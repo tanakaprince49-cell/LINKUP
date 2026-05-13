@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BottomNavigation, Header } from './components/Navigation';
 import { AnimatePresence, motion } from 'framer-motion';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 
 // Pages - We'll build these next
 import FeedPage from './pages/FeedPage';
@@ -41,7 +42,7 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-full flex-col items-center justify-center bg-black gap-4">
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-white dark:bg-black gap-4 transition-colors">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-accent-yellow border-t-transparent shadow-glow" />
         <p className="text-[10px] font-black uppercase tracking-[0.3em] text-accent-yellow animate-pulse italic">Establishing Link...</p>
       </div>
@@ -68,7 +69,7 @@ function AppContent() {
   };
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-[#050508] text-white font-sans">
+    <div className="relative h-screen w-full overflow-hidden bg-white dark:bg-[#050508] text-black dark:text-white font-sans transition-colors">
       {/* Background Atmosphere - Immersive UI Style */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
         <div className="bg-glow -top-[200px] -left-[100px]" />
@@ -119,8 +120,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

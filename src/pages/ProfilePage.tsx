@@ -3,13 +3,15 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
-import { User, X, Camera, MapPin, Globe, Briefcase, Award, Settings, LogOut, Trash2, ShieldCheck, Zap, Plus } from 'lucide-react';
+import { User, X, Camera, MapPin, Globe, Briefcase, Award, Settings, LogOut, Trash2, ShieldCheck, Zap, Plus, Moon, Sun } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function ProfilePage({ onClose }: { onClose: () => void }) {
   const { profile, logOut } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editedProfile, setEditedProfile] = useState(profile);
   const [activeTab, setActiveTab] = useState<'info' | 'settings'>('info');
+  const { theme, toggleTheme } = useTheme();
 
   const handleSave = async () => {
     if (!profile || !editedProfile) return;
@@ -28,7 +30,7 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[70] flex flex-col bg-[#050508]/90 backdrop-blur-2xl overflow-hidden"
+      className="fixed inset-0 z-[70] flex flex-col bg-white/90 dark:bg-[#050508]/90 backdrop-blur-2xl overflow-hidden transition-colors"
     >
       {/* Background Decor */}
       <div className="absolute inset-0 z-0 pointer-events-none">
@@ -36,8 +38,8 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Header Overlay */}
-      <div className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/5">
-        <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+      <div className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-black/5 dark:border-white/5">
+        <div className="flex bg-black/5 dark:bg-white/5 p-1 rounded-xl border border-black/10 dark:border-white/10">
           <button 
             onClick={() => setActiveTab('info')}
             className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'info' ? 'bg-accent-yellow text-black' : 'text-white/40 hover:text-white'}`}
@@ -53,7 +55,7 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
         </div>
         <button 
           onClick={onClose}
-          className="h-10 w-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white transition-all active:scale-95 hover:bg-white/10"
+          className="h-10 w-10 flex items-center justify-center rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-black dark:text-white transition-all active:scale-95 hover:bg-black/10 dark:hover:bg-white/10"
         >
           <X size={20} />
         </button>
@@ -238,16 +240,33 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
             <h3 className="text-4xl font-black font-display italic tracking-tight text-white uppercase">Control<span className="text-accent-yellow">Center</span></h3>
             
             <div className="space-y-4">
-              <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-white/20 ml-2">Preferences</h4>
-              <div className="bg-zinc-900 border border-white/5 divide-y divide-white/5 rounded-3xl overflow-hidden">
-                <div className="flex items-center justify-between p-6 hover:bg-white/[0.02] transition-colors">
+              <h4 className="text-[9px] font-black uppercase tracking-[0.3em] text-black/20 dark:text-white/20 ml-2">Preferences</h4>
+              <div className="bg-zinc-100 dark:bg-zinc-900 border border-black/5 dark:border-white/5 divide-y divide-black/5 dark:divide-white/5 rounded-3xl overflow-hidden">
+                <div 
+                  onClick={toggleTheme}
+                  className="flex items-center justify-between p-6 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-accent-yellow/10 text-accent-yellow">
+                      {theme === 'dark' ? <Moon size={20} /> : <Sun size={20} />}
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest leading-none text-black dark:text-white">Dark Mode</p>
+                      <p className="text-[9px] text-black/30 dark:text-white/30 font-medium mt-1">Adjust app appearance</p>
+                    </div>
+                  </div>
+                  <div className={`h-6 w-12 rounded-full p-1 transition-all ${theme === 'dark' ? 'bg-accent-yellow shadow-glow' : 'bg-black/10'}`}>
+                    <div className={`h-4 w-4 rounded-full bg-white dark:bg-black transition-all ${theme === 'dark' ? 'ml-auto' : 'ml-0'}`} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between p-6 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors">
                   <div className="flex items-center gap-4">
                     <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-accent-yellow/10 text-accent-yellow">
                       <Globe size={20} />
                     </div>
                     <div>
-                      <p className="text-xs font-black uppercase tracking-widest leading-none">Public Discovery</p>
-                      <p className="text-[9px] text-white/30 font-medium mt-1">Show me in the founder pool</p>
+                      <p className="text-xs font-black uppercase tracking-widest leading-none text-black dark:text-white">Public Discovery</p>
+                      <p className="text-[9px] text-black/30 dark:text-white/30 font-medium mt-1">Show me in the founder pool</p>
                     </div>
                   </div>
                   <div className="h-6 w-12 rounded-full bg-accent-yellow p-1 shadow-glow transition-all">

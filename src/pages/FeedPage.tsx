@@ -5,11 +5,11 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfile, Swipe, Block, Post, Match } from '../types';
 import { X, Heart, Zap, RotateCcw, Info, MessageCircle, MapPin, Briefcase, Users, Shield, Flag, ShieldOff, Search, Award, Lightbulb, Trash2, Send, Share2, Plus, Brain, ChevronLeft, ShieldAlert, Loader2, ChevronRight, User, Star, Settings, Rocket } from 'lucide-react';
-import { getMatchingExplanation } from '../lib/gemini';
+import { getMatchingExplanation } from '../lib/ai';
 import ReportModal from '../components/ReportModal';
 import BlockModal from '../components/BlockModal';
 import { DEMO_PROFILES, DEMO_POSTS } from '../constants/demoData';
-import { generateAIComment } from '../lib/gemini';
+import { generateAIComment } from '../lib/ai';
 import StartupAnalyzerModal from '../components/StartupAnalyzer';
 
 const PostCard = ({ post, onDelete }: { post: Post, onDelete?: (id: string) => void }) => {
@@ -102,7 +102,7 @@ const PostCard = ({ post, onDelete }: { post: Post, onDelete?: (id: string) => v
       initial={{ opacity: 0, y: 10 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      className="mb-8 liquid-card border-white/5 overflow-hidden group hover:border-white/10 transition-colors"
+      className="mb-8 liquid-card border-black/5 dark:border-white/5 overflow-hidden group hover:border-black/10 dark:hover:border-white/10 transition-colors"
     >
       <div className="p-6 pb-4">
         <div className="flex items-center gap-3 mb-5">
@@ -110,23 +110,23 @@ const PostCard = ({ post, onDelete }: { post: Post, onDelete?: (id: string) => v
             {author?.profilePic ? (
               <img src={author.profilePic} alt={author.displayName} className="h-full w-full object-cover rounded-lg" />
             ) : (
-              <div className="flex h-full w-full items-center justify-center bg-slate-800 rounded-lg">
-                <User size={20} className="text-white/20" />
+              <div className="flex h-full w-full items-center justify-center bg-zinc-100 dark:bg-slate-800 rounded-lg">
+                <User size={20} className="text-black/20 dark:text-white/20" />
               </div>
             )}
           </div>
           <div className="flex-1">
-            <h3 className="text-base font-black uppercase tracking-tight text-white group-hover:text-accent-yellow transition-colors leading-none">
+            <h3 className="text-base font-black uppercase tracking-tight text-black dark:text-white group-hover:text-accent-yellow transition-colors leading-none">
               {author?.displayName || 'Builder'}
             </h3>
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest leading-none">
+              <span className="text-[9px] font-bold text-black/30 dark:text-white/30 uppercase tracking-widest leading-none">
                 {author?.city} • {new Date(localPost.timestamp?.toDate ? localPost.timestamp.toDate() : localPost.timestamp).toLocaleDateString()}
               </span>
               <div className="w-0.5 h-0.5 rounded-full bg-white/20" />
               <div className="flex items-center gap-1">
                 {getIcon()}
-                <span className="text-[9px] font-black uppercase text-white/40 tracking-widest leading-none">{localPost.type}</span>
+                <span className="text-[9px] font-black uppercase text-black/40 dark:text-white/40 tracking-widest leading-none">{localPost.type}</span>
               </div>
             </div>
           </div>
@@ -134,7 +134,7 @@ const PostCard = ({ post, onDelete }: { post: Post, onDelete?: (id: string) => v
           {user?.uid === localPost.authorId && (
             <button 
               onClick={handleDelete}
-              className="p-2 rounded-lg bg-white/5 text-white/20 hover:bg-red-500/10 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+              className="p-2 rounded-lg bg-black/5 dark:bg-white/5 text-black/20 dark:text-white/20 hover:bg-red-500/10 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
             >
               <Trash2 size={16} />
             </button>
@@ -142,7 +142,7 @@ const PostCard = ({ post, onDelete }: { post: Post, onDelete?: (id: string) => v
         </div>
 
         <div className="space-y-6">
-          <p className="text-sm font-medium leading-relaxed text-white/80 whitespace-pre-wrap">{localPost.content}</p>
+          <p className="text-sm font-medium leading-relaxed text-black/80 dark:text-white/80 whitespace-pre-wrap">{localPost.content}</p>
           
           {localPost.mediaUrl && (
             <div className="overflow-hidden rounded-2xl border border-white/5">
@@ -152,17 +152,17 @@ const PostCard = ({ post, onDelete }: { post: Post, onDelete?: (id: string) => v
 
           <div className="flex items-center justify-between pt-6 border-t border-white/5 pb-2">
             <div className="flex items-center gap-6">
-              <button onClick={handleLike} className={`flex items-center gap-2 group/btn transition-all ${isLiking ? 'text-accent-yellow scale-110' : 'text-white/30 hover:text-accent-yellow'}`}>
-                <div className="p-2 rounded-lg bg-white/5 group-hover/btn:bg-accent-yellow/10 transition-colors">
+              <button onClick={handleLike} className={`flex items-center gap-2 group/btn transition-all ${isLiking ? 'text-accent-yellow scale-110' : 'text-black/30 dark:text-white/30 hover:text-accent-yellow'}`}>
+                <div className="p-2 rounded-lg bg-black/5 dark:bg-white/5 group-hover/btn:bg-accent-yellow/10 transition-colors">
                   <Heart size={16} fill={localPost.likesCount > 0 ? "currentColor" : "none"} className={localPost.likesCount > 0 ? "text-accent-yellow shadow-glow" : ""} />
                 </div>
                 <span className="text-[10px] font-black uppercase tracking-widest">{localPost.likesCount}</span>
               </button>
               <button 
                 onClick={() => setShowComments(!showComments)}
-                className={`flex items-center gap-2 group/btn transition-all ${showComments ? 'text-white' : 'text-white/30 hover:text-white'}`}
+                className={`flex items-center gap-2 group/btn transition-all ${showComments ? 'text-black dark:text-white' : 'text-black/30 dark:text-white/30 hover:text-black dark:hover:text-white'}`}
               >
-                <div className="p-2 rounded-lg bg-white/5 group-hover/btn:bg-white/10 transition-colors">
+                <div className="p-2 rounded-lg bg-black/5 dark:bg-white/5 group-hover/btn:bg-black/10 dark:group-hover/btn:bg-white/10 transition-colors">
                   <MessageCircle size={16} />
                 </div>
                 <span className="text-[10px] font-black uppercase tracking-widest">{localPost.commentsCount}</span>
@@ -189,7 +189,7 @@ const PostCard = ({ post, onDelete }: { post: Post, onDelete?: (id: string) => v
                   <div className="w-1 h-1 rounded-full bg-accent-yellow shadow-glow" />
                   <span className="text-[8px] font-black uppercase text-accent-yellow tracking-widest">Co-Pilot Briefing</span>
                 </div>
-                <p className="text-xs font-bold italic text-white/60 leading-relaxed italic">"{aiComment}"</p>
+                <p className="text-xs font-bold italic text-black/60 dark:text-white/60 leading-relaxed italic">"{aiComment}"</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -213,7 +213,7 @@ const PostCard = ({ post, onDelete }: { post: Post, onDelete?: (id: string) => v
                       onChange={(e) => setCommentText(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleComment()}
                       placeholder="Add a comment..."
-                      className="w-full h-8 bg-white/5 rounded-lg pl-3 pr-10 text-[10px] text-white/80 placeholder:text-white/10 focus:bg-white/10 transition-all border border-transparent focus:border-white/5 outline-none"
+                      className="w-full h-8 bg-black/5 dark:bg-white/5 rounded-lg pl-3 pr-10 text-[10px] text-black/80 dark:text-white/80 placeholder:text-black/10 dark:placeholder:text-white/10 focus:bg-black/10 dark:focus:bg-white/10 transition-all border border-transparent focus:border-black/5 dark:focus:border-white/5 outline-none"
                     />
                     <button 
                       onClick={handleComment}
@@ -225,7 +225,7 @@ const PostCard = ({ post, onDelete }: { post: Post, onDelete?: (id: string) => v
                   </div>
                 </div>
                 {localPost.id.startsWith('demo-') && (
-                  <p className="mt-2 text-[8px] font-bold text-white/20 uppercase tracking-widest text-center italic">Comments are disabled for signals from antiquity</p>
+                  <p className="mt-2 text-[8px] font-bold text-black/20 dark:text-white/20 uppercase tracking-widest text-center italic">Comments are disabled for signals from antiquity</p>
                 )}
               </motion.div>
             )}

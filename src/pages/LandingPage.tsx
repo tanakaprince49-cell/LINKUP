@@ -23,7 +23,7 @@ export default function LandingPage() {
   console.log("LandingPage Render");
 
   return (
-    <div className="relative flex h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#050508] px-6 text-center font-sans border-t-2 border-accent-yellow/5">
+    <div className="relative flex h-screen w-full flex-col items-center justify-center overflow-hidden bg-white dark:bg-[#050508] px-6 text-center font-sans border-t-2 border-accent-yellow/5 transition-colors">
       {/* Immersive Background */}
       <div className="absolute inset-0 z-0">
         <div className="bg-glow -top-[200px] -left-[100px] opacity-30" style={{ background: 'radial-gradient(circle, #FBE618 0%, transparent 70%)' }} />
@@ -32,65 +32,75 @@ export default function LandingPage() {
       </div>
 
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
+        initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-        className="relative z-10 space-y-8"
+        transition={{ duration: 1, ease: "easeOut" }}
+        className="relative z-10 w-full max-w-4xl space-y-12"
       >
-        <div className="space-y-4">
+        <div className="space-y-6">
           <motion.div
-            animate={{ rotate: [0, 5, -5, 0] }}
-            transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }}
-            className="mx-auto flex h-24 w-24 items-center justify-center rounded-[32px] bg-zinc-900 border border-accent-yellow/30 shadow-2xl"
+            animate={{ 
+              boxShadow: ["0 0 20px rgba(251,230,24,0.1)", "0 0 50px rgba(251,230,24,0.3)", "0 0 20px rgba(251,230,24,0.1)"]
+            }}
+            transition={{ repeat: Infinity, duration: 4 }}
+            className="mx-auto flex h-32 w-32 items-center justify-center rounded-[40px] bg-zinc-900 border border-accent-yellow/30"
           >
-            <Zap size={48} className="text-accent-yellow drop-shadow-[0_0_10px_rgba(251,230,24,0.8)]" fill="currentColor" />
+            <Zap size={64} className="text-accent-yellow drop-shadow-glow" fill="currentColor" />
           </motion.div>
-          <h1 className="text-7xl font-black tracking-tight text-white sm:text-9xl font-display uppercase italic">
-            LINKUP<span className="text-accent-yellow text-xs align-top ml-1 tracking-[0.2em] font-black italic block sm:inline">Professional</span>
-          </h1>
-          <p className="mx-auto max-w-sm text-sm font-black text-white/30 tracking-[0.2em] uppercase">
-            The elite network for co-founder acquisition.
-          </p>
+          
+          <div className="space-y-2">
+            <h1 className="text-8xl font-black tracking-tighter text-black dark:text-white sm:text-[10rem] font-display uppercase italic leading-[0.8] mb-4">
+              LINK<span className="text-accent-yellow">UP</span>
+            </h1>
+            <div className="flex items-center justify-center gap-4">
+              <div className="h-px w-12 bg-black/10 dark:bg-white/10" />
+              <p className="text-[11px] font-black text-black/40 dark:text-white/40 tracking-[0.5em] uppercase italic">
+                The Elite Co-Founder Acquisition Network
+              </p>
+              <div className="h-px w-12 bg-black/10 dark:bg-white/10" />
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-col items-center gap-6 pt-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-3xl mx-auto py-8">
+           {[
+             { icon: Users, title: "CURATED NETWORK", desc: "Vetted founders only." },
+             { icon: Brain, title: "AI MATCHMAKING", desc: "Proprietary synergy analysis." },
+             { icon: Zap, title: "FAST CONNECTIONS", desc: "Skip the noise, build faster." }
+           ].map((item, i) => (
+             <div key={i} className="space-y-3 p-6 rounded-3xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
+                <item.icon size={20} className="mx-auto text-accent-yellow" />
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-black dark:text-white">{item.title}</h3>
+                <p className="text-[10px] font-bold text-black/30 dark:text-white/30 uppercase tracking-widest">{item.desc}</p>
+             </div>
+           ))}
+        </div>
+
+        <div className="flex flex-col items-center gap-8 pt-4">
           <button
             onClick={handleSignIn}
             disabled={isLoggingIn}
-            className="group relative flex items-center gap-3 rounded-2xl bg-accent-yellow px-12 py-5 text-sm font-black uppercase tracking-widest text-black transition-all hover:scale-105 active:scale-95 shadow-[0_0_40px_rgba(251,230,24,0.3)] disabled:opacity-50"
+            className="group relative flex items-center gap-4 rounded-3xl bg-accent-yellow px-16 py-6 text-xs font-black uppercase tracking-[0.3em] text-black transition-all hover:scale-105 active:scale-95 shadow-glow disabled:opacity-50"
           >
-            {isLoggingIn ? <Loader2 className="animate-spin" size={18} /> : "Authenticate"}
-            {!isLoggingIn && <Zap className="transition-transform group-hover:rotate-12" size={18} fill="currentColor" />}
+            {isLoggingIn ? <Loader2 className="animate-spin" size={20} /> : "Initialize Identity"}
+            {!isLoggingIn && <ChevronRight className="transition-transform group-hover:translate-x-1" size={20} />}
           </button>
 
           {error && (
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black uppercase tracking-widest"
+              className="flex items-center gap-2 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black uppercase tracking-widest"
             >
               <AlertCircle size={14} />
               {error}
             </motion.div>
           )}
           
-          <p className="text-[9px] font-bold text-white/10 uppercase tracking-widest">
-            Identity verification via Google Required. Pop-ups must be enabled.
-          </p>
-          
-          <div className="flex items-center gap-8 pt-12 text-white/10">
-            <div className="flex flex-col items-center gap-1 group">
-              <Users size={16} className="group-hover:text-accent-yellow transition-colors" />
-              <span className="text-[8px] font-black uppercase tracking-[0.3em]">Network</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 group">
-              <Shield size={16} className="group-hover:text-accent-yellow transition-colors" />
-              <span className="text-[8px] font-black uppercase tracking-[0.3em]">Verify</span>
-            </div>
-            <div className="flex flex-col items-center gap-1 group">
-              <Zap size={16} className="group-hover:text-accent-yellow transition-colors" fill="currentColor" />
-              <span className="text-[8px] font-black uppercase tracking-[0.3em]">AI Insight</span>
-            </div>
+          <div className="flex items-center gap-4 pt-12">
+            <p className="text-[9px] font-black text-black/20 dark:text-white/20 uppercase tracking-[0.4em]">
+              V1.1.0 // SECURE PROTOCOL // CLOUD INFRASTRUCTURE
+            </p>
           </div>
         </div>
       </motion.div>

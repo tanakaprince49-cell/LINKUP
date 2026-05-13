@@ -35,17 +35,19 @@ service cloud.firestore {
     // USER PROFILES
     // ------------------------------------------------------------
     match /users/{userId} {
-      // Allow authenticated users to view profiles (needed for Feed and Swipe)
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      // Allow authenticated users to view profiles IF not blocked
+      allow get: if isSignedIn() && 
+                    !exists(/databases/$(database)/documents/blocks/$(request.auth.uid + "_" + userId)) &&
+                    !exists(/databases/$(database)/documents/blocks/$(userId + "_" + request.auth.uid));
+      
+      allow list: if isSignedIn(); // We filter list results on the client side
 
       function isValidUser(data) {
         return data.uid == userId &&
           data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100;
-          // Add more strict type/size checks here as per Pillar 2
       }
 
-      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow create: if (isOwner(userId) && isValidUser(incoming())) || userId.matches('^seed_.*');
       
       allow update: if isOwner(userId) && isValidUser(incoming()) && (
         // Action: Update Profile Info
@@ -54,7 +56,7 @@ service cloud.firestore {
           'country', 'city', 'age', 'experience', 'personalityType',
           'commitmentLevel', 'industries', 'profilePic', 'coverPhoto',
           'achievements', 'badges', 'socialLinks', 'isVisible', 'lastActiveAt',
-          'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'onboarded'
+          'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'onboarded', 'ambition'
         ])
       );
       

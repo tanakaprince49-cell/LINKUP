@@ -113,14 +113,14 @@ export const Header: React.FC<{ onProfileClick: () => void; onPostClick: () => v
     <motion.header 
       initial={false}
       animate={{ y: isActuallyHidden ? -100 : 0, opacity: isActuallyHidden ? 0 : 1 }}
-      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 bg-[#050508]/80 backdrop-blur-3xl border-b border-white/5 transition-all duration-300"
+      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 bg-white/80 dark:bg-[#050508]/80 backdrop-blur-3xl border-b border-black/5 dark:border-white/5 transition-all duration-300"
     >
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-yellow text-black shadow-glow">
             <Zap size={18} fill="currentColor" />
           </div>
-          <h1 className="text-xl font-black font-display tracking-tighter text-white italic">
+          <h1 className="text-xl font-black font-display tracking-tighter text-black dark:text-white italic">
             LINK<span className="text-accent-yellow">UP</span>
           </h1>
         </div>
@@ -143,13 +143,13 @@ export const Header: React.FC<{ onProfileClick: () => void; onPostClick: () => v
           {profile?.profilePic ? (
             <img src={profile.profilePic} alt="Profile" className="h-full w-full object-cover rounded-[10px]" />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-zinc-900 rounded-[10px]">
-              <User size={18} className="text-white/40" />
+            <div className="flex h-full w-full items-center justify-center bg-zinc-100 dark:bg-zinc-900 rounded-[10px]">
+              <User size={18} className="text-black/40 dark:text-white/40" />
             </div>
           )}
         </button>
 
-        <button className="h-9 w-9 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/40 hover:text-white transition-colors hover:border-accent-yellow/30">
+        <button className="h-9 w-9 flex items-center justify-center rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors hover:border-accent-yellow/30">
           <Settings size={18} />
         </button>
       </div>

@@ -1,20 +1,42 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Plus+Jakarta+Sans:wght@700&display=swap');
 @import "tailwindcss";
 
+:root {
+  --color-bg: #FFFFFF;
+  --color-text: #000000;
+  --color-glass: rgba(0, 0, 0, 0.04);
+  --color-glass-border: rgba(0, 0, 0, 0.08);
+  --color-accent-yellow: #FBE618;
+  --color-card-bg: #F8F8F8;
+  --color-card-border: rgba(0, 0, 0, 0.05);
+  --color-input-bg: rgba(0, 0, 0, 0.03);
+  --color-nav-bg: rgba(255, 255, 255, 0.8);
+  --color-text-muted: rgba(0, 0, 0, 0.4);
+}
+
+.dark {
+  --color-bg: #050508;
+  --color-text: #FFFFFF;
+  --color-glass: rgba(255, 255, 255, 0.04);
+  --color-glass-border: rgba(255, 255, 255, 0.08);
+  --color-card-bg: #111111;
+  --color-card-border: rgba(255, 255, 255, 0.05);
+  --color-input-bg: rgba(255, 255, 255, 0.03);
+  --color-nav-bg: rgba(5, 5, 8, 0.8);
+  --color-text-muted: rgba(255, 255, 255, 0.4);
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Plus Jakarta Sans", sans-serif;
-  
-  --color-glass: rgba(255, 255, 255, 0.04);
-  --color-glass-border: rgba(255, 255, 255, 0.08);
-  --color-accent-yellow: #FBE618;
-  
   --shadow-glow: 0 0 20px rgba(251, 230, 24, 0.2);
 }
 
 @layer base {
   body {
-    @apply bg-black text-white antialiased selection:bg-accent-yellow/30 selection:text-accent-yellow;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    @apply antialiased selection:bg-accent-yellow/30 selection:text-accent-yellow transition-colors duration-300;
     margin: 0;
     overflow: hidden;
     font-size: 0.8125rem;
@@ -31,13 +53,16 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-white/5 rounded-full hover:bg-white/10 transition-colors;
+    background-color: var(--color-text-muted);
+    @apply rounded-full opacity-10 hover:opacity-20 transition-opacity;
   }
 }
 
 /* Native App Components */
 .liquid-card {
-  @apply bg-zinc-900/40 backdrop-blur-3xl border border-white/5 rounded-xl shadow-2xl;
+  background-color: var(--color-card-bg);
+  border-color: var(--color-card-border);
+  @apply backdrop-blur-3xl border rounded-xl shadow-2xl;
 }
 
 .brand-button {
@@ -56,3 +81,11 @@
   @apply absolute w-[600px] h-[600px] rounded-full blur-[60px] opacity-15 pointer-events-none;
   background: radial-gradient(circle, var(--color-accent-yellow) 0%, transparent 70%);
 }
+
+/* Helper classes for theming */
+.theme-bg { background-color: var(--color-bg); }
+.theme-text { color: var(--color-text); }
+.theme-text-muted { color: var(--color-text-muted); }
+.theme-card { background-color: var(--color-card-bg); border-color: var(--color-card-border); }
+.theme-input { background-color: var(--color-input-bg); border-color: var(--color-card-border); }
+.theme-nav { background-color: var(--color-nav-bg); }
