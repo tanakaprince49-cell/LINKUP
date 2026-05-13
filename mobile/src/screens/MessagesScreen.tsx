@@ -27,7 +27,7 @@ const ConversationItem = ({ match }: { match: Match }) => {
   if (!otherUser) return null;
 
   return (
-    <TouchableOpacity style={[styles.chatItem, { backgroundColor: isDark ? '#111111' : '#F8F8F8', borderColor: isDark ? '#222222' : '#EEEEEE' }]}>
+    <TouchableOpacity style={[styles.chatItem, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8', borderColor: isDark ? '#333333' : '#EEEEEE' }]}>
       <View style={styles.avatarContainer}>
         {otherUser.profilePic ? (
           <Image source={{ uri: otherUser.profilePic }} style={styles.avatar} />
@@ -71,7 +71,7 @@ export default function MessagesScreen() {
   }, [user]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#050508' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#121212' : '#FFFFFF' }]}>
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
           Direct<Text style={{ color: '#FBE618' }}>Messages</Text>
@@ -79,8 +79,8 @@ export default function MessagesScreen() {
       </View>
 
       <View style={styles.searchContainer}>
-        <View style={[styles.searchBar, { backgroundColor: isDark ? '#111111' : '#F8F8F8' }]}>
-          <Search size={18} color={isDark ? '#444444' : '#999999'} />
+        <View style={[styles.searchBar, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}>
+          <Search size={18} color={isDark ? '#888888' : '#999999'} />
           <TextInput
             placeholder="Search collaborators..."
             placeholderTextColor={isDark ? '#444444' : '#999999'}

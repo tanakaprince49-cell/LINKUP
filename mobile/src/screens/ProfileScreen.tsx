@@ -25,7 +25,7 @@ export default function ProfileScreen() {
   if (!profile) return null;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#050508' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#121212' : '#FFFFFF' }]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <View style={styles.profileHeader}>
@@ -33,8 +33,8 @@ export default function ProfileScreen() {
               {profile.profilePic ? (
                 <Image source={{ uri: profile.profilePic }} style={styles.avatar} />
               ) : (
-                <View style={[styles.avatarPlaceholder, { backgroundColor: isDark ? '#111111' : '#F8F8F8' }]}>
-                  <User size={40} color={isDark ? '#222222' : '#EEEEEE'} />
+                <View style={[styles.avatarPlaceholder, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}>
+                  <User size={40} color={isDark ? '#444444' : '#EEEEEE'} />
                 </View>
               )}
               <TouchableOpacity style={styles.editAvatar}>
@@ -84,7 +84,7 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>STARTUP RESUME</Text>
           <View style={styles.resumeContainer}>
-            <View style={[styles.resumeItem, { backgroundColor: isDark ? '#111111' : '#F8F8F8' }]}>
+            <View style={[styles.resumeItem, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}>
               <Briefcase size={18} color="#FBE618" />
               <View style={styles.resumeInfo}>
                 <Text style={[styles.resumeTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>Shipped Products</Text>
@@ -92,7 +92,7 @@ export default function ProfileScreen() {
               </View>
               <ExternalLink size={16} color="#666666" />
             </View>
-            <View style={[styles.resumeItem, { backgroundColor: isDark ? '#111111' : '#F8F8F8' }]}>
+            <View style={[styles.resumeItem, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}>
               <Award size={18} color="#FBE618" />
               <View style={styles.resumeInfo}>
                 <Text style={[styles.resumeTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>Hackathon Wins</Text>
@@ -106,7 +106,7 @@ export default function ProfileScreen() {
         {/* SETTINGS TOGGLE SECTION */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>SETTINGS & PREFERENCES</Text>
-          <View style={[styles.settingRow, { backgroundColor: isDark ? '#111111' : '#F8F8F8' }]}>
+          <View style={[styles.settingRow, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}>
             <View style={styles.settingLabelContainer}>
               {isDark ? <Moon size={20} color="#FBE618" /> : <Sun size={20} color="#FBE618" />}
               <Text style={[styles.settingLabel, { color: isDark ? '#FFFFFF' : '#000000' }]}>Dark Mode</Text>
@@ -114,7 +114,7 @@ export default function ProfileScreen() {
             <Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: '#FBE61840', false: '#CCC' }} thumbColor={isDark ? '#FBE618' : '#FFF'} />
           </View>
           
-          <View style={[styles.settingRow, { backgroundColor: isDark ? '#111111' : '#F8F8F8' }]}>
+          <View style={[styles.settingRow, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}>
             <View style={styles.settingLabelContainer}>
               <Shield size={20} color="#FBE618" />
               <Text style={[styles.settingLabel, { color: isDark ? '#FFFFFF' : '#000000' }]}>Profile Visibility</Text>

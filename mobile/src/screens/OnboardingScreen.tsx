@@ -50,6 +50,13 @@ const steps = [
     field: { id: 'bio', label: 'Founder Bio', placeholder: 'Serial entrepreneur building the future of...', icon: Briefcase }
   },
   {
+    id: 'photos',
+    title: 'Showcase your work',
+    icon: User,
+    type: 'photos',
+    desc: 'Upload at least 3 photos to stand out.'
+  },
+  {
     id: 'skills',
     title: 'What are your core skills?',
     icon: Code,
@@ -115,13 +122,14 @@ export default function OnboardingScreen() {
     if (step.type === 'form') return step.fields?.every(f => !!formData[f.id]);
     if (step.type === 'textarea') return !!formData[step.field.id];
     if (step.type === 'input') return !!formData[step.field.id];
+    if (step.type === 'photos') return formData.photos && formData.photos.length >= 3;
     return false;
   };
 
   const Icon = step.icon;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#050508' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#121212' : '#FFFFFF' }]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.progressContainer}>
           {steps.map((_, i) => (
@@ -209,8 +217,42 @@ export default function OnboardingScreen() {
                 placeholderTextColor={isDark ? '#444444' : '#CCCCCC'}
                 value={formData[step.field.id] || ''}
                 onChangeText={(text) => handleInputChange(step.field.id, text)}
-                style={[styles.input, { color: isDark ? '#FFFFFF' : '#000000', backgroundColor: isDark ? '#111111' : '#F8F8F8' }]}
+                style={[styles.input, { color: isDark ? '#FFFFFF' : '#000000', backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}
               />
+            </View>
+          )}
+
+          {step.type === 'photos' && (
+            <View style={styles.photosContainer}>
+              <Text style={[styles.selectDesc, { marginBottom: 20, textAlign: 'center', color: isDark ? '#AAAAAA' : '#666666' }]}>{step.desc}</Text>
+              <View style={styles.photoGrid}>
+                {[0, 1, 2].map((index) => {
+                  const hasPhoto = formData.photos && formData.photos[index];
+                  return (
+                    <TouchableOpacity 
+                      key={index}
+                      style={[styles.photoSlot, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8', borderColor: isDark ? '#333333' : '#EEEEEE' }]}
+                      onPress={() => {
+                        // Simulate upload for demo
+                        const newPhotos = [...(formData.photos || [])];
+                        newPhotos[index] = `https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&q=${Math.random()}`;
+                        handleInputChange('photos', newPhotos);
+                      }}
+                    >
+                      {hasPhoto ? (
+                        <View style={styles.photoAdded}>
+                          <Check size={24} color="#FBE618" />
+                          <Text style={{color: '#FBE618', fontSize: 10, marginTop: 4, fontWeight: 'bold'}}>ADDED</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.photoAdd}>
+                          <Text style={{color: isDark ? '#666' : '#999', fontSize: 32}}>+</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
           )}
         </View>
@@ -347,4 +389,33 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 2,
   },
+  photosContainer: {
+    marginTop: 10,
+  },
+  photoGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  photoSlot: {
+    flex: 1,
+    aspectRatio: 0.8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  photoAdd: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoAdded: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#111111',
+    width: '100%',
+    height: '100%',
+  }
 });
