@@ -1,0 +1,170 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ------------------------------------------------------------
+    // GLOBAL HELPERS
+    // ------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // ------------------------------------------------------------
+    // DEFAULT DENY (Safety Net)
+    // ------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ------------------------------------------------------------
+    // USER PROFILES
+    // ------------------------------------------------------------
+    match /users/{userId} {
+      // Allow authenticated users to view profiles (needed for Feed and Swipe)
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+
+      function isValidUser(data) {
+        return data.uid == userId &&
+          data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100;
+          // Add more strict type/size checks here as per Pillar 2
+      }
+
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        // Action: Update Profile Info
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'bio', 'skills', 'interests', 'goals',
+          'country', 'city', 'age', 'experience', 'personalityType',
+          'commitmentLevel', 'industries', 'profilePic', 'coverPhoto',
+          'achievements', 'badges', 'socialLinks', 'isVisible', 'lastActiveAt',
+          'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'onboarded'
+        ])
+      );
+      
+      allow delete: if isOwner(userId);
+    }
+
+    // ------------------------------------------------------------
+    // POSTS (Founder Feed)
+    // ------------------------------------------------------------
+    match /posts/{postId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+
+      function isValidPost(data) {
+        return data.authorId == request.auth.uid &&
+          data.content is string && data.content.size() <= 2000 &&
+          data.timestamp == request.time &&
+          data.type in ['build', 'launch', 'achievement', 'update'];
+      }
+
+      allow create: if isSignedIn() && isValidPost(incoming()) &&
+                      incoming().likesCount == 0 &&
+                      incoming().commentsCount == 0;
+
+      allow update: if isSignedIn() && (
+        // Action: Owner Edit
+        (isOwner(existing().authorId) && 
+         incoming().timestamp == existing().timestamp && // Prevent timestamp spoof
+         incoming().authorId == existing().authorId && // Immobility
+         incoming().diff(existing()).affectedKeys().hasOnly(['content', 'type', 'mediaUrl'])) ||
+        
+        // Action: Social Interaction (Any signed-in user can like/comment)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'commentsCount']) &&
+         incoming().authorId == existing().authorId &&
+         incoming().content == existing().content)
+      );
+
+      allow delete: if isSignedIn() && isOwner(existing().authorId);
+    }
+
+    // ------------------------------------------------------------
+    // BLOCKS
+    // ------------------------------------------------------------
+    match /blocks/{blockId} {
+      // Allow users to see who they blocked or who blocked them
+      allow get: if isSignedIn() && (existing().blockedById == request.auth.uid || existing().blockedUserId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.blockedById == request.auth.uid || resource.data.blockedUserId == request.auth.uid);
+      
+      allow create: if isSignedIn() && 
+                      incoming().blockedById == request.auth.uid &&
+                      incoming().timestamp == request.time &&
+                      isValidId(incoming().blockedUserId);
+      
+      allow delete: if isSignedIn() && isOwner(existing().blockedById);
+    }
+
+    // ------------------------------------------------------------
+    // REPORTS
+    // ------------------------------------------------------------
+    match /reports/{reportId} {
+      allow read: if false; // Admins only (handled in console)
+      allow create: if isSignedIn() && 
+                      incoming().reportedById == request.auth.uid &&
+                      incoming().timestamp == request.time;
+    }
+
+    // ------------------------------------------------------------
+    // SWIPES
+    // ------------------------------------------------------------
+    match /swipes/{swipeId} {
+      allow get: if isSignedIn() && (existing().fromId == request.auth.uid || existing().toId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
+      
+      allow create: if isSignedIn() && 
+                      incoming().fromId == request.auth.uid &&
+                      incoming().timestamp == request.time &&
+                      isValidId(incoming().toId);
+    }
+
+    // ------------------------------------------------------------
+    // MATCHES & MESSAGES
+    // ------------------------------------------------------------
+    match /matches/{matchId} {
+      allow get: if isSignedIn() && request.auth.uid in existing().userIds;
+      allow list: if isSignedIn() && request.auth.uid in resource.data.userIds;
+      
+      allow create: if isSignedIn() && request.auth.uid in incoming().userIds;
+      allow update: if isSignedIn() && request.auth.uid in existing().userIds &&
+                      incoming().userIds == existing().userIds;
+      allow delete: if isSignedIn() && request.auth.uid in existing().userIds;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.userIds;
+        allow create: if isSignedIn() && 
+                        request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.userIds &&
+                        incoming().senderId == request.auth.uid &&
+                        incoming().timestamp == request.time;
+      }
+    }
+
+    // ------------------------------------------------------------
+    // NOTIFICATIONS
+    // ------------------------------------------------------------
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn(); 
+      allow update: if isSignedIn() && isOwner(existing().userId) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
+      allow delete: if isOwner(existing().userId);
+    }
+  }
+}
+

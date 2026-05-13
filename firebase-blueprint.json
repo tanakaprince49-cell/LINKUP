@@ -1,0 +1,170 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile with skills, startup interests, and reputation.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "bio": { "type": "string" },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "interests": { "type": "array", "items": { "type": "string" } },
+        "goals": { "type": "string" },
+        "country": { "type": "string" },
+        "city": { "type": "string" },
+        "age": { "type": "number" },
+        "experience": { "type": "string" },
+        "personalityType": { "type": "string" },
+        "commitmentLevel": { "type": "string" },
+        "industries": { "type": "array", "items": { "type": "string" } },
+        "profilePic": { "type": "string" },
+        "coverPhoto": { "type": "string" },
+        "achievements": { "type": "array", "items": { "type": "string" } },
+        "badges": { "type": "array", "items": { "type": "string" } },
+        "reputationScore": { "type": "number" },
+        "streakCount": { "type": "number" },
+        "lastActiveAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "socialLinks": { "type": "object" },
+        "isVisible": { "type": "boolean" },
+        "isBot": { "type": "boolean" },
+        "projects": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "url": { "type": "string" },
+              "role": { "type": "string" }
+            }
+          }
+        },
+        "portfolioLinks": { "type": "array", "items": { "type": "string" } },
+        "startupIdeas": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "vision": { "type": "string" },
+              "stage": { "type": "string", "enum": ["napkin", "prototype", "mvp", "scaling"] }
+            }
+          }
+        },
+        "resume": { 
+          "type": "object",
+          "properties": {
+            "shippedProducts": { "type": "array", "items": { "type": "string" } },
+            "sideProjects": { "type": "array", "items": { "type": "string" } },
+            "startupAttempts": { "type": "array", "items": { "type": "string" } },
+            "hackathonWins": { "type": "array", "items": { "type": "string" } },
+            "buildStreaks": { "type": "number" }
+          }
+        }
+      },
+      "required": ["uid", "displayName", "createdAt"]
+    },
+    "Report": {
+      "title": "Report Record",
+      "description": "A record of a user reporting another user for misconduct.",
+      "type": "object",
+      "properties": {
+        "reportedById": { "type": "string" },
+        "reportedUserId": { "type": "string" },
+        "reason": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "reviewed", "resolved"] }
+      },
+      "required": ["reportedById", "reportedUserId", "reason", "timestamp", "status"]
+    },
+    "Swipe": {
+      "title": "Swipe Record",
+      "description": "A record of a user swiping on another user.",
+      "type": "object",
+      "properties": {
+        "fromId": { "type": "string" },
+        "toId": { "type": "string" },
+        "type": { "type": "string", "enum": ["like", "pass", "superconnect"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fromId", "toId", "type", "timestamp"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "A match between two users.",
+      "type": "object",
+      "properties": {
+        "userIds": { "type": "array", "items": { "type": "string" } },
+        "matchedAt": { "type": "string", "format": "date-time" },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userIds", "matchedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A chat message within a match.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "isRead": { "type": "boolean" }
+      },
+      "required": ["senderId", "text", "timestamp"]
+    },
+    "Post": {
+      "title": "Social Post",
+      "description": "A post in the founder feed.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "type": { "type": "string", "enum": ["build", "launch", "achievement", "update"] },
+        "content": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "likesCount": { "type": "number" },
+        "commentsCount": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "type", "content", "timestamp"]
+    },
+    "Block": {
+      "title": "Block Record",
+      "description": "A record of a user blocking another user.",
+      "type": "object",
+      "properties": {
+        "blockedById": { "type": "string" },
+        "blockedUserId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["blockedById", "blockedUserId", "timestamp"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification for likes, views, etc.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "fromId": { "type": "string" },
+        "content": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users": { "schema": "User", "description": "Collection of user profiles." },
+    "/swipes": { "schema": "Swipe", "description": "Collection of swipes (likes/passes)." },
+    "/matches": { "schema": "Match", "description": "Collection of matches." },
+    "/matches/{matchId}/messages": { "schema": "Message", "description": "Sub-collection of messages for a match." },
+    "/posts": { "schema": "Post", "description": "Collection of social posts." },
+    "/blocks": { "schema": "Block", "description": "Collection of user blocks." },
+    "/reports": { "schema": "Report", "description": "Collection of user reports." },
+    "/notifications": { "schema": "Notification", "description": "Collection of user notifications." }
+  }
+}
