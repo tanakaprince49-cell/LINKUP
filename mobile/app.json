@@ -5,7 +5,7 @@
     "scheme": "linkup",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo.png.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
@@ -19,7 +19,7 @@
     "android": {
       "package": "com.tana.linkup",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/logo.png.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -27,6 +27,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "62db6e6e-e4be-44ff-a0c1-9437f43ba980"
+      }
     }
   }
 }

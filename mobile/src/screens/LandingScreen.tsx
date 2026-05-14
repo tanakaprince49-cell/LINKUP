@@ -64,9 +64,9 @@ export default function LandingScreen() {
           <View style={styles.footer}>
             <Text style={styles.legalText}>
               By joining, you agree to our{"\n"}
-              <Text style={styles.legalLink} onPress={() => openLink('https://linkup.pro/terms')}>TERMS OF SERVICE</Text>
+              <Text style={styles.legalLink} onPress={() => openLink('https://docs.google.com/document/d/1SPu2VZchQfmWQT0gr2QuvmHbiuLpBZX-aFpmVd-ph2E/edit?usp=sharing')}>TERMS OF SERVICE</Text>
               <Text style={styles.legalText}> & </Text>
-              <Text style={styles.legalLink} onPress={() => openLink('https://linkup.pro/privacy')}>PRIVACY POLICY</Text>
+              <Text style={styles.legalLink} onPress={() => openLink('https://docs.google.com/document/d/1FUTyaNfaBXzYGUiqbfhrKX73H6S6S809kpI00chyWRM/edit?usp=sharing')}>PRIVACY POLICY</Text>
             </Text>
             <Text style={styles.complianceText}>© 2026 LINKUP. DATA PROTECTED UNDER GDPR & CCPA.</Text>
           </View>

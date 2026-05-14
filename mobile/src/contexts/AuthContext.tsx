@@ -4,6 +4,7 @@ import { onAuthStateChanged, User, signOut, signInWithEmailAndPassword, GoogleAu
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { UserProfile } from '../types';
+import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -32,12 +33,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [request, response, promptAsync] = Google.useAuthRequest(GOOGLE_CONFIG);
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    ...GOOGLE_CONFIG,
+    responseType: 'id_token',
+    redirectUri: AuthSession.makeRedirectUri({
+      scheme: 'linkup',
+      projectNameForProxy: 'linkup',
+    }),
+  });
 
   useEffect(() => {
     if (response?.type === 'success') {
-      const { id_token } = response.params;
-      const credential = GoogleAuthProvider.credential(id_token);
+      const { id_token, authentication } = response.params;
+      const credential = GoogleAuthProvider.credential(id_token || authentication?.idToken);
       signInWithCredential(auth, credential);
     }
   }, [response]);
@@ -120,7 +128,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signInWithGoogle = async () => {
+    const finalRedirectUri = AuthSession.makeRedirectUri({
+      scheme: 'linkup',
+      projectNameForProxy: 'linkup',
+    });
     console.log("Starting Google Auth flow...");
+    console.log("Using Redirect URI:", finalRedirectUri);
     
     try {
       const result = await promptAsync();
