@@ -105,6 +105,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 hackathonWins: [],
                 buildStreaks: 0
               },
+              viewedBy: [],
+              isStealthMode: false,
+              hasExit: false,
               onboarded: false
             };
             await setDoc(userDocRef, newProfile);

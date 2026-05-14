@@ -136,3 +136,34 @@ export const generateFeedback = async (postContent: string) => {
     return "BUILD_INTEL_DECRYPTION_FAILED";
   }
 };
+export const generateWarmIntro = async (me: any, other: any) => {
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "deepseek/deepseek-chat",
+        messages: [
+          {
+            role: "system",
+            content: "You are a professional co-founder matchmaker. Write a short, enthusiastic warm intro message."
+          },
+          {
+            role: "user",
+            content: `Me: ${JSON.stringify(me)}
+            Other Founder: ${JSON.stringify(other)}
+            Write a 2-sentence opening message I can send to start a conversation about building together.`
+          }
+        ]
+      })
+    });
+    const data = await response.json();
+    return data.choices[0].message.content;
+  } catch (error) {
+    console.error("OpenRouter Error:", error);
+    return "Hey! Saw we matched, excited to see what we can build together.";
+  }
+};

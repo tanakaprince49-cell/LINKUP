@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, SafeAreaView, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, SafeAreaView, KeyboardAvoidingView, Platform, Image, Alert } from 'react-native';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { ChevronLeft, Send, Camera, Zap } from 'lucide-react-native';
+import { generateWarmIntro } from '../lib/ai';
 
 export default function ChatScreen({ route, navigation }: any) {
   const { matchId, otherUser } = route.params;
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [messages, setMessages] = useState<any[]>([]);
@@ -93,6 +94,16 @@ export default function ChatScreen({ route, navigation }: any) {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
         <View style={[styles.inputContainer, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
+          <TouchableOpacity 
+            style={[styles.toolBtn, { backgroundColor: '#FBE61820' }]} 
+            onPress={async () => {
+              Alert.alert("AI INTRO", "Drafting a perfect opening based on your profiles...");
+              const intro = await generateWarmIntro(profile, otherUser);
+              setInputText(intro);
+            }}
+          >
+            <Zap size={20} color="#FBE618" fill="#FBE618" />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.toolBtn}>
             <Camera size={20} color="#666" />
           </TouchableOpacity>

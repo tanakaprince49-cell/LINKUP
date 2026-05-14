@@ -37,6 +37,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Post } from '../types';
 import * as Icons from 'lucide-react-native';
+import { generateFeedback } from '../lib/ai';
 
 const { width } = Dimensions.get('window');
 
@@ -266,6 +267,22 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
             <SafeIcon name="MessageSquare" size={18} color="#666" />
           </Animated.View>
           <Text style={styles.actionVal}>{post.commentsCount || 0}</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.actionBtn} 
+          onPress={async () => {
+            if (post.authorId === user?.uid) {
+              Alert.alert("Self-Roast", "You can't roast yourself! Let the community or AI do it.");
+              return;
+            }
+            Alert.alert("AI ROAST", "Analyzing this build for weaknesses...");
+            const roast = await generateFeedback(post.content);
+            Alert.alert("BRUTAL FEEDBACK", roast);
+          }}
+        >
+          <SafeIcon name="Flame" size={18} color="#FF4444" />
+          <Text style={[styles.actionVal, { color: '#FF4444' }]}>ROAST</Text>
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.actionBtn}>

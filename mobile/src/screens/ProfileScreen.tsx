@@ -58,7 +58,9 @@ export default function ProfileScreen({ navigation }: any) {
   const startEditing = () => {
     setEditData({ 
       ...profile,
-      skills: Array.isArray(profile.skills) ? profile.skills.join(', ') : (profile.skills || '')
+      skills: Array.isArray(profile.skills) ? profile.skills.join(', ') : (profile.skills || ''),
+      isStealthMode: profile.isStealthMode || false,
+      hasExit: profile.hasExit || false
     });
     setIsEditing(true);
   };
@@ -110,7 +112,10 @@ export default function ProfileScreen({ navigation }: any) {
         bio: editData.bio || '',
         city: editData.city || '',
         skills: skillsArray,
-        socialLinks: editData.socialLinks || {}
+        socialLinks: editData.socialLinks || {},
+        isStealthMode: editData.isStealthMode || false,
+        hasExit: editData.hasExit || false,
+        vibeMedia: editData.vibeMedia || ''
       });
       setIsEditing(false);
     } catch (err) {
@@ -221,6 +226,27 @@ export default function ProfileScreen({ navigation }: any) {
           )}
         </View>
 
+        {/* VIBE INTRO */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>VIBE-CHECK (INTRO)</Text>
+          {isEditing ? (
+            <TextInput
+              style={[styles.bioInput, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
+              value={editData?.vibeMedia}
+              onChangeText={(t) => setEditData({...editData, vibeMedia: t})}
+              placeholder="Paste a link to your 15s audio/video intro..."
+              placeholderTextColor="#444"
+            />
+          ) : (
+            <TouchableOpacity style={[styles.vibeCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+              <SafeIcon name="Mic" size={20} color="#FBE618" />
+              <Text style={[styles.vibeText, { color: isDark ? '#AAA' : '#444' }]}>
+                {profile.vibeMedia ? "PLAY VIBE INTRO" : "NO VIBE INTRO SET"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* BIO SECTION */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>IDENTITY</Text>
@@ -259,7 +285,7 @@ export default function ProfileScreen({ navigation }: any) {
           )}
         </View>
 
-        {/* SOCIALS */}
+        {/* CHANNELS */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>CHANNELS</Text>
           <View style={styles.socialsRow}>
@@ -278,10 +304,48 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* PREFERENCES */}
+        {/* ANALYTICS */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>SETTINGS</Text>
+          <Text style={styles.sectionLabel}>ANALYTICS (PRO)</Text>
+          <TouchableOpacity 
+            style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
+            onPress={() => navigation.navigate('Viewers')}
+          >
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name="Eye" size={18} color="#FBE618" />
+              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Who viewed your profile</Text>
+            </View>
+            <Text style={styles.viewerCount}>{profile.viewedBy?.length || 0}</Text>
+          </TouchableOpacity>
+        </View>
+
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name="Ghost" size={18} color="#FBE618" />
+              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Stealth Mode</Text>
+            </View>
+            <Switch 
+              value={isEditing ? editData.isStealthMode : profile.isStealthMode} 
+              onValueChange={(v) => isEditing ? setEditData({...editData, isStealthMode: v}) : updateDoc(doc(db, 'users', profile.uid), { isStealthMode: v })} 
+              trackColor={{ true: '#FBE618' }} 
+              thumbColor="#FFF" 
+            />
+          </View>
+
+          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name="Target" size={18} color="#FBE618" />
+              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Verified Exit</Text>
+            </View>
+            <Switch 
+              value={isEditing ? editData.hasExit : profile.hasExit} 
+              onValueChange={(v) => isEditing ? setEditData({...editData, hasExit: v}) : updateDoc(doc(db, 'users', profile.uid), { hasExit: v })} 
+              trackColor={{ true: '#FBE618' }} 
+              thumbColor="#FFF" 
+            />
+          </View>
+
+          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name={isDark ? "Moon" : "Sun"} size={18} color="#FBE618" />
               <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Dark Mode</Text>
@@ -428,6 +492,18 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: 16,
   },
+  vibeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 20,
+  },
+  vibeText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
   bioText: {
     fontSize: 15,
     lineHeight: 22,
@@ -495,6 +571,11 @@ const styles = StyleSheet.create({
   prefLabel: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  viewerCount: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#FBE618',
   },
   cancelButton: {
     marginTop: 10,

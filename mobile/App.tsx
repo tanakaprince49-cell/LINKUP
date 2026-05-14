@@ -20,6 +20,7 @@ import MessagesScreen from './src/screens/MessagesScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import CreatePostScreen from './src/screens/CreatePostScreen';
 import ChatScreen from './src/screens/ChatScreen';
+import ViewersScreen from './src/screens/ViewersScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -42,7 +43,7 @@ const AppHeader = ({ navigation, title }: any) => {
       <View style={styles.headerContent}>
         <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>
           {title === 'LINKUP' ? (
-            <>LINK<Text style={{ color: '#FBE618' }}>UP</Text></>
+            <>LIN<Text style={{ color: '#FBE618' }}>KUP</Text></>
           ) : title}
         </Text>
         <View style={styles.headerActions}>
@@ -128,12 +129,12 @@ function TabNavigator({ navigation }: any) {
         headerShown: true,
         header: (props) => {
           const titles: Record<string, string> = {
-            'Feed': 'LINNKUP',
+            'Feed': 'LINKUP',
             'Swipe': 'DISCOVER',
             'Matches': 'CONNECTIONS',
             'Alerts': 'NOTIFICATIONS'
           };
-          return <AppHeader navigation={props.navigation} title={titles[route.name] || 'LINNKUP'} />;
+          return <AppHeader navigation={props.navigation} title={titles[route.name] || 'LINKUP'} />;
         }
       })}
     >
@@ -185,6 +186,7 @@ function AppContent() {
             <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="Messages" component={MessagesScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
+            <Stack.Screen name="Viewers" component={ViewersScreen} />
             <Stack.Screen name="CreatePost" component={CreatePostScreen} options={{ presentation: 'modal' }} />
           </>
         )}

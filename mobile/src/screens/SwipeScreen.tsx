@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, Animated, PanResponder, ScrollView } from 'react-native';
-import { collection, query, onSnapshot, where, addDoc, limit, serverTimestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, addDoc, updateDoc, doc, arrayUnion, limit, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -116,13 +116,43 @@ export default function SwipeScreen() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'users'), where('uid', '!=', user.uid), limit(40));
+    const q = query(
+      collection(db, 'users'), 
+      where('uid', '!=', user.uid), 
+      where('isStealthMode', '==', false),
+      limit(40)
+    );
     const unsub = onSnapshot(q, (snap) => {
       setProfiles(snap.docs.map(doc => doc.data() as UserProfile));
       setLoading(false);
     });
     return () => unsub();
   }, [user]);
+
+  useEffect(() => {
+    if (!user || !profiles[currentIndex]) return;
+    const target = profiles[currentIndex];
+    const trackView = async () => {
+      try {
+        await updateDoc(doc(db, 'users', target.uid), {
+          viewedBy: arrayUnion(user.uid)
+        });
+        
+        // Also create a notification for the viewed user
+        await addDoc(collection(db, 'notifications'), {
+          userId: target.uid,
+          fromId: user.uid,
+          type: 'view',
+          content: `${user.displayName || 'Someone'} viewed your profile.`,
+          timestamp: serverTimestamp(),
+          isRead: false
+        });
+      } catch (e) {
+        console.error("Tracking view failed:", e);
+      }
+    };
+    trackView();
+  }, [currentIndex, profiles, user]);
 
   const renderCards = () => {
     if (currentIndex >= profiles.length) {
@@ -181,8 +211,16 @@ export default function SwipeScreen() {
               showsVerticalScrollIndicator={false}
               scrollEnabled={isTop} // Only allow scrolling on the top card
             >
+            <View style={styles.nameRow}>
               <Text style={styles.nameText}>{profile.displayName}, {profile.age}</Text>
-              <Text style={styles.bioText}>"{profile.bio}"</Text>
+              {profile.hasExit && (
+                <View style={styles.exitBadge}>
+                  <Target size={12} color="#000" />
+                  <Text style={styles.exitText}>EXIT</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.bioText}>"{profile.bio}"</Text>
               
               <View style={styles.tagGrid}>
                 {profile.skills?.slice(0, 5).map((s, idx) => (
@@ -222,8 +260,8 @@ export default function SwipeScreen() {
         <TouchableOpacity style={styles.actionBtnLarge} onPress={() => forceSwipe('right')}>
           <Heart size={32} color="#000" fill="#000" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtnSmall}>
-          <MessageSquare size={24} color="#FBE618" />
+        <TouchableOpacity style={styles.actionBtnSmall} onPress={() => setCurrentIndex(0)}>
+          <RotateCcw size={24} color="#FBE618" />
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -285,6 +323,25 @@ const styles = StyleSheet.create({
     padding: 24,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  exitBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FBE618',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 4,
+  },
+  exitText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#000',
   },
   nameText: {
     fontSize: 28,

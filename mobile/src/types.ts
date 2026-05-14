@@ -33,6 +33,10 @@ export interface UserProfile {
   resume: StartupResume;
   badges: string[];
   projects: Project[];
+  viewedBy: string[];
+  isStealthMode: boolean; // For private discovery
+  hasExit: boolean; // Verified serial founder
+  vibeMedia?: string; // Base64 audio/video intro
 }
 
 export interface StartupResume {
