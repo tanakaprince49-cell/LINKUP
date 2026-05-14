@@ -1,137 +1,316 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, SafeAreaView, ScrollView, Switch } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Image, 
+  TouchableOpacity, 
+  SafeAreaView, 
+  ScrollView, 
+  Switch, 
+  TextInput, 
+  ActivityIndicator, 
+  Dimensions,
+  Alert
+} from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { User, LogOut, Moon, Sun, Settings, Rocket, Award, Briefcase, Shield, Zap, Check, ExternalLink, Trash2 } from 'lucide-react-native';
-import { seedDatabase } from '../lib/seed';
+import * as Icons from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadMedia } from '../lib/storage';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 
-const Badge = ({ name, icon: Icon }: { name: string, icon: any }) => {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
+const { width } = Dimensions.get('window');
+
+// ULTRA-SAFE ICON RENDERER
+const SafeIcon = ({ name, size = 20, color = "#FBE618", fill = "transparent", style }: any) => {
+  const IconComponent = (Icons as any)[name];
+  if (!IconComponent) {
+    return <View style={[{ width: size, height: size, backgroundColor: color + '20', borderRadius: 4 }, style]} />;
+  }
+  return <IconComponent size={size} color={color} fill={fill} style={style} />;
+};
+
+const Badge = ({ name, iconName, color = "#FBE618" }: { name: string, iconName: string, color?: string }) => {
   return (
-    <View style={[styles.badgeItem, { backgroundColor: isDark ? '#FBE61810' : '#FBE61820' }]}>
-      <Icon size={14} color="#FBE618" />
-      <Text style={styles.badgeText}>{name}</Text>
+    <View style={[styles.badgeItem, { backgroundColor: `${color}10`, borderColor: `${color}20` }]}>
+      <SafeIcon name={iconName} size={12} color={color} />
+      <Text style={[styles.badgeText, { color }]}>{name}</Text>
     </View>
   );
 };
 
-export default function ProfileScreen() {
-  const { profile, logout } = useAuth();
+export default function ProfileScreen({ navigation }: any) {
+  const { profile, logout, deleteAccount } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
-  const [showSettings, setShowSettings] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editData, setEditData] = useState<any>(null);
 
-  if (!profile) return null;
+  if (!profile) return (
+    <View style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', justifyContent: 'center', alignItems: 'center' }]}>
+      <ActivityIndicator color="#FBE618" />
+    </View>
+  );
+
+  const startEditing = () => {
+    setEditData({ 
+      ...profile,
+      skills: Array.isArray(profile.skills) ? profile.skills.join(', ') : (profile.skills || '')
+    });
+    setIsEditing(true);
+  };
+
+  const pickProfilePic = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'We need access to your photos to update your profile picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.2, // Small for profile
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      const base64Data = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      setIsSaving(true);
+      try {
+        await updateDoc(doc(db, 'users', profile.uid), {
+          profilePic: base64Data
+        });
+        
+        if (isEditing) {
+          setEditData({ ...editData, profilePic: base64Data });
+        }
+      } catch (e) {
+        Alert.alert("Error", "Failed to update profile picture.");
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  };
+
+  const handleSave = async () => {
+    if (!editData) return;
+    setIsSaving(true);
+    try {
+      const skillsArray = typeof editData.skills === 'string' 
+        ? editData.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '')
+        : (Array.isArray(editData.skills) ? editData.skills : []);
+
+      await updateDoc(doc(db, 'users', profile.uid), {
+        displayName: editData.displayName || '',
+        bio: editData.bio || '',
+        city: editData.city || '',
+        skills: skillsArray,
+        socialLinks: editData.socialLinks || {}
+      });
+      setIsEditing(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${profile.uid}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert("Logout", "Are you sure you want to exit the realm?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Logout", style: "destructive", onPress: async () => {
+        try {
+          await logout();
+        } catch (e) {
+          console.error(e);
+        }
+      }}
+    ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "DELETE ACCOUNT", 
+      "This is permanent. Your founder profile and all network data will be wiped from existence. Proceed?", 
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "DELETE EVERYTHING", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              setIsSaving(true);
+              await deleteAccount();
+            } catch (e: any) {
+              Alert.alert("Error", e.message || "Failed to delete account. You may need to re-authenticate first.");
+            } finally {
+              setIsSaving(false);
+            }
+          } 
+        }
+      ]
+    );
+  };
+
+  const currentSkills = isEditing 
+    ? (typeof editData.skills === 'string' ? editData.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '') : [])
+    : (Array.isArray(profile.skills) ? profile.skills : []);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#121212' : '#FFFFFF' }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* HEADER */}
         <View style={styles.header}>
-          <View style={styles.profileHeader}>
-            <View style={styles.avatarContainer}>
-              {profile.profilePic ? (
-                <Image source={{ uri: profile.profilePic }} style={styles.avatar} />
-              ) : (
-                <View style={[styles.avatarPlaceholder, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}>
-                  <User size={40} color={isDark ? '#444444' : '#EEEEEE'} />
-                </View>
-              )}
-              <TouchableOpacity style={styles.editAvatar}>
-                <Settings size={16} color="#000000" />
+          <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.iconButton}>
+            <SafeIcon name="ChevronLeft" size={20} color={isDark ? '#FFF' : '#000'} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>PROFILE</Text>
+          <TouchableOpacity onPress={isEditing ? handleSave : startEditing} style={styles.iconButton}>
+            {isSaving ? <ActivityIndicator size="small" color="#FBE618" /> : (
+              <SafeIcon name={isEditing ? "Save" : "Pen"} size={20} color="#FBE618" />
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* PROFILE HERO */}
+        <View style={styles.heroSection}>
+          <View style={styles.avatarContainer}>
+            <Image 
+              source={{ uri: (isEditing ? editData?.profilePic : profile.profilePic) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400' }} 
+              style={styles.avatar} 
+            />
+            {(isEditing || true) && (
+              <TouchableOpacity style={styles.cameraOverlay} onPress={pickProfilePic}>
+                <SafeIcon name="Camera" size={20} color="#000" />
               </TouchableOpacity>
+            )}
+            <View style={styles.reputationFloating}>
+              <SafeIcon name="Zap" size={10} color="#000" fill="#000" />
+              <Text style={styles.reputationVal}>{profile.reputationScore || 500}</Text>
             </View>
-            <View style={styles.mainInfo}>
-              <Text style={[styles.name, { color: isDark ? '#FFFFFF' : '#000000' }]}>{profile.displayName}</Text>
-              <Text style={styles.location}>{profile.city}, {profile.country}</Text>
-              <View style={styles.statsRow}>
-                <View style={styles.stat}>
-                  <Text style={[styles.statValue, { color: '#FBE618' }]}>{profile.reputationScore}</Text>
-                  <Text style={styles.statLabel}>REPUTATION</Text>
-                </View>
-                <View style={styles.stat}>
-                  <Text style={[styles.statValue, { color: '#FBE618' }]}>{profile.streakCount} 🔥</Text>
-                  <Text style={styles.statLabel}>STREAK</Text>
-                </View>
-              </View>
+          </View>
+
+          {isEditing ? (
+            <View style={styles.editForm}>
+              <TextInput 
+                style={[styles.nameInput, { color: isDark ? '#FFF' : '#000' }]}
+                value={editData?.displayName}
+                onChangeText={(t) => setEditData({...editData, displayName: t})}
+                placeholder="Full Name"
+                placeholderTextColor="#666"
+              />
+              <TextInput 
+                style={[styles.locationInput, { color: '#FBE618' }]}
+                value={editData?.city}
+                onChangeText={(t) => setEditData({...editData, city: t})}
+                placeholder="City, Country"
+                placeholderTextColor="#666"
+              />
             </View>
+          ) : (
+            <>
+              <Text style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}>{profile.displayName || 'Builder'}</Text>
+              <Text style={styles.locationText}>{profile.city || 'Digital Nomad'}</Text>
+            </>
+          )}
+        </View>
+
+        {/* BIO SECTION */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>IDENTITY</Text>
+          {isEditing ? (
+            <TextInput
+              multiline
+              style={[styles.bioInput, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
+              value={editData?.bio}
+              onChangeText={(t) => setEditData({...editData, bio: t})}
+              placeholder="Tell your story..."
+              placeholderTextColor="#444"
+            />
+          ) : (
+            <Text style={[styles.bioText, { color: isDark ? '#AAA' : '#444' }]}>
+              "{profile.bio || 'No bio provided yet. Complete your identity to stand out.'}"
+            </Text>
+          )}
+        </View>
+
+        {/* SKILLS SECTION */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>SKILLS & STACK</Text>
+          <View style={styles.badgesGrid}>
+            {currentSkills.map((skill, i) => (
+              <Badge key={i} name={skill.toUpperCase()} iconName="Rocket" />
+            ))}
+          </View>
+          {isEditing && (
+            <TextInput 
+              style={[styles.skillsInput, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', color: isDark ? '#FFF' : '#000' }]}
+              value={editData?.skills}
+              onChangeText={(t) => setEditData({...editData, skills: t})}
+              placeholder="React, Node, AI..."
+              placeholderTextColor="#444"
+            />
+          )}
+        </View>
+
+        {/* SOCIALS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>CHANNELS</Text>
+          <View style={styles.socialsRow}>
+            <TouchableOpacity style={styles.socialButton}>
+              <SafeIcon name="Github" size={20} color={isDark ? '#FFF' : '#000'} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.socialButton}>
+              <SafeIcon name="Twitter" size={20} color="#1DA1F2" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.socialButton}>
+              <SafeIcon name="Linkedin" size={20} color="#0A66C2" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.socialButton}>
+              <SafeIcon name="Link" size={20} color="#FBE618" />
+            </TouchableOpacity>
           </View>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.seedButton, { borderColor: isDark ? '#FBE61820' : '#FBE61850' }]}
-          onPress={async () => {
-            await seedDatabase(profile.uid);
-            alert("Network Seeded! 10 Founders added.");
-          }}
-        >
-          <Shield size={20} color="#FBE618" />
-          <Text style={styles.seedButtonText}>SEED DEMO NETWORK</Text>
-        </TouchableOpacity>
-
-        {/* ACHIEVEMENT BADGES */}
+        {/* PREFERENCES */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>SKILL BADGES</Text>
-          <View style={styles.badgesContainer}>
-            <Badge name="TOP BUILDER" icon={Rocket} />
-            <Badge name="FAST EXECUTOR" icon={Zap} />
-            <Badge name="CONSISTENT" icon={Check} />
-            <Badge name="LEADERSHIP" icon={Shield} />
-          </View>
-        </View>
-
-        {/* STARTUP RESUME */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>STARTUP RESUME</Text>
-          <View style={styles.resumeContainer}>
-            <View style={[styles.resumeItem, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}>
-              <Briefcase size={18} color="#FBE618" />
-              <View style={styles.resumeInfo}>
-                <Text style={[styles.resumeTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>Shipped Products</Text>
-                <Text style={styles.resumeDesc}>{profile.resume?.shippedProducts?.length || 0} Products Live</Text>
-              </View>
-              <ExternalLink size={16} color="#666666" />
+          <Text style={styles.sectionLabel}>SETTINGS</Text>
+          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name={isDark ? "Moon" : "Sun"} size={18} color="#FBE618" />
+              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Dark Mode</Text>
             </View>
-            <View style={[styles.resumeItem, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}>
-              <Award size={18} color="#FBE618" />
-              <View style={styles.resumeInfo}>
-                <Text style={[styles.resumeTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>Hackathon Wins</Text>
-                <Text style={styles.resumeDesc}>{profile.resume?.hackathonWins?.length || 0} Victories</Text>
-              </View>
-              <ExternalLink size={16} color="#666666" />
-            </View>
-          </View>
-        </View>
-
-        {/* SETTINGS TOGGLE SECTION */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>SETTINGS & PREFERENCES</Text>
-          <View style={[styles.settingRow, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}>
-            <View style={styles.settingLabelContainer}>
-              {isDark ? <Moon size={20} color="#FBE618" /> : <Sun size={20} color="#FBE618" />}
-              <Text style={[styles.settingLabel, { color: isDark ? '#FFFFFF' : '#000000' }]}>Dark Mode</Text>
-            </View>
-            <Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: '#FBE61840', false: '#CCC' }} thumbColor={isDark ? '#FBE618' : '#FFF'} />
-          </View>
-          
-          <View style={[styles.settingRow, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}>
-            <View style={styles.settingLabelContainer}>
-              <Shield size={20} color="#FBE618" />
-              <Text style={[styles.settingLabel, { color: isDark ? '#FFFFFF' : '#000000' }]}>Profile Visibility</Text>
-            </View>
-            <Switch value={profile.isVisible} trackColor={{ true: '#FBE61840', false: '#CCC' }} thumbColor={profile.isVisible ? '#FBE618' : '#FFF'} />
+            <Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: '#FBE618' }} thumbColor="#FFF" />
           </View>
 
-          <TouchableOpacity style={[styles.logoutButton, { marginTop: 20 }]} onPress={logout}>
-            <LogOut size={20} color="#FF4444" />
-            <Text style={styles.logoutText}>TERMINATE SESSION</Text>
+          <TouchableOpacity style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]} onPress={handleLogout}>
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name="LogOut" size={18} color="#FBE618" />
+              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Exit Realm (Logout)</Text>
+            </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.deleteButton, { marginTop: 10 }]}>
-            <Trash2 size={20} color="#FF444460" />
-            <Text style={styles.deleteText}>DELETE ACCOUNT</Text>
+          <TouchableOpacity style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]} onPress={handleDeleteAccount}>
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name="Trash2" size={18} color="#FF4444" />
+              <Text style={[styles.prefLabel, { color: '#FF4444' }]}>Delete Account Permanently</Text>
+            </View>
           </TouchableOpacity>
         </View>
+
+        {isEditing && (
+          <TouchableOpacity style={styles.cancelButton} onPress={() => setIsEditing(false)}>
+            <Text style={styles.cancelText}>DISCARD CHANGES</Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -142,89 +321,127 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 100,
+    padding: 24,
   },
   header: {
-    marginBottom: 40,
-    marginTop: 20,
-  },
-  profileHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 20,
+    marginBottom: 32,
+  },
+  headerTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#FBE61815',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FBE61830',
+  },
+  heroSection: {
+    alignItems: 'center',
+    marginBottom: 32,
   },
   avatarContainer: {
     position: 'relative',
+    marginBottom: 20,
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 40,
-  },
-  avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editAvatar: {
-    position: 'absolute',
-    bottom: -5,
-    right: -5,
-    width: 32,
-    height: 32,
-    borderRadius: 12,
-    backgroundColor: '#FBE618',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 120,
+    height: 120,
+    borderRadius: 50,
     borderWidth: 3,
-    borderColor: '#050508',
+    borderColor: '#FBE618',
   },
-  mainInfo: {
-    flex: 1,
+  cameraOverlay: {
+    position: 'absolute',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(251, 230, 24, 0.4)',
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  name: {
-    fontSize: 24,
+  reputationFloating: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#FBE618',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+  },
+  reputationVal: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#000',
+  },
+  nameText: {
+    fontSize: 28,
     fontWeight: '900',
     fontStyle: 'italic',
     textTransform: 'uppercase',
   },
-  location: {
-    fontSize: 14,
-    color: '#666666',
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 20,
-  },
-  stat: {
-    alignItems: 'flex-start',
-  },
-  statValue: {
-    fontSize: 18,
+  locationText: {
+    fontSize: 12,
+    color: '#FBE618',
     fontWeight: '900',
+    marginTop: 4,
   },
-  statLabel: {
-    fontSize: 9,
-    color: '#666666',
+  editForm: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  nameInput: {
+    fontSize: 24,
     fontWeight: '900',
-    letterSpacing: 1,
+    textAlign: 'center',
+    width: '100%',
   },
-  section: {
-    marginBottom: 30,
-  },
-  sectionTitle: {
+  locationInput: {
     fontSize: 12,
     fontWeight: '900',
+    textAlign: 'center',
+    marginTop: 4,
+    width: '100%',
+  },
+  section: {
+    marginBottom: 32,
+  },
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#666',
     letterSpacing: 2,
     marginBottom: 16,
-    opacity: 0.6,
   },
-  badgesContainer: {
+  bioText: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontStyle: 'italic',
+    fontWeight: '500',
+  },
+  bioInput: {
+    padding: 16,
+    borderRadius: 20,
+    fontSize: 15,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  badgesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
@@ -232,100 +449,62 @@ const styles = StyleSheet.create({
   badgeItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
   },
   badgeText: {
-    color: '#FBE618',
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1,
   },
-  resumeContainer: {
-    gap: 10,
-  },
-  resumeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  skillsInput: {
+    marginTop: 12,
     padding: 16,
-    borderRadius: 20,
-    gap: 16,
-  },
-  resumeInfo: {
-    flex: 1,
-  },
-  resumeTitle: {
+    borderRadius: 16,
     fontSize: 14,
-    fontWeight: '900',
-  },
-  resumeDesc: {
-    fontSize: 12,
-    color: '#666666',
     fontWeight: '600',
   },
-  settingRow: {
+  socialsRow: {
     flexDirection: 'row',
+    gap: 16,
+  },
+  socialButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 18,
+    backgroundColor: '#F8F8F810',
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#22222610',
+  },
+  prefRow: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 16,
     borderRadius: 20,
-    marginBottom: 10,
   },
-  settingLabelContainer: {
+  prefLabelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  settingLabel: {
+  prefLabel: {
     fontSize: 14,
     fontWeight: '700',
   },
-  seedButton: {
-    flexDirection: 'row',
+  cancelButton: {
+    marginTop: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
     padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 30,
-    backgroundColor: '#FBE61805',
   },
-  seedButtonText: {
-    color: '#FBE618',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#FF444420',
-  },
-  logoutText: {
+  cancelText: {
     color: '#FF4444',
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 1,
-  },
-  deleteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    padding: 16,
-  },
-  deleteText: {
-    color: '#FF444460',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
+  }
 });

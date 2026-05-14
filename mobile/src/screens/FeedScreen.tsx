@@ -1,192 +1,317 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, TextInput, Modal, ScrollView } from 'react-native';
-import { collection, query, getDocs, where, limit, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
+  Image, 
+  TouchableOpacity, 
+  SafeAreaView, 
+  ActivityIndicator, 
+  Dimensions, 
+  TextInput, 
+  ScrollView, 
+  Animated,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Alert
+} from 'react-native';
+import { 
+  collection, 
+  query, 
+  onSnapshot, 
+  doc, 
+  updateDoc, 
+  arrayUnion, 
+  arrayRemove, 
+  addDoc, 
+  serverTimestamp, 
+  orderBy, 
+  limit, 
+  deleteDoc,
+  increment
+} from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { Post, UserProfile } from '../types';
-import { Heart, MessageSquare, Share2, Rocket, Shield, Send, X, Code, Zap } from 'lucide-react-native';
-import { generateFeedback } from '../lib/ai';
+import { Post } from '../types';
+import * as Icons from 'lucide-react-native';
 
-const PostCard = ({ post }: { post: Post }) => {
-  const { user } = useAuth();
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
-  const [isLiked, setIsLiked] = useState(post.likedBy?.includes(user?.uid || ''));
-  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
-  const [showComments, setShowComments] = useState(false);
-  const [newComment, setNewComment] = useState('');
+const { width } = Dimensions.get('window');
+
+// Safe Icon Helper
+const SafeIcon = ({ name, size = 18, color = "#666", fill = "transparent", style }: any) => {
+  const IconComponent = (Icons as any)[name];
+  if (!IconComponent) return <View style={[{ width: size, height: size, backgroundColor: color + '20' }, style]} />;
+  return <IconComponent size={size} color={color} fill={fill} style={style} />;
+};
+
+const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) => {
   const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (showComments) {
-      const q = query(collection(db, `posts/${post.id}/comments`), orderBy('timestamp', 'asc'));
-      const unsub = onSnapshot(q, (snap) => {
-        setComments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      });
-      return () => unsub();
-    }
-  }, [showComments, post.id]);
+    if (!visible) return;
+    const q = query(collection(db, 'posts', post.id, 'comments'), orderBy('timestamp', 'asc'));
+    const unsub = onSnapshot(q, (snap) => {
+      setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [visible]);
 
-  const handleLike = async () => {
-    if (!user) return;
-    const postRef = doc(db, 'posts', post.id);
-    if (isLiked) {
-      await updateDoc(postRef, {
-        likesCount: post.likesCount - 1,
-        likedBy: arrayRemove(user.uid)
-      });
-      setIsLiked(false);
-    } else {
-      await updateDoc(postRef, {
-        likesCount: post.likesCount + 1,
-        likedBy: arrayUnion(user.uid)
-      });
-      setIsLiked(true);
-      
-      // Notify the author if it's not their own post
-      if (post.authorId !== user.uid) {
-        await addDoc(collection(db, 'notifications'), {
-          userId: post.authorId,
-          fromId: user.uid,
-          type: 'like',
-          content: `${user.displayName || 'Someone'} liked your build update!`,
-          isRead: false,
-          timestamp: serverTimestamp()
-        });
-      }
-    }
-  };
-
-  const handleAiAnalyze = async () => {
-    setAiFeedback("Analyzing Proof of Work...");
-    const feedback = await generateFeedback(post.content);
-    setAiFeedback(feedback);
-  };
-
-  const handleAddComment = async () => {
+  const handlePostComment = async () => {
     if (!newComment.trim() || !user) return;
-    await addDoc(collection(db, `posts/${post.id}/comments`), {
-      authorId: user.uid,
-      authorName: user.displayName || 'Builder',
-      content: newComment,
-      timestamp: serverTimestamp()
-    });
-    await updateDoc(doc(db, 'posts', post.id), {
-      commentsCount: (post.commentsCount || 0) + 1
-    });
-    
-    // Notify the author if it's not their own post
-    if (post.authorId !== user.uid) {
-      await addDoc(collection(db, 'notifications'), {
-        userId: post.authorId,
-        fromId: user.uid,
-        type: 'system',
-        content: `${user.displayName || 'Someone'} commented on your post.`,
-        isRead: false,
+    const text = newComment;
+    setNewComment('');
+    try {
+      await addDoc(collection(db, 'posts', post.id, 'comments'), {
+        userId: user.uid,
+        userName: profile?.displayName || user.displayName || 'Builder',
+        userPic: profile?.profilePic || '',
+        content: text,
         timestamp: serverTimestamp()
       });
-    }
-    
-    setNewComment('');
+      await updateDoc(doc(db, 'posts', post.id), {
+        commentsCount: increment(1)
+      });
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      await deleteDoc(doc(db, 'posts', post.id, 'comments', commentId));
+      await updateDoc(doc(db, 'posts', post.id), {
+        commentsCount: increment(-1)
+      });
+    } catch (e) { console.error(e); }
   };
 
   return (
-    <View style={[styles.card, { backgroundColor: isDark ? '#1E1E1E' : '#FFFFFF', borderColor: isDark ? '#333333' : '#EEEEEE' }]}>
-      <View style={styles.cardHeader}>
-        <View style={styles.authorInfo}>
-          <Text style={[styles.authorName, { color: isDark ? '#FFFFFF' : '#000000' }]}>{post.authorName}</Text>
-          <Text style={styles.timestamp}>12m ago</Text>
-        </View>
-        <TouchableOpacity style={styles.verifyBadge} onPress={handleAiAnalyze}>
-          <Shield size={14} color="#FBE618" />
-          <Text style={styles.verifyText}>AI VERIFY PoW</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={[styles.content, { color: isDark ? '#FFFFFF90' : '#333333' }]}>{post.content}</Text>
-
-      {aiFeedback && (
-        <View style={styles.aiBox}>
-          <Zap size={14} color="#FBE618" style={{ marginTop: 2 }} />
-          <Text style={styles.aiText}>{aiFeedback}</Text>
-        </View>
-      )}
-
-      <View style={styles.cardFooter}>
-        <TouchableOpacity style={styles.footerAction} onPress={handleLike}>
-          <Heart size={20} color={isLiked ? '#FBE618' : (isDark ? '#444444' : '#CCCCCC')} fill={isLiked ? '#FBE618' : 'transparent'} />
-          <Text style={[styles.actionCount, { color: isDark ? '#444444' : '#999999' }]}>{post.likesCount}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.footerAction} onPress={() => setShowComments(!showComments)}>
-          <MessageSquare size={20} color={isDark ? '#444444' : '#CCCCCC'} />
-          <Text style={[styles.actionCount, { color: isDark ? '#444444' : '#999999' }]}>{post.commentsCount}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.footerAction}>
-          <Share2 size={20} color={isDark ? '#444444' : '#CCCCCC'} />
-        </TouchableOpacity>
-      </View>
-
-      {showComments && (
-        <View style={styles.commentsSection}>
-          {comments.map((comment) => (
-            <View key={comment.id} style={styles.commentItem}>
-              <Text style={[styles.commentAuthor, { color: isDark ? '#FFFFFF' : '#000000' }]}>{comment.authorName}</Text>
-              <Text style={[styles.commentContent, { color: isDark ? '#AAAAAA' : '#666666' }]}>{comment.content}</Text>
-            </View>
-          ))}
-          <View style={styles.commentInputRow}>
-            <TextInput
-              value={newComment}
-              onChangeText={setNewComment}
-              placeholder="Add a founder insight..."
-              placeholderTextColor={isDark ? '#444444' : '#CCCCCC'}
-              style={[styles.commentInput, { color: isDark ? '#FFFFFF' : '#000000', backgroundColor: isDark ? '#050508' : '#F8F8F8' }]}
-            />
-            <TouchableOpacity onPress={handleAddComment}>
-              <Send size={20} color="#FBE618" />
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <SafeAreaView style={[styles.modalContent, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: isDark ? '#FFF' : '#000' }]}>COMMENTS</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <SafeIcon name="X" size={24} color={isDark ? '#FFF' : '#000'} />
             </TouchableOpacity>
           </View>
-        </View>
-      )}
-    </View>
+
+          {loading ? <ActivityIndicator color="#FBE618" style={{ flex: 1 }} /> : (
+            <FlatList
+              data={comments}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.commentItem}>
+                  <Image source={{ uri: item.userPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.commentAvatar} />
+                  <View style={styles.commentBody}>
+                    <View style={styles.commentHeader}>
+                      <Text style={[styles.commentUser, { color: isDark ? '#FFF' : '#000' }]}>{item.userName}</Text>
+                      {item.userId === user?.uid && (
+                        <TouchableOpacity onPress={() => handleDeleteComment(item.id)}>
+                          <SafeIcon name="Trash2" size={14} color="#FF4444" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <Text style={[styles.commentText, { color: isDark ? '#AAA' : '#444' }]}>{item.content}</Text>
+                  </View>
+                </View>
+              )}
+              contentContainerStyle={{ padding: 20 }}
+            />
+          )}
+
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={[styles.commentInputRow, { borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
+              <TextInput
+                style={[styles.commentInput, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
+                placeholder="Write a comment..."
+                placeholderTextColor="#666"
+                value={newComment}
+                onChangeText={setNewComment}
+              />
+              <TouchableOpacity style={styles.sendBtn} onPress={handlePostComment}>
+                <SafeIcon name="Send" size={20} color="#000" />
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </View>
+    </Modal>
   );
 };
 
-export default function FeedScreen() {
+const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
+  const { user, profile } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+  const isLiked = post.likedBy?.includes(user?.uid || '');
+  const [showComments, setShowComments] = useState(false);
+  
+  const likeScale = useRef(new Animated.Value(1)).current;
+  const commentScale = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 8, useNativeDriver: true })
+    ]).start();
+
+    if (user && !post.viewedBy?.includes(user.uid)) {
+      updateDoc(doc(db, 'posts', post.id), {
+        viewsCount: increment(1),
+        viewedBy: arrayUnion(user.uid)
+      });
+    }
+  }, [user]);
+
+  const handleLike = async () => {
+    if (!user) return;
+    Animated.sequence([
+      Animated.timing(likeScale, { toValue: 1.4, duration: 100, useNativeDriver: true }),
+      Animated.spring(likeScale, { toValue: 1, friction: 3, useNativeDriver: true })
+    ]).start();
+    const postRef = doc(db, 'posts', post.id);
+    if (isLiked) {
+      await updateDoc(postRef, { likesCount: increment(-1), likedBy: arrayRemove(user.uid) });
+    } else {
+      await updateDoc(postRef, { likesCount: increment(1), likedBy: arrayUnion(user.uid) });
+    }
+  };
+
+  const handleDelete = () => {
+    Alert.alert("Delete Post", "Are you sure you want to delete this post?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: async () => { await deleteDoc(doc(db, 'posts', post.id)); }}
+    ]);
+  };
+
+  return (
+    <Animated.View style={[
+      styles.card, 
+      { 
+        backgroundColor: isDark ? '#111115' : '#FFFFFF', 
+        borderColor: isDark ? '#222226' : '#EEEEEE',
+        opacity: fadeAnim,
+        transform: [{ translateY: slideAnim }]
+      }
+    ]}>
+      <CommentModal 
+        visible={showComments} 
+        onClose={() => setShowComments(false)} 
+        post={post} 
+        user={user} 
+        profile={profile} 
+        isDark={isDark} 
+      />
+      
+      <View style={styles.cardHeader}>
+        <TouchableOpacity style={styles.authorRow} onPress={() => navigation.navigate('Profile', { userId: post.authorId })}>
+          <Image source={{ uri: post.authorPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.authorAvatarImg} />
+          <View>
+            <Text style={[styles.authorName, { color: isDark ? '#FFF' : '#000' }]}>{post.authorName}</Text>
+            <Text style={styles.postTime}>MOMENTS_AGO</Text>
+          </View>
+        </TouchableOpacity>
+        
+        <View style={styles.headerRight}>
+          <View style={styles.viewBadge}>
+            <SafeIcon name="Eye" size={12} color="#666" />
+            <Text style={styles.viewVal}>{post.viewsCount || 0}</Text>
+          </View>
+          {post.authorId === user?.uid && (
+            <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn}>
+              <SafeIcon name="Trash2" size={18} color="#FF4444" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      <Text style={[styles.postContent, { color: isDark ? '#DDD' : '#333' }]}>
+        {post.content}
+      </Text>
+
+      {post.media && post.media.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaScroll}>
+          {post.media.map((uri, i) => (
+            <Image key={i} source={{ uri }} style={styles.postImage} />
+          ))}
+        </ScrollView>
+      )}
+
+      <View style={styles.cardFooter}>
+        <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
+          <Animated.View style={{ transform: [{ scale: likeScale }] }}>
+            <SafeIcon name="Heart" size={18} color={isLiked ? '#FBE618' : '#666'} fill={isLiked ? '#FBE618' : 'transparent'} />
+          </Animated.View>
+          <Text style={[styles.actionVal, { color: isLiked ? '#FBE618' : '#666' }]}>{post.likesCount || 0}</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.actionBtn} 
+          onPress={() => {
+            Animated.sequence([
+              Animated.timing(commentScale, { toValue: 1.2, duration: 100, useNativeDriver: true }),
+              Animated.spring(commentScale, { toValue: 1, friction: 3, useNativeDriver: true })
+            ]).start();
+            setShowComments(true);
+          }}
+        >
+          <Animated.View style={{ transform: [{ scale: commentScale }] }}>
+            <SafeIcon name="MessageSquare" size={18} color="#666" />
+          </Animated.View>
+          <Text style={styles.actionVal}>{post.commentsCount || 0}</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.actionBtn}>
+          <SafeIcon name="Share2" size={18} color="#666" />
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  );
+};
+
+export default function FeedScreen({ navigation }: any) {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isPosting, setIsPosting] = useState(false);
-  const [newPostContent, setNewPostContent] = useState('');
 
   useEffect(() => {
-    const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'), limit(20));
+    const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
-      setPosts(data);
+      setPosts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post)));
       setLoading(false);
     });
     return () => unsub();
   }, []);
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#121212' : '#FFFFFF' }]}>
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-          Founder<Text style={{ color: '#FBE618' }}>Feed</Text>
-        </Text>
-      </View>
+  if (loading) return (
+    <View style={{ flex: 1, backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
+      <ActivityIndicator color="#FBE618" />
+    </View>
+  );
 
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <PostCard post={item} />}
+        renderItem={({ item }) => <PostCard post={item} navigation={navigation} />}
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          loading ? <ActivityIndicator color="#FBE618" style={{ marginTop: 50 }} /> : null
+          <View style={styles.emptyContainer}>
+            <SafeIcon name="Rocket" size={48} color="#222" />
+            <Text style={styles.emptyText}>THE FEED IS QUIET...</Text>
+            <Text style={styles.emptySub}>START THE FIRST MOMENT</Text>
+          </View>
         }
       />
     </SafeAreaView>
@@ -197,34 +322,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 30, // Increased
-    paddingBottom: 20,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    textTransform: 'uppercase',
-  },
-  postTrigger: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#FBE618',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#FBE618',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 5,
-  },
   listContent: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 100,
   },
   card: {
@@ -236,141 +335,176 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  authorInfo: {
-    flex: 1,
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  authorAvatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
   },
   authorName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
     textTransform: 'uppercase',
     fontStyle: 'italic',
   },
-  timestamp: {
-    fontSize: 10,
-    color: '#666666',
-    marginTop: 2,
-    fontWeight: '700',
+  postTime: {
+    fontSize: 9,
+    color: '#666',
+    fontWeight: '900',
   },
-  verifyBadge: {
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FBE61815',
+    gap: 12,
+  },
+  viewBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F8F8F810',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
-    gap: 4,
   },
-  verifyText: {
-    fontSize: 9,
+  viewVal: {
+    fontSize: 10,
+    color: '#666',
     fontWeight: '900',
-    color: '#FBE618',
   },
-  content: {
-    fontSize: 15,
-    lineHeight: 22,
+  deleteBtn: {
+    padding: 4,
+  },
+  postContent: {
+    fontSize: 16,
+    lineHeight: 24,
     fontWeight: '500',
     marginBottom: 16,
   },
-  aiBox: {
-    flexDirection: 'row',
-    backgroundColor: '#FBE61810',
-    padding: 12,
-    borderRadius: 16,
-    gap: 10,
+  mediaScroll: {
     marginBottom: 16,
-    borderLeftWidth: 3,
-    borderLeftColor: '#FBE618',
   },
-  aiText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#FBE618',
-    fontWeight: '700',
-    fontStyle: 'italic',
+  postImage: {
+    width: width * 0.7,
+    height: 200,
+    borderRadius: 20,
+    marginRight: 12,
   },
   cardFooter: {
     flexDirection: 'row',
-    gap: 20,
+    gap: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#1A1A1F10',
+    paddingTop: 16,
   },
-  footerAction: {
+  actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  actionCount: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  commentsSection: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#222222',
-  },
-  commentItem: {
-    marginBottom: 12,
-  },
-  commentAuthor: {
+  actionVal: {
     fontSize: 12,
     fontWeight: '900',
-    marginBottom: 2,
-  },
-  commentContent: {
-    fontSize: 13,
-  },
-  commentInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 10,
-  },
-  commentInput: {
-    flex: 1,
-    height: 44,
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    fontSize: 13,
   },
   modalOverlay: {
     flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    height: '80%',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1A1A1F10',
   },
   modalTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '900',
     letterSpacing: 2,
   },
-  postButton: {
-    color: '#FBE618',
+  closeBtn: {
+    padding: 4,
+  },
+  commentItem: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    gap: 12,
+  },
+  commentAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+  },
+  commentBody: {
+    flex: 1,
+    backgroundColor: '#F8F8F805',
+    padding: 12,
+    borderRadius: 16,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  commentUser: {
+    fontSize: 12,
     fontWeight: '900',
+  },
+  commentText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  commentInputRow: {
+    flexDirection: 'row',
+    padding: 20,
+    alignItems: 'center',
+    gap: 12,
+    borderTopWidth: 1,
+  },
+  commentInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
     fontSize: 14,
   },
-  modalInput: {
-    flex: 1,
-    padding: 20,
-    fontSize: 18,
-    textAlignVertical: 'top',
-  },
-  powTip: {
-    flexDirection: 'row',
+  sendBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: '#FBE618',
     alignItems: 'center',
-    gap: 10,
-    padding: 20,
-    backgroundColor: '#FBE61810',
-    margin: 20,
-    borderRadius: 20,
+    justifyContent: 'center',
   },
-  powTipText: {
-    color: '#FBE618',
-    fontSize: 12,
-    fontWeight: '700',
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 100,
+    gap: 16,
   },
+  emptyText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#444',
+    letterSpacing: 2,
+  },
+  emptySub: {
+    fontSize: 10,
+    color: '#222',
+    fontWeight: '900',
+  }
 });

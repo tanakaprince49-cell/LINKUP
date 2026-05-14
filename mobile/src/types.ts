@@ -55,14 +55,17 @@ export interface Post {
   id: string;
   authorId: string;
   authorName: string;
+  authorPic?: string;
   content: string;
   type: 'build' | 'launch' | 'achievement' | 'update';
   timestamp: Timestamp | FieldValue;
   likesCount: number;
   commentsCount: number;
+  viewsCount: number;
   likedBy: string[];
-  mediaUrl?: string;
-  powLink?: string; // Proof of Work link
+  viewedBy: string[];
+  media?: string[];
+  powLink?: string;
 }
 
 export interface Match {

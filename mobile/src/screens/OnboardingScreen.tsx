@@ -1,67 +1,58 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, SafeAreaView, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, SafeAreaView, ActivityIndicator, Image, Dimensions, Alert } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { Rocket, Target, Briefcase, Zap, ChevronRight, Check, User, MapPin, Code } from 'lucide-react-native';
+import * as Icons from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadMedia } from '../lib/storage';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 
+const { width } = Dimensions.get('window');
+
 const steps = [
   {
-    id: 'role',
-    title: 'What is your current focus?',
-    icon: Rocket,
-    type: 'select',
-    options: [
-      { id: 'founder', label: 'Technical Founder', desc: 'Building the core product' },
-      { id: 'growth', label: 'Growth/Marketing', desc: 'Scaling the user base' },
-      { id: 'investor', label: 'Angel/VC', desc: 'Seeking the next unicorn' },
-      { id: 'advisor', label: 'Advisor', desc: 'Expert guidance for startups' }
-    ]
-  },
-  {
-    id: 'ambition',
-    title: 'What is your ambition level?',
-    icon: Zap,
-    type: 'select',
-    options: [
-      { id: 'unicorn', label: 'Unicorn or Bust', desc: 'Building a $1B+ company' },
-      { id: 'lifestyle', label: 'Profitable Indie', desc: 'Sustainable, high-margin business' },
-      { id: 'impact', label: 'Social Impact', desc: 'Solving world-scale problems' },
-      { id: 'learn', label: 'Skill Acquisition', desc: 'Focused on growth and learning' }
-    ]
-  },
-  {
-    id: 'profile_basic',
-    title: 'Set up your identity',
-    icon: User,
+    id: 'identity',
+    title: 'Your Identity',
+    subtitle: 'How should the network address you?',
+    icon: 'User',
     type: 'form',
     fields: [
-      { id: 'displayName', label: 'Display Name', placeholder: 'Elon Musk', icon: User },
-      { id: 'city', label: 'Location', placeholder: 'San Francisco, CA', icon: MapPin },
-      { id: 'age', label: 'Age', placeholder: '25', icon: Target }
+      { id: 'displayName', label: 'Full Name', placeholder: 'Vitalik Buterin', icon: 'User' },
+      { id: 'city', label: 'Home Base', placeholder: 'Zug, Switzerland', icon: 'MapPin' }
     ]
+  },
+  {
+    id: 'profilePic',
+    title: 'Profile Picture',
+    subtitle: 'Upload a clear headshot for your founder profile.',
+    icon: 'Camera',
+    type: 'single-photo',
+    desc: 'This is the first thing other builders will see.'
   },
   {
     id: 'bio',
-    title: 'Tell us your story',
-    icon: Briefcase,
+    title: 'Founder Bio',
+    subtitle: 'Your story in 140 characters.',
+    icon: 'Briefcase',
     type: 'textarea',
-    field: { id: 'bio', label: 'Founder Bio', placeholder: 'Serial entrepreneur building the future of...', icon: Briefcase }
+    field: { id: 'bio', label: 'Bio', placeholder: 'Serial entrepreneur building the future of...', icon: 'Briefcase' }
   },
   {
     id: 'photos',
-    title: 'Showcase your work',
-    icon: User,
+    title: 'Proof of Life',
+    subtitle: 'Upload 3 photos to verify your identity.',
+    icon: 'Camera',
     type: 'photos',
-    desc: 'Upload at least 3 photos to stand out.'
+    desc: 'You MUST upload at least 3 photos to proceed.'
   },
   {
     id: 'skills',
-    title: 'What are your core skills?',
-    icon: Code,
+    title: 'Core Skills',
+    subtitle: 'What can you build?',
+    icon: 'Code',
     type: 'input',
-    field: { id: 'skills', label: 'Skills (comma separated)', placeholder: 'React, Node.js, Python, Sales', icon: Code }
+    field: { id: 'skills', label: 'Skills (comma separated)', placeholder: 'React, Node.js, Python, Sales', icon: 'Code' }
   }
 ];
 
@@ -70,13 +61,17 @@ export default function OnboardingScreen() {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, any>>({
+    photos: [],
+    profilePic: ''
+  });
   const [isFinishing, setIsFinishing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleSelect = (stepId: string, optionId: string) => {
     setFormData(prev => ({ ...prev, [stepId]: optionId }));
     if (currentStep < steps.length - 1) {
-      setTimeout(() => setCurrentStep(prev => prev + 1), 300);
+      setTimeout(() => setCurrentStep(prev => prev + 1), 500);
     }
   };
 
@@ -90,24 +85,62 @@ export default function OnboardingScreen() {
     }
   };
 
-  const handleFinish = async () => {
+  const handleSinglePhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'We need access to your photos to set your profile picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.2,
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      handleInputChange('profilePic', `data:image/jpeg;base64,${result.assets[0].base64}`);
+    }
+  };
+
+  const handlePhotoUpload = async (index: number) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'We need access to your photos for verification.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 6],
+      quality: 0.2,
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      const newPhotos = [...(formData.photos || [])];
+      newPhotos[index] = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      handleInputChange('photos', newPhotos);
+    }
+  };
+
+  const finishOnboarding = async () => {
     if (!user) return;
     setIsFinishing(true);
     try {
-      const skillsArray = formData.skills ? formData.skills.split(',').map((s: string) => s.trim()) : [];
+      const skillsArray = typeof formData.skills === 'string' 
+        ? formData.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '')
+        : [];
+
       await updateDoc(doc(db, 'users', user.uid), {
-        onboarded: true,
-        displayName: formData.displayName || user.displayName,
-        city: formData.city || 'Unknown',
-        age: parseInt(formData.age) || 20,
-        bio: formData.bio || '',
-        experience: formData.experience || 'first',
-        ambition: formData.ambition || 'unicorn',
-        industries: [formData.industries || 'ai'],
+        ...formData,
         skills: skillsArray,
-        commitmentLevel: formData.commitment || 'fulltime'
+        onboarded: true,
+        lastActiveAt: new Date()
       });
-      // In mobile, we might need to handle navigation differently or rely on state update
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
     } finally {
@@ -116,306 +149,182 @@ export default function OnboardingScreen() {
   };
 
   const step = steps[currentStep];
-
-  const isStepValid = () => {
-    if (step.type === 'select') return !!formData[step.id];
-    if (step.type === 'form') return step.fields?.every(f => !!formData[f.id]);
-    if (step.type === 'textarea') return !!formData[step.field.id];
-    if (step.type === 'input') return !!formData[step.field.id];
-    if (step.type === 'photos') return formData.photos && formData.photos.length >= 3;
-    return false;
-  };
-
-  const Icon = step.icon;
+  const IconComponent = (Icons as any)[step.icon];
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#121212' : '#FFFFFF' }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.progressContainer}>
-          {steps.map((_, i) => (
-            <View 
-              key={i} 
-              style={[
-                styles.progressBar, 
-                { backgroundColor: i <= currentStep ? '#FBE618' : (isDark ? '#222222' : '#EEEEEE') }
-              ]} 
-            />
-          ))}
-        </View>
-
-        <View style={styles.header}>
-          <View style={styles.iconContainer}>
-            <Icon size={24} color="#FBE618" />
-          </View>
-          <Text style={[styles.title, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-            {step.title}
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        <View style={styles.progressHeader}>
+          <Text style={[styles.stepCount, { color: isDark ? '#444' : '#CCC' }]}>
+            STEP {currentStep + 1} OF {steps.length}
           </Text>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${((currentStep + 1) / steps.length) * 100}%` }]} />
+          </View>
         </View>
 
-        <View style={styles.optionsContainer}>
-          {step.type === 'select' && step.options?.map((option) => {
-            const isSelected = formData[step.id] === option.id;
-            return (
-              <TouchableOpacity
-                key={option.id}
-                onPress={() => handleSelect(step.id, option.id)}
-                style={[
-                  styles.selectButton,
-                  { 
-                    backgroundColor: isSelected ? '#FBE618' : (isDark ? '#111111' : '#F8F8F8'),
-                    borderColor: isSelected ? '#FBE618' : (isDark ? '#222222' : '#EEEEEE')
-                  }
-                ]}
-              >
-                <View style={styles.selectHeader}>
-                  <Text style={[styles.selectLabel, { color: isSelected ? '#000000' : (isDark ? '#FFFFFF' : '#000000') }]}>
-                    {option.label}
-                  </Text>
-                  {isSelected && <Check size={16} color="#000000" />}
-                </View>
-                <Text style={[styles.selectDesc, { color: isSelected ? '#00000080' : '#666666' }]}>
-                  {option.desc}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+        <View key={currentStep}>
+          <View style={styles.header}>
+            <View style={[styles.iconBadge, { backgroundColor: isDark ? '#FBE61810' : '#FBE61820' }]}>
+              {IconComponent && <IconComponent size={28} color="#FBE618" />}
+            </View>
+            <Text style={[styles.title, { color: isDark ? '#FFFFFF' : '#000000' }]}>{step.title}</Text>
+            <Text style={styles.subtitle}>{step.subtitle}</Text>
+          </View>
 
-          {step.type === 'form' && step.fields?.map((field) => {
-            const FieldIcon = field.icon;
-            return (
-              <View key={field.id} style={styles.inputWrapper}>
-                <FieldIcon size={16} color={isDark ? '#444444' : '#CCCCCC'} style={styles.inputIcon} />
+          <View style={styles.contentContainer}>
+            {step.type === 'form' && step.fields?.map((field) => (
+              <View key={field.id} style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{field.label.toUpperCase()}</Text>
+                <View style={[styles.inputContainer, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+                  <Icons.Search size={18} color="#666" />
+                  <TextInput
+                    placeholder={field.placeholder}
+                    placeholderTextColor="#444"
+                    value={formData[field.id] || ''}
+                    onChangeText={(text) => handleInputChange(field.id, text)}
+                    style={[styles.textInput, { color: isDark ? '#FFFFFF' : '#000000' }]}
+                  />
+                </View>
+              </View>
+            ))}
+
+            {step.type === 'single-photo' && (
+              <View style={styles.avatarStep}>
+                <TouchableOpacity 
+                  style={[styles.avatarUploadBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
+                  onPress={handleSinglePhoto}
+                >
+                  {formData.profilePic ? (
+                    <Image source={{ uri: formData.profilePic }} style={styles.avatarPreview} />
+                  ) : (
+                    <Icons.Camera size={40} color="#FBE618" />
+                  )}
+                </TouchableOpacity>
+                <Text style={styles.photoDesc}>{step.desc}</Text>
+                {isUploading && <ActivityIndicator color="#FBE618" style={{ marginTop: 20 }} />}
+              </View>
+            )}
+
+            {step.type === 'textarea' && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{step.field.label.toUpperCase()}</Text>
                 <TextInput
-                  placeholder={field.placeholder}
-                  placeholderTextColor={isDark ? '#444444' : '#CCCCCC'}
-                  value={formData[field.id] || ''}
-                  onChangeText={(text) => handleInputChange(field.id, text)}
-                  style={[styles.input, { color: isDark ? '#FFFFFF' : '#000000', backgroundColor: isDark ? '#111111' : '#F8F8F8' }]}
+                  placeholder={step.field.placeholder}
+                  placeholderTextColor="#444"
+                  value={formData[step.field.id] || ''}
+                  onChangeText={(text) => handleInputChange(step.field.id, text)}
+                  multiline
+                  numberOfLines={6}
+                  textAlignVertical="top"
+                  style={[styles.textarea, { 
+                    color: isDark ? '#FFFFFF' : '#000000', 
+                    backgroundColor: isDark ? '#16161A' : '#F8F8F8' 
+                  }]}
                 />
               </View>
-            );
-          })}
+            )}
 
-          {step.type === 'textarea' && (
-            <TextInput
-              placeholder={step.field.placeholder}
-              placeholderTextColor={isDark ? '#444444' : '#CCCCCC'}
-              value={formData[step.field.id] || ''}
-              onChangeText={(text) => handleInputChange(step.field.id, text)}
-              multiline
-              numberOfLines={6}
-              textAlignVertical="top"
-              style={[styles.textarea, { color: isDark ? '#FFFFFF' : '#000000', backgroundColor: isDark ? '#111111' : '#F8F8F8' }]}
-            />
-          )}
-
-          {step.type === 'input' && (
-            <View style={styles.inputWrapper}>
-              <Code size={16} color={isDark ? '#444444' : '#CCCCCC'} style={styles.inputIcon} />
-              <TextInput
-                placeholder={step.field.placeholder}
-                placeholderTextColor={isDark ? '#444444' : '#CCCCCC'}
-                value={formData[step.field.id] || ''}
-                onChangeText={(text) => handleInputChange(step.field.id, text)}
-                style={[styles.input, { color: isDark ? '#FFFFFF' : '#000000', backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8' }]}
-              />
-            </View>
-          )}
-
-          {step.type === 'photos' && (
-            <View style={styles.photosContainer}>
-              <Text style={[styles.selectDesc, { marginBottom: 20, textAlign: 'center', color: isDark ? '#AAAAAA' : '#666666' }]}>{step.desc}</Text>
-              <View style={styles.photoGrid}>
-                {[0, 1, 2].map((index) => {
-                  const hasPhoto = formData.photos && formData.photos[index];
-                  return (
+            {step.type === 'photos' && (
+              <View>
+                <View style={styles.photosGrid}>
+                  {[0, 1, 2].map((i) => (
                     <TouchableOpacity 
-                      key={index}
-                      style={[styles.photoSlot, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8', borderColor: isDark ? '#333333' : '#EEEEEE' }]}
-                      onPress={() => {
-                        // Simulate upload for demo
-                        const newPhotos = [...(formData.photos || [])];
-                        newPhotos[index] = `https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&q=${Math.random()}`;
-                        handleInputChange('photos', newPhotos);
-                      }}
+                      key={i} 
+                      style={[styles.photoCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
+                      onPress={() => handlePhotoUpload(i)}
                     >
-                      {hasPhoto ? (
-                        <View style={styles.photoAdded}>
-                          <Check size={24} color="#FBE618" />
-                          <Text style={{color: '#FBE618', fontSize: 10, marginTop: 4, fontWeight: 'bold'}}>ADDED</Text>
-                        </View>
+                      {formData.photos?.[i] ? (
+                        <Image source={{ uri: formData.photos[i] }} style={styles.uploadedPhoto} />
                       ) : (
-                        <View style={styles.photoAdd}>
-                          <Text style={{color: isDark ? '#666' : '#999', fontSize: 32}}>+</Text>
+                        <View style={styles.photoPlaceholder}>
+                          <Icons.Plus size={24} color="#666" />
                         </View>
                       )}
                     </TouchableOpacity>
-                  );
-                })}
+                  ))}
+                </View>
+                <Text style={styles.photoDesc}>{step.desc}</Text>
+                {isUploading && <ActivityIndicator color="#FBE618" style={{ marginTop: 10 }} />}
               </View>
-            </View>
+            )}
+
+            {step.type === 'input' && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{step.field.label.toUpperCase()}</Text>
+                <TextInput
+                  placeholder={step.field.placeholder}
+                  placeholderTextColor="#444"
+                  value={formData[step.field.id] || ''}
+                  onChangeText={(text) => handleInputChange(step.field.id, text)}
+                  style={[styles.textInput, { 
+                    color: isDark ? '#FFFFFF' : '#000000', 
+                    backgroundColor: isDark ? '#16161A' : '#F8F8F8',
+                    padding: 20,
+                    borderRadius: 16
+                  }]}
+                />
+              </View>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.footer}>
+          {currentStep === steps.length - 1 ? (
+            <TouchableOpacity 
+              style={[styles.finishButton, { opacity: isFinishing ? 0.7 : 1 }]} 
+              onPress={finishOnboarding}
+              disabled={isFinishing}
+            >
+              {isFinishing ? <ActivityIndicator color="#000" /> : <Text style={styles.finishText}>START BUILDING</Text>}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={[styles.nextButton, { opacity: (step.type === 'single-photo' && !formData.profilePic) ? 0.5 : 1 }]} 
+              onPress={handleNext}
+              disabled={step.type === 'single-photo' && !formData.profilePic && !isUploading}
+            >
+              <Text style={styles.nextText}>NEXT STEP</Text>
+              <Icons.ChevronRight size={20} color="#000" />
+            </TouchableOpacity>
           )}
         </View>
 
-        {step.type !== 'select' && (
-          <TouchableOpacity
-            disabled={!isStepValid()}
-            onPress={currentStep === steps.length - 1 ? handleFinish : handleNext}
-            style={[styles.nextButton, { opacity: isStepValid() ? 1 : 0.3 }]}
-          >
-            {isFinishing ? (
-              <ActivityIndicator color="#000000" />
-            ) : (
-              <>
-                <Text style={styles.nextButtonText}>
-                  {currentStep === steps.length - 1 ? 'CONNECT TO NETWORK' : 'NEXT STEP'}
-                </Text>
-                <ChevronRight size={18} color="#000000" />
-              </>
-            )}
-          </TouchableOpacity>
-        )}
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 30,
-    paddingBottom: 50,
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 40,
-    height: 4,
-  },
-  progressBar: {
-    flex: 1,
-    borderRadius: 2,
-  },
-  header: {
-    marginBottom: 40,
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: '#FBE61815',
-    borderWidth: 1,
-    borderColor: '#FBE61830',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    textTransform: 'uppercase',
-    lineHeight: 36,
-  },
-  optionsContainer: {
-    gap: 12,
-    marginBottom: 40,
-  },
-  selectButton: {
-    padding: 24,
-    borderRadius: 32,
-    borderWidth: 1,
-  },
-  selectHeader: {
-    flexDirection: 'row',
-    justifyContent: 'between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  selectLabel: {
-    fontSize: 14,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    flex: 1,
-  },
-  selectDesc: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  inputWrapper: {
-    position: 'relative',
-    marginBottom: 12,
-  },
-  inputIcon: {
-    position: 'absolute',
-    left: 24,
-    top: 22,
-    zIndex: 1,
-  },
-  input: {
-    height: 60,
-    borderRadius: 30,
-    paddingHorizontal: 54,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  textarea: {
-    borderRadius: 32,
-    padding: 24,
-    fontSize: 14,
-    fontWeight: '700',
-    minHeight: 160,
-  },
-  nextButton: {
-    backgroundColor: '#FBE618',
-    height: 60,
-    borderRadius: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    shadowColor: '#FBE618',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 5,
-  },
-  nextButtonText: {
-    color: '#000000',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 2,
-  },
-  photosContainer: {
-    marginTop: 10,
-  },
-  photoGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  photoSlot: {
-    flex: 1,
-    aspectRatio: 0.8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  photoAdd: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  photoAdded: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#111111',
-    width: '100%',
-    height: '100%',
-  }
+  container: { flex: 1 },
+  scrollContent: { padding: 24 },
+  progressHeader: { marginBottom: 40 },
+  stepCount: { fontSize: 10, fontWeight: '900', letterSpacing: 2, marginBottom: 12 },
+  progressTrack: { height: 4, backgroundColor: '#FBE61810', borderRadius: 2 },
+  progressFill: { height: 4, backgroundColor: '#FBE618', borderRadius: 2 },
+  header: { marginBottom: 40 },
+  iconBadge: { width: 60, height: 60, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  title: { fontSize: 28, fontWeight: '900', marginBottom: 8 },
+  subtitle: { fontSize: 14, color: '#666', lineHeight: 22 },
+  contentContainer: { marginBottom: 40 },
+  inputGroup: { marginBottom: 24 },
+  inputLabel: { fontSize: 10, fontWeight: '900', color: '#666', letterSpacing: 1.5, marginBottom: 12 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 56, borderRadius: 16, gap: 12 },
+  textInput: { flex: 1, fontSize: 16, fontWeight: '500' },
+  avatarStep: { alignItems: 'center', gap: 20 },
+  avatarUploadBtn: { width: 150, height: 150, borderRadius: 75, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: '#FBE61830' },
+  avatarPreview: { width: '100%', height: '100%' },
+  textarea: { height: 150, padding: 16, borderRadius: 16, fontSize: 16, fontWeight: '500' },
+  photosGrid: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  photoCard: { flex: 1, aspectRatio: 2/3, borderRadius: 20, overflow: 'hidden' },
+  photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  uploadedPhoto: { width: '100%', height: '100%' },
+  photoDesc: { fontSize: 12, color: '#666', fontStyle: 'italic', textAlign: 'center' },
+  footer: { marginTop: 20 },
+  nextButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FBE618', height: 60, borderRadius: 20, gap: 8 },
+  nextText: { fontSize: 14, fontWeight: '900', letterSpacing: 1 },
+  finishButton: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#FBE618', height: 60, borderRadius: 20 },
+  finishText: { fontSize: 14, fontWeight: '900', letterSpacing: 1 },
 });

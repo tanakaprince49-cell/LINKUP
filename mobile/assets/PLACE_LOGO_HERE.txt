@@ -1,0 +1,3 @@
+# LOGO PLACEMENT
+Drop your branding icon here as 'logo.png'.
+The app is configured to look for this file for all branding elements.

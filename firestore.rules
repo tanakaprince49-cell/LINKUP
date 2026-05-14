@@ -56,7 +56,8 @@ service cloud.firestore {
           'country', 'city', 'age', 'experience', 'personalityType',
           'commitmentLevel', 'industries', 'profilePic', 'coverPhoto',
           'achievements', 'badges', 'socialLinks', 'isVisible', 'lastActiveAt',
-          'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'onboarded', 'ambition'
+          'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'onboarded', 
+          'ambition', 'photos', 'pushTokens', 'reputationScore'
         ])
       );
       
@@ -88,13 +89,22 @@ service cloud.firestore {
          incoming().authorId == existing().authorId && // Immobility
          incoming().diff(existing()).affectedKeys().hasOnly(['content', 'type', 'mediaUrl'])) ||
         
-        // Action: Social Interaction (Any signed-in user can like/comment)
-        (incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'commentsCount']) &&
+        // Action: Social Interaction (Any signed-in user can like/comment/view)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'viewsCount', 'likedBy', 'viewedBy']) &&
          incoming().authorId == existing().authorId &&
          incoming().content == existing().content)
       );
 
       allow delete: if isSignedIn() && isOwner(existing().authorId);
+
+      // Comments Subcollection
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && 
+                        incoming().userId == request.auth.uid &&
+                        incoming().timestamp == request.time;
+        allow delete: if isSignedIn() && (isOwner(existing().userId) || isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorId));
+      }
     }
 
     // ------------------------------------------------------------

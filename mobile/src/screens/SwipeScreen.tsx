@@ -1,168 +1,229 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, Animated, PanResponder, ScrollView } from 'react-native';
 import { collection, query, onSnapshot, where, addDoc, limit, serverTimestamp } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { UserProfile, Block } from '../types';
-import { X, Heart, Zap, RotateCcw, Info, Users, MapPin, Briefcase } from 'lucide-react-native';
-import { getMatchingExplanation } from '../lib/ai';
+import { UserProfile } from '../types';
+import { X, Heart, Zap, RotateCcw, Sparkles, Target, Info, MessageSquare, ChevronDown } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
+const SWIPE_THRESHOLD = 0.25 * width;
 
 export default function SwipeScreen() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [history, setHistory] = useState<UserProfile[]>([]);
-  const [explanation, setExplanation] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const position = useRef(new Animated.ValueXY()).current;
+
+  const rotate = position.x.interpolate({
+    inputRange: [-width / 2, 0, width / 2],
+    outputRange: ['-10deg', '0deg', '10deg'],
+    extrapolate: 'clamp'
+  });
+
+  const nextCardScale = position.x.interpolate({
+    inputRange: [-width / 2, 0, width / 2],
+    outputRange: [1, 0.9, 1],
+    extrapolate: 'clamp'
+  });
+
+  const nextCardOpacity = position.x.interpolate({
+    inputRange: [-width / 2, 0, width / 2],
+    outputRange: [1, 0.5, 1],
+    extrapolate: 'clamp'
+  });
+
+  const likeOpacity = position.x.interpolate({
+    inputRange: [0, width / 4],
+    outputRange: [0, 1],
+    extrapolate: 'clamp'
+  });
+
+  const nopeOpacity = position.x.interpolate({
+    inputRange: [-width / 4, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp'
+  });
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: (evt, gestureState) => {
+        // Only take over if the user is swiping horizontally significantly
+        return Math.abs(gestureState.dx) > 10;
+      },
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return Math.abs(gestureState.dx) > 10;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        position.setValue({ x: gestureState.dx, y: gestureState.dy });
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dx > SWIPE_THRESHOLD) {
+          forceSwipe('right');
+        } else if (gestureState.dx < -SWIPE_THRESHOLD) {
+          forceSwipe('left');
+        } else {
+          resetPosition();
+        }
+      }
+    })
+  ).current;
+
+  const forceSwipe = (direction: 'left' | 'right') => {
+    const x = direction === 'right' ? width + 100 : -width - 100;
+    Animated.timing(position, {
+      toValue: { x, y: 0 },
+      duration: 250,
+      useNativeDriver: false
+    }).start(() => onSwipeComplete(direction));
+  };
+
+  const onSwipeComplete = (direction: 'left' | 'right') => {
+    const item = profiles[currentIndex];
+    direction === 'right' ? handleLike(item) : handleSkip(item);
+    position.setValue({ x: 0, y: 0 });
+    setCurrentIndex(prev => prev + 1);
+  };
+
+  const handleLike = async (target: UserProfile) => {
+    if (!user || !target) return;
+    try {
+      await addDoc(collection(db, 'swipes'), {
+        fromId: user.uid,
+        toId: target.uid,
+        type: 'like',
+        timestamp: serverTimestamp()
+      });
+    } catch (e) { console.error(e); }
+  };
+
+  const handleSkip = (target: UserProfile) => {
+    // Just skip
+  };
+
+  const resetPosition = () => {
+    Animated.spring(position, {
+      toValue: { x: 0, y: 0 },
+      friction: 4,
+      useNativeDriver: false
+    }).start();
+  };
 
   useEffect(() => {
     if (!user) return;
-    // Use onSnapshot to automatically see new seeded founders
-    const q = query(collection(db, 'users'), where('uid', '!=', user.uid), limit(50));
+    const q = query(collection(db, 'users'), where('uid', '!=', user.uid), limit(40));
     const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(doc => doc.data() as UserProfile);
-      // Filter out profiles we've already swiped in this session
-      const remaining = data.filter(p => !history.find(h => h.uid === p.uid));
-      setProfiles(remaining);
-      setLoading(false);
-    }, (err) => {
-      console.error("Fetch profiles error:", err);
+      setProfiles(snap.docs.map(doc => doc.data() as UserProfile));
       setLoading(false);
     });
     return () => unsub();
-  }, [user, history]);
+  }, [user]);
 
-  const handleSwipe = async (direction: 'left' | 'right' | 'super') => {
-    if (profiles.length === 0) return;
-    
-    const targetUser = profiles[0];
-    setHistory(prev => [targetUser, ...prev]);
-    // Profiles state will update via the onSnapshot filter
-    setExplanation(null);
-    setIsExpanded(false);
-
-    if (direction === 'left') return;
-
-    try {
-      await addDoc(collection(db, 'swipes'), {
-        fromId: user?.uid,
-        toId: targetUser.uid,
-        type: direction === 'right' ? 'like' : 'superconnect',
-        timestamp: serverTimestamp()
-      });
-
-      // Also add a notification to the target user
-      await addDoc(collection(db, 'notifications'), {
-        userId: targetUser.uid,
-        type: direction === 'right' ? 'like' : 'match',
-        content: `Someone is interested in your Proof of Work!`,
-        isRead: false,
-        timestamp: serverTimestamp()
-      });
-    } catch (err) {
-      console.error("Swipe record error:", err);
+  const renderCards = () => {
+    if (currentIndex >= profiles.length) {
+      return (
+        <View style={styles.emptyContainer}>
+          <RotateCcw size={48} color="#FBE618" />
+          <Text style={[styles.emptyText, { color: isDark ? '#FFF' : '#000' }]}>NO MORE PROFILES</Text>
+          <TouchableOpacity style={styles.resetBtn} onPress={() => setCurrentIndex(0)}>
+            <Text style={styles.resetText}>REFRESH DISCOVERY</Text>
+          </TouchableOpacity>
+        </View>
+      );
     }
-  };
 
-  const handleRewind = () => {
-    if (history.length === 0) return;
-    const lastUser = history[0];
-    setHistory(prev => prev.slice(1));
-    setProfiles(prev => [lastUser, ...prev]);
-  };
+    return profiles.slice(currentIndex, currentIndex + 2).map((profile, i) => {
+      const isTop = i === 0;
+      const dragHandlers = isTop ? panResponder.panHandlers : {};
+      
+      const cardStyle = isTop ? {
+        transform: [...position.getTranslateTransform(), { rotate }],
+        zIndex: 10
+      } : {
+        transform: [{ scale: nextCardScale }],
+        opacity: nextCardOpacity,
+        zIndex: 5
+      };
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: isDark ? '#121212' : '#FFFFFF', justifyContent: 'center' }]}>
-        <ActivityIndicator color="#FBE618" />
-      </View>
-    );
-  }
-
-  const currentProfile = profiles[0];
-
-  if (!currentProfile) {
-    return (
-      <View style={[styles.container, { backgroundColor: isDark ? '#121212' : '#FFFFFF', justifyContent: 'center', alignItems: 'center' }]}>
-        <RotateCcw size={48} color={isDark ? '#333333' : '#EEEEEE'} />
-        <Text style={{ color: isDark ? '#666666' : '#999999', marginTop: 20, fontWeight: '700' }}>No more builders found.</Text>
-        <TouchableOpacity 
-          style={styles.refreshButton}
-          onPress={() => setHistory([])}
+      return (
+        <Animated.View
+          key={profile.uid}
+          style={[styles.card, cardStyle, { backgroundColor: isDark ? '#111115' : '#F8F8F8' }]}
+          {...dragHandlers}
         >
-          <Text style={styles.refreshButtonText}>RESET DECK</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+          {isTop && (
+            <>
+              <Animated.View style={[styles.badge, { opacity: likeOpacity, right: 30, borderColor: '#4ADE80' }]}>
+                <Text style={[styles.badgeText, { color: '#4ADE80' }]}>LIKE</Text>
+              </Animated.View>
+              <Animated.View style={[styles.badge, { opacity: nopeOpacity, left: 30, borderColor: '#FF4444' }]}>
+                <Text style={[styles.badgeText, { color: '#FF4444' }]}>NOPE</Text>
+              </Animated.View>
+            </>
+          )}
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#121212' : '#FFFFFF' }]}>
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-          Find<Text style={{ color: '#FBE618' }}>Partners</Text>
-        </Text>
-      </View>
-
-      <View style={styles.cardContainer}>
-        <View style={[styles.card, { backgroundColor: isDark ? '#1E1E1E' : '#F8F8F8', borderColor: isDark ? '#333333' : '#EEEEEE' }]}>
-          <View style={styles.imageContainer}>
-            {currentProfile.profilePic ? (
-              <Image source={{ uri: currentProfile.profilePic }} style={styles.profilePic} />
-            ) : (
-              <View style={styles.profilePicPlaceholder}>
-                <Users size={80} color={isDark ? '#222222' : '#EEEEEE'} />
-              </View>
-            )}
-            <View style={styles.imageOverlay} />
-            
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>AI TOP PICK</Text>
+          <Image source={{ uri: profile.profilePic || 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800' }} style={styles.cardImg} />
+          <View style={styles.cardOverlay} />
+          
+          <View style={styles.cardInfo}>
+            <View style={styles.repBadge}>
+              <Zap size={10} color="#000" fill="#000" />
+              <Text style={styles.repVal}>{profile.reputationScore || 500} REP</Text>
             </View>
-
-            <View style={styles.infoOverlay}>
-              <Text style={styles.nameText}>{currentProfile.displayName}, {currentProfile.age}</Text>
-              <Text style={styles.bioText} numberOfLines={2}>"{currentProfile.bio}"</Text>
+            
+            <ScrollView 
+              style={styles.bottomMeta} 
+              showsVerticalScrollIndicator={false}
+              scrollEnabled={isTop} // Only allow scrolling on the top card
+            >
+              <Text style={styles.nameText}>{profile.displayName}, {profile.age}</Text>
+              <Text style={styles.bioText}>"{profile.bio}"</Text>
               
-              <View style={styles.skillsContainer}>
-                {currentProfile.skills.slice(0, 3).map((skill, i) => (
-                  <View key={i} style={styles.skillTag}>
-                    <Text style={styles.skillText}>{skill.toUpperCase()}</Text>
+              <View style={styles.tagGrid}>
+                {profile.skills?.slice(0, 5).map((s, idx) => (
+                  <View key={idx} style={styles.skillTag}>
+                    <Text style={styles.skillTagText}>{s.toUpperCase()}</Text>
                   </View>
                 ))}
               </View>
-            </View>
+              
+              <View style={styles.scrollIndicator}>
+                <ChevronDown size={14} color="#FBE618" />
+                <Text style={styles.scrollText}>SCROLL FOR BIO</Text>
+              </View>
+            </ScrollView>
           </View>
-        </View>
+        </Animated.View>
+      );
+    }).reverse();
+  };
 
-        {explanation && (
-          <View style={styles.aiNote}>
-            <View style={styles.aiNoteHeader}>
-              <Zap size={14} color="#FBE618" />
-              <Text style={styles.aiNoteTitle}>CO-PILOT NOTE</Text>
-            </View>
-            <Text style={styles.aiNoteText}>"{explanation}"</Text>
-          </View>
-        )}
+  if (loading) return (
+    <View style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', justifyContent: 'center' }]}>
+      <ActivityIndicator color="#FBE618" />
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
+      <View style={styles.stackArea}>
+        {renderCards()}
       </View>
 
-      <View style={styles.actions}>
-        <TouchableOpacity onPress={handleRewind} style={[styles.actionButtonSmall, { opacity: history.length > 0 ? 1 : 0.3 }]}>
-          <RotateCcw size={24} color="#FBE618" />
+      <View style={styles.actionRow}>
+        <TouchableOpacity style={styles.actionBtnSmall} onPress={() => forceSwipe('left')}>
+          <X size={24} color="#FF4444" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleSwipe('left')} style={styles.actionButtonX}>
-          <X size={32} color={isDark ? '#FFFFFF' : '#000000'} strokeWidth={3} />
+        <TouchableOpacity style={styles.actionBtnLarge} onPress={() => forceSwipe('right')}>
+          <Heart size={32} color="#000" fill="#000" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleSwipe('super')} style={styles.actionButtonZap}>
-          <Zap size={24} color="#FBE618" fill="#FBE618" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleSwipe('right')} style={styles.actionButtonHeart}>
-          <Heart size={36} color="#000000" fill="#000000" />
+        <TouchableOpacity style={styles.actionBtnSmall}>
+          <MessageSquare size={24} color="#FBE618" />
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -173,194 +234,167 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    textTransform: 'uppercase',
-  },
-  cardContainer: {
+  stackArea: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'center',
+    margin: 20,
+    marginTop: 0,
   },
   card: {
-    flex: 1,
-    borderRadius: 40,
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 32,
     borderWidth: 1,
+    borderColor: '#222226',
     overflow: 'hidden',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
   },
-  imageContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-  profilePic: {
+  cardImg: {
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
-  profilePicPlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imageOverlay: {
+  cardOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.3)',
   },
-  infoOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 30,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+  cardInfo: {
+    ...StyleSheet.absoluteFillObject,
+    padding: 24,
+    justifyContent: 'space-between',
+  },
+  repBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FBE618',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginBottom: 20,
+  },
+  repVal: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#000',
+  },
+  bottomMeta: {
+    flex: 1,
+    maxHeight: '60%',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    marginHorizontal: -24,
+    marginBottom: -24,
+    padding: 24,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
   },
   nameText: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: '#FFF',
     fontStyle: 'italic',
     textTransform: 'uppercase',
   },
   bioText: {
     fontSize: 14,
-    color: '#FFFFFFCC',
-    fontWeight: '500',
+    color: '#CCC',
     marginTop: 8,
+    fontWeight: '500',
+    fontStyle: 'italic',
     lineHeight: 20,
   },
-  skillsContainer: {
+  tagGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 20,
+    marginTop: 16,
+    marginBottom: 20,
   },
   skillTag: {
     backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
-  skillText: {
-    fontSize: 10,
+  skillTagText: {
+    fontSize: 9,
     fontWeight: '900',
-    color: '#FFFFFF80',
-    letterSpacing: 1,
+    color: '#FFF',
+  },
+  scrollIndicator: {
+    alignItems: 'center',
+    paddingBottom: 20,
+  },
+  scrollText: {
+    fontSize: 8,
+    color: '#FBE618',
+    fontWeight: '900',
+    marginTop: 4,
   },
   badge: {
     position: 'absolute',
-    top: 30,
-    left: 30,
-    backgroundColor: '#FBE618',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    top: 40,
+    zIndex: 100,
+    borderWidth: 4,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    transform: [{ rotate: '-15deg' }]
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 32,
     fontWeight: '900',
-    color: '#000000',
-    letterSpacing: 1,
+    textTransform: 'uppercase'
   },
-  aiNote: {
-    marginTop: 20,
-    padding: 20,
-    backgroundColor: '#111111',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#FBE61820',
-  },
-  aiNoteHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  aiNoteTitle: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#FBE618',
-    letterSpacing: 1,
-  },
-  aiNoteText: {
-    fontSize: 12,
-    color: '#CCCCCC',
-    fontWeight: '500',
-    fontStyle: 'italic',
-    lineHeight: 18,
-  },
-  actions: {
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
-    paddingBottom: 40,
+    gap: 25,
+    paddingBottom: 110,
   },
-  actionButtonSmall: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#111111',
+  actionBtnSmall: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#16161A',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#222222',
+    borderColor: '#222226',
   },
-  actionButtonX: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#111111',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#222222',
-  },
-  actionButtonZap: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FBE61815',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#FBE61830',
-  },
-  actionButtonHeart: {
+  actionBtnLarge: {
     width: 80,
     height: 80,
     borderRadius: 40,
     backgroundColor: '#FBE618',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 10,
     shadowColor: '#FBE618',
-    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowRadius: 15,
+    elevation: 8,
   },
-  refreshButton: {
-    marginTop: 20,
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '900',
+    fontStyle: 'italic',
+  },
+  resetBtn: {
     backgroundColor: '#FBE618',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 16,
+    borderRadius: 20,
   },
-  refreshButtonText: {
+  resetText: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#000000',
+    color: '#000',
     letterSpacing: 1,
-  },
+  }
 });

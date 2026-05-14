@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
-import { collection, query, getDocs, where, limit, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions } from 'react-native';
+import { collection, query, onSnapshot, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
-import { User, MessageSquare } from 'lucide-react-native';
+import { MessageSquare, User, Zap, Sparkles, ChevronRight, Briefcase } from 'lucide-react-native';
+
+const { width } = Dimensions.get('window');
 
 const MatchItem = ({ match }: { match: Match }) => {
   const { user } = useAuth();
@@ -27,24 +29,33 @@ const MatchItem = ({ match }: { match: Match }) => {
   if (!otherUser) return null;
 
   return (
-    <TouchableOpacity style={[styles.matchItem, { backgroundColor: isDark ? '#111111' : '#F8F8F8', borderColor: isDark ? '#222222' : '#EEEEEE' }]}>
-      <View style={styles.avatarContainer}>
-        {otherUser.profilePic ? (
-          <Image source={{ uri: otherUser.profilePic }} style={styles.avatar} />
-        ) : (
-          <View style={[styles.avatarPlaceholder, { backgroundColor: isDark ? '#222222' : '#EEEEEE' }]}>
-            <User size={24} color={isDark ? '#444444' : '#CCCCCC'} />
+    <View style={[styles.matchCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+      <View style={styles.cardMain}>
+        <View style={styles.avatarContainer}>
+          <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.avatar} />
+          <View style={styles.statusDot} />
+        </View>
+        
+        <View style={styles.infoContainer}>
+          <View style={styles.nameRow}>
+            <Text style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}>{otherUser.displayName}</Text>
+            <View style={styles.roleBadge}>
+              <Text style={styles.roleText}>{otherUser.ambition?.toUpperCase() || 'FOUNDER'}</Text>
+            </View>
           </View>
-        )}
+          <Text style={styles.lastMsg} numberOfLines={1}>{match.lastMessage || `You connected! Start the conversation.`}</Text>
+          
+          <View style={styles.aiReasonBox}>
+            <Sparkles size={10} color="#FBE618" />
+            <Text style={styles.aiReasonText}>SYNERGY: {otherUser.skills?.[0] || 'Innovation'} + {otherUser.skills?.[1] || 'Growth'}</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity style={styles.msgBtn}>
+          <MessageSquare size={20} color="#FBE618" fill="#FBE61820" />
+        </TouchableOpacity>
       </View>
-      <View style={styles.matchInfo}>
-        <Text style={[styles.matchName, { color: isDark ? '#FFFFFF' : '#000000' }]}>{otherUser.displayName}</Text>
-        <Text style={styles.matchBio} numberOfLines={1}>{otherUser.bio}</Text>
-      </View>
-      <View style={styles.messageButton}>
-        <MessageSquare size={20} color="#FBE618" />
-      </View>
-    </TouchableOpacity>
+    </View>
   );
 };
 
@@ -59,37 +70,28 @@ export default function MatchScreen() {
     if (!user) return;
     const q = query(collection(db, 'matches'), where('userIds', 'array-contains', user.uid));
     const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match));
-      setMatches(data);
+      setMatches(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match)));
       setLoading(false);
     });
     return () => unsub();
   }, [user]);
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: isDark ? '#050508' : '#FFFFFF', justifyContent: 'center' }]}>
-        <ActivityIndicator color="#FBE618" />
-      </View>
-    );
-  }
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#050508' : '#FFFFFF' }]}>
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-          Your<Text style={{ color: '#FBE618' }}>Matches</Text>
-        </Text>
-      </View>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
       <FlatList
         data={matches}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <MatchItem match={item} />}
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={{ color: isDark ? '#444444' : '#999999', fontWeight: '700' }}>No matches yet. Keep building!</Text>
-          </View>
+          loading ? <ActivityIndicator color="#FBE618" style={{ marginTop: 50 }} /> : (
+            <View style={styles.emptyState}>
+              <Zap size={48} color="#222" />
+              <Text style={styles.emptyText}>NO ACTIVE CONNECTIONS</Text>
+              <Text style={styles.emptySub}>START SWIPING TO BUILD YOUR NETWORK</Text>
+            </View>
+          )
         }
       />
     </SafeAreaView>
@@ -100,68 +102,111 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    textTransform: 'uppercase',
-  },
   listContent: {
-    padding: 20,
+    padding: 24,
+    paddingTop: 10,
+    paddingBottom: 100,
   },
-  matchItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  matchCard: {
     padding: 16,
     borderRadius: 24,
     marginBottom: 12,
     borderWidth: 1,
   },
+  cardMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
   avatarContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginRight: 16,
+    position: 'relative',
   },
   avatar: {
-    width: '100%',
-    height: '100%',
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#FBE61840',
   },
-  avatarPlaceholder: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
+  statusDot: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#4ADE80',
+    borderWidth: 3,
+    borderColor: '#111',
   },
-  matchInfo: {
+  infoContainer: {
     flex: 1,
+    gap: 4,
   },
-  matchName: {
-    fontSize: 18,
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  nameText: {
+    fontSize: 16,
     fontWeight: '900',
     textTransform: 'uppercase',
+    fontStyle: 'italic',
   },
-  matchBio: {
+  roleBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: '#FBE61815',
+  },
+  roleText: {
+    fontSize: 8,
+    color: '#FBE618',
+    fontWeight: '900',
+  },
+  lastMsg: {
     fontSize: 12,
-    color: '#666666',
+    color: '#666',
+    fontWeight: '600',
+  },
+  aiReasonBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginTop: 4,
   },
-  messageButton: {
+  aiReasonText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FBE618',
+    letterSpacing: 0.5,
+  },
+  msgBtn: {
     width: 44,
     height: 44,
-    borderRadius: 14,
-    backgroundColor: '#FBE61815',
+    borderRadius: 15,
+    backgroundColor: '#16161A',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#222226',
   },
-  emptyContainer: {
-    flex: 1,
+  emptyState: {
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 100,
+    gap: 16,
   },
+  emptyText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#444',
+    letterSpacing: 2,
+  },
+  emptySub: {
+    fontSize: 10,
+    color: '#222',
+    fontWeight: '900',
+  }
 });

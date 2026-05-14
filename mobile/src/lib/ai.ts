@@ -107,3 +107,32 @@ export const generateAIComment = async (postContent: string) => {
     return null;
   }
 };
+export const generateFeedback = async (postContent: string) => {
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "deepseek/deepseek-chat",
+        messages: [
+          {
+            role: "system",
+            content: "You are the 'Brutal Build Roaster'. Your job is to analyze startup progress and give raw, unfiltered, but ultimately helpful feedback. Be punchy, use founder lingo, and don't sugarcoat it."
+          },
+          {
+            role: "user",
+            content: `Roast this build progress and give me 1 actionable improvement: "${postContent}"`
+          }
+        ]
+      })
+    });
+    const data = await response.json();
+    return data.choices[0].message.content;
+  } catch (error) {
+    console.error("OpenRouter Error:", error);
+    return "BUILD_INTEL_DECRYPTION_FAILED";
+  }
+};

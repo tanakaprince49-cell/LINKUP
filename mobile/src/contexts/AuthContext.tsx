@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User, signOut, signInWithEmailAndPassword, signInAnonymously, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { Alert } from 'react-native';
+import { onAuthStateChanged, User, signOut, signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { UserProfile } from '../types';
@@ -14,15 +15,16 @@ interface AuthContextType {
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // CONFIGURATION: Replace these when you are ready to launch to the App Store
 const GOOGLE_CONFIG = {
-  iosClientId: 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com',
-  androidClientId: 'YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com',
-  webClientId: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com',
+  webClientId: '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com',
+  iosClientId: '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com',
+  androidClientId: '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com',
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -118,26 +120,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signInWithGoogle = async () => {
-    console.log("Authenticating...");
+    console.log("Starting Google Auth flow...");
     
-    // Check if client IDs are still placeholders
-    const isPlaceholder = GOOGLE_CONFIG.iosClientId.includes('YOUR_IOS_CLIENT_ID');
-    
-    if (isPlaceholder) {
-      console.log("Using Developer Preview Mode (Anonymous)...");
-      try {
-        await signInAnonymously(auth);
-      } catch (error) {
-        console.error("Auth failed:", error);
-      }
-      return;
-    }
-
     try {
-      await promptAsync();
-    } catch (error) {
-      console.log("Google Auth failed, falling back to Anonymous:", error);
-      await signInAnonymously(auth);
+      const result = await promptAsync();
+      if (result.type === 'success') {
+        const { id_token } = result.params;
+        const credential = GoogleAuthProvider.credential(id_token);
+        await signInWithCredential(auth, credential);
+      } else if (result.type === 'error') {
+        Alert.alert("Authentication Error", "Google Sign-In failed. Please try again.");
+      }
+    } catch (error: any) {
+      console.error("Google Auth Error:", error);
+      Alert.alert("Connection Error", "Could not reach Google. Check your internet connection.");
     }
   };
 
@@ -149,8 +145,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const deleteAccount = async () => {
+    if (!auth.currentUser) return;
+    try {
+      const uid = auth.currentUser.uid;
+      // Delete Firestore document first
+      await setDoc(doc(db, 'users', uid), { deleted: true }, { merge: true }); // Soft delete or just remove doc
+      // In a real app, you'd trigger a cloud function to cleanup posts/matches
+      await auth.currentUser.delete();
+    } catch (error) {
+      console.error("Delete account error:", error);
+      throw error;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, logout, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

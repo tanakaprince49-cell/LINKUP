@@ -1,68 +1,188 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, Image, ScrollView, Dimensions, Alert } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { db } from '../lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { X, Code } from 'lucide-react-native';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, increment, query, where, getDocs, limit } from 'firebase/firestore';
+import { uploadMedia } from '../lib/storage';
+import * as ImagePicker from 'expo-image-picker';
+import { X, Camera, Video, Send, Image as ImageIcon } from 'lucide-react-native';
+
+const { width } = Dimensions.get('window');
 
 export default function CreatePostScreen({ navigation }: any) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [content, setContent] = useState('');
   const [isPosting, setIsPosting] = useState(false);
+  const [media, setMedia] = useState<string[]>([]);
+  const [showTagMenu, setShowTagMenu] = useState(false);
+  const [tagQuery, setTagQuery] = useState('');
+  const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (tagQuery.length > 0) {
+      const fetchUsers = async () => {
+        const q = query(collection(db, 'users'), where('displayName', '>=', tagQuery), limit(5));
+        const snap = await getDocs(q);
+        setSuggestedUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      };
+      fetchUsers();
+    } else {
+      setSuggestedUsers([]);
+    }
+  }, [tagQuery]);
+
+  const handleTextChange = (text: string) => {
+    setContent(text);
+    const words = text.split(/\s/);
+    const lastWord = words[words.length - 1];
+
+    if (lastWord.startsWith('@')) {
+      setShowTagMenu(true);
+      setTagQuery(lastWord.slice(1));
+    } else {
+      setShowTagMenu(false);
+    }
+  };
+
+  const insertTag = (username: string) => {
+    const words = content.split(/\s/);
+    words[words.length - 1] = `@${username} `;
+    setContent(words.join(' '));
+    setShowTagMenu(false);
+  };
 
   const handlePost = async () => {
     if (!content.trim() || !user || isPosting) return;
     
     setIsPosting(true);
     try {
+      const hashtags = content.match(/#[a-z0-9_]+/gi) || [];
+      const tags = content.match(/@[a-z0-9_]+/gi) || [];
+
       await addDoc(collection(db, 'posts'), {
         authorId: user.uid,
-        authorName: user.displayName || 'Builder',
+        authorName: profile?.displayName || user.displayName || 'Builder',
+        authorPic: profile?.profilePic || '',
         content,
-        type: 'build',
         timestamp: serverTimestamp(),
         likesCount: 0,
         commentsCount: 0,
-        likedBy: []
+        viewsCount: 0,
+        likedBy: [],
+        viewedBy: [],
+        media, // media already contains base64 strings
+        hashtags,
+        mentions: tags,
+        type: 'update',
       });
+
+      await updateDoc(doc(db, 'users', user.uid), {
+        reputationScore: increment(10),
+        lastActiveAt: serverTimestamp()
+      });
+
       navigation.goBack();
     } catch (err) {
       console.error("Failed to post:", err);
+      Alert.alert("Error", "Failed to upload media or post content.");
       setIsPosting(false);
     }
   };
 
+  const pickMedia = async (type: 'image' | 'video') => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'We need access to your photos to post media.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: type === 'image' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos,
+      allowsMultipleSelection: true,
+      quality: 0.3, // Heavily compressed to fit in Firestore
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      const newMedia = result.assets.map(asset => {
+        if (asset.base64) {
+          return `data:image/jpeg;base64,${asset.base64}`;
+        }
+        return asset.uri;
+      });
+      setMedia(prev => [...prev, ...newMedia]);
+    }
+  };
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#121212' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
-            <X size={24} color={isDark ? '#FFFFFF' : '#000000'} />
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton}>
+            <X size={20} color={isDark ? '#FFF' : '#000'} />
           </TouchableOpacity>
-          <Text style={[styles.title, { color: isDark ? '#FFFFFF' : '#000000' }]}>SHIP SOMETHING</Text>
-          <TouchableOpacity onPress={handlePost} disabled={!content.trim() || isPosting}>
-            <Text style={[styles.postBtn, { opacity: content.trim() ? 1 : 0.5 }]}>
-              {isPosting ? '...' : 'PUBLISH'}
-            </Text>
+          <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>POST</Text>
+          <TouchableOpacity 
+            onPress={handlePost} 
+            disabled={!content.trim() || isPosting}
+            style={[styles.shipButton, { backgroundColor: '#FBE618', opacity: content.trim() ? 1 : 0.5 }]}
+          >
+            {isPosting ? <ActivityIndicator size="small" color="#000" /> : <Text style={styles.shipText}>POST</Text>}
           </TouchableOpacity>
         </View>
-        
-        <TextInput
-          autoFocus
-          multiline
-          placeholder="What did you ship today? Paste a link or describe your progress..."
-          placeholderTextColor={isDark ? '#888888' : '#AAAAAA'}
-          style={[styles.input, { color: isDark ? '#FFFFFF' : '#000000' }]}
-          value={content}
-          onChangeText={setContent}
-        />
-        
-        <View style={styles.powTip}>
-          <Code size={16} color="#FBE618" />
-          <Text style={styles.powTipText}>Proof of Work increases your visibility.</Text>
+
+        <ScrollView style={styles.contentArea} keyboardShouldPersistTaps="handled">
+          <View style={styles.inputWrapper}>
+            <Image source={{ uri: profile?.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.userThumb} />
+            <TextInput
+              autoFocus
+              multiline
+              placeholder="WHAT'S ON YOUR MIND?"
+              placeholderTextColor="#666"
+              style={[styles.input, { color: isDark ? '#FFF' : '#000' }]}
+              value={content}
+              onChangeText={handleTextChange}
+            />
+          </View>
+
+          {media.length > 0 && (
+            <ScrollView horizontal style={styles.mediaPreview} showsHorizontalScrollIndicator={false}>
+              {media.map((uri, i) => (
+                <View key={i} style={styles.mediaItem}>
+                  <Image source={{ uri }} style={styles.mediaImg} />
+                  <TouchableOpacity style={styles.removeMedia} onPress={() => setMedia(prev => prev.filter((_, idx) => idx !== i))}>
+                    <X size={12} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+
+          {showTagMenu && suggestedUsers.length > 0 && (
+            <View style={styles.tagMenu}>
+              {suggestedUsers.map(u => (
+                <TouchableOpacity key={u.id} style={styles.tagItem} onPress={() => insertTag(u.displayName)}>
+                  <Image source={{ uri: u.profilePic }} style={styles.tagAvatar} />
+                  <Text style={styles.tagName}>{u.displayName}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+
+        <View style={[styles.toolbar, { borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
+          <TouchableOpacity style={styles.toolBtn} onPress={() => pickMedia('image')}>
+            <ImageIcon size={22} color="#FBE618" />
+            <Text style={styles.toolText}>PHOTO</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.toolBtn} onPress={() => pickMedia('video')}>
+            <Video size={22} color="#FBE618" />
+            <Text style={styles.toolText}>VIDEO</Text>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -70,48 +190,98 @@ export default function CreatePostScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    paddingTop: 10,
   },
-  closeBtn: {
-    padding: 4,
+  headerTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 2,
   },
-  title: {
-    fontSize: 16,
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#FBE61815',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FBE61830',
+  },
+  shipButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 14,
+  },
+  shipText: {
+    fontWeight: '900',
+    fontSize: 12,
+  },
+  contentArea: { flex: 1, padding: 20 },
+  inputWrapper: { flexDirection: 'row', gap: 16 },
+  userThumb: { width: 44, height: 44, borderRadius: 15 },
+  input: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '500',
+    paddingTop: 10,
+    textAlignVertical: 'top',
+  },
+  mediaPreview: { marginTop: 24, flexDirection: 'row' },
+  mediaItem: { position: 'relative', marginRight: 12 },
+  mediaImg: { width: 150, height: 200, borderRadius: 20 },
+  removeMedia: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toolbar: {
+    flexDirection: 'row',
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    borderTopWidth: 1,
+    gap: 20,
+  },
+  toolBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FBE61810',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  toolText: {
+    color: '#FBE618',
+    fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
   },
-  postBtn: {
-    color: '#FBE618',
-    fontWeight: '900',
-    fontSize: 16,
+  tagMenu: {
+    backgroundColor: '#16161A',
+    borderRadius: 16,
+    marginTop: 10,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#222226',
   },
-  input: {
-    flex: 1,
-    padding: 20,
-    fontSize: 18,
-    textAlignVertical: 'top',
-  },
-  powTip: {
+  tagItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 10,
     gap: 10,
-    padding: 20,
-    backgroundColor: '#FBE61815',
-    margin: 20,
-    borderRadius: 20,
   },
-  powTipText: {
-    color: '#FBE618',
-    fontSize: 13,
-    fontWeight: '700',
-  },
+  tagAvatar: { width: 30, height: 30, borderRadius: 10 },
+  tagName: { color: '#FFF', fontWeight: '900', fontSize: 12 },
 });
