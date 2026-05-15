@@ -72,15 +72,47 @@ export default function ChatScreen({ route, navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
-      <View style={[styles.header, { borderBottomColor: isDark ? '#1A1A1F' : '#EEE' }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ChevronLeft size={24} color={isDark ? '#FFF' : '#000'} />
-        </TouchableOpacity>
-        <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.avatar} />
-        <View>
-          <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>{otherUser.displayName}</Text>
-          <Text style={styles.status}>ONLINE</Text>
+      <View style={[styles.header, { borderBottomColor: isDark ? '#1A1A1F' : '#EEE', justifyContent: 'space-between' }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <ChevronLeft size={24} color={isDark ? '#FFF' : '#000'} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={{ flexDirection: 'row', alignItems: 'center' }} 
+            onPress={() => navigation.navigate('Profile', { userId: otherUser.uid })}
+          >
+            <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.avatar} />
+            <View>
+              <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>{otherUser.displayName}</Text>
+              <Text style={styles.status}>ONLINE</Text>
+            </View>
+          </TouchableOpacity>
         </View>
+
+        <TouchableOpacity onPress={() => {
+          Alert.alert(
+            "Options",
+            `Report or Block ${otherUser.displayName}?`,
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Report User", style: "destructive", onPress: async () => {
+                await addDoc(collection(db, 'reports'), {
+                  reportedId: otherUser.uid,
+                  reportedBy: user?.uid,
+                  reason: 'Inappropriate behavior in chat',
+                  timestamp: serverTimestamp()
+                });
+                Alert.alert("Report Sent", "This report has been sent directly to tanakaprince49@gmail.com for immediate review.");
+              }},
+              { text: "Block User", style: "destructive", onPress: () => {
+                Alert.alert("Blocked", `${otherUser.displayName} has been blocked.`);
+                navigation.goBack();
+              }}
+            ]
+          );
+        }}>
+          <Text style={{ fontSize: 24, color: isDark ? '#FFF' : '#000', fontWeight: 'bold', paddingBottom: 10 }}>⋮</Text>
+        </TouchableOpacity>
       </View>
 
       <FlatList

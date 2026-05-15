@@ -49,16 +49,19 @@ service cloud.firestore {
 
       allow create: if (isOwner(userId) && isValidUser(incoming())) || userId.matches('^seed_.*');
       
-      allow update: if isOwner(userId) && isValidUser(incoming()) && (
-        // Action: Update Profile Info
-        incoming().diff(existing()).affectedKeys().hasOnly([
+      allow update: if isSignedIn() && (
+        // Self-updating own profile data
+        (isOwner(userId) && isValidUser(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly([
           'displayName', 'bio', 'skills', 'interests', 'goals',
           'country', 'city', 'age', 'experience', 'personalityType',
           'commitmentLevel', 'industries', 'profilePic', 'coverPhoto',
           'achievements', 'badges', 'socialLinks', 'isVisible', 'lastActiveAt',
           'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'onboarded', 
-          'ambition', 'photos', 'pushTokens', 'reputationScore', 'isStealthMode', 'hasExit', 'isVerified'
-        ])
+          'ambition', 'photos', 'pushTokens', 'reputationScore', 'isStealthMode', 'hasExit', 'isVerified',
+          'following'
+        ])) ||
+        // Other users following/unfollowing this profile
+        (incoming().diff(existing()).affectedKeys().hasOnly(['followers']))
       );
       
       allow delete: if isOwner(userId);

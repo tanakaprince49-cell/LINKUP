@@ -19,7 +19,7 @@ import * as Icons from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadMedia } from '../lib/storage';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, arrayUnion, arrayRemove, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -117,6 +117,41 @@ export default function ProfileScreen({ navigation, route }: any) {
       }
     }
   };
+  const handleFollow = async () => {
+    if (!myProfile || !targetUserId) return;
+    const isFollowing = profile.followers?.includes(myProfile.uid);
+    
+    // Optimistic update
+    setViewedProfile((prev: any) => ({
+      ...prev,
+      followers: isFollowing 
+        ? (prev.followers || []).filter((id: string) => id !== myProfile.uid)
+        : [...(prev.followers || []), myProfile.uid]
+    }));
+
+    try {
+      if (isFollowing) {
+        await updateDoc(doc(db, 'users', targetUserId), { followers: arrayRemove(myProfile.uid) });
+        await updateDoc(doc(db, 'users', myProfile.uid), { following: arrayRemove(targetUserId) });
+      } else {
+        await updateDoc(doc(db, 'users', targetUserId), { followers: arrayUnion(myProfile.uid) });
+        await updateDoc(doc(db, 'users', myProfile.uid), { following: arrayUnion(targetUserId) });
+        
+        await addDoc(collection(db, 'notifications'), {
+          userId: targetUserId,
+          fromId: myProfile.uid,
+          fromName: myProfile.displayName,
+          fromPic: myProfile.profilePic,
+          type: 'follow',
+          content: 'started following you.',
+          isRead: false,
+          timestamp: serverTimestamp()
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleSave = async () => {
     if (!editData) return;
@@ -150,7 +185,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       { text: "Logout", style: "destructive", onPress: async () => {
         try {
           await logout();
-        } catch (e) {
+        } catch (e: any) {
           console.error(e);
         }
       }}
@@ -250,6 +285,36 @@ export default function ProfileScreen({ navigation, route }: any) {
                 )}
               </View>
               <Text style={styles.locationText}>{profile.city || 'Digital Nomad'}</Text>
+              <View style={{ flexDirection: 'row', gap: 16, marginTop: 12 }}>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ color: isDark ? '#FFF' : '#000', fontWeight: 'bold', fontSize: 16 }}>{profile.followers?.length || 0}</Text>
+                  <Text style={{ color: '#666', fontSize: 12 }}>Followers</Text>
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ color: isDark ? '#FFF' : '#000', fontWeight: 'bold', fontSize: 16 }}>{profile.following?.length || 0}</Text>
+                  <Text style={{ color: '#666', fontSize: 12 }}>Following</Text>
+                </View>
+              </View>
+              
+              {isViewingOther && (
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+                  <TouchableOpacity 
+                    style={[styles.actionButton, { backgroundColor: profile.followers?.includes(myProfile?.uid) ? '#333' : '#2563EB' }]}
+                    onPress={handleFollow}
+                  >
+                    <Text style={{ color: '#FFF', fontWeight: 'bold' }}>
+                      {profile.followers?.includes(myProfile?.uid) ? 'Following' : 'Follow'}
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.actionButton, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderWidth: 1, borderColor: '#2563EB' }]}
+                    onPress={() => navigation.navigate('Chat', { otherUser: profile })}
+                  >
+                    <Text style={{ color: '#2563EB', fontWeight: 'bold' }}>Message</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </>
           )}
         </View>

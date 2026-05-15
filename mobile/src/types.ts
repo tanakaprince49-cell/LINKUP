@@ -37,6 +37,9 @@ export interface UserProfile {
   isStealthMode: boolean; // For private discovery
   hasExit: boolean; // Verified serial founder
   vibeMedia?: string; // Base64 audio/video intro
+  isVerified?: boolean;
+  followers?: string[];
+  following?: string[];
 }
 
 export interface StartupResume {
