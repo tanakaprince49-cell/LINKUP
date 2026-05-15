@@ -365,19 +365,6 @@ export default function ProfileScreen({ navigation, route }: any) {
 
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
-              <SafeIcon name="Target" size={18} color="#666" />
-              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Verified Exit</Text>
-            </View>
-            <Switch 
-              value={isEditing ? editData.hasExit : profile.hasExit} 
-              onValueChange={(v) => isEditing ? setEditData({...editData, hasExit: v}) : updateDoc(doc(db, 'users', profile.uid), { hasExit: v })} 
-              trackColor={{ true: '#2563EB' }} 
-              thumbColor="#FFF" 
-            />
-          </View>
-
-          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
-            <View style={styles.prefLabelContainer}>
               <SafeIcon name={isDark ? "Moon" : "Sun"} size={18} color="#666" />
               <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Dark Mode</Text>
             </View>

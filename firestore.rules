@@ -57,7 +57,7 @@ service cloud.firestore {
           'commitmentLevel', 'industries', 'profilePic', 'coverPhoto',
           'achievements', 'badges', 'socialLinks', 'isVisible', 'lastActiveAt',
           'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'onboarded', 
-          'ambition', 'photos', 'pushTokens', 'reputationScore'
+          'ambition', 'photos', 'pushTokens', 'reputationScore', 'isStealthMode', 'hasExit', 'isVerified'
         ])
       );
       

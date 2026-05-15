@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
 import React from 'react';
-import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text, SafeAreaView } from 'react-native';
+import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -9,6 +9,7 @@ import * as Icons from 'lucide-react-native';
 
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import FeedScreen from './src/screens/FeedScreen';
 import LandingScreen from './src/screens/LandingScreen';
@@ -192,17 +193,18 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   headerContainer: {
-    paddingTop: 45,
     borderBottomWidth: 1,
     borderBottomColor: '#1A1A1A20',
   },

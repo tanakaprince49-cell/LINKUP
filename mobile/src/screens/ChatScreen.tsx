@@ -92,17 +92,50 @@ export default function ChatScreen({ route, navigation }: any) {
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
       />
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+      {Platform.OS === 'ios' ? (
+        <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={90}>
+          <View style={[styles.inputContainer, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
+            <TouchableOpacity 
+              style={[styles.toolBtn, { backgroundColor: '#2563EB20' }]} 
+              onPress={async () => {
+                Alert.alert("AI INTRO", "Drafting a perfect opening based on your profiles...");
+                const intro = await generateWarmIntro(profile, otherUser);
+                setInputText(intro);
+              }}
+            >
+              <Zap size={20} color="#2563EB" fill="#2563EB" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.toolBtn}>
+              <Camera size={20} color="#666" />
+            </TouchableOpacity>
+            <TextInput
+              style={[styles.input, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
+              placeholder="Type a message..."
+              placeholderTextColor="#666"
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+            />
+            <TouchableOpacity 
+              style={[styles.sendBtn, { opacity: inputText.trim() ? 1 : 0.5, backgroundColor: '#2563EB' }]} 
+              onPress={handleSend}
+              disabled={!inputText.trim()}
+            >
+              <Send size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      ) : (
         <View style={[styles.inputContainer, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
           <TouchableOpacity 
-            style={[styles.toolBtn, { backgroundColor: '#FBE61820' }]} 
+            style={[styles.toolBtn, { backgroundColor: '#2563EB20' }]} 
             onPress={async () => {
               Alert.alert("AI INTRO", "Drafting a perfect opening based on your profiles...");
               const intro = await generateWarmIntro(profile, otherUser);
               setInputText(intro);
             }}
           >
-            <Zap size={20} color="#FBE618" fill="#FBE618" />
+            <Zap size={20} color="#2563EB" fill="#2563EB" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.toolBtn}>
             <Camera size={20} color="#666" />
@@ -116,14 +149,14 @@ export default function ChatScreen({ route, navigation }: any) {
             multiline
           />
           <TouchableOpacity 
-            style={[styles.sendBtn, { opacity: inputText.trim() ? 1 : 0.5 }]} 
+            style={[styles.sendBtn, { opacity: inputText.trim() ? 1 : 0.5, backgroundColor: '#2563EB' }]} 
             onPress={handleSend}
             disabled={!inputText.trim()}
           >
-            <Send size={20} color="#000" />
+            <Send size={20} color="#FFF" />
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      )}
     </SafeAreaView>
   );
 }
