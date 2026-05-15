@@ -5,7 +5,9 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
-import { Search, User, MessageSquare, ChevronRight, Zap } from 'lucide-react-native';
+import { Search, User, MessageSquare, ChevronRight, Zap, Plus, X, Eye, Heart } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadMedia } from '../lib/storage';
 
 const { width } = Dimensions.get('window');
 
@@ -58,16 +60,64 @@ export default function MessagesScreen({ navigation }: any) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [stories, setStories] = useState<any[]>([]);
+  const [activeStory, setActiveStory] = useState<any | null>(null);
 
   useEffect(() => {
     if (!user) return;
+    const now = new Date();
+    // In a real app, query where expiresAt > now. But for simple demo, fetch all recent stories and filter client-side
+    const sq = query(collection(db, 'stories'), orderBy('createdAt', 'desc'), limit(20));
+    const unsubStories = onSnapshot(sq, (snap) => {
+      const validStories = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter((s: any) => {
+        const expires = s.expiresAt?.toDate ? s.expiresAt.toDate() : new Date(s.expiresAt);
+        return expires > new Date();
+      });
+      setStories(validStories);
+    });
+
     const q = query(collection(db, 'matches'), where('userIds', 'array-contains', user.uid));
     const unsub = onSnapshot(q, (snap) => {
       setMatches(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match)));
       setLoading(false);
     });
-    return () => unsub();
+    
+    return () => { unsub(); unsubStories(); };
   }, [user]);
+
+  const handleAddStory = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.5,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0].base64) {
+      try {
+        const base64Data = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 24); // 24 hours
+
+        await addDoc(collection(db, 'stories'), {
+          authorId: user?.uid,
+          authorName: profile?.displayName,
+          authorPic: profile?.profilePic,
+          mediaUrl: base64Data,
+          type: 'image',
+          viewers: [],
+          likes: [],
+          createdAt: new Date(),
+          expiresAt: expiresAt
+        });
+      } catch (e) {
+        console.error("Error adding story", e);
+      }
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
@@ -85,14 +135,24 @@ export default function MessagesScreen({ navigation }: any) {
       </View>
 
       <View style={styles.activeNodes}>
-        <Text style={styles.sectionTitle}>RECENT CONNECTIONS</Text>
+        <Text style={styles.sectionTitle}>STORIES</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeNodesScroll}>
-          {matches.slice(0, 5).map((m) => (
-            <TouchableOpacity key={m.id} style={styles.activeNodeItem}>
-              <View style={styles.activeAvatarWrapper}>
-                <Image source={{ uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.activeAvatar} />
-                <View style={styles.activeStatus} />
+          <TouchableOpacity style={styles.addStoryItem} onPress={handleAddStory}>
+            <View style={[styles.activeAvatarWrapper, { borderColor: '#FBE618', borderWidth: 2 }]}>
+              <Image source={{ uri: profile?.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.activeAvatar} />
+              <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: '#2563EB', borderRadius: 10, padding: 2 }}>
+                <Plus size={12} color="#FFF" />
               </View>
+            </View>
+            <Text style={[styles.storyName, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>Add Story</Text>
+          </TouchableOpacity>
+          
+          {stories.map((s) => (
+            <TouchableOpacity key={s.id} style={styles.activeNodeItem} onPress={() => setActiveStory(s)}>
+              <View style={[styles.activeAvatarWrapper, { borderColor: s.viewers.includes(user?.uid) ? '#666' : '#2563EB', borderWidth: 2 }]}>
+                <Image source={{ uri: s.authorPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.activeAvatar} />
+              </View>
+              <Text style={[styles.storyName, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{s.authorName.split(' ')[0]}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -114,6 +174,36 @@ export default function MessagesScreen({ navigation }: any) {
             </View>
           }
         />
+      )}
+
+      {activeStory && (
+        <View style={StyleSheet.absoluteFillObject}>
+          <View style={{ flex: 1, backgroundColor: '#000' }}>
+            <Image source={{ uri: activeStory.mediaUrl }} style={{ flex: 1 }} resizeMode="contain" />
+            <SafeAreaView style={{ position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Image source={{ uri: activeStory.authorPic }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{activeStory.authorName}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setActiveStory(null)}>
+                <X size={28} color="#FFF" />
+              </TouchableOpacity>
+            </SafeAreaView>
+            <SafeAreaView style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', gap: 16 }}>
+                <TouchableOpacity onPress={async () => {
+                  // Like logic
+                }}>
+                  <Heart size={28} color="#FFF" />
+                </TouchableOpacity>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Eye size={20} color="#FFF" />
+                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{activeStory.viewers?.length || 0}</Text>
+              </View>
+            </SafeAreaView>
+          </View>
+        </View>
       )}
     </SafeAreaView>
   );
@@ -157,7 +247,19 @@ const styles = StyleSheet.create({
   activeNodesScroll: {
     gap: 15,
   },
-  activeNodeItem: {},
+  activeNodeItem: {
+    alignItems: 'center',
+    width: 60,
+  },
+  addStoryItem: {
+    alignItems: 'center',
+    width: 60,
+  },
+  storyName: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginTop: 6,
+  },
   activeAvatarWrapper: {
     position: 'relative',
   },

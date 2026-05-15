@@ -101,6 +101,20 @@ export interface AppNotification {
   fromId?: string;
 }
 
+export interface Story {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorPic: string;
+  mediaUrl?: string;
+  type: 'image' | 'text';
+  content?: string;
+  viewers: string[];
+  likes: string[];
+  expiresAt: Timestamp | FieldValue;
+  createdAt: Timestamp | FieldValue;
+}
+
 export interface Block {
   id: string;
   blockedById: string;

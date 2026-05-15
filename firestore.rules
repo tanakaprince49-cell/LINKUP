@@ -195,6 +195,17 @@ service cloud.firestore {
                       incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
       allow delete: if isOwner(existing().userId);
     }
+
+    // ------------------------------------------------------------
+    // STORIES (Insta-Stories)
+    // ------------------------------------------------------------
+    match /stories/{storyId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isOwner(request.resource.data.authorId);
+      allow update: if isSignedIn();
+      allow delete: if isOwner(resource.data.authorId);
+    }
   }
 }
 
