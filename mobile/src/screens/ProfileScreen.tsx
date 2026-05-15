@@ -241,6 +241,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholderTextColor="#666"
               />
             </View>
+          ) : (
             <>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
                 <Text style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}>{profile.displayName || 'Builder'}</Text>
