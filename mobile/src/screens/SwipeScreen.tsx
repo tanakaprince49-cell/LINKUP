@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, Animated, PanResponder, ScrollView } from 'react-native';
-import { collection, query, onSnapshot, where, addDoc, updateDoc, doc, arrayUnion, limit, serverTimestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, addDoc, updateDoc, doc, arrayUnion, limit, serverTimestamp, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -99,6 +99,53 @@ export default function SwipeScreen() {
         type: 'like',
         timestamp: serverTimestamp()
       });
+
+      // Check if they already liked us
+      const q = query(
+        collection(db, 'swipes'), 
+        where('fromId', '==', target.uid), 
+        where('toId', '==', user.uid),
+        where('type', '==', 'like')
+      );
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        // It's a MATCH!
+        const matchDoc = await addDoc(collection(db, 'matches'), {
+          userIds: [user.uid, target.uid],
+          timestamp: serverTimestamp(),
+        });
+        
+        // Notify both users
+        await addDoc(collection(db, 'notifications'), {
+          userId: target.uid,
+          fromId: user.uid,
+          type: 'match',
+          content: 'You got a new match!',
+          matchId: matchDoc.id,
+          isRead: false,
+          timestamp: serverTimestamp()
+        });
+        await addDoc(collection(db, 'notifications'), {
+          userId: user.uid,
+          fromId: target.uid,
+          type: 'match',
+          content: 'You got a new match!',
+          matchId: matchDoc.id,
+          isRead: false,
+          timestamp: serverTimestamp()
+        });
+      } else {
+        // Just a like notification
+        await addDoc(collection(db, 'notifications'), {
+          userId: target.uid,
+          fromId: user.uid,
+          type: 'like',
+          content: 'liked your profile!',
+          isRead: false,
+          timestamp: serverTimestamp()
+        });
+      }
     } catch (e) { console.error(e); }
   };
 

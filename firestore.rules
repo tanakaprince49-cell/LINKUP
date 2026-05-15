@@ -103,7 +103,22 @@ service cloud.firestore {
         allow create: if isSignedIn() && 
                         incoming().userId == request.auth.uid &&
                         incoming().timestamp == request.time;
+        allow update: if isSignedIn() && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['likes'])
+        );
         allow delete: if isSignedIn() && (isOwner(existing().userId) || isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorId));
+
+        // Replies Subcollection
+        match /replies/{replyId} {
+          allow read: if isSignedIn();
+          allow create: if isSignedIn() && 
+                          incoming().userId == request.auth.uid &&
+                          incoming().timestamp == request.time;
+          allow update: if isSignedIn() && (
+            incoming().diff(existing()).affectedKeys().hasOnly(['likes'])
+          );
+          allow delete: if isSignedIn() && (isOwner(existing().userId) || isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorId));
+        }
       }
     }
 

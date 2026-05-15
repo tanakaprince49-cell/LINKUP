@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -19,7 +19,7 @@ import * as Icons from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadMedia } from '../lib/storage';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -59,13 +59,12 @@ export default function ProfileScreen({ navigation, route }: any) {
   useEffect(() => {
     if (!isViewingOther) return;
     setViewedLoading(true);
-    import('firebase/firestore').then(({ getDoc, doc }) => {
-      import('../lib/firebase').then(({ db }) => {
-        getDoc(doc(db, 'users', targetUserId)).then(snap => {
-          if (snap.exists()) setViewedProfile({ ...snap.data(), uid: snap.id });
-          setViewedLoading(false);
-        });
-      });
+    getDoc(doc(db, 'users', targetUserId)).then(snap => {
+      if (snap.exists()) setViewedProfile({ ...snap.data(), uid: snap.id });
+      setViewedLoading(false);
+    }).catch((err) => {
+      console.error("Error fetching viewed profile:", err);
+      setViewedLoading(false);
     });
   }, [targetUserId]);
 
@@ -242,9 +241,13 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholderTextColor="#666"
               />
             </View>
-          ) : (
             <>
-              <Text style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}>{profile.displayName || 'Builder'}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+                <Text style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}>{profile.displayName || 'Builder'}</Text>
+                {profile.isVerified && (
+                  <SafeIcon name="BadgeCheck" size={24} color="#FBE618" fill="#FBE618" />
+                )}
+              </View>
               <Text style={styles.locationText}>{profile.city || 'Digital Nomad'}</Text>
             </>
           )}

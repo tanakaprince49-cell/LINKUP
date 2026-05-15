@@ -41,6 +41,24 @@ import { generateFeedback } from '../lib/ai';
 
 const { width } = Dimensions.get('window');
 
+const formatTimeAgo = (timestamp: any) => {
+  if (!timestamp) return 'Just now';
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) return `${diffInDays}d ago`;
+  const diffInWeeks = Math.floor(diffInDays / 7);
+  return `${diffInWeeks}w ago`;
+};
+
+
 // Safe Icon Helper
 const SafeIcon = ({ name, size = 18, color = "#666", fill = "transparent", style }: any) => {
   const IconComponent = (Icons as any)[name];
@@ -79,6 +97,19 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
           timestamp: serverTimestamp(),
           likes: [],
         });
+        
+        if (replyingTo.userId !== user.uid) {
+          await addDoc(collection(db, 'notifications'), {
+            userId: replyingTo.userId,
+            fromId: user.uid,
+            fromName: profile?.displayName || 'Someone',
+            fromPic: profile?.profilePic || '',
+            type: 'comment',
+            content: 'replied to your comment.',
+            isRead: false,
+            timestamp: serverTimestamp()
+          });
+        }
         setReplyingTo(null);
       } else {
         await addDoc(collection(db, 'posts', post.id, 'comments'), {
@@ -94,13 +125,27 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
     } catch (e) { console.error(e); }
   };
 
-  const handleLikeComment = async (commentId: string, currentLikes: string[]) => {
+  const handleLikeComment = async (item: any, currentLikes: string[]) => {
     if (!user) return;
+    const commentId = item.id;
     const commentRef = doc(db, 'posts', post.id, 'comments', commentId);
     const alreadyLiked = currentLikes?.includes(user.uid);
     await updateDoc(commentRef, {
       likes: alreadyLiked ? arrayRemove(user.uid) : arrayUnion(user.uid)
     });
+    
+    if (!alreadyLiked && item.userId !== user.uid) {
+      await addDoc(collection(db, 'notifications'), {
+        userId: item.userId,
+        fromId: user.uid,
+        fromName: profile?.displayName || 'Someone',
+        fromPic: profile?.profilePic || '',
+        type: 'like',
+        content: 'liked your comment.',
+        isRead: false,
+        timestamp: serverTimestamp()
+      });
+    }
   };
 
   const handleDeleteComment = async (commentId: string) => {
@@ -164,7 +209,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
                       <View style={{ flexDirection: 'row', gap: 16, marginTop: 6 }}>
                         <TouchableOpacity 
                           style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                          onPress={() => handleLikeComment(item.id, item.likes || [])}
+                          onPress={() => handleLikeComment(item, item.likes || [])}
                         >
                           <SafeIcon 
                             name="Heart" size={13} 
@@ -251,6 +296,18 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       await updateDoc(postRef, { likesCount: increment(-1), likedBy: arrayRemove(user.uid) });
     } else {
       await updateDoc(postRef, { likesCount: increment(1), likedBy: arrayUnion(user.uid) });
+      if (post.authorId !== user.uid) {
+        await addDoc(collection(db, 'notifications'), {
+          userId: post.authorId,
+          fromId: user.uid,
+          fromName: profile?.displayName || 'Someone',
+          fromPic: profile?.profilePic || '',
+          type: 'like',
+          content: 'liked your post.',
+          isRead: false,
+          timestamp: serverTimestamp()
+        });
+      }
     }
   };
 
@@ -284,8 +341,13 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
         <TouchableOpacity style={styles.authorRow} onPress={() => navigation.navigate('Profile', { userId: post.authorId })}>
           <Image source={{ uri: post.authorPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.authorAvatarImg} />
           <View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Text style={[styles.authorName, { color: isDark ? '#FFF' : '#000' }]}>{post.authorName}</Text>
-            <Text style={styles.postTime}>MOMENTS_AGO</Text>
+            {post.authorId === 'M9JgG7Bv2kS5K8W0jZ1P4nL3cQv2' /* Or any verification check */ && (
+              <SafeIcon name="BadgeCheck" size={14} color="#FBE618" fill="#FBE618" />
+            )}
+          </View>
+          <Text style={styles.postTime}>{formatTimeAgo(post.timestamp)}</Text>
           </View>
         </TouchableOpacity>
         

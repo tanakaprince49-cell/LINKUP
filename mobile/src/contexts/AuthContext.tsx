@@ -44,6 +44,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         unsubscribeProfile = onSnapshot(userDocRef, async (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data() as UserProfile;
+            if (authenticatedUser.email === 'tanakaprince49@gmail.com' && !data.isVerified) {
+              await updateDoc(userDocRef, { isVerified: true });
+              data.isVerified = true;
+            }
             setProfile(data);
             setLoading(false);
           } else {
@@ -85,7 +89,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               viewedBy: [],
               isStealthMode: false,
               hasExit: false,
-              onboarded: false
+              onboarded: false,
+              isVerified: authenticatedUser.email === 'tanakaprince49@gmail.com'
             };
             await setDoc(userDocRef, newProfile);
             setProfile(newProfile);
