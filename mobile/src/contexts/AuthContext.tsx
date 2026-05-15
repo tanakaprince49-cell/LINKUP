@@ -129,6 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async () => {
     const finalRedirectUri = 'https://auth.expo.io/@tanakaprince49-cell/linkup';
+    Alert.alert("DEBUG: Redirect URI", finalRedirectUri);
     console.log("Starting Google Auth flow...");
     console.log("Using Redirect URI:", finalRedirectUri);
     
