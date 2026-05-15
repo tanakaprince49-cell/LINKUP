@@ -24,8 +24,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // CONFIGURATION: Replace these when you are ready to launch to the App Store
 const GOOGLE_CONFIG = {
   webClientId: '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com',
-  iosClientId: '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com',
-  androidClientId: '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com',
+  androidClientId: '70946124449-of65t4a84qtq8llu58rf3g0g7lbgn534.apps.googleusercontent.com',
+  iosClientId: '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com', // Placeholder
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

@@ -318,7 +318,9 @@ export default function ProfileScreen({ navigation }: any) {
             <Text style={styles.viewerCount}>{profile.viewedBy?.length || 0}</Text>
           </TouchableOpacity>
         </View>
-
+        {/* SETTINGS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>SETTINGS & PREFERENCES</Text>
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name="Ghost" size={18} color="#FBE618" />
