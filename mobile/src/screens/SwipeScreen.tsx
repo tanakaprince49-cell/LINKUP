@@ -119,11 +119,16 @@ export default function SwipeScreen() {
     const q = query(
       collection(db, 'users'), 
       where('uid', '!=', user.uid), 
-      where('isStealthMode', '==', false),
       limit(40)
     );
     const unsub = onSnapshot(q, (snap) => {
-      setProfiles(snap.docs.map(doc => doc.data() as UserProfile));
+      const allUsers = snap.docs.map(doc => doc.data() as UserProfile);
+      // Filter out stealth users on the client side (avoids needing a composite index)
+      const visibleUsers = allUsers.filter(u => !u.isStealthMode);
+      setProfiles(visibleUsers);
+      setLoading(false);
+    }, (error) => {
+      console.error("SwipeScreen query error:", error);
       setLoading(false);
     });
     return () => unsub();
@@ -255,13 +260,13 @@ export default function SwipeScreen() {
 
       <View style={styles.actionRow}>
         <TouchableOpacity style={styles.actionBtnSmall} onPress={() => forceSwipe('left')}>
-          <X size={24} color="#FF4444" />
+          <X size={24} color="#EF4444" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtnLarge} onPress={() => forceSwipe('right')}>
-          <Heart size={32} color="#000" fill="#000" />
+          <Heart size={32} color="#FFF" fill="#FFF" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtnSmall} onPress={() => setCurrentIndex(0)}>
-          <RotateCcw size={24} color="#FBE618" />
+          <RotateCcw size={24} color="#888" />
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -301,7 +306,7 @@ const styles = StyleSheet.create({
   repBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FBE618',
+    backgroundColor: '#2563EB',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
@@ -312,7 +317,7 @@ const styles = StyleSheet.create({
   repVal: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#000',
+    color: '#FFF',
   },
   bottomMeta: {
     flex: 1,
@@ -332,7 +337,7 @@ const styles = StyleSheet.create({
   exitBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FBE618',
+    backgroundColor: '#4ADE80',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
@@ -384,7 +389,7 @@ const styles = StyleSheet.create({
   },
   scrollText: {
     fontSize: 8,
-    color: '#FBE618',
+    color: '#AAA',
     fontWeight: '900',
     marginTop: 4,
   },
@@ -423,10 +428,10 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#FBE618',
+    backgroundColor: '#2563EB',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FBE618',
+    shadowColor: '#2563EB',
     shadowOpacity: 0.3,
     shadowRadius: 15,
     elevation: 8,
@@ -443,7 +448,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   resetBtn: {
-    backgroundColor: '#FBE618',
+    backgroundColor: '#2563EB',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 20,

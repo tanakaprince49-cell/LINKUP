@@ -41,17 +41,37 @@ const Badge = ({ name, iconName, color = "#FBE618" }: { name: string, iconName: 
   );
 };
 
-export default function ProfileScreen({ navigation }: any) {
-  const { profile, logout, deleteAccount } = useAuth();
+export default function ProfileScreen({ navigation, route }: any) {
+  const { profile: myProfile, logout, deleteAccount } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editData, setEditData] = useState<any>(null);
+  const [viewedProfile, setViewedProfile] = useState<any>(null);
+  const [viewedLoading, setViewedLoading] = useState(false);
 
-  if (!profile) return (
+  // If a userId param is passed and it's not the current user, fetch that profile
+  const targetUserId = route?.params?.userId;
+  const isViewingOther = targetUserId && targetUserId !== myProfile?.uid;
+  const profile = isViewingOther ? viewedProfile : myProfile;
+
+  useEffect(() => {
+    if (!isViewingOther) return;
+    setViewedLoading(true);
+    import('firebase/firestore').then(({ getDoc, doc }) => {
+      import('../lib/firebase').then(({ db }) => {
+        getDoc(doc(db, 'users', targetUserId)).then(snap => {
+          if (snap.exists()) setViewedProfile({ ...snap.data(), uid: snap.id });
+          setViewedLoading(false);
+        });
+      });
+    });
+  }, [targetUserId]);
+
+  if (!profile || viewedLoading) return (
     <View style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', justifyContent: 'center', alignItems: 'center' }]}>
-      <ActivityIndicator color="#FBE618" />
+      <ActivityIndicator color="#666" />
     </View>
   );
 
@@ -175,12 +195,16 @@ export default function ProfileScreen({ navigation }: any) {
           <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.iconButton}>
             <SafeIcon name="ChevronLeft" size={20} color={isDark ? '#FFF' : '#000'} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>PROFILE</Text>
-          <TouchableOpacity onPress={isEditing ? handleSave : startEditing} style={styles.iconButton}>
-            {isSaving ? <ActivityIndicator size="small" color="#FBE618" /> : (
-              <SafeIcon name={isEditing ? "Save" : "Pen"} size={20} color="#FBE618" />
-            )}
-          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>
+            {isViewingOther ? 'PROFILE' : 'MY PROFILE'}
+          </Text>
+          {!isViewingOther ? (
+            <TouchableOpacity onPress={isEditing ? handleSave : startEditing} style={styles.iconButton}>
+              {isSaving ? <ActivityIndicator size="small" color="#444" /> : (
+                <SafeIcon name={isEditing ? "Save" : "Pen"} size={20} color={isDark ? '#CCC' : '#444'} />
+              )}
+            </TouchableOpacity>
+          ) : <View style={styles.iconButton} />}
         </View>
 
         {/* PROFILE HERO */}
@@ -318,47 +342,48 @@ export default function ProfileScreen({ navigation }: any) {
             <Text style={styles.viewerCount}>{profile.viewedBy?.length || 0}</Text>
           </TouchableOpacity>
         </View>
-        {/* SETTINGS */}
+        {/* SETTINGS - only shown on own profile */}
+        {!isViewingOther && (
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>SETTINGS & PREFERENCES</Text>
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
             <View style={styles.prefLabelContainer}>
-              <SafeIcon name="Ghost" size={18} color="#FBE618" />
+              <SafeIcon name="Ghost" size={18} color="#666" />
               <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Stealth Mode</Text>
             </View>
             <Switch 
               value={isEditing ? editData.isStealthMode : profile.isStealthMode} 
               onValueChange={(v) => isEditing ? setEditData({...editData, isStealthMode: v}) : updateDoc(doc(db, 'users', profile.uid), { isStealthMode: v })} 
-              trackColor={{ true: '#FBE618' }} 
+              trackColor={{ true: '#2563EB' }} 
               thumbColor="#FFF" 
             />
           </View>
 
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
-              <SafeIcon name="Target" size={18} color="#FBE618" />
+              <SafeIcon name="Target" size={18} color="#666" />
               <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Verified Exit</Text>
             </View>
             <Switch 
               value={isEditing ? editData.hasExit : profile.hasExit} 
               onValueChange={(v) => isEditing ? setEditData({...editData, hasExit: v}) : updateDoc(doc(db, 'users', profile.uid), { hasExit: v })} 
-              trackColor={{ true: '#FBE618' }} 
+              trackColor={{ true: '#2563EB' }} 
               thumbColor="#FFF" 
             />
           </View>
 
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
-              <SafeIcon name={isDark ? "Moon" : "Sun"} size={18} color="#FBE618" />
+              <SafeIcon name={isDark ? "Moon" : "Sun"} size={18} color="#666" />
               <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Dark Mode</Text>
             </View>
-            <Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: '#FBE618' }} thumbColor="#FFF" />
+            <Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: '#2563EB' }} thumbColor="#FFF" />
           </View>
 
           <TouchableOpacity style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]} onPress={handleLogout}>
             <View style={styles.prefLabelContainer}>
-              <SafeIcon name="LogOut" size={18} color="#FBE618" />
-              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Exit Realm (Logout)</Text>
+              <SafeIcon name="LogOut" size={18} color="#EF4444" />
+              <Text style={[styles.prefLabel, { color: '#EF4444' }]}>Logout</Text>
             </View>
           </TouchableOpacity>
 
@@ -369,6 +394,7 @@ export default function ProfileScreen({ navigation }: any) {
             </View>
           </TouchableOpacity>
         </View>
+        )}
 
         {isEditing && (
           <TouchableOpacity style={styles.cancelButton} onPress={() => setIsEditing(false)}>

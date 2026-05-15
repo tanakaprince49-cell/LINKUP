@@ -51,6 +51,7 @@ const SafeIcon = ({ name, size = 18, color = "#666", fill = "transparent", style
 const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) => {
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -68,26 +69,67 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
     const text = newComment;
     setNewComment('');
     try {
-      await addDoc(collection(db, 'posts', post.id, 'comments'), {
-        userId: user.uid,
-        userName: profile?.displayName || user.displayName || 'Builder',
-        userPic: profile?.profilePic || '',
-        content: text,
-        timestamp: serverTimestamp()
-      });
-      await updateDoc(doc(db, 'posts', post.id), {
-        commentsCount: increment(1)
-      });
+      if (replyingTo) {
+        // Post as a reply to a comment
+        await addDoc(collection(db, 'posts', post.id, 'comments', replyingTo.id, 'replies'), {
+          userId: user.uid,
+          userName: profile?.displayName || user.displayName || 'Builder',
+          userPic: profile?.profilePic || '',
+          content: text,
+          timestamp: serverTimestamp(),
+          likes: [],
+        });
+        setReplyingTo(null);
+      } else {
+        await addDoc(collection(db, 'posts', post.id, 'comments'), {
+          userId: user.uid,
+          userName: profile?.displayName || user.displayName || 'Builder',
+          userPic: profile?.profilePic || '',
+          content: text,
+          timestamp: serverTimestamp(),
+          likes: [],
+        });
+        await updateDoc(doc(db, 'posts', post.id), { commentsCount: increment(1) });
+      }
     } catch (e) { console.error(e); }
+  };
+
+  const handleLikeComment = async (commentId: string, currentLikes: string[]) => {
+    if (!user) return;
+    const commentRef = doc(db, 'posts', post.id, 'comments', commentId);
+    const alreadyLiked = currentLikes?.includes(user.uid);
+    await updateDoc(commentRef, {
+      likes: alreadyLiked ? arrayRemove(user.uid) : arrayUnion(user.uid)
+    });
   };
 
   const handleDeleteComment = async (commentId: string) => {
     try {
       await deleteDoc(doc(db, 'posts', post.id, 'comments', commentId));
-      await updateDoc(doc(db, 'posts', post.id), {
-        commentsCount: increment(-1)
-      });
+      await updateDoc(doc(db, 'posts', post.id), { commentsCount: increment(-1) });
     } catch (e) { console.error(e); }
+  };
+
+  const RepliesSection = ({ commentId }: { commentId: string }) => {
+    const [replies, setReplies] = useState<any[]>([]);
+    useEffect(() => {
+      const q = query(collection(db, 'posts', post.id, 'comments', commentId, 'replies'), orderBy('timestamp', 'asc'));
+      return onSnapshot(q, snap => setReplies(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    }, [commentId]);
+    if (replies.length === 0) return null;
+    return (
+      <View style={{ marginLeft: 44, marginTop: 4 }}>
+        {replies.map(reply => (
+          <View key={reply.id} style={[styles.commentItem, { marginBottom: 4 }]}>
+            <Image source={{ uri: reply.userPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={[styles.commentAvatar, { width: 28, height: 28 }]} />
+            <View style={styles.commentBody}>
+              <Text style={[styles.commentUser, { color: isDark ? '#FFF' : '#000', fontSize: 11 }]}>{reply.userName}</Text>
+              <Text style={[styles.commentText, { color: isDark ? '#AAA' : '#444', fontSize: 12 }]}>{reply.content}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    );
   };
 
   return (
@@ -101,24 +143,43 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
             </TouchableOpacity>
           </View>
 
-          {loading ? <ActivityIndicator color="#FBE618" style={{ flex: 1 }} /> : (
+          {loading ? <ActivityIndicator color="#666" style={{ flex: 1 }} /> : (
             <FlatList
               data={comments}
               keyExtractor={item => item.id}
               renderItem={({ item }) => (
-                <View style={styles.commentItem}>
-                  <Image source={{ uri: item.userPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.commentAvatar} />
-                  <View style={styles.commentBody}>
-                    <View style={styles.commentHeader}>
-                      <Text style={[styles.commentUser, { color: isDark ? '#FFF' : '#000' }]}>{item.userName}</Text>
-                      {item.userId === user?.uid && (
-                        <TouchableOpacity onPress={() => handleDeleteComment(item.id)}>
-                          <SafeIcon name="Trash2" size={14} color="#FF4444" />
+                <View style={{ marginBottom: 8 }}>
+                  <View style={styles.commentItem}>
+                    <Image source={{ uri: item.userPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.commentAvatar} />
+                    <View style={styles.commentBody}>
+                      <View style={styles.commentHeader}>
+                        <Text style={[styles.commentUser, { color: isDark ? '#FFF' : '#000' }]}>{item.userName}</Text>
+                        {item.userId === user?.uid && (
+                          <TouchableOpacity onPress={() => handleDeleteComment(item.id)}>
+                            <SafeIcon name="Trash2" size={14} color="#FF4444" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      <Text style={[styles.commentText, { color: isDark ? '#AAA' : '#444' }]}>{item.content}</Text>
+                      <View style={{ flexDirection: 'row', gap: 16, marginTop: 6 }}>
+                        <TouchableOpacity 
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                          onPress={() => handleLikeComment(item.id, item.likes || [])}
+                        >
+                          <SafeIcon 
+                            name="Heart" size={13} 
+                            color={item.likes?.includes(user?.uid) ? '#EF4444' : '#888'}
+                            fill={item.likes?.includes(user?.uid) ? '#EF4444' : 'transparent'}
+                          />
+                          <Text style={{ fontSize: 11, color: '#888' }}>{item.likes?.length || 0}</Text>
                         </TouchableOpacity>
-                      )}
+                        <TouchableOpacity onPress={() => setReplyingTo(item)}>
+                          <Text style={{ fontSize: 11, color: '#888', fontWeight: '600' }}>Reply</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                    <Text style={[styles.commentText, { color: isDark ? '#AAA' : '#444' }]}>{item.content}</Text>
                   </View>
+                  <RepliesSection commentId={item.id} />
                 </View>
               )}
               contentContainerStyle={{ padding: 20 }}
@@ -126,16 +187,24 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
           )}
 
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            {replyingTo && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 8, gap: 8 }}>
+                <Text style={{ fontSize: 12, color: '#888' }}>Replying to <Text style={{ fontWeight: '700', color: isDark ? '#FFF' : '#000' }}>{replyingTo.userName}</Text></Text>
+                <TouchableOpacity onPress={() => setReplyingTo(null)}>
+                  <SafeIcon name="X" size={14} color="#888" />
+                </TouchableOpacity>
+              </View>
+            )}
             <View style={[styles.commentInputRow, { borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
               <TextInput
                 style={[styles.commentInput, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
-                placeholder="Write a comment..."
+                placeholder={replyingTo ? `Reply to ${replyingTo.userName}...` : "Write a comment..."}
                 placeholderTextColor="#666"
                 value={newComment}
                 onChangeText={setNewComment}
               />
               <TouchableOpacity style={styles.sendBtn} onPress={handlePostComment}>
-                <SafeIcon name="Send" size={20} color="#000" />
+                <SafeIcon name="Send" size={20} color="#FFF" />
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
@@ -248,9 +317,9 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       <View style={styles.cardFooter}>
         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
           <Animated.View style={{ transform: [{ scale: likeScale }] }}>
-            <SafeIcon name="Heart" size={18} color={isLiked ? '#FBE618' : '#666'} fill={isLiked ? '#FBE618' : 'transparent'} />
+            <SafeIcon name="Heart" size={18} color={isLiked ? '#EF4444' : '#666'} fill={isLiked ? '#EF4444' : 'transparent'} />
           </Animated.View>
-          <Text style={[styles.actionVal, { color: isLiked ? '#FBE618' : '#666' }]}>{post.likesCount || 0}</Text>
+          <Text style={[styles.actionVal, { color: isLiked ? '#EF4444' : '#666' }]}>{post.likesCount || 0}</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -267,22 +336,6 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
             <SafeIcon name="MessageSquare" size={18} color="#666" />
           </Animated.View>
           <Text style={styles.actionVal}>{post.commentsCount || 0}</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.actionBtn} 
-          onPress={async () => {
-            if (post.authorId === user?.uid) {
-              Alert.alert("Self-Roast", "You can't roast yourself! Let the community or AI do it.");
-              return;
-            }
-            Alert.alert("AI ROAST", "Analyzing this build for weaknesses...");
-            const roast = await generateFeedback(post.content);
-            Alert.alert("BRUTAL FEEDBACK", roast);
-          }}
-        >
-          <SafeIcon name="Flame" size={18} color="#FF4444" />
-          <Text style={[styles.actionVal, { color: '#FF4444' }]}>ROAST</Text>
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.actionBtn}>
@@ -503,7 +556,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 15,
-    backgroundColor: '#FBE618',
+    backgroundColor: '#2563EB',
     alignItems: 'center',
     justifyContent: 'center',
   },

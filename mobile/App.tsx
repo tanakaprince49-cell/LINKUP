@@ -51,19 +51,13 @@ const AppHeader = ({ navigation, title }: any) => {
             style={[styles.headerIconBtn, { backgroundColor: isDark ? '#1A1A1F' : '#F8F8F8' }]}
             onPress={() => navigation.navigate('Messages')}
           >
-            <SafeIcon name="MessageSquare" size={18} color={isDark ? '#FBE618' : '#000'} />
+            <SafeIcon name="MessageSquare" size={18} color={isDark ? '#CCC' : '#444'} />
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.headerIconBtn, { backgroundColor: isDark ? '#1A1A1F' : '#F8F8F8' }]}
             onPress={() => navigation.navigate('Profile')}
           >
-            <SafeIcon name="User" size={18} color={isDark ? '#FBE618' : '#000'} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.headerIconBtn, { borderColor: '#FF444430', backgroundColor: isDark ? '#1A1A1F' : '#F8F8F8' }]}
-            onPress={() => logout()}
-          >
-            <SafeIcon name="LogOut" size={16} color="#FF4444" />
+            <SafeIcon name="User" size={18} color={isDark ? '#CCC' : '#444'} />
           </TouchableOpacity>
         </View>
       </View>
