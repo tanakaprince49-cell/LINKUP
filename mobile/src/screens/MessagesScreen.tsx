@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, TextInput, Dimensions, ScrollView } from 'react-native';
-import { collection, query, where, onSnapshot, orderBy, limit, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, limit, doc, getDoc, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -54,7 +54,7 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
 };
 
 export default function MessagesScreen({ navigation }: any) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [matches, setMatches] = useState<Match[]>([]);
@@ -149,10 +149,10 @@ export default function MessagesScreen({ navigation }: any) {
           
           {stories.map((s) => (
             <TouchableOpacity key={s.id} style={styles.activeNodeItem} onPress={() => setActiveStory(s)}>
-              <View style={[styles.activeAvatarWrapper, { borderColor: s.viewers.includes(user?.uid) ? '#666' : '#2563EB', borderWidth: 2 }]}>
+              <View style={[styles.activeAvatarWrapper, { borderColor: (s.viewers || []).includes(user?.uid) ? '#666' : '#2563EB', borderWidth: 2 }]}>
                 <Image source={{ uri: s.authorPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.activeAvatar} />
               </View>
-              <Text style={[styles.storyName, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{s.authorName.split(' ')[0]}</Text>
+              <Text style={[styles.storyName, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{s.authorName ? s.authorName.split(' ')[0] : 'User'}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
