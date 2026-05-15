@@ -36,7 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [request, response, promptAsync] = Google.useAuthRequest({
     ...GOOGLE_CONFIG,
     responseType: 'id_token',
-    redirectUri: 'https://auth.expo.io/@talala/linkup',
+    redirectUri: 'https://auth.expo.io/@tanakaprince49-cell/linkup',
   });
 
   useEffect(() => {
@@ -128,7 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signInWithGoogle = async () => {
-    const finalRedirectUri = 'https://auth.expo.io/@talala/linkup';
+    const finalRedirectUri = 'https://auth.expo.io/@tanakaprince49-cell/linkup';
     console.log("Starting Google Auth flow...");
     console.log("Using Redirect URI:", finalRedirectUri);
     
