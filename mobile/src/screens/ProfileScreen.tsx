@@ -11,7 +11,8 @@ import {
   TextInput, 
   ActivityIndicator, 
   Dimensions,
-  Alert
+  Alert,
+  Linking
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -331,7 +332,16 @@ export default function ProfileScreen({ navigation, route }: any) {
               placeholderTextColor="#444"
             />
           ) : (
-            <TouchableOpacity style={[styles.vibeCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+            <TouchableOpacity 
+              style={[styles.vibeCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
+              onPress={() => {
+                if (profile.vibeMedia) {
+                  Linking.openURL(profile.vibeMedia).catch(err => Alert.alert("Invalid Link", "Could not open vibe intro link."));
+                } else {
+                  Alert.alert("No Vibe", "This user hasn't set a vibe intro yet.");
+                }
+              }}
+            >
               <SafeIcon name="Mic" size={20} color="#FBE618" />
               <Text style={[styles.vibeText, { color: isDark ? '#AAA' : '#444' }]}>
                 {profile.vibeMedia ? "PLAY VIBE INTRO" : "NO VIBE INTRO SET"}
@@ -428,6 +438,19 @@ export default function ProfileScreen({ navigation, route }: any) {
             />
           </View>
 
+          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name="Zap" size={18} color="#2563EB" />
+              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Show Online Status</Text>
+            </View>
+            <Switch 
+              value={isEditing ? editData.isVisible : profile.isVisible} 
+              onValueChange={(v) => isEditing ? setEditData({...editData, isVisible: v}) : updateDoc(doc(db, 'users', profile.uid), { isVisible: v })} 
+              trackColor={{ true: '#2563EB' }} 
+              thumbColor="#FFF" 
+            />
+          </View>
+          
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name={isDark ? "Moon" : "Sun"} size={18} color="#666" />

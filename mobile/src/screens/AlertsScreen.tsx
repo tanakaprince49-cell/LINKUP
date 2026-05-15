@@ -9,7 +9,22 @@ import { Bell, Heart, Zap, User, Sparkles, MessageSquare, Shield } from 'lucide-
 
 const { width } = Dimensions.get('window');
 
-const NotificationItem = ({ notification, index }: { notification: AppNotification, index: number }) => {
+const formatTimeAgo = (timestamp: any) => {
+  if (!timestamp) return 'Just now';
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) return `${diffInDays}d ago`;
+  return `${Math.floor(diffInDays / 7)}w ago`;
+};
+
+const NotificationItem = ({ notification, navigation }: { notification: any, navigation: any }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -23,24 +38,42 @@ const NotificationItem = ({ notification, index }: { notification: AppNotificati
   };
 
   return (
-    <View style={[styles.item, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+    <TouchableOpacity 
+      style={[styles.item, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E2E8F0', shadowColor: isDark ? '#000' : '#E2E8F0', shadowOpacity: isDark ? 0 : 0.5, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: isDark ? 0 : 2 }]}
+      onPress={() => {
+        if (notification.fromId) {
+          navigation.navigate('Profile', { userId: notification.fromId });
+        }
+      }}
+    >
       <View style={styles.iconContainer}>
-        {getIcon()}
+        {notification.fromPic ? (
+          <Image source={{ uri: notification.fromPic }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+        ) : getIcon()}
+        
+        {notification.fromPic && (
+          <View style={{ position: 'absolute', bottom: -4, right: -4, backgroundColor: isDark ? '#111115' : '#FFF', borderRadius: 10, padding: 2 }}>
+            {getIcon()}
+          </View>
+        )}
       </View>
       <View style={styles.content}>
-        <Text style={[styles.contentText, { color: isDark ? '#FFF' : '#000' }]}>{notification.content}</Text>
-        <Text style={styles.timeText}>MOMENTS AGO</Text>
+        <Text style={[styles.contentText, { color: isDark ? '#FFF' : '#334155' }]}>
+          <Text style={{ fontWeight: 'bold', color: isDark ? '#FFF' : '#0F172A' }}>{notification.fromName || 'Someone'} </Text>
+          {notification.content}
+        </Text>
+        <Text style={styles.timeText}>{formatTimeAgo(notification.timestamp)}</Text>
       </View>
       {!notification.isRead && <View style={styles.unreadDot} />}
-    </View>
+    </TouchableOpacity>
   );
 };
 
-export default function AlertsScreen() {
+export default function AlertsScreen({ navigation }: any) {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,10 +81,11 @@ export default function AlertsScreen() {
     const q = query(
       collection(db, 'notifications'), 
       where('userId', '==', user.uid),
-      limit(20)
+      orderBy('timestamp', 'desc'),
+      limit(30)
     );
     const unsub = onSnapshot(q, (snap) => {
-      setNotifications(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppNotification)));
+      setNotifications(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     }, (err) => {
         console.error("Notifications error:", err);
@@ -61,11 +95,11 @@ export default function AlertsScreen() {
   }, [user]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#F8FAFC' }]}>
       <FlatList
         data={notifications}
         keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => <NotificationItem notification={item} index={index} />}
+        renderItem={({ item }) => <NotificationItem notification={item} navigation={navigation} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
@@ -100,15 +134,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
-    backgroundColor: '#FBE61810',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
-    borderWidth: 1,
-    borderColor: '#FBE61820',
   },
   content: {
     flex: 1,
@@ -120,7 +151,7 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 9,
-    color: '#666',
+    color: '#3B82F6',
     marginTop: 4,
     fontWeight: '900',
     letterSpacing: 1,
@@ -131,20 +162,18 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#FBE618',
     marginLeft: 10,
-    shadowColor: '#FBE618',
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
   },
   emptyContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 100,
-    gap: 16,
   },
   emptyText: {
     fontSize: 14,
     fontWeight: '900',
     color: '#444',
     letterSpacing: 2,
+    marginTop: 16,
   },
   emptySubText: {
     fontSize: 10,
