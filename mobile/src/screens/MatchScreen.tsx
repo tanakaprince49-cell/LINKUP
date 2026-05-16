@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions } from 'react-native';
-import { collection, query, onSnapshot, where, doc, getDoc } from 'firebase/firestore';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, Alert } from 'react-native';
+import { collection, query, onSnapshot, where, doc, getDoc, addDoc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -9,7 +9,7 @@ import { MessageSquare, User, Zap, Sparkles, ChevronRight, Briefcase } from 'luc
 
 const { width } = Dimensions.get('window');
 
-const MatchItem = ({ match }: { match: Match }) => {
+const MatchItem = ({ match, navigation }: { match: Match, navigation: any }) => {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -51,15 +51,49 @@ const MatchItem = ({ match }: { match: Match }) => {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.msgBtn}>
-          <MessageSquare size={20} color="#FBE618" fill="#FBE61820" />
+        <TouchableOpacity
+          style={[
+            styles.msgBtn,
+            { backgroundColor: isDark ? '#16161A' : '#FBE61815', borderColor: isDark ? '#222226' : '#FBE61830' },
+          ]}
+          onPress={async () => {
+            if (!user?.uid || !otherUser?.uid) return;
+            try {
+              // Find or create the match doc between these two users
+              const q = query(collection(db, 'matches'), where('userIds', 'array-contains', user.uid));
+              const snap = await getDocs(q);
+              const existing = snap.docs.find((d) => {
+                const data = d.data() as any;
+                const ids = Array.isArray(data.userIds) ? data.userIds : [];
+                return ids.includes(otherUser.uid);
+              });
+
+              let matchId = existing?.id;
+              if (!matchId) {
+                const ref = await addDoc(collection(db, 'matches'), {
+                  userIds: [user.uid, otherUser.uid],
+                  timestamp: serverTimestamp(),
+                  lastMessage: '',
+                  lastMessageTime: serverTimestamp(),
+                });
+                matchId = ref.id;
+              }
+
+              navigation.navigate('Chat', { matchId, otherUser });
+            } catch (e) {
+              console.error('Open chat error:', e);
+              Alert.alert('Error', 'Could not open chat.');
+            }
+          }}
+        >
+          <MessageSquare size={20} color={isDark ? '#FBE618' : '#2563EB'} fill="transparent" />
         </TouchableOpacity>
       </View>
     </View>
   );
 };
 
-export default function MatchScreen() {
+export default function MatchScreen({ navigation }: any) {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -81,7 +115,7 @@ export default function MatchScreen() {
       <FlatList
         data={matches}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <MatchItem match={item} />}
+        renderItem={({ item }) => <MatchItem match={item} navigation={navigation} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={

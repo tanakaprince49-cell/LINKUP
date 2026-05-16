@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, TextInput, Dimensions, ScrollView } from 'react-native';
-import { collection, query, where, onSnapshot, orderBy, limit, doc, addDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, TextInput, Dimensions, ScrollView, Pressable, Alert } from 'react-native';
+import { collection, query, where, onSnapshot, orderBy, limit, doc, addDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -50,6 +50,24 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
     <TouchableOpacity 
       style={[styles.chatItem, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
       onPress={() => navigation.navigate('Chat', { matchId: match.id, otherUser })}
+      onLongPress={() => {
+        if (!user?.uid) return;
+        Alert.alert('Delete chat', 'Remove this chat from your inbox?', [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteDoc(doc(db, 'matches', match.id));
+              } catch (e) {
+                console.error('Delete chat error:', e);
+                Alert.alert('Error', 'Could not delete chat.');
+              }
+            },
+          },
+        ]);
+      }}
     >
       <View style={styles.avatarContainer}>
         <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.avatar} />
@@ -78,6 +96,7 @@ export default function MessagesScreen({ navigation }: any) {
   const [search, setSearch] = useState('');
   const [stories, setStories] = useState<any[]>([]);
   const [activeStory, setActiveStory] = useState<any | null>(null);
+  const lastTapRef = useRef(0);
 
   useEffect(() => {
     if (!user) return;
@@ -100,6 +119,36 @@ export default function MessagesScreen({ navigation }: any) {
     
     return () => { unsub(); unsubStories(); };
   }, [user]);
+
+  const openStory = async (s: any) => {
+    setActiveStory(s);
+    if (!user?.uid || !s?.id) return;
+    try {
+      if (!(s.viewers || []).includes(user.uid)) {
+        await updateDoc(doc(db, 'stories', s.id), { viewers: arrayUnion(user.uid) });
+        setActiveStory((prev: any) => (prev ? { ...prev, viewers: [...(prev.viewers || []), user.uid] } : prev));
+      }
+    } catch (e) {
+      console.error('Story view update error:', e);
+    }
+  };
+
+  const toggleStoryLike = async () => {
+    if (!user?.uid || !activeStory?.id) return;
+    try {
+      const alreadyLiked = (activeStory.likes || []).includes(user.uid);
+      await updateDoc(doc(db, 'stories', activeStory.id), {
+        likes: alreadyLiked ? arrayRemove(user.uid) : arrayUnion(user.uid),
+      });
+      setActiveStory((prev: any) => {
+        if (!prev) return prev;
+        const likes = Array.isArray(prev.likes) ? prev.likes : [];
+        return { ...prev, likes: alreadyLiked ? likes.filter((id: string) => id !== user.uid) : [...likes, user.uid] };
+      });
+    } catch (e) {
+      console.error('Story like error:', e);
+    }
+  };
 
   const handleAddStory = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -164,7 +213,7 @@ export default function MessagesScreen({ navigation }: any) {
           </TouchableOpacity>
           
           {stories.map((s) => (
-            <TouchableOpacity key={s.id} style={styles.activeNodeItem} onPress={() => setActiveStory(s)}>
+            <TouchableOpacity key={s.id} style={styles.activeNodeItem} onPress={() => openStory(s)}>
               <View style={[styles.activeAvatarWrapper, { borderColor: (s.viewers || []).includes(user?.uid) ? '#666' : '#2563EB', borderWidth: 2 }]}>
                 <Image source={{ uri: s.authorPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.activeAvatar} />
               </View>
@@ -195,7 +244,22 @@ export default function MessagesScreen({ navigation }: any) {
       {activeStory && (
         <View style={StyleSheet.absoluteFillObject}>
           <View style={{ flex: 1, backgroundColor: '#000' }}>
-            <Image source={{ uri: activeStory.mediaUrl }} style={{ flex: 1 }} resizeMode="contain" />
+            <Pressable
+              style={{ flex: 1 }}
+              onPress={() => {}}
+              onPressIn={() => {}}
+              onPressOut={() => {}}
+              onTouchEnd={(e) => {
+                const now = Date.now();
+                const prev = lastTapRef.current;
+                lastTapRef.current = now;
+                if (now - prev < 260) {
+                  toggleStoryLike();
+                }
+              }}
+            >
+              <Image source={{ uri: activeStory.mediaUrl }} style={{ flex: 1 }} resizeMode="contain" />
+            </Pressable>
             <SafeAreaView style={{ position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Image source={{ uri: activeStory.authorPic }} style={{ width: 40, height: 40, borderRadius: 20 }} />
@@ -205,29 +269,11 @@ export default function MessagesScreen({ navigation }: any) {
                 <X size={28} color="#FFF" />
               </TouchableOpacity>
             </SafeAreaView>
-            <SafeAreaView style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ position: 'absolute', bottom: 56, left: 0, right: 0, paddingHorizontal: 20, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View style={{ flexDirection: 'row', gap: 16 }}>
                 <TouchableOpacity
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
-                  onPress={async () => {
-                    if (!user?.uid || !activeStory?.id) return;
-                    try {
-                      const alreadyLiked = (activeStory.likes || []).includes(user.uid);
-                      await updateDoc(doc(db, 'stories', activeStory.id), {
-                        likes: alreadyLiked ? arrayRemove(user.uid) : arrayUnion(user.uid),
-                      });
-                      setActiveStory((prev: any) => {
-                        if (!prev) return prev;
-                        const likes = Array.isArray(prev.likes) ? prev.likes : [];
-                        return {
-                          ...prev,
-                          likes: alreadyLiked ? likes.filter((id: string) => id !== user.uid) : [...likes, user.uid],
-                        };
-                      });
-                    } catch (e) {
-                      console.error('Story like error:', e);
-                    }
-                  }}
+                  onPress={toggleStoryLike}
                 >
                   <Heart
                     size={28}
@@ -241,7 +287,7 @@ export default function MessagesScreen({ navigation }: any) {
                 <Eye size={20} color="#FFF" />
                 <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{activeStory.viewers?.length || 0}</Text>
               </View>
-            </SafeAreaView>
+            </View>
           </View>
         </View>
       )}

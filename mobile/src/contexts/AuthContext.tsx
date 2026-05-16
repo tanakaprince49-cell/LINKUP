@@ -1,15 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, AppState } from 'react-native';
-import { onAuthStateChanged, User, signOut, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { Alert, AppState, NativeModules } from 'react-native';
+import {
+  GoogleAuthProvider,
+  User,
+  onAuthStateChanged,
+  signInWithCredential,
+  signOut,
+} from 'firebase/auth';
+import { doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { auth, db } from '../lib/firebase';
 import { UserProfile } from '../types';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
-// Configure Google Sign-In with the WEB Client ID (Firebase requires this for credential exchange)
-GoogleSignin.configure({
-  webClientId: '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com',
-});
+const GOOGLE_WEB_CLIENT_ID =
+  '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com';
 
 interface AuthContextType {
   user: User | null;
@@ -27,21 +31,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Native Google Sign-In requires a dev client / prebuild / real APK.
+  // Expo Go does not include `RNGoogleSignin`, so we guard usage at runtime.
+  const hasNativeGoogleSignin = !!(NativeModules as any)?.RNGoogleSignin;
+
   useEffect(() => {
     let unsubscribeProfile: (() => void) | null = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (authenticatedUser) => {
       setUser(authenticatedUser);
-      
+
       if (unsubscribeProfile) {
         unsubscribeProfile();
         unsubscribeProfile = null;
       }
 
-      if (authenticatedUser) {
-        const userDocRef = doc(db, 'users', authenticatedUser.uid);
-        
-        unsubscribeProfile = onSnapshot(userDocRef, async (docSnap) => {
+      if (!authenticatedUser) {
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      const userDocRef = doc(db, 'users', authenticatedUser.uid);
+      unsubscribeProfile = onSnapshot(
+        userDocRef,
+        async (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data() as UserProfile;
             if (authenticatedUser.email === 'tanakaprince49@gmail.com' && !data.isVerified) {
@@ -50,60 +64,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             setProfile(data);
             setLoading(false);
-          } else {
-            const newProfile: UserProfile = {
-              uid: authenticatedUser.uid,
-              displayName: authenticatedUser.displayName || 'New Builder',
-              bio: '',
-              skills: [],
-              interests: [],
-              goals: '',
-              country: '',
-              city: '',
-              age: 20,
-              experience: '',
-              personalityType: '',
-              commitmentLevel: '',
-              industries: [],
-              profilePic: authenticatedUser.photoURL || '',
-              coverPhoto: '',
-              achievements: [],
-              badges: [],
-              reputationScore: 0,
-              streakCount: 0,
-              lastActiveAt: serverTimestamp(),
-              createdAt: serverTimestamp(),
-              socialLinks: {},
-              isVisible: true,
-              isBot: false,
-              projects: [],
-              portfolioLinks: [],
-              startupIdeas: [],
-              resume: {
-                shippedProducts: [],
-                sideProjects: [],
-                startupAttempts: [],
-                hackathonWins: [],
-                buildStreaks: 0
-              },
-              viewedBy: [],
-              isStealthMode: false,
-              hasExit: false,
-              onboarded: false,
-              isVerified: authenticatedUser.email === 'tanakaprince49@gmail.com'
-            };
-            await setDoc(userDocRef, newProfile);
-            setProfile(newProfile);
-            setLoading(false);
+            return;
           }
-        }, (error) => {
-          console.error("Profile listener error:", error);
+
+          // Keep the initial profile permissive to avoid blocking auth on schema drift.
+          const newProfile: any = {
+            uid: authenticatedUser.uid,
+            displayName: authenticatedUser.displayName || 'New Builder',
+            bio: '',
+            profilePic: authenticatedUser.photoURL || '',
+            country: '',
+            city: '',
+            age: 20,
+            skills: [],
+            interests: [],
+            goals: '',
+            experience: '',
+            personalityType: '',
+            commitmentLevel: '',
+            industries: [],
+            ambition: '',
+            reputationScore: 0,
+            streakCount: 0,
+            onboarded: false,
+            isVisible: true,
+            isBot: false,
+            isOnline: true,
+            lastActiveAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
+            socialLinks: {},
+            resume: {
+              shippedProducts: [],
+              sideProjects: [],
+              startupAttempts: [],
+              hackathonWins: [],
+              buildStreaks: 0,
+            },
+            badges: [],
+            projects: [],
+            viewedBy: [],
+            isStealthMode: false,
+            hasExit: false,
+            isVerified: authenticatedUser.email === 'tanakaprince49@gmail.com',
+            followers: [],
+            following: [],
+          };
+
+          await setDoc(userDocRef, newProfile);
+          setProfile(newProfile as UserProfile);
           setLoading(false);
-        });
-      } else {
-        setProfile(null);
-        setLoading(false);
-      }
+        },
+        (error) => {
+          console.error('Profile listener error:', error);
+          setLoading(false);
+        }
+      );
     });
 
     return () => {
@@ -118,11 +133,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const setPresence = async (isOnline: boolean) => {
       try {
-        await setDoc(
-          userDocRef,
-          { isOnline, lastActiveAt: serverTimestamp() },
-          { merge: true }
-        );
+        await setDoc(userDocRef, { isOnline, lastActiveAt: serverTimestamp() }, { merge: true });
       } catch (e) {
         console.error('Presence update error:', e);
       }
@@ -141,36 +152,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user?.uid]);
 
   const signInWithGoogle = async () => {
-    console.log("Starting Native Google Sign-In...");
-    
     try {
-      // Check if Google Play Services are available
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      
-      // Sign in natively (no browser, no redirect URI!)
-      const signInResult = await GoogleSignin.signIn();
-      const idToken = signInResult?.data?.idToken;
-      
-      if (!idToken) {
-        Alert.alert("Authentication Error", "Could not retrieve Google token. Please try again.");
+      if (!hasNativeGoogleSignin) {
+        Alert.alert(
+          'Google Sign-In Unavailable',
+          'Native Google Sign-In is not available in Expo Go. Please run a development build / real APK that includes the Google Sign-In native module.'
+        );
         return;
       }
-      
-      // Exchange the native token for a Firebase credential
+
+      GoogleSignin.configure({
+        webClientId: GOOGLE_WEB_CLIENT_ID,
+      });
+
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const signInResult = await GoogleSignin.signIn();
+      const idToken = signInResult?.data?.idToken;
+
+      if (!idToken) {
+        Alert.alert('Authentication Error', 'Could not retrieve Google token. Please try again.');
+        return;
+      }
+
       const credential = GoogleAuthProvider.credential(idToken);
       await signInWithCredential(auth, credential);
-      console.log("Firebase sign-in successful!");
     } catch (error: any) {
-      console.error("Google Auth Error:", error);
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        // User cancelled — do nothing
-      } else if (error.code === statusCodes.IN_PROGRESS) {
-        Alert.alert("Please Wait", "Sign-in is already in progress.");
-      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        Alert.alert("Error", "Google Play Services are not available on this device.");
-      } else {
-        Alert.alert("Sign-In Error", error.message || "Something went wrong. Please try again.");
+      console.error('Google Auth Error:', error);
+      if (error?.code === statusCodes.SIGN_IN_CANCELLED) return;
+      if (error?.code === statusCodes.IN_PROGRESS) {
+        Alert.alert('Please Wait', 'Sign-in is already in progress.');
+        return;
       }
+      if (error?.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        Alert.alert('Error', 'Google Play Services are not available on this device.');
+        return;
+      }
+      Alert.alert('Sign-In Error', error?.message || 'Something went wrong. Please try again.');
     }
   };
 
@@ -178,7 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await signOut(auth);
     } catch (error) {
-      console.error("Sign out error:", error);
+      console.error('Sign out error:', error);
     }
   };
 
@@ -186,12 +203,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!auth.currentUser) return;
     try {
       const uid = auth.currentUser.uid;
-      // Delete Firestore document first
-      await setDoc(doc(db, 'users', uid), { deleted: true }, { merge: true }); // Soft delete or just remove doc
-      // In a real app, you'd trigger a cloud function to cleanup posts/matches
+      await setDoc(doc(db, 'users', uid), { deleted: true }, { merge: true });
       await auth.currentUser.delete();
     } catch (error) {
-      console.error("Delete account error:", error);
+      console.error('Delete account error:', error);
       throw error;
     }
   };

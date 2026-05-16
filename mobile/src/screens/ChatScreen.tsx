@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, SafeAreaView, KeyboardAvoidingView, Platform, Image, Alert, StatusBar } from 'react-native';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -19,6 +19,14 @@ const formatLastSeen = (timestamp: any) => {
   if (diffInHours < 24) return `Last seen ${diffInHours}h ago`;
   const diffInDays = Math.floor(diffInHours / 24);
   return `Last seen ${diffInDays}d ago`;
+};
+
+const formatMessageTime = (timestamp: any) => {
+  if (!timestamp) return '';
+  const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
 };
 
 export default function ChatScreen({ route, navigation }: any) {
@@ -96,14 +104,40 @@ export default function ChatScreen({ route, navigation }: any) {
     const isMe = item.senderId === user?.uid;
     return (
       <View style={[styles.messageWrapper, isMe ? styles.myMessageWrapper : styles.theirMessageWrapper]}>
-        <View style={[
-          styles.messageBubble,
-          isMe ? styles.myBubble : [styles.theirBubble, { backgroundColor: isDark ? '#16161A' : '#F0F0F0' }]
-        ]}>
-          <Text style={[styles.messageText, { color: isMe ? '#000' : (isDark ? '#FFF' : '#000') }]}>
-            {item.content}
-          </Text>
-        </View>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onLongPress={() => {
+            if (!matchId) return;
+            if (!isMe) return;
+            Alert.alert('Delete message', 'Delete this message for everyone?', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    await deleteDoc(doc(db, 'matches', matchId, 'messages', item.id));
+                  } catch (e) {
+                    console.error('Delete message error:', e);
+                    Alert.alert('Error', 'Could not delete message.');
+                  }
+                },
+              },
+            ]);
+          }}
+        >
+          <View style={[
+            styles.messageBubble,
+            isMe ? styles.myBubble : [styles.theirBubble, { backgroundColor: isDark ? '#16161A' : '#F0F0F0' }]
+          ]}>
+            <Text style={[styles.messageText, { color: isMe ? '#000' : (isDark ? '#FFF' : '#000') }]}>
+              {item.content}
+            </Text>
+            <Text style={[styles.messageTime, { color: isMe ? '#00000080' : (isDark ? '#FFFFFF80' : '#00000080') }]}>
+              {formatMessageTime(item.timestamp)}
+            </Text>
+          </View>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -260,6 +294,12 @@ const styles = StyleSheet.create({
     padding: 12,
     paddingHorizontal: 16,
     borderRadius: 20,
+  },
+  messageTime: {
+    fontSize: 10,
+    fontWeight: '900',
+    marginTop: 6,
+    alignSelf: 'flex-end',
   },
   myBubble: {
     backgroundColor: '#FBE618',

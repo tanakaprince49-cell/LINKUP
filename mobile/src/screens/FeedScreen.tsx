@@ -265,6 +265,9 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
   const isDark = theme === 'dark';
   const isLiked = post.likedBy?.includes(user?.uid || '');
   const [showComments, setShowComments] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const viewerRef = useRef<FlatList>(null);
   
   const likeScale = useRef(new Animated.Value(1)).current;
   const commentScale = useRef(new Animated.Value(1)).current;
@@ -328,6 +331,33 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
         transform: [{ translateY: slideAnim }]
       }
     ]}>
+      <Modal visible={viewerOpen} animationType="fade" transparent onRequestClose={() => setViewerOpen(false)}>
+        <View style={styles.viewerOverlay}>
+          <SafeAreaView style={styles.viewerTopBar}>
+            <TouchableOpacity onPress={() => setViewerOpen(false)} style={styles.viewerCloseBtn}>
+              <SafeIcon name="X" size={28} color="#FFF" />
+            </TouchableOpacity>
+          </SafeAreaView>
+
+          <FlatList
+            ref={viewerRef}
+            data={post.media || []}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={viewerIndex}
+            getItemLayout={(_d, index) => ({ length: width, offset: width * index, index })}
+            keyExtractor={(uri, idx) => `${idx}-${uri}`}
+            onScrollToIndexFailed={() => {}}
+            renderItem={({ item }) => (
+              <View style={{ width, height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+                <Image source={{ uri: item }} style={styles.viewerImage} resizeMode="contain" />
+              </View>
+            )}
+          />
+        </View>
+      </Modal>
+
       <CommentModal 
         visible={showComments} 
         onClose={() => setShowComments(false)} 
@@ -371,7 +401,17 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       {post.media && post.media.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaScroll}>
           {post.media.map((uri, i) => (
-            <Image key={i} source={{ uri }} style={styles.postImage} />
+            <TouchableOpacity
+              key={i}
+              activeOpacity={0.9}
+              onPress={() => {
+                setViewerIndex(i);
+                setViewerOpen(true);
+                setTimeout(() => viewerRef.current?.scrollToIndex({ index: i, animated: false }), 0);
+              }}
+            >
+              <Image source={{ uri }} style={styles.postImage} />
+            </TouchableOpacity>
           ))}
         </ScrollView>
       )}
@@ -457,6 +497,32 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 16,
     paddingBottom: 100,
+  },
+  viewerOverlay: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  viewerTopBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  viewerCloseBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: '#11111180',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewerImage: {
+    width: width,
+    height: '100%',
   },
   card: {
     padding: 20,

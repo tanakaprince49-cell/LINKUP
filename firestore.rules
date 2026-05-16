@@ -182,6 +182,10 @@ service cloud.firestore {
                         request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.userIds &&
                         incoming().senderId == request.auth.uid &&
                         incoming().timestamp == request.time;
+        allow delete: if isSignedIn() &&
+                        request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.userIds &&
+                        existing().senderId == request.auth.uid;
+        allow update: if false;
       }
     }
 
@@ -203,7 +207,12 @@ service cloud.firestore {
       allow get: if isSignedIn();
       allow list: if isSignedIn();
       allow create: if isOwner(request.resource.data.authorId);
-      allow update: if isSignedIn();
+      // Allow any signed-in user to update only `viewers`/`likes` for social interactions.
+      // Allow the author to update their own story document.
+      allow update: if isSignedIn() && (
+        (isOwner(existing().authorId)) ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['viewers', 'likes']))
+      );
       allow delete: if isOwner(resource.data.authorId);
     }
   }
