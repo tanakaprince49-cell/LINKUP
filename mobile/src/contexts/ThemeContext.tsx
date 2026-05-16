@@ -21,7 +21,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (saved) {
         setTheme(saved as Theme);
       } else {
-        setTheme(systemTheme || 'light');
+        // Always default to Light on first sign-in / first install.
+        setTheme('light');
       }
     };
     loadTheme();

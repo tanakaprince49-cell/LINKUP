@@ -231,7 +231,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
             />
           )}
 
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             {replyingTo && (
               <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 8, gap: 8 }}>
                 <Text style={{ fontSize: 12, color: '#888' }}>Replying to <Text style={{ fontWeight: '700', color: isDark ? '#FFF' : '#000' }}>{replyingTo.userName}</Text></Text>

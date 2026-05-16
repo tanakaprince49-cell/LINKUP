@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, SafeAreaView, KeyboardAvoidingView, Platform, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, SafeAreaView, KeyboardAvoidingView, Platform, Image, Alert, StatusBar } from 'react-native';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -174,47 +174,17 @@ export default function ChatScreen({ route, navigation }: any) {
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
       />
 
-      {Platform.OS === 'ios' ? (
-        <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={90}>
-          <View style={[styles.inputContainer, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
-            <TouchableOpacity 
-              style={[styles.toolBtn, { backgroundColor: '#2563EB20' }]} 
-              onPress={async () => {
-                Alert.alert("AI INTRO", "Drafting a perfect opening based on your profiles...");
-                const intro = await generateWarmIntro(profile, otherUser);
-                setInputText(intro);
-              }}
-            >
-              <Zap size={20} color="#2563EB" fill="#2563EB" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.toolBtn}>
-              <Camera size={20} color="#666" />
-            </TouchableOpacity>
-            <TextInput
-              style={[styles.input, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
-              placeholder="Type a message..."
-              placeholderTextColor="#666"
-              value={inputText}
-              onChangeText={setInputText}
-              multiline
-            />
-            <TouchableOpacity 
-              style={[styles.sendBtn, { opacity: inputText.trim() ? 1 : 0.5, backgroundColor: '#2563EB' }]} 
-              onPress={handleSend}
-              disabled={!inputText.trim()}
-            >
-              <Send size={20} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      ) : (
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
         <View style={[styles.inputContainer, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
           <TouchableOpacity 
             style={[styles.toolBtn, { backgroundColor: '#2563EB20' }]} 
             onPress={async () => {
               Alert.alert("AI INTRO", "Drafting a perfect opening based on your profiles...");
               const intro = await generateWarmIntro(profile, otherUser);
-              setInputText(intro);
+              setInputText((intro || '').trim());
             }}
           >
             <Zap size={20} color="#2563EB" fill="#2563EB" />
@@ -238,7 +208,7 @@ export default function ChatScreen({ route, navigation }: any) {
             <Send size={20} color="#FFF" />
           </TouchableOpacity>
         </View>
-      )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -251,6 +221,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
+    paddingTop: Platform.OS === 'android' ? ((StatusBar.currentHeight || 0) + 8) : 16,
     borderBottomWidth: 1,
   },
   backBtn: {

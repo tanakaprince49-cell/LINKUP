@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, TextInput, Dimensions, ScrollView } from 'react-native';
-import { collection, query, where, onSnapshot, orderBy, limit, doc, addDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, limit, doc, addDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -207,10 +207,34 @@ export default function MessagesScreen({ navigation }: any) {
             </SafeAreaView>
             <SafeAreaView style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View style={{ flexDirection: 'row', gap: 16 }}>
-                <TouchableOpacity onPress={async () => {
-                  // Like logic
-                }}>
-                  <Heart size={28} color="#FFF" />
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                  onPress={async () => {
+                    if (!user?.uid || !activeStory?.id) return;
+                    try {
+                      const alreadyLiked = (activeStory.likes || []).includes(user.uid);
+                      await updateDoc(doc(db, 'stories', activeStory.id), {
+                        likes: alreadyLiked ? arrayRemove(user.uid) : arrayUnion(user.uid),
+                      });
+                      setActiveStory((prev: any) => {
+                        if (!prev) return prev;
+                        const likes = Array.isArray(prev.likes) ? prev.likes : [];
+                        return {
+                          ...prev,
+                          likes: alreadyLiked ? likes.filter((id: string) => id !== user.uid) : [...likes, user.uid],
+                        };
+                      });
+                    } catch (e) {
+                      console.error('Story like error:', e);
+                    }
+                  }}
+                >
+                  <Heart
+                    size={28}
+                    color="#FFF"
+                    fill={(activeStory.likes || []).includes(user?.uid) ? '#EF4444' : 'transparent'}
+                  />
+                  <Text style={{ color: '#FFF', fontWeight: 'bold' }}>{activeStory.likes?.length || 0}</Text>
                 </TouchableOpacity>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -278,6 +302,8 @@ const styles = StyleSheet.create({
   },
   activeAvatarWrapper: {
     position: 'relative',
+    borderRadius: 30,
+    overflow: 'hidden',
   },
   activeAvatar: {
     width: 54,

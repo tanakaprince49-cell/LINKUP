@@ -149,13 +149,13 @@ export const generateWarmIntro = async (me: any, other: any) => {
         messages: [
           {
             role: "system",
-            content: "You are a professional co-founder matchmaker. Write a short, enthusiastic warm intro message."
+            content: "You are a professional co-founder matchmaker. Write a warm, enthusiastic opening message that feels human and specific."
           },
           {
             role: "user",
             content: `Me: ${JSON.stringify(me)}
             Other Founder: ${JSON.stringify(other)}
-            Write a 2-sentence opening message I can send to start a conversation about building together.`
+            Write a 4-6 sentence opening message I can send to start a conversation about building together. End with 1 clear question.`
           }
         ]
       })
