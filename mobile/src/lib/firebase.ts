@@ -1,11 +1,15 @@
 import { initializeApp } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { initializeAuth } from '@firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
+// `getReactNativePersistence` exists in the React Native entrypoint of `@firebase/auth`,
+// but isn't part of the default (web) TypeScript surface.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { getReactNativePersistence } = require('@firebase/auth') as any;
 export const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(AsyncStorage)
 });

@@ -20,7 +20,7 @@ import * as Icons from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadMedia } from '../lib/storage';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, updateDoc, getDoc, arrayUnion, arrayRemove, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, getDocs, query, where, arrayUnion, arrayRemove, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
@@ -86,6 +86,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const pickProfilePic = async () => {
+    if (isViewingOther || !myProfile) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission Denied', 'We need access to your photos to update your profile picture.');
@@ -104,7 +105,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       const base64Data = `data:image/jpeg;base64,${result.assets[0].base64}`;
       setIsSaving(true);
       try {
-        await updateDoc(doc(db, 'users', profile.uid), {
+        await updateDoc(doc(db, 'users', myProfile.uid), {
           profilePic: base64Data
         });
         
@@ -116,6 +117,38 @@ export default function ProfileScreen({ navigation, route }: any) {
       } finally {
         setIsSaving(false);
       }
+    }
+  };
+
+  const openChat = async () => {
+    if (!myProfile || !targetUserId || !profile) return;
+    setIsSaving(true);
+    try {
+      const q = query(collection(db, 'matches'), where('userIds', 'array-contains', myProfile.uid));
+      const snap = await getDocs(q);
+      const existing = snap.docs.find((d) => {
+        const data = d.data() as any;
+        const ids = Array.isArray(data.userIds) ? data.userIds : [];
+        return ids.includes(targetUserId);
+      });
+
+      let matchId = existing?.id;
+      if (!matchId) {
+        const ref = await addDoc(collection(db, 'matches'), {
+          userIds: [myProfile.uid, targetUserId],
+          timestamp: serverTimestamp(),
+          lastMessage: '',
+          lastMessageTime: serverTimestamp(),
+        });
+        matchId = ref.id;
+      }
+
+      navigation.navigate('Chat', { matchId, otherUser: { ...profile, uid: targetUserId } });
+    } catch (e) {
+      console.error('openChat error:', e);
+      Alert.alert('Error', 'Could not open chat. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
   const handleFollow = async () => {
@@ -249,7 +282,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               source={{ uri: (isEditing ? editData?.profilePic : profile.profilePic) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400' }} 
               style={styles.avatar} 
             />
-            {(isEditing || true) && (
+            {!isViewingOther && (
               <TouchableOpacity style={styles.cameraOverlay} onPress={pickProfilePic}>
                 <SafeIcon name="Camera" size={20} color="#000" />
               </TouchableOpacity>
@@ -310,7 +343,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   
                   <TouchableOpacity 
                     style={[styles.actionButton, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderWidth: 1, borderColor: '#2563EB' }]}
-                    onPress={() => navigation.navigate('Chat', { otherUser: profile })}
+                    onPress={openChat}
                   >
                     <Text style={{ color: '#2563EB', fontWeight: 'bold' }}>Message</Text>
                   </TouchableOpacity>

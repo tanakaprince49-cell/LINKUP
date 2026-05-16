@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, TextInput, Dimensions, ScrollView } from 'react-native';
-import { collection, query, where, onSnapshot, orderBy, limit, doc, getDoc, addDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, limit, doc, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -10,6 +10,20 @@ import * as ImagePicker from 'expo-image-picker';
 import { uploadMedia } from '../lib/storage';
 
 const { width } = Dimensions.get('window');
+
+const formatTimeAgo = (timestamp: any) => {
+  if (!timestamp) return '';
+  const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+  const now = new Date();
+  const diffInSeconds = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
+  if (diffInSeconds < 60) return `${diffInSeconds}s`;
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes}m`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `${diffInDays}d`;
+};
 
 const ConversationItem = ({ match, navigation }: { match: Match, navigation: any }) => {
   const { user } = useAuth();
@@ -21,14 +35,16 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
     const otherId = match.userIds.find(id => id !== user?.uid);
     if (!otherId) return;
 
-    const fetchOtherUser = async () => {
-      const snap = await getDoc(doc(db, 'users', otherId));
-      if (snap.exists()) setOtherUser(snap.data() as UserProfile);
-    };
-    fetchOtherUser();
+    const unsub = onSnapshot(doc(db, 'users', otherId), (snap) => {
+      if (!snap.exists()) return;
+      setOtherUser({ uid: otherId, ...(snap.data() as any) } as UserProfile);
+    });
+
+    return () => unsub();
   }, [match.userIds, user?.uid]);
 
   if (!otherUser) return null;
+  const isOnline = !!otherUser.isOnline;
 
   return (
     <TouchableOpacity 
@@ -37,15 +53,15 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
     >
       <View style={styles.avatarContainer}>
         <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.avatar} />
-        <View style={styles.statusDot} />
+        <View style={[styles.statusDot, { backgroundColor: isOnline ? '#22C55E' : '#666' }]} />
       </View>
       <View style={styles.chatInfo}>
         <View style={styles.chatHeader}>
           <Text style={[styles.chatName, { color: isDark ? '#FFF' : '#000' }]}>{otherUser.displayName}</Text>
-          <Text style={styles.chatTime}>MOMENTS_AGO</Text>
+          <Text style={styles.chatTime}>{formatTimeAgo(match.lastMessageTime)}</Text>
         </View>
         <Text style={styles.lastMessage} numberOfLines={1}>
-          {match.lastMessage || `Start the conversation with ${otherUser.displayName.split(' ')[0]}`}
+          {match.lastMessage || `Start the conversation with ${(otherUser.displayName || 'Builder').split(' ')[0]}`}
         </Text>
       </View>
       <ChevronRight size={16} color="#666" />
@@ -266,7 +282,7 @@ const styles = StyleSheet.create({
   activeAvatar: {
     width: 54,
     height: 54,
-    borderRadius: 20,
+    borderRadius: 27,
     borderWidth: 2,
     borderColor: '#FBE618',
   },
@@ -299,7 +315,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: 54,
     height: 54,
-    borderRadius: 18,
+    borderRadius: 27,
   },
   statusDot: {
     position: 'absolute',

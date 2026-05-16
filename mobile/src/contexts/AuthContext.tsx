@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import { onAuthStateChanged, User, signOut, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { UserProfile } from '../types';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
@@ -111,6 +111,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (unsubscribeProfile) unsubscribeProfile();
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const userDocRef = doc(db, 'users', user.uid);
+
+    const setPresence = async (isOnline: boolean) => {
+      try {
+        await setDoc(
+          userDocRef,
+          { isOnline, lastActiveAt: serverTimestamp() },
+          { merge: true }
+        );
+      } catch (e) {
+        console.error('Presence update error:', e);
+      }
+    };
+
+    setPresence(true);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setPresence(true);
+      else setPresence(false);
+    });
+
+    return () => {
+      sub.remove();
+      setPresence(false);
+    };
+  }, [user?.uid]);
 
   const signInWithGoogle = async () => {
     console.log("Starting Native Google Sign-In...");

@@ -7,16 +7,39 @@ import { useTheme } from '../contexts/ThemeContext';
 import { ChevronLeft, Send, Camera, Zap } from 'lucide-react-native';
 import { generateWarmIntro } from '../lib/ai';
 
+const formatLastSeen = (timestamp: any) => {
+  if (!timestamp) return 'Offline';
+  const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
+  const now = new Date();
+  const diffInSeconds = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
+  if (diffInSeconds < 60) return `Last seen ${diffInSeconds}s ago`;
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `Last seen ${diffInMinutes}m ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `Last seen ${diffInHours}h ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `Last seen ${diffInDays}d ago`;
+};
+
 export default function ChatScreen({ route, navigation }: any) {
-  const { matchId, otherUser } = route.params;
+  const matchId = route?.params?.matchId;
+  const otherUserParam = route?.params?.otherUser;
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
+  const [otherUser, setOtherUser] = useState<any>(otherUserParam || null);
 
   useEffect(() => {
+    if (matchId) return;
+    Alert.alert('Chat error', 'This conversation could not be opened.');
+    navigation.goBack();
+  }, [matchId, navigation]);
+
+  useEffect(() => {
+    if (!matchId) return;
     const q = query(
       collection(db, 'matches', matchId, 'messages'),
       orderBy('timestamp', 'asc')
@@ -31,8 +54,18 @@ export default function ChatScreen({ route, navigation }: any) {
     return () => unsub();
   }, [matchId]);
 
+  useEffect(() => {
+    const otherId = otherUserParam?.uid;
+    if (!otherId) return;
+    const unsub = onSnapshot(doc(db, 'users', otherId), (snap) => {
+      if (!snap.exists()) return;
+      setOtherUser({ uid: otherId, ...(snap.data() as any) });
+    });
+    return () => unsub();
+  }, [otherUserParam?.uid]);
+
   const handleSend = async () => {
-    if (!inputText.trim() || !user) return;
+    if (!inputText.trim() || !user || !matchId) return;
     
     const text = inputText;
     setInputText('');
@@ -48,6 +81,11 @@ export default function ChatScreen({ route, navigation }: any) {
       await updateDoc(doc(db, 'matches', matchId), {
         lastMessage: text,
         lastMessageTime: serverTimestamp()
+      });
+
+      await updateDoc(doc(db, 'users', user.uid), {
+        isOnline: true,
+        lastActiveAt: serverTimestamp(),
       });
     } catch (e) {
       console.error(e);
@@ -77,27 +115,39 @@ export default function ChatScreen({ route, navigation }: any) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <ChevronLeft size={24} color={isDark ? '#FFF' : '#000'} />
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={{ flexDirection: 'row', alignItems: 'center' }} 
-            onPress={() => navigation.navigate('Profile', { userId: otherUser.uid })}
-          >
-            <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.avatar} />
-            <View>
-              <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>{otherUser.displayName}</Text>
-              <Text style={styles.status}>ONLINE</Text>
+          {otherUser ? (
+            <TouchableOpacity 
+              style={{ flexDirection: 'row', alignItems: 'center' }} 
+              onPress={() => navigation.navigate('Profile', { userId: otherUser.uid })}
+            >
+              <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.avatar} />
+              <View>
+                <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>{otherUser.displayName || 'Builder'}</Text>
+                <Text style={styles.status}>
+                  {otherUser.isOnline ? 'ONLINE' : formatLastSeen(otherUser.lastActiveAt)}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={[styles.avatar, { backgroundColor: isDark ? '#16161A' : '#EEE' }]} />
+              <View>
+                <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>CHAT</Text>
+                <Text style={styles.status}>Loading…</Text>
+              </View>
             </View>
-          </TouchableOpacity>
+          )}
         </View>
 
         <TouchableOpacity onPress={() => {
           Alert.alert(
             "Options",
-            `Report or Block ${otherUser.displayName}?`,
+            `Report or Block ${otherUser?.displayName || 'this user'}?`,
             [
               { text: "Cancel", style: "cancel" },
               { text: "Report User", style: "destructive", onPress: async () => {
                 await addDoc(collection(db, 'reports'), {
-                  reportedId: otherUser.uid,
+                  reportedId: otherUser?.uid,
                   reportedBy: user?.uid,
                   reason: 'Inappropriate behavior in chat',
                   timestamp: serverTimestamp()
@@ -105,7 +155,7 @@ export default function ChatScreen({ route, navigation }: any) {
                 Alert.alert("Report Sent", "This report has been sent directly to tanakaprince49@gmail.com for immediate review.");
               }},
               { text: "Block User", style: "destructive", onPress: () => {
-                Alert.alert("Blocked", `${otherUser.displayName} has been blocked.`);
+                Alert.alert("Blocked", `${otherUser?.displayName || 'This user'} has been blocked.`);
                 navigation.goBack();
               }}
             ]

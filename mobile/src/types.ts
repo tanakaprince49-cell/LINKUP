@@ -22,6 +22,7 @@ export interface UserProfile {
   onboarded: boolean;
   isVisible: boolean;
   isBot: boolean;
+  isOnline?: boolean;
   lastActiveAt: Timestamp | FieldValue;
   createdAt: Timestamp | FieldValue;
   socialLinks: {
