@@ -3,9 +3,13 @@ import { FieldValue, Timestamp } from 'firebase/firestore';
 export interface UserProfile {
   uid: string;
   displayName: string;
+  username?: string;
   bio: string;
   profilePic: string;
+  photos?: string[];
   coverPhoto?: string;
+  occupation?: string;
+  company?: string;
   city: string;
   country: string;
   age: number;
@@ -19,6 +23,16 @@ export interface UserProfile {
   ambition: string; // 'unicorn' | 'lifestyle' | 'impact'
   reputationScore: number;
   streakCount: number;
+  founderScore?: number;
+  reputationMetrics?: {
+    reliability?: number; // 0-100
+    responseRate?: number; // 0-100
+    collaboration?: number; // 0-100
+    consistency?: number; // 0-100
+    completion?: number; // 0-100
+  };
+  aiMatchInsights?: string;
+  networkingIntent?: string; // e.g. "Serious Builder"
   onboarded: boolean;
   isVisible: boolean;
   isBot: boolean;
@@ -39,8 +53,19 @@ export interface UserProfile {
   hasExit: boolean; // Verified serial founder
   vibeMedia?: string; // Base64 audio/video intro
   isVerified?: boolean;
-  followers?: string[];
-  following?: string[];
+  availability?: string; // e.g. "Available now", "Weekends"
+  timezone?: string; // e.g. "UTC+2"
+  languages?: string[];
+  lookingFor?: string[]; // e.g. ["Cofounder", "Hiring"]
+  startupStage?: string; // e.g. "Idea", "MVP"
+  fundingStage?: string; // e.g. "Bootstrapped", "Raised"
+  workStyle?: string; // e.g. "Fast-paced"
+  education?: string; // e.g. "Student", "PhD"
+  remoteOnly?: boolean;
+  willingToRelocate?: boolean;
+  teamSizePreference?: string; // e.g. "Solo Founder"
+  circles?: string[];
+  personalityAnswers?: Record<string, string>;
 }
 
 export interface StartupResume {
@@ -82,6 +107,10 @@ export interface Match {
   timestamp: Timestamp | FieldValue;
   lastMessage?: string;
   lastMessageTime?: Timestamp | FieldValue;
+  pinnedBy?: string[];
+  archivedBy?: string[];
+  importantBy?: string[];
+  mutedUntilBy?: Record<string, any>;
 }
 
 export interface Message {
@@ -90,6 +119,9 @@ export interface Message {
   content: string;
   timestamp: Timestamp | FieldValue;
   type: 'text' | 'image' | 'pow';
+  replyToMessageId?: string;
+  replyToSenderId?: string;
+  replyToText?: string;
 }
 
 export interface AppNotification {

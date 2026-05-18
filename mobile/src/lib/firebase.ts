@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { initializeAuth } from '@firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getFunctions } from 'firebase/functions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -17,6 +18,7 @@ export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
 });
 export const storage = getStorage(app);
+export const functions = getFunctions(app);
 
 export enum OperationType {
   CREATE = 'create',

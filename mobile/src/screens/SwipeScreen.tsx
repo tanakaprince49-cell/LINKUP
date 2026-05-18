@@ -2,21 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, Animated, PanResponder, ScrollView } from 'react-native';
 import { collection, query, onSnapshot, where, addDoc, updateDoc, doc, arrayUnion, limit, serverTimestamp, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { rankCandidatesWithAI } from '../lib/matchmaking';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { X, Heart, Zap, RotateCcw, Sparkles, Target, Info, MessageSquare, ChevronDown } from 'lucide-react-native';
+import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
 const SWIPE_THRESHOLD = 0.25 * width;
 
-export default function SwipeScreen() {
+export default function SwipeScreen({ navigation }: any) {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [aiOrderingDone, setAiOrderingDone] = useState(false);
 
   const position = useRef(new Animated.ValueXY()).current;
 
@@ -88,6 +91,7 @@ export default function SwipeScreen() {
     direction === 'right' ? handleLike(item) : handleSkip(item);
     position.setValue({ x: 0, y: 0 });
     setCurrentIndex(prev => prev + 1);
+    setActivePhotoIndex(0);
   };
 
   const handleLike = async (target: UserProfile) => {
@@ -173,6 +177,7 @@ export default function SwipeScreen() {
       // Filter out stealth users on the client side (avoids needing a composite index)
       const visibleUsers = allUsers.filter(u => !u.isStealthMode);
       setProfiles(visibleUsers);
+      setAiOrderingDone(false);
       setLoading(false);
     }, (error) => {
       console.error("SwipeScreen query error:", error);
@@ -180,6 +185,35 @@ export default function SwipeScreen() {
     });
     return () => unsub();
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (aiOrderingDone) return;
+    if (!profiles || profiles.length < 2) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const candidateIds = profiles.map((p) => p.uid).filter(Boolean).slice(0, 40);
+        const ranked = await rankCandidatesWithAI(candidateIds, 20);
+        if (cancelled || ranked.length === 0) return;
+
+        const scoreById = new Map(ranked.map((r) => [r.uid, r.score]));
+        const ordered = [...profiles].sort(
+          (a, b) => (scoreById.get(b.uid) ?? -1) - (scoreById.get(a.uid) ?? -1)
+        );
+        setProfiles(ordered);
+      } catch (e) {
+        console.warn('AI ranking unavailable, using default discovery order.', e);
+      } finally {
+        if (!cancelled) setAiOrderingDone(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, profiles, aiOrderingDone]);
 
   useEffect(() => {
     if (!user || !profiles[currentIndex]) return;
@@ -222,6 +256,10 @@ export default function SwipeScreen() {
     return profiles.slice(currentIndex, currentIndex + 2).map((profile, i) => {
       const isTop = i === 0;
       const dragHandlers = isTop ? panResponder.panHandlers : {};
+      const photos = (Array.isArray((profile as any).photos) && (profile as any).photos.length > 0
+        ? (profile as any).photos
+        : [profile.profilePic].filter(Boolean)) as string[];
+      const safeIndex = Math.min(activePhotoIndex, Math.max(0, photos.length - 1));
       
       const cardStyle = isTop ? {
         transform: [...position.getTranslateTransform(), { rotate }],
@@ -249,10 +287,24 @@ export default function SwipeScreen() {
             </>
           )}
 
-          <Image source={{ uri: profile.profilePic || 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800' }} style={styles.cardImg} />
+          <Image source={{ uri: photos[safeIndex] || 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800' }} style={styles.cardImg} />
           <View style={styles.cardOverlay} />
           
           <View style={styles.cardInfo}>
+            {isTop && photos.length > 1 && (
+              <View style={styles.photoThumbRow}>
+                {photos.slice(0, 3).map((uri, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    activeOpacity={0.9}
+                    onPress={() => setActivePhotoIndex(idx)}
+                    style={[styles.photoThumbWrap, idx === safeIndex && styles.photoThumbWrapActive]}
+                  >
+                    <Image source={{ uri }} style={styles.photoThumbImg} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
             <View style={styles.repBadge}>
               <Zap size={10} color="#000" fill="#000" />
               <Text style={styles.repVal}>{profile.reputationScore || 500} REP</Text>
@@ -301,6 +353,14 @@ export default function SwipeScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={() => navigation?.goBack?.()} style={styles.topBtn}>
+          <ChevronLeft size={22} color={isDark ? '#FFF' : '#000'} />
+        </TouchableOpacity>
+        <Text style={[styles.topTitle, { color: isDark ? '#FFF' : '#000' }]}>SWIPE</Text>
+        <View style={styles.topBtn} />
+      </View>
+
       <View style={styles.stackArea}>
         {renderCards()}
       </View>
@@ -324,10 +384,33 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  topBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00000000',
+  },
+  topTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 3,
+  },
   stackArea: {
     flex: 1,
-    margin: 20,
-    marginTop: 0,
+    marginHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 16,
+    justifyContent: 'center',
   },
   card: {
     ...StyleSheet.absoluteFillObject,
@@ -360,6 +443,29 @@ const styles = StyleSheet.create({
     gap: 4,
     alignSelf: 'flex-start',
     marginBottom: 20,
+  },
+  photoThumbRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignSelf: 'flex-end',
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  photoThumbWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.25)',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  photoThumbWrapActive: {
+    borderColor: '#FBE618',
+  },
+  photoThumbImg: {
+    width: '100%',
+    height: '100%',
   },
   repVal: {
     fontSize: 10,
@@ -459,7 +565,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 25,
-    paddingBottom: 110,
+    paddingBottom: 36,
   },
   actionBtnSmall: {
     width: 60,

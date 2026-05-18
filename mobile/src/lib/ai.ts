@@ -1,169 +1,119 @@
-const OPENROUTER_API_KEY = process.env.EXPO_PUBLIC_OPENROUTER_API_KEY;
+const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+
+async function geminiText(prompt: string, opts?: { temperature?: number; maxOutputTokens?: number }) {
+  if (!GEMINI_API_KEY) {
+    throw new Error('Missing EXPO_PUBLIC_GEMINI_API_KEY');
+  }
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${encodeURIComponent(
+      GEMINI_API_KEY
+    )}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: opts?.temperature ?? 0.2,
+          maxOutputTokens: opts?.maxOutputTokens ?? 200,
+        },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Gemini HTTP ${res.status}: ${text.slice(0, 300)}`);
+  }
+
+  const json: any = await res.json();
+  const text: string | undefined = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini returned empty content.');
+  return text.trim();
+}
+
+function extractFirstJsonBlock(text: string) {
+  const match = text.match(/\{[\s\S]*\}/);
+  return match ? match[0] : text;
+}
 
 export const getMatchingExplanation = async (user1: any, user2: any) => {
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "deepseek/deepseek-chat",
-        messages: [
-          {
-            role: "system",
-            content: "You are a professional co-founder matchmaker. Provide a concise, encouraging explanation."
-          },
-          {
-            role: "user",
-            content: `Compare these two founders and explain why they are a good match or not.
-            Founder 1: ${JSON.stringify(user1)}
-            Founder 2: ${JSON.stringify(user2)}
-            Focus on skills compatibility, goals alignment, and personality fit.`
-          }
-        ]
-      })
-    });
-    const data = await response.json();
-    return data.choices[0].message.content;
+    const prompt = [
+      'You are a professional co-founder matchmaker.',
+      'Write a concise, encouraging explanation (2-4 sentences).',
+      'Focus on skills compatibility, goals alignment, and personality fit.',
+      '',
+      'FounderA=' + JSON.stringify(user1),
+      'FounderB=' + JSON.stringify(user2),
+    ].join('\n');
+    return await geminiText(prompt, { maxOutputTokens: 220, temperature: 0.3 });
   } catch (error) {
-    console.error("OpenRouter Error:", error);
+    console.error("Gemini Error:", error);
     return "Compatibility analysis unavailable.";
   }
 };
 
 export const analyzeStartupIdea = async (idea: string) => {
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "deepseek/deepseek-chat",
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert startup analyst and VC. Be critical but constructive. Respond ONLY with a valid JSON object."
-          },
-          {
-            role: "user",
-            content: `Evaluate this startup idea: "${idea}"
-            Provide a breakdown of:
-            1. Market Potential
-            2. Competition
-            3. Scalability
-            4. Monetization Strategies
-            
-            Return format:
-            {
-              "marketPotential": "...",
-              "competition": "...",
-              "scalability": "...",
-              "monetization": "...",
-              "summary": "..."
-            }`
-          }
-        ],
-        response_format: { type: "json_object" }
-      })
-    });
-    const data = await response.json();
-    return JSON.parse(data.choices[0].message.content || "{}");
+    const prompt = [
+      'You are an expert startup analyst and VC. Be critical but constructive.',
+      'Respond ONLY with a valid JSON object and nothing else.',
+      '',
+      `Evaluate this startup idea: "${idea}"`,
+      'Provide a breakdown of marketPotential, competition, scalability, monetization, summary.',
+      '',
+      'Return format:',
+      '{"marketPotential":"...","competition":"...","scalability":"...","monetization":"...","summary":"..."}',
+    ].join('\n');
+    const text = await geminiText(prompt, { maxOutputTokens: 260, temperature: 0.25 });
+    const json = extractFirstJsonBlock(text);
+    return JSON.parse(json || "{}");
   } catch (error) {
-    console.error("OpenRouter Error:", error);
+    console.error("Gemini Error:", error);
     return null;
   }
 };
 
 export const generateAIComment = async (postContent: string) => {
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "deepseek/deepseek-chat",
-        messages: [
-          {
-            role: "system",
-            content: "You are a supportive AI mentor for founders. Keep it short and punchy."
-          },
-          {
-            role: "user",
-            content: `Write a short, insightful, and supportive comment for this builder's post: "${postContent}"`
-          }
-        ]
-      })
-    });
-    const data = await response.json();
-    return data.choices[0].message.content;
+    const prompt = [
+      "You are a supportive AI mentor for founders. Keep it short and punchy (1-2 sentences).",
+      `Post: "${postContent}"`,
+    ].join('\n');
+    return await geminiText(prompt, { maxOutputTokens: 120, temperature: 0.35 });
   } catch (error) {
-    console.error("OpenRouter Error:", error);
+    console.error("Gemini Error:", error);
     return null;
   }
 };
 export const generateFeedback = async (postContent: string) => {
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "deepseek/deepseek-chat",
-        messages: [
-          {
-            role: "system",
-            content: "You are the 'Brutal Build Roaster'. Your job is to analyze startup progress and give raw, unfiltered, but ultimately helpful feedback. Be punchy, use founder lingo, and don't sugarcoat it."
-          },
-          {
-            role: "user",
-            content: `Roast this build progress and give me 1 actionable improvement: "${postContent}"`
-          }
-        ]
-      })
-    });
-    const data = await response.json();
-    return data.choices[0].message.content;
+    const prompt = [
+      "You are the 'Brutal Build Roaster'. Be raw but helpful. Be punchy (3-6 sentences).",
+      'End with exactly 1 actionable improvement as a single bullet.',
+      `Build update: "${postContent}"`,
+    ].join('\n');
+    return await geminiText(prompt, { maxOutputTokens: 220, temperature: 0.4 });
   } catch (error) {
-    console.error("OpenRouter Error:", error);
+    console.error("Gemini Error:", error);
     return "BUILD_INTEL_DECRYPTION_FAILED";
   }
 };
 export const generateWarmIntro = async (me: any, other: any) => {
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "deepseek/deepseek-chat",
-        messages: [
-          {
-            role: "system",
-            content: "You are a professional co-founder matchmaker. Write a warm, enthusiastic opening message that feels human and specific."
-          },
-          {
-            role: "user",
-            content: `Me: ${JSON.stringify(me)}
-            Other Founder: ${JSON.stringify(other)}
-            Write a 4-6 sentence opening message I can send to start a conversation about building together. End with 1 clear question.`
-          }
-        ]
-      })
-    });
-    const data = await response.json();
-    return data.choices[0].message.content;
+    const prompt = [
+      'You are a professional co-founder matchmaker.',
+      'Write a warm, enthusiastic opening message that feels human and specific.',
+      'Write 4-6 sentences. End with 1 clear question.',
+      '',
+      'Me=' + JSON.stringify(me),
+      'Other=' + JSON.stringify(other),
+    ].join('\n');
+    return await geminiText(prompt, { maxOutputTokens: 220, temperature: 0.45 });
   } catch (error) {
-    console.error("OpenRouter Error:", error);
+    console.error("Gemini Error:", error);
     return "Hey! Saw we matched, excited to see what we can build together.";
   }
 };

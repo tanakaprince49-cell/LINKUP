@@ -52,13 +52,21 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         // Self-updating own profile data
         (isOwner(userId) && isValidUser(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly([
-          'displayName', 'bio', 'skills', 'interests', 'goals',
+          'displayName', 'username', 'occupation', 'company',
+          'bio', 'skills', 'interests', 'goals',
           'country', 'city', 'age', 'experience', 'personalityType',
           'commitmentLevel', 'industries', 'profilePic', 'coverPhoto',
           'achievements', 'badges', 'socialLinks', 'isVisible', 'lastActiveAt',
           'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'onboarded', 
           'ambition', 'photos', 'pushTokens', 'reputationScore', 'isStealthMode', 'hasExit', 'isVerified',
-          'following'
+          'isOnline',
+          'deleted',
+          'availability', 'timezone', 'languages', 'lookingFor', 'startupStage', 'fundingStage', 'workStyle',
+          'education', 'remoteOnly', 'willingToRelocate', 'teamSizePreference',
+          'founderScore', 'reputationMetrics', 'aiMatchInsights', 'networkingIntent',
+          'following',
+          'circles',
+          'personalityAnswers'
         ])) ||
         // Other users following/unfollowing this profile
         (incoming().diff(existing()).affectedKeys().hasOnly(['followers']))
@@ -167,6 +175,19 @@ service cloud.firestore {
     // ------------------------------------------------------------
     // MATCHES & MESSAGES
     // ------------------------------------------------------------
+
+    // ------------------------------------------------------------
+    // AI MATCH CACHE (server-generated)
+    // ------------------------------------------------------------
+    match /aiMatches/{pairId} {
+      // Users may read cached scores only if they are part of the pair.
+      allow get: if isSignedIn() && (existing().u1 == request.auth.uid || existing().u2 == request.auth.uid);
+      allow list: if false;
+
+      // Never allow clients to write AI cache. Cloud Functions (Admin SDK) bypasses rules.
+      allow create, update, delete: if false;
+    }
+
     match /matches/{matchId} {
       allow get: if isSignedIn() && request.auth.uid in existing().userIds;
       allow list: if isSignedIn() && request.auth.uid in resource.data.userIds;

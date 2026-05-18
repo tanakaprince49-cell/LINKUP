@@ -3,12 +3,16 @@ import { Alert, AppState, NativeModules } from 'react-native';
 import {
   GoogleAuthProvider,
   User,
+  EmailAuthProvider,
+  createUserWithEmailAndPassword,
+  linkWithCredential,
   onAuthStateChanged,
+  signInAnonymously,
   signInWithCredential,
+  signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
 import { doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { auth, db } from '../lib/firebase';
 import { UserProfile } from '../types';
 
@@ -20,6 +24,8 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
@@ -30,6 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [autoAuthAttempted, setAutoAuthAttempted] = useState(false);
 
   // Native Google Sign-In requires a dev client / prebuild / real APK.
   // Expo Go does not include `RNGoogleSignin`, so we guard usage at runtime.
@@ -48,6 +55,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (!authenticatedUser) {
         setProfile(null);
+        // Keep development flow simple: auto-sign in anonymously if no session.
+        // Onboarding still runs before access to the network.
+        if (!autoAuthAttempted) {
+          setAutoAuthAttempted(true);
+          try {
+            await signInAnonymously(auth);
+            return;
+          } catch (e) {
+            console.error('Anonymous sign-in failed:', e);
+          }
+        }
         setLoading(false);
         return;
       }
@@ -71,8 +89,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const newProfile: any = {
             uid: authenticatedUser.uid,
             displayName: authenticatedUser.displayName || 'New Builder',
+            username: (authenticatedUser.displayName || 'builder')
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, '')
+              .slice(0, 14),
             bio: '',
             profilePic: authenticatedUser.photoURL || '',
+            photos: [],
+            occupation: 'Founder',
+            company: '',
             country: '',
             city: '',
             age: 20,
@@ -84,14 +109,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             commitmentLevel: '',
             industries: [],
             ambition: '',
+            availability: 'Open',
+            timezone: '',
+            languages: ['English'],
+            lookingFor: ['Networking'],
+            startupStage: 'Idea',
+            fundingStage: 'Pre-revenue',
+            workStyle: '',
+            education: '',
+            remoteOnly: false,
+            willingToRelocate: false,
+            teamSizePreference: 'Solo Founder',
             reputationScore: 0,
             streakCount: 0,
+            founderScore: 50,
+            reputationMetrics: {
+              reliability: 70,
+              responseRate: 70,
+              collaboration: 70,
+              consistency: 60,
+              completion: 60,
+            },
+            aiMatchInsights: '',
+            networkingIntent: 'Serious Builder',
             onboarded: false,
             isVisible: true,
             isBot: false,
             isOnline: true,
             lastActiveAt: serverTimestamp(),
             createdAt: serverTimestamp(),
+            circles: [],
+            personalityAnswers: {},
             socialLinks: {},
             resume: {
               shippedProducts: [],
@@ -161,6 +209,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      // Lazily require the native module so Expo Go doesn't crash at import time.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { GoogleSignin, statusCodes } = require('@react-native-google-signin/google-signin') as any;
+
       GoogleSignin.configure({
         webClientId: GOOGLE_WEB_CLIENT_ID,
       });
@@ -178,16 +230,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signInWithCredential(auth, credential);
     } catch (error: any) {
       console.error('Google Auth Error:', error);
-      if (error?.code === statusCodes.SIGN_IN_CANCELLED) return;
-      if (error?.code === statusCodes.IN_PROGRESS) {
+      const statusCodes = (require('@react-native-google-signin/google-signin') as any)?.statusCodes;
+      if (statusCodes && error?.code === statusCodes.SIGN_IN_CANCELLED) return;
+      if (statusCodes && error?.code === statusCodes.IN_PROGRESS) {
         Alert.alert('Please Wait', 'Sign-in is already in progress.');
         return;
       }
-      if (error?.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      if (statusCodes && error?.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         Alert.alert('Error', 'Google Play Services are not available on this device.');
         return;
       }
       Alert.alert('Sign-In Error', error?.message || 'Something went wrong. Please try again.');
+    }
+  };
+
+  const signUpWithEmail = async (email: string, password: string) => {
+    const trimmedEmail = String(email || '').trim();
+    if (!trimmedEmail || !password) {
+      Alert.alert('Missing Info', 'Enter email + password.');
+      return;
+    }
+
+    try {
+      if (auth.currentUser?.isAnonymous) {
+        const cred = EmailAuthProvider.credential(trimmedEmail, password);
+        await linkWithCredential(auth.currentUser, cred);
+        return;
+      }
+
+      await createUserWithEmailAndPassword(auth, trimmedEmail, password);
+    } catch (e: any) {
+      console.error('Email sign-up error:', e);
+      Alert.alert('Sign Up Error', e?.message || 'Could not create account.');
+    }
+  };
+
+  const signInWithEmail = async (email: string, password: string) => {
+    const trimmedEmail = String(email || '').trim();
+    if (!trimmedEmail || !password) {
+      Alert.alert('Missing Info', 'Enter email + password.');
+      return;
+    }
+
+    try {
+      await signInWithEmailAndPassword(auth, trimmedEmail, password);
+    } catch (e: any) {
+      console.error('Email sign-in error:', e);
+      Alert.alert('Sign In Error', e?.message || 'Could not sign in.');
     }
   };
 
@@ -212,7 +301,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, logout, deleteAccount }}>
+    <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, signUpWithEmail, signInWithEmail, logout, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   );

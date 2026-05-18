@@ -26,7 +26,7 @@ export default function ViewersScreen({ navigation }: any) {
         const viewerProfiles = await Promise.all(
           profile.viewedBy.slice(0, 20).map(async (uid: string) => {
             const snap = await getDoc(doc(db, 'users', uid));
-            return snap.exists() ? { id: snap.id, ...snap.data() } as UserProfile : null;
+            return snap.exists() ? ({ uid: snap.id, ...(snap.data() as any) } as UserProfile) : null;
           })
         );
         setViewers(viewerProfiles.filter(p => p !== null) as UserProfile[]);

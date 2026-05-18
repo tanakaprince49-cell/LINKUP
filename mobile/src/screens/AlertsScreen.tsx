@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions } from 'react-native';
-import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, Image } from 'react-native';
+import { collection, query, where, onSnapshot, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -40,7 +40,15 @@ const NotificationItem = ({ notification, navigation }: { notification: any, nav
   return (
     <TouchableOpacity 
       style={[styles.item, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E2E8F0', shadowColor: isDark ? '#000' : '#E2E8F0', shadowOpacity: isDark ? 0 : 0.5, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: isDark ? 0 : 2 }]}
-      onPress={() => {
+      onPress={async () => {
+        try {
+          if (notification?.id && notification?.isRead === false) {
+            await updateDoc(doc(db, 'notifications', notification.id), { isRead: true });
+          }
+        } catch (e) {
+          console.error('Mark notification read error:', e);
+        }
+
         if (notification.fromId) {
           navigation.navigate('Profile', { userId: notification.fromId });
         }

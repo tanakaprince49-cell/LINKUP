@@ -1,12 +1,14 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from './firebase';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
@@ -45,4 +47,23 @@ export async function registerForPushNotificationsAsync(userId: string) {
   }
 
   return token;
+}
+
+export function subscribeToUnreadNotificationsCount(
+  userId: string,
+  onCount: (count: number) => void
+) {
+  const q = query(
+    collection(db, 'notifications'),
+    where('userId', '==', userId),
+    where('isRead', '==', false)
+  );
+  return onSnapshot(
+    q,
+    (snap) => onCount(snap.size),
+    (err) => {
+      console.error('Unread notifications listener error:', err);
+      onCount(0);
+    }
+  );
 }

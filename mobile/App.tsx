@@ -6,22 +6,23 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import * as Icons from 'lucide-react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import FeedScreen from './src/screens/FeedScreen';
-import LandingScreen from './src/screens/LandingScreen';
-import OnboardingScreen from './src/screens/OnboardingScreen';
 import SwipeScreen from './src/screens/SwipeScreen';
+import DiscoveryDashboardScreen from './src/screens/DiscoveryDashboardScreen';
+import SearchScreen from './src/screens/SearchScreen';
 import MatchScreen from './src/screens/MatchScreen';
 import AlertsScreen from './src/screens/AlertsScreen';
 import MessagesScreen from './src/screens/MessagesScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
-import CreatePostScreen from './src/screens/CreatePostScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import ViewersScreen from './src/screens/ViewersScreen';
+import { subscribeToUnreadNotificationsCount } from './src/lib/notifications';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -68,41 +69,52 @@ const AppHeader = ({ navigation, title }: any) => {
 
 function TabNavigator({ navigation }: any) {
   const { theme } = useTheme();
+  const { user } = useAuth();
   const isDark = theme === 'dark';
+  const [unreadCount, setUnreadCount] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = subscribeToUnreadNotificationsCount(user.uid, setUnreadCount);
+    return () => unsub();
+  }, [user?.uid]);
 
   return (
     <Tab.Navigator
+      initialRouteName="Swipe"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName = "Home";
           if (focused) {
-            if (route.name === 'Feed') iconName = "Rocket";
-            else if (route.name === 'Swipe') iconName = "Search";
-            else if (route.name === 'Post') iconName = "Plus";
+            if (route.name === 'Swipe') iconName = "Home";
+            else if (route.name === 'Search') iconName = "Search";
             else if (route.name === 'Matches') iconName = "Users";
             else if (route.name === 'Alerts') iconName = "Bell";
           } else {
-             if (route.name === 'Feed') iconName = "Rocket";
-            else if (route.name === 'Swipe') iconName = "Search";
-            else if (route.name === 'Post') iconName = "Plus";
+            if (route.name === 'Swipe') iconName = "Home";
+            else if (route.name === 'Search') iconName = "Search";
             else if (route.name === 'Matches') iconName = "Users";
             else if (route.name === 'Alerts') iconName = "Bell";
           }
 
-          const isPostButton = route.name === 'Post';
-
           return (
             <View style={[
               styles.tabIconContainer,
-              isPostButton && styles.postButtonContainer
             ]}>
               <SafeIcon 
                 name={iconName}
-                size={isPostButton ? 28 : 22} 
-                color={isPostButton ? '#000' : (focused ? '#FBE618' : '#666')} 
-                fill={focused && !isPostButton ? '#FBE61820' : 'transparent'}
+                size={22} 
+                color={focused ? '#FBE618' : '#666'} 
+                fill={focused ? '#FBE61820' : 'transparent'}
               />
-              {focused && !isPostButton && <View style={styles.focusedDot} />}
+              {route.name === 'Alerts' && unreadCount > 0 && (
+                <View style={styles.badgeBubble}>
+                  <Text style={styles.badgeText} numberOfLines={1}>
+                    {unreadCount > 99 ? '99+' : String(unreadCount)}
+                  </Text>
+                </View>
+              )}
+              {focused && <View style={styles.focusedDot} />}
             </View>
           );
         },
@@ -124,8 +136,8 @@ function TabNavigator({ navigation }: any) {
         headerShown: true,
         header: (props) => {
           const titles: Record<string, string> = {
-            'Feed': 'LINKUP',
             'Swipe': 'DISCOVER',
+            'Search': 'SEARCH',
             'Matches': 'CONNECTIONS',
             'Alerts': 'NOTIFICATIONS'
           };
@@ -133,18 +145,8 @@ function TabNavigator({ navigation }: any) {
         }
       })}
     >
-      <Tab.Screen name="Feed" component={FeedScreen} />
-      <Tab.Screen name="Swipe" component={SwipeScreen} />
-      <Tab.Screen 
-        name="Post" 
-        component={View} 
-        listeners={({ navigation }) => ({
-          tabPress: (e) => {
-            e.preventDefault();
-            navigation.navigate('CreatePost');
-          },
-        })}
-      />
+      <Tab.Screen name="Swipe" component={DiscoveryDashboardScreen} />
+      <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Matches" component={MatchScreen} />
       <Tab.Screen name="Alerts" component={AlertsScreen} />
     </Tab.Navigator>
@@ -171,20 +173,22 @@ function AppContent() {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}>
-        {!user ? (
-          <Stack.Screen name="Landing" component={LandingScreen} />
-        ) : profile && !profile.onboarded ? (
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+        {user && !profile?.onboarded ? (
+          <>
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            <Stack.Screen name="Main" component={TabNavigator} />
+          </>
         ) : (
           <>
             <Stack.Screen name="Main" component={TabNavigator} />
-            <Stack.Screen name="Profile" component={ProfileScreen} />
-            <Stack.Screen name="Messages" component={MessagesScreen} />
-            <Stack.Screen name="Chat" component={ChatScreen} />
-            <Stack.Screen name="Viewers" component={ViewersScreen} />
-            <Stack.Screen name="CreatePost" component={CreatePostScreen} options={{ presentation: 'modal' }} />
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
           </>
         )}
+        <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen name="Messages" component={MessagesScreen} />
+        <Stack.Screen name="Chat" component={ChatScreen} />
+        <Stack.Screen name="SwipeDeck" component={SwipeScreen} />
+        <Stack.Screen name="Viewers" component={ViewersScreen} />
       </Stack.Navigator>
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </NavigationContainer>
@@ -193,13 +197,15 @@ function AppContent() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -246,19 +252,6 @@ const styles = StyleSheet.create({
     height: 40,
     width: 40,
   },
-  postButtonContainer: {
-    backgroundColor: '#FBE618',
-    width: 54,
-    height: 54,
-    borderRadius: 20,
-    marginTop: -25,
-    shadowColor: '#FBE618',
-    shadowOpacity: 0.4,
-    shadowRadius: 15,
-    elevation: 8,
-    borderWidth: 4,
-    borderColor: '#0A0A0C',
-  },
   focusedDot: {
     width: 4,
     height: 4,
@@ -266,5 +259,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#FBE618',
     position: 'absolute',
     bottom: -8,
-  }
+  },
+  badgeBubble: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#FFF',
+    letterSpacing: 0.5,
+  },
 });

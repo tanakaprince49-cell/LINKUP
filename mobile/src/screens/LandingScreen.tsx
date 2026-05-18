@@ -81,7 +81,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   glowContainer: {
-    position: 'absolute',
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
   },
