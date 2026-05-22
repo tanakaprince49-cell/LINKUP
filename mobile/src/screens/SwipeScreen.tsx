@@ -510,7 +510,7 @@ export default function SwipeScreen({ navigation }: any) {
           },
         ]}
       >
-        <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.cardImg} fadeDuration={0} />
+        <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={[styles.cardImg, styles.faceFocusedImg]} resizeMode="cover" fadeDuration={0} />
         <View style={styles.previewOverlay} pointerEvents="none" />
         <View style={styles.previewInfo}>
           <Text style={styles.previewEyebrow}>NEXT BUILDER</Text>
@@ -626,7 +626,7 @@ export default function SwipeScreen({ navigation }: any) {
           <Text style={[styles.badgeText, { color: '#FF4444' }]}>NOPE</Text>
         </Animated.View>
 
-        <Image source={{ uri: photos[safeIndex] || FALLBACK_PHOTO }} style={styles.cardImg} fadeDuration={0} />
+        <Image source={{ uri: photos[safeIndex] || FALLBACK_PHOTO }} style={[styles.cardImg, styles.faceFocusedImg]} resizeMode="cover" fadeDuration={0} />
         <View style={styles.cardOverlay} pointerEvents="none" />
 
         <View style={[styles.cardInfo, isCompactWeb && styles.compactCardInfo]}>
@@ -784,10 +784,10 @@ export default function SwipeScreen({ navigation }: any) {
       <View style={[styles.webStage, isWideWeb && styles.webStageDesktop, isCompactWeb && styles.webStageMobile]}>
         <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }, isCompactWeb && styles.compactTopBar]}>
           <TouchableOpacity onPress={() => navigation?.goBack?.()} style={[styles.topBtn, isCompactWeb && styles.compactTopBtn]}>
-            <ChevronLeft size={22} color={isDark ? '#FFF' : '#000'} />
+            <ChevronLeft size={22} color="#000" />
           </TouchableOpacity>
-          <Text style={[styles.topTitle, isCompactWeb && styles.compactTopTitle, { color: isDark ? '#FFF' : '#000' }]}>SWIPE</Text>
-          <View style={[styles.topBtn, isCompactWeb && styles.compactTopBtn]} />
+          <Text style={[styles.topTitle, isCompactWeb && styles.compactTopTitle]}>SWIPE</Text>
+          <View style={[styles.topBtn, styles.topBtnGhost, isCompactWeb && styles.compactTopBtn]} />
         </View>
 
         <View style={[styles.stackArea, webDeckStyle, isCompactWeb && styles.compactStackArea]}>
@@ -827,7 +827,7 @@ const styles = StyleSheet.create({
   },
   topBar: {
     position: 'absolute',
-    top: 8,
+    top: 14,
     left: 0,
     right: 0,
     zIndex: 80,
@@ -844,12 +844,33 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00000000',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  topBtnGhost: {
+    opacity: 0,
   },
   topTitle: {
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 3,
+    color: '#000',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 999,
+    overflow: 'hidden',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
   },
   compactTopBar: {
     paddingHorizontal: 10,
@@ -909,6 +930,9 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  faceFocusedImg: {
+    ...(Platform.OS === 'web' ? ({ objectPosition: 'center 18%' } as any) : null),
   },
   cardOverlay: {
     ...StyleSheet.absoluteFillObject,

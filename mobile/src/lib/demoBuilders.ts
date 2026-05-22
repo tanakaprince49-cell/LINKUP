@@ -63,7 +63,7 @@ const makeDemoBuilder = (profile: Partial<UserProfile> & Pick<UserProfile, 'uid'
   ...profile,
 });
 
-export const demoBuilders: UserProfile[] = [
+const allDemoBuilders: UserProfile[] = [
   makeDemoBuilder({
     uid: 'demo-builder-amara',
     displayName: 'Amara Ncube',
@@ -304,6 +304,8 @@ export const demoBuilders: UserProfile[] = [
     reputationScore: 82,
   }),
 ];
+
+export const demoBuilders: UserProfile[] = allDemoBuilders.slice(0, 5);
 
 export function isDemoBuilder(profile?: Pick<UserProfile, 'uid' | 'isBot'> | null) {
   return Boolean(profile?.isBot || String(profile?.uid || '').startsWith('demo-builder-'));
