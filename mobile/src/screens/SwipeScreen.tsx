@@ -14,6 +14,7 @@ import {
   InteractionManager,
   Platform,
   useWindowDimensions,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, query, onSnapshot, where, addDoc, limit, serverTimestamp, getDocs } from 'firebase/firestore';
@@ -21,11 +22,12 @@ import { db } from '../lib/firebase';
 import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 import { trackProfileView } from '../lib/analytics';
 import { ensureDirectMatch } from '../lib/chat';
+import { ConnectionRequest, requestConnection, subscribeToConnectionRequest } from '../lib/connectionRequests';
 import { demoBuilders, isDemoBuilder } from '../lib/demoBuilders';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase } from 'lucide-react-native';
+import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare } from 'lucide-react-native';
 
 const windowSize = Dimensions.get('window');
 const { width } = windowSize;
@@ -66,6 +68,8 @@ export default function SwipeScreen({ navigation }: any) {
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [aiOrderingDone, setAiOrderingDone] = useState(false);
   const [infoExpanded, setInfoExpanded] = useState(false);
+  const [connectionRequest, setConnectionRequest] = useState<ConnectionRequest | null>(null);
+  const [contactBusy, setContactBusy] = useState(false);
 
   const swipedSessionIdsRef = useRef<Set<string>>(new Set());
   const hasUserSwipedRef = useRef(false);
@@ -320,6 +324,15 @@ export default function SwipeScreen({ navigation }: any) {
     setInfoExpanded(false);
   }, [topProfile?.uid]);
 
+  useEffect(() => {
+    if (!user?.uid || !topProfile?.uid || isDemoBuilder(topProfile)) {
+      setConnectionRequest(null);
+      return;
+    }
+
+    return subscribeToConnectionRequest(user.uid, topProfile.uid, setConnectionRequest);
+  }, [topProfile?.uid, user?.uid]);
+
   const handleLike = async (target: UserProfile) => {
     if (!user?.uid || !target || isDemoBuilder(target)) return;
     try {
@@ -370,6 +383,44 @@ export default function SwipeScreen({ navigation }: any) {
       }
     } catch (error) {
       console.warn('Swipe like skipped:', error);
+    }
+  };
+
+  const handleContactRequest = async () => {
+    const target = profiles[0];
+    if (!user?.uid || !target || isDemoBuilder(target) || contactBusy) return;
+
+    if (connectionRequest?.status === 'approved') {
+      const matchId = await ensureDirectMatch(user.uid, target.uid);
+      navigation.navigate('Chat', { matchId, otherUser: target });
+      return;
+    }
+
+    if (connectionRequest?.status === 'pending') {
+      Alert.alert('Request pending', `${target.displayName || 'This builder'} has not answered yet.`);
+      return;
+    }
+
+    if (connectionRequest?.status === 'rejected') {
+      Alert.alert('Request rejected', `${target.displayName || 'This builder'} declined this request.`);
+      return;
+    }
+
+    setContactBusy(true);
+    try {
+      const request = await requestConnection({
+        senderId: user.uid,
+        recipientId: target.uid,
+        senderName: myProfile?.displayName || user.displayName || 'Someone',
+        senderPic: myProfile?.profilePic || user.photoURL || '',
+      });
+      setConnectionRequest(request);
+      Alert.alert('Request sent', `${target.displayName || 'This builder'} can approve or reject it.`);
+    } catch (error) {
+      console.warn('Contact request failed:', error);
+      Alert.alert('Request failed', 'Could not send this contact request. Check Firebase rules and try again.');
+    } finally {
+      setContactBusy(false);
     }
   };
 
@@ -717,6 +768,30 @@ export default function SwipeScreen({ navigation }: any) {
         <View style={[styles.actionRow, isWideWeb && styles.webActionRow, isCompactWeb && styles.compactActionRow]}>
           <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={() => animateSwipeOut('left')}>
             <X size={24} color="#EF4444" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.contactActionBtn,
+              isCompactWeb && styles.compactContactActionBtn,
+              connectionRequest?.status === 'approved' && styles.contactApprovedBtn,
+              connectionRequest?.status === 'pending' && styles.contactPendingBtn,
+              connectionRequest?.status === 'rejected' && styles.contactRejectedBtn,
+            ]}
+            disabled={contactBusy || !topProfile || isDemoBuilder(topProfile)}
+            onPress={handleContactRequest}
+          >
+            <MessageSquare size={18} color="#000" />
+            <Text style={styles.contactActionText}>
+              {contactBusy
+                ? '...'
+                : connectionRequest?.status === 'approved'
+                  ? 'CHAT'
+                  : connectionRequest?.status === 'pending'
+                    ? 'SENT'
+                    : connectionRequest?.status === 'rejected'
+                      ? 'NO'
+                      : 'CONTACT'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtnLarge, isCompactWeb && styles.compactActionBtnLarge]} onPress={() => animateSwipeOut('right')}>
             <Heart size={32} color="#FFF" fill="#FFF" />
@@ -1209,6 +1284,41 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
+  },
+  contactActionBtn: {
+    width: 76,
+    height: 60,
+    borderRadius: 22,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#D9C800',
+    gap: 3,
+  },
+  compactContactActionBtn: {
+    width: 68,
+    height: 54,
+    borderRadius: 20,
+  },
+  contactApprovedBtn: {
+    backgroundColor: '#22C55E',
+    borderColor: '#16A34A',
+  },
+  contactPendingBtn: {
+    backgroundColor: '#FACC15',
+    borderColor: '#EAB308',
+    opacity: 0.86,
+  },
+  contactRejectedBtn: {
+    backgroundColor: '#FCA5A5',
+    borderColor: '#EF4444',
+  },
+  contactActionText: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    color: '#000',
   },
   actionBtnLarge: {
     width: 80,

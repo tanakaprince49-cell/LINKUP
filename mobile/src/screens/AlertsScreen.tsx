@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, query, where, onSnapshot, doc, updateDoc, limit } from 'firebase/firestore';
 import { useFocusEffect } from '@react-navigation/native';
@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppNotification } from '../types';
 import { markUnreadNotificationsRead } from '../lib/notifications';
+import { respondToConnectionRequest } from '../lib/connectionRequests';
 import { Bell, Eye, Heart, MessageSquare, Sparkles, Zap } from 'lucide-react-native';
 
 const formatTimeAgo = (timestamp: any) => {
@@ -38,6 +39,8 @@ type NotificationRow = AppNotification;
 
 const NotificationItem = ({ notification, navigation }: { notification: NotificationRow, navigation: any }) => {
   const { theme } = useTheme();
+  const { user, profile } = useAuth();
+  const [busy, setBusy] = useState(false);
   const isDark = theme === 'dark';
 
   const getIcon = () => {
@@ -45,10 +48,52 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
       case 'like': return <Heart size={18} color="#FBE618" fill="#FBE61820" />;
       case 'match': return <Zap size={18} color="#FBE618" fill="#FBE61820" />;
       case 'message': return <MessageSquare size={18} color="#2563EB" />;
+      case 'connection_request': return <MessageSquare size={18} color="#FBE618" />;
+      case 'connection_approved': return <Zap size={18} color="#22C55E" fill="#22C55E20" />;
+      case 'connection_rejected': return <MessageSquare size={18} color="#EF4444" />;
       case 'comment': return <MessageSquare size={18} color="#F97316" />;
       case 'view': return <Eye size={18} color="#22C55E" />;
       case 'system': return <Sparkles size={18} color="#FBE618" />;
       default: return <Bell size={18} color="#FBE618" />;
+    }
+  };
+
+  const markRead = async () => {
+    if (!notification?.id || notification?.isRead !== false) return;
+    await updateDoc(doc(db, 'notifications', notification.id), { isRead: true });
+  };
+
+  const respondToRequest = async (approved: boolean) => {
+    if (!user?.uid || !notification.requestId || !notification.fromId || busy) return;
+    setBusy(true);
+    try {
+      await markRead();
+      const result = await respondToConnectionRequest({
+        requestId: notification.requestId,
+        responderId: user.uid,
+        senderId: notification.fromId,
+        approved,
+        responderName: profile?.displayName || user.displayName || 'Someone',
+        responderPic: profile?.profilePic || user.photoURL || '',
+      });
+
+      if (approved && result.matchId) {
+        navigation.navigate('Chat', {
+          matchId: result.matchId,
+          otherUser: {
+            uid: notification.fromId,
+            displayName: notification.fromName || 'Builder',
+            profilePic: notification.fromPic || '',
+          },
+        });
+      } else {
+        Alert.alert('Request rejected', `${notification.fromName || 'This builder'} will be notified.`);
+      }
+    } catch (error) {
+      console.warn('Connection request response failed:', error);
+      Alert.alert('Action failed', 'Could not answer this request. Check Firebase rules and try again.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -57,9 +102,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
       style={[styles.item, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E2E8F0', shadowColor: isDark ? '#000' : '#E2E8F0', shadowOpacity: isDark ? 0 : 0.5, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: isDark ? 0 : 2 }]}
       onPress={async () => {
         try {
-          if (notification?.id && notification?.isRead === false) {
-            await updateDoc(doc(db, 'notifications', notification.id), { isRead: true });
-          }
+          await markRead();
         } catch (e) {
           console.error('Mark notification read error:', e);
         }
@@ -109,6 +152,30 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           {notification.content}
         </Text>
         <Text style={styles.timeText}>{formatTimeAgo(notification.timestamp)}</Text>
+        {notification.type === 'connection_request' && notification.requestId && notification.fromId && (
+          <View style={styles.requestActions}>
+            <TouchableOpacity
+              style={[styles.requestActionBtn, styles.rejectBtn]}
+              disabled={busy}
+              onPress={(event: any) => {
+                event?.stopPropagation?.();
+                void respondToRequest(false);
+              }}
+            >
+              <Text style={[styles.requestActionText, styles.rejectText]}>{busy ? '...' : 'REJECT'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.requestActionBtn}
+              disabled={busy}
+              onPress={(event: any) => {
+                event?.stopPropagation?.();
+                void respondToRequest(true);
+              }}
+            >
+              <Text style={styles.requestActionText}>{busy ? '...' : 'APPROVE'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
       {!notification.isRead && <View style={styles.unreadDot} />}
     </TouchableOpacity>
@@ -211,6 +278,34 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: '900',
     letterSpacing: 1,
+  },
+  requestActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  requestActionBtn: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: 14,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#EAB308',
+  },
+  rejectBtn: {
+    backgroundColor: '#111115',
+    borderColor: '#222226',
+  },
+  requestActionText: {
+    color: '#000',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  rejectText: {
+    color: '#FFF',
   },
   unreadDot: {
     width: 10,

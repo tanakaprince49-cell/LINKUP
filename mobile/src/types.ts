@@ -134,7 +134,16 @@ export interface Message {
 export interface AppNotification {
   id: string;
   userId: string;
-  type: 'like' | 'match' | 'view' | 'system' | 'message' | 'comment';
+  type:
+    | 'like'
+    | 'match'
+    | 'view'
+    | 'system'
+    | 'message'
+    | 'comment'
+    | 'connection_request'
+    | 'connection_approved'
+    | 'connection_rejected';
   content: string;
   timestamp: Timestamp | FieldValue;
   isRead: boolean;
@@ -142,6 +151,7 @@ export interface AppNotification {
   fromName?: string;
   fromPic?: string;
   matchId?: string;
+  requestId?: string;
 }
 
 export interface Story {

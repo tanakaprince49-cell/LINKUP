@@ -258,6 +258,53 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------
+    // Connection requests / permission to start chats
+    // ------------------------------------------------------------
+    match /connectionRequests/{requestId} {
+      function userIsInConnectionRequest(data) {
+        return isSignedIn() && (data.senderId == request.auth.uid || data.recipientId == request.auth.uid);
+      }
+
+      function validConnectionRequestBase(data) {
+        return data.senderId is string &&
+          isValidId(data.senderId) &&
+          data.recipientId is string &&
+          isValidId(data.recipientId) &&
+          data.senderId != data.recipientId &&
+          data.senderName is string &&
+          data.senderName.size() > 0 &&
+          data.senderName.size() <= 120 &&
+          data.senderPic is string &&
+          data.senderPic.size() <= 5000;
+      }
+
+      allow get, list: if userIsInConnectionRequest(existing());
+      allow create: if isSignedIn() &&
+        incoming().keys().hasOnly([
+          'senderId', 'recipientId', 'senderName', 'senderPic',
+          'status', 'createdAt', 'updatedAt'
+        ]) &&
+        requestId == request.auth.uid + "_" + incoming().recipientId &&
+        validConnectionRequestBase(incoming()) &&
+        incoming().senderId == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isSignedIn() &&
+        existing().recipientId == request.auth.uid &&
+        existing().status == 'pending' &&
+        incoming().senderId == existing().senderId &&
+        incoming().recipientId == existing().recipientId &&
+        incoming().senderName == existing().senderName &&
+        incoming().senderPic == existing().senderPic &&
+        incoming().status in ['approved', 'rejected'] &&
+        incoming().reviewedAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedAt', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------
     // AI match cache (Cloud Functions/Admin SDK writes only)
     // ------------------------------------------------------------
     match /aiMatches/{pairId} {
@@ -388,7 +435,7 @@ service cloud.firestore {
       function validNotification(data) {
         return data.keys().hasOnly([
           'userId', 'fromId', 'fromName', 'fromPic',
-          'type', 'content', 'matchId',
+          'type', 'content', 'matchId', 'requestId',
           'isRead', 'timestamp'
         ]) &&
         data.userId is string &&
@@ -396,9 +443,14 @@ service cloud.firestore {
         data.isRead == false &&
         data.content is string &&
         data.content.size() <= 500 &&
-        data.type in ['like', 'match', 'view', 'message', 'comment', 'system'] &&
+        data.type in [
+          'like', 'match', 'view', 'message', 'comment', 'system',
+          'connection_request', 'connection_approved', 'connection_rejected'
+        ] &&
         data.timestamp == request.time &&
         (!data.keys().hasAny(['fromId']) || isValidId(data.fromId)) &&
+        (!data.keys().hasAny(['matchId']) || isValidId(data.matchId)) &&
+        (!data.keys().hasAny(['requestId']) || isValidId(data.requestId)) &&
         (
           data.userId == request.auth.uid ||
           (data.keys().hasAny(['fromId']) && data.fromId == request.auth.uid)

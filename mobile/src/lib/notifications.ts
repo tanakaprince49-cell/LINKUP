@@ -82,6 +82,9 @@ function notificationTitle(data: any) {
   if (data?.type === 'message') return `New message from ${data.fromName || 'LINKUP'}`;
   if (data?.type === 'match') return 'New LINKUP match';
   if (data?.type === 'like') return 'New profile like';
+  if (data?.type === 'connection_request') return 'New contact request';
+  if (data?.type === 'connection_approved') return 'Contact request approved';
+  if (data?.type === 'connection_rejected') return 'Contact request rejected';
   if (data?.type === 'view') return 'New profile view';
   if (data?.type === 'comment') return 'New comment';
   if (String(data?.content || '').startsWith('AI Project Match')) return 'AI Project Match found';
@@ -122,6 +125,9 @@ export async function playInAppNotificationSound(type?: string) {
       message: [740, 980],
       match: [620, 880, 1180],
       like: [780, 1040],
+      connection_request: [740, 980],
+      connection_approved: [620, 880, 1180],
+      connection_rejected: [420, 540],
       view: [520, 700],
       system: [640, 860],
       comment: [680, 900],
