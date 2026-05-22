@@ -79,6 +79,9 @@ export function describeAIError(error: unknown) {
   if (status === 503 || lower.includes('high demand') || lower.includes('unavailable')) {
     return `Gemini is temporarily overloaded. Try again shortly. Details: ${rawMessage}`;
   }
+  if (lower.includes('max_tokens') || lower.includes('finishreason') || lower.includes('empty content')) {
+    return `Gemini responded but stopped before returning text because the output token limit was too low. The app has increased the token budget; redeploy and try again. Details: ${rawMessage}`;
+  }
   if (lower.includes('failed to fetch') || lower.includes('network') || lower.includes('cors')) {
     return `Network/CORS problem reaching Gemini from this app. Check browser console, API restrictions, and connection. Details: ${rawMessage}`;
   }
@@ -107,7 +110,7 @@ export async function requestGeminiText(prompt: string, options: GeminiRequestOp
 
   const generationConfig: Record<string, unknown> = {};
   if (typeof options.temperature === 'number') generationConfig.temperature = options.temperature;
-  if (typeof options.maxOutputTokens === 'number') generationConfig.maxOutputTokens = options.maxOutputTokens;
+  generationConfig.maxOutputTokens = Math.max(128, Number(options.maxOutputTokens || 512));
   if (options.responseMimeType) generationConfig.responseMimeType = options.responseMimeType;
 
   let response: any;
@@ -148,9 +151,11 @@ export async function requestGeminiText(prompt: string, options: GeminiRequestOp
     throw new GeminiRequestError(`Gemini blocked the prompt: ${blockReason}`, undefined, raw);
   }
 
-  const text = data?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || '').join('').trim();
+  const firstCandidate = data?.candidates?.[0];
+  const text = firstCandidate?.content?.parts?.map((part: any) => part?.text || '').join('').trim();
   if (!text) {
-    throw new GeminiRequestError('Gemini returned empty content', undefined, raw);
+    const finishReason = firstCandidate?.finishReason ? ` Finish reason: ${firstCandidate.finishReason}.` : '';
+    throw new GeminiRequestError(`Gemini returned empty content.${finishReason}`, undefined, raw);
   }
 
   setLastAIDiagnostic({
@@ -167,7 +172,7 @@ export async function testGeminiConnection() {
   try {
     await requestGeminiText('Reply with LINKUP_AI_OK only.', {
       temperature: 0,
-      maxOutputTokens: 12,
+      maxOutputTokens: 128,
     });
     return setLastAIDiagnostic({
       ok: true,
