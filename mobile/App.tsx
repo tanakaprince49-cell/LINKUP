@@ -35,6 +35,7 @@ import { subscribeToUnreadMessagesCount } from './src/lib/chat';
 import OpportunityRadar from './src/components/OpportunityRadar';
 import WebAnalytics from './src/components/WebAnalytics';
 import PWAInstallPrompt from './src/components/PWAInstallPrompt';
+import { blurActiveElementOnWeb } from './src/lib/webFocus';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -344,7 +345,7 @@ function AppContent() {
   );
 
   return (
-    <NavigationContainer ref={navigationRef} key={navigationStateKey} linking={linking}>
+    <NavigationContainer ref={navigationRef} key={navigationStateKey} linking={linking} onStateChange={blurActiveElementOnWeb}>
       <Stack.Navigator key={navigationStateKey} screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}>
         {!user ? (
           <>

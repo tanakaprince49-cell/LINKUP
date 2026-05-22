@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { ChevronLeft, Send, Camera, Zap, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X } from 'lucide-react-native';
 import { generateWarmIntro } from '../lib/ai';
+import { blurActiveElementOnWeb } from '../lib/webFocus';
 
 const getFutureDate = (value: any) => {
   if (!value) return null;
@@ -67,6 +68,22 @@ export default function ChatScreen({ route, navigation }: any) {
     () => otherUser?.uid || otherUserParam?.uid || (Array.isArray(matchMeta?.userIds) ? matchMeta.userIds.find((id: string) => id !== myUid) : ''),
     [matchMeta?.userIds, myUid, otherUser?.uid, otherUserParam?.uid]
   );
+  const openOptionsMenu = () => {
+    blurActiveElementOnWeb();
+    setOptionsOpen(true);
+  };
+  const closeOptionsMenu = () => {
+    blurActiveElementOnWeb();
+    setOptionsOpen(false);
+  };
+  const openMutePicker = () => {
+    blurActiveElementOnWeb();
+    setMutePickerOpen(true);
+  };
+  const closeMutePicker = () => {
+    blurActiveElementOnWeb();
+    setMutePickerOpen(false);
+  };
 
   useEffect(() => {
     if (matchId) return;
@@ -334,20 +351,20 @@ export default function ChatScreen({ route, navigation }: any) {
       await updateDoc(ref, { [field]: has ? arrayRemove(myUid) : arrayUnion(myUid) } as any);
 
       if (field === 'archivedBy') {
-        setOptionsOpen(false);
+        closeOptionsMenu();
         Alert.alert(has ? 'Unarchived' : 'Archived', has ? 'This chat is back in your inbox.' : 'This chat is now archived.');
         if (!has) navigation.goBack();
         return;
       }
 
       if (field === 'deletedBy') {
-        setOptionsOpen(false);
+        closeOptionsMenu();
         Alert.alert('Deleted', 'This conversation was removed from your inbox.');
         navigation.goBack();
         return;
       }
 
-      setOptionsOpen(false);
+      closeOptionsMenu();
       if (field === 'pinnedBy') Alert.alert(has ? 'Unpinned' : 'Pinned', has ? 'Conversation unpinned.' : 'Conversation pinned.');
       if (field === 'importantBy') Alert.alert(has ? 'Unmarked' : 'Marked Important', has ? 'Removed from important.' : 'Marked as important.');
       if (field === 'confidentialBy') Alert.alert(has ? 'Confidential Off' : 'Confidential On', has ? 'Confidential mode disabled.' : 'This conversation is now marked confidential.');
@@ -379,8 +396,8 @@ export default function ChatScreen({ route, navigation }: any) {
         mutedUntilBy[myUid] = new Date(Date.now() + hours * 60 * 60 * 1000);
       }
       await updateDoc(ref, { mutedUntilBy } as any);
-      setMutePickerOpen(false);
-      setOptionsOpen(false);
+      closeMutePicker();
+      closeOptionsMenu();
       if (hours === 'off') Alert.alert('Unmuted', 'Notifications unmuted.');
       else Alert.alert('Muted', hours === 'forever' ? 'Muted forever.' : `Muted for ${hours} hour(s).`);
     } catch (e) {
@@ -400,7 +417,7 @@ export default function ChatScreen({ route, navigation }: any) {
       const blockId = `${myUid}_${blockedUserId}`;
       if (hasBlockedUser) {
         await deleteDoc(doc(db, 'blocks', blockId));
-        setOptionsOpen(false);
+        closeOptionsMenu();
         Alert.alert('Unblocked', `${otherUser.displayName || 'User'} can now message you again.`);
         return;
       }
@@ -411,7 +428,7 @@ export default function ChatScreen({ route, navigation }: any) {
         timestamp: serverTimestamp(),
       });
 
-      setOptionsOpen(false);
+      closeOptionsMenu();
       Alert.alert('Blocked', `${otherUser.displayName || 'User'} is blocked. The chat stays here so you can unblock later.`);
     } catch (e) {
       console.error('block toggle error', e);
@@ -439,13 +456,13 @@ export default function ChatScreen({ route, navigation }: any) {
     if (!otherUser?.uid) return;
     const inviteText = `Team invite: I’d like to explore building together on LINKUP. Are you open to joining a startup/project conversation?`;
     await sendChatText(inviteText, {}, 'invited you to collaborate on a team.');
-    setOptionsOpen(false);
+    closeOptionsMenu();
     Alert.alert('Invite Sent', 'A team invite message was sent in this chat.');
   };
 
   const scheduleMeeting = () => {
     const meetingText = `Meeting request: Are you available for a quick LINKUP call this week?`;
-    setOptionsOpen(false);
+    closeOptionsMenu();
     Alert.alert('Schedule Meeting', 'Choose how you want to schedule.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -472,7 +489,7 @@ export default function ChatScreen({ route, navigation }: any) {
         profile?.profileLink || (user?.uid ? `linkup://profile/${user.uid}` : ''),
       ].filter(Boolean).join('\n');
       await Share.share({ title: 'LINKUP contact card', message: card });
-      setOptionsOpen(false);
+      closeOptionsMenu();
     } catch (e) {
       console.error('share contact error', e);
       Alert.alert('Share failed', 'Could not open the share sheet.');
@@ -492,7 +509,7 @@ export default function ChatScreen({ route, navigation }: any) {
         title: 'LINKUP conversation export',
         message: `LINKUP Conversation with ${otherUser?.displayName || 'Builder'}\n\n${transcript}`,
       });
-      setOptionsOpen(false);
+      closeOptionsMenu();
     } catch (e) {
       console.error('export conversation error', e);
       Alert.alert('Export failed', 'Could not export this conversation.');
@@ -639,7 +656,7 @@ export default function ChatScreen({ route, navigation }: any) {
           )}
         </View>
 
-        <TouchableOpacity onPress={() => setOptionsOpen(true)} style={{ padding: 8, alignItems: 'center', justifyContent: 'center' }}>
+        <TouchableOpacity onPress={openOptionsMenu} style={{ padding: 8, alignItems: 'center', justifyContent: 'center' }}>
           <MoreVertical size={22} color={isDark ? '#FFF' : '#000'} />
         </TouchableOpacity>
       </View>
@@ -722,8 +739,8 @@ export default function ChatScreen({ route, navigation }: any) {
         </View>
       </KeyboardAvoidingView>
 
-      <Modal transparent visible={optionsOpen} animationType="fade" onRequestClose={() => setOptionsOpen(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setOptionsOpen(false)} />
+      <Modal transparent visible={optionsOpen} animationType="fade" onRequestClose={closeOptionsMenu}>
+        <Pressable style={styles.modalOverlay} onPress={closeOptionsMenu} />
         <View style={[styles.menuSheet, { backgroundColor: isDark ? '#0F0F12' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
           <View style={styles.menuHeaderRow}>
             <Text style={[styles.menuHeader, { color: isDark ? '#FFF' : '#000' }]}>CHAT OPTIONS</Text>
@@ -739,7 +756,7 @@ export default function ChatScreen({ route, navigation }: any) {
               title="View Profile"
               subtitle="Open full business profile"
               onPress={() => {
-                setOptionsOpen(false);
+                closeOptionsMenu();
                 if (!otherUser?.uid) return;
                 navigation.navigate('Profile', { userId: otherUser.uid });
               }}
@@ -750,8 +767,8 @@ export default function ChatScreen({ route, navigation }: any) {
               title="Mute Notifications"
               subtitle={mutedUntilLabel || 'Choose duration'}
               onPress={() => {
-                setOptionsOpen(false);
-                setMutePickerOpen(true);
+                closeOptionsMenu();
+                openMutePicker();
               }}
             />
 
@@ -835,8 +852,8 @@ export default function ChatScreen({ route, navigation }: any) {
         </View>
       </Modal>
 
-      <Modal transparent visible={mutePickerOpen} animationType="fade" onRequestClose={() => setMutePickerOpen(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setMutePickerOpen(false)} />
+      <Modal transparent visible={mutePickerOpen} animationType="fade" onRequestClose={closeMutePicker}>
+        <Pressable style={styles.modalOverlay} onPress={closeMutePicker} />
         <View style={[styles.menuSheet, { backgroundColor: isDark ? '#0F0F12' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
           <Text style={[styles.menuHeader, { color: isDark ? '#FFF' : '#000' }]}>MUTE</Text>
           <MenuItem icon={<BellOff size={18} color={isDark ? '#FFF' : '#000'} />} title="1 hour" onPress={() => setMute(1)} />

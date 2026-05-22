@@ -38,6 +38,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Post } from '../types';
 import * as Icons from 'lucide-react-native';
 import { generateFeedback } from '../lib/ai';
+import { blurActiveElementOnWeb } from '../lib/webFocus';
 
 const { width } = Dimensions.get('window');
 
@@ -198,7 +199,13 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
         <SafeAreaView style={[styles.modalContent, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: isDark ? '#FFF' : '#000' }]}>COMMENTS</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity
+              onPress={() => {
+                blurActiveElementOnWeb();
+                onClose();
+              }}
+              style={styles.closeBtn}
+            >
               <SafeIcon name="X" size={24} color={isDark ? '#FFF' : '#000'} />
             </TouchableOpacity>
           </View>
@@ -335,6 +342,24 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       { text: "Delete", style: "destructive", onPress: async () => { await deleteDoc(doc(db, 'posts', post.id)); }}
     ]);
   };
+  const openMediaViewer = (index: number) => {
+    blurActiveElementOnWeb();
+    setViewerIndex(index);
+    setViewerOpen(true);
+    setTimeout(() => viewerRef.current?.scrollToIndex({ index, animated: false }), 0);
+  };
+  const closeMediaViewer = () => {
+    blurActiveElementOnWeb();
+    setViewerOpen(false);
+  };
+  const openComments = () => {
+    blurActiveElementOnWeb();
+    setShowComments(true);
+  };
+  const closeComments = () => {
+    blurActiveElementOnWeb();
+    setShowComments(false);
+  };
 
   return (
     <Animated.View style={[
@@ -346,10 +371,10 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
         transform: [{ translateY: slideAnim }]
       }
     ]}>
-      <Modal visible={viewerOpen} animationType="fade" transparent onRequestClose={() => setViewerOpen(false)}>
+      <Modal visible={viewerOpen} animationType="fade" transparent onRequestClose={closeMediaViewer}>
         <View style={styles.viewerOverlay}>
           <SafeAreaView style={styles.viewerTopBar}>
-            <TouchableOpacity onPress={() => setViewerOpen(false)} style={styles.viewerCloseBtn}>
+            <TouchableOpacity onPress={closeMediaViewer} style={styles.viewerCloseBtn}>
               <SafeIcon name="X" size={28} color="#FFF" />
             </TouchableOpacity>
           </SafeAreaView>
@@ -375,7 +400,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
 
       <CommentModal 
         visible={showComments} 
-        onClose={() => setShowComments(false)} 
+        onClose={closeComments} 
         post={post} 
         user={user} 
         profile={profile} 
@@ -419,11 +444,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
             <TouchableOpacity
               key={i}
               activeOpacity={0.9}
-              onPress={() => {
-                setViewerIndex(i);
-                setViewerOpen(true);
-                setTimeout(() => viewerRef.current?.scrollToIndex({ index: i, animated: false }), 0);
-              }}
+              onPress={() => openMediaViewer(i)}
             >
               <Image source={{ uri }} style={styles.postImage} />
             </TouchableOpacity>
@@ -446,7 +467,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
               Animated.timing(commentScale, { toValue: 1.2, duration: 100, useNativeDriver: true }),
               Animated.spring(commentScale, { toValue: 1, friction: 3, useNativeDriver: true })
             ]).start();
-            setShowComments(true);
+            openComments();
           }}
         >
           <Animated.View style={{ transform: [{ scale: commentScale }] }}>

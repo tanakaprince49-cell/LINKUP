@@ -30,6 +30,7 @@ import { trackProfileView } from '../lib/analytics';
 import { analyzeStartupIdea } from '../lib/ai';
 import { imageAssetToDataUri } from '../lib/imageUploadLimits';
 import { ensureDirectMatch } from '../lib/chat';
+import { blurActiveElementOnWeb } from '../lib/webFocus';
 
 const { width } = Dimensions.get('window');
 
@@ -732,6 +733,14 @@ export default function ProfileScreen({ navigation, route }: any) {
     borderColor: isDark ? '#222226' : '#E5E7EB',
   };
   const heroProfilePic = (isEditing ? editData?.profilePic : profile.profilePic) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400';
+  const openFullPhoto = (uri: string) => {
+    blurActiveElementOnWeb();
+    setFullPhotoUri(uri);
+  };
+  const closeFullPhoto = () => {
+    blurActiveElementOnWeb();
+    setFullPhotoUri('');
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
@@ -791,7 +800,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         {/* PROFILE HERO */}
         <View style={styles.heroSection}>
           <View style={styles.avatarContainer}>
-            <TouchableOpacity activeOpacity={0.9} onPress={() => setFullPhotoUri(heroProfilePic)}>
+            <TouchableOpacity activeOpacity={0.9} onPress={() => openFullPhoto(heroProfilePic)}>
               <Image
                 source={{ uri: heroProfilePic }}
                 style={styles.avatar}
@@ -1466,9 +1475,9 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         <View style={{ height: 100 }} />
       </ScrollView>
-      <Modal transparent visible={!!fullPhotoUri} animationType="fade" onRequestClose={() => setFullPhotoUri('')}>
-        <Pressable style={styles.photoModalBackdrop} onPress={() => setFullPhotoUri('')}>
-          <TouchableOpacity style={styles.photoModalClose} onPress={() => setFullPhotoUri('')}>
+      <Modal transparent visible={!!fullPhotoUri} animationType="fade" onRequestClose={closeFullPhoto}>
+        <Pressable style={styles.photoModalBackdrop} onPress={closeFullPhoto}>
+          <TouchableOpacity style={styles.photoModalClose} onPress={closeFullPhoto}>
             <SafeIcon name="X" size={22} color="#FFF" />
           </TouchableOpacity>
           <Image source={{ uri: fullPhotoUri }} style={styles.fullPhotoImage} resizeMode="contain" />
