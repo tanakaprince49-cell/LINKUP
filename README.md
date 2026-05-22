@@ -1,20 +1,32 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# LINKUP
 
-# Run and deploy your AI Studio app
+LINKUP is an Expo React Native app for mobile and web. The production web deploy now serves the same Expo app from `mobile/`, so Vercel shows the same experience as the mobile build.
 
-This contains everything you need to run your app locally.
+## Local Development
 
-View your app in AI Studio: https://ai.studio/apps/0d0bb713-aaa5-493c-801a-a1cd4a713268
+```bash
+cd mobile
+npm install
+npm run web
+```
 
-## Run Locally
+## Production Web Build
 
-**Prerequisites:**  Node.js
+```bash
+cd mobile
+npm run build:web
+```
 
+The static Expo web output is generated at `mobile/dist`.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Vercel
+
+This repo includes `vercel.json`, so Vercel deploys the Expo web build automatically:
+
+- Install command: `cd mobile && npm ci`
+- Build command: `cd mobile && npm run build:web`
+- Output directory: `mobile/dist`
+
+Set this environment variable in Vercel before launching:
+
+- `EXPO_PUBLIC_GEMINI_API_KEY`
