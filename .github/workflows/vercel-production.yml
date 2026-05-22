@@ -1,0 +1,51 @@
+name: Deploy Expo Web to Vercel Production
+
+on:
+  push:
+    branches:
+      - codex/mobile-port
+  workflow_dispatch:
+
+concurrency:
+  group: linkup-vercel-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy existing Vercel project
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Verify Vercel secrets
+        shell: bash
+        run: |
+          missing=0
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is missing. Add it in GitHub repo Settings > Secrets and variables > Actions."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Pull Vercel production environment
+        run: npx vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build production output
+        run: npx vercel@latest build --prod --token="$VERCEL_TOKEN"
+
+      - name: Promote to production
+        run: npx vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"
