@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { defineSecret } from 'firebase-functions/params';
 import crypto from 'node:crypto';
@@ -42,6 +43,16 @@ type RankedCandidate = {
   score: number;
   reason: string;
   cached: boolean;
+};
+
+type LinkupNotification = {
+  userId?: string;
+  fromId?: string;
+  fromName?: string;
+  fromPic?: string;
+  type?: string;
+  content?: string;
+  matchId?: string;
 };
 
 function normalize(v: unknown) {
@@ -145,6 +156,146 @@ function cheapPreScore(me: CompactProfile, them: CompactProfile): number {
 function sortedPairId(a: string, b: string) {
   return [a, b].sort().join('_');
 }
+
+function notificationTitle(data: LinkupNotification) {
+  if (data.type === 'message') return `New message from ${data.fromName || 'LINKUP'}`;
+  if (data.type === 'match') return 'New LINKUP match';
+  if (data.type === 'like') return 'New profile like';
+  if (data.type === 'view') return 'New profile view';
+  if (data.type === 'comment') return 'New comment';
+  if (String(data.content || '').startsWith('AI Project Match')) return 'AI Project Match found';
+  if (String(data.content || '').startsWith('AI Opportunity')) return 'AI Opportunity found';
+  return 'LINKUP notification';
+}
+
+function notificationUrl(data: LinkupNotification) {
+  if (data.matchId) return `/chat/${data.matchId}`;
+  if (
+    data.fromId &&
+    (String(data.content || '').startsWith('AI Opportunity') ||
+      String(data.content || '').startsWith('AI Project Match'))
+  ) {
+    return `/opportunity/${data.fromId}`;
+  }
+  if (data.fromId && ['like', 'view', 'match'].includes(String(data.type || ''))) {
+    return `/profile/${data.fromId}`;
+  }
+  return '/alerts';
+}
+
+function isExpoPushToken(token: unknown): token is string {
+  return (
+    typeof token === 'string' &&
+    (token.startsWith('ExpoPushToken[') || token.startsWith('ExponentPushToken[')) &&
+    token.endsWith(']')
+  );
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+export const sendPushForNotification = onDocumentCreated(
+  { region: 'us-central1', document: 'notifications/{notificationId}' },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const notificationId = event.params.notificationId;
+    const notification = snap.data() as LinkupNotification;
+    const userId = String(notification.userId || '').trim();
+    if (!userId) {
+      logger.warn('Notification missing userId; push skipped.', { notificationId });
+      return;
+    }
+
+    const privateSnap = await admin.firestore().collection('userPrivate').doc(userId).get();
+    const tokens = Array.from(new Set((privateSnap.get('pushTokens') || []).filter(isExpoPushToken)));
+    if (!tokens.length) {
+      logger.info('No Expo push tokens for notification recipient.', { notificationId, userId });
+      return;
+    }
+
+    const title = notificationTitle(notification);
+    const body = String(notification.content || 'Open LINKUP for the latest update.').slice(0, 180);
+    const url = notificationUrl(notification);
+    const messages = tokens.map((to) => ({
+      to,
+      sound: 'default',
+      title,
+      body,
+      priority: 'high',
+      channelId: 'default',
+      data: {
+        notificationId,
+        url,
+        type: notification.type || 'system',
+        matchId: notification.matchId || '',
+        fromId: notification.fromId || '',
+      },
+    }));
+
+    const invalidTokens: string[] = [];
+
+    await Promise.all(
+      chunk(messages, 100).map(async (messageChunk) => {
+        const response = await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(messageChunk),
+        });
+
+        const json = (await response.json().catch(() => null)) as any;
+        if (!response.ok) {
+          logger.error('Expo push API error.', {
+            notificationId,
+            status: response.status,
+            response: JSON.stringify(json).slice(0, 1000),
+          });
+          return;
+        }
+
+        const tickets = Array.isArray(json?.data) ? json.data : [];
+        tickets.forEach((ticket: any, index: number) => {
+          if (ticket?.status === 'error') {
+            const token = String(messageChunk[index]?.to || '');
+            logger.warn('Expo push ticket error.', {
+              notificationId,
+              token,
+              details: ticket?.details,
+              message: ticket?.message,
+            });
+            if (ticket?.details?.error === 'DeviceNotRegistered' && token) {
+              invalidTokens.push(token);
+            }
+          }
+        });
+      })
+    );
+
+    if (invalidTokens.length) {
+      await admin
+        .firestore()
+        .collection('userPrivate')
+        .doc(userId)
+        .set(
+          {
+            pushTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+    }
+  }
+);
 
 async function geminiScorePair(me: CompactProfile, them: CompactProfile): Promise<{ score: number; reason: string }> {
   const apiKey = GEMINI_API_KEY.value();

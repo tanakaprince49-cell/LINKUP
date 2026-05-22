@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, limit } from 'firebase/firestore';
 import { useFocusEffect } from '@react-navigation/native';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -135,7 +135,9 @@ export default function AlertsScreen({ navigation }: any) {
     if (!user) return;
     const q = query(
       collection(db, 'notifications'), 
-      where('userId', '==', user.uid)
+      where('userId', '==', user.uid),
+      orderBy('timestamp', 'desc'),
+      limit(75)
     );
     const unsub = onSnapshot(q, (snap) => {
       const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as NotificationRow));

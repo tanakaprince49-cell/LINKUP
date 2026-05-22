@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 import React from 'react';
 import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text, Platform } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
@@ -30,13 +30,14 @@ import ActiveOpportunityScreen from './src/screens/ActiveOpportunityScreen';
 import ActiveOpportunitiesScreen from './src/screens/ActiveOpportunitiesScreen';
 import TrendingBuildersScreen from './src/screens/TrendingBuildersScreen';
 import RecommendedMatchesScreen from './src/screens/RecommendedMatchesScreen';
-import { subscribeToBrowserNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
+import { subscribeToNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
 import OpportunityRadar from './src/components/OpportunityRadar';
 import WebAnalytics from './src/components/WebAnalytics';
 import PWAInstallPrompt from './src/components/PWAInstallPrompt';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+const navigationRef = createNavigationContainerRef<any>();
 
 const linking: any = {
   prefixes: [ExpoLinking.createURL('/'), 'linkup://'],
@@ -229,6 +230,34 @@ function AppContent() {
   );
   const navigationStateKey = `${user?.uid || 'guest'}-${isOnboarded ? 'onboarded' : 'new'}-${requiresEmailVerification ? 'unverified' : 'verified'}-${authVersion}`;
 
+  const openNotificationTarget = React.useCallback((data: any) => {
+    if (!navigationRef.isReady()) return;
+    const targetUrl = String(data?.url || data?.targetUrl || '');
+
+    if (data?.matchId || targetUrl.startsWith('/chat/')) {
+      const matchId = String(data?.matchId || targetUrl.replace('/chat/', '')).trim();
+      if (matchId) {
+        navigationRef.navigate('Chat', { matchId });
+        return;
+      }
+    }
+
+    if (targetUrl.startsWith('/opportunity/')) {
+      const userId = targetUrl.replace('/opportunity/', '').trim();
+      if (userId) {
+        navigationRef.navigate('ActiveOpportunity', { userId });
+        return;
+      }
+    }
+
+    if (data?.fromId && (data?.type === 'like' || data?.type === 'view' || data?.type === 'match')) {
+      navigationRef.navigate('Profile', { userId: String(data.fromId) });
+      return;
+    }
+
+    navigationRef.navigate('Main', { screen: 'Alerts' });
+  }, []);
+
   React.useEffect(() => {
     if (!user?.uid) return;
     import('./src/lib/notifications')
@@ -239,8 +268,37 @@ function AppContent() {
   }, [user?.uid]);
 
   React.useEffect(() => {
-    if (!user?.uid || Platform.OS !== 'web') return;
-    return subscribeToBrowserNotificationToasts(user.uid);
+    if (Platform.OS === 'web') return;
+    let subscription: { remove: () => void } | undefined;
+    let cancelled = false;
+
+    import('expo-notifications')
+      .then((Notifications) => {
+        if (cancelled) return;
+        subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+          openNotificationTarget(response.notification.request.content.data);
+        });
+        Notifications.getLastNotificationResponseAsync?.()
+          .then((response) => {
+            if (response && !cancelled) {
+              openNotificationTarget(response.notification.request.content.data);
+            }
+          })
+          .catch(() => {});
+      })
+      .catch((error) => {
+        console.warn('Notification tap handling unavailable:', error);
+      });
+
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+    };
+  }, [openNotificationTarget]);
+
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    return subscribeToNotificationToasts(user.uid);
   }, [user?.uid]);
 
   React.useEffect(() => {
@@ -269,7 +327,7 @@ function AppContent() {
   );
 
   return (
-    <NavigationContainer key={navigationStateKey} linking={linking}>
+    <NavigationContainer ref={navigationRef} key={navigationStateKey} linking={linking}>
       <Stack.Navigator key={navigationStateKey} screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}>
         {!user ? (
           <>

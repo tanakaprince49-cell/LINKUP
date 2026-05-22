@@ -11,11 +11,14 @@ import {
   serverTimestamp,
   getDocs,
   writeBatch,
+  orderBy,
+  limit,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
 let notificationHandlerReady = false;
 const WEB_NOTIFICATIONS_STORAGE_KEY = 'linkup:web-notifications-enabled';
+const NOTIFICATION_QUERY_LIMIT = 75;
 
 function getExpoConstants() {
   try {
@@ -40,22 +43,11 @@ async function loadNotificationsModule() {
   }
 }
 
-export async function registerForPushNotificationsAsync(userId: string) {
-  if (!userId) {
-    return;
-  }
-
-  if (Platform.OS === 'web') {
-    return registerForWebNotificationsAsync(userId);
-  }
-
-  if (isExpoGo()) {
-    console.warn('Push notifications require a development build or real APK; skipping Expo Go token registration.');
-    return;
-  }
+async function ensureNativeNotificationRuntime() {
+  if (Platform.OS === 'web') return null;
 
   const Notifications = await loadNotificationsModule();
-  if (!Notifications) return;
+  if (!Notifications) return null;
 
   if (!notificationHandlerReady) {
     Notifications.setNotificationHandler({
@@ -70,18 +62,76 @@ export async function registerForPushNotificationsAsync(userId: string) {
     notificationHandlerReady = true;
   }
 
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'LINKUP alerts',
+      description: 'Matches, messages, profile views, and AI opportunity alerts.',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FBE618',
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      sound: 'default',
+    });
+  }
+
+  return Notifications;
+}
+
+function notificationTitle(data: any) {
+  if (data?.type === 'message') return `New message from ${data.fromName || 'LINKUP'}`;
+  if (data?.type === 'match') return 'New LINKUP match';
+  if (data?.type === 'like') return 'New profile like';
+  if (data?.type === 'view') return 'New profile view';
+  if (data?.type === 'comment') return 'New comment';
+  if (String(data?.content || '').startsWith('AI Project Match')) return 'AI Project Match found';
+  if (String(data?.content || '').startsWith('AI Opportunity')) return 'AI Opportunity found';
+  return 'LINKUP notification';
+}
+
+function notificationTargetUrl(data: any) {
+  if (data?.matchId) return `/chat/${data.matchId}`;
+  if (
+    data?.fromId &&
+    (String(data?.content || '').startsWith('AI Opportunity') ||
+      String(data?.content || '').startsWith('AI Project Match'))
+  ) {
+    return `/opportunity/${data.fromId}`;
+  }
+  return '/alerts';
+}
+
+async function ensureNotificationPermission(Notifications: any) {
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  if (existingStatus === 'granted') return true;
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === 'granted';
+}
+
+export async function registerForPushNotificationsAsync(userId: string) {
+  if (!userId) {
+    return;
+  }
+
+  if (Platform.OS === 'web') {
+    return registerForWebNotificationsAsync(userId);
+  }
+
+  const Notifications = await ensureNativeNotificationRuntime();
+  if (!Notifications) return;
+
+  const permissionGranted = await ensureNotificationPermission(Notifications);
+  if (!permissionGranted) {
+    console.warn('Notification permission was not granted.');
+    return;
+  }
+
+  if (isExpoGo()) {
+    console.warn('Remote push tokens require a development build or real APK; foreground/local LINKUP notifications remain enabled.');
+    return;
+  }
+
   let token;
   if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!');
-      return;
-    }
     const constants = getExpoConstants();
     const projectId = constants?.expoConfig?.extra?.eas?.projectId || constants?.easConfig?.projectId;
     token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
@@ -100,15 +150,6 @@ export async function registerForPushNotificationsAsync(userId: string) {
     }
   } else {
     console.log('Must use physical device for Push Notifications');
-  }
-
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FBE618',
-    });
   }
 
   return token;
@@ -143,12 +184,9 @@ export async function registerForWebNotificationsAsync(userId: string) {
   }
 }
 
-export function subscribeToBrowserNotificationToasts(userId: string) {
+export function subscribeToNotificationToasts(userId: string) {
   if (
-    !userId ||
-    Platform.OS !== 'web' ||
-    typeof window === 'undefined' ||
-    !('Notification' in window)
+    !userId
   ) {
     return () => {};
   }
@@ -156,7 +194,9 @@ export function subscribeToBrowserNotificationToasts(userId: string) {
   const q = query(
     collection(db, 'notifications'),
     where('userId', '==', userId),
-    where('isRead', '==', false)
+    where('isRead', '==', false),
+    orderBy('timestamp', 'desc'),
+    limit(NOTIFICATION_QUERY_LIMIT)
   );
 
   const seenIds = new Set<string>();
@@ -177,46 +217,64 @@ export function subscribeToBrowserNotificationToasts(userId: string) {
         if (seenIds.has(notificationId)) return;
         seenIds.add(notificationId);
 
-        if (window.Notification.permission !== 'granted') return;
+        const title = notificationTitle(data);
+        const body = String(data.content || 'Open LINKUP for the latest update.');
+        const targetUrl = notificationTargetUrl(data);
 
-        const title = data.type === 'message'
-          ? `New message from ${data.fromName || 'LINKUP'}`
-          : data.type === 'match'
-            ? 'New LINKUP match'
-          : data.content?.startsWith('AI Project Match')
-              ? 'AI Project Match found'
-              : data.content?.startsWith('AI Opportunity')
-                ? 'AI Opportunity found'
-              : 'LINKUP notification';
+        if (Platform.OS === 'web') {
+          if (typeof window === 'undefined' || !('Notification' in window)) return;
+          if (window.Notification.permission !== 'granted') return;
 
-        const targetUrl = data.matchId
-          ? `/chat/${data.matchId}`
-          : (data.content?.startsWith('AI Opportunity') || data.content?.startsWith('AI Project Match')) && data.fromId
-            ? `/opportunity/${data.fromId}`
-            : '/alerts';
+          const browserNotification = new window.Notification(title, {
+            body,
+            icon: '/icons/icon-192.png',
+            badge: '/icons/icon-192.png',
+            tag: notificationId,
+            data: { targetUrl },
+          });
 
-        const browserNotification = new window.Notification(title, {
-          body: String(data.content || 'Open LINKUP for the latest update.'),
-          icon: '/icons/icon-192.png',
-          badge: '/icons/icon-192.png',
-          tag: notificationId,
-          data: { targetUrl },
-        });
+          browserNotification.onclick = () => {
+            window.focus();
+            window.location.assign(targetUrl);
+            browserNotification.close();
+          };
+          return;
+        }
 
-        browserNotification.onclick = () => {
-          window.focus();
-          window.location.assign(targetUrl);
-          browserNotification.close();
-        };
+        void ensureNativeNotificationRuntime()
+          .then((Notifications) => {
+            if (!Notifications) return;
+            return Notifications.scheduleNotificationAsync({
+              content: {
+                title,
+                body,
+                sound: 'default',
+                badge: 1,
+                data: {
+                  notificationId,
+                  targetUrl,
+                  type: data.type,
+                  matchId: data.matchId || '',
+                  fromId: data.fromId || '',
+                },
+              },
+              trigger: null,
+            });
+          })
+          .catch((error) => {
+            console.warn('Local notification skipped:', error);
+          });
       });
 
       bootstrapped = true;
     },
     (err) => {
-      console.warn('Web notification listener unavailable:', err);
+      console.warn('Notification listener unavailable:', err);
     }
   );
 }
+
+export const subscribeToBrowserNotificationToasts = subscribeToNotificationToasts;
 
 export function subscribeToUnreadNotificationsCount(
   userId: string,
@@ -229,7 +287,9 @@ export function subscribeToUnreadNotificationsCount(
   const q = query(
     collection(db, 'notifications'),
     where('userId', '==', userId),
-    where('isRead', '==', false)
+    where('isRead', '==', false),
+    orderBy('timestamp', 'desc'),
+    limit(NOTIFICATION_QUERY_LIMIT)
   );
   return onSnapshot(
     q,
@@ -247,7 +307,9 @@ export async function markUnreadNotificationsRead(userId: string) {
   const unreadQuery = query(
     collection(db, 'notifications'),
     where('userId', '==', userId),
-    where('isRead', '==', false)
+    where('isRead', '==', false),
+    orderBy('timestamp', 'desc'),
+    limit(450)
   );
   const snap = await getDocs(unreadQuery);
   if (snap.empty) return;
