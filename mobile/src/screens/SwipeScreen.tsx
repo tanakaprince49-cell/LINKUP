@@ -88,7 +88,7 @@ export default function SwipeScreen({ navigation }: any) {
   const deckHeight = isWeb
     ? isWideWeb
       ? Math.min(680, Math.max(560, safeViewportHeight - 250))
-      : Math.min(490, Math.max(390, safeViewportHeight - 380))
+      : Math.min(570, Math.max(430, safeViewportHeight - 275))
     : undefined;
   const motionWidth = Math.max(deckWidth ?? safeViewportWidth, width);
   const swipeThreshold = Math.min(170, Math.max(92, (deckWidth ?? safeViewportWidth) * 0.27));
