@@ -21,6 +21,52 @@ const extractJsonObject = (text: string) => {
   return text.slice(start, end + 1);
 };
 
+const parseSearchFilterText = (text: string, input: string): GeminiFilterResult => {
+  const result: GeminiFilterResult = { query: input };
+  const keyMap: Record<string, keyof GeminiFilterResult> = {
+    query: 'query',
+    search: 'query',
+    location: 'location',
+    skills: 'skills',
+    skill: 'skills',
+    industry: 'industry',
+    experience: 'experience',
+    availability: 'availability',
+    timezone: 'timezone',
+    lookingforcofounder: 'lookingForCofounder',
+    cofounder: 'lookingForCofounder',
+  };
+
+  text
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```(?:json)?/g, '').replace(/```/g, ''))
+    .split(/\r?\n/)
+    .forEach((line) => {
+      const match = line.match(/^\s*[-*]?\s*([a-zA-Z _-]+)\s*:\s*(.*?)\s*$/);
+      if (!match) return;
+      const key = keyMap[match[1].toLowerCase().replace(/[^a-z]/g, '')];
+      const value = match[2].trim();
+      if (!key || !value || value === '-' || value.toLowerCase() === 'null') return;
+
+      if (key === 'skills') {
+        result.skills = value
+          .split(/[,|]/)
+          .map((skill) => skill.trim())
+          .filter(Boolean)
+          .slice(0, 8);
+        return;
+      }
+
+      if (key === 'lookingForCofounder') {
+        result.lookingForCofounder = /^(true|yes|y|1)$/i.test(value);
+        return;
+      }
+
+      (result as any)[key] = value;
+    });
+
+  return result;
+};
+
 async function directGeminiText(prompt: string) {
   if (!getGeminiApiKey()) return null;
   return requestGeminiText(prompt, { temperature: 0.2, maxOutputTokens: 500 });
@@ -47,7 +93,21 @@ async function aiText(task: string, payload: Record<string, unknown>) {
   try {
     if (task === 'searchFilters') {
       const direct = await directGeminiText(
-        `Convert this LINKUP people search into compact JSON filters with keys query, location, skills, industry, experience, availability, timezone, lookingForCofounder. Return JSON only.\nSearch: ${String(payload.input || '')}`
+        [
+          'Convert this LINKUP people search into simple filters.',
+          'Return plain text only, no JSON and no markdown.',
+          'Use exactly these lines:',
+          'query:',
+          'location:',
+          'skills:',
+          'industry:',
+          'experience:',
+          'availability:',
+          'timezone:',
+          'lookingForCofounder:',
+          'Use comma-separated skills and true/false for lookingForCofounder.',
+          `Search: ${String(payload.input || '')}`,
+        ].join('\n')
       );
       if (direct) return direct;
     }
@@ -87,7 +147,21 @@ export async function geminiToSearchFilters(input: string): Promise<GeminiFilter
   try {
     const text = await aiText('searchFilters', { input });
     const jsonText = extractJsonObject(text) ?? text;
-    return JSON.parse(jsonText);
+    if (jsonText.trim().startsWith('{')) {
+      try {
+        return JSON.parse(jsonText);
+      } catch {
+        // Gemini sometimes returns almost-JSON. Fall through to the safer line parser.
+      }
+    }
+
+    const parsed = parseSearchFilterText(text, input);
+    const local = localSearchFilters(input);
+    return {
+      ...local,
+      ...parsed,
+      skills: parsed.skills?.length ? parsed.skills : local.skills,
+    };
   } catch (error) {
     recordAIError(error, 'AI search fallback active');
     return localSearchFilters(input);

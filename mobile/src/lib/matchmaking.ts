@@ -47,11 +47,71 @@ const compactProfile = (profile: Partial<UserProfile> | null | undefined) => ({
   roleSignals: profile?.roleAnswers || {},
 });
 
-const extractJsonArray = (text: string) => {
+const parseRankedLines = (text: string, candidates: UserProfile[], maxCandidates: number): RankedCandidate[] => {
+  const allowedIds = new Set(candidates.map((candidate) => candidate.uid));
+  const rows: RankedCandidate[] = [];
+  const seen = new Set<string>();
+
+  text
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```(?:json)?/g, '').replace(/```/g, ''))
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/^[-*\d.)\s]+/, ''))
+    .filter(Boolean)
+    .forEach((line) => {
+      const columns = line.split(/\t+|\s*\|\s*/).map((column) => column.trim()).filter(Boolean);
+      let uid = columns[0] || '';
+      if (!allowedIds.has(uid)) {
+        uid = Array.from(allowedIds).find((candidateId) => line.includes(candidateId)) || '';
+      }
+      if (!uid || seen.has(uid)) return;
+
+      const scoreText = columns[1] || line.replace(uid, '').match(/\b(100|[1-9]?\d)\b/)?.[1] || '';
+      const score = Math.max(1, Math.min(100, Math.round(Number(scoreText))));
+      if (!Number.isFinite(score)) return;
+
+      const reason =
+        columns.slice(2).join(' ').trim() ||
+        line
+          .replace(uid, '')
+          .replace(scoreText, '')
+          .replace(/^[\s|:,-]+/, '')
+          .trim() ||
+        'AI-ranked startup fit';
+
+      seen.add(uid);
+      rows.push({
+        uid,
+        score,
+        reason: reason.slice(0, 120),
+        cached: false,
+      });
+    });
+
+  return rows.sort((left, right) => right.score - left.score).slice(0, maxCandidates);
+};
+
+const parseRankedJsonQuietly = (text: string, candidates: UserProfile[], maxCandidates: number): RankedCandidate[] => {
   const start = text.indexOf('[');
   const end = text.lastIndexOf(']');
-  if (start === -1 || end === -1 || end <= start) return null;
-  return text.slice(start, end + 1);
+  if (start === -1 || end === -1 || end <= start) return [];
+
+  try {
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    if (!Array.isArray(parsed)) return [];
+    const allowedIds = new Set(candidates.map((candidate) => candidate.uid));
+    return parsed
+      .map((rank: any) => ({
+        uid: String(rank?.uid || ''),
+        score: Math.max(1, Math.min(100, Math.round(Number(rank?.score || 0)))),
+        reason: String(rank?.reason || 'AI-ranked startup fit').slice(0, 120),
+        cached: false,
+      }))
+      .filter((rank: RankedCandidate) => allowedIds.has(rank.uid) && Number.isFinite(rank.score) && rank.reason)
+      .sort((left: RankedCandidate, right: RankedCandidate) => right.score - left.score)
+      .slice(0, maxCandidates);
+  } catch {
+    return [];
+  }
 };
 
 async function directGeminiRank(me: UserProfile | null | undefined, candidates: UserProfile[], maxCandidates: number): Promise<RankedCandidate[]> {
@@ -67,7 +127,10 @@ async function directGeminiRank(me: UserProfile | null | undefined, candidates: 
   const prompt = [
     'You are LINKUP AI matchmaking for startup builders.',
     'Rank candidates for the current user by useful collaboration potential, complementary skills, shared industries/goals, work style, commitment, and startup intent.',
-    'Return JSON only, no markdown, as an array of objects: [{"uid":"string","score":1-100,"reason":"max 14 words"}].',
+    'Return plain text only, no JSON and no markdown.',
+    'One candidate per line using this exact tab-separated format:',
+    'uid<TAB>score<TAB>reason',
+    'Keep reason under 14 words and do not use quotation marks.',
     `Return at most ${Math.min(maxCandidates, 20)} candidates.`,
     `Current user: ${JSON.stringify(compactProfile(me))}`,
     `Candidates: ${JSON.stringify(compactCandidates)}`,
@@ -76,23 +139,10 @@ async function directGeminiRank(me: UserProfile | null | undefined, candidates: 
   const text = await requestGeminiText(prompt, {
     temperature: 0.2,
     maxOutputTokens: 900,
-    responseMimeType: 'application/json',
   });
-  const jsonText = extractJsonArray(String(text || '')) || String(text || '');
-  const parsed = JSON.parse(jsonText);
-  if (!Array.isArray(parsed)) return [];
-
-  const allowedIds = new Set(candidates.map((candidate) => candidate.uid));
-  return parsed
-    .map((rank: any) => ({
-      uid: String(rank?.uid || ''),
-      score: Math.max(1, Math.min(100, Math.round(Number(rank?.score || 0)))),
-      reason: String(rank?.reason || 'AI-ranked startup fit').slice(0, 120),
-      cached: false,
-    }))
-    .filter((rank: RankedCandidate) => allowedIds.has(rank.uid) && Number.isFinite(rank.score) && rank.reason)
-    .sort((left: RankedCandidate, right: RankedCandidate) => right.score - left.score)
-    .slice(0, maxCandidates);
+  const jsonRanks = parseRankedJsonQuietly(String(text || ''), candidates, maxCandidates);
+  if (jsonRanks.length) return jsonRanks;
+  return parseRankedLines(String(text || ''), candidates, maxCandidates);
 }
 
 export async function rankCandidatesHybrid(
