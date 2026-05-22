@@ -1,4 +1,4 @@
-import { UserProfile } from '../types';
+import { Project, UserProfile } from '../types';
 
 export const cleanUsername = (value: string) =>
   value.replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
@@ -33,12 +33,12 @@ export const earnedScore = (profile: any) => {
 
 const asList = (value: any) => (Array.isArray(value) ? value.map((x) => String(x)).filter(Boolean) : []);
 
-export const opportunityDetails = (profile: any) => {
+export const opportunityDetails = (profile: any, selectedProject?: Project | null) => {
   const lookingFor = asList(profile?.lookingFor);
   const skills = asList(profile?.skills);
   const industries = asList(profile?.industries);
   const projects = Array.isArray(profile?.projects) ? profile.projects : [];
-  const project = projects[0];
+  const project = selectedProject || projects[0];
   const roleNeed = lookingFor.length ? lookingFor.slice(0, 3).join(', ') : 'Collaborators';
   const title = project?.title ? `${project.title}` : `${profile?.displayName || 'Builder'} is building`;
   const summary =

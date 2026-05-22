@@ -78,7 +78,11 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           return;
         }
 
-        if (notification.type === 'system' && notification.content?.startsWith('AI Opportunity') && notification.fromId) {
+        if (
+          notification.type === 'system' &&
+          (notification.content?.startsWith('AI Opportunity') || notification.content?.startsWith('AI Project Match')) &&
+          notification.fromId
+        ) {
           navigation.navigate('ActiveOpportunity', { userId: notification.fromId });
           return;
         }

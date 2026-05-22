@@ -88,6 +88,12 @@ const earnedReputation = (profile: any) => {
 const cleanUsername = (value: string) => value.replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
 const profileLinkFor = (profile: any) => profile?.profileLink || (profile?.uid ? `linkup://profile/${encodeURIComponent(profile.uid)}` : '');
 const toTextValue = (value: unknown) => (typeof value === 'string' ? value : value == null ? '' : String(value));
+const normalizeProjectStatus = (value: unknown) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized.includes('live') || normalized.includes('scal')) return 'live';
+  if (normalized.includes('idea')) return 'idea';
+  return 'mvp';
+};
 type PreferenceField = 'isStealthMode' | 'isVisible' | 'turboConnect' | 'hideOnlineStatus';
 
 const PreferenceSwitch = ({
@@ -252,6 +258,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   // From here onward, `profile` is guaranteed to exist.
 
   const startEditing = () => {
+    const firstProject = Array.isArray((profile as any).projects) ? (profile as any).projects[0] : null;
     setEditData({ 
       ...profile,
       username: (profile as any).username || '',
@@ -270,6 +277,9 @@ export default function ProfileScreen({ navigation, route }: any) {
       turboConnect: !!(profile as any).turboConnect,
       hasExit: profile.hasExit || false,
       photos: Array.isArray((profile as any).photos) ? (profile as any).photos.slice(0, 3) : [],
+      projectTitle: firstProject?.title || '',
+      projectDescription: firstProject?.description || '',
+      projectStatus: firstProject?.status || (profile as any).startupStage || 'mvp',
     });
     setIsEditing(true);
   };
@@ -419,6 +429,19 @@ export default function ProfileScreen({ navigation, route }: any) {
       const skillsArray = typeof editData.skills === 'string' 
         ? editData.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '')
         : (Array.isArray(editData.skills) ? editData.skills : []);
+      const existingProjects = Array.isArray((profile as any).projects) ? (profile as any).projects : [];
+      const projectTitle = String(editData.projectTitle || '').trim();
+      const projectDescription = String(editData.projectDescription || '').trim();
+      const mainProject = projectTitle || projectDescription
+        ? [{
+            id: existingProjects[0]?.id || `project_${profile.uid}_main`,
+            title: projectTitle || `${editData.company || editData.displayName || 'LINKUP'} project`,
+            description: projectDescription || editData.bio || 'Ongoing project looking for relevant collaborators.',
+            status: normalizeProjectStatus(editData.projectStatus),
+            ...(existingProjects[0]?.link ? { link: existingProjects[0].link } : {}),
+          }]
+        : [];
+      const nextProjects = [...mainProject, ...existingProjects.slice(1)].slice(0, 20);
 
       await updateDoc(doc(db, 'users', profile.uid), {
         displayName: editData.displayName || '',
@@ -450,6 +473,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         turboConnect: !!editData.turboConnect,
         vibeMedia: editData.vibeMedia || '',
         photos: Array.isArray(editData.photos) ? editData.photos.filter((p: string) => !!p).slice(0, 3) : [],
+        projects: nextProjects,
       });
       setIsEditing(false);
     } catch (err) {
@@ -587,6 +611,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         ? editData.lookingFor.split(',').map((s: string) => s.trim()).filter(Boolean)
         : (Array.isArray(editData?.lookingFor) ? editData.lookingFor : []))
     : (Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor : [])) as string[];
+  const projects = Array.isArray((profile as any).projects) ? (profile as any).projects : [];
   const stealthModeValue = isEditing
     ? !!(editData?.isStealthMode ?? false)
     : preferenceValue('isStealthMode', !!profile.isStealthMode);
@@ -779,6 +804,34 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholder="Industries (comma-separated)"
                 placeholderTextColor="#666"
               />
+              <View style={[styles.projectEditCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+                <Text style={styles.projectEditLabel}>ONGOING PROJECT</Text>
+                <TextInput
+                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                  value={toTextValue(editData?.projectTitle)}
+                  onChangeText={(t: string) => setEditData({ ...editData, projectTitle: t })}
+                  placeholder="Project title (e.g. AI founder marketplace)"
+                  placeholderTextColor="#666"
+                />
+                <TextInput
+                  multiline
+                  style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                  value={toTextValue(editData?.projectDescription)}
+                  onChangeText={(t: string) => setEditData({ ...editData, projectDescription: t })}
+                  placeholder="What are you building, and who should LINKUP recommend it to?"
+                  placeholderTextColor="#666"
+                />
+                <TextInput
+                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                  value={toTextValue(editData?.projectStatus)}
+                  onChangeText={(t: string) => setEditData({ ...editData, projectStatus: t })}
+                  placeholder="Stage: idea, mvp, live"
+                  placeholderTextColor="#666"
+                />
+                <Text style={styles.projectEditHelp}>
+                  LINKUP recommends this project to people with matching skills, interests, roles, and goals.
+                </Text>
+              </View>
             </View>
           ) : (
             <>
@@ -892,6 +945,30 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
           </View>
         </View>
+
+        {!!projects.length && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>ONGOING PROJECTS</Text>
+            {projects.slice(0, 3).map((project: any, index: number) => (
+              <View
+                key={project?.id || `${profile.uid}-project-${index}`}
+                style={[styles.projectCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                  <Text style={[styles.projectTitle, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                    {project?.title || 'Untitled project'}
+                  </Text>
+                  <View style={styles.projectStagePill}>
+                    <Text style={styles.projectStageText}>{String(project?.status || 'mvp').toUpperCase()}</Text>
+                  </View>
+                </View>
+                <Text style={styles.projectDescription}>
+                  {project?.description || 'Ongoing project looking for relevant collaborators.'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* INDUSTRY INTERESTS */}
         {!!industries.length && (
@@ -1957,6 +2034,59 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#777',
     textAlign: 'center',
+  },
+  projectEditCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 12,
+    marginTop: 4,
+  },
+  projectEditLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    color: '#2563EB',
+  },
+  projectEditHelp: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 15,
+    color: '#777',
+  },
+  projectCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 14,
+    marginTop: 10,
+  },
+  projectTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  projectStagePill: {
+    height: 24,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  projectStageText: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1,
+    color: '#000',
+  },
+  projectDescription: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
+    color: '#777',
   },
   cancelButton: {
     marginTop: 10,

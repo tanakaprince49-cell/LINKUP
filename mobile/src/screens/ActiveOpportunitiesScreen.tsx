@@ -8,9 +8,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
+import { getBestProjectRecommendations, scoreProjectFit } from '../lib/projectRecommendations';
 
 export default function ActiveOpportunitiesScreen({ navigation }: any) {
-  const { user } = useAuth();
+  const { user, profile: me } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [builders, setBuilders] = useState<UserProfile[]>([]);
@@ -63,15 +64,28 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
       .filter((item) => item.weight > 0)
       .sort((left, right) => right.weight - left.weight);
 
-    return scored.slice(0, 40).map((item) => item.profile);
-  }, [builders]);
+    const recommendedOwners = getBestProjectRecommendations(me, builders, 40).map((item) => item.owner.uid);
+    return scored
+      .sort((left, right) => {
+        const leftBoost = recommendedOwners.indexOf(left.profile.uid);
+        const rightBoost = recommendedOwners.indexOf(right.profile.uid);
+        const leftRank = leftBoost === -1 ? 999 : leftBoost;
+        const rightRank = rightBoost === -1 ? 999 : rightBoost;
+        return leftRank - rightRank || right.weight - left.weight;
+      })
+      .slice(0, 40)
+      .map((item) => item.profile);
+  }, [builders, me]);
 
   const renderItem = ({ item }: { item: UserProfile }) => {
     const details = opportunityDetails(item);
+    const recommendedProject = Array.isArray(item.projects)
+      ? item.projects.map((project) => scoreProjectFit(me, item, project)).filter(Boolean)[0]
+      : null;
     return (
       <TouchableOpacity
         activeOpacity={0.9}
-        onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.uid })}
+        onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.uid, projectId: recommendedProject?.project.id })}
         style={[styles.card, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
       >
         <View style={styles.cardTop}>
@@ -86,7 +100,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
           </View>
           <View style={styles.livePill}>
-            <Text style={styles.liveText}>ACTIVE</Text>
+            <Text style={styles.liveText}>{recommendedProject ? `${recommendedProject.score}% FIT` : 'ACTIVE'}</Text>
           </View>
         </View>
 

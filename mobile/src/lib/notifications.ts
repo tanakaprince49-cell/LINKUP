@@ -183,13 +183,15 @@ export function subscribeToBrowserNotificationToasts(userId: string) {
           ? `New message from ${data.fromName || 'LINKUP'}`
           : data.type === 'match'
             ? 'New LINKUP match'
-            : data.content?.startsWith('AI Opportunity')
-              ? 'AI Opportunity found'
+          : data.content?.startsWith('AI Project Match')
+              ? 'AI Project Match found'
+              : data.content?.startsWith('AI Opportunity')
+                ? 'AI Opportunity found'
               : 'LINKUP notification';
 
         const targetUrl = data.matchId
           ? `/chat/${data.matchId}`
-          : data.content?.startsWith('AI Opportunity') && data.fromId
+          : (data.content?.startsWith('AI Opportunity') || data.content?.startsWith('AI Project Match')) && data.fromId
             ? `/opportunity/${data.fromId}`
             : '/alerts';
 

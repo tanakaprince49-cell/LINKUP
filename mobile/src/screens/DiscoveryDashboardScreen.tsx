@@ -9,7 +9,8 @@ import { UserProfile } from '../types';
 import { localCommonalityRank, rankCandidatesWithAI } from '../lib/matchmaking';
 import { earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
-import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing } from 'lucide-react-native';
+import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
+import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket } from 'lucide-react-native';
 
 export default function DiscoveryDashboardScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
@@ -107,6 +108,11 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
     list.sort((a, b) => b.weight - a.weight);
     return list.slice(0, 12).map((x) => x.profile);
   }, [people]);
+
+  const projectRecommendations = useMemo(
+    () => getBestProjectRecommendations(me, people, 8),
+    [me, people]
+  );
 
   useEffect(() => {
     setOpportunityRadar(getBestOpportunityAlerts(me, people, 3));
@@ -209,6 +215,45 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
       </TouchableOpacity>
     );
   };
+
+  const ProjectCard = ({ item }: { item: ProjectRecommendation }) => (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.owner.uid, projectId: item.project.id })}
+      style={[styles.projectCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+      activeOpacity={0.9}
+    >
+      <View style={styles.projectTop}>
+        <View style={styles.projectIcon}>
+          <Rocket size={17} color="#000" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.projectTitle, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+            {item.project.title}
+          </Text>
+          <Text style={styles.handle} numberOfLines={1}>{handleFor(item.owner)}</Text>
+        </View>
+        <View style={styles.projectScore}>
+          <Text style={styles.projectScoreText}>{item.score}%</Text>
+        </View>
+      </View>
+      <Text style={[styles.projectSummary, { color: isDark ? '#CCC' : '#333' }]} numberOfLines={3}>
+        {item.project.description}
+      </Text>
+      <View style={styles.projectSignalRow}>
+        <Text style={styles.projectSignalLabel}>WHY YOU</Text>
+        <Text style={[styles.projectReason, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+          {item.reason}
+        </Text>
+      </View>
+      <View style={styles.tagsRow}>
+        {[item.roleNeed, item.project.status, ...item.matchingSignals].filter(Boolean).slice(0, 4).map((tag) => (
+          <View key={`${item.id}-${tag}`} style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+            <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{String(tag).toUpperCase()}</Text>
+          </View>
+        ))}
+      </View>
+    </TouchableOpacity>
+  );
 
   const Section = ({ title, icon, data, showScore, variant, onViewAll }: any) => (
     <View style={{ marginTop: 18 }}>
@@ -313,6 +358,29 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
             showScore
             onViewAll={() => navigation.navigate('RecommendedMatches')}
           />
+          <View style={{ marginTop: 18 }}>
+            <TouchableOpacity style={styles.sectionHeader} onPress={() => navigation.navigate('ActiveOpportunities')} activeOpacity={0.8}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Rocket size={18} color="#FBE618" />
+                <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#000' }]}>AI Project Matches</Text>
+              </View>
+              <ChevronRight size={18} color="#666" />
+            </TouchableOpacity>
+            <FlatList
+              data={projectRecommendations}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
+              ListEmptyComponent={
+                <View style={[styles.emptyCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+                  <Text style={[styles.emptyTitle, { color: isDark ? '#FFF' : '#000' }]}>No project matches yet</Text>
+                  <Text style={styles.emptySub}>Add skills and interests so LINKUP can match you with ongoing projects.</Text>
+                </View>
+              }
+              renderItem={({ item }) => <ProjectCard item={item} />}
+            />
+          </View>
           <Section
             title="Trending Builders"
             icon={<TrendingUp size={18} color="#2563EB" />}
@@ -456,6 +524,70 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     padding: 14,
+  },
+  projectCard: {
+    width: 330,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 14,
+  },
+  projectTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  projectIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  projectTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  projectScore: {
+    height: 30,
+    minWidth: 46,
+    borderRadius: 15,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  projectScoreText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#FFF',
+    letterSpacing: 0.6,
+  },
+  projectSummary: {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  projectSignalRow: {
+    marginTop: 12,
+    borderRadius: 14,
+    backgroundColor: '#FBE61814',
+    padding: 10,
+  },
+  projectSignalLabel: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    color: '#8A7900',
+  },
+  projectReason: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   opportunityTop: {
     flexDirection: 'row',

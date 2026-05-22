@@ -12,6 +12,7 @@ import { ensureDirectMatch } from '../lib/chat';
 
 export default function ActiveOpportunityScreen({ route, navigation }: any) {
   const userId = route?.params?.userId;
+  const projectId = route?.params?.projectId;
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -43,7 +44,11 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
     };
   }, [userId]);
 
-  const details = useMemo(() => opportunityDetails(profile), [profile]);
+  const selectedProject = useMemo(() => {
+    const projects = Array.isArray((profile as any)?.projects) ? (profile as any).projects : [];
+    return projects.find((project: any) => String(project?.id || '') === String(projectId || '')) || null;
+  }, [profile, projectId]);
+  const details = useMemo(() => opportunityDetails(profile, selectedProject), [profile, selectedProject]);
   const score = useMemo(() => earnedScore(profile), [profile]);
 
   const openChat = async () => {
