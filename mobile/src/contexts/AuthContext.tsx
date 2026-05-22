@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Alert, AppState, NativeModules } from 'react-native';
+import { Alert, AppState, NativeModules, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   GoogleAuthProvider,
@@ -13,6 +13,8 @@ import {
   signInAnonymously,
   signInWithCredential,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  signInWithRedirect,
   signOut,
   verifyBeforeUpdateEmail,
 } from 'firebase/auth';
@@ -245,6 +247,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async () => {
     try {
+      if (Platform.OS === 'web') {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({
+          prompt: 'select_account',
+        });
+
+        try {
+          await signInWithPopup(auth, provider);
+        } catch (popupError: any) {
+          const popupCode = String(popupError?.code || '');
+          if (popupCode.includes('popup-closed-by-user') || popupCode.includes('cancelled-popup-request')) {
+            return;
+          }
+          if (
+            popupCode.includes('popup-blocked') ||
+            popupCode.includes('operation-not-supported-in-this-environment')
+          ) {
+            await signInWithRedirect(auth, provider);
+            return;
+          }
+          throw popupError;
+        }
+        return;
+      }
+
       if (!hasNativeGoogleSignin) {
         Alert.alert(
           'Google Sign-In Unavailable',
@@ -274,14 +301,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signInWithCredential(auth, credential);
     } catch (error: any) {
       console.error('Google Auth Error:', error);
-      const statusCodes = (require('@react-native-google-signin/google-signin') as any)?.statusCodes;
-      if (statusCodes && error?.code === statusCodes.SIGN_IN_CANCELLED) return;
-      if (statusCodes && error?.code === statusCodes.IN_PROGRESS) {
-        Alert.alert('Please Wait', 'Sign-in is already in progress.');
-        return;
+      if (Platform.OS !== 'web') {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const statusCodes = (require('@react-native-google-signin/google-signin') as any)?.statusCodes;
+          if (statusCodes && error?.code === statusCodes.SIGN_IN_CANCELLED) return;
+          if (statusCodes && error?.code === statusCodes.IN_PROGRESS) {
+            Alert.alert('Please Wait', 'Sign-in is already in progress.');
+            return;
+          }
+          if (statusCodes && error?.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+            Alert.alert('Error', 'Google Play Services are not available on this device.');
+            return;
+          }
+        } catch {
+          // Native status codes are unavailable outside the native Google module.
+        }
       }
-      if (statusCodes && error?.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        Alert.alert('Error', 'Google Play Services are not available on this device.');
+
+      const code = String(error?.code || '');
+      if (Platform.OS === 'web' && code.includes('unauthorized-domain')) {
+        Alert.alert(
+          'Google Sign-In Setup Needed',
+          'Add your Vercel domain to Firebase Console > Authentication > Settings > Authorized domains, then redeploy.'
+        );
         return;
       }
       Alert.alert('Sign-In Error', error?.message || 'Something went wrong. Please try again.');
