@@ -20,7 +20,8 @@ async function directGeminiText(task: string, payload: Record<string, unknown>) 
   if (!getGeminiApiKey()) return null;
   const prompt = promptsByTask[task]?.(payload);
   if (!prompt) return null;
-  return requestGeminiText(prompt);
+  const maxOutputTokens = task === 'startupAnalyzer' ? 420 : 180;
+  return requestGeminiText(prompt, { temperature: 0.2, maxOutputTokens });
 }
 
 async function aiText(task: string, payload: Record<string, unknown>) {

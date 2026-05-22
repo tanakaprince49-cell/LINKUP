@@ -10,6 +10,7 @@ if (!admin.apps.length) {
 }
 
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
+const GEMINI_MODEL = 'gemini-2.5-flash-lite';
 
 type CompactProfile = {
   uid: string;
@@ -300,7 +301,7 @@ export const sendPushForNotification = onDocumentCreated(
 async function geminiScorePair(me: CompactProfile, them: CompactProfile): Promise<{ score: number; reason: string }> {
   const apiKey = GEMINI_API_KEY.value();
   const endpoint =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + encodeURIComponent(apiKey);
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=` + encodeURIComponent(apiKey);
 
   const prompt = [
     'Return STRICT JSON only, no markdown.',
@@ -359,7 +360,7 @@ async function geminiScorePair(me: CompactProfile, them: CompactProfile): Promis
 async function geminiText(prompt: string, opts?: { temperature?: number; maxOutputTokens?: number }) {
   const apiKey = GEMINI_API_KEY.value();
   const endpoint =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + encodeURIComponent(apiKey);
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=` + encodeURIComponent(apiKey);
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -569,7 +570,7 @@ export const rankCandidates = onCall({ region: 'us-central1', secrets: [GEMINI_A
           u2: p.uid,
           score,
           reason,
-          model: 'gemini-flash-latest',
+          model: GEMINI_MODEL,
           userHashA: meProfileHash,
           userHashB: themHash,
           preScore: pre,

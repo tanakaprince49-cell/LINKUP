@@ -138,7 +138,7 @@ async function directGeminiRank(me: UserProfile | null | undefined, candidates: 
 
   const text = await requestGeminiText(prompt, {
     temperature: 0.2,
-    maxOutputTokens: 900,
+    maxOutputTokens: 700,
   });
   const jsonRanks = parseRankedJsonQuietly(String(text || ''), candidates, maxCandidates);
   if (jsonRanks.length) return jsonRanks;

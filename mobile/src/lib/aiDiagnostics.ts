@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-export const GEMINI_MODEL = 'gemini-flash-latest';
+export const GEMINI_MODEL = 'gemini-2.5-flash-lite';
 
 type GeminiRequestOptions = {
   temperature?: number;
@@ -110,7 +110,7 @@ export async function requestGeminiText(prompt: string, options: GeminiRequestOp
 
   const generationConfig: Record<string, unknown> = {};
   if (typeof options.temperature === 'number') generationConfig.temperature = options.temperature;
-  generationConfig.maxOutputTokens = Math.max(128, Number(options.maxOutputTokens || 512));
+  generationConfig.maxOutputTokens = Math.max(128, Number(options.maxOutputTokens || 256));
   if (options.responseMimeType) generationConfig.responseMimeType = options.responseMimeType;
 
   let response: any;

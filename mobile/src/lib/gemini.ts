@@ -69,7 +69,7 @@ const parseSearchFilterText = (text: string, input: string): GeminiFilterResult 
 
 async function directGeminiText(prompt: string) {
   if (!getGeminiApiKey()) return null;
-  return requestGeminiText(prompt, { temperature: 0.2, maxOutputTokens: 500 });
+  return requestGeminiText(prompt, { temperature: 0.2, maxOutputTokens: 220 });
 }
 
 const localSearchFilters = (input: string): GeminiFilterResult => {
