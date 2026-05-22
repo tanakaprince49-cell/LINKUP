@@ -7,6 +7,7 @@ type Theme = 'light' | 'dark';
 interface ThemeContextType {
   theme: Theme;
   toggleTheme: () => void;
+  setThemeMode: (nextTheme: Theme) => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -28,14 +29,18 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     loadTheme();
   }, [systemTheme]);
 
-  const toggleTheme = async () => {
-    const nextTheme = theme === 'light' ? 'dark' : 'light';
+  const setThemeMode = async (nextTheme: Theme) => {
     setTheme(nextTheme);
     await AsyncStorage.setItem('theme', nextTheme);
   };
 
+  const toggleTheme = async () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    await setThemeMode(nextTheme);
+  };
+
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, setThemeMode }}>
       {children}
     </ThemeContext.Provider>
   );

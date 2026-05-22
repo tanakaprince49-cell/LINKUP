@@ -5,13 +5,13 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
-  FlatList,
   Image,
   ActivityIndicator,
   Alert,
   PanResponder,
+  ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,13 +19,47 @@ import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { Search, SlidersHorizontal, X, Sparkles, BadgeCheck, MapPin, Briefcase, Clock } from 'lucide-react-native';
 import { geminiToSearchFilters } from '../lib/gemini';
-import { rankCandidatesWithAI } from '../lib/matchmaking';
+import { localCommonalityRank, rankCandidatesWithAI } from '../lib/matchmaking';
 
 const normalize = (v: string) => v.trim().toLowerCase();
+const LOOKING_FOR_FILTERS = ['CTO', 'Designer', 'Marketer', 'Developer', 'Investor', 'Cofounder', 'Startup Team', 'Mentor'];
+const STAGE_FILTERS = ['Idea', 'MVP', 'Early Users', 'Revenue', 'Scaling', 'Fundraising'];
+const INDUSTRY_FILTERS = ['AI', 'SaaS', 'Fintech', 'Healthtech', 'EdTech', 'Gaming', 'E-commerce', 'Crypto'];
 
 const includesAny = (haystack: string, needles: string[]) => {
   const h = normalize(haystack);
   return needles.some((n) => h.includes(normalize(n)));
+};
+
+const cleanUsername = (value: string) => value.replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+
+const profileHandle = (profile: Partial<UserProfile>) => {
+  const raw = (profile as any).username || profile.displayName || 'builder';
+  return `@${cleanUsername(String(raw)) || 'builder'}`;
+};
+
+const lookingForNeedles = (option: string) => {
+  const key = normalize(option);
+  const aliases: Record<string, string[]> = {
+    cto: ['CTO', 'technical cofounder', 'technical founder', 'tech lead', 'developer'],
+    designer: ['designer', 'UI/UX', 'product designer'],
+    marketer: ['marketer', 'marketing', 'growth', 'growth hacker'],
+    developer: ['developer', 'engineer', 'frontend', 'backend', 'mobile developer'],
+    investor: ['investor', 'investment', 'angel'],
+    mentor: ['mentor', 'mentorship', 'advisor'],
+    'startup team': ['startup team', 'team member', 'collaborator'],
+  };
+  return aliases[key] || [option];
+};
+
+const stageNeedles = (option: string) => {
+  const key = normalize(option);
+  const aliases: Record<string, string[]> = {
+    mvp: ['MVP', 'building MVP'],
+    'early users': ['early users', 'early traction', 'early customers'],
+    revenue: ['revenue', 'revenue generating'],
+  };
+  return aliases[key] || [option];
 };
 
 export default function SearchScreen({ navigation }: any) {
@@ -50,6 +84,8 @@ export default function SearchScreen({ navigation }: any) {
   const [industry, setIndustry] = useState('');
   const [availability, setAvailability] = useState(''); // free-text
   const [timezone, setTimezone] = useState('');
+  const [lookingForRole, setLookingForRole] = useState('');
+  const [stageFilter, setStageFilter] = useState('');
   const [lookingForCofounder, setLookingForCofounder] = useState(false);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [activeWithin, setActiveWithin] = useState<'any' | 'today' | 'week'>('any');
@@ -115,12 +151,16 @@ export default function SearchScreen({ navigation }: any) {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'users'), where('uid', '!=', user.uid));
+    const q = query(
+      collection(db, 'users'),
+      where('isVisible', '==', true),
+      where('isStealthMode', '==', false)
+    );
     const unsub = onSnapshot(
       q,
       (snap) => {
         const data = snap.docs.map((d) => d.data() as UserProfile);
-        setAllProfiles(data.filter((p) => !(p as any).isStealthMode));
+        setAllProfiles(data.filter((p: any) => p.uid !== user.uid && !p.deleted));
         setLoading(false);
       },
       (err) => {
@@ -140,6 +180,9 @@ export default function SearchScreen({ navigation }: any) {
 
     return allProfiles.filter((p) => {
       const name = p.displayName || '';
+      const username = cleanUsername(String((p as any).username || ''));
+      const handle = username ? `@${username}` : profileHandle(p);
+      const queryWithoutAt = cleanUsername(q);
       const bio = p.bio || '';
       const city = p.city || '';
       const country = p.country || '';
@@ -152,14 +195,18 @@ export default function SearchScreen({ navigation }: any) {
       const interests = Array.isArray((p as any).interests) ? (p as any).interests : [];
       const goals = (p as any).goals || '';
       const lookingArr = Array.isArray((p as any).lookingFor) ? (p as any).lookingFor : [];
+      const startupStage = (p as any).startupStage || '';
       const looking = !!(p as any).lookingForCofounder || lookingArr.map(normalize).includes('cofounder');
       const isVerified = !!(p as any).isVerified;
       const lastActiveAt = (p as any).lastActiveAt;
       const compatibility = computeCompatibility(p);
 
       if (q) {
+        const nameNeedles = [q, queryWithoutAt].filter(Boolean);
         const textHit =
-          includesAny(name, [q]) ||
+          includesAny(name, nameNeedles) ||
+          (queryWithoutAt ? includesAny(username, [queryWithoutAt]) : false) ||
+          includesAny(handle, [q]) ||
           includesAny(bio, [q]) ||
           includesAny(occupation, [q]) ||
           includesAny(`${city} ${country}`, [q]) ||
@@ -191,6 +238,19 @@ export default function SearchScreen({ navigation }: any) {
         if (!ok) return false;
       }
 
+      if (lookingForRole.trim()) {
+        const needles = lookingForNeedles(lookingForRole);
+        const roleHit =
+          lookingArr.some((s: string) => includesAny(s, needles)) ||
+          includesAny(occupation, needles) ||
+          includesAny(goals, needles);
+        if (!roleHit) return false;
+      }
+
+      if (stageFilter.trim()) {
+        if (!includesAny(startupStage, stageNeedles(stageFilter))) return false;
+      }
+
       if (availability.trim()) {
         if (!includesAny(avail, [availability])) return false;
       }
@@ -216,12 +276,13 @@ export default function SearchScreen({ navigation }: any) {
 
       return true;
     });
-  }, [allProfiles, queryText, location, skills, experience, industry, availability, timezone, lookingForCofounder, verifiedOnly, activeWithin, minCompatibility, me?.uid]);
+  }, [allProfiles, queryText, location, skills, experience, industry, availability, timezone, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, activeWithin, minCompatibility, me?.uid]);
 
   const displayed = useMemo(() => {
-    if (!aiRankMode) return filtered;
+    const turboBoost = (p: UserProfile) => ((p as any).turboConnect ? 1 : 0);
+    if (!aiRankMode) return [...filtered].sort((a, b) => turboBoost(b) - turboBoost(a));
     const withScores = filtered.map((p) => ({ p, s: aiRankMap[p.uid]?.score ?? -1 }));
-    withScores.sort((a, b) => b.s - a.s);
+    withScores.sort((a, b) => (b.s + turboBoost(b.p) * 8) - (a.s + turboBoost(a.p) * 8));
     return withScores.map((x) => x.p);
   }, [filtered, aiRankMode, aiRankMap]);
 
@@ -232,7 +293,8 @@ export default function SearchScreen({ navigation }: any) {
 
     setAiRankLoading(true);
     try {
-      const ranked = await rankCandidatesWithAI(candidateIds, 20);
+      let ranked = await rankCandidatesWithAI(candidateIds, 20);
+      if (!ranked.length) ranked = localCommonalityRank(me, filtered, 20);
       const nextMap: Record<string, { score: number; reason: string }> = {};
       ranked.forEach((r) => {
         nextMap[r.uid] = { score: r.score, reason: r.reason };
@@ -241,7 +303,14 @@ export default function SearchScreen({ navigation }: any) {
       setAiRankMode(true);
     } catch (e: any) {
       console.error('AI ranking error:', e);
-      Alert.alert('AI Ranking Error', e?.message || 'AI ranking failed');
+      const ranked = localCommonalityRank(me, filtered, 20);
+      const nextMap: Record<string, { score: number; reason: string }> = {};
+      ranked.forEach((r) => {
+        nextMap[r.uid] = { score: r.score, reason: r.reason };
+      });
+      setAiRankMap(nextMap);
+      setAiRankMode(true);
+      Alert.alert('AI Ranking Unavailable', 'Showing best matches based on common skills/interests.');
     } finally {
       setAiRankLoading(false);
     }
@@ -254,6 +323,8 @@ export default function SearchScreen({ navigation }: any) {
     setIndustry('');
     setAvailability('');
     setTimezone('');
+    setLookingForRole('');
+    setStageFilter('');
     setLookingForCofounder(false);
     setVerifiedOnly(false);
     setActiveWithin('any');
@@ -284,6 +355,11 @@ export default function SearchScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+      <ScrollView
+        contentContainerStyle={styles.searchContent}
+        showsVerticalScrollIndicator
+        keyboardShouldPersistTaps="handled"
+      >
       <View style={styles.header}>
         <View style={[styles.searchBar, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
           <Search size={18} color="#666" />
@@ -333,6 +409,7 @@ export default function SearchScreen({ navigation }: any) {
 
       {filterOpen && (
         <View style={[styles.filtersCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+          <View style={styles.filtersScrollContent}>
           <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>FILTERS</Text>
 
           <View style={styles.filterRow}>
@@ -384,6 +461,78 @@ export default function SearchScreen({ navigation }: any) {
               onChangeText={setAvailability}
               style={[styles.filterInput, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', color: isDark ? '#FFF' : '#000' }]}
             />
+          </View>
+
+          <View style={styles.filterSection}>
+            <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>LOOKING FOR...</Text>
+            <View style={styles.wrapPills}>
+              {LOOKING_FOR_FILTERS.map((option) => {
+                const active = lookingForRole === option;
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    onPress={() => setLookingForRole(active ? '' : option)}
+                    style={[
+                      styles.choicePill,
+                      {
+                        backgroundColor: active ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
+                        borderColor: active ? '#FBE618' : (isDark ? '#222226' : '#EEEEEE'),
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.choicePillText, { color: active ? '#000' : (isDark ? '#FFF' : '#000') }]}>{option.toUpperCase()}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.filterSection}>
+            <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>STARTUP STAGE</Text>
+            <View style={styles.wrapPills}>
+              {STAGE_FILTERS.map((option) => {
+                const active = stageFilter === option;
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    onPress={() => setStageFilter(active ? '' : option)}
+                    style={[
+                      styles.choicePill,
+                      {
+                        backgroundColor: active ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
+                        borderColor: active ? '#FBE618' : (isDark ? '#222226' : '#EEEEEE'),
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.choicePillText, { color: active ? '#000' : (isDark ? '#FFF' : '#000') }]}>{option.toUpperCase()}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.filterSection}>
+            <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>INDUSTRY QUICK PICKS</Text>
+            <View style={styles.wrapPills}>
+              {INDUSTRY_FILTERS.map((option) => {
+                const active = normalize(industry) === normalize(option);
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    onPress={() => setIndustry(active ? '' : option)}
+                    style={[
+                      styles.choicePill,
+                      {
+                        backgroundColor: active ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
+                        borderColor: active ? '#FBE618' : (isDark ? '#222226' : '#EEEEEE'),
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.choicePillText, { color: active ? '#000' : (isDark ? '#FFF' : '#000') }]}>{option.toUpperCase()}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
           <TouchableOpacity
@@ -467,20 +616,17 @@ export default function SearchScreen({ navigation }: any) {
               <Text style={[styles.smallBtnText, { color: '#FFF' }]}>DONE</Text>
             </TouchableOpacity>
           </View>
+          </View>
         </View>
       )}
 
       {loading ? (
         <ActivityIndicator color="#FBE618" style={{ marginTop: 30 }} />
       ) : (
-        <FlatList
-          data={displayed}
-          keyExtractor={(item) => item.uid}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => (
+        <View style={styles.resultsList}>
+          {displayed.map((item) => (
             <TouchableOpacity
+              key={item.uid}
               style={[styles.resultCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
               onPress={() => navigation.navigate('Profile', { userId: item.uid })}
             >
@@ -508,6 +654,7 @@ export default function SearchScreen({ navigation }: any) {
                     <Text style={styles.compatText}>{aiRankMap[item.uid]?.score ?? computeCompatibility(item)}%</Text>
                   </TouchableOpacity>
                 </View>
+                <Text style={styles.resultHandle} numberOfLines={1}>{profileHandle(item)}</Text>
                 <View style={styles.metaRow}>
                   <MapPin size={12} color="#666" />
                   <Text style={styles.metaText} numberOfLines={1}>
@@ -531,21 +678,29 @@ export default function SearchScreen({ navigation }: any) {
                 </Text>
               </View>
             </TouchableOpacity>
-          )}
-          ListEmptyComponent={
+          ))}
+          {displayed.length === 0 && (
             <View style={{ alignItems: 'center', marginTop: 60, gap: 10 }}>
               <Text style={{ fontSize: 12, fontWeight: '900', letterSpacing: 2, color: '#666' }}>NO RESULTS</Text>
               <Text style={{ fontSize: 10, fontWeight: '700', color: '#666' }}>Try fewer filters.</Text>
             </View>
-          }
-        />
+          )}
+        </View>
       )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  searchContent: {
+    paddingBottom: 180,
+  },
+  resultsList: {
+    padding: 16,
+    paddingBottom: 20,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -622,6 +777,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 10,
   },
+  filtersScrollContent: {
+    gap: 10,
+    paddingBottom: 120,
+  },
   filtersTitle: {
     fontSize: 10,
     fontWeight: '900',
@@ -639,6 +798,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     fontSize: 12,
     fontWeight: '700',
+  },
+  filterSection: {
+    gap: 8,
+    marginTop: 4,
+  },
+  wrapPills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  choicePill: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choicePillText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   togglePill: {
     height: 44,
@@ -691,6 +872,12 @@ const styles = StyleSheet.create({
   resultMeta: {
     fontSize: 10,
     color: '#666',
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  resultHandle: {
+    fontSize: 10,
+    color: '#2563EB',
     fontWeight: '900',
     marginTop: 2,
   },

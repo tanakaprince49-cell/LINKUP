@@ -5,23 +5,28 @@ import {
   StyleSheet, 
   Image, 
   TouchableOpacity, 
-  SafeAreaView, 
   ScrollView, 
+  RefreshControl,
   Switch, 
   TextInput, 
   ActivityIndicator, 
   Dimensions,
   Alert,
-  Linking
+  Linking,
+  Share
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import * as Icons from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, updateDoc, getDoc, getDocs, query, where, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { geminiProfileInsights } from '../lib/gemini';
-import { uploadImageToStorage } from '../lib/mediaUpload';
+import { trackProfileView } from '../lib/analytics';
+import { analyzeStartupIdea } from '../lib/ai';
+import { imageAssetToDataUri } from '../lib/imageUploadLimits';
+import { ensureDirectMatch } from '../lib/chat';
 
 const { width } = Dimensions.get('window');
 
@@ -43,8 +48,83 @@ const Badge = ({ name, iconName, color = "#FBE618" }: { name: string, iconName: 
   );
 };
 
+const clampScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
+
+const earnedReputation = (profile: any) => {
+  const skills = Array.isArray(profile?.skills) ? profile.skills : [];
+  const industries = Array.isArray(profile?.industries) ? profile.industries : [];
+  const lookingFor = Array.isArray(profile?.lookingFor) ? profile.lookingFor : [];
+  const photos = Array.isArray(profile?.photos) ? profile.photos : [];
+  const projects = Array.isArray(profile?.projects) ? profile.projects : [];
+  const responseRate = Number(profile?.reputationMetrics?.responseRate ?? 70);
+
+  const profileQuality =
+    (profile?.displayName ? 10 : 0) +
+    (profile?.bio ? 12 : 0) +
+    (profile?.profilePic ? 12 : 0) +
+    (profile?.city && profile?.country ? 8 : 0) +
+    Math.min(18, skills.length * 4) +
+    Math.min(12, industries.length * 4) +
+    Math.min(10, lookingFor.length * 5) +
+    Math.min(8, photos.length * 3);
+
+  const activity =
+    Math.min(10, Number(profile?.streakCount || 0) * 2) +
+    Math.min(8, projects.length * 4) +
+    (profile?.isVerified ? 8 : 0) +
+    (profile?.onboarded ? 6 : 0);
+
+  const founderScore = clampScore(profileQuality + activity);
+  return {
+    reliability: clampScore(40 + profileQuality * 0.45 + activity * 0.6),
+    responseRate: clampScore(responseRate),
+    collaboration: clampScore(45 + Math.min(30, lookingFor.length * 8) + Math.min(25, skills.length * 3)),
+    consistency: clampScore(35 + Math.min(35, Number(profile?.streakCount || 0) * 4) + (profile?.onboarded ? 20 : 0)),
+    completion: clampScore(35 + Math.min(40, projects.length * 12) + (profile?.bio ? 15 : 0)),
+    founderScore,
+  };
+};
+
+const cleanUsername = (value: string) => value.replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+const profileLinkFor = (profile: any) => profile?.profileLink || (profile?.uid ? `linkup://profile/${encodeURIComponent(profile.uid)}` : '');
+const toTextValue = (value: unknown) => (typeof value === 'string' ? value : value == null ? '' : String(value));
+type PreferenceField = 'isStealthMode' | 'isVisible' | 'turboConnect' | 'hideOnlineStatus';
+
+const PreferenceSwitch = ({
+  value,
+  onValueChange,
+  disabled,
+  isDark,
+}: {
+  value: boolean;
+  onValueChange: (next: boolean) => void;
+  disabled?: boolean;
+  isDark: boolean;
+}) => (
+  <View style={[styles.switchWrap, disabled ? { opacity: 0.55 } : null]}>
+    <Text style={[styles.switchState, { color: value ? '#2563EB' : '#777' }]}>{value ? 'ON' : 'OFF'}</Text>
+    <Switch
+      value={value}
+      onValueChange={onValueChange}
+      disabled={!!disabled}
+      trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#2563EB' }}
+      ios_backgroundColor={isDark ? '#2A2A30' : '#D1D5DB'}
+      thumbColor="#FFF"
+    />
+  </View>
+);
+
 export default function ProfileScreen({ navigation, route }: any) {
-  const { user, profile: myProfile, signUpWithEmail, signInWithEmail, logout, deleteAccount } = useAuth();
+  const {
+    user,
+    profile: myProfile,
+    logout,
+    deleteAccount,
+    resetPassword,
+    sendVerificationEmail,
+    requestEmailChange,
+    showMfaEnrollmentNotice,
+  } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
   const [isEditing, setIsEditing] = useState(false);
@@ -52,8 +132,16 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [editData, setEditData] = useState<any>(null);
   const [viewedProfile, setViewedProfile] = useState<any>(null);
   const [viewedLoading, setViewedLoading] = useState(false);
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
+  const [viewedError, setViewedError] = useState('');
+  const [startupIdeaText, setStartupIdeaText] = useState('');
+  const [startupAnalysis, setStartupAnalysis] = useState<any>(null);
+  const [startupAnalyzing, setStartupAnalyzing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [preferenceOverrides, setPreferenceOverrides] = useState<Partial<Record<PreferenceField, boolean>>>({});
+  const [savingPreference, setSavingPreference] = useState<PreferenceField | null>(null);
+  const [profileViewCount, setProfileViewCount] = useState(0);
+  const [newAccountEmail, setNewAccountEmail] = useState('');
+  const [accountActionBusy, setAccountActionBusy] = useState('');
 
   // If a userId param is passed and it's not the current user, fetch that profile
   const targetUserId = route?.params?.userId;
@@ -63,27 +151,57 @@ export default function ProfileScreen({ navigation, route }: any) {
   useEffect(() => {
     if (!isViewingOther) return;
     setViewedLoading(true);
+    setViewedError('');
     getDoc(doc(db, 'users', targetUserId)).then(snap => {
       if (snap.exists()) setViewedProfile({ ...snap.data(), uid: snap.id });
+      else setViewedError('This profile is unavailable.');
       setViewedLoading(false);
     }).catch((err) => {
       console.error("Error fetching viewed profile:", err);
+      setViewedError('This profile is unavailable or blocked you.');
       setViewedLoading(false);
     });
   }, [targetUserId]);
+
+  useEffect(() => {
+    if (!isViewingOther || !myProfile?.uid || !profile?.uid) return;
+    trackProfileView({
+      profileId: profile.uid,
+      viewerId: myProfile.uid,
+      viewerName: myProfile.displayName,
+      viewerPic: myProfile.profilePic,
+    });
+  }, [isViewingOther, myProfile?.uid, (profile as any)?.uid]);
+
+  useEffect(() => {
+    if (isViewingOther || !myProfile?.uid) {
+      setProfileViewCount(0);
+      return;
+    }
+
+    const viewsQuery = query(collection(db, 'profileViews'), where('profileId', '==', myProfile.uid));
+    const unsubscribe = onSnapshot(
+      viewsQuery,
+      (snapshot) => {
+        setProfileViewCount(snapshot.docs.filter((viewDoc) => (viewDoc.data() as any).viewerId !== myProfile.uid).length);
+      },
+      (error) => {
+        console.warn('Profile view count unavailable:', error);
+        setProfileViewCount(Array.isArray(myProfile.viewedBy) ? myProfile.viewedBy.length : 0);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [isViewingOther, myProfile?.uid, Array.isArray(myProfile?.viewedBy) ? myProfile.viewedBy.join('|') : '']);
 
   // NOTE: do not early-return before hooks below (Rules of Hooks).
   const isBusy = !profile || viewedLoading;
   const safeProfile: any = profile || { uid: targetUserId || myProfile?.uid || '', displayName: 'Builder', skills: [] };
 
-  const founderScore = useMemo(() => {
-    const base = typeof (safeProfile as any).founderScore === 'number' ? (safeProfile as any).founderScore : undefined;
-    if (typeof base === 'number') return Math.max(0, Math.min(100, Math.round(base)));
-    const rep = typeof (safeProfile as any).reputationScore === 'number' ? (safeProfile as any).reputationScore : 0;
-    const streak = typeof (safeProfile as any).streakCount === 'number' ? (safeProfile as any).streakCount : 0;
-    const score = 40 + Math.min(40, Math.round(rep / 25)) + Math.min(20, streak);
-    return Math.max(0, Math.min(100, score));
-  }, [(safeProfile as any)?.founderScore, (safeProfile as any)?.reputationScore, (safeProfile as any)?.streakCount]);
+  const earnedRep = useMemo(() => earnedReputation(safeProfile), [safeProfile]);
+  const founderScore = earnedRep.founderScore;
+  const profileLink = useMemo(() => profileLinkFor(safeProfile), [safeProfile?.uid, safeProfile?.profileLink]);
+  const visibleProfileViewCount = Math.max(profileViewCount, Array.isArray((profile as any)?.viewedBy) ? (profile as any).viewedBy.length : 0);
 
   const compatibility = useMemo(() => {
     if (!myProfile || !isViewingOther || !profile) return null;
@@ -106,6 +224,22 @@ export default function ProfileScreen({ navigation, route }: any) {
     const total = skillScore * 0.55 + indScore * 0.20 + commitmentScore * 0.15 + ambitionScore * 0.10;
     return Math.round(Math.max(0, Math.min(1, total)) * 100);
   }, [myProfile?.uid, (profile as any)?.uid, isViewingOther]);
+
+  if (viewedError && isViewingOther) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
+        <View style={styles.unavailableWrap}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backPill, { backgroundColor: isDark ? '#16161A' : '#F5F5F5' }]}>
+            <SafeIcon name="ChevronLeft" size={18} color={isDark ? '#FFF' : '#000'} />
+            <Text style={[styles.backPillText, { color: isDark ? '#FFF' : '#000' }]}>BACK</Text>
+          </TouchableOpacity>
+          <SafeIcon name="ShieldAlert" size={42} color="#FBE618" />
+          <Text style={[styles.unavailableTitle, { color: isDark ? '#FFF' : '#000' }]}>PROFILE UNAVAILABLE</Text>
+          <Text style={styles.unavailableText}>{viewedError}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (isBusy) {
     return (
@@ -132,8 +266,10 @@ export default function ProfileScreen({ navigation, route }: any) {
       workStyle: (profile as any).workStyle || '',
       networkingIntent: (profile as any).networkingIntent || '',
       isStealthMode: profile.isStealthMode || false,
+      hideOnlineStatus: !!(profile as any).hideOnlineStatus,
+      turboConnect: !!(profile as any).turboConnect,
       hasExit: profile.hasExit || false,
-      photos: Array.isArray((profile as any).photos) ? (profile as any).photos.slice(0, 3) : []
+      photos: Array.isArray((profile as any).photos) ? (profile as any).photos.slice(0, 3) : [],
     });
     setIsEditing(true);
   };
@@ -154,6 +290,19 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
+  const shareProfileLink = async () => {
+    if (!profileLink) return;
+    try {
+      await Share.share({
+        title: 'My LINKUP profile',
+        message: `Connect with me on LINKUP: ${profileLink}`,
+        url: profileLink,
+      });
+    } catch (e) {
+      Alert.alert('Share failed', 'Could not open the share menu.');
+    }
+  };
+
   const pickGalleryPhoto = async (index: number) => {
     if (isViewingOther || !myProfile) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -163,35 +312,26 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.85,
+      quality: 0.06,
+      base64: true,
     });
 
     if (result.canceled) return;
-    const uri = result.assets?.[0]?.uri;
-    if (!uri) return;
-
-    setIsSaving(true);
-    let downloadUrl = uri;
-    try {
-      downloadUrl = await uploadImageToStorage({
-        uri,
-        path: `userPhotos/${myProfile.uid}/proof_${index + 1}_${Date.now()}`,
-      });
-    } catch (e) {
-      console.error('Photo upload error:', e);
-      Alert.alert('Error', 'Failed to upload photo.');
-      setIsSaving(false);
+    const { dataUri, error } = imageAssetToDataUri(result.assets?.[0]);
+    if (!dataUri) {
+      Alert.alert('Photo too large', error || 'Please choose a smaller photo.');
       return;
     }
 
     const current = Array.isArray(editData?.photos) ? [...editData.photos] : [];
     while (current.length < 3) current.push('');
-    current[index] = downloadUrl;
+    current[index] = dataUri;
 
     setEditData({ ...editData, photos: current.filter((p: string) => !!p).slice(0, 3) });
+    setIsSaving(true);
     try {
       await updateDoc(doc(db, 'users', myProfile.uid), { photos: current.filter((p) => !!p).slice(0, 3) });
     } catch (e) {
@@ -210,27 +350,27 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.85,
+      quality: 0.08,
+      base64: true,
     });
 
     if (!result.canceled) {
-      const uri = result.assets?.[0]?.uri;
-      if (!uri) return;
+      const { dataUri, error } = imageAssetToDataUri(result.assets?.[0]);
+      if (!dataUri) {
+        Alert.alert('Photo too large', error || 'Please choose a smaller photo.');
+        return;
+      }
       setIsSaving(true);
       try {
-        const url = await uploadImageToStorage({
-          uri,
-          path: `userPhotos/${myProfile.uid}/profile_${Date.now()}`,
-        });
         await updateDoc(doc(db, 'users', myProfile.uid), {
-          profilePic: url
+          profilePic: dataUri
         });
         
         if (isEditing) {
-          setEditData({ ...editData, profilePic: url });
+          setEditData({ ...editData, profilePic: dataUri });
         }
       } catch (e) {
         Alert.alert("Error", "Failed to update profile picture.");
@@ -244,25 +384,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     if (!myProfile || !targetUserId || !profile) return;
     setIsSaving(true);
     try {
-      const q = query(collection(db, 'matches'), where('userIds', 'array-contains', myProfile.uid));
-      const snap = await getDocs(q);
-      const existing = snap.docs.find((d) => {
-        const data = d.data() as any;
-        const ids = Array.isArray(data.userIds) ? data.userIds : [];
-        return ids.includes(targetUserId);
-      });
-
-      let matchId = existing?.id;
-      if (!matchId) {
-        const ref = await addDoc(collection(db, 'matches'), {
-          userIds: [myProfile.uid, targetUserId],
-          timestamp: serverTimestamp(),
-          lastMessage: '',
-          lastMessageTime: serverTimestamp(),
-        });
-        matchId = ref.id;
-      }
-
+      const matchId = await ensureDirectMatch(myProfile.uid, targetUserId);
       navigation.navigate('Chat', { matchId, otherUser: { ...profile, uid: targetUserId } });
     } catch (e) {
       console.error('openChat error:', e);
@@ -272,15 +394,24 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
-  const handleEmailCreate = async () => {
-    await signUpWithEmail(authEmail, authPassword);
-    setAuthPassword('');
+  const refreshProfile = async () => {
+    const uid = isViewingOther ? targetUserId : myProfile?.uid;
+    if (!uid) return;
+    setRefreshing(true);
+    try {
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (snap.exists() && isViewingOther) {
+        setViewedProfile({ ...snap.data(), uid: snap.id });
+        setViewedError('');
+      }
+    } catch (e) {
+      console.warn('Profile refresh failed:', e);
+      if (isViewingOther) setViewedError('This profile is unavailable or blocked you.');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
-  const handleEmailSignIn = async () => {
-    await signInWithEmail(authEmail, authPassword);
-    setAuthPassword('');
-  };
   const handleSave = async () => {
     if (!editData) return;
     setIsSaving(true);
@@ -291,7 +422,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
       await updateDoc(doc(db, 'users', profile.uid), {
         displayName: editData.displayName || '',
-        username: editData.username || '',
+        username: cleanUsername(editData.username || editData.displayName || ''),
         occupation: editData.occupation || '',
         company: editData.company || '',
         bio: editData.bio || '',
@@ -313,17 +444,51 @@ export default function ProfileScreen({ navigation, route }: any) {
         workStyle: editData.workStyle || '',
         networkingIntent: editData.networkingIntent || '',
         socialLinks: editData.socialLinks || {},
-        isStealthMode: editData.isStealthMode || false,
-        hasExit: editData.hasExit || false,
+        isStealthMode: !!editData.isStealthMode,
+        hideOnlineStatus: !!editData.hideOnlineStatus,
+        isVisible: editData.isVisible ?? true,
+        turboConnect: !!editData.turboConnect,
         vibeMedia: editData.vibeMedia || '',
-        photos: Array.isArray(editData.photos) ? editData.photos.filter((p: string) => !!p).slice(0, 3) : []
+        photos: Array.isArray(editData.photos) ? editData.photos.filter((p: string) => !!p).slice(0, 3) : [],
       });
       setIsEditing(false);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${profile.uid}`);
+      Alert.alert('Could not save profile', 'Please deploy the latest Firestore rules, then try again.');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const updatePreference = async (patch: Record<string, any>) => {
+    if (!profile?.uid) return false;
+    try {
+      await updateDoc(doc(db, 'users', profile.uid), patch as any);
+      return true;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${profile.uid}`);
+      Alert.alert('Setting not saved', 'Please deploy the latest Firestore rules, then try again.');
+      return false;
+    }
+  };
+
+  const preferenceValue = (field: PreferenceField, fallback: boolean) => {
+    if (Object.prototype.hasOwnProperty.call(preferenceOverrides, field)) {
+      return !!preferenceOverrides[field];
+    }
+    return !!fallback;
+  };
+
+  const setPreference = async (field: PreferenceField, value: boolean) => {
+    if (savingPreference) return;
+    const previous = preferenceValue(field, !!(profile as any)?.[field]);
+    setPreferenceOverrides((prev) => ({ ...prev, [field]: value }));
+    setSavingPreference(field);
+    const ok = await updatePreference({ [field]: value });
+    if (!ok) {
+      setPreferenceOverrides((prev) => ({ ...prev, [field]: previous }));
+    }
+    setSavingPreference(null);
   };
 
   const handleLogout = () => {
@@ -363,8 +528,52 @@ export default function ProfileScreen({ navigation, route }: any) {
     );
   };
 
-  const currentSkills = isEditing 
-    ? (typeof editData.skills === 'string' ? editData.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '') : [])
+  const runAccountAction = async (actionName: string, action: () => Promise<void>) => {
+    if (accountActionBusy) return;
+    setAccountActionBusy(actionName);
+    try {
+      await action();
+    } finally {
+      setAccountActionBusy('');
+    }
+  };
+
+  const handleCurrentPasswordReset = () => {
+    const email = user?.email || '';
+    if (!email) {
+      Alert.alert('No email found', 'This account does not have an email/password login attached yet.');
+      return;
+    }
+    runAccountAction('reset-password', () => resetPassword(email));
+  };
+
+  const handleEmailChange = () => {
+    runAccountAction('change-email', async () => {
+      await requestEmailChange(newAccountEmail);
+      setNewAccountEmail('');
+    });
+  };
+
+  const runStartupAnalyzer = async () => {
+    const idea = startupIdeaText.trim();
+    if (idea.length < 12) {
+      Alert.alert('Add more detail', 'Describe the customer, problem, and product in one or two sentences.');
+      return;
+    }
+
+    setStartupAnalyzing(true);
+    try {
+      const result = await analyzeStartupIdea(idea);
+      setStartupAnalysis(result);
+    } catch (error: any) {
+      Alert.alert('Analyzer error', error?.message || 'Could not analyze this idea.');
+    } finally {
+      setStartupAnalyzing(false);
+    }
+  };
+
+  const currentSkills = isEditing
+    ? (typeof editData?.skills === 'string' ? editData.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '') : [])
     : (Array.isArray(profile.skills) ? profile.skills : []);
 
   const industries = (isEditing
@@ -378,10 +587,37 @@ export default function ProfileScreen({ navigation, route }: any) {
         ? editData.lookingFor.split(',').map((s: string) => s.trim()).filter(Boolean)
         : (Array.isArray(editData?.lookingFor) ? editData.lookingFor : []))
     : (Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor : [])) as string[];
+  const stealthModeValue = isEditing
+    ? !!(editData?.isStealthMode ?? false)
+    : preferenceValue('isStealthMode', !!profile.isStealthMode);
+  const publicDiscoveryValue = isEditing
+    ? !!(editData?.isVisible ?? true)
+    : preferenceValue('isVisible', profile.isVisible !== false);
+  const turboConnectValue = isEditing
+    ? !!(editData?.turboConnect ?? false)
+    : preferenceValue('turboConnect', !!(profile as any).turboConnect);
+  const hideOnlineStatusValue = isEditing
+    ? !!(editData?.hideOnlineStatus ?? false)
+    : preferenceValue('hideOnlineStatus', !!(profile as any).hideOnlineStatus);
+  const editFieldStyle = {
+    backgroundColor: isDark ? '#16161A' : '#F8F8F8',
+    borderColor: isDark ? '#222226' : '#E5E7EB',
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refreshProfile}
+            tintColor="#FBE618"
+            colors={['#FBE618']}
+          />
+        }
+      >
         
         {/* HEADER */}
         <View style={styles.header}>
@@ -391,13 +627,36 @@ export default function ProfileScreen({ navigation, route }: any) {
           <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>
             {isViewingOther ? 'PROFILE' : 'MY PROFILE'}
           </Text>
-          {!isViewingOther ? (
-            <TouchableOpacity onPress={isEditing ? handleSave : startEditing} style={styles.iconButton}>
-              {isSaving ? <ActivityIndicator size="small" color="#444" /> : (
-                <SafeIcon name={isEditing ? "Save" : "Pen"} size={20} color={isDark ? '#CCC' : '#444'} />
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={refreshProfile}
+              style={styles.iconButton}
+              activeOpacity={0.85}
+              disabled={refreshing}
+            >
+              {refreshing ? (
+                <ActivityIndicator size="small" color="#FBE618" />
+              ) : (
+                <SafeIcon name="RefreshCw" size={18} color={isDark ? '#CCC' : '#444'} />
               )}
             </TouchableOpacity>
-          ) : <View style={styles.iconButton} />}
+            {!isViewingOther ? (
+              <TouchableOpacity
+                onPress={isEditing ? handleSave : startEditing}
+                style={[styles.iconButton, isEditing && styles.saveProfileButton]}
+                activeOpacity={0.85}
+              >
+                {isSaving ? <ActivityIndicator size="small" color={isEditing ? '#000' : '#444'} /> : isEditing ? (
+                  <View style={styles.saveProfileContent}>
+                    <SafeIcon name="CheckCircle2" size={17} color="#000" fill="#00000010" />
+                    <Text style={styles.saveProfileText}>SAVE</Text>
+                  </View>
+                ) : (
+                  <SafeIcon name="PenLine" size={20} color={isDark ? '#CCC' : '#444'} />
+                )}
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         {/* PROFILE HERO */}
@@ -450,72 +709,72 @@ export default function ProfileScreen({ navigation, route }: any) {
           {isEditing ? (
             <View style={styles.editForm}>
               <TextInput 
-                style={[styles.nameInput, { color: isDark ? '#FFF' : '#000' }]}
-                value={editData?.displayName}
+                style={[styles.nameInput, styles.editTextBox, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.displayName)}
                 onChangeText={(t: string) => setEditData({...editData, displayName: t})}
                 placeholder="Full Name"
                 placeholderTextColor="#666"
               />
               <TextInput
-                style={[styles.metaInput, { color: isDark ? '#FFF' : '#000' }]}
-                value={editData?.username}
-                onChangeText={(t: string) => setEditData({ ...editData, username: t })}
-                placeholder="Username (e.g. tanaka)"
+                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={editData?.username ? `@${toTextValue(editData.username)}` : ''}
+                onChangeText={(t: string) => setEditData({ ...editData, username: cleanUsername(t) })}
+                placeholder="@username"
                 placeholderTextColor="#666"
                 autoCapitalize="none"
               />
               <TextInput
-                style={[styles.metaInput, { color: isDark ? '#FFF' : '#000' }]}
-                value={editData?.occupation}
+                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.occupation)}
                 onChangeText={(t: string) => setEditData({ ...editData, occupation: t })}
                 placeholder="Occupation (e.g. Founder, AI Engineer)"
                 placeholderTextColor="#666"
               />
               <TextInput
-                style={[styles.metaInput, { color: isDark ? '#FFF' : '#000' }]}
-                value={editData?.company}
+                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.company)}
                 onChangeText={(t: string) => setEditData({ ...editData, company: t })}
                 placeholder="Company / Startup (optional)"
                 placeholderTextColor="#666"
               />
               <TextInput 
-                style={[styles.locationInput, { color: '#FBE618' }]}
-                value={editData?.city}
+                style={[styles.locationInput, styles.editTextBox, editFieldStyle, { color: '#FBE618' }]}
+                value={toTextValue(editData?.city)}
                 onChangeText={(t: string) => setEditData({...editData, city: t})}
                 placeholder="City, Country"
                 placeholderTextColor="#666"
               />
               <TextInput
-                style={[styles.metaInput, { color: isDark ? '#FFF' : '#000' }]}
-                value={editData?.availability}
+                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.availability)}
                 onChangeText={(t: string) => setEditData({ ...editData, availability: t })}
                 placeholder="Availability (e.g. Open, Weekends)"
                 placeholderTextColor="#666"
               />
               <TextInput
-                style={[styles.metaInput, { color: isDark ? '#FFF' : '#000' }]}
-                value={editData?.startupStage}
+                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.startupStage)}
                 onChangeText={(t: string) => setEditData({ ...editData, startupStage: t })}
                 placeholder="Startup Stage (Idea, MVP, Revenue...)"
                 placeholderTextColor="#666"
               />
               <TextInput
-                style={[styles.metaInput, { color: isDark ? '#FFF' : '#000' }]}
-                value={editData?.fundingStage}
+                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.fundingStage)}
                 onChangeText={(t: string) => setEditData({ ...editData, fundingStage: t })}
                 placeholder="Funding (Bootstrapped, Raised, Pre-revenue...)"
                 placeholderTextColor="#666"
               />
               <TextInput
-                style={[styles.metaInput, { color: isDark ? '#FFF' : '#000' }]}
-                value={editData?.lookingFor}
+                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.lookingFor)}
                 onChangeText={(t: string) => setEditData({ ...editData, lookingFor: t })}
                 placeholder="Looking For (comma-separated)"
                 placeholderTextColor="#666"
               />
               <TextInput
-                style={[styles.metaInput, { color: isDark ? '#FFF' : '#000' }]}
-                value={editData?.industries}
+                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.industries)}
                 onChangeText={(t: string) => setEditData({ ...editData, industries: t })}
                 placeholder="Industries (comma-separated)"
                 placeholderTextColor="#666"
@@ -530,7 +789,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 )}
               </View>
               <Text style={styles.handleText}>
-                @{(profile as any).username || (profile.displayName || 'builder').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 14)}
+                @{cleanUsername((profile as any).username || profile.displayName || 'builder')}
               </Text>
               <Text style={styles.roleTextLine} numberOfLines={1}>
                 {[(profile as any).occupation, (profile as any).company ? `@ ${(profile as any).company}` : null].filter(Boolean).join(' ') || 'Builder'}
@@ -538,6 +797,23 @@ export default function ProfileScreen({ navigation, route }: any) {
               <Text style={styles.locationText}>
                 {[profile.city, profile.country].filter(Boolean).join(', ') || 'Remote'}
               </Text>
+
+              {!isViewingOther && !!profileLink && (
+                <TouchableOpacity
+                  style={[styles.profileLinkCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+                  onPress={shareProfileLink}
+                  activeOpacity={0.85}
+                >
+                  <SafeIcon name="Link" size={18} color="#2563EB" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.profileLinkLabel}>YOUR LINKUP LINK</Text>
+                    <Text style={[styles.profileLinkText, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                      {profileLink}
+                    </Text>
+                  </View>
+                  <Text style={styles.profileLinkAction}>SHARE</Text>
+                </TouchableOpacity>
+              )}
               
               {isViewingOther && (
                 <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
@@ -636,11 +912,11 @@ export default function ProfileScreen({ navigation, route }: any) {
           <Text style={styles.sectionLabel}>FOUNDER REPUTATION</Text>
           <View style={[styles.repCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
             {[
-              ['Reliability', (profile as any).reputationMetrics?.reliability ?? 70],
-              ['Response Rate', (profile as any).reputationMetrics?.responseRate ?? 70],
-              ['Collaboration', (profile as any).reputationMetrics?.collaboration ?? 70],
-              ['Consistency', (profile as any).reputationMetrics?.consistency ?? 60],
-              ['Completion', (profile as any).reputationMetrics?.completion ?? 60],
+              ['Reliability', earnedRep.reliability],
+              ['Response Rate', earnedRep.responseRate],
+              ['Collaboration', earnedRep.collaboration],
+              ['Consistency', earnedRep.consistency],
+              ['Completion', earnedRep.completion],
             ].map(([label, val]: any) => (
               <View key={label} style={styles.repRow}>
                 <Text style={styles.repLabel}>{String(label).toUpperCase()}</Text>
@@ -651,6 +927,9 @@ export default function ProfileScreen({ navigation, route }: any) {
               </View>
             ))}
           </View>
+          <Text style={styles.repHelp}>
+            Earned from profile quality, skills, projects, verification, consistency, and activity.
+          </Text>
         </View>
 
         {/* MATCH INSIGHTS */}
@@ -673,8 +952,8 @@ export default function ProfileScreen({ navigation, route }: any) {
           <Text style={styles.sectionLabel}>VIBE-CHECK (INTRO)</Text>
           {isEditing ? (
             <TextInput
-              style={[styles.bioInput, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
-              value={editData?.vibeMedia}
+              style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+              value={toTextValue(editData?.vibeMedia)}
               onChangeText={(t: string) => setEditData({...editData, vibeMedia: t})}
               placeholder="Paste a link to your 15s audio/video intro..."
               placeholderTextColor="#444"
@@ -704,8 +983,8 @@ export default function ProfileScreen({ navigation, route }: any) {
           {isEditing ? (
             <TextInput
               multiline
-              style={[styles.bioInput, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
-              value={editData?.bio}
+              style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+              value={toTextValue(editData?.bio)}
               onChangeText={(t: string) => setEditData({...editData, bio: t})}
               placeholder="Tell your story..."
               placeholderTextColor="#444"
@@ -727,8 +1006,8 @@ export default function ProfileScreen({ navigation, route }: any) {
           </View>
           {isEditing && (
             <TextInput 
-              style={[styles.skillsInput, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', color: isDark ? '#FFF' : '#000' }]}
-              value={editData?.skills}
+              style={[styles.skillsInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+              value={toTextValue(editData?.skills)}
               onChangeText={(t: string) => setEditData({...editData, skills: t})}
               placeholder="React, Node, AI..."
               placeholderTextColor="#444"
@@ -745,11 +1024,68 @@ export default function ProfileScreen({ navigation, route }: any) {
           >
             <View style={styles.prefLabelContainer}>
               <SafeIcon name="Eye" size={18} color="#FBE618" />
-              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Who viewed your profile</Text>
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Who viewed your profile</Text>
+                <Text style={styles.prefHelp}>Shows recent people who opened your profile from swipe, search, or alerts.</Text>
+              </View>
             </View>
-            <Text style={styles.viewerCount}>{profile.viewedBy?.length || 0}</Text>
+            <Text style={styles.viewerCount}>{visibleProfileViewCount}</Text>
           </TouchableOpacity>
         </View>
+
+        {!isViewingOther && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>STARTUP ANALYZER</Text>
+            <View style={[styles.analyzerCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+              <Text style={[styles.analyzerTitle, { color: isDark ? '#FFF' : '#000' }]}>Test your startup idea</Text>
+              <Text style={styles.analyzerHelp}>
+                Get a fast AI score for market, competition, monetization, risks, and your next validation move.
+              </Text>
+              <TextInput
+                multiline
+                value={startupIdeaText}
+                onChangeText={setStartupIdeaText}
+                placeholder="Example: An AI assistant that helps student founders find technical cofounders in Africa..."
+                placeholderTextColor="#666"
+                style={[styles.analyzerInput, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#0F0F12' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}
+              />
+              <TouchableOpacity
+                disabled={startupAnalyzing}
+                onPress={runStartupAnalyzer}
+                style={[styles.analyzerButton, { opacity: startupAnalyzing ? 0.6 : 1 }]}
+              >
+                {startupAnalyzing ? <ActivityIndicator size="small" color="#000" /> : <Text style={styles.analyzerButtonText}>ANALYZE IDEA</Text>}
+              </TouchableOpacity>
+
+              {!!startupAnalysis && (
+                <View style={styles.analysisResults}>
+                  <View style={styles.analysisScoreRow}>
+                    <Text style={styles.analysisScore}>{startupAnalysis.score ?? '--'}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.analysisVerdict, { color: isDark ? '#FFF' : '#000' }]}>
+                        {startupAnalysis.verdict || 'Startup snapshot'}
+                      </Text>
+                      <Text style={styles.analysisSmall}>Overall score / 100</Text>
+                    </View>
+                  </View>
+                  {[
+                    ['Market', startupAnalysis.marketPotential],
+                    ['Customer', startupAnalysis.targetCustomer],
+                    ['Competition', startupAnalysis.competition],
+                    ['Monetization', startupAnalysis.monetization],
+                    ['Risks', Array.isArray(startupAnalysis.keyRisks) ? startupAnalysis.keyRisks.join(' • ') : startupAnalysis.keyRisks],
+                    ['Next Step', startupAnalysis.nextValidationStep],
+                  ].filter(([, value]) => !!value).map(([label, value]) => (
+                    <View key={label} style={styles.analysisItem}>
+                      <Text style={styles.analysisLabel}>{label.toUpperCase()}</Text>
+                      <Text style={[styles.analysisText, { color: isDark ? '#DDD' : '#333' }]}>{String(value)}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+        )}
         {/* SETTINGS - only shown on own profile */}
         {!isViewingOther && (
         <View style={styles.section}>
@@ -757,88 +1093,180 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name="Ghost" size={18} color="#666" />
-              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Stealth Mode</Text>
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Stealth Mode</Text>
+                <Text style={styles.prefHelp}>Hides your profile from discovery/search while keeping your account active.</Text>
+              </View>
             </View>
-            <Switch 
-              value={isEditing ? editData.isStealthMode : profile.isStealthMode} 
-              onValueChange={(v) => isEditing ? setEditData({...editData, isStealthMode: v}) : updateDoc(doc(db, 'users', profile.uid), { isStealthMode: v })} 
-              trackColor={{ true: '#2563EB' }} 
-              thumbColor="#FFF" 
+            <PreferenceSwitch
+              value={stealthModeValue}
+              isDark={isDark}
+              disabled={savingPreference === 'isStealthMode'}
+              onValueChange={(v) => isEditing ? setEditData({ ...editData, isStealthMode: v }) : setPreference('isStealthMode', v)}
             />
           </View>
 
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
-              <SafeIcon name="Zap" size={18} color="#2563EB" />
-              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Show Online Status</Text>
+              <SafeIcon name="Globe2" size={18} color="#2563EB" />
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Public Discovery</Text>
+                <Text style={styles.prefHelp}>When on, your profile can appear in swipe, search, and active opportunity discovery.</Text>
+              </View>
             </View>
-            <Switch 
-              value={isEditing ? editData.isVisible : profile.isVisible} 
-              onValueChange={(v) => isEditing ? setEditData({...editData, isVisible: v}) : updateDoc(doc(db, 'users', profile.uid), { isVisible: v })} 
-              trackColor={{ true: '#2563EB' }} 
-              thumbColor="#FFF" 
+            <PreferenceSwitch
+              value={publicDiscoveryValue}
+              isDark={isDark}
+              disabled={savingPreference === 'isVisible'}
+              onValueChange={(v) => isEditing ? setEditData({ ...editData, isVisible: v }) : setPreference('isVisible', v)}
             />
           </View>
-          
+
+          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name="Rocket" size={18} color="#FBE618" />
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Turbo Connect</Text>
+                <Text style={styles.prefHelp}>Boosts your profile priority in discovery and search ranking when public discovery is on.</Text>
+              </View>
+            </View>
+            <PreferenceSwitch
+              value={turboConnectValue}
+              isDark={isDark}
+              disabled={savingPreference === 'turboConnect'}
+              onValueChange={(v) => isEditing ? setEditData({ ...editData, turboConnect: v }) : setPreference('turboConnect', v)}
+            />
+          </View>
+
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name={isDark ? "Moon" : "Sun"} size={18} color="#666" />
-              <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Dark Mode</Text>
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Dark Mode</Text>
+                <Text style={styles.prefHelp}>Switches LINKUP between clean light mode and premium dark mode.</Text>
+              </View>
             </View>
-            <Switch value={isDark} onValueChange={toggleTheme} trackColor={{ true: '#2563EB' }} thumbColor="#FFF" />
+            <PreferenceSwitch value={isDark} isDark={isDark} onValueChange={toggleTheme} />
           </View>
 
-          <View style={[styles.authBox, { backgroundColor: isDark ? '#111115' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-            <Text style={[styles.authTitle, { color: isDark ? '#FFF' : '#000' }]}>
-              {user?.isAnonymous ? 'CREATE A TEST ACCOUNT (UPGRADE)' : 'ACCOUNT'}
-            </Text>
-            <Text style={styles.authHint}>
-              Use email/password so you can test across devices. Anonymous accounts can be upgraded here.
-            </Text>
-            <TextInput
-              value={authEmail}
-              onChangeText={setAuthEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              placeholder="Email"
-              placeholderTextColor="#666"
-              style={[styles.authInput, { color: isDark ? '#FFF' : '#000', borderColor: isDark ? '#222226' : '#EAEAEA' }]}
+          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name="EyeOff" size={18} color="#22C55E" />
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Hide Online Status</Text>
+                <Text style={styles.prefHelp}>When on, people will see you as offline/hidden even while you are using LINKUP.</Text>
+              </View>
+            </View>
+            <PreferenceSwitch
+              value={hideOnlineStatusValue}
+              isDark={isDark}
+              disabled={savingPreference === 'hideOnlineStatus'}
+              onValueChange={(v) => isEditing ? setEditData({ ...editData, hideOnlineStatus: v }) : setPreference('hideOnlineStatus', v)}
             />
-            <TextInput
-              value={authPassword}
-              onChangeText={setAuthPassword}
-              secureTextEntry
-              placeholder="Password"
-              placeholderTextColor="#666"
-              style={[styles.authInput, { color: isDark ? '#FFF' : '#000', borderColor: isDark ? '#222226' : '#EAEAEA' }]}
-            />
-            <View style={{ flexDirection: 'row', gap: 10 }}>
+          </View>
+
+          <View style={[styles.accountSecurityCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+            <View style={styles.accountSecurityHeader}>
+              <SafeIcon name="MailCheck" size={19} color="#2563EB" />
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Email Security</Text>
+                <Text style={styles.prefHelp}>
+                  Verification, password reset, email change, and MFA notifications for this account.
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.emailStatusPill, { backgroundColor: isDark ? '#0F0F12' : '#FFFFFF' }]}>
+              <Text style={styles.emailStatusLabel}>CURRENT EMAIL</Text>
+              <Text style={[styles.emailStatusValue, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                {user?.email || 'No email linked'}
+              </Text>
+              <Text style={[styles.emailVerifiedText, { color: user?.emailVerified ? '#22C55E' : '#F59E0B' }]}>
+                {user?.emailVerified ? 'VERIFIED' : 'NOT VERIFIED'}
+              </Text>
+            </View>
+
+            <View style={styles.accountActionGrid}>
               <TouchableOpacity
-                onPress={handleEmailCreate}
-                style={[styles.authBtn, { backgroundColor: '#FBE618' }]}
+                disabled={!!accountActionBusy}
+                onPress={() => runAccountAction('verify-email', sendVerificationEmail)}
+                style={[styles.accountActionBtn, { opacity: accountActionBusy ? 0.6 : 1 }]}
               >
-                <Text style={[styles.authBtnText, { color: '#000' }]}>CREATE</Text>
+                {accountActionBusy === 'verify-email' ? (
+                  <ActivityIndicator size="small" color="#000" />
+                ) : (
+                  <Text style={styles.accountActionText}>VERIFY EMAIL</Text>
+                )}
               </TouchableOpacity>
+
               <TouchableOpacity
-                onPress={handleEmailSignIn}
-                style={[styles.authBtn, { backgroundColor: isDark ? '#16161A' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EAEAEA', borderWidth: 1 }]}
+                disabled={!!accountActionBusy}
+                onPress={handleCurrentPasswordReset}
+                style={[styles.accountActionBtn, { opacity: accountActionBusy ? 0.6 : 1 }]}
               >
-                <Text style={[styles.authBtnText, { color: isDark ? '#FFF' : '#000' }]}>SIGN IN</Text>
+                {accountActionBusy === 'reset-password' ? (
+                  <ActivityIndicator size="small" color="#000" />
+                ) : (
+                  <Text style={styles.accountActionText}>RESET PASSWORD</Text>
+                )}
               </TouchableOpacity>
             </View>
+
+            <TextInput
+              value={newAccountEmail}
+              onChangeText={setNewAccountEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder="New email address"
+              placeholderTextColor="#777"
+              style={[
+                styles.emailChangeInput,
+                {
+                  color: isDark ? '#FFF' : '#000',
+                  backgroundColor: isDark ? '#0F0F12' : '#FFFFFF',
+                  borderColor: isDark ? '#26262C' : '#E5E7EB',
+                },
+              ]}
+            />
+            <TouchableOpacity
+              disabled={!!accountActionBusy}
+              onPress={handleEmailChange}
+              style={[styles.emailChangeBtn, { opacity: accountActionBusy ? 0.6 : 1 }]}
+            >
+              {accountActionBusy === 'change-email' ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={styles.emailChangeText}>SEND EMAIL CHANGE CONFIRMATION</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              disabled={!!accountActionBusy}
+              onPress={() => runAccountAction('mfa-notice', showMfaEnrollmentNotice)}
+              style={[styles.mfaNoticeBtn, { borderColor: isDark ? '#26262C' : '#E5E7EB' }]}
+            >
+              <SafeIcon name="ShieldCheck" size={16} color="#22C55E" />
+              <Text style={[styles.mfaNoticeText, { color: isDark ? '#FFF' : '#000' }]}>MULTI-FACTOR ENROLLMENT NOTICE</Text>
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]} onPress={handleLogout}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name="LogOut" size={18} color="#EF4444" />
-              <Text style={[styles.prefLabel, { color: '#EF4444' }]}>Logout</Text>
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: '#EF4444' }]}>Logout</Text>
+                <Text style={styles.prefHelp}>Signs you out of this device. Your profile and chats stay saved.</Text>
+              </View>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]} onPress={handleDeleteAccount}>
             <View style={styles.prefLabelContainer}>
-              <SafeIcon name="Trash2" size={18} color="#FF4444" />
-              <Text style={[styles.prefLabel, { color: '#FF4444' }]}>Delete Account Permanently</Text>
+                <SafeIcon name="Trash2" size={18} color="#FF4444" />
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: '#FF4444' }]}>Delete Account Permanently</Text>
+                <Text style={styles.prefHelp}>Deletes your profile document and Firebase Auth account. You may need to sign in again first.</Text>
+              </View>
             </View>
           </TouchableOpacity>
         </View>
@@ -875,6 +1303,11 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   iconButton: {
     width: 42,
     height: 42,
@@ -884,6 +1317,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#FBE61830',
+  },
+  saveProfileButton: {
+    width: 82,
+    backgroundColor: '#FBE618',
+    borderColor: '#FBE618',
+    shadowColor: '#FBE618',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  saveProfileContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  saveProfileText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    color: '#000',
   },
   actionButton: {
     paddingVertical: 12,
@@ -995,6 +1448,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
   },
+  editTextBox: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
   locationInput: {
     fontSize: 12,
     fontWeight: '900',
@@ -1004,8 +1463,8 @@ const styles = StyleSheet.create({
   },
   metaInput: {
     marginTop: 10,
-    backgroundColor: '#16161A',
     borderRadius: 16,
+    borderWidth: 1,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontWeight: '700',
@@ -1042,6 +1501,7 @@ const styles = StyleSheet.create({
   bioInput: {
     padding: 16,
     borderRadius: 20,
+    borderWidth: 1,
     fontSize: 15,
     minHeight: 100,
     textAlignVertical: 'top',
@@ -1068,6 +1528,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 16,
     borderRadius: 16,
+    borderWidth: 1,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1243,56 +1704,259 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+  },
+  prefCopy: {
+    flex: 1,
   },
   prefLabel: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  prefHelp: {
+    marginTop: 3,
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: '700',
+    color: '#777',
+  },
+  accountSecurityCard: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 22,
+  },
+  accountSecurityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  emailStatusPill: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 16,
+  },
+  emailStatusLabel: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+    color: '#777',
+  },
+  emailStatusValue: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  emailVerifiedText: {
+    marginTop: 5,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  accountActionGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  accountActionBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 15,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  accountActionText: {
+    color: '#000',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textAlign: 'center',
+  },
+  emailChangeInput: {
+    marginTop: 12,
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  emailChangeBtn: {
+    marginTop: 10,
+    minHeight: 46,
+    borderRadius: 16,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  emailChangeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textAlign: 'center',
+  },
+  mfaNoticeBtn: {
+    marginTop: 10,
+    minHeight: 46,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  mfaNoticeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textAlign: 'center',
+  },
+  switchWrap: {
+    minWidth: 92,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  switchState: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   viewerCount: {
     fontSize: 12,
     fontWeight: '900',
     color: '#FBE618',
   },
-  authBox: {
-    marginTop: 12,
-    padding: 14,
+  analyzerCard: {
     borderRadius: 22,
     borderWidth: 1,
+    padding: 16,
   },
-  authTitle: {
-    fontSize: 10,
+  analyzerTitle: {
+    fontSize: 15,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
-  authHint: {
+  analyzerHelp: {
     marginTop: 6,
     fontSize: 11,
-    fontWeight: '700',
-    color: '#666',
     lineHeight: 16,
+    fontWeight: '700',
+    color: '#777',
   },
-  authInput: {
-    marginTop: 10,
-    height: 48,
-    borderRadius: 16,
+  analyzerInput: {
+    minHeight: 110,
+    borderRadius: 18,
     borderWidth: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 14,
     fontSize: 13,
     fontWeight: '800',
-    backgroundColor: 'transparent',
+    textAlignVertical: 'top',
   },
-  authBtn: {
-    flex: 1,
-    height: 48,
+  analyzerButton: {
+    height: 46,
     borderRadius: 16,
+    backgroundColor: '#FBE618',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
+    marginTop: 12,
   },
-  authBtnText: {
+  analyzerButtonText: {
     fontSize: 11,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: 1.8,
+    color: '#000',
+  },
+  analysisResults: {
+    marginTop: 14,
+    gap: 10,
+  },
+  analysisScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  analysisScore: {
+    width: 58,
+    height: 58,
+    borderRadius: 20,
+    backgroundColor: '#FBE618',
+    color: '#000',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  analysisVerdict: {
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  analysisSmall: {
+    marginTop: 3,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#777',
+  },
+  analysisItem: {
+    borderTopWidth: 1,
+    borderTopColor: '#88888820',
+    paddingTop: 10,
+  },
+  analysisLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    color: '#2563EB',
+  },
+  analysisText: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  profileLinkCard: {
+    width: '100%',
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  profileLinkLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    color: '#666',
+  },
+  profileLinkText: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  profileLinkAction: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+    color: '#2563EB',
+  },
+  repHelp: {
+    marginTop: 10,
+    fontSize: 10,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#777',
+    textAlign: 'center',
   },
   cancelButton: {
     marginTop: 10,
@@ -1304,5 +1968,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 1,
+  },
+  unavailableWrap: {
+    flex: 1,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+  },
+  backPill: {
+    position: 'absolute',
+    top: 18,
+    left: 18,
+    height: 42,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  backPillText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  unavailableTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  unavailableText: {
+    maxWidth: 280,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 18,
+    color: '#777',
   }
 });

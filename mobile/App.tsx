@@ -5,6 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
+import * as ExpoLinking from 'expo-linking';
 import * as Icons from 'lucide-react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -22,10 +23,48 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import ViewersScreen from './src/screens/ViewersScreen';
+import EmailAuthScreen from './src/screens/EmailAuthScreen';
+import EmailVerificationScreen from './src/screens/EmailVerificationScreen';
+import LandingScreen from './src/screens/LandingScreen';
+import ActiveOpportunityScreen from './src/screens/ActiveOpportunityScreen';
+import ActiveOpportunitiesScreen from './src/screens/ActiveOpportunitiesScreen';
+import TrendingBuildersScreen from './src/screens/TrendingBuildersScreen';
+import RecommendedMatchesScreen from './src/screens/RecommendedMatchesScreen';
 import { subscribeToUnreadNotificationsCount } from './src/lib/notifications';
+import OpportunityRadar from './src/components/OpportunityRadar';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+
+const linking: any = {
+  prefixes: [ExpoLinking.createURL('/'), 'linkup://'],
+  config: {
+    screens: {
+      Landing: 'landing',
+      EmailAuth: 'login',
+      EmailVerification: 'verify-email',
+      Onboarding: 'onboarding',
+      Main: {
+        screens: {
+          Swipe: '',
+          Search: 'search',
+          Matches: 'connections',
+          Alerts: 'alerts',
+        },
+      },
+      Profile: 'profile/:userId',
+      Messages: 'messages',
+      Chat: 'chat/:matchId',
+      ArchivedChats: 'messages/archived',
+      SwipeDeck: 'swipe',
+      Viewers: 'viewers',
+      ActiveOpportunity: 'opportunity/:userId',
+      ActiveOpportunities: 'opportunities',
+      TrendingBuilders: 'trending-builders',
+      RecommendedMatches: 'recommended-matches',
+    },
+  },
+};
 
 // Safe Icon Helper
 const SafeIcon = ({ name, size = 20, color = "#FBE618", fill = "transparent" }: any) => {
@@ -72,9 +111,18 @@ function TabNavigator({ navigation }: any) {
   const { user } = useAuth();
   const isDark = theme === 'dark';
   const [unreadCount, setUnreadCount] = React.useState(0);
+  const tabLabels: Record<string, string> = {
+    Swipe: 'Home',
+    Search: 'Search',
+    Matches: 'Connections',
+    Alerts: 'Notifications',
+  };
 
   React.useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid) {
+      setUnreadCount(0);
+      return;
+    }
     const unsub = subscribeToUnreadNotificationsCount(user.uid, setUnreadCount);
     return () => unsub();
   }, [user?.uid]);
@@ -100,6 +148,7 @@ function TabNavigator({ navigation }: any) {
           return (
             <View style={[
               styles.tabIconContainer,
+              route.name === 'Alerts' ? styles.alertTabIconContainer : null,
             ]}>
               <SafeIcon 
                 name={iconName}
@@ -120,18 +169,30 @@ function TabNavigator({ navigation }: any) {
         },
         tabBarActiveTintColor: '#FBE618',
         tabBarInactiveTintColor: '#666',
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
+        tabBarLabel: tabLabels[route.name] || route.name,
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '800',
+          marginTop: 2,
+        },
         tabBarStyle: {
           backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: isDark ? '#1A1A1A' : '#EEEEEE',
-          height: 85,
-          paddingBottom: 25,
+          height: 74,
+          paddingTop: 7,
+          paddingBottom: 8,
           position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          elevation: 0,
+          bottom: 12,
+          left: 16,
+          right: 16,
+          borderRadius: 26,
+          elevation: 10,
+          shadowColor: '#000',
+          shadowOpacity: 0.12,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 8 },
         },
         headerShown: true,
         header: (props) => {
@@ -154,15 +215,31 @@ function TabNavigator({ navigation }: any) {
 }
 
 function AppContent() {
-  const { user, profile, loading } = useAuth();
-  const { theme } = useTheme();
+  const { user, profile, loading, authVersion, isOnboarded } = useAuth();
+  const { theme, setThemeMode } = useTheme();
   const isDark = theme === 'dark';
+  const requiresEmailVerification = Boolean(
+    user?.email &&
+      !user.emailVerified &&
+      user.providerData?.some((provider) => provider.providerId === 'password')
+  );
+  const navigationStateKey = `${user?.uid || 'guest'}-${isOnboarded ? 'onboarded' : 'new'}-${requiresEmailVerification ? 'unverified' : 'verified'}-${authVersion}`;
 
   React.useEffect(() => {
-    if (user) {
-      import('./src/lib/notifications').then(m => m.registerForPushNotificationsAsync(user.uid));
+    if (!user?.uid) return;
+    import('./src/lib/notifications')
+      .then((m) => m.registerForPushNotificationsAsync(user.uid))
+      .catch((error) => {
+        console.warn('Notifications setup unavailable:', error);
+      });
+  }, [user?.uid]);
+
+  React.useEffect(() => {
+    if (!user?.uid || isOnboarded) return;
+    if (theme !== 'light') {
+      setThemeMode('light').catch(() => {});
     }
-  }, [user]);
+  }, [user?.uid, isOnboarded, theme, setThemeMode]);
 
   if (loading) return (
     <View style={{ flex: 1, backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
@@ -171,9 +248,16 @@ function AppContent() {
   );
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}>
-        {user && !profile?.onboarded ? (
+    <NavigationContainer key={navigationStateKey} linking={linking}>
+      <Stack.Navigator key={navigationStateKey} screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}>
+        {!user ? (
+          <>
+            <Stack.Screen name="Landing" component={LandingScreen} />
+            <Stack.Screen name="EmailAuth" component={EmailAuthScreen} />
+          </>
+        ) : requiresEmailVerification ? (
+          <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
+        ) : !isOnboarded ? (
           <>
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />
             <Stack.Screen name="Main" component={TabNavigator} />
@@ -186,10 +270,16 @@ function AppContent() {
         )}
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="Messages" component={MessagesScreen} />
+        <Stack.Screen name="ArchivedChats" component={MessagesScreen} initialParams={{ archivedOnly: true }} />
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="SwipeDeck" component={SwipeScreen} />
         <Stack.Screen name="Viewers" component={ViewersScreen} />
+        <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
+        <Stack.Screen name="ActiveOpportunities" component={ActiveOpportunitiesScreen} />
+        <Stack.Screen name="TrendingBuilders" component={TrendingBuildersScreen} />
+        <Stack.Screen name="RecommendedMatches" component={RecommendedMatchesScreen} />
       </Stack.Navigator>
+      <OpportunityRadar />
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </NavigationContainer>
   );
@@ -249,8 +339,11 @@ const styles = StyleSheet.create({
   tabIconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 40,
-    width: 40,
+    height: 34,
+    width: 42,
+  },
+  alertTabIconContainer: {
+    overflow: 'visible',
   },
   focusedDot: {
     width: 4,
@@ -258,26 +351,26 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#FBE618',
     position: 'absolute',
-    bottom: -8,
+    bottom: -3,
   },
   badgeBubble: {
     position: 'absolute',
-    top: -6,
-    right: -10,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 5,
-    borderRadius: 9,
-    backgroundColor: '#EF4444',
+    top: -13,
+    right: -12,
+    minWidth: 30,
+    height: 30,
+    paddingHorizontal: 7,
+    borderRadius: 15,
+    backgroundColor: '#E30613',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 14,
     fontWeight: '900',
     color: '#FFF',
-    letterSpacing: 0.5,
+    letterSpacing: 0,
   },
 });

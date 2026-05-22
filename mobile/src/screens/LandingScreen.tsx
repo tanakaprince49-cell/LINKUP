@@ -1,12 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions, Linking, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Linking, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Rocket, Shield, Lock, Globe } from 'lucide-react-native';
 
 const { width, height } = Dimensions.get('window');
 
-export default function LandingScreen() {
+export default function LandingScreen({ navigation }: any) {
   const { signInWithGoogle } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -54,6 +55,14 @@ export default function LandingScreen() {
               <View style={[styles.googleG, { borderTopColor: '#4285F4', borderLeftColor: '#EA4335', borderBottomColor: '#FBBC05', borderRightColor: '#34A853' }]} />
             </View>
             <Text style={styles.googleButtonText}>SIGN IN WITH GOOGLE</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.secondaryButton, { backgroundColor: isDark ? '#121216' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EAEAEA' }]}
+            onPress={() => navigation.navigate('EmailAuth')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.secondaryButtonText, { color: isDark ? '#FFF' : '#000' }]}>CONTINUE WITH EMAIL</Text>
           </TouchableOpacity>
 
           <View style={styles.privacyNotice}>
@@ -171,6 +180,18 @@ const styles = StyleSheet.create({
   googleButtonText: {
     color: '#000',
     fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  secondaryButton: {
+    height: 58,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  secondaryButtonText: {
+    fontSize: 12,
     fontWeight: '900',
     letterSpacing: 1.5,
   },

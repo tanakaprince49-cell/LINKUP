@@ -4,6 +4,7 @@ export interface UserProfile {
   uid: string;
   displayName: string;
   username?: string;
+  profileLink?: string;
   bio: string;
   profilePic: string;
   photos?: string[];
@@ -35,6 +36,7 @@ export interface UserProfile {
   networkingIntent?: string; // e.g. "Serious Builder"
   onboarded: boolean;
   isVisible: boolean;
+  turboConnect?: boolean;
   isBot: boolean;
   isOnline?: boolean;
   lastActiveAt: Timestamp | FieldValue;
@@ -50,6 +52,7 @@ export interface UserProfile {
   projects: Project[];
   viewedBy: string[];
   isStealthMode: boolean; // For private discovery
+  hideOnlineStatus?: boolean;
   hasExit: boolean; // Verified serial founder
   vibeMedia?: string; // Base64 audio/video intro
   isVerified?: boolean;
@@ -66,6 +69,7 @@ export interface UserProfile {
   teamSizePreference?: string; // e.g. "Solo Founder"
   circles?: string[];
   personalityAnswers?: Record<string, string>;
+  roleAnswers?: Record<string, string | string[]>;
 }
 
 export interface StartupResume {
@@ -104,12 +108,15 @@ export interface Post {
 export interface Match {
   id: string;
   userIds: string[];
+  participants?: Record<string, boolean>;
   timestamp: Timestamp | FieldValue;
   lastMessage?: string;
   lastMessageTime?: Timestamp | FieldValue;
   pinnedBy?: string[];
   archivedBy?: string[];
   importantBy?: string[];
+  deletedBy?: string[];
+  confidentialBy?: string[];
   mutedUntilBy?: Record<string, any>;
 }
 
@@ -127,11 +134,14 @@ export interface Message {
 export interface AppNotification {
   id: string;
   userId: string;
-  type: 'like' | 'match' | 'view' | 'system';
+  type: 'like' | 'match' | 'view' | 'system' | 'message' | 'comment';
   content: string;
   timestamp: Timestamp | FieldValue;
   isRead: boolean;
   fromId?: string;
+  fromName?: string;
+  fromPic?: string;
+  matchId?: string;
 }
 
 export interface Story {

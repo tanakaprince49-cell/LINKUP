@@ -1,20 +1,70 @@
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import { doc, updateDoc, arrayUnion, collection, onSnapshot, query, where } from 'firebase/firestore';
+import {
+  doc,
+  setDoc,
+  arrayUnion,
+  collection,
+  onSnapshot,
+  query,
+  where,
+  serverTimestamp,
+  getDocs,
+  writeBatch,
+} from 'firebase/firestore';
 import { db } from './firebase';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+let notificationHandlerReady = false;
+
+function getExpoConstants() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('expo-constants').default;
+  } catch {
+    return null;
+  }
+}
+
+function isExpoGo() {
+  const constants = getExpoConstants();
+  return constants?.appOwnership === 'expo' || constants?.executionEnvironment === 'storeClient';
+}
+
+async function loadNotificationsModule() {
+  try {
+    return await import('expo-notifications');
+  } catch (error) {
+    console.warn('Notifications module unavailable in this runtime:', error);
+    return null;
+  }
+}
 
 export async function registerForPushNotificationsAsync(userId: string) {
+  if (!userId || Platform.OS === 'web') {
+    return;
+  }
+
+  if (isExpoGo()) {
+    console.warn('Push notifications require a development build or real APK; skipping Expo Go token registration.');
+    return;
+  }
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) return;
+
+  if (!notificationHandlerReady) {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+    notificationHandlerReady = true;
+  }
+
   let token;
   if (Device.isDevice) {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -27,18 +77,28 @@ export async function registerForPushNotificationsAsync(userId: string) {
       console.log('Failed to get push token for push notification!');
       return;
     }
-    token = (await Notifications.getExpoPushTokenAsync()).data;
+    const constants = getExpoConstants();
+    const projectId = constants?.expoConfig?.extra?.eas?.projectId || constants?.easConfig?.projectId;
+    token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
     
-    // Save token to Firestore
-    await updateDoc(doc(db, 'users', userId), {
-      pushTokens: arrayUnion(token)
-    });
+    try {
+      await setDoc(
+        doc(db, 'userPrivate', userId),
+        {
+          pushTokens: arrayUnion(token),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      console.warn('Push token save skipped:', e);
+    }
   } else {
     console.log('Must use physical device for Push Notifications');
   }
 
   if (Platform.OS === 'android') {
-    Notifications.setNotificationChannelAsync('default', {
+    await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
@@ -53,6 +113,10 @@ export function subscribeToUnreadNotificationsCount(
   userId: string,
   onCount: (count: number) => void
 ) {
+  if (!userId) {
+    onCount(0);
+    return () => {};
+  }
   const q = query(
     collection(db, 'notifications'),
     where('userId', '==', userId),
@@ -62,8 +126,26 @@ export function subscribeToUnreadNotificationsCount(
     q,
     (snap) => onCount(snap.size),
     (err) => {
-      console.error('Unread notifications listener error:', err);
+      console.warn('Unread notifications unavailable:', err);
       onCount(0);
     }
   );
+}
+
+export async function markUnreadNotificationsRead(userId: string) {
+  if (!userId) return;
+
+  const unreadQuery = query(
+    collection(db, 'notifications'),
+    where('userId', '==', userId),
+    where('isRead', '==', false)
+  );
+  const snap = await getDocs(unreadQuery);
+  if (snap.empty) return;
+
+  const batch = writeBatch(db);
+  snap.docs.slice(0, 450).forEach((notificationDoc) => {
+    batch.update(notificationDoc.ref, { isRead: true });
+  });
+  await batch.commit();
 }

@@ -1,23 +1,35 @@
 import { initializeApp } from 'firebase/app';
-import { initializeAuth } from '@firebase/auth';
+import { getAuth, initializeAuth } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
 import { getFunctions } from 'firebase/functions';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-// `getReactNativePersistence` exists in the React Native entrypoint of `@firebase/auth`,
-// but isn't part of the default (web) TypeScript surface.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { getReactNativePersistence } = require('@firebase/auth') as any;
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+
+const createAuth = () => {
+  if (Platform.OS === 'web') {
+    return getAuth(app);
+  }
+
+  try {
+    // `getReactNativePersistence` is only available in the React Native auth bundle.
+    // Keep it out of the web path so Expo Web does not boot into a blank screen.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getReactNativePersistence } = require('@firebase/auth') as any;
+    return initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch {
+    return getAuth(app);
+  }
+};
+
+export const auth = createAuth();
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
 });
-export const storage = getStorage(app);
 export const functions = getFunctions(app);
 
 export enum OperationType {
@@ -40,5 +52,5 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo, null, 2));
-  throw new Error(JSON.stringify(errInfo));
+  return errInfo;
 }

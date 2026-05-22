@@ -1,12 +1,19 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, SafeAreaView, KeyboardAvoidingView, Platform, Image, Alert, StatusBar, Modal, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Alert, StatusBar, Modal, Pressable, ScrollView, Linking, Share } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { ChevronLeft, Send, Camera, Zap, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X } from 'lucide-react-native';
 import { generateWarmIntro } from '../lib/ai';
+
+const getFutureDate = (value: any) => {
+  if (!value) return null;
+  const date = value?.toDate ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) || date.getTime() <= Date.now() ? null : date;
+};
 
 const formatLastSeen = (timestamp: any) => {
   if (!timestamp) return 'Offline';
@@ -33,7 +40,6 @@ const formatMessageTime = (timestamp: any) => {
 export default function ChatScreen({ route, navigation }: any) {
   const matchId = route?.params?.matchId;
   const otherUserParam = route?.params?.otherUser;
-  const isDemo = !matchId;
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -46,39 +52,13 @@ export default function ChatScreen({ route, navigation }: any) {
   const [busyAction, setBusyAction] = useState(false);
   const [matchMeta, setMatchMeta] = useState<any>(null);
   const [replyTo, setReplyTo] = useState<null | { messageId: string; senderId: string; text: string }>(null);
+  const [hasBlockedUser, setHasBlockedUser] = useState(false);
 
   useEffect(() => {
-    if (!isDemo) return;
-    setOtherUser({
-      uid: 'demo_user',
-      displayName: 'Demo Builder',
-      profilePic: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200',
-      isOnline: true,
-    });
-    setMessages([
-      {
-        id: 'd1',
-        senderId: 'demo_user',
-        content: "Hey — saw you're building LINKUP. The UI is premium.",
-        timestamp: new Date(),
-        type: 'text',
-      },
-      {
-        id: 'd2',
-        senderId: user?.uid || 'me',
-        content: "Thanks! I’m tuning swipe + search. What should I improve next?",
-        timestamp: new Date(),
-        type: 'text',
-      },
-      {
-        id: 'd3',
-        senderId: 'demo_user',
-        content: "Make search feel like magic: 'AI engineer in SA into fintech' → perfect results.",
-        timestamp: new Date(),
-        type: 'text',
-      },
-    ]);
-  }, [isDemo, user?.uid]);
+    if (matchId) return;
+    Alert.alert('Chat unavailable', 'Open a chat from a real connection (match).');
+    navigation.goBack();
+  }, [matchId, navigation]);
 
   useEffect(() => {
     if (!matchId) return;
@@ -87,35 +67,107 @@ export default function ChatScreen({ route, navigation }: any) {
       orderBy('timestamp', 'asc')
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      const msgs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setMessages(msgs);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const msgs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setMessages(msgs);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      },
+      (err) => {
+        console.warn('Chat messages unavailable:', err);
+        setMessages([]);
+      }
+    );
 
     return () => unsub();
   }, [matchId]);
 
   useEffect(() => {
     if (!matchId) return;
-    const unsub = onSnapshot(doc(db, 'matches', matchId), (snap) => {
-      if (!snap.exists()) return;
-      setMatchMeta({ id: snap.id, ...snap.data() });
-    });
+    const unsub = onSnapshot(
+      doc(db, 'matches', matchId),
+      (snap) => {
+        if (!snap.exists()) return;
+        setMatchMeta({ id: snap.id, ...snap.data() });
+      },
+      (err) => {
+        console.warn('Chat metadata unavailable:', err);
+        setMatchMeta(null);
+      }
+    );
     return () => unsub();
   }, [matchId]);
 
   useEffect(() => {
     const otherId = otherUserParam?.uid;
     if (!otherId) return;
-    const unsub = onSnapshot(doc(db, 'users', otherId), (snap) => {
-      if (!snap.exists()) return;
-      setOtherUser({ uid: otherId, ...(snap.data() as any) });
-    });
-    return () => unsub();
+
+    const unsubUser = onSnapshot(
+      doc(db, 'users', otherId),
+      (snap) => {
+        if (!snap.exists()) return;
+        setOtherUser((prev: any) => ({ ...(prev || {}), uid: otherId, ...(snap.data() as any) }));
+      },
+      (err) => {
+        console.warn('Chat user unavailable:', err);
+      }
+    );
+
+    return () => {
+      unsubUser();
+    };
   }, [otherUserParam?.uid]);
 
   const myUid = user?.uid;
+
+  useEffect(() => {
+    const otherId = otherUser?.uid || otherUserParam?.uid;
+    if (!otherId) return;
+    if (otherUser?.hideOnlineStatus) {
+      setOtherUser((prev: any) => ({ ...(prev || {}), isOnline: false, lastActiveAt: null }));
+      return;
+    }
+
+    const unsubPresence = onSnapshot(
+      doc(db, 'presence', otherId),
+      (snap) => {
+        if (!snap.exists()) return;
+        const p = snap.data() as any;
+        setOtherUser((prev: any) => ({ ...(prev || {}), isOnline: !!p.isOnline, lastActiveAt: p.lastActiveAt }));
+      },
+      (err) => {
+        console.warn('Chat presence unavailable:', err);
+      }
+    );
+
+    return () => unsubPresence();
+  }, [otherUser?.uid, otherUser?.hideOnlineStatus, otherUserParam?.uid]);
+
+  useEffect(() => {
+    if (!myUid || !otherUser?.uid) {
+      setHasBlockedUser(false);
+      return;
+    }
+
+    const unsub = onSnapshot(
+      doc(db, 'blocks', `${myUid}_${otherUser.uid}`),
+      (snap) => setHasBlockedUser(snap.exists()),
+      (err) => {
+        console.warn('Block status unavailable:', err);
+        setHasBlockedUser(false);
+      }
+    );
+
+    return () => unsub();
+  }, [myUid, otherUser?.uid]);
+
+  const mutedUntilLabel = useMemo(() => {
+    if (!myUid) return null;
+    const date = getFutureDate(matchMeta?.mutedUntilBy?.[myUid]);
+    if (!date) return null;
+    return `Muted until ${date.toLocaleString()}`;
+  }, [matchMeta?.mutedUntilBy, myUid]);
 
   const isPinned = useMemo(() => {
     if (!myUid) return false;
@@ -129,45 +181,30 @@ export default function ChatScreen({ route, navigation }: any) {
     return importantBy.includes(myUid);
   }, [matchMeta?.importantBy, myUid]);
 
-  const mutedUntilLabel = useMemo(() => {
-    if (!myUid) return null;
-    const m = matchMeta?.mutedUntilBy?.[myUid];
-    if (!m) return null;
-    const date = m?.toDate ? m.toDate() : new Date(m);
-    if (Number.isNaN(date.getTime())) return null;
-    if (date.getTime() <= Date.now()) return null;
-    return `Muted until ${date.toLocaleString()}`;
-  }, [matchMeta?.mutedUntilBy, myUid]);
+  const isArchived = useMemo(() => {
+    if (!myUid) return false;
+    const archivedBy = Array.isArray(matchMeta?.archivedBy) ? matchMeta.archivedBy : [];
+    return archivedBy.includes(myUid);
+  }, [matchMeta?.archivedBy, myUid]);
 
-  const handleSend = async () => {
-    if (!inputText.trim() || !user) return;
+  const isConfidential = useMemo(() => {
+    if (!myUid) return false;
+    const confidentialBy = Array.isArray(matchMeta?.confidentialBy) ? matchMeta.confidentialBy : [];
+    return confidentialBy.includes(myUid);
+  }, [matchMeta?.confidentialBy, myUid]);
 
-    if (isDemo) {
-      const text = inputText;
-      setInputText('');
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `demo_${Date.now()}`,
-          senderId: user.uid,
-          content: text,
-          timestamp: new Date(),
-          type: 'text',
-          ...(replyTo ? { replyToMessageId: replyTo.messageId, replyToSenderId: replyTo.senderId, replyToText: replyTo.text } : {}),
-        },
-      ]);
-      setReplyTo(null);
+  const isRecipientMuted = (recipientId?: string) => {
+    if (!recipientId) return false;
+    return !!getFutureDate(matchMeta?.mutedUntilBy?.[recipientId]);
+  };
+
+  const sendChatText = async (text: string, replyPayload: Record<string, unknown> = {}, notificationContent = 'sent you a message.') => {
+    if (!text.trim() || !user) return;
+    if (!matchId) return;
+    if (hasBlockedUser) {
+      Alert.alert('User blocked', 'Unblock this user before sending a message.');
       return;
     }
-
-    if (!matchId) return;
-    
-    const text = inputText;
-    setInputText('');
-    const replyPayload = replyTo
-      ? { replyToMessageId: replyTo.messageId, replyToSenderId: replyTo.senderId, replyToText: replyTo.text }
-      : {};
-    setReplyTo(null);
 
     try {
       await addDoc(collection(db, 'matches', matchId, 'messages'), {
@@ -185,46 +222,84 @@ export default function ChatScreen({ route, navigation }: any) {
 
       // In-app notification for the recipient (unread badge increments).
       const recipientId = otherUser?.uid;
-      if (recipientId && recipientId !== user.uid) {
+      if (recipientId && recipientId !== user.uid && !isRecipientMuted(recipientId)) {
         await addDoc(collection(db, 'notifications'), {
           userId: recipientId,
           fromId: user.uid,
           fromName: profile?.displayName || 'Someone',
           fromPic: profile?.profilePic || '',
-          type: 'system',
-          content: 'sent you a message.',
+          type: 'message',
+          content: notificationContent,
+          matchId,
           isRead: false,
           timestamp: serverTimestamp(),
         });
       }
 
-      await updateDoc(doc(db, 'users', user.uid), {
-        isOnline: true,
-        lastActiveAt: serverTimestamp(),
-      });
+      await setDoc(doc(db, 'presence', user.uid), { isOnline: true, lastActiveAt: serverTimestamp() }, { merge: true });
     } catch (e) {
       console.error(e);
+      Alert.alert('Message failed', 'Could not send this message. Check your connection and Firebase rules.');
     }
   };
 
-  const toggleArrayField = async (field: 'pinnedBy' | 'archivedBy' | 'importantBy') => {
-    if (!matchId || !myUid) return;
+  const handleSend = async () => {
+    if (!inputText.trim() || !user) return;
+
+    const text = inputText.trim();
+    setInputText('');
+    const replyPayload = replyTo
+      ? { replyToMessageId: replyTo.messageId, replyToSenderId: replyTo.senderId, replyToText: replyTo.text }
+      : {};
+    setReplyTo(null);
+    await sendChatText(text, replyPayload);
+  };
+
+  const toggleArrayField = async (field: 'pinnedBy' | 'archivedBy' | 'importantBy' | 'confidentialBy' | 'deletedBy') => {
+    if (!matchId) {
+      Alert.alert('Demo chat', 'Pin/Archive/Important works on real chats (a matchId is required).');
+      return;
+    }
+    if (!myUid) return;
     try {
       setBusyAction(true);
       const ref = doc(db, 'matches', matchId);
       const current = Array.isArray(matchMeta?.[field]) ? matchMeta[field] : [];
       const has = current.includes(myUid);
       await updateDoc(ref, { [field]: has ? arrayRemove(myUid) : arrayUnion(myUid) } as any);
+
+      if (field === 'archivedBy') {
+        setOptionsOpen(false);
+        Alert.alert(has ? 'Unarchived' : 'Archived', has ? 'This chat is back in your inbox.' : 'This chat is now archived.');
+        if (!has) navigation.goBack();
+        return;
+      }
+
+      if (field === 'deletedBy') {
+        setOptionsOpen(false);
+        Alert.alert('Deleted', 'This conversation was removed from your inbox.');
+        navigation.goBack();
+        return;
+      }
+
+      setOptionsOpen(false);
+      if (field === 'pinnedBy') Alert.alert(has ? 'Unpinned' : 'Pinned', has ? 'Conversation unpinned.' : 'Conversation pinned.');
+      if (field === 'importantBy') Alert.alert(has ? 'Unmarked' : 'Marked Important', has ? 'Removed from important.' : 'Marked as important.');
+      if (field === 'confidentialBy') Alert.alert(has ? 'Confidential Off' : 'Confidential On', has ? 'Confidential mode disabled.' : 'This conversation is now marked confidential.');
     } catch (e) {
       console.error('toggle field error', e);
-      Alert.alert('Error', 'Action failed.');
+      Alert.alert('Error', 'Action failed. Check Firebase permissions.');
     } finally {
       setBusyAction(false);
     }
   };
 
   const setMute = async (hours: number | 'forever' | 'off') => {
-    if (!matchId || !myUid) return;
+    if (!matchId) {
+      Alert.alert('Demo chat', 'Mute works on real chats (a matchId is required).');
+      return;
+    }
+    if (!myUid) return;
     try {
       setBusyAction(true);
       const ref = doc(db, 'matches', matchId);
@@ -239,30 +314,42 @@ export default function ChatScreen({ route, navigation }: any) {
         mutedUntilBy[myUid] = new Date(Date.now() + hours * 60 * 60 * 1000);
       }
       await updateDoc(ref, { mutedUntilBy } as any);
+      setMutePickerOpen(false);
+      setOptionsOpen(false);
+      if (hours === 'off') Alert.alert('Unmuted', 'Notifications unmuted.');
+      else Alert.alert('Muted', hours === 'forever' ? 'Muted forever.' : `Muted for ${hours} hour(s).`);
     } catch (e) {
       console.error('mute error', e);
       Alert.alert('Error', 'Could not update mute.');
     } finally {
       setBusyAction(false);
-      setMutePickerOpen(false);
     }
   };
 
-  const blockUser = async () => {
+  const toggleBlockUser = async () => {
+    if (!matchId) return;
     if (!myUid || !otherUser?.uid) return;
     try {
       setBusyAction(true);
       const blockId = `${myUid}_${otherUser.uid}`;
+      if (hasBlockedUser) {
+        await deleteDoc(doc(db, 'blocks', blockId));
+        setOptionsOpen(false);
+        Alert.alert('Unblocked', `${otherUser.displayName || 'User'} can now message you again.`);
+        return;
+      }
+
       await setDoc(doc(db, 'blocks', blockId), {
         blockedById: myUid,
         blockedUserId: otherUser.uid,
         timestamp: serverTimestamp(),
       });
-      Alert.alert('Blocked', `${otherUser.displayName || 'User'} has been blocked.`);
-      navigation.goBack();
+
+      setOptionsOpen(false);
+      Alert.alert('Blocked', `${otherUser.displayName || 'User'} is blocked. The chat stays here so you can unblock later.`);
     } catch (e) {
-      console.error('block error', e);
-      Alert.alert('Error', 'Could not block user.');
+      console.error('block toggle error', e);
+      Alert.alert('Error', hasBlockedUser ? 'Could not unblock user.' : 'Could not block user.');
     } finally {
       setBusyAction(false);
     }
@@ -276,19 +363,74 @@ export default function ChatScreen({ route, navigation }: any) {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          try {
-            setBusyAction(true);
-            await deleteDoc(doc(db, 'matches', matchId));
-            navigation.goBack();
-          } catch (e) {
-            console.error('delete conversation error', e);
-            Alert.alert('Error', 'Could not delete conversation.');
-          } finally {
-            setBusyAction(false);
-          }
+          await toggleArrayField('deletedBy');
         },
       },
     ]);
+  };
+
+  const inviteToTeam = async () => {
+    if (!otherUser?.uid) return;
+    const inviteText = `Team invite: I’d like to explore building together on LINKUP. Are you open to joining a startup/project conversation?`;
+    await sendChatText(inviteText, {}, 'invited you to collaborate on a team.');
+    setOptionsOpen(false);
+    Alert.alert('Invite Sent', 'A team invite message was sent in this chat.');
+  };
+
+  const scheduleMeeting = () => {
+    const meetingText = `Meeting request: Are you available for a quick LINKUP call this week?`;
+    setOptionsOpen(false);
+    Alert.alert('Schedule Meeting', 'Choose how you want to schedule.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Message Request',
+        onPress: () => setInputText(meetingText),
+      },
+      {
+        text: 'Google Meet',
+        onPress: () => Linking.openURL('https://meet.google.com/new').catch(() => setInputText(meetingText)),
+      },
+      {
+        text: 'Calendly',
+        onPress: () => Linking.openURL('https://calendly.com/').catch(() => setInputText(meetingText)),
+      },
+    ]);
+  };
+
+  const shareContactCard = async () => {
+    try {
+      const card = [
+        `${profile?.displayName || user?.displayName || 'LINKUP Builder'}`,
+        profile?.occupation ? `${profile.occupation}${profile?.company ? ` @ ${profile.company}` : ''}` : '',
+        profile?.city || profile?.country ? [profile.city, profile.country].filter(Boolean).join(', ') : '',
+        profile?.profileLink || (user?.uid ? `linkup://profile/${user.uid}` : ''),
+      ].filter(Boolean).join('\n');
+      await Share.share({ title: 'LINKUP contact card', message: card });
+      setOptionsOpen(false);
+    } catch (e) {
+      console.error('share contact error', e);
+      Alert.alert('Share failed', 'Could not open the share sheet.');
+    }
+  };
+
+  const exportConversation = async () => {
+    try {
+      const transcript = messages.length
+        ? messages.map((message) => {
+            const sender = message.senderId === user?.uid ? 'You' : (otherUser?.displayName || 'Them');
+            const time = formatMessageTime(message.timestamp) || '--:--';
+            return `[${time}] ${sender}: ${message.content || ''}`;
+          }).join('\n')
+        : 'No messages yet.';
+      await Share.share({
+        title: 'LINKUP conversation export',
+        message: `LINKUP Conversation with ${otherUser?.displayName || 'Builder'}\n\n${transcript}`,
+      });
+      setOptionsOpen(false);
+    } catch (e) {
+      console.error('export conversation error', e);
+      Alert.alert('Export failed', 'Could not export this conversation.');
+    }
   };
 
   const MenuItem = ({ icon, title, subtitle, danger, onPress }: any) => (
@@ -405,6 +547,10 @@ export default function ChatScreen({ route, navigation }: any) {
                 <Text style={styles.status}>
                   {otherUser.isOnline ? 'ONLINE' : formatLastSeen(otherUser.lastActiveAt)}
                 </Text>
+                <View style={styles.securityLine}>
+                  <Shield size={10} color="#22C55E" />
+                  <Text style={styles.securityText}>SECURED CHAT</Text>
+                </View>
               </View>
             </TouchableOpacity>
           ) : (
@@ -413,6 +559,10 @@ export default function ChatScreen({ route, navigation }: any) {
               <View>
                 <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>CHAT</Text>
                 <Text style={styles.status}>Loading…</Text>
+                <View style={styles.securityLine}>
+                  <Shield size={10} color="#22C55E" />
+                  <Text style={styles.securityText}>SECURED CHAT</Text>
+                </View>
               </View>
             </View>
           )}
@@ -422,6 +572,15 @@ export default function ChatScreen({ route, navigation }: any) {
           <MoreVertical size={22} color={isDark ? '#FFF' : '#000'} />
         </TouchableOpacity>
       </View>
+
+      {isConfidential && (
+        <View style={[styles.confidentialBanner, { backgroundColor: isDark ? '#16161A' : '#FFFBEA', borderColor: '#FBE61855' }]}>
+          <Shield size={14} color="#FBE618" />
+          <Text style={[styles.confidentialText, { color: isDark ? '#FBE618' : '#92400E' }]}>
+            CONFIDENTIAL BUSINESS CHAT
+          </Text>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -512,7 +671,10 @@ export default function ChatScreen({ route, navigation }: any) {
               icon={<BellOff size={18} color={isDark ? '#FFF' : '#000'} />}
               title="Mute Notifications"
               subtitle={mutedUntilLabel || 'Choose duration'}
-              onPress={() => setMutePickerOpen(true)}
+              onPress={() => {
+                setOptionsOpen(false);
+                setMutePickerOpen(true);
+              }}
             />
 
             <MenuItem
@@ -524,8 +686,8 @@ export default function ChatScreen({ route, navigation }: any) {
 
             <MenuItem
               icon={<Archive size={18} color={isDark ? '#FFF' : '#000'} />}
-              title="Archive Chat"
-              subtitle="Hide from inbox without deleting"
+              title={isArchived ? 'Unarchive Chat' : 'Archive Chat'}
+              subtitle={isArchived ? 'Show in inbox again' : 'Hide from inbox without deleting'}
               onPress={() => toggleArrayField('archivedBy')}
             />
 
@@ -539,53 +701,58 @@ export default function ChatScreen({ route, navigation }: any) {
             <MenuItem
               icon={<Users size={18} color={isDark ? '#FFF' : '#000'} />}
               title="Invite to Team"
-              subtitle="Coming soon"
-              onPress={() => Alert.alert('Coming soon', 'Team invites will appear here.')}
+              subtitle="Send a collaboration invite"
+              onPress={inviteToTeam}
             />
 
             <MenuItem
               icon={<Calendar size={18} color={isDark ? '#FFF' : '#000'} />}
               title="Schedule Meeting"
               subtitle="Zoom / Google Meet / Calendly"
-              onPress={() => Alert.alert('Schedule', 'Add your meeting links in profile settings (coming soon).')}
+              onPress={scheduleMeeting}
             />
 
             <MenuItem
-              icon={<Shield size={18} color={isDark ? '#FFF' : '#000'} />}
-              title="Confidential Mode"
-              subtitle="Premium (coming soon)"
-              onPress={() => Alert.alert('Premium feature', 'Confidential mode will be available soon.')}
+              icon={<ContactRound size={18} color={isDark ? '#FFF' : '#000'} />}
+              title="Share Contact Card"
+              subtitle="Share your LINKUP identity"
+              onPress={shareContactCard}
+            />
+
+            <MenuItem
+              icon={<Shield size={18} color={isConfidential ? '#FBE618' : (isDark ? '#FFF' : '#000')} />}
+              title={isConfidential ? 'Disable Confidential Mode' : 'Confidential Mode'}
+              subtitle={isConfidential ? 'Conversation marked confidential' : 'Mark this business chat confidential'}
+              onPress={() => toggleArrayField('confidentialBy')}
             />
 
             <MenuItem
               icon={<FileText size={18} color={isDark ? '#FFF' : '#000'} />}
               title="Export Conversation"
-              subtitle="PDF / TXT (coming soon)"
-              onPress={() => Alert.alert('Coming soon', 'Export will be available soon.')}
+              subtitle="Share as text transcript"
+              onPress={exportConversation}
             />
 
             <MenuItem
               icon={<UserX size={18} color="#EF4444" />}
-              title="Block User"
-              subtitle="Remove access and messaging"
+              title={hasBlockedUser ? 'Unblock User' : 'Block User'}
+              subtitle={hasBlockedUser ? 'Allow messaging again' : 'Stop messages without deleting this chat'}
               danger
               onPress={() => {
-                Alert.alert('Block user', 'Block this user completely?', [
+                Alert.alert(hasBlockedUser ? 'Unblock user' : 'Block user', hasBlockedUser ? 'Allow this user to message you again?' : 'Block this user? The chat will stay available so you can unblock later.', [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Block', style: 'destructive', onPress: blockUser },
+                  { text: hasBlockedUser ? 'Unblock' : 'Block', style: hasBlockedUser ? 'default' : 'destructive', onPress: toggleBlockUser },
                 ]);
               }}
             />
 
-            {!isDemo && (
-              <MenuItem
-                icon={<Trash2 size={18} color="#EF4444" />}
-                title="Delete Conversation"
-                subtitle="Deletes locally for you"
-                danger
-                onPress={deleteConversation}
-              />
-            )}
+            <MenuItem
+              icon={<Trash2 size={18} color="#EF4444" />}
+              title="Delete Conversation"
+              subtitle="Deletes locally for you"
+              danger
+              onPress={deleteConversation}
+            />
           </ScrollView>
         </View>
       </Modal>
@@ -635,6 +802,35 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#4ADE80',
     fontWeight: '900',
+  },
+  securityLine: {
+    marginTop: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  securityText: {
+    fontSize: 9,
+    color: '#22C55E',
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  confidentialBanner: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  confidentialText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.4,
   },
   listContent: {
     padding: 16,

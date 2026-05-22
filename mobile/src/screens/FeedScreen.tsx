@@ -6,7 +6,6 @@ import {
   FlatList, 
   Image, 
   TouchableOpacity, 
-  SafeAreaView, 
   ActivityIndicator, 
   Dimensions, 
   TextInput, 
@@ -17,6 +16,7 @@ import {
   Platform,
   Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   collection, 
   query, 
@@ -75,10 +75,18 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
   useEffect(() => {
     if (!visible) return;
     const q = query(collection(db, 'posts', post.id, 'comments'), orderBy('timestamp', 'asc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      (err) => {
+        console.warn('Comments unavailable:', err);
+        setComments([]);
+        setLoading(false);
+      }
+    );
     return () => unsub();
   }, [visible]);
 
@@ -159,7 +167,14 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
     const [replies, setReplies] = useState<any[]>([]);
     useEffect(() => {
       const q = query(collection(db, 'posts', post.id, 'comments', commentId, 'replies'), orderBy('timestamp', 'asc'));
-      return onSnapshot(q, snap => setReplies(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      return onSnapshot(
+        q,
+        snap => setReplies(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+        err => {
+          console.warn('Replies unavailable:', err);
+          setReplies([]);
+        }
+      );
     }, [commentId]);
     if (replies.length === 0) return null;
     return (
@@ -457,10 +472,18 @@ export default function FeedScreen({ navigation }: any) {
 
   useEffect(() => {
     const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setPosts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post)));
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setPosts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post)));
+        setLoading(false);
+      },
+      (err) => {
+        console.warn('Feed unavailable:', err);
+        setPosts([]);
+        setLoading(false);
+      }
+    );
     return () => unsub();
   }, []);
 

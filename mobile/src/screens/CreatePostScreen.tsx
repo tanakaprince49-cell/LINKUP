@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, Image, ScrollView, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image, ScrollView, Dimensions, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { db } from '../lib/firebase';
@@ -24,7 +25,13 @@ export default function CreatePostScreen({ navigation }: any) {
   useEffect(() => {
     if (tagQuery.length > 0) {
       const fetchUsers = async () => {
-        const q = query(collection(db, 'users'), where('displayName', '>=', tagQuery), limit(5));
+        const q = query(
+          collection(db, 'users'),
+          where('isVisible', '==', true),
+          where('isStealthMode', '==', false),
+          where('displayName', '>=', tagQuery),
+          limit(5)
+        );
         const snap = await getDocs(q);
         setSuggestedUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       };
@@ -100,7 +107,7 @@ export default function CreatePostScreen({ navigation }: any) {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: type === 'image' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos,
+      mediaTypes: type === 'image' ? ['images'] : ['videos'],
       allowsMultipleSelection: true,
       quality: 0.3, // Heavily compressed to fit in Firestore
       base64: true,

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, Alert } from 'react-native';
-import { collection, query, onSnapshot, where, doc, getDoc, addDoc, getDocs, serverTimestamp } from 'firebase/firestore';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, Dimensions, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { FieldPath, collection, query, onSnapshot, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
 import { MessageSquare, User, Zap, Sparkles, ChevronRight, Briefcase } from 'lucide-react-native';
+import { ensureDirectMatch } from '../lib/chat';
 
 const { width } = Dimensions.get('window');
 
@@ -59,26 +61,7 @@ const MatchItem = ({ match, navigation }: { match: Match, navigation: any }) => 
           onPress={async () => {
             if (!user?.uid || !otherUser?.uid) return;
             try {
-              // Find or create the match doc between these two users
-              const q = query(collection(db, 'matches'), where('userIds', 'array-contains', user.uid));
-              const snap = await getDocs(q);
-              const existing = snap.docs.find((d) => {
-                const data = d.data() as any;
-                const ids = Array.isArray(data.userIds) ? data.userIds : [];
-                return ids.includes(otherUser.uid);
-              });
-
-              let matchId = existing?.id;
-              if (!matchId) {
-                const ref = await addDoc(collection(db, 'matches'), {
-                  userIds: [user.uid, otherUser.uid],
-                  timestamp: serverTimestamp(),
-                  lastMessage: '',
-                  lastMessageTime: serverTimestamp(),
-                });
-                matchId = ref.id;
-              }
-
+              const matchId = await ensureDirectMatch(user.uid, otherUser.uid);
               navigation.navigate('Chat', { matchId, otherUser });
             } catch (e) {
               console.error('Open chat error:', e);
@@ -102,11 +85,19 @@ export default function MatchScreen({ navigation }: any) {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'matches'), where('userIds', 'array-contains', user.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      setMatches(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match)));
-      setLoading(false);
-    });
+    const q = query(collection(db, 'matches'), where(new FieldPath('participants', user.uid), '==', true));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setMatches(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Match)));
+        setLoading(false);
+      },
+      (err) => {
+        console.warn('Connections unavailable:', err);
+        setMatches([]);
+        setLoading(false);
+      }
+    );
     return () => unsub();
   }, [user]);
 

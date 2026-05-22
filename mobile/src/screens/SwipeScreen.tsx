@@ -1,388 +1,715 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, Animated, PanResponder, ScrollView } from 'react-native';
-import { collection, query, onSnapshot, where, addDoc, updateDoc, doc, arrayUnion, limit, serverTimestamp, getDocs } from 'firebase/firestore';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Easing,
+  PanResponder,
+  ScrollView,
+  InteractionManager,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { collection, query, onSnapshot, where, addDoc, limit, serverTimestamp, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { rankCandidatesWithAI } from '../lib/matchmaking';
+import { localCommonalityRank, rankCandidatesWithAI } from '../lib/matchmaking';
+import { trackProfileView } from '../lib/analytics';
+import { ensureDirectMatch } from '../lib/chat';
+import { demoBuilders, isDemoBuilder } from '../lib/demoBuilders';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft } from 'lucide-react-native';
+import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase } from 'lucide-react-native';
 
-const { width, height } = Dimensions.get('window');
-const SWIPE_THRESHOLD = 0.25 * width;
+const windowSize = Dimensions.get('window');
+const { width } = windowSize;
+const SWIPE_THRESHOLD = 0.22 * width;
+const DISCOVERY_LIMIT = 12;
+const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800';
+const MAX_SWIPE_DATA_URI_CHARS = 220_000;
+
+const isSafeSwipePhoto = (uri: unknown): uri is string => {
+  if (typeof uri !== 'string') return false;
+  const value = uri.trim();
+  if (!value) return false;
+  return !value.startsWith('data:') || value.length <= MAX_SWIPE_DATA_URI_CHARS;
+};
+
+const getSwipePhotos = (profile: UserProfile): string[] => {
+  const rawPhotos: unknown[] = Array.isArray((profile as any).photos) && (profile as any).photos.length > 0
+    ? (profile as any).photos
+    : [profile.profilePic];
+  const safePhotos = rawPhotos.filter(isSafeSwipePhoto);
+  return safePhotos.length ? safePhotos : [FALLBACK_PHOTO];
+};
 
 export default function SwipeScreen({ navigation }: any) {
-  const { user } = useAuth();
+  const { user, profile: myProfile } = useAuth();
   const { theme } = useTheme();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const isDark = theme === 'dark';
+  const isWeb = Platform.OS === 'web';
+  const safeViewportWidth = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : width;
+  const safeViewportHeight =
+    Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : windowSize.height || 900;
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [aiOrderingDone, setAiOrderingDone] = useState(false);
+  const [infoExpanded, setInfoExpanded] = useState(false);
 
-  const position = useRef(new Animated.ValueXY()).current;
+  const swipedSessionIdsRef = useRef<Set<string>>(new Set());
+  const hasUserSwipedRef = useRef(false);
+  const allProfilesRef = useRef<UserProfile[]>([]);
+  const completeSwipeRef = useRef<(direction: 'left' | 'right') => void>(() => {});
+  const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
+  const resetSwipePositionRef = useRef<() => void>(() => {});
+  const isAnimatingRef = useRef(false);
+  const swipePosition = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const swipeThresholdRef = useRef(SWIPE_THRESHOLD);
+  const deckExitDistanceRef = useRef(width + 160);
 
-  const rotate = position.x.interpolate({
-    inputRange: [-width / 2, 0, width / 2],
-    outputRange: ['-10deg', '0deg', '10deg'],
-    extrapolate: 'clamp'
+  const topProfile = profiles[0];
+  const nextProfile = profiles[1];
+  const deckWidth = isWeb ? Math.min(430, Math.max(360, safeViewportWidth - 64)) : undefined;
+  const deckHeight = isWeb ? Math.min(680, Math.max(560, safeViewportHeight - 260)) : undefined;
+  const motionWidth = Math.max(deckWidth ?? safeViewportWidth, width);
+  const swipeThreshold = Math.min(170, Math.max(92, (deckWidth ?? safeViewportWidth) * 0.27));
+  const deckExitDistance = Math.max(deckWidth ?? safeViewportWidth, 360) + 190;
+  const webDeckStyle =
+    isWeb && deckWidth && deckHeight
+      ? {
+          width: deckWidth,
+          height: deckHeight,
+          minHeight: deckHeight,
+          maxHeight: deckHeight,
+          flexBasis: deckHeight,
+          flexGrow: 0,
+          flexShrink: 0,
+          alignSelf: 'center' as const,
+          marginHorizontal: 0,
+        }
+      : null;
+
+  const cardRotate = swipePosition.x.interpolate({
+    inputRange: [-motionWidth, 0, motionWidth],
+    outputRange: ['-14deg', '0deg', '14deg'],
+    extrapolate: 'clamp',
   });
-
-  const nextCardScale = position.x.interpolate({
-    inputRange: [-width / 2, 0, width / 2],
-    outputRange: [1, 0.9, 1],
-    extrapolate: 'clamp'
+  const topCardScale = swipePosition.x.interpolate({
+    inputRange: [-motionWidth, 0, motionWidth],
+    outputRange: [0.96, 1, 0.96],
+    extrapolate: 'clamp',
   });
-
-  const nextCardOpacity = position.x.interpolate({
-    inputRange: [-width / 2, 0, width / 2],
-    outputRange: [1, 0.5, 1],
-    extrapolate: 'clamp'
+  const topCardOpacity = swipePosition.x.interpolate({
+    inputRange: [-motionWidth * 0.85, 0, motionWidth * 0.85],
+    outputRange: [0.88, 1, 0.88],
+    extrapolate: 'clamp',
   });
-
-  const likeOpacity = position.x.interpolate({
-    inputRange: [0, width / 4],
+  const nextCardScale = swipePosition.x.interpolate({
+    inputRange: [-swipeThreshold, 0, swipeThreshold],
+    outputRange: [1, 0.94, 1],
+    extrapolate: 'clamp',
+  });
+  const nextCardTranslateY = swipePosition.x.interpolate({
+    inputRange: [-swipeThreshold, 0, swipeThreshold],
+    outputRange: [0, 18, 0],
+    extrapolate: 'clamp',
+  });
+  const nextCardOpacity = swipePosition.x.interpolate({
+    inputRange: [-swipeThreshold, 0, swipeThreshold],
+    outputRange: [1, 0.72, 1],
+    extrapolate: 'clamp',
+  });
+  const likeOpacity = swipePosition.x.interpolate({
+    inputRange: [0, swipeThreshold],
     outputRange: [0, 1],
-    extrapolate: 'clamp'
+    extrapolate: 'clamp',
+  });
+  const nopeOpacity = swipePosition.x.interpolate({
+    inputRange: [-swipeThreshold, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+  const likeBadgeScale = swipePosition.x.interpolate({
+    inputRange: [0, swipeThreshold],
+    outputRange: [0.84, 1],
+    extrapolate: 'clamp',
+  });
+  const nopeBadgeScale = swipePosition.x.interpolate({
+    inputRange: [-swipeThreshold, 0],
+    outputRange: [1, 0.84],
+    extrapolate: 'clamp',
   });
 
-  const nopeOpacity = position.x.interpolate({
-    inputRange: [-width / 4, 0],
-    outputRange: [1, 0],
-    extrapolate: 'clamp'
-  });
+  const profileIdsKey = useMemo(() => profiles.map((profile) => profile.uid).join('|'), [profiles]);
+
+  useEffect(() => {
+    swipeThresholdRef.current = swipeThreshold;
+    deckExitDistanceRef.current = deckExitDistance;
+  }, [deckExitDistance, swipeThreshold]);
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: (evt, gestureState) => {
-        // Only take over if the user is swiping horizontally significantly
-        return Math.abs(gestureState.dx) > 10;
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponderCapture: (_evt, gestureState) =>
+        !isAnimatingRef.current &&
+        Math.abs(gestureState.dx) > 14 &&
+        Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.25,
+      onMoveShouldSetPanResponder: (_evt, gestureState) =>
+        !isAnimatingRef.current &&
+        Math.abs(gestureState.dx) > 14 &&
+        Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.25,
+      onPanResponderMove: (_evt, gestureState) => {
+        if (isAnimatingRef.current) return;
+        swipePosition.setValue({ x: gestureState.dx, y: gestureState.dy * 0.18 });
       },
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dx) > 10;
+      onPanResponderRelease: (_evt, gestureState) => {
+        if (isAnimatingRef.current) return;
+        if (gestureState.dx > swipeThresholdRef.current) animateSwipeOutRef.current('right');
+        else if (gestureState.dx < -swipeThresholdRef.current) animateSwipeOutRef.current('left');
+        else resetSwipePositionRef.current();
       },
-      onPanResponderMove: (evt, gestureState) => {
-        position.setValue({ x: gestureState.dx, y: gestureState.dy });
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.dx > SWIPE_THRESHOLD) {
-          forceSwipe('right');
-        } else if (gestureState.dx < -SWIPE_THRESHOLD) {
-          forceSwipe('left');
-        } else {
-          resetPosition();
-        }
-      }
+      onPanResponderTerminate: () => resetSwipePositionRef.current(),
+      onPanResponderTerminationRequest: () => false,
     })
   ).current;
 
-  const forceSwipe = (direction: 'left' | 'right') => {
-    const x = direction === 'right' ? width + 100 : -width - 100;
-    Animated.timing(position, {
-      toValue: { x, y: 0 },
-      duration: 250,
-      useNativeDriver: false
-    }).start(() => onSwipeComplete(direction));
-  };
+  useEffect(() => {
+    if (!user) return;
+    const usersQuery = query(
+      collection(db, 'users'),
+      where('isVisible', '==', true),
+      where('isStealthMode', '==', false),
+      limit(DISCOVERY_LIMIT)
+    );
 
-  const onSwipeComplete = (direction: 'left' | 'right') => {
-    const item = profiles[currentIndex];
-    direction === 'right' ? handleLike(item) : handleSkip(item);
-    position.setValue({ x: 0, y: 0 });
-    setCurrentIndex(prev => prev + 1);
-    setActivePhotoIndex(0);
-  };
+    const unsubscribe = onSnapshot(
+      usersQuery,
+      (snap) => {
+        const allUsers = snap.docs.map((docSnap) => docSnap.data() as UserProfile);
+        const visibleUsers = allUsers
+          .filter((profile: any) => profile.uid !== user.uid && !profile.deleted)
+          .sort((a: any, b: any) => (b.turboConnect ? 1 : 0) - (a.turboConnect ? 1 : 0));
+        const mergedUsers = [...visibleUsers, ...demoBuilders].filter(
+          (profile, index, list) => list.findIndex((item) => item.uid === profile.uid) === index
+        );
+        const locallyRanked = myProfile ? localCommonalityRank(myProfile, mergedUsers, mergedUsers.length) : [];
+        const localScoreById = new Map(locallyRanked.map((rank) => [rank.uid, rank.score]));
+        const orderedUsers = locallyRanked.length
+          ? [...mergedUsers].sort(
+              (a: any, b: any) =>
+                ((localScoreById.get(b.uid) ?? 0) + (b.turboConnect ? 8 : 0)) -
+                ((localScoreById.get(a.uid) ?? 0) + (a.turboConnect ? 8 : 0))
+            )
+          : mergedUsers;
+
+        allProfilesRef.current = orderedUsers;
+        if (hasUserSwipedRef.current) {
+          setProfiles((current) => {
+            const currentIds = new Set(current.map((profile) => profile.uid));
+            const additions = orderedUsers.filter(
+              (profile) => !swipedSessionIdsRef.current.has(profile.uid) && !currentIds.has(profile.uid)
+            );
+            return additions.length ? [...current, ...additions] : current;
+          });
+        } else {
+          setProfiles(orderedUsers);
+        }
+        setAiOrderingDone(false);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('SwipeScreen query error:', error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid, myProfile?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid || aiOrderingDone || profiles.length < 2 || hasUserSwipedRef.current) return;
+
+    let cancelled = false;
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      void (async () => {
+        try {
+          const candidateIds = profiles
+            .filter((profile) => !isDemoBuilder(profile))
+            .map((profile) => profile.uid)
+            .filter(Boolean)
+            .slice(0, DISCOVERY_LIMIT);
+          if (candidateIds.length < 2) return;
+          const ranked = await rankCandidatesWithAI(candidateIds, Math.min(candidateIds.length, 12));
+          if (cancelled || ranked.length === 0 || hasUserSwipedRef.current) return;
+
+          const scoreById = new Map(ranked.map((rank) => [rank.uid, rank.score]));
+          setProfiles((current) =>
+            [...current].sort(
+              (a: any, b: any) =>
+                ((scoreById.get(b.uid) ?? -1) + (b.turboConnect ? 8 : 0)) -
+                ((scoreById.get(a.uid) ?? -1) + (a.turboConnect ? 8 : 0))
+            )
+          );
+        } catch {
+          // Local ranking is already applied. Keep swipe stable.
+        } finally {
+          if (!cancelled) setAiOrderingDone(true);
+        }
+      })();
+    });
+
+    return () => {
+      cancelled = true;
+      interaction.cancel();
+    };
+  }, [user?.uid, profileIdsKey, aiOrderingDone, profiles.length]);
+
+  useEffect(() => {
+    if (!user?.uid || !topProfile || isDemoBuilder(topProfile)) return;
+
+    let cancelled = false;
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return;
+      trackProfileView({
+        profileId: topProfile.uid,
+        viewerId: user.uid,
+        viewerName: user.displayName || 'Someone',
+        notify: false,
+      }).catch((error) => console.warn('Swipe view tracking skipped:', error));
+    });
+
+    return () => {
+      cancelled = true;
+      interaction.cancel();
+    };
+  }, [topProfile?.uid, user?.uid]);
+
+  useEffect(() => {
+    [topProfile, nextProfile].filter(Boolean).forEach((profile) => {
+      getSwipePhotos(profile as UserProfile)
+        .slice(0, 1)
+        .filter((uri) => /^https?:\/\//.test(uri))
+        .forEach((uri) => Image.prefetch(uri).catch(() => {}));
+    });
+  }, [topProfile?.uid, nextProfile?.uid]);
+
+  useEffect(() => {
+    setInfoExpanded(false);
+  }, [topProfile?.uid]);
 
   const handleLike = async (target: UserProfile) => {
-    if (!user || !target) return;
+    if (!user?.uid || !target || isDemoBuilder(target)) return;
     try {
       await addDoc(collection(db, 'swipes'), {
         fromId: user.uid,
         toId: target.uid,
         type: 'like',
-        timestamp: serverTimestamp()
+        timestamp: serverTimestamp(),
       });
 
-      // Check if they already liked us
-      const q = query(
-        collection(db, 'swipes'), 
-        where('fromId', '==', target.uid), 
+      const reciprocalQuery = query(
+        collection(db, 'swipes'),
+        where('fromId', '==', target.uid),
         where('toId', '==', user.uid),
         where('type', '==', 'like')
       );
-      const querySnapshot = await getDocs(q);
+      const querySnapshot = await getDocs(reciprocalQuery);
 
       if (!querySnapshot.empty) {
-        // It's a MATCH!
-        const matchDoc = await addDoc(collection(db, 'matches'), {
-          userIds: [user.uid, target.uid],
-          timestamp: serverTimestamp(),
-        });
-        
-        // Notify both users
+        const matchId = await ensureDirectMatch(user.uid, target.uid);
         await addDoc(collection(db, 'notifications'), {
           userId: target.uid,
           fromId: user.uid,
           type: 'match',
           content: 'You got a new match!',
-          matchId: matchDoc.id,
+          matchId,
           isRead: false,
-          timestamp: serverTimestamp()
+          timestamp: serverTimestamp(),
         });
         await addDoc(collection(db, 'notifications'), {
           userId: user.uid,
           fromId: target.uid,
           type: 'match',
           content: 'You got a new match!',
-          matchId: matchDoc.id,
+          matchId,
           isRead: false,
-          timestamp: serverTimestamp()
+          timestamp: serverTimestamp(),
         });
       } else {
-        // Just a like notification
         await addDoc(collection(db, 'notifications'), {
           userId: target.uid,
           fromId: user.uid,
           type: 'like',
           content: 'liked your profile!',
           isRead: false,
-          timestamp: serverTimestamp()
-        });
-      }
-    } catch (e) { console.error(e); }
-  };
-
-  const handleSkip = (target: UserProfile) => {
-    // Just skip
-  };
-
-  const resetPosition = () => {
-    Animated.spring(position, {
-      toValue: { x: 0, y: 0 },
-      friction: 4,
-      useNativeDriver: false
-    }).start();
-  };
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(
-      collection(db, 'users'), 
-      where('uid', '!=', user.uid), 
-      limit(40)
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      const allUsers = snap.docs.map(doc => doc.data() as UserProfile);
-      // Filter out stealth users on the client side (avoids needing a composite index)
-      const visibleUsers = allUsers.filter(u => !u.isStealthMode);
-      setProfiles(visibleUsers);
-      setAiOrderingDone(false);
-      setLoading(false);
-    }, (error) => {
-      console.error("SwipeScreen query error:", error);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    if (aiOrderingDone) return;
-    if (!profiles || profiles.length < 2) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const candidateIds = profiles.map((p) => p.uid).filter(Boolean).slice(0, 40);
-        const ranked = await rankCandidatesWithAI(candidateIds, 20);
-        if (cancelled || ranked.length === 0) return;
-
-        const scoreById = new Map(ranked.map((r) => [r.uid, r.score]));
-        const ordered = [...profiles].sort(
-          (a, b) => (scoreById.get(b.uid) ?? -1) - (scoreById.get(a.uid) ?? -1)
-        );
-        setProfiles(ordered);
-      } catch (e) {
-        console.warn('AI ranking unavailable, using default discovery order.', e);
-      } finally {
-        if (!cancelled) setAiOrderingDone(true);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user, profiles, aiOrderingDone]);
-
-  useEffect(() => {
-    if (!user || !profiles[currentIndex]) return;
-    const target = profiles[currentIndex];
-    const trackView = async () => {
-      try {
-        await updateDoc(doc(db, 'users', target.uid), {
-          viewedBy: arrayUnion(user.uid)
-        });
-        
-        // Also create a notification for the viewed user
-        await addDoc(collection(db, 'notifications'), {
-          userId: target.uid,
-          fromId: user.uid,
-          type: 'view',
-          content: `${user.displayName || 'Someone'} viewed your profile.`,
           timestamp: serverTimestamp(),
-          isRead: false
         });
-      } catch (e) {
-        console.error("Tracking view failed:", e);
       }
-    };
-    trackView();
-  }, [currentIndex, profiles, user]);
-
-  const renderCards = () => {
-    if (currentIndex >= profiles.length) {
-      return (
-        <View style={styles.emptyContainer}>
-          <RotateCcw size={48} color="#FBE618" />
-          <Text style={[styles.emptyText, { color: isDark ? '#FFF' : '#000' }]}>NO MORE PROFILES</Text>
-          <TouchableOpacity style={styles.resetBtn} onPress={() => setCurrentIndex(0)}>
-            <Text style={styles.resetText}>REFRESH DISCOVERY</Text>
-          </TouchableOpacity>
-        </View>
-      );
+    } catch (error) {
+      console.warn('Swipe like skipped:', error);
     }
+  };
 
-    return profiles.slice(currentIndex, currentIndex + 2).map((profile, i) => {
-      const isTop = i === 0;
-      const dragHandlers = isTop ? panResponder.panHandlers : {};
-      const photos = (Array.isArray((profile as any).photos) && (profile as any).photos.length > 0
-        ? (profile as any).photos
-        : [profile.profilePic].filter(Boolean)) as string[];
-      const safeIndex = Math.min(activePhotoIndex, Math.max(0, photos.length - 1));
-      
-      const cardStyle = isTop ? {
-        transform: [...position.getTranslateTransform(), { rotate }],
-        zIndex: 10
-      } : {
-        transform: [{ scale: nextCardScale }],
-        opacity: nextCardOpacity,
-        zIndex: 5
-      };
+  const completeSwipe = (direction: 'left' | 'right') => {
+    const item = profiles[0];
+    if (!item) return;
 
-      return (
+    hasUserSwipedRef.current = true;
+    swipedSessionIdsRef.current.add(item.uid);
+    setActivePhotoIndex(0);
+    setInfoExpanded(false);
+    setProfiles((current) => current.slice(1));
+
+    if (direction === 'right') {
+      void handleLike(item);
+    }
+  };
+
+  const resetSwipePosition = () => {
+    swipePosition.stopAnimation();
+    Animated.spring(swipePosition, {
+      toValue: { x: 0, y: 0 },
+      tension: 85,
+      friction: 9,
+      useNativeDriver: true,
+    }).start(() => {
+      isAnimatingRef.current = false;
+    });
+  };
+
+  const animateSwipeOut = (direction: 'left' | 'right') => {
+    if (isAnimatingRef.current || !profiles[0]) return;
+    isAnimatingRef.current = true;
+    setInfoExpanded(false);
+    const exitX = direction === 'right' ? deckExitDistanceRef.current : -deckExitDistanceRef.current;
+
+    Animated.timing(swipePosition, {
+      toValue: { x: exitX, y: direction === 'right' ? 34 : -34 },
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      swipePosition.setValue({ x: 0, y: 0 });
+      isAnimatingRef.current = false;
+      if (finished) completeSwipe(direction);
+    });
+  };
+
+  completeSwipeRef.current = completeSwipe;
+  animateSwipeOutRef.current = animateSwipeOut;
+  resetSwipePositionRef.current = resetSwipePosition;
+
+  const resetDeck = () => {
+    swipedSessionIdsRef.current.clear();
+    hasUserSwipedRef.current = false;
+    setActivePhotoIndex(0);
+    setInfoExpanded(false);
+    setAiOrderingDone(false);
+    swipePosition.setValue({ x: 0, y: 0 });
+    isAnimatingRef.current = false;
+    setProfiles(allProfilesRef.current);
+  };
+
+  const renderEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <RotateCcw size={48} color="#FBE618" />
+      <Text style={[styles.emptyText, { color: isDark ? '#FFF' : '#000' }]}>NO MORE PROFILES</Text>
+      <TouchableOpacity style={styles.resetBtn} onPress={resetDeck}>
+        <Text style={styles.resetText}>REFRESH DISCOVERY</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderPreviewCard = () => {
+    if (!nextProfile || infoExpanded) return null;
+    const photos = getSwipePhotos(nextProfile);
+    const ageText = Number(nextProfile.age) > 0 ? `, ${nextProfile.age}` : '';
+    const roleText = [
+      (nextProfile as any).occupation || 'Builder',
+      (nextProfile as any).company ? `@ ${(nextProfile as any).company}` : null,
+    ].filter(Boolean).join(' ');
+
+    return (
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.card,
+          styles.deckCardLayer,
+          styles.previewCard,
+          isWeb && styles.webCard,
+          {
+            backgroundColor: isDark ? '#111115' : '#F8F8F8',
+            opacity: nextCardOpacity,
+            transform: [{ translateY: nextCardTranslateY }, { scale: nextCardScale }],
+          },
+        ]}
+      >
+        <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.cardImg} fadeDuration={0} />
+        <View style={styles.previewOverlay} pointerEvents="none" />
+        <View style={styles.previewInfo}>
+          <Text style={styles.previewEyebrow}>NEXT BUILDER</Text>
+          <Text style={styles.previewName} numberOfLines={1}>
+            {nextProfile.displayName || 'Builder'}{ageText}
+          </Text>
+          <Text style={styles.previewRole} numberOfLines={1}>{roleText}</Text>
+        </View>
+      </Animated.View>
+    );
+  };
+
+  const renderCard = () => {
+    if (!topProfile) return renderEmpty();
+
+    const photos = getSwipePhotos(topProfile);
+    const safeIndex = Math.min(activePhotoIndex, Math.max(0, photos.length - 1));
+    const ageText = Number(topProfile.age) > 0 ? `, ${topProfile.age}` : '';
+    const locationText = [topProfile.city, topProfile.country].filter(Boolean).join(', ') || 'Remote';
+    const roleText = [
+      (topProfile as any).occupation || 'Builder',
+      (topProfile as any).company ? `@ ${(topProfile as any).company}` : null,
+    ].filter(Boolean).join(' ');
+    const lookingFor = Array.isArray((topProfile as any).lookingFor) ? (topProfile as any).lookingFor : [];
+    const industries = Array.isArray((topProfile as any).industries) ? (topProfile as any).industries : [];
+    const bio = topProfile.bio || 'No bio yet. Open their profile to learn more.';
+    const reputation = Math.max(0, Number((topProfile as any).reputationScore ?? 0));
+    const matchRank = myProfile ? localCommonalityRank(myProfile, [topProfile], 1)[0] : null;
+    const compatibility = Math.max(isDemoBuilder(topProfile) ? 72 : 1, Math.min(99, Math.round(matchRank?.score || 82)));
+    const compatibilityReason = matchRank?.reason || 'AI compatibility preview from profile signals';
+
+    return (
+      <Animated.View
+        key={topProfile.uid}
+        style={[
+          styles.card,
+          styles.deckCardLayer,
+          isWeb && styles.webCard,
+          {
+            backgroundColor: isDark ? '#111115' : '#F8F8F8',
+            opacity: topCardOpacity,
+            transform: [
+              { translateX: swipePosition.x },
+              { translateY: swipePosition.y },
+              { rotate: cardRotate },
+              { scale: topCardScale },
+            ],
+          },
+        ]}
+        {...(infoExpanded ? {} : panResponder.panHandlers)}
+      >
         <Animated.View
-          key={profile.uid}
-          style={[styles.card, cardStyle, { backgroundColor: isDark ? '#111115' : '#F8F8F8' }]}
-          {...dragHandlers}
+          pointerEvents="none"
+          style={[
+            styles.badge,
+            styles.likeBadge,
+            {
+              opacity: likeOpacity,
+              transform: [{ rotate: '-14deg' }, { scale: likeBadgeScale }],
+            },
+          ]}
         >
-          {isTop && (
-            <>
-              <Animated.View style={[styles.badge, { opacity: likeOpacity, right: 30, borderColor: '#4ADE80' }]}>
-                <Text style={[styles.badgeText, { color: '#4ADE80' }]}>LIKE</Text>
-              </Animated.View>
-              <Animated.View style={[styles.badge, { opacity: nopeOpacity, left: 30, borderColor: '#FF4444' }]}>
-                <Text style={[styles.badgeText, { color: '#FF4444' }]}>NOPE</Text>
-              </Animated.View>
-            </>
-          )}
+          <Text style={[styles.badgeText, { color: '#4ADE80' }]}>LIKE</Text>
+        </Animated.View>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.badge,
+            styles.nopeBadge,
+            {
+              opacity: nopeOpacity,
+              transform: [{ rotate: '14deg' }, { scale: nopeBadgeScale }],
+            },
+          ]}
+        >
+          <Text style={[styles.badgeText, { color: '#FF4444' }]}>NOPE</Text>
+        </Animated.View>
 
-          <Image source={{ uri: photos[safeIndex] || 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800' }} style={styles.cardImg} />
-          <View style={styles.cardOverlay} />
-          
-          <View style={styles.cardInfo}>
-            {isTop && photos.length > 1 && (
+        <Image source={{ uri: photos[safeIndex] || FALLBACK_PHOTO }} style={styles.cardImg} fadeDuration={0} />
+        <View style={styles.cardOverlay} pointerEvents="none" />
+
+        <View style={styles.cardInfo}>
+          <View style={styles.cardTopRow}>
+            <View style={styles.topBadgeColumn}>
+              <View style={styles.aiBadge}>
+                <Zap size={11} color="#000" fill="#000" />
+                <Text style={styles.aiBadgeText}>AI {compatibility}% MATCH</Text>
+              </View>
+              <View style={styles.repBadge}>
+                <Zap size={10} color="#000" fill="#000" />
+                <Text style={styles.repVal}>{reputation} REP</Text>
+              </View>
+            </View>
+            {photos.length > 1 && (
               <View style={styles.photoThumbRow}>
                 {photos.slice(0, 3).map((uri, idx) => (
                   <TouchableOpacity
-                    key={idx}
+                    key={`${topProfile.uid}-${idx}`}
                     activeOpacity={0.9}
                     onPress={() => setActivePhotoIndex(idx)}
                     style={[styles.photoThumbWrap, idx === safeIndex && styles.photoThumbWrapActive]}
                   >
-                    <Image source={{ uri }} style={styles.photoThumbImg} />
+                    <Image source={{ uri }} style={styles.photoThumbImg} fadeDuration={0} />
                   </TouchableOpacity>
                 ))}
               </View>
             )}
-            <View style={styles.repBadge}>
-              <Zap size={10} color="#000" fill="#000" />
-              <Text style={styles.repVal}>{profile.reputationScore || 500} REP</Text>
-            </View>
-            
-            <ScrollView 
-              style={styles.bottomMeta} 
-              showsVerticalScrollIndicator={false}
-              scrollEnabled={isTop} // Only allow scrolling on the top card
-            >
+          </View>
+
+          <View style={styles.compactMeta}>
             <View style={styles.nameRow}>
-              <Text style={styles.nameText}>{profile.displayName}, {profile.age}</Text>
-              {profile.hasExit && (
+              <Text style={styles.nameText}>{topProfile.displayName || 'Builder'}{ageText}</Text>
+              {topProfile.hasExit && (
                 <View style={styles.exitBadge}>
                   <Target size={12} color="#000" />
                   <Text style={styles.exitText}>EXIT</Text>
                 </View>
               )}
             </View>
-            <Text style={styles.bioText}>"{profile.bio}"</Text>
-              
-              <View style={styles.tagGrid}>
-                {profile.skills?.slice(0, 5).map((s, idx) => (
-                  <View key={idx} style={styles.skillTag}>
-                    <Text style={styles.skillTagText}>{s.toUpperCase()}</Text>
-                  </View>
-                ))}
-              </View>
-              
-              <View style={styles.scrollIndicator}>
-                <ChevronDown size={14} color="#FBE618" />
-                <Text style={styles.scrollText}>SCROLL FOR BIO</Text>
-              </View>
-            </ScrollView>
+            <View style={styles.metaLine}>
+              <Briefcase size={13} color="#FBE618" />
+              <Text style={styles.metaLineText} numberOfLines={1}>{roleText}</Text>
+            </View>
+            <View style={styles.metaLine}>
+              <MapPin size={13} color="#FBE618" />
+              <Text style={styles.metaLineText} numberOfLines={1}>{locationText}</Text>
+            </View>
+            <View style={styles.aiReasonPill}>
+              <SparkleDot />
+              <Text style={styles.aiReasonText} numberOfLines={1}>{compatibilityReason}</Text>
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.moreInfoBtn}
+              onPress={() => setInfoExpanded(true)}
+            >
+              <Text style={styles.moreInfoText}>MORE INFO ABOUT THIS PERSON</Text>
+              <ChevronDown size={15} color="#000" />
+            </TouchableOpacity>
           </View>
-        </Animated.View>
-      );
-    }).reverse();
+
+          {infoExpanded && (
+            <ScrollView
+              style={styles.bottomMeta}
+              contentContainerStyle={styles.bottomMetaContent}
+              showsVerticalScrollIndicator
+              nestedScrollEnabled
+              bounces
+              scrollEventThrottle={16}
+            >
+            <View style={styles.detailsHeader}>
+              <Text style={styles.detailsTitle}>BUILDER DETAILS</Text>
+              <TouchableOpacity onPress={() => setInfoExpanded(false)} style={styles.closeInfoBtn}>
+                <Text style={styles.closeInfoText}>HIDE</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.bioCard}>
+              <Text style={styles.detailLabel}>BIO</Text>
+              <Text style={styles.bioText}>{bio}</Text>
+            </View>
+
+            <View style={styles.tagGrid}>
+              {topProfile.skills?.slice(0, 5).map((skill, idx) => (
+                <View key={`${topProfile.uid}-${skill}-${idx}`} style={styles.skillTag}>
+                  <Text style={styles.skillTagText}>{String(skill).toUpperCase()}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.detailGrid}>
+              <View style={styles.detailCard}>
+                <Text style={styles.detailLabel}>AI MATCH</Text>
+                <Text style={styles.detailValue}>{compatibility}% • {compatibilityReason}</Text>
+              </View>
+              <View style={styles.detailCard}>
+                <Text style={styles.detailLabel}>LOOKING FOR</Text>
+                <Text style={styles.detailValue}>{lookingFor.slice(0, 3).join(' • ') || 'Networking'}</Text>
+              </View>
+              <View style={styles.detailCard}>
+                <Text style={styles.detailLabel}>STAGE</Text>
+                <Text style={styles.detailValue}>{(topProfile as any).startupStage || 'Exploring'}</Text>
+              </View>
+              <View style={styles.detailCard}>
+                <Text style={styles.detailLabel}>INDUSTRY</Text>
+                <Text style={styles.detailValue}>{industries.slice(0, 3).join(' • ') || 'Open'}</Text>
+              </View>
+              <View style={styles.detailCard}>
+                <Text style={styles.detailLabel}>AVAILABILITY</Text>
+                <Text style={styles.detailValue}>{(topProfile as any).availability || 'Open'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.scrollIndicator}>
+              <ChevronDown size={14} color="#FBE618" />
+              <Text style={styles.scrollText}>SCROLL FOR DETAILS</Text>
+            </View>
+            </ScrollView>
+          )}
+        </View>
+      </Animated.View>
+    );
   };
 
-  if (loading) return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', justifyContent: 'center' }]}>
-      <ActivityIndicator color="#FBE618" />
-    </View>
-  );
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', justifyContent: 'center' }]}>
+        <ActivityIndicator color="#FBE618" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => navigation?.goBack?.()} style={styles.topBtn}>
-          <ChevronLeft size={22} color={isDark ? '#FFF' : '#000'} />
-        </TouchableOpacity>
-        <Text style={[styles.topTitle, { color: isDark ? '#FFF' : '#000' }]}>SWIPE</Text>
-        <View style={styles.topBtn} />
-      </View>
+      <View style={[styles.webStage, isWeb && styles.webStageDesktop]}>
+        <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }]}>
+          <TouchableOpacity onPress={() => navigation?.goBack?.()} style={styles.topBtn}>
+            <ChevronLeft size={22} color={isDark ? '#FFF' : '#000'} />
+          </TouchableOpacity>
+          <Text style={[styles.topTitle, { color: isDark ? '#FFF' : '#000' }]}>SWIPE</Text>
+          <View style={styles.topBtn} />
+        </View>
 
-      <View style={styles.stackArea}>
-        {renderCards()}
-      </View>
+        <View style={[styles.stackArea, webDeckStyle]}>
+          {renderPreviewCard()}
+          {renderCard()}
+        </View>
 
-      <View style={styles.actionRow}>
-        <TouchableOpacity style={styles.actionBtnSmall} onPress={() => forceSwipe('left')}>
-          <X size={24} color="#EF4444" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtnLarge} onPress={() => forceSwipe('right')}>
-          <Heart size={32} color="#FFF" fill="#FFF" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtnSmall} onPress={() => setCurrentIndex(0)}>
-          <RotateCcw size={24} color="#888" />
-        </TouchableOpacity>
+        <View style={[styles.actionRow, isWeb && styles.webActionRow]}>
+          <TouchableOpacity style={styles.actionBtnSmall} onPress={() => animateSwipeOut('left')}>
+            <X size={24} color="#EF4444" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtnLarge} onPress={() => animateSwipeOut('right')}>
+            <Heart size={32} color="#FFF" fill="#FFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtnSmall} onPress={resetDeck}>
+            <RotateCcw size={24} color="#888" />
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
 }
 
+const SparkleDot = () => <View style={styles.sparkleDot} />;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  webStage: {
+    flex: 1,
+  },
+  webStageDesktop: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 24,
+    paddingBottom: 22,
   },
   topBar: {
     flexDirection: 'row',
@@ -411,13 +738,27 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 16,
     justifyContent: 'center',
+    position: 'relative',
   },
   card: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     borderRadius: 32,
     borderWidth: 1,
     borderColor: '#222226',
     overflow: 'hidden',
+  },
+  webCard: {
+    width: '100%',
+    height: '100%',
+    minHeight: 560,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  deckCardLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  previewCard: {
+    borderColor: 'rgba(0,0,0,0.08)',
   },
   cardImg: {
     width: '100%',
@@ -426,12 +767,77 @@ const styles = StyleSheet.create({
   },
   cardOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  previewOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.26)',
+  },
+  previewInfo: {
+    position: 'absolute',
+    left: 22,
+    right: 22,
+    bottom: 22,
+    borderRadius: 22,
+    padding: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  previewEyebrow: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FBE618',
+    letterSpacing: 1.4,
+  },
+  previewName: {
+    marginTop: 5,
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FFF',
+    fontStyle: 'italic',
+    textTransform: 'uppercase',
+  },
+  previewRole: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#E5E7EB',
   },
   cardInfo: {
     ...StyleSheet.absoluteFillObject,
     padding: 24,
     justifyContent: 'space-between',
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  topBadgeColumn: {
+    gap: 8,
+    alignItems: 'flex-start',
+  },
+  aiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FBE618',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 5,
+    alignSelf: 'flex-start',
+    shadowColor: '#FBE618',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  aiBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#000',
+    letterSpacing: 0.4,
   },
   repBadge: {
     flexDirection: 'row',
@@ -442,14 +848,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 4,
     alignSelf: 'flex-start',
-    marginBottom: 20,
   },
   photoThumbRow: {
     flexDirection: 'row',
     gap: 8,
     alignSelf: 'flex-end',
-    marginTop: 6,
-    marginBottom: 10,
   },
   photoThumbWrap: {
     width: 38,
@@ -472,20 +875,73 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#FFF',
   },
+  compactMeta: {
+    borderRadius: 26,
+    padding: 18,
+    backgroundColor: 'rgba(0,0,0,0.48)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  moreInfoBtn: {
+    marginTop: 14,
+    minHeight: 44,
+    borderRadius: 16,
+    backgroundColor: '#FBE618',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  moreInfoText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#000',
+    letterSpacing: 0.8,
+  },
   bottomMeta: {
-    flex: 1,
-    maxHeight: '60%',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    maxHeight: '68%',
     backgroundColor: 'rgba(0,0,0,0.6)',
-    marginHorizontal: -24,
-    marginBottom: -24,
-    padding: 24,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
+    zIndex: 20,
+  },
+  bottomMetaContent: {
+    padding: 24,
+    paddingBottom: 34,
+  },
+  detailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  detailsTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#FFF',
+    letterSpacing: 1.6,
+  },
+  closeInfoBtn: {
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  closeInfoText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    flexWrap: 'wrap',
   },
   exitBadge: {
     flexDirection: 'row',
@@ -507,13 +963,58 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontStyle: 'italic',
     textTransform: 'uppercase',
+    flexShrink: 1,
+  },
+  metaLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  metaLineText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#F3F4F6',
+    fontWeight: '800',
+  },
+  aiReasonPill: {
+    marginTop: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(251,230,24,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(251,230,24,0.26)',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sparkleDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FBE618',
+  },
+  aiReasonText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#FFF',
+    letterSpacing: 0.3,
+  },
+  bioCard: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   bioText: {
     fontSize: 14,
-    color: '#CCC',
-    marginTop: 8,
+    color: '#F3F4F6',
+    marginTop: 6,
     fontWeight: '500',
-    fontStyle: 'italic',
     lineHeight: 20,
   },
   tagGrid: {
@@ -521,7 +1022,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 16,
-    marginBottom: 20,
+    marginBottom: 10,
   },
   skillTag: {
     backgroundColor: 'rgba(255,255,255,0.1)',
@@ -536,9 +1037,33 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#FFF',
   },
+  detailGrid: {
+    gap: 10,
+    marginTop: 8,
+  },
+  detailCard: {
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  detailLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+    color: '#FBE618',
+  },
+  detailValue: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#FFF',
+    fontWeight: '800',
+    lineHeight: 17,
+  },
   scrollIndicator: {
     alignItems: 'center',
-    paddingBottom: 20,
+    paddingTop: 12,
   },
   scrollText: {
     fontSize: 8,
@@ -553,12 +1078,20 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     paddingHorizontal: 10,
     borderRadius: 10,
-    transform: [{ rotate: '-15deg' }]
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  likeBadge: {
+    right: 30,
+    borderColor: '#4ADE80',
+  },
+  nopeBadge: {
+    left: 30,
+    borderColor: '#FF4444',
   },
   badgeText: {
     fontSize: 32,
     fontWeight: '900',
-    textTransform: 'uppercase'
+    textTransform: 'uppercase',
   },
   actionRow: {
     flexDirection: 'row',
@@ -566,6 +1099,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 25,
     paddingBottom: 36,
+  },
+  webActionRow: {
+    paddingBottom: 0,
+    marginTop: 18,
   },
   actionBtnSmall: {
     width: 60,
@@ -611,5 +1148,5 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#000',
     letterSpacing: 1,
-  }
+  },
 });

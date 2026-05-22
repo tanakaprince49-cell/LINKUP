@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, ActivityIndicator, Dimensions, Image } from 'react-native';
-import { collection, query, where, onSnapshot, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { useFocusEffect } from '@react-navigation/native';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppNotification } from '../types';
-import { Bell, Heart, Zap, User, Sparkles, MessageSquare, Shield } from 'lucide-react-native';
-
-const { width } = Dimensions.get('window');
+import { markUnreadNotificationsRead } from '../lib/notifications';
+import { Bell, Eye, Heart, MessageSquare, Sparkles, Zap } from 'lucide-react-native';
 
 const formatTimeAgo = (timestamp: any) => {
   if (!timestamp) return 'Just now';
@@ -24,7 +25,18 @@ const formatTimeAgo = (timestamp: any) => {
   return `${Math.floor(diffInDays / 7)}w ago`;
 };
 
-const NotificationItem = ({ notification, navigation }: { notification: any, navigation: any }) => {
+const timestampToMillis = (timestamp: AppNotification['timestamp']) => {
+  if (!timestamp) return 0;
+  if (typeof (timestamp as any)?.toDate === 'function') {
+    return (timestamp as any).toDate().getTime();
+  }
+  const parsed = new Date(timestamp as any).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+type NotificationRow = AppNotification;
+
+const NotificationItem = ({ notification, navigation }: { notification: NotificationRow, navigation: any }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -32,6 +44,9 @@ const NotificationItem = ({ notification, navigation }: { notification: any, nav
     switch (notification.type) {
       case 'like': return <Heart size={18} color="#FBE618" fill="#FBE61820" />;
       case 'match': return <Zap size={18} color="#FBE618" fill="#FBE61820" />;
+      case 'message': return <MessageSquare size={18} color="#2563EB" />;
+      case 'comment': return <MessageSquare size={18} color="#F97316" />;
+      case 'view': return <Eye size={18} color="#22C55E" />;
       case 'system': return <Sparkles size={18} color="#FBE618" />;
       default: return <Bell size={18} color="#FBE618" />;
     }
@@ -47,6 +62,25 @@ const NotificationItem = ({ notification, navigation }: { notification: any, nav
           }
         } catch (e) {
           console.error('Mark notification read error:', e);
+        }
+
+        if (notification.matchId) {
+          navigation.navigate('Chat', {
+            matchId: notification.matchId,
+            otherUser: notification.fromId
+              ? {
+                  uid: notification.fromId,
+                  displayName: notification.fromName || 'Builder',
+                  profilePic: notification.fromPic || '',
+                }
+              : undefined,
+          });
+          return;
+        }
+
+        if (notification.type === 'system' && notification.content?.startsWith('AI Opportunity') && notification.fromId) {
+          navigation.navigate('ActiveOpportunity', { userId: notification.fromId });
+          return;
         }
 
         if (notification.fromId) {
@@ -81,22 +115,31 @@ export default function AlertsScreen({ navigation }: any) {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.uid) return;
+      markUnreadNotificationsRead(user.uid).catch((error) => {
+        console.warn('Could not clear notification badge:', error);
+      });
+    }, [user?.uid])
+  );
 
   useEffect(() => {
     if (!user) return;
     const q = query(
       collection(db, 'notifications'), 
-      where('userId', '==', user.uid),
-      orderBy('timestamp', 'desc'),
-      limit(30)
+      where('userId', '==', user.uid)
     );
     const unsub = onSnapshot(q, (snap) => {
-      setNotifications(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as NotificationRow));
+      rows.sort((a, b) => timestampToMillis(b.timestamp) - timestampToMillis(a.timestamp));
+      setNotifications(rows.slice(0, 30));
       setLoading(false);
     }, (err) => {
-        console.error("Notifications error:", err);
+        console.warn("Notifications unavailable:", err);
         setLoading(false);
     });
     return () => unsub();

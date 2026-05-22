@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
-import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
-import { MessageSquare, ChevronRight, Pin, Star } from 'lucide-react-native';
+import { MessageSquare, ChevronRight, Pin, Star, Archive, ChevronLeft } from 'lucide-react-native';
 
 const formatTimeAgo = (timestamp: any) => {
   if (!timestamp) return '';
@@ -26,18 +27,51 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
+  const otherId = match.userIds.find(id => id !== user?.uid);
 
   useEffect(() => {
-    const otherId = match.userIds.find(id => id !== user?.uid);
     if (!otherId) return;
 
-    const unsub = onSnapshot(doc(db, 'users', otherId), (snap) => {
-      if (!snap.exists()) return;
-      setOtherUser({ uid: otherId, ...(snap.data() as any) } as UserProfile);
-    });
+    const unsub = onSnapshot(
+      doc(db, 'users', otherId),
+      (snap) => {
+        if (!snap.exists()) return;
+        setOtherUser({ uid: otherId, ...(snap.data() as any) } as UserProfile);
+      },
+      (err) => {
+        console.warn('Conversation profile unavailable:', err);
+        setOtherUser(null);
+      }
+    );
 
-    return () => unsub();
-  }, [match.userIds, user?.uid]);
+    return () => {
+      unsub();
+    };
+  }, [otherId]);
+
+  useEffect(() => {
+    if (!otherId) return;
+    if ((otherUser as any)?.hideOnlineStatus) {
+      setOtherUser((prev) => (prev ? ({ ...prev, isOnline: false, lastActiveAt: null } as any) : prev));
+      return;
+    }
+
+    const unsubPresence = onSnapshot(
+      doc(db, 'presence', otherId),
+      (snap) => {
+        if (!snap.exists()) return;
+        const p = snap.data() as any;
+        setOtherUser((prev) => (prev ? ({ ...prev, isOnline: !!p.isOnline, lastActiveAt: p.lastActiveAt } as any) : prev));
+      },
+      (err) => {
+        console.warn('Conversation presence unavailable:', err);
+      }
+    );
+
+    return () => {
+      unsubPresence();
+    };
+  }, [otherId, (otherUser as any)?.hideOnlineStatus]);
 
   if (!otherUser) return null;
   const isOnline = !!otherUser.isOnline;
@@ -57,7 +91,7 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
             style: 'destructive',
             onPress: async () => {
               try {
-                await deleteDoc(doc(db, 'matches', match.id));
+                await updateDoc(doc(db, 'matches', match.id), { deletedBy: arrayUnion(user.uid) } as any);
               } catch (e) {
                 console.error('Delete chat error:', e);
                 Alert.alert('Error', 'Could not delete chat.');
@@ -89,85 +123,89 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
   );
 };
 
-export default function MessagesScreen({ navigation }: any) {
+export default function MessagesScreen({ navigation, route }: any) {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const archivedOnly = !!route?.params?.archivedOnly;
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const demoOtherUser: UserProfile = {
-    uid: 'demo_user',
-    displayName: 'Demo Builder',
-    profilePic: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200',
-  } as any;
-
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'matches'), where('userIds', 'array-contains', user.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      const raw = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any as Match));
-      const visible = raw.filter((m: any) => !(Array.isArray(m.archivedBy) && m.archivedBy.includes(user.uid)));
-      visible.sort((a: any, b: any) => {
-        const ap = Array.isArray(a.pinnedBy) && a.pinnedBy.includes(user.uid);
-        const bp = Array.isArray(b.pinnedBy) && b.pinnedBy.includes(user.uid);
-        if (ap !== bp) return ap ? -1 : 1;
-        const at = a.lastMessageTime?.toMillis ? a.lastMessageTime.toMillis() : (a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0);
-        const bt = b.lastMessageTime?.toMillis ? b.lastMessageTime.toMillis() : (b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0);
-        return bt - at;
-      });
-      setMatches(visible);
-      setLoading(false);
-    });
+    const q = query(collection(db, 'matches'), where(new FieldPath('participants', user.uid), '==', true));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const raw = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any as Match));
+        const visible = raw.filter((m: any) => {
+          const archived = Array.isArray(m.archivedBy) && m.archivedBy.includes(user.uid);
+          const deleted = Array.isArray(m.deletedBy) && m.deletedBy.includes(user.uid);
+          if (deleted) return false;
+          return archivedOnly ? archived : !archived;
+        });
+        visible.sort((a: any, b: any) => {
+          const ap = Array.isArray(a.pinnedBy) && a.pinnedBy.includes(user.uid);
+          const bp = Array.isArray(b.pinnedBy) && b.pinnedBy.includes(user.uid);
+          if (ap !== bp) return ap ? -1 : 1;
+          const at = a.lastMessageTime?.toMillis ? a.lastMessageTime.toMillis() : (a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0);
+          const bt = b.lastMessageTime?.toMillis ? b.lastMessageTime.toMillis() : (b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0);
+          return bt - at;
+        });
+        setMatches(visible);
+        setLoading(false);
+      },
+      (err) => {
+        console.warn('Messages list unavailable:', err);
+        setMatches([]);
+        setLoading(false);
+      }
+    );
     
     return () => { unsub(); };
-  }, [user]);
-
-  const inboxItems = [
-    { id: '__demo__', kind: 'demo' as const },
-    ...matches.map((m) => ({ id: m.id, kind: 'match' as const, match: m })),
-  ];
+  }, [user, archivedOnly]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+      <View style={styles.topBar}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+          {archivedOnly && (
+            <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, { backgroundColor: isDark ? '#16161A' : '#F5F5F5' }]}>
+              <ChevronLeft size={20} color={isDark ? '#FFF' : '#000'} />
+            </TouchableOpacity>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.screenTitle, { color: isDark ? '#FFF' : '#000' }]}>
+              {archivedOnly ? 'ARCHIVED CHATS' : 'MESSAGES'}
+            </Text>
+            <Text style={styles.screenSub}>
+              {archivedOnly ? 'Hidden conversations you can still reopen.' : 'Your founder conversations and team threads.'}
+            </Text>
+          </View>
+        </View>
+        {!archivedOnly && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ArchivedChats', { archivedOnly: true })}
+            style={[styles.archiveBtn, { backgroundColor: isDark ? '#16161A' : '#F5F5F5', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+          >
+            <Archive size={17} color={isDark ? '#FFF' : '#000'} />
+            <Text style={[styles.archiveBtnText, { color: isDark ? '#FFF' : '#000' }]}>ARCHIVE</Text>
+          </TouchableOpacity>
+        )}
+      </View>
       {loading ? (
         <ActivityIndicator color="#FBE618" style={{ marginTop: 50 }} />
       ) : (
         <FlatList
-          data={inboxItems}
+          data={matches}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => {
-            if (item.kind === 'demo') {
-              return (
-                <TouchableOpacity
-                  style={[styles.chatItem, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
-                  onPress={() => navigation.navigate('Chat', { otherUser: demoOtherUser })}
-                >
-                  <View style={styles.avatarContainer}>
-                    <Image source={{ uri: demoOtherUser.profilePic }} style={styles.avatar} />
-                    <View style={[styles.statusDot, { backgroundColor: '#22C55E' }]} />
-                  </View>
-                  <View style={styles.chatInfo}>
-                    <View style={styles.chatHeader}>
-                      <Text style={[styles.chatName, { color: isDark ? '#FFF' : '#000' }]}>DEMO CHAT</Text>
-                      <Text style={styles.chatTime}>NOW</Text>
-                    </View>
-                    <Text style={styles.lastMessage} numberOfLines={1}>
-                      Tap to open a demo conversation
-                    </Text>
-                  </View>
-                  <ChevronRight size={16} color="#666" />
-                </TouchableOpacity>
-              );
-            }
-            return <ConversationItem match={item.match} navigation={navigation} />;
-          }}
+          renderItem={({ item }) => <ConversationItem match={item} navigation={navigation} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <MessageSquare size={48} color="#222" />
-              <Text style={styles.emptyText}>NO CONVERSATIONS YET</Text>
+              <Text style={styles.emptyText}>{archivedOnly ? 'NO ARCHIVED CHATS' : 'NO CONVERSATIONS YET'}</Text>
             </View>
           }
         />
@@ -180,9 +218,52 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  topBar: {
+    paddingHorizontal: 24,
+    paddingTop: 22,
+    paddingBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  screenTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    fontStyle: 'italic',
+  },
+  screenSub: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#777',
+    lineHeight: 15,
+  },
+  archiveBtn: {
+    height: 42,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  archiveBtnText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
   listContent: {
     paddingHorizontal: 24,
-    paddingTop: 26,
+    paddingTop: 20,
     paddingBottom: 100,
   },
   chatItem: {
