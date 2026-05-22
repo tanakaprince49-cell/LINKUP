@@ -299,7 +299,8 @@ service cloud.firestore {
           'participants',
           'lastMessage', 'lastMessageTime',
           'pinnedBy', 'archivedBy', 'importantBy', 'mutedUntilBy',
-          'deletedBy', 'confidentialBy'
+          'deletedBy', 'confidentialBy',
+          'unreadBy', 'typingBy'
         ]) &&
         validMatchUsers(data.userIds) &&
         validParticipants(data) &&
@@ -319,6 +320,10 @@ service cloud.firestore {
           validParticipantArray(data, 'confidentialBy') &&
           (!data.keys().hasAny(['mutedUntilBy']) ||
             (data.mutedUntilBy is map && data.mutedUntilBy.keys().hasOnly(data.userIds))) &&
+          (!data.keys().hasAny(['unreadBy']) ||
+            (data.unreadBy is map && data.unreadBy.keys().hasOnly(data.userIds))) &&
+          (!data.keys().hasAny(['typingBy']) ||
+            (data.typingBy is map && data.typingBy.keys().hasOnly(data.userIds))) &&
           (!data.keys().hasAny(['lastMessage']) ||
             (data.lastMessage is string && data.lastMessage.size() <= 4000));
       }
@@ -335,7 +340,8 @@ service cloud.firestore {
             'timestamp', 'participants',
             'lastMessage', 'lastMessageTime',
             'pinnedBy', 'archivedBy', 'importantBy', 'mutedUntilBy',
-            'deletedBy', 'confidentialBy'
+            'deletedBy', 'confidentialBy',
+            'unreadBy', 'typingBy'
           ]);
       }
 
@@ -405,6 +411,39 @@ service cloud.firestore {
         incoming().diff(existing()).affectedKeys().hasOnly(['isRead']) &&
         incoming().isRead is bool;
       allow delete: if isNotificationOwner(existing());
+    }
+
+    // ------------------------------------------------------------
+    // Saved builder profiles
+    // ------------------------------------------------------------
+    match /savedProfiles/{saveId} {
+      function isSavedProfileOwner(data) {
+        return isSignedIn() && data.ownerId == request.auth.uid;
+      }
+
+      function validSavedProfile(data) {
+        return data.keys().hasOnly([
+          'ownerId', 'profileId', 'profileName', 'profilePic',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.profileId) &&
+        data.profileId != request.auth.uid &&
+        saveId == request.auth.uid + "_" + data.profileId &&
+        (!data.keys().hasAny(['profileName']) || (data.profileName is string && data.profileName.size() <= 100)) &&
+        (!data.keys().hasAny(['profilePic']) || (data.profilePic is string && data.profilePic.size() <= 900000));
+      }
+
+      allow get, list: if isSavedProfileOwner(existing());
+      allow create: if isSignedIn() && validSavedProfile(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isSavedProfileOwner(existing()) && validSavedProfile(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().profileId == existing().profileId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if isSavedProfileOwner(existing());
     }
 
     // ------------------------------------------------------------

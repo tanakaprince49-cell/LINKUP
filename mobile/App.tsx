@@ -31,6 +31,7 @@ import ActiveOpportunitiesScreen from './src/screens/ActiveOpportunitiesScreen';
 import TrendingBuildersScreen from './src/screens/TrendingBuildersScreen';
 import RecommendedMatchesScreen from './src/screens/RecommendedMatchesScreen';
 import { subscribeToNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
+import { subscribeToUnreadMessagesCount } from './src/lib/chat';
 import OpportunityRadar from './src/components/OpportunityRadar';
 import WebAnalytics from './src/components/WebAnalytics';
 import PWAInstallPrompt from './src/components/PWAInstallPrompt';
@@ -81,6 +82,15 @@ const AppHeader = ({ navigation, title }: any) => {
   const { theme } = useTheme();
   const { user } = useAuth();
   const isDark = theme === 'dark';
+  const [messageCount, setMessageCount] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!user?.uid) {
+      setMessageCount(0);
+      return;
+    }
+    return subscribeToUnreadMessagesCount(user.uid, setMessageCount);
+  }, [user?.uid]);
 
   return (
     <SafeAreaView style={[styles.headerContainer, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
@@ -96,6 +106,13 @@ const AppHeader = ({ navigation, title }: any) => {
             onPress={() => navigation.navigate('Messages')}
           >
             <SafeIcon name="MessageSquare" size={18} color={isDark ? '#CCC' : '#444'} />
+            {messageCount > 0 && (
+              <View style={styles.headerBadgeBubble}>
+                <Text style={styles.headerBadgeText} numberOfLines={1}>
+                  {messageCount > 99 ? '99+' : String(messageCount)}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.headerIconBtn, { backgroundColor: isDark ? '#1A1A1F' : '#F8F8F8' }]}
@@ -420,6 +437,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 5,
     elevation: 2,
+    position: 'relative',
+  },
+  headerBadgeBubble: {
+    position: 'absolute',
+    top: -9,
+    right: -9,
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    backgroundColor: '#E30613',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  headerBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#FFF',
   },
   tabIconContainer: {
     alignItems: 'center',

@@ -22,7 +22,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import * as Icons from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, doc, getDoc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { geminiProfileInsights } from '../lib/gemini';
 import { trackProfileView } from '../lib/analytics';
 import { analyzeStartupIdea } from '../lib/ai';
@@ -154,6 +154,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [profileViewCount, setProfileViewCount] = useState(0);
   const [newAccountEmail, setNewAccountEmail] = useState('');
   const [accountActionBusy, setAccountActionBusy] = useState('');
+  const [isProfileSaved, setIsProfileSaved] = useState(false);
 
   // If a userId param is passed and it's not the current user, fetch that profile
   const rawTargetUserId = route?.params?.userId;
@@ -228,6 +229,24 @@ export default function ProfileScreen({ navigation, route }: any) {
 
     return () => unsubscribe();
   }, [isViewingOther, myProfile?.uid, Array.isArray(myProfile?.viewedBy) ? myProfile.viewedBy.join('|') : '']);
+
+  useEffect(() => {
+    if (!isViewingOther || !myProfile?.uid || !targetUserId) {
+      setIsProfileSaved(false);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      doc(db, 'savedProfiles', `${myProfile.uid}_${targetUserId}`),
+      (snapshot) => setIsProfileSaved(snapshot.exists()),
+      (error) => {
+        console.warn('Saved profile status unavailable:', error);
+        setIsProfileSaved(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [isViewingOther, myProfile?.uid, targetUserId]);
 
   // NOTE: do not early-return before hooks below (Rules of Hooks).
   const isBusy = !profile || viewedLoading;
@@ -428,6 +447,36 @@ export default function ProfileScreen({ navigation, route }: any) {
     } catch (e) {
       console.error('openChat error:', e);
       Alert.alert('Error', 'Could not open chat. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const toggleSavedProfile = async () => {
+    if (!myProfile?.uid || !targetUserId || !profile) return;
+    setIsSaving(true);
+    try {
+      const saveRef = doc(db, 'savedProfiles', `${myProfile.uid}_${targetUserId}`);
+      if (isProfileSaved) {
+        await deleteDoc(saveRef);
+        setIsProfileSaved(false);
+        Alert.alert('Removed', 'Profile removed from your saved builders.');
+        return;
+      }
+
+      await setDoc(saveRef, {
+        ownerId: myProfile.uid,
+        profileId: targetUserId,
+        profileName: profile.displayName || 'Builder',
+        profilePic: profile.profilePic || '',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setIsProfileSaved(true);
+      Alert.alert('Saved', 'Profile saved to your builders.');
+    } catch (e) {
+      console.error('save profile error:', e);
+      Alert.alert('Save failed', 'Could not save this profile. Deploy the latest Firestore rules and try again.');
     } finally {
       setIsSaving(false);
     }
@@ -928,10 +977,13 @@ export default function ProfileScreen({ navigation, route }: any) {
                     <Text style={{ color: '#2563EB', fontWeight: 'bold' }}>Message</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: '#FBE618', borderWidth: 1, borderColor: '#FBE618' }]}
-                    onPress={() => Alert.alert('Saved', 'Profile saved.')}
+                    style={[styles.actionButton, { backgroundColor: isProfileSaved ? '#111827' : '#FBE618', borderWidth: 1, borderColor: '#FBE618' }]}
+                    onPress={toggleSavedProfile}
+                    disabled={isSaving}
                   >
-                    <Text style={{ color: '#000', fontWeight: 'bold' }}>Save</Text>
+                    <Text style={{ color: isProfileSaved ? '#FBE618' : '#000', fontWeight: 'bold' }}>
+                      {isProfileSaved ? 'Saved' : 'Save'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               )}

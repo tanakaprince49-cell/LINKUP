@@ -22,6 +22,18 @@ const formatTimeAgo = (timestamp: any) => {
   return `${diffInDays}d`;
 };
 
+const isPresenceOnline = (presence: any) => {
+  if (!presence?.isOnline || !presence?.lastActiveAt) return false;
+  const date = presence.lastActiveAt?.toDate ? presence.lastActiveAt.toDate() : new Date(presence.lastActiveAt);
+  if (Number.isNaN(date.getTime())) return false;
+  return Date.now() - date.getTime() < 2 * 60 * 1000;
+};
+
+const formatLastSeen = (timestamp: any) => {
+  const ago = formatTimeAgo(timestamp);
+  return ago ? `Last seen ${ago} ago` : 'Offline';
+};
+
 const ConversationItem = ({ match, navigation }: { match: Match, navigation: any }) => {
   const { user } = useAuth();
   const { theme } = useTheme();
@@ -59,12 +71,16 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
     const unsubPresence = onSnapshot(
       doc(db, 'presence', otherId),
       (snap) => {
-        if (!snap.exists()) return;
+        if (!snap.exists()) {
+          setOtherUser((prev) => (prev ? ({ ...prev, isOnline: false } as any) : prev));
+          return;
+        }
         const p = snap.data() as any;
-        setOtherUser((prev) => (prev ? ({ ...prev, isOnline: !!p.isOnline, lastActiveAt: p.lastActiveAt } as any) : prev));
+        setOtherUser((prev) => (prev ? ({ ...prev, isOnline: isPresenceOnline(p), lastActiveAt: p.lastActiveAt } as any) : prev));
       },
       (err) => {
         console.warn('Conversation presence unavailable:', err);
+        setOtherUser((prev) => (prev ? ({ ...prev, isOnline: false } as any) : prev));
       }
     );
 
@@ -74,9 +90,10 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
   }, [otherId, (otherUser as any)?.hideOnlineStatus]);
 
   if (!otherUser) return null;
-  const isOnline = !!otherUser.isOnline;
+  const isOnline = isPresenceOnline(otherUser);
   const isPinned = Array.isArray((match as any).pinnedBy) && (match as any).pinnedBy.includes(user?.uid);
   const isImportant = Array.isArray((match as any).importantBy) && (match as any).importantBy.includes(user?.uid);
+  const unreadCount = Math.max(0, Number((match as any).unreadBy?.[user?.uid || ''] || 0));
 
   return (
     <TouchableOpacity 
@@ -117,7 +134,15 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
         <Text style={styles.lastMessage} numberOfLines={1}>
           {match.lastMessage || `Start the conversation with ${(otherUser.displayName || 'Builder').split(' ')[0]}`}
         </Text>
+        {!isOnline && !!otherUser.lastActiveAt && (
+          <Text style={styles.presenceText}>{formatLastSeen(otherUser.lastActiveAt)}</Text>
+        )}
       </View>
+      {unreadCount > 0 && (
+        <View style={styles.unreadBadge}>
+          <Text style={styles.unreadBadgeText}>{unreadCount > 99 ? '99+' : String(unreadCount)}</Text>
+        </View>
+      )}
       <ChevronRight size={16} color="#666" />
     </TouchableOpacity>
   );
@@ -169,7 +194,7 @@ export default function MessagesScreen({ navigation, route }: any) {
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
       <View style={styles.topBar}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-          {archivedOnly && (
+          {(archivedOnly || navigation.canGoBack?.()) && (
             <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, { backgroundColor: isDark ? '#16161A' : '#F5F5F5' }]}>
               <ChevronLeft size={20} color={isDark ? '#FFF' : '#000'} />
             </TouchableOpacity>
@@ -318,6 +343,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     fontWeight: '600',
+  },
+  presenceText: {
+    marginTop: 3,
+    color: '#888',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  unreadBadge: {
+    minWidth: 28,
+    height: 28,
+    paddingHorizontal: 7,
+    borderRadius: 14,
+    backgroundColor: '#E30613',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  unreadBadgeText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '900',
   },
   emptyContainer: {
     alignItems: 'center',

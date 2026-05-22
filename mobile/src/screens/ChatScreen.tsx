@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Alert, StatusBar, Modal, Pressable, ScrollView, Linking, Share } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -29,6 +29,13 @@ const formatLastSeen = (timestamp: any) => {
   return `Last seen ${diffInDays}d ago`;
 };
 
+const isPresenceOnline = (presence: any) => {
+  if (!presence?.isOnline || !presence?.lastActiveAt) return false;
+  const date = presence.lastActiveAt?.toDate ? presence.lastActiveAt.toDate() : new Date(presence.lastActiveAt);
+  if (Number.isNaN(date.getTime())) return false;
+  return Date.now() - date.getTime() < 2 * 60 * 1000;
+};
+
 const formatMessageTime = (timestamp: any) => {
   if (!timestamp) return '';
   const date = timestamp?.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -53,6 +60,13 @@ export default function ChatScreen({ route, navigation }: any) {
   const [matchMeta, setMatchMeta] = useState<any>(null);
   const [replyTo, setReplyTo] = useState<null | { messageId: string; senderId: string; text: string }>(null);
   const [hasBlockedUser, setHasBlockedUser] = useState(false);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingValueRef = useRef(false);
+  const myUid = user?.uid;
+  const otherUserId = useMemo(
+    () => otherUser?.uid || otherUserParam?.uid || (Array.isArray(matchMeta?.userIds) ? matchMeta.userIds.find((id: string) => id !== myUid) : ''),
+    [matchMeta?.userIds, myUid, otherUser?.uid, otherUserParam?.uid]
+  );
 
   useEffect(() => {
     if (matchId) return;
@@ -100,7 +114,7 @@ export default function ChatScreen({ route, navigation }: any) {
   }, [matchId]);
 
   useEffect(() => {
-    const otherId = otherUserParam?.uid;
+    const otherId = otherUserId;
     if (!otherId) return;
 
     const unsubUser = onSnapshot(
@@ -117,12 +131,10 @@ export default function ChatScreen({ route, navigation }: any) {
     return () => {
       unsubUser();
     };
-  }, [otherUserParam?.uid]);
-
-  const myUid = user?.uid;
+  }, [otherUserId]);
 
   useEffect(() => {
-    const otherId = otherUser?.uid || otherUserParam?.uid;
+    const otherId = otherUserId;
     if (!otherId) return;
     if (otherUser?.hideOnlineStatus) {
       setOtherUser((prev: any) => ({ ...(prev || {}), isOnline: false, lastActiveAt: null }));
@@ -132,26 +144,37 @@ export default function ChatScreen({ route, navigation }: any) {
     const unsubPresence = onSnapshot(
       doc(db, 'presence', otherId),
       (snap) => {
-        if (!snap.exists()) return;
+        if (!snap.exists()) {
+          setOtherUser((prev: any) => ({ ...(prev || {}), isOnline: false }));
+          return;
+        }
         const p = snap.data() as any;
-        setOtherUser((prev: any) => ({ ...(prev || {}), isOnline: !!p.isOnline, lastActiveAt: p.lastActiveAt }));
+        setOtherUser((prev: any) => ({ ...(prev || {}), isOnline: isPresenceOnline(p), lastActiveAt: p.lastActiveAt }));
       },
       (err) => {
         console.warn('Chat presence unavailable:', err);
+        setOtherUser((prev: any) => ({ ...(prev || {}), isOnline: false }));
       }
     );
 
     return () => unsubPresence();
-  }, [otherUser?.uid, otherUser?.hideOnlineStatus, otherUserParam?.uid]);
+  }, [otherUserId, otherUser?.hideOnlineStatus]);
 
   useEffect(() => {
-    if (!myUid || !otherUser?.uid) {
+    if (!matchId || !myUid) return;
+    updateDoc(doc(db, 'matches', matchId), { [`unreadBy.${myUid}`]: 0 } as any).catch((error) => {
+      console.warn('Could not clear chat unread count:', error);
+    });
+  }, [matchId, myUid]);
+
+  useEffect(() => {
+    if (!myUid || !otherUserId) {
       setHasBlockedUser(false);
       return;
     }
 
     const unsub = onSnapshot(
-      doc(db, 'blocks', `${myUid}_${otherUser.uid}`),
+      doc(db, 'blocks', `${myUid}_${otherUserId}`),
       (snap) => setHasBlockedUser(snap.exists()),
       (err) => {
         console.warn('Block status unavailable:', err);
@@ -160,7 +183,7 @@ export default function ChatScreen({ route, navigation }: any) {
     );
 
     return () => unsub();
-  }, [myUid, otherUser?.uid]);
+  }, [myUid, otherUserId]);
 
   const mutedUntilLabel = useMemo(() => {
     if (!myUid) return null;
@@ -198,6 +221,39 @@ export default function ChatScreen({ route, navigation }: any) {
     return !!getFutureDate(matchMeta?.mutedUntilBy?.[recipientId]);
   };
 
+  const setTypingState = async (isTyping: boolean) => {
+    if (!matchId || !myUid) return;
+    if (lastTypingValueRef.current === isTyping) return;
+    lastTypingValueRef.current = isTyping;
+    try {
+      await updateDoc(doc(db, 'matches', matchId), { [`typingBy.${myUid}`]: isTyping } as any);
+    } catch (error) {
+      console.warn('Typing indicator update failed:', error);
+    }
+  };
+
+  const handleInputChange = (text: string) => {
+    setInputText(text);
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+
+    if (text.trim()) {
+      void setTypingState(true);
+      typingTimerRef.current = setTimeout(() => {
+        void setTypingState(false);
+      }, 1400);
+      return;
+    }
+
+    void setTypingState(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      void setTypingState(false);
+    };
+  }, [matchId, myUid]);
+
   const sendChatText = async (text: string, replyPayload: Record<string, unknown> = {}, notificationContent = 'sent you a message.') => {
     if (!text.trim() || !user) return;
     if (!matchId) return;
@@ -215,13 +271,20 @@ export default function ChatScreen({ route, navigation }: any) {
         ...replyPayload,
       });
 
-      await updateDoc(doc(db, 'matches', matchId), {
+      const recipientId = otherUserId || otherUser?.uid;
+      const matchPatch: Record<string, unknown> = {
         lastMessage: text,
-        lastMessageTime: serverTimestamp()
-      });
+        lastMessageTime: serverTimestamp(),
+        [`unreadBy.${user.uid}`]: 0,
+      };
+
+      if (recipientId && recipientId !== user.uid) {
+        matchPatch[`unreadBy.${recipientId}`] = increment(1);
+      }
+
+      await updateDoc(doc(db, 'matches', matchId), matchPatch as any);
 
       // In-app notification for the recipient (unread badge increments).
-      const recipientId = otherUser?.uid;
       if (recipientId && recipientId !== user.uid && !isRecipientMuted(recipientId)) {
         await addDoc(collection(db, 'notifications'), {
           userId: recipientId,
@@ -248,6 +311,8 @@ export default function ChatScreen({ route, navigation }: any) {
 
     const text = inputText.trim();
     setInputText('');
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    void setTypingState(false);
     const replyPayload = replyTo
       ? { replyToMessageId: replyTo.messageId, replyToSenderId: replyTo.senderId, replyToText: replyTo.text }
       : {};
@@ -328,10 +393,11 @@ export default function ChatScreen({ route, navigation }: any) {
 
   const toggleBlockUser = async () => {
     if (!matchId) return;
-    if (!myUid || !otherUser?.uid) return;
+    const blockedUserId = otherUserId || otherUser?.uid;
+    if (!myUid || !blockedUserId) return;
     try {
       setBusyAction(true);
-      const blockId = `${myUid}_${otherUser.uid}`;
+      const blockId = `${myUid}_${blockedUserId}`;
       if (hasBlockedUser) {
         await deleteDoc(doc(db, 'blocks', blockId));
         setOptionsOpen(false);
@@ -341,7 +407,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
       await setDoc(doc(db, 'blocks', blockId), {
         blockedById: myUid,
-        blockedUserId: otherUser.uid,
+        blockedUserId,
         timestamp: serverTimestamp(),
       });
 
@@ -528,6 +594,11 @@ export default function ChatScreen({ route, navigation }: any) {
     );
   };
 
+  const otherIsTyping = !!(otherUserId && matchMeta?.typingBy?.[otherUserId]);
+  const otherIsOnline = isPresenceOnline(otherUser);
+  const headerStatus = otherIsTyping ? 'TYPING...' : (otherIsOnline ? 'ONLINE' : formatLastSeen(otherUser?.lastActiveAt));
+  const headerStatusColor = otherIsTyping ? '#2563EB' : (otherIsOnline ? '#4ADE80' : '#888');
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
@@ -544,12 +615,12 @@ export default function ChatScreen({ route, navigation }: any) {
               <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.avatar} />
               <View>
                 <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>{otherUser.displayName || 'Builder'}</Text>
-                <Text style={styles.status}>
-                  {otherUser.isOnline ? 'ONLINE' : formatLastSeen(otherUser.lastActiveAt)}
+                <Text style={[styles.status, { color: headerStatusColor }]}>
+                  {headerStatus}
                 </Text>
                 <View style={styles.securityLine}>
                   <Shield size={10} color="#22C55E" />
-                  <Text style={styles.securityText}>SECURED CHAT</Text>
+                  <Text style={styles.securityText}>END-TO-END ENCRYPTED</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -561,7 +632,7 @@ export default function ChatScreen({ route, navigation }: any) {
                 <Text style={styles.status}>Loading…</Text>
                 <View style={styles.securityLine}>
                   <Shield size={10} color="#22C55E" />
-                  <Text style={styles.securityText}>SECURED CHAT</Text>
+                  <Text style={styles.securityText}>END-TO-END ENCRYPTED</Text>
                 </View>
               </View>
             </View>
@@ -598,6 +669,13 @@ export default function ChatScreen({ route, navigation }: any) {
         />
 
         <View style={[styles.inputContainer, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
+          {otherIsTyping && (
+            <View style={[styles.typingPill, { backgroundColor: isDark ? '#111115' : '#EEF2FF', borderColor: isDark ? '#222226' : '#DBEAFE' }]}>
+              <Text style={[styles.typingText, { color: isDark ? '#FBE618' : '#2563EB' }]}>
+                {(otherUser?.displayName || 'Builder').split(' ')[0]} is typing...
+              </Text>
+            </View>
+          )}
           {!!replyTo && (
             <View style={[styles.replyBar, { backgroundColor: isDark ? '#111115' : '#F3F4F6', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
               <View style={{ flex: 1 }}>
@@ -631,7 +709,7 @@ export default function ChatScreen({ route, navigation }: any) {
             placeholder="Type a message..."
             placeholderTextColor="#666"
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleInputChange}
             multiline
           />
           <TouchableOpacity 
@@ -800,7 +878,6 @@ const styles = StyleSheet.create({
   },
   status: {
     fontSize: 10,
-    color: '#4ADE80',
     fontWeight: '900',
   },
   securityLine: {
@@ -873,6 +950,21 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     gap: 12,
+  },
+  typingPill: {
+    position: 'absolute',
+    left: 16,
+    top: -38,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  typingText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   replyAction: {
     width: 54,

@@ -11,7 +11,6 @@ import {
   serverTimestamp,
   getDocs,
   writeBatch,
-  orderBy,
   limit,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -194,8 +193,6 @@ export function subscribeToNotificationToasts(userId: string) {
   const q = query(
     collection(db, 'notifications'),
     where('userId', '==', userId),
-    where('isRead', '==', false),
-    orderBy('timestamp', 'desc'),
     limit(NOTIFICATION_QUERY_LIMIT)
   );
 
@@ -205,7 +202,9 @@ export function subscribeToNotificationToasts(userId: string) {
   return onSnapshot(
     q,
     (snap) => {
-      snap.docs.forEach((notificationDoc) => {
+      snap.docs
+        .filter((notificationDoc) => (notificationDoc.data() as any)?.isRead === false)
+        .forEach((notificationDoc) => {
         const data = notificationDoc.data() as any;
         const notificationId = notificationDoc.id;
 
@@ -287,13 +286,11 @@ export function subscribeToUnreadNotificationsCount(
   const q = query(
     collection(db, 'notifications'),
     where('userId', '==', userId),
-    where('isRead', '==', false),
-    orderBy('timestamp', 'desc'),
     limit(NOTIFICATION_QUERY_LIMIT)
   );
   return onSnapshot(
     q,
-    (snap) => onCount(snap.size),
+    (snap) => onCount(snap.docs.filter((notificationDoc) => (notificationDoc.data() as any)?.isRead === false).length),
     (err) => {
       console.warn('Unread notifications unavailable:', err);
       onCount(0);
@@ -307,15 +304,16 @@ export async function markUnreadNotificationsRead(userId: string) {
   const unreadQuery = query(
     collection(db, 'notifications'),
     where('userId', '==', userId),
-    where('isRead', '==', false),
-    orderBy('timestamp', 'desc'),
     limit(450)
   );
   const snap = await getDocs(unreadQuery);
   if (snap.empty) return;
 
   const batch = writeBatch(db);
-  snap.docs.slice(0, 450).forEach((notificationDoc) => {
+  snap.docs
+    .filter((notificationDoc) => (notificationDoc.data() as any)?.isRead === false)
+    .slice(0, 450)
+    .forEach((notificationDoc) => {
     batch.update(notificationDoc.ref, { isRead: true });
   });
   await batch.commit();
