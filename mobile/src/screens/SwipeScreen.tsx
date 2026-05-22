@@ -58,6 +58,8 @@ export default function SwipeScreen({ navigation }: any) {
   const safeViewportWidth = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : width;
   const safeViewportHeight =
     Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : windowSize.height || 900;
+  const isWideWeb = isWeb && safeViewportWidth >= 768;
+  const isCompactWeb = isWeb && !isWideWeb;
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
@@ -77,8 +79,16 @@ export default function SwipeScreen({ navigation }: any) {
 
   const topProfile = profiles[0];
   const nextProfile = profiles[1];
-  const deckWidth = isWeb ? Math.min(430, Math.max(360, safeViewportWidth - 64)) : undefined;
-  const deckHeight = isWeb ? Math.min(680, Math.max(560, safeViewportHeight - 260)) : undefined;
+  const deckWidth = isWeb
+    ? isWideWeb
+      ? Math.min(460, Math.max(380, safeViewportWidth - 96))
+      : Math.min(390, Math.max(300, safeViewportWidth - 24))
+    : undefined;
+  const deckHeight = isWeb
+    ? isWideWeb
+      ? Math.min(680, Math.max(560, safeViewportHeight - 250))
+      : Math.min(620, Math.max(430, safeViewportHeight - 172))
+    : undefined;
   const motionWidth = Math.max(deckWidth ?? safeViewportWidth, width);
   const swipeThreshold = Math.min(170, Math.max(92, (deckWidth ?? safeViewportWidth) * 0.27));
   const deckExitDistance = Math.max(deckWidth ?? safeViewportWidth, 360) + 190;
@@ -182,7 +192,12 @@ export default function SwipeScreen({ navigation }: any) {
   ).current;
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) {
+      setProfiles([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     const usersQuery = query(
       collection(db, 'users'),
       where('isVisible', '==', true),
@@ -444,7 +459,7 @@ export default function SwipeScreen({ navigation }: any) {
           styles.card,
           styles.deckCardLayer,
           styles.previewCard,
-          isWeb && styles.webCard,
+          isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
             backgroundColor: isDark ? '#111115' : '#F8F8F8',
             opacity: nextCardOpacity,
@@ -490,7 +505,7 @@ export default function SwipeScreen({ navigation }: any) {
         style={[
           styles.card,
           styles.deckCardLayer,
-          isWeb && styles.webCard,
+          isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
             backgroundColor: isDark ? '#111115' : '#F8F8F8',
             opacity: topCardOpacity,
@@ -534,7 +549,7 @@ export default function SwipeScreen({ navigation }: any) {
         <Image source={{ uri: photos[safeIndex] || FALLBACK_PHOTO }} style={styles.cardImg} fadeDuration={0} />
         <View style={styles.cardOverlay} pointerEvents="none" />
 
-        <View style={styles.cardInfo}>
+        <View style={[styles.cardInfo, isCompactWeb && styles.compactCardInfo]}>
           <View style={styles.cardTopRow}>
             <View style={styles.topBadgeColumn}>
               <View style={styles.aiBadge}>
@@ -562,9 +577,9 @@ export default function SwipeScreen({ navigation }: any) {
             )}
           </View>
 
-          <View style={styles.compactMeta}>
+          <View style={[styles.compactMeta, isCompactWeb && styles.compactWebMeta]}>
             <View style={styles.nameRow}>
-              <Text style={styles.nameText}>{topProfile.displayName || 'Builder'}{ageText}</Text>
+              <Text style={[styles.nameText, isCompactWeb && styles.compactNameText]}>{topProfile.displayName || 'Builder'}{ageText}</Text>
               {topProfile.hasExit && (
                 <View style={styles.exitBadge}>
                   <Target size={12} color="#000" />
@@ -586,7 +601,7 @@ export default function SwipeScreen({ navigation }: any) {
             </View>
             <TouchableOpacity
               activeOpacity={0.9}
-              style={styles.moreInfoBtn}
+              style={[styles.moreInfoBtn, isCompactWeb && styles.compactMoreInfoBtn]}
               onPress={() => setInfoExpanded(true)}
             >
               <Text style={styles.moreInfoText}>MORE INFO ABOUT THIS PERSON</Text>
@@ -656,6 +671,25 @@ export default function SwipeScreen({ navigation }: any) {
     );
   };
 
+  if (!user?.uid) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
+        <View style={styles.authGate}>
+          <Zap size={44} color="#FBE618" fill="#FBE618" />
+          <Text style={[styles.authGateTitle, { color: isDark ? '#FFF' : '#000' }]}>JOIN LINKUP FIRST</Text>
+          <Text style={styles.authGateCopy}>Sign in to unlock AI matchmaking, builder search, and swipe discovery.</Text>
+          <TouchableOpacity
+            style={styles.authGateButton}
+            onPress={() => navigation?.reset?.({ index: 0, routes: [{ name: 'Landing' }] }) || navigation?.navigate?.('Landing')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.authGateButtonText}>GO TO LOGIN</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', justifyContent: 'center' }]}>
@@ -666,7 +700,7 @@ export default function SwipeScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
-      <View style={[styles.webStage, isWeb && styles.webStageDesktop]}>
+      <View style={[styles.webStage, isWideWeb && styles.webStageDesktop, isCompactWeb && styles.webStageMobile]}>
         <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }]}>
           <TouchableOpacity onPress={() => navigation?.goBack?.()} style={styles.topBtn}>
             <ChevronLeft size={22} color={isDark ? '#FFF' : '#000'} />
@@ -680,14 +714,14 @@ export default function SwipeScreen({ navigation }: any) {
           {renderCard()}
         </View>
 
-        <View style={[styles.actionRow, isWeb && styles.webActionRow]}>
-          <TouchableOpacity style={styles.actionBtnSmall} onPress={() => animateSwipeOut('left')}>
+        <View style={[styles.actionRow, isWideWeb && styles.webActionRow, isCompactWeb && styles.compactActionRow]}>
+          <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={() => animateSwipeOut('left')}>
             <X size={24} color="#EF4444" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtnLarge} onPress={() => animateSwipeOut('right')}>
+          <TouchableOpacity style={[styles.actionBtnLarge, isCompactWeb && styles.compactActionBtnLarge]} onPress={() => animateSwipeOut('right')}>
             <Heart size={32} color="#FFF" fill="#FFF" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtnSmall} onPress={resetDeck}>
+          <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={resetDeck}>
             <RotateCcw size={24} color="#888" />
           </TouchableOpacity>
         </View>
@@ -710,6 +744,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 24,
     paddingBottom: 22,
+  },
+  webStageMobile: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 0,
+    paddingBottom: 14,
   },
   topBar: {
     flexDirection: 'row',
@@ -751,6 +791,13 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     minHeight: 560,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  compactWebCard: {
+    width: '100%',
+    height: '100%',
+    minHeight: 430,
     flexGrow: 0,
     flexShrink: 0,
   },
@@ -808,6 +855,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     padding: 24,
     justifyContent: 'space-between',
+  },
+  compactCardInfo: {
+    padding: 14,
   },
   cardTopRow: {
     flexDirection: 'row',
@@ -882,6 +932,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
   },
+  compactWebMeta: {
+    borderRadius: 22,
+    padding: 13,
+  },
   moreInfoBtn: {
     marginTop: 14,
     minHeight: 44,
@@ -891,6 +945,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  compactMoreInfoBtn: {
+    minHeight: 40,
+    marginTop: 10,
   },
   moreInfoText: {
     fontSize: 11,
@@ -964,6 +1022,10 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textTransform: 'uppercase',
     flexShrink: 1,
+  },
+  compactNameText: {
+    fontSize: 22,
+    lineHeight: 26,
   },
   metaLine: {
     flexDirection: 'row',
@@ -1104,6 +1166,11 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     marginTop: 18,
   },
+  compactActionRow: {
+    gap: 18,
+    paddingBottom: 0,
+    marginTop: 10,
+  },
   actionBtnSmall: {
     width: 60,
     height: 60,
@@ -1113,6 +1180,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#222226',
+  },
+  compactActionBtnSmall: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
   },
   actionBtnLarge: {
     width: 80,
@@ -1126,11 +1198,53 @@ const styles = StyleSheet.create({
     shadowRadius: 15,
     elevation: 8,
   },
+  compactActionBtnLarge: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+  },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 20,
+  },
+  authGate: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 30,
+    gap: 14,
+  },
+  authGateTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    letterSpacing: 1.2,
+    textAlign: 'center',
+  },
+  authGateCopy: {
+    maxWidth: 310,
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 20,
+    color: '#666',
+    textAlign: 'center',
+  },
+  authGateButton: {
+    marginTop: 8,
+    height: 52,
+    paddingHorizontal: 28,
+    borderRadius: 18,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authGateButtonText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1.6,
+    color: '#000',
   },
   emptyText: {
     fontSize: 18,

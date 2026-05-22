@@ -16,7 +16,6 @@ import {
   signInAnonymously,
   signInWithCredential,
   signInWithEmailAndPassword,
-  signInWithPopup,
   signInWithRedirect,
   signOut,
   verifyBeforeUpdateEmail,
@@ -196,6 +195,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [completedOnboardingUid, setCompletedOnboardingUid] = useState<string | null>(null);
   const isOnboarded = Boolean(user?.uid && (profile?.onboarded || completedOnboardingUid === user.uid));
 
+  useEffect(() => {
+    if (!loading) return;
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, Platform.OS === 'web' ? 3500 : 6500);
+    return () => clearTimeout(timeout);
+  }, [loading]);
+
   const rememberOnboardedUser = async (authUser: User) => {
     const userDocRef = doc(db, 'users', authUser.uid);
 
@@ -230,7 +237,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const completeWebRedirect = async () => {
       try {
         await setPersistence(auth, browserLocalPersistence);
-        await getRedirectResult(auth);
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          await rememberOnboardedUser(result.user);
+        }
       } catch (error: any) {
         if (cancelled) return;
         console.error('Google redirect completion error:', error);
@@ -270,6 +280,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const userDocRef = doc(db, 'users', authenticatedUser.uid);
+      const initialStoredOnboarded = await readStoredOnboarding(authenticatedUser.uid);
+      if (initialStoredOnboarded) {
+        setCompletedOnboardingUid(authenticatedUser.uid);
+      }
+      setProfile(buildLocalUserProfile(authenticatedUser, initialStoredOnboarded) as UserProfile);
+      setLoading(false);
+
       unsubscribeProfile = onSnapshot(
         userDocRef,
         async (docSnap) => {
@@ -360,16 +377,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         await setPersistence(auth, browserLocalPersistence);
-        try {
-          await signInWithPopup(auth, provider);
-        } catch (webError: any) {
-          const webCode = String(webError?.code || '').toLowerCase();
-          if (webCode.includes('popup-blocked') || webCode.includes('operation-not-supported')) {
-            await signInWithRedirect(auth, provider);
-            return;
-          }
-          throw webError;
-        }
+        await signInWithRedirect(auth, provider);
         return;
       }
 
@@ -402,7 +410,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const credential = GoogleAuthProvider.credential(idToken);
-      await signInWithCredential(auth, credential);
+      const signedIn = await signInWithCredential(auth, credential);
+      await rememberOnboardedUser(signedIn.user);
     } catch (error: any) {
       console.error('Google Auth Error:', error);
       if (Platform.OS !== 'web') {
