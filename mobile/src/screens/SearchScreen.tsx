@@ -20,7 +20,7 @@ import { UserProfile } from '../types';
 import { Search, SlidersHorizontal, X, Sparkles, BadgeCheck, MapPin, Briefcase, Clock } from 'lucide-react-native';
 import { geminiToSearchFilters } from '../lib/gemini';
 import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
-import { AIDiagnostic, describeAIError, getLastAIDiagnostic, testGeminiConnection } from '../lib/aiDiagnostics';
+import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
 
 const normalize = (v: string) => v.trim().toLowerCase();
 const LOOKING_FOR_FILTERS = ['CTO', 'Designer', 'Marketer', 'Developer', 'Investor', 'Cofounder', 'Startup Team', 'Mentor'];
@@ -131,7 +131,6 @@ export default function SearchScreen({ navigation }: any) {
   const [aiRankMode, setAiRankMode] = useState(false);
   const [aiRankMap, setAiRankMap] = useState<Record<string, { score: number; reason: string }>>({});
   const [savedAlerts, setSavedAlerts] = useState<SavedSearchAlert[]>([]);
-  const [aiDiagnostic, setAiDiagnostic] = useState<AIDiagnostic | null>(getLastAIDiagnostic());
   const [savingAlert, setSavingAlert] = useState(false);
 
   // Filters (simple + client-side for now)
@@ -380,7 +379,6 @@ export default function SearchScreen({ navigation }: any) {
       setAiRankMap(nextMap);
       setAiRankMode(true);
       const diagnostic = getLastAIDiagnostic();
-      setAiDiagnostic(diagnostic);
       if (diagnostic && !diagnostic.ok && ranked.every((rank) => rank.cached)) {
         Alert.alert('AI Ranking Fallback', `${diagnostic.message}\n\nShowing best matches based on local skills/interests.`);
       }
@@ -394,7 +392,6 @@ export default function SearchScreen({ navigation }: any) {
       setAiRankMap(nextMap);
       setAiRankMode(true);
       const message = describeAIError(e);
-      setAiDiagnostic(getLastAIDiagnostic());
       Alert.alert('AI Ranking Unavailable', `${message}\n\nShowing best matches based on common skills/interests.`);
     } finally {
       setAiRankLoading(false);
@@ -511,24 +508,16 @@ export default function SearchScreen({ navigation }: any) {
       if (typeof r.lookingForCofounder === 'boolean') setLookingForCofounder(r.lookingForCofounder);
       setFilterOpen(true);
       const diagnostic = getLastAIDiagnostic();
-      setAiDiagnostic(diagnostic);
       if (diagnostic && !diagnostic.ok && diagnostic.timestamp > previousDiagnosticAt) {
         Alert.alert('AI Search Fallback', `${diagnostic.message}\n\nI applied local keyword filters so search still works.`);
       }
     } catch (e: any) {
       console.error('Gemini search error:', e);
       const message = describeAIError(e);
-      setAiDiagnostic(getLastAIDiagnostic());
       Alert.alert('AI Search Error', message);
     } finally {
       setAiLoading(false);
     }
-  };
-
-  const runAiSetupCheck = async () => {
-    const diagnostic = await testGeminiConnection();
-    setAiDiagnostic(diagnostic);
-    Alert.alert(diagnostic.ok ? 'AI is working' : 'AI problem found', diagnostic.message);
   };
 
   return (
@@ -547,24 +536,6 @@ export default function SearchScreen({ navigation }: any) {
         <Text style={styles.heroCopy}>
           Search names, @handles, skills, industries, projects, locations, and live intent — then rank by AI compatibility.
         </Text>
-        <TouchableOpacity
-          style={[
-            styles.aiDiagnosticButton,
-            {
-              backgroundColor: aiDiagnostic?.ok ? '#DCFCE7' : '#FFF4CC',
-              borderColor: aiDiagnostic?.ok ? '#22C55E55' : '#FBE618',
-            },
-          ]}
-          onPress={runAiSetupCheck}
-        >
-          <Sparkles size={14} color={aiDiagnostic?.ok ? '#16A34A' : '#B45309'} />
-          <Text style={[styles.aiDiagnosticButtonText, { color: aiDiagnostic?.ok ? '#166534' : '#92400E' }]}>
-            {aiDiagnostic?.ok ? 'AI ONLINE - TAP TO TEST' : 'TEST AI SETUP'}
-          </Text>
-        </TouchableOpacity>
-        {!!aiDiagnostic && !aiDiagnostic.ok && (
-          <Text style={styles.aiDiagnosticCopy}>{aiDiagnostic.message}</Text>
-        )}
       </View>
 
       <View style={styles.header}>
@@ -974,29 +945,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 18,
     color: '#666',
-  },
-  aiDiagnosticButton: {
-    marginTop: 14,
-    alignSelf: 'flex-start',
-    minHeight: 36,
-    paddingHorizontal: 13,
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  aiDiagnosticButtonText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.1,
-  },
-  aiDiagnosticCopy: {
-    marginTop: 8,
-    fontSize: 11,
-    fontWeight: '800',
-    lineHeight: 16,
-    color: '#92400E',
   },
   searchActionsRow: {
     flexDirection: 'row',
