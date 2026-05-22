@@ -727,7 +727,7 @@ const SkillsInput = ({
 );
 
 export default function OnboardingScreen({ navigation }: any) {
-  const { user, logout, markOnboardingComplete } = useAuth();
+  const { user, logout, markOnboardingComplete, isOnboarded } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -781,6 +781,15 @@ export default function OnboardingScreen({ navigation }: any) {
   }, [role]);
 
   // Intentionally do NOT auto-prefill the name. Users must type their real name.
+
+  useEffect(() => {
+    if (!isOnboarded || saving) return;
+    if (navigation?.reset) {
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+    } else {
+      navigation?.replace?.('Main');
+    }
+  }, [isOnboarded, navigation, saving]);
 
   const pickPhoto = async (slot: 'profile' | number) => {
     try {
@@ -1501,11 +1510,6 @@ export default function OnboardingScreen({ navigation }: any) {
       } as any;
       await setDoc(doc(db, 'users', user.uid), onboardingProfile, { merge: true });
       await markOnboardingComplete(onboardingProfile);
-      if (navigation?.reset) {
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-      } else {
-        navigation?.replace?.('Main');
-      }
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
       Alert.alert('Could not finish onboarding', 'Please deploy the latest Firestore rules, then try again.');

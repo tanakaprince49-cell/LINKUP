@@ -265,15 +265,9 @@ function AppContent() {
         ) : requiresEmailVerification ? (
           <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
         ) : !isOnboarded ? (
-          <>
-            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-            <Stack.Screen name="Main" component={TabNavigator} />
-          </>
+          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         ) : (
-          <>
-            <Stack.Screen name="Main" component={TabNavigator} />
-            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-          </>
+          <Stack.Screen name="Main" component={TabNavigator} />
         )}
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="Messages" component={MessagesScreen} />

@@ -2,18 +2,20 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { Alert, AppState, NativeModules, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  browserLocalPersistence,
   GoogleAuthProvider,
   EmailAuthProvider,
   User,
   createUserWithEmailAndPassword,
+  getRedirectResult,
   linkWithCredential,
   onAuthStateChanged,
   sendEmailVerification,
   sendPasswordResetEmail,
+  setPersistence,
   signInAnonymously,
   signInWithCredential,
   signInWithEmailAndPassword,
-  signInWithPopup,
   signInWithRedirect,
   signOut,
   verifyBeforeUpdateEmail,
@@ -88,6 +90,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Native Google Sign-In requires a dev client / prebuild / real APK.
   // Expo Go does not include `RNGoogleSignin`, so we guard usage at runtime.
   const hasNativeGoogleSignin = !!(NativeModules as any)?.RNGoogleSignin;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    let cancelled = false;
+
+    const completeWebRedirect = async () => {
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+        await getRedirectResult(auth);
+      } catch (error: any) {
+        if (cancelled) return;
+        console.error('Google redirect completion error:', error);
+        const code = String(error?.code || '');
+        if (code.includes('unauthorized-domain')) {
+          Alert.alert(
+            'Google Sign-In Setup Needed',
+            'Add this web domain to Firebase Console > Authentication > Settings > Authorized domains, then try again.'
+          );
+        }
+      }
+    };
+
+    completeWebRedirect();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let unsubscribeProfile: (() => void) | null = null;
@@ -253,22 +284,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           prompt: 'select_account',
         });
 
-        try {
-          await signInWithPopup(auth, provider);
-        } catch (popupError: any) {
-          const popupCode = String(popupError?.code || '');
-          if (popupCode.includes('popup-closed-by-user') || popupCode.includes('cancelled-popup-request')) {
-            return;
-          }
-          if (
-            popupCode.includes('popup-blocked') ||
-            popupCode.includes('operation-not-supported-in-this-environment')
-          ) {
-            await signInWithRedirect(auth, provider);
-            return;
-          }
-          throw popupError;
-        }
+        await setPersistence(auth, browserLocalPersistence);
+        await signInWithRedirect(auth, provider);
         return;
       }
 
