@@ -17,6 +17,7 @@
     },
     "android": {
       "package": "com.tana.linkup",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png.png",
         "backgroundColor": "#ffffff"

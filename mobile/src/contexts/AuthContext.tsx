@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { Alert, AppState, NativeModules, Platform } from 'react-native';
+import { Alert, AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   browserLocalPersistence,
@@ -16,6 +16,7 @@ import {
   signInAnonymously,
   signInWithCredential,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signInWithRedirect,
   signOut,
   verifyBeforeUpdateEmail,
@@ -58,6 +59,24 @@ const hasCompletedProfileSignals = (data: any) => {
   );
 };
 
+const loadNativeGoogleSignIn = () => {
+  try {
+    return require('@react-native-google-signin/google-signin') as any;
+  } catch (error) {
+    console.error('Native Google Sign-In module unavailable:', error);
+    return null;
+  }
+};
+
+const getGoogleIdToken = async (GoogleSignin: any, signInResult: any) => {
+  if (signInResult?.type === 'cancelled') return null;
+  const tokenFromSignIn = signInResult?.data?.idToken || signInResult?.idToken;
+  if (tokenFromSignIn) return tokenFromSignIn;
+
+  const tokens = await GoogleSignin.getTokens?.().catch(() => null);
+  return tokens?.idToken || null;
+};
+
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
@@ -86,10 +105,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authVersion, setAuthVersion] = useState(0);
   const [completedOnboardingUid, setCompletedOnboardingUid] = useState<string | null>(null);
   const isOnboarded = Boolean(user?.uid && (profile?.onboarded || completedOnboardingUid === user.uid));
-
-  // Native Google Sign-In requires a dev client / prebuild / real APK.
-  // Expo Go does not include `RNGoogleSignin`, so we guard usage at runtime.
-  const hasNativeGoogleSignin = !!(NativeModules as any)?.RNGoogleSignin;
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -280,16 +295,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (Platform.OS === 'web') {
         const provider = new GoogleAuthProvider();
+        provider.addScope('email');
+        provider.addScope('profile');
         provider.setCustomParameters({
           prompt: 'select_account',
         });
 
         await setPersistence(auth, browserLocalPersistence);
-        await signInWithRedirect(auth, provider);
+        try {
+          await signInWithPopup(auth, provider);
+        } catch (webError: any) {
+          const webCode = String(webError?.code || '').toLowerCase();
+          if (webCode.includes('popup-blocked') || webCode.includes('operation-not-supported')) {
+            await signInWithRedirect(auth, provider);
+            return;
+          }
+          throw webError;
+        }
         return;
       }
 
-      if (!hasNativeGoogleSignin) {
+      const googleModule = loadNativeGoogleSignIn();
+      if (!googleModule?.GoogleSignin) {
         Alert.alert(
           'Google Sign-In Unavailable',
           'Native Google Sign-In is not available in Expo Go. Please run a development build / real APK that includes the Google Sign-In native module.'
@@ -297,20 +324,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Lazily require the native module so Expo Go doesn't crash at import time.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { GoogleSignin, statusCodes } = require('@react-native-google-signin/google-signin') as any;
+      const { GoogleSignin } = googleModule;
 
       GoogleSignin.configure({
         webClientId: GOOGLE_WEB_CLIENT_ID,
+        offlineAccess: false,
+        forceCodeForRefreshToken: false,
+        profileImageSize: 120,
       });
 
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      await GoogleSignin.signOut?.().catch(() => {});
       const signInResult = await GoogleSignin.signIn();
-      const idToken = signInResult?.data?.idToken;
+      const idToken = await getGoogleIdToken(GoogleSignin, signInResult);
 
       if (!idToken) {
-        Alert.alert('Authentication Error', 'Could not retrieve Google token. Please try again.');
+        Alert.alert('Authentication Cancelled', 'Google did not return an ID token. Please choose an account and try again.');
         return;
       }
 
@@ -320,8 +349,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Google Auth Error:', error);
       if (Platform.OS !== 'web') {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const statusCodes = (require('@react-native-google-signin/google-signin') as any)?.statusCodes;
+          const statusCodes = loadNativeGoogleSignIn()?.statusCodes;
           if (statusCodes && error?.code === statusCodes.SIGN_IN_CANCELLED) return;
           if (statusCodes && error?.code === statusCodes.IN_PROGRESS) {
             Alert.alert('Please Wait', 'Sign-in is already in progress.');
@@ -333,6 +361,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } catch {
           // Native status codes are unavailable outside the native Google module.
+        }
+        const code = String(error?.code || error?.message || '');
+        if (code.includes('10') || code.toLowerCase().includes('developer_error')) {
+          Alert.alert(
+            'Google Setup Error',
+            'Firebase is missing the Android SHA-1/SHA-256 for com.tana.linkup. Add your app signing fingerprints in Firebase Project Settings, download the new google-services.json, then rebuild the APK.'
+          );
+          return;
         }
       }
 
