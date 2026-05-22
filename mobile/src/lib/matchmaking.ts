@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { UserProfile } from '../types';
@@ -12,6 +13,8 @@ export type RankedCandidate = {
 };
 
 export async function rankCandidatesWithAI(candidateIds: string[], maxCandidates = 20): Promise<RankedCandidate[]> {
+  if (Platform.OS === 'web') return [];
+
   try {
     const callable = httpsCallable(functions, 'rankCandidates');
     const res = await callable({ candidateIds, maxCandidates });
@@ -117,15 +120,15 @@ export async function rankCandidatesHybrid(
 ): Promise<RankedCandidate[]> {
   const candidateIds = candidates.map((candidate) => candidate.uid).filter(Boolean).slice(0, Math.max(maxCandidates, 20));
 
-  const functionRanked = await rankCandidatesWithAI(candidateIds, maxCandidates);
-  if (functionRanked.length) return functionRanked;
-
   try {
     const geminiRanked = await directGeminiRank(me, candidates, maxCandidates);
     if (geminiRanked.length) return geminiRanked;
   } catch (error) {
     console.warn('Direct Gemini ranking unavailable:', error);
   }
+
+  const functionRanked = await rankCandidatesWithAI(candidateIds, maxCandidates);
+  if (functionRanked.length) return functionRanked;
 
   return localCommonalityRank(me, candidates, maxCandidates);
 }

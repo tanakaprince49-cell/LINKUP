@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 
@@ -44,6 +45,14 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     if (direct) return direct;
   } catch (error) {
     console.warn('Direct Gemini unavailable:', error);
+  }
+
+  if (Platform.OS === 'web') {
+    throw new Error(
+      GEMINI_API_KEY.trim()
+        ? 'Gemini request failed and web Functions fallback is disabled to avoid CORS.'
+        : 'Missing EXPO_PUBLIC_GEMINI_API_KEY on web.'
+    );
   }
 
   try {
