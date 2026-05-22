@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Linking, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Linking, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -8,12 +8,22 @@ import { Rocket, Shield, Lock, Globe } from 'lucide-react-native';
 const { width, height } = Dimensions.get('window');
 
 export default function LandingScreen({ navigation }: any) {
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, authError, clearAuthError } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   const openLink = (url: string) => {
     Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
+  };
+
+  const handleGoogleSignIn = async () => {
+    setGoogleBusy(true);
+    try {
+      await signInWithGoogle();
+    } finally {
+      setGoogleBusy(false);
+    }
   };
 
   return (
@@ -47,15 +57,32 @@ export default function LandingScreen({ navigation }: any) {
         {/* ACTION AREA */}
         <View style={styles.actions}>
           <TouchableOpacity 
-            style={styles.googleButton}
-            onPress={signInWithGoogle}
+            style={[styles.googleButton, googleBusy && styles.disabledButton]}
+            onPress={handleGoogleSignIn}
+            disabled={googleBusy}
             activeOpacity={0.8}
           >
-            <View style={styles.googleIconContainer}>
-              <View style={[styles.googleG, { borderTopColor: '#4285F4', borderLeftColor: '#EA4335', borderBottomColor: '#FBBC05', borderRightColor: '#34A853' }]} />
-            </View>
-            <Text style={styles.googleButtonText}>SIGN IN WITH GOOGLE</Text>
+            {googleBusy ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <>
+                <View style={styles.googleIconContainer}>
+                  <View style={[styles.googleG, { borderTopColor: '#4285F4', borderLeftColor: '#EA4335', borderBottomColor: '#FBBC05', borderRightColor: '#34A853' }]} />
+                </View>
+                <Text style={styles.googleButtonText}>SIGN IN WITH GOOGLE</Text>
+              </>
+            )}
           </TouchableOpacity>
+
+          {authError ? (
+            <View style={[styles.authErrorBox, { backgroundColor: isDark ? '#201313' : '#FFF5F5', borderColor: '#EF4444' }]}>
+              <Text style={styles.authErrorTitle}>GOOGLE AUTH ERROR</Text>
+              <Text selectable style={[styles.authErrorText, { color: isDark ? '#FFD6D6' : '#7F1D1D' }]}>{authError}</Text>
+              <TouchableOpacity onPress={clearAuthError} activeOpacity={0.8} style={styles.dismissErrorBtn}>
+                <Text style={styles.dismissErrorText}>DISMISS</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
           <TouchableOpacity
             style={[styles.secondaryButton, { backgroundColor: isDark ? '#121216' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EAEAEA' }]}
@@ -163,6 +190,9 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 8,
   },
+  disabledButton: {
+    opacity: 0.7,
+  },
   googleIconContainer: {
     width: 28,
     height: 28,
@@ -182,6 +212,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 1.5,
+  },
+  authErrorBox: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    gap: 8,
+  },
+  authErrorTitle: {
+    color: '#EF4444',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  authErrorText: {
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  dismissErrorBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  dismissErrorText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   secondaryButton: {
     height: 58,

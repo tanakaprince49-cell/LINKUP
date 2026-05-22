@@ -16,7 +16,7 @@ import {
   signInAnonymously,
   signInWithCredential,
   signInWithEmailAndPassword,
-  signInWithRedirect,
+  signInWithPopup,
   signOut,
   verifyBeforeUpdateEmail,
 } from 'firebase/auth';
@@ -29,6 +29,43 @@ const GOOGLE_WEB_CLIENT_ID =
 
 let warnedPresenceRules = false;
 const onboardingStorageKey = (uid: string) => `linkup:onboarded:${uid}`;
+
+const currentWebHost = () => {
+  if (Platform.OS !== 'web') return '';
+  const location = (globalThis as any)?.location;
+  return location?.host || location?.hostname || '';
+};
+
+const replaceWebRoute = (path: string) => {
+  if (Platform.OS !== 'web') return;
+  const history = (globalThis as any)?.history;
+  if (history?.replaceState) {
+    history.replaceState(null, '', path);
+  }
+};
+
+const describeAuthError = (flow: string, error: any) => {
+  const code = String(error?.code || error?.name || 'unknown');
+  const message = String(error?.message || error || 'No Firebase message returned.');
+  const host = currentWebHost();
+  let hint = 'Try again. If this keeps happening, copy this error and check Firebase Authentication settings.';
+
+  if (code.includes('unauthorized-domain')) {
+    hint = `Add "${host}" to Firebase Console > Authentication > Settings > Authorized domains, then redeploy.`;
+  } else if (code.includes('operation-not-allowed')) {
+    hint = 'Enable the Google sign-in provider in Firebase Console > Authentication > Sign-in method.';
+  } else if (code.includes('popup-closed-by-user')) {
+    hint = 'The Google window was closed before login finished. Keep it open until Google redirects back.';
+  } else if (code.includes('popup-blocked')) {
+    hint = 'The browser blocked the Google popup. Allow popups for this site and try again.';
+  } else if (code.includes('network-request-failed')) {
+    hint = 'Network request failed. Check connection, ad blockers, VPN, or browser privacy settings.';
+  } else if (message.toLowerCase().includes('cookie') || message.toLowerCase().includes('storage')) {
+    hint = 'Google auth needs cookies/local storage. Disable strict tracking blockers for this site and try again.';
+  }
+
+  return `${flow}\nCode: ${code}\nHost: ${host || 'native app'}\nFix: ${hint}\nFirebase: ${message}`;
+};
 
 const readStoredOnboarding = async (uid: string) => {
   try {
@@ -172,6 +209,8 @@ interface AuthContextType {
   loading: boolean;
   authVersion: number;
   isOnboarded: boolean;
+  authError: string | null;
+  clearAuthError: () => void;
   signInWithGoogle: () => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -193,6 +232,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [authVersion, setAuthVersion] = useState(0);
   const [completedOnboardingUid, setCompletedOnboardingUid] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const isOnboarded = Boolean(user?.uid && (profile?.onboarded || completedOnboardingUid === user.uid));
 
   useEffect(() => {
@@ -244,6 +284,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (error: any) {
         if (cancelled) return;
         console.error('Google redirect completion error:', error);
+        const friendlyError = describeAuthError('Google redirect completion failed.', error);
+        setAuthError(friendlyError);
         const code = String(error?.code || '');
         if (code.includes('unauthorized-domain')) {
           Alert.alert(
@@ -367,6 +409,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user?.uid]);
 
   const signInWithGoogle = async () => {
+    setAuthError(null);
     try {
       if (Platform.OS === 'web') {
         const provider = new GoogleAuthProvider();
@@ -377,7 +420,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         await setPersistence(auth, browserLocalPersistence);
-        await signInWithRedirect(auth, provider);
+        const result = await signInWithPopup(auth, provider);
+        if (result?.user) {
+          await rememberOnboardedUser(result.user);
+        }
         return;
       }
 
@@ -414,6 +460,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await rememberOnboardedUser(signedIn.user);
     } catch (error: any) {
       console.error('Google Auth Error:', error);
+      const friendlyError = describeAuthError('Google sign-in failed.', error);
+      setAuthError(friendlyError);
       if (Platform.OS !== 'web') {
         try {
           const statusCodes = loadNativeGoogleSignIn()?.statusCodes;
@@ -524,9 +572,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
+      replaceWebRoute('/landing');
       await signOut(auth);
+      setUser(null);
+      setProfile(null);
+      setCompletedOnboardingUid(null);
+      setAuthVersion((value) => value + 1);
     } catch (error) {
       console.error('Sign out error:', error);
+      setAuthError(describeAuthError('Logout failed.', error));
+    } finally {
+      replaceWebRoute('/landing');
     }
   };
 
@@ -685,6 +741,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         authVersion,
         isOnboarded,
+        authError,
+        clearAuthError: () => setAuthError(null),
         signInWithGoogle,
         signUpWithEmail,
         signInWithEmail,

@@ -156,9 +156,32 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [accountActionBusy, setAccountActionBusy] = useState('');
 
   // If a userId param is passed and it's not the current user, fetch that profile
-  const targetUserId = route?.params?.userId;
-  const isViewingOther = targetUserId && targetUserId !== myProfile?.uid;
+  const rawTargetUserId = route?.params?.userId;
+  const targetUserId =
+    typeof rawTargetUserId === 'string' && rawTargetUserId.trim() && rawTargetUserId !== 'undefined'
+      ? rawTargetUserId.trim()
+      : '';
+  const isViewingOther = Boolean(targetUserId && targetUserId !== myProfile?.uid);
   const profile = isViewingOther ? viewedProfile : myProfile;
+
+  const goBackOrHome = () => {
+    if (navigation?.canGoBack?.()) {
+      navigation.goBack();
+      return;
+    }
+
+    if (!user?.uid) {
+      navigation?.reset?.({ index: 0, routes: [{ name: 'Landing' }] });
+      return;
+    }
+
+    if (!myProfile?.onboarded) {
+      navigation?.reset?.({ index: 0, routes: [{ name: 'Onboarding' }] });
+      return;
+    }
+
+    navigation?.reset?.({ index: 0, routes: [{ name: 'Main' }] });
+  };
 
   useEffect(() => {
     if (!isViewingOther) return;
@@ -241,7 +264,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
         <View style={styles.unavailableWrap}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backPill, { backgroundColor: isDark ? '#16161A' : '#F5F5F5' }]}>
+          <TouchableOpacity onPress={goBackOrHome} style={[styles.backPill, { backgroundColor: isDark ? '#16161A' : '#F5F5F5' }]}>
             <SafeIcon name="ChevronLeft" size={18} color={isDark ? '#FFF' : '#000'} />
             <Text style={[styles.backPillText, { color: isDark ? '#FFF' : '#000' }]}>BACK</Text>
           </TouchableOpacity>
@@ -674,7 +697,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         
         {/* HEADER */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.iconButton}>
+          <TouchableOpacity onPress={goBackOrHome} style={styles.iconButton}>
             <SafeIcon name="ChevronLeft" size={20} color={isDark ? '#FFF' : '#000'} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>

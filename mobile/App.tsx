@@ -78,7 +78,7 @@ const SafeIcon = ({ name, size = 20, color = "#FBE618", fill = "transparent" }: 
 // Global Header Component
 const AppHeader = ({ navigation, title }: any) => {
   const { theme } = useTheme();
-  const { logout } = useAuth();
+  const { user } = useAuth();
   const isDark = theme === 'dark';
 
   return (
@@ -98,7 +98,9 @@ const AppHeader = ({ navigation, title }: any) => {
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.headerIconBtn, { backgroundColor: isDark ? '#1A1A1F' : '#F8F8F8' }]}
-            onPress={() => navigation.navigate('Profile')}
+            onPress={() => {
+              if (user?.uid) navigation.navigate('Profile', { userId: user.uid });
+            }}
           >
             <SafeIcon name="User" size={18} color={isDark ? '#CCC' : '#444'} />
           </TouchableOpacity>
@@ -248,6 +250,18 @@ function AppContent() {
     }
   }, [user?.uid, isOnboarded, theme, setThemeMode]);
 
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || user?.uid) return;
+    const location = (globalThis as any)?.location;
+    const history = (globalThis as any)?.history;
+    const pathname = String(location?.pathname || '');
+    const publicPaths = new Set(['', '/', '/landing', '/login']);
+
+    if (history?.replaceState && !publicPaths.has(pathname)) {
+      history.replaceState(null, '', '/landing');
+    }
+  }, [user?.uid]);
+
   if (loading) return (
     <View style={{ flex: 1, backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
       <ActivityIndicator color="#FBE618" />
@@ -263,22 +277,32 @@ function AppContent() {
             <Stack.Screen name="EmailAuth" component={EmailAuthScreen} />
           </>
         ) : requiresEmailVerification ? (
-          <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
+          <>
+            <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
+          </>
         ) : !isOnboarded ? (
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          <>
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          </>
         ) : (
-          <Stack.Screen name="Main" component={TabNavigator} />
+          <>
+            <Stack.Screen name="Main" component={TabNavigator} />
+          </>
         )}
-        <Stack.Screen name="Profile" component={ProfileScreen} />
-        <Stack.Screen name="Messages" component={MessagesScreen} />
-        <Stack.Screen name="ArchivedChats" component={MessagesScreen} initialParams={{ archivedOnly: true }} />
-        <Stack.Screen name="Chat" component={ChatScreen} />
-        <Stack.Screen name="SwipeDeck" component={SwipeScreen} />
-        <Stack.Screen name="Viewers" component={ViewersScreen} />
-        <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
-        <Stack.Screen name="ActiveOpportunities" component={ActiveOpportunitiesScreen} />
-        <Stack.Screen name="TrendingBuilders" component={TrendingBuildersScreen} />
-        <Stack.Screen name="RecommendedMatches" component={RecommendedMatchesScreen} />
+        {user ? (
+          <>
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="Messages" component={MessagesScreen} />
+            <Stack.Screen name="ArchivedChats" component={MessagesScreen} initialParams={{ archivedOnly: true }} />
+            <Stack.Screen name="Chat" component={ChatScreen} />
+            <Stack.Screen name="SwipeDeck" component={SwipeScreen} />
+            <Stack.Screen name="Viewers" component={ViewersScreen} />
+            <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
+            <Stack.Screen name="ActiveOpportunities" component={ActiveOpportunitiesScreen} />
+            <Stack.Screen name="TrendingBuilders" component={TrendingBuildersScreen} />
+            <Stack.Screen name="RecommendedMatches" component={RecommendedMatchesScreen} />
+          </>
+        ) : null}
       </Stack.Navigator>
       <OpportunityRadar />
       <WebAnalytics />
