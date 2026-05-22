@@ -189,20 +189,6 @@ const buildLocalUserProfile = (authUser: User, onboarded: boolean): any => {
   };
 };
 
-const toWritableProfile = (profile: any) => {
-  const writable = { ...profile };
-  delete writable.reputationScore;
-  delete writable.streakCount;
-  delete writable.founderScore;
-  delete writable.reputationMetrics;
-  delete writable.isBot;
-  delete writable.lastActiveAt;
-  delete writable.badges;
-  delete writable.viewedBy;
-  delete writable.hasExit;
-  return writable;
-};
-
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
@@ -243,29 +229,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearTimeout(timeout);
   }, [loading]);
 
-  const rememberOnboardedUser = async (authUser: User) => {
+  const syncSignedInUserProfile = async (authUser: User) => {
     const userDocRef = doc(db, 'users', authUser.uid);
-
-    await AsyncStorage.setItem(onboardingStorageKey(authUser.uid), 'true');
-    setCompletedOnboardingUid(authUser.uid);
-    setProfile((current) => {
-      const nextProfile = Object.assign({}, buildLocalUserProfile(authUser, true), current || {}, {
-        uid: authUser.uid,
-        onboarded: true,
-      });
-      return nextProfile as UserProfile;
-    });
-    setAuthVersion((value) => value + 1);
+    setUser(authUser);
+    setLoading(false);
+    setAuthError(null);
 
     try {
       const userSnap = await getDoc(userDocRef);
       if (userSnap.exists()) {
-        await setDoc(userDocRef, { onboarded: true }, { merge: true });
-      } else {
-        await setDoc(userDocRef, toWritableProfile(buildLocalUserProfile(authUser, true)), { merge: true });
+        const rawProfile = userSnap.data() as any;
+        const storedOnboarded = await readStoredOnboarding(authUser.uid);
+        const inferredOnboarded = Boolean(rawProfile.onboarded || hasCompletedProfileSignals(rawProfile) || storedOnboarded);
+
+        if (inferredOnboarded) {
+          await AsyncStorage.setItem(onboardingStorageKey(authUser.uid), 'true');
+          setCompletedOnboardingUid(authUser.uid);
+          if (!rawProfile.onboarded) {
+            setDoc(userDocRef, { onboarded: true }, { merge: true }).catch(() => {});
+          }
+        } else {
+          await AsyncStorage.removeItem(onboardingStorageKey(authUser.uid)).catch(() => {});
+          setCompletedOnboardingUid(null);
+        }
+
+        setProfile({
+          ...buildLocalUserProfile(authUser, inferredOnboarded),
+          ...rawProfile,
+          uid: authUser.uid,
+          onboarded: inferredOnboarded,
+        } as UserProfile);
+        setAuthVersion((value) => value + 1);
+        return;
       }
+
+      await AsyncStorage.removeItem(onboardingStorageKey(authUser.uid)).catch(() => {});
+      setCompletedOnboardingUid(null);
+      setProfile(buildLocalUserProfile(authUser, false) as UserProfile);
+      setAuthVersion((value) => value + 1);
     } catch (error) {
-      console.warn('Returning user onboarding sync unavailable:', error);
+      const storedOnboarded = await readStoredOnboarding(authUser.uid);
+      if (storedOnboarded) {
+        setCompletedOnboardingUid(authUser.uid);
+      } else {
+        setCompletedOnboardingUid(null);
+      }
+      setProfile(buildLocalUserProfile(authUser, storedOnboarded) as UserProfile);
+      setAuthVersion((value) => value + 1);
+      console.warn('Signed-in profile sync unavailable:', error);
     }
   };
 
@@ -279,7 +290,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await setPersistence(auth, browserLocalPersistence);
         const result = await getRedirectResult(auth);
         if (result?.user) {
-          await rememberOnboardedUser(result.user);
+          await syncSignedInUserProfile(result.user);
         }
       } catch (error: any) {
         if (cancelled) return;
@@ -322,11 +333,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const userDocRef = doc(db, 'users', authenticatedUser.uid);
-      const initialStoredOnboarded = await readStoredOnboarding(authenticatedUser.uid);
-      if (initialStoredOnboarded) {
-        setCompletedOnboardingUid(authenticatedUser.uid);
-      }
-      setProfile(buildLocalUserProfile(authenticatedUser, initialStoredOnboarded) as UserProfile);
+      setCompletedOnboardingUid(null);
+      setProfile(buildLocalUserProfile(authenticatedUser, false) as UserProfile);
       setLoading(false);
 
       unsubscribeProfile = onSnapshot(
@@ -336,8 +344,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (docSnap.exists()) {
             const rawProfile = docSnap.data() as any;
-            const inferredOnboarded = Boolean(rawProfile.onboarded || storedOnboarded || hasCompletedProfileSignals(rawProfile));
+            const inferredOnboarded = Boolean(rawProfile.onboarded || hasCompletedProfileSignals(rawProfile) || storedOnboarded);
             const data = {
+              ...buildLocalUserProfile(authenticatedUser, inferredOnboarded),
               ...(rawProfile as UserProfile),
               uid: authenticatedUser.uid,
               onboarded: inferredOnboarded,
@@ -348,6 +357,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (inferredOnboarded) {
               setCompletedOnboardingUid(authenticatedUser.uid);
               AsyncStorage.setItem(onboardingStorageKey(authenticatedUser.uid), 'true').catch(() => {});
+            } else {
+              setCompletedOnboardingUid(null);
+              AsyncStorage.removeItem(onboardingStorageKey(authenticatedUser.uid)).catch(() => {});
             }
             if (inferredOnboarded && !rawProfile.onboarded) {
               updateDoc(userDocRef, { onboarded: true }).catch(() => {});
@@ -357,11 +369,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
           }
 
-          const newProfile = buildLocalUserProfile(authenticatedUser, storedOnboarded);
-
-          if (storedOnboarded) {
-            setCompletedOnboardingUid(authenticatedUser.uid);
-          }
+          const newProfile = buildLocalUserProfile(authenticatedUser, false);
+          setCompletedOnboardingUid(null);
+          AsyncStorage.removeItem(onboardingStorageKey(authenticatedUser.uid)).catch(() => {});
 
           setProfile(newProfile as UserProfile);
           setLoading(false);
@@ -422,7 +432,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await setPersistence(auth, browserLocalPersistence);
         const result = await signInWithPopup(auth, provider);
         if (result?.user) {
-          await rememberOnboardedUser(result.user);
+          await syncSignedInUserProfile(result.user);
         }
         return;
       }
@@ -457,7 +467,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const credential = GoogleAuthProvider.credential(idToken);
       const signedIn = await signInWithCredential(auth, credential);
-      await rememberOnboardedUser(signedIn.user);
+      await syncSignedInUserProfile(signedIn.user);
     } catch (error: any) {
       console.error('Google Auth Error:', error);
       const friendlyError = describeAuthError('Google sign-in failed.', error);
@@ -550,7 +560,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const result = await signInWithEmailAndPassword(auth, trimmedEmail, password);
-      await rememberOnboardedUser(result.user);
+      await syncSignedInUserProfile(result.user);
     } catch (e: any) {
       console.error('Email sign-in error:', e);
       const code = String(e?.code || '');
