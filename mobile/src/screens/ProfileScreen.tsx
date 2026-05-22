@@ -13,6 +13,7 @@ import {
   Dimensions,
   Alert,
   Linking,
+  Platform,
   Share
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -88,6 +89,11 @@ const earnedReputation = (profile: any) => {
 const cleanUsername = (value: string) => value.replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
 const profileLinkFor = (profile: any) => profile?.profileLink || (profile?.uid ? `linkup://profile/${encodeURIComponent(profile.uid)}` : '');
 const toTextValue = (value: unknown) => (typeof value === 'string' ? value : value == null ? '' : String(value));
+const webConfirm = (message: string) => {
+  const confirmFn = (globalThis as any)?.confirm;
+  if (Platform.OS !== 'web' || typeof confirmFn !== 'function') return null;
+  return !!confirmFn(message);
+};
 const normalizeProjectStatus = (value: unknown) => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized.includes('live') || normalized.includes('scal')) return 'live';
@@ -515,20 +521,51 @@ export default function ProfileScreen({ navigation, route }: any) {
     setSavingPreference(null);
   };
 
+  const performLogout = async () => {
+    try {
+      await logout();
+    } catch (e: any) {
+      console.error(e);
+    }
+  };
+
   const handleLogout = () => {
+    const confirmed = webConfirm('Log out of LINKUP?');
+    if (confirmed !== null) {
+      if (confirmed) performLogout();
+      return;
+    }
+
     Alert.alert("Logout", "Are you sure you want to exit the realm?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Logout", style: "destructive", onPress: async () => {
-        try {
-          await logout();
-        } catch (e: any) {
-          console.error(e);
-        }
-      }}
+      { text: "Logout", style: "destructive", onPress: performLogout}
     ]);
   };
 
+  const performDeleteAccount = async () => {
+    try {
+      setIsSaving(true);
+      await deleteAccount();
+    } catch (e: any) {
+      const message = String(e?.code || e?.message || '');
+      Alert.alert(
+        "Error",
+        message.includes('requires-recent-login')
+          ? "For security, log out and sign in again, then delete your account."
+          : e.message || "Failed to delete account. You may need to re-authenticate first."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleDeleteAccount = () => {
+    const confirmed = webConfirm('Permanently delete your LINKUP account and profile? This cannot be undone.');
+    if (confirmed !== null) {
+      if (confirmed) performDeleteAccount();
+      return;
+    }
+
     Alert.alert(
       "DELETE ACCOUNT", 
       "This is permanent. Your founder profile and all network data will be wiped from existence. Proceed?", 
@@ -537,16 +574,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         { 
           text: "DELETE EVERYTHING", 
           style: "destructive", 
-          onPress: async () => {
-            try {
-              setIsSaving(true);
-              await deleteAccount();
-            } catch (e: any) {
-              Alert.alert("Error", e.message || "Failed to delete account. You may need to re-authenticate first.");
-            } finally {
-              setIsSaving(false);
-            }
-          } 
+          onPress: performDeleteAccount
         }
       ]
     );
