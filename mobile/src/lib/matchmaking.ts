@@ -1,4 +1,5 @@
 import { httpsCallable } from 'firebase/functions';
+import { Platform } from 'react-native';
 import { functions } from './firebase';
 import { UserProfile } from '../types';
 import { describeAIError, getGeminiApiKey, recordAIError, requestGeminiText } from './aiDiagnostics';
@@ -43,6 +44,37 @@ const compactProfile = (profile: Partial<UserProfile> | null | undefined) => ({
   personality: profile?.personalityType || '',
   roleSignals: profile?.roleAnswers || {},
 });
+
+async function serverGeminiRank(me: UserProfile | null | undefined, candidates: UserProfile[], maxCandidates: number): Promise<RankedCandidate[]> {
+  if (Platform.OS !== 'web' || typeof fetch !== 'function' || !me || candidates.length === 0) return [];
+
+  const compactCandidates = candidates.slice(0, Math.min(maxCandidates, 20)).map(compactProfile);
+  const response = await fetch('/api/rankCandidates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      me: compactProfile(me),
+      candidates: compactCandidates,
+      maxCandidates,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.technical || data?.error || `Vercel AI ranking failed: ${response.status}`);
+  }
+
+  const ranked = data?.ranked;
+  if (!Array.isArray(ranked)) return [];
+  return ranked
+    .map((r: any) => ({
+      uid: String(r?.uid ?? ''),
+      score: Math.max(1, Math.min(100, Math.round(Number(r?.score ?? 0)))),
+      reason: String(r?.reason ?? ''),
+      cached: !!r?.cached,
+    }))
+    .filter((r: RankedCandidate) => r.uid && Number.isFinite(r.score) && r.reason);
+}
 
 const parseRankedLines = (text: string, candidates: UserProfile[], maxCandidates: number): RankedCandidate[] => {
   const allowedIds = new Set(candidates.map((candidate) => candidate.uid));
@@ -155,6 +187,16 @@ export async function rankCandidatesHybrid(
   } catch (error) {
     console.warn('Direct Gemini ranking unavailable:', describeAIError(error));
     recordAIError(error, 'Direct Gemini ranking unavailable');
+  }
+
+  try {
+    const serverRanked = await serverGeminiRank(me, candidates, maxCandidates);
+    if (serverRanked.length) return serverRanked;
+  } catch (error) {
+    recordAIError(error, 'Vercel AI ranking unavailable');
+    if (Platform.OS === 'web') {
+      return localCommonalityRank(me, candidates, maxCandidates);
+    }
   }
 
   const functionRanked = await rankCandidatesWithAI(candidateIds, maxCandidates);

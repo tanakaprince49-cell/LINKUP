@@ -1,4 +1,5 @@
 import { httpsCallable } from 'firebase/functions';
+import { Platform } from 'react-native';
 import { functions } from './firebase';
 import { describeAIError, getGeminiApiKey, recordAIError, requestGeminiText } from './aiDiagnostics';
 
@@ -71,6 +72,20 @@ async function directGeminiText(prompt: string) {
   return requestGeminiText(prompt, { temperature: 0.2, maxOutputTokens: 220 });
 }
 
+async function vercelAiText(task: string, payload: Record<string, unknown>) {
+  if (Platform.OS !== 'web' || typeof fetch !== 'function') return null;
+  const response = await fetch('/api/aiAssist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task, payload }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.technical || data?.error || `Vercel AI failed: ${response.status}`);
+  }
+  return typeof data?.text === 'string' && data.text.trim() ? data.text.trim() : null;
+}
+
 const localSearchFilters = (input: string): GeminiFilterResult => {
   const normalized = input.toLowerCase();
   const skills = ['react', 'next.js', 'python', 'ai', 'ml', 'figma', 'sales', 'marketing', 'flutter', 'node.js', 'backend', 'frontend']
@@ -89,6 +104,7 @@ const localSearchFilters = (input: string): GeminiFilterResult => {
 
 async function aiText(task: string, payload: Record<string, unknown>) {
   let directError: unknown = null;
+  let serverError: unknown = null;
   try {
     if (task === 'searchFilters') {
       const direct = await directGeminiText(
@@ -123,6 +139,17 @@ async function aiText(task: string, payload: Record<string, unknown>) {
   }
 
   try {
+    const server = await vercelAiText(task, payload);
+    if (server) return server;
+  } catch (error) {
+    serverError = error;
+    recordAIError(error, 'Vercel AI fallback unavailable');
+    if (Platform.OS === 'web') {
+      throw new Error(describeAIError(directError || serverError));
+    }
+  }
+
+  try {
     const callable = httpsCallable(functions, 'aiAssist');
     const res = await callable({ task, payload });
     const text = (res.data as any)?.text;
@@ -133,6 +160,9 @@ async function aiText(task: string, payload: Record<string, unknown>) {
 
   if (directError) {
     throw new Error(describeAIError(directError));
+  }
+  if (serverError) {
+    throw new Error(describeAIError(serverError));
   }
 
   throw new Error('AI returned empty content.');

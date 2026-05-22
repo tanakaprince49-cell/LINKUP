@@ -1,4 +1,5 @@
 import { httpsCallable } from 'firebase/functions';
+import { Platform } from 'react-native';
 import { functions } from './firebase';
 import { describeAIError, getGeminiApiKey, recordAIError, requestGeminiText } from './aiDiagnostics';
 
@@ -23,14 +24,40 @@ async function directGeminiText(task: string, payload: Record<string, unknown>) 
   return requestGeminiText(prompt, { temperature: 0.2, maxOutputTokens });
 }
 
+async function vercelAiText(task: string, payload: Record<string, unknown>) {
+  if (Platform.OS !== 'web' || typeof fetch !== 'function') return null;
+  const response = await fetch('/api/aiAssist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task, payload }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.technical || data?.error || `Vercel AI failed: ${response.status}`);
+  }
+  return typeof data?.text === 'string' && data.text.trim() ? data.text.trim() : null;
+}
+
 async function aiText(task: string, payload: Record<string, unknown>) {
   let directError: unknown = null;
+  let serverError: unknown = null;
   try {
     const direct = await directGeminiText(task, payload);
     if (direct) return direct;
   } catch (error) {
     directError = error;
     recordAIError(error, 'Direct Gemini unavailable');
+  }
+
+  try {
+    const server = await vercelAiText(task, payload);
+    if (server) return server;
+  } catch (error) {
+    serverError = error;
+    recordAIError(error, 'Vercel AI fallback unavailable');
+    if (Platform.OS === 'web') {
+      throw new Error(describeAIError(directError || serverError));
+    }
   }
 
   try {
@@ -44,6 +71,9 @@ async function aiText(task: string, payload: Record<string, unknown>) {
 
   if (directError) {
     throw new Error(describeAIError(directError));
+  }
+  if (serverError) {
+    throw new Error(describeAIError(serverError));
   }
 
   throw new Error('AI returned empty content.');

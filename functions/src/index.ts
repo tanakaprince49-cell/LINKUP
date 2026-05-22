@@ -11,6 +11,13 @@ if (!admin.apps.length) {
 
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 const GEMINI_MODEL = 'gemini-2.5-flash-lite';
+const LINKUP_CORS_ORIGINS: (string | RegExp)[] = [
+  'https://linkup-muqu.vercel.app',
+  /^https:\/\/linkup-muqu(?:-[a-z0-9-]+)?\.vercel\.app$/,
+  /^https:\/\/linkup-muqu-git-[a-z0-9-]+-[a-z0-9-]+\.vercel\.app$/,
+  /^http:\/\/localhost(:\d+)?$/,
+  /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+];
 
 type CompactProfile = {
   uid: string;
@@ -389,7 +396,7 @@ function clippedJson(value: unknown, max = 3500) {
   return JSON.stringify(value ?? {}).slice(0, max);
 }
 
-export const aiAssist = onCall({ region: 'us-central1', secrets: [GEMINI_API_KEY], cors: true }, async (request) => {
+export const aiAssist = onCall({ region: 'us-central1', secrets: [GEMINI_API_KEY], cors: LINKUP_CORS_ORIGINS }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in.');
 
@@ -498,7 +505,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: nu
   return results;
 }
 
-export const rankCandidates = onCall({ region: 'us-central1', secrets: [GEMINI_API_KEY], cors: true }, async (request) => {
+export const rankCandidates = onCall({ region: 'us-central1', secrets: [GEMINI_API_KEY], cors: LINKUP_CORS_ORIGINS }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in.');
 

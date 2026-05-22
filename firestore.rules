@@ -261,6 +261,14 @@ service cloud.firestore {
     // Connection requests / permission to start chats
     // ------------------------------------------------------------
     match /connectionRequests/{requestId} {
+      function requestPathInvolvesSignedInUser() {
+        return isSignedIn() &&
+          (
+            requestId.matches('^' + request.auth.uid + '_[a-zA-Z0-9_\\-]+$') ||
+            requestId.matches('^[a-zA-Z0-9_\\-]+_' + request.auth.uid + '$')
+          );
+      }
+
       function userIsInConnectionRequest(data) {
         return isSignedIn() && (data.senderId == request.auth.uid || data.recipientId == request.auth.uid);
       }
@@ -278,7 +286,8 @@ service cloud.firestore {
           data.senderPic.size() <= 5000;
       }
 
-      allow get, list: if userIsInConnectionRequest(existing());
+      allow get: if requestPathInvolvesSignedInUser() || userIsInConnectionRequest(existing());
+      allow list: if false;
       allow create: if isSignedIn() &&
         incoming().keys().hasOnly([
           'senderId', 'recipientId', 'senderName', 'senderPic',

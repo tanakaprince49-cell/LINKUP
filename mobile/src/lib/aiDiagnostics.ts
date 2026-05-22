@@ -64,6 +64,20 @@ export function describeAIError(error: unknown) {
   const rawMessage = compactTechnical((error as any)?.technical || (error as any)?.message || error);
   const lower = rawMessage.toLowerCase();
 
+  if (lower.includes('cors') || lower.includes('failed to fetch') || lower.includes('network') || lower.includes('preflight')) {
+    return `Network/CORS problem reaching the AI backend. The web app will use the same-origin Vercel AI route when deployed. Details: ${rawMessage}`;
+  }
+  if (lower.includes('cloudfunctions.net') || lower.includes('not-found') || lower.includes('404')) {
+    return `Firebase Cloud Function is unavailable or not deployed. The web app should use /api/aiAssist and /api/rankCandidates on Vercel instead. Details: ${rawMessage}`;
+  }
+  if (
+    lower.includes('vercel ai api missing') ||
+    lower.includes('missing gemini_api_key') ||
+    lower.includes('missing google_api_key')
+  ) {
+    return 'Vercel AI key is missing. Add GEMINI_API_KEY in Vercel Environment Variables, then create a new production deployment.';
+  }
+
   if (!key) {
     return 'Gemini API key is missing in this build. Add EXPO_PUBLIC_GEMINI_API_KEY in Vercel Environment Variables and mobile/.env, then redeploy/restart Expo.';
   }
@@ -82,10 +96,6 @@ export function describeAIError(error: unknown) {
   if (lower.includes('max_tokens') || lower.includes('finishreason') || lower.includes('empty content')) {
     return `Gemini responded but stopped before returning text because the output token limit was too low. The app has increased the token budget; redeploy and try again. Details: ${rawMessage}`;
   }
-  if (lower.includes('failed to fetch') || lower.includes('network') || lower.includes('cors')) {
-    return `Network/CORS problem reaching Gemini from this app. Check browser console, API restrictions, and connection. Details: ${rawMessage}`;
-  }
-
   return rawMessage || 'Unknown Gemini error. Open the browser console for the technical details.';
 }
 
