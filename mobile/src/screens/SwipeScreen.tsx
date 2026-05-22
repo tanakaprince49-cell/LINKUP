@@ -79,15 +79,16 @@ export default function SwipeScreen({ navigation }: any) {
 
   const topProfile = profiles[0];
   const nextProfile = profiles[1];
+  const ScreenRoot = isWeb ? View : SafeAreaView;
   const deckWidth = isWeb
     ? isWideWeb
       ? Math.min(460, Math.max(380, safeViewportWidth - 96))
-      : Math.min(390, Math.max(300, safeViewportWidth - 24))
+      : Math.min(360, Math.max(300, safeViewportWidth - 32))
     : undefined;
   const deckHeight = isWeb
     ? isWideWeb
       ? Math.min(680, Math.max(560, safeViewportHeight - 250))
-      : Math.min(620, Math.max(430, safeViewportHeight - 172))
+      : Math.min(490, Math.max(390, safeViewportHeight - 380))
     : undefined;
   const motionWidth = Math.max(deckWidth ?? safeViewportWidth, width);
   const swipeThreshold = Math.min(170, Math.max(92, (deckWidth ?? safeViewportWidth) * 0.27));
@@ -673,7 +674,7 @@ export default function SwipeScreen({ navigation }: any) {
 
   if (!user?.uid) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
+      <ScreenRoot style={[styles.container, isWeb && styles.webRoot, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
         <View style={styles.authGate}>
           <Zap size={44} color="#FBE618" fill="#FBE618" />
           <Text style={[styles.authGateTitle, { color: isDark ? '#FFF' : '#000' }]}>JOIN LINKUP FIRST</Text>
@@ -686,7 +687,7 @@ export default function SwipeScreen({ navigation }: any) {
             <Text style={styles.authGateButtonText}>GO TO LOGIN</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </ScreenRoot>
     );
   }
 
@@ -699,17 +700,17 @@ export default function SwipeScreen({ navigation }: any) {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
+    <ScreenRoot style={[styles.container, isWeb && styles.webRoot, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
       <View style={[styles.webStage, isWideWeb && styles.webStageDesktop, isCompactWeb && styles.webStageMobile]}>
-        <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }]}>
-          <TouchableOpacity onPress={() => navigation?.goBack?.()} style={styles.topBtn}>
+        <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }, isCompactWeb && styles.compactTopBar]}>
+          <TouchableOpacity onPress={() => navigation?.goBack?.()} style={[styles.topBtn, isCompactWeb && styles.compactTopBtn]}>
             <ChevronLeft size={22} color={isDark ? '#FFF' : '#000'} />
           </TouchableOpacity>
-          <Text style={[styles.topTitle, { color: isDark ? '#FFF' : '#000' }]}>SWIPE</Text>
-          <View style={styles.topBtn} />
+          <Text style={[styles.topTitle, isCompactWeb && styles.compactTopTitle, { color: isDark ? '#FFF' : '#000' }]}>SWIPE</Text>
+          <View style={[styles.topBtn, isCompactWeb && styles.compactTopBtn]} />
         </View>
 
-        <View style={[styles.stackArea, webDeckStyle]}>
+        <View style={[styles.stackArea, webDeckStyle, isCompactWeb && styles.compactStackArea]}>
           {renderPreviewCard()}
           {renderCard()}
         </View>
@@ -726,7 +727,7 @@ export default function SwipeScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
       </View>
-    </SafeAreaView>
+    </ScreenRoot>
   );
 }
 
@@ -735,6 +736,11 @@ const SparkleDot = () => <View style={styles.sparkleDot} />;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  webRoot: {
+    height: '100dvh' as any,
+    minHeight: '100dvh' as any,
+    overflow: 'hidden' as any,
   },
   webStage: {
     flex: 1,
@@ -749,7 +755,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingTop: 0,
-    paddingBottom: 14,
+    paddingBottom: 8,
   },
   topBar: {
     flexDirection: 'row',
@@ -772,6 +778,21 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 3,
   },
+  compactTopBar: {
+    paddingHorizontal: 4,
+    paddingTop: 2,
+    paddingBottom: 0,
+    minHeight: 38,
+  },
+  compactTopBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+  },
+  compactTopTitle: {
+    fontSize: 11,
+    letterSpacing: 4,
+  },
   stackArea: {
     flex: 1,
     marginHorizontal: 20,
@@ -779,6 +800,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     justifyContent: 'center',
     position: 'relative',
+  },
+  compactStackArea: {
+    marginTop: 4,
+    marginBottom: 8,
   },
   card: {
     flex: 1,
@@ -797,7 +822,7 @@ const styles = StyleSheet.create({
   compactWebCard: {
     width: '100%',
     height: '100%',
-    minHeight: 430,
+    minHeight: 390,
     flexGrow: 0,
     flexShrink: 0,
   },
