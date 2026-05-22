@@ -14,7 +14,9 @@ import {
   Alert,
   Linking,
   Platform,
-  Share
+  Share,
+  Modal,
+  Pressable
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
@@ -155,6 +157,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [newAccountEmail, setNewAccountEmail] = useState('');
   const [accountActionBusy, setAccountActionBusy] = useState('');
   const [isProfileSaved, setIsProfileSaved] = useState(false);
+  const [fullPhotoUri, setFullPhotoUri] = useState('');
 
   // If a userId param is passed and it's not the current user, fetch that profile
   const rawTargetUserId = route?.params?.userId;
@@ -728,6 +731,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     backgroundColor: isDark ? '#16161A' : '#F8F8F8',
     borderColor: isDark ? '#222226' : '#E5E7EB',
   };
+  const heroProfilePic = (isEditing ? editData?.profilePic : profile.profilePic) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
@@ -787,10 +791,12 @@ export default function ProfileScreen({ navigation, route }: any) {
         {/* PROFILE HERO */}
         <View style={styles.heroSection}>
           <View style={styles.avatarContainer}>
-            <Image 
-              source={{ uri: (isEditing ? editData?.profilePic : profile.profilePic) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400' }} 
-              style={styles.avatar} 
-            />
+            <TouchableOpacity activeOpacity={0.9} onPress={() => setFullPhotoUri(heroProfilePic)}>
+              <Image
+                source={{ uri: heroProfilePic }}
+                style={styles.avatar}
+              />
+            </TouchableOpacity>
             {!isViewingOther && (
               <TouchableOpacity style={styles.cameraOverlay} onPress={pickProfilePic}>
                 <SafeIcon name="Camera" size={20} color="#000" />
@@ -1460,6 +1466,14 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+      <Modal transparent visible={!!fullPhotoUri} animationType="fade" onRequestClose={() => setFullPhotoUri('')}>
+        <Pressable style={styles.photoModalBackdrop} onPress={() => setFullPhotoUri('')}>
+          <TouchableOpacity style={styles.photoModalClose} onPress={() => setFullPhotoUri('')}>
+            <SafeIcon name="X" size={22} color="#FFF" />
+          </TouchableOpacity>
+          <Image source={{ uri: fullPhotoUri }} style={styles.fullPhotoImage} resizeMode="contain" />
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1561,12 +1575,42 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#FBE618',
   },
-  cameraOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(251, 230, 24, 0.4)',
-    borderRadius: 50,
+  photoModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 18,
+  },
+  photoModalClose: {
+    position: 'absolute',
+    top: 46,
+    right: 22,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullPhotoImage: {
+    width: '100%',
+    height: '82%',
+    borderRadius: 22,
+  },
+  cameraOverlay: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 42,
+    height: 42,
+    backgroundColor: 'rgba(251, 230, 24, 0.4)',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FBE618',
   },
   reputationFloating: {
     position: 'absolute',

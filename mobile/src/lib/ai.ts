@@ -40,6 +40,13 @@ async function directGeminiText(task: string, payload: Record<string, unknown>) 
 
 async function aiText(task: string, payload: Record<string, unknown>) {
   try {
+    const direct = await directGeminiText(task, payload);
+    if (direct) return direct;
+  } catch (error) {
+    console.warn('Direct Gemini unavailable:', error);
+  }
+
+  try {
     const callable = httpsCallable(functions, 'aiAssist');
     const res = await callable({ task, payload });
     const text = (res.data as any)?.text;
@@ -48,8 +55,6 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     // Direct Gemini fallback keeps Expo Web investor demos functional without Functions.
   }
 
-  const direct = await directGeminiText(task, payload);
-  if (direct) return direct;
   throw new Error('AI returned empty content.');
 }
 

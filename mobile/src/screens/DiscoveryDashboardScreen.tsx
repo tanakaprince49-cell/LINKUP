@@ -6,7 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { UserProfile } from '../types';
-import { localCommonalityRank, rankCandidatesWithAI } from '../lib/matchmaking';
+import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 import { earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
@@ -55,7 +55,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
     (async () => {
       try {
         setAiLoading(true);
-        let ranked = await rankCandidatesWithAI(people.map((p) => p.uid).filter(Boolean).slice(0, 40), 15);
+        let ranked = await rankCandidatesHybrid(me, people.slice(0, 40), 15);
         // Fallback: always provide recommendations even when Functions/AI isn't available.
         if (!ranked.length) ranked = localCommonalityRank(me, people, 15);
         if (cancelled) return;

@@ -62,26 +62,30 @@ const localSearchFilters = (input: string): GeminiFilterResult => {
 
 async function aiText(task: string, payload: Record<string, unknown>) {
   try {
+    if (task === 'searchFilters') {
+      const direct = await directGeminiText(
+        `Convert this LINKUP people search into compact JSON filters with keys query, location, skills, industry, experience, availability, timezone, lookingForCofounder. Return JSON only.\nSearch: ${String(payload.input || '')}`
+      );
+      if (direct) return direct;
+    }
+
+    if (task === 'profileInsights') {
+      const direct = await directGeminiText(
+        `Write one short premium startup-networking match insight for this profile. Keep under 22 words:\n${JSON.stringify(payload.profile || {})}`
+      );
+      if (direct) return direct;
+    }
+  } catch (error) {
+    console.warn('Direct Gemini unavailable:', error);
+  }
+
+  try {
     const callable = httpsCallable(functions, 'aiAssist');
     const res = await callable({ task, payload });
     const text = (res.data as any)?.text;
     if (typeof text === 'string' && text.trim()) return text.trim();
   } catch {
     // Fall through to direct Gemini/local fallbacks for Expo Web demos.
-  }
-
-  if (task === 'searchFilters') {
-    const direct = await directGeminiText(
-      `Convert this LINKUP people search into compact JSON filters with keys query, location, skills, industry, experience, availability, timezone, lookingForCofounder. Return JSON only.\nSearch: ${String(payload.input || '')}`
-    );
-    if (direct) return direct;
-  }
-
-  if (task === 'profileInsights') {
-    const direct = await directGeminiText(
-      `Write one short premium startup-networking match insight for this profile. Keep under 22 words:\n${JSON.stringify(payload.profile || {})}`
-    );
-    if (direct) return direct;
   }
 
   throw new Error('AI returned empty content.');

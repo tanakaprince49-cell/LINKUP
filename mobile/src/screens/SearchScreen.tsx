@@ -19,7 +19,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { Search, SlidersHorizontal, X, Sparkles, BadgeCheck, MapPin, Briefcase, Clock } from 'lucide-react-native';
 import { geminiToSearchFilters } from '../lib/gemini';
-import { localCommonalityRank, rankCandidatesWithAI } from '../lib/matchmaking';
+import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 
 const normalize = (v: string) => v.trim().toLowerCase();
 const LOOKING_FOR_FILTERS = ['CTO', 'Designer', 'Marketer', 'Developer', 'Investor', 'Cofounder', 'Startup Team', 'Mentor'];
@@ -369,7 +369,7 @@ export default function SearchScreen({ navigation }: any) {
 
     setAiRankLoading(true);
     try {
-      let ranked = await rankCandidatesWithAI(candidateIds, 20);
+      let ranked = await rankCandidatesHybrid(me, filtered.filter((profile) => candidateIds.includes(profile.uid)), 20);
       if (!ranked.length) ranked = localCommonalityRank(me, filtered, 20);
       const nextMap: Record<string, { score: number; reason: string }> = {};
       ranked.forEach((r) => {

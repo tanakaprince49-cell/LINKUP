@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, query, onSnapshot, where, addDoc, limit, serverTimestamp, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { localCommonalityRank, rankCandidatesWithAI } from '../lib/matchmaking';
+import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 import { trackProfileView } from '../lib/analytics';
 import { ensureDirectMatch } from '../lib/chat';
 import { demoBuilders, isDemoBuilder } from '../lib/demoBuilders';
@@ -257,13 +257,11 @@ export default function SwipeScreen({ navigation }: any) {
     const interaction = InteractionManager.runAfterInteractions(() => {
       void (async () => {
         try {
-          const candidateIds = profiles
+          const candidates = profiles
             .filter((profile) => !isDemoBuilder(profile))
-            .map((profile) => profile.uid)
-            .filter(Boolean)
             .slice(0, DISCOVERY_LIMIT);
-          if (candidateIds.length < 2) return;
-          const ranked = await rankCandidatesWithAI(candidateIds, Math.min(candidateIds.length, 12));
+          if (candidates.length < 2) return;
+          const ranked = await rankCandidatesHybrid(myProfile, candidates, Math.min(candidates.length, 12));
           if (cancelled || ranked.length === 0 || hasUserSwipedRef.current) return;
 
           const scoreById = new Map(ranked.map((rank) => [rank.uid, rank.score]));
@@ -286,7 +284,7 @@ export default function SwipeScreen({ navigation }: any) {
       cancelled = true;
       interaction.cancel();
     };
-  }, [user?.uid, profileIdsKey, aiOrderingDone, profiles.length]);
+  }, [user?.uid, myProfile?.uid, profileIdsKey, aiOrderingDone, profiles.length]);
 
   useEffect(() => {
     if (!user?.uid || !topProfile || isDemoBuilder(topProfile)) return;

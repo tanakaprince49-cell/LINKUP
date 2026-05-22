@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { handleFor, isDiscoverableProfile } from '../lib/discovery';
-import { localCommonalityRank, rankCandidatesWithAI } from '../lib/matchmaking';
+import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 import { ensureDirectMatch } from '../lib/chat';
 
 type MatchScore = {
@@ -82,7 +82,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
     (async () => {
       setAiLoading(true);
       try {
-        let ranked = await rankCandidatesWithAI(people.map((person) => person.uid).filter(Boolean).slice(0, 40), 30);
+        let ranked = await rankCandidatesHybrid(me, people.slice(0, 40), 30);
         if (!ranked.length) ranked = localCommonalityRank(me, people, 30);
         if (cancelled) return;
 
