@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ------------------------------------------------------------
-    // GLOBAL HELPERS
+    // Helpers
     // ------------------------------------------------------------
     function isSignedIn() {
       return request.auth != null && request.auth.uid != null;
@@ -24,218 +24,420 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // ------------------------------------------------------------
-    // DEFAULT DENY (Safety Net)
-    // ------------------------------------------------------------
+    function isParticipant(userIds) {
+      return isSignedIn() && userIds is list && request.auth.uid in userIds;
+    }
+
+    function isPairBlocked(userIds) {
+      return userIds is list &&
+        userIds.size() == 2 &&
+        (
+          exists(/databases/$(database)/documents/blocks/$(userIds[0] + "_" + userIds[1])) ||
+          exists(/databases/$(database)/documents/blocks/$(userIds[1] + "_" + userIds[0]))
+        );
+    }
+
+    function isPublicProfile(data) {
+      return data.isVisible == true && data.isStealthMode == false;
+    }
+
+    function isReadableProfile(data) {
+      return !data.keys().hasAny(['deleted']) || data.deleted == false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
 
     // ------------------------------------------------------------
-    // USER PROFILES
+    // Users / public builder profiles
     // ------------------------------------------------------------
     match /users/{userId} {
-      // Allow authenticated users to view profiles IF not blocked
-      allow get: if isSignedIn() && 
-                    !exists(/databases/$(database)/documents/blocks/$(request.auth.uid + "_" + userId)) &&
-                    !exists(/databases/$(database)/documents/blocks/$(userId + "_" + request.auth.uid));
-      
-      allow list: if isSignedIn(); // We filter list results on the client side
-
       function isValidUser(data) {
         return data.uid == userId &&
-          data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100;
+          data.displayName is string &&
+          data.displayName.size() > 0 &&
+          data.displayName != 'New Builder' &&
+          data.displayName.size() <= 100;
       }
 
-      allow create: if (isOwner(userId) && isValidUser(incoming())) || userId.matches('^seed_.*');
-      
-      allow update: if isSignedIn() && (
-        // Self-updating own profile data
-        (isOwner(userId) && isValidUser(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly([
-          'displayName', 'username', 'occupation', 'company',
-          'bio', 'skills', 'interests', 'goals',
-          'country', 'city', 'age', 'experience', 'personalityType',
-          'commitmentLevel', 'industries', 'profilePic', 'coverPhoto',
-          'achievements', 'badges', 'socialLinks', 'isVisible', 'lastActiveAt',
-          'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'onboarded', 
-          'ambition', 'photos', 'pushTokens', 'reputationScore', 'isStealthMode', 'hasExit', 'isVerified',
-          'isOnline',
-          'deleted',
-          'availability', 'timezone', 'languages', 'lookingFor', 'startupStage', 'fundingStage', 'workStyle',
+      function validOptionalString(data, field, maxSize) {
+        return !data.keys().hasAny([field]) ||
+          (data[field] is string && data[field].size() <= maxSize);
+      }
+
+      function validOptionalList(data, field, maxSize) {
+        return !data.keys().hasAny([field]) ||
+          (data[field] is list && data[field].size() <= maxSize);
+      }
+
+      function validOptionalBool(data, field) {
+        return !data.keys().hasAny([field]) || data[field] is bool;
+      }
+
+      function validProfileShape(data) {
+        return validOptionalString(data, 'username', 30) &&
+          validOptionalString(data, 'profileLink', 180) &&
+          validOptionalString(data, 'occupation', 80) &&
+          validOptionalString(data, 'company', 120) &&
+          validOptionalString(data, 'bio', 2000) &&
+          validOptionalString(data, 'country', 80) &&
+          validOptionalString(data, 'city', 80) &&
+          validOptionalString(data, 'profilePic', 900000) &&
+          validOptionalString(data, 'coverPhoto', 900000) &&
+          validOptionalString(data, 'vibeMedia', 900000) &&
+          validOptionalList(data, 'photos', 3) &&
+          validOptionalList(data, 'skills', 50) &&
+          validOptionalList(data, 'interests', 50) &&
+          validOptionalList(data, 'industries', 40) &&
+          validOptionalList(data, 'lookingFor', 30) &&
+          validOptionalList(data, 'languages', 20) &&
+          validOptionalList(data, 'projects', 20) &&
+          validOptionalList(data, 'circles', 20) &&
+          validOptionalBool(data, 'isVisible') &&
+          validOptionalBool(data, 'isStealthMode') &&
+          validOptionalBool(data, 'turboConnect') &&
+          validOptionalBool(data, 'hideOnlineStatus') &&
+          (!data.keys().hasAny(['age']) ||
+            (data.age is int && (data.age == 0 || (data.age >= 13 && data.age <= 120))));
+      }
+
+      function safeProfileCreateKeys() {
+        return incoming().keys().hasOnly([
+          'uid', 'displayName', 'username', 'profileLink',
+          'occupation', 'company', 'bio',
+          'age', 'country', 'city',
+          'skills', 'interests', 'goals', 'industries',
+          'experience', 'personalityType', 'personalityAnswers', 'roleAnswers',
+          'commitmentLevel', 'startupStage', 'fundingStage',
+          'availability', 'timezone', 'languages', 'workStyle',
+          'lookingFor', 'networkingIntent',
+          'profilePic', 'photos', 'coverPhoto', 'vibeMedia',
+          'projects', 'portfolioLinks', 'startupIdeas', 'resume',
+          'socialLinks', 'education', 'remoteOnly', 'willingToRelocate',
+          'teamSizePreference', 'ambition',
+          'isVisible', 'isStealthMode', 'turboConnect', 'hideOnlineStatus',
+          'onboarded', 'createdAt',
+          'circles', 'aiMatchInsights'
+        ]);
+      }
+
+      function safeProfileUpdateKeys() {
+        return incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'username', 'profileLink',
+          'occupation', 'company', 'bio',
+          'age', 'country', 'city',
+          'skills', 'interests', 'goals', 'industries',
+          'experience', 'personalityType', 'personalityAnswers', 'roleAnswers',
+          'commitmentLevel', 'startupStage', 'fundingStage',
+          'availability', 'timezone', 'languages', 'workStyle',
+          'lookingFor', 'networkingIntent',
+          'profilePic', 'photos', 'coverPhoto', 'vibeMedia',
+          'projects', 'portfolioLinks', 'startupIdeas', 'resume',
+          'socialLinks',
           'education', 'remoteOnly', 'willingToRelocate', 'teamSizePreference',
-          'founderScore', 'reputationMetrics', 'aiMatchInsights', 'networkingIntent',
-          'following',
-          'circles',
-          'personalityAnswers'
-        ])) ||
-        // Other users following/unfollowing this profile
-        (incoming().diff(existing()).affectedKeys().hasOnly(['followers']))
+          'ambition',
+          'isVisible', 'isStealthMode', 'turboConnect', 'hideOnlineStatus',
+          'onboarded',
+          'aiMatchInsights',
+          'circles'
+        ]);
+      }
+
+      function safePushTokenCleanup() {
+        return existing().keys().hasAny(['pushTokens']) &&
+          !incoming().keys().hasAny(['pushTokens']) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['pushTokens']);
+      }
+
+      allow get: if isOwner(userId) || (
+        isSignedIn() &&
+        isReadableProfile(existing()) &&
+        !exists(/databases/$(database)/documents/blocks/$(userId + "_" + request.auth.uid))
       );
-      
+
+      // Search/discovery can only list public, non-stealth profiles with no public push tokens.
+      allow list: if isSignedIn() && isPublicProfile(existing());
+
+      allow create: if isOwner(userId) && isValidUser(incoming()) && safeProfileCreateKeys() && validProfileShape(incoming());
+
+      allow update: if isSignedIn() && (
+        (isOwner(userId) && isValidUser(incoming()) && safeProfileUpdateKeys() && validProfileShape(incoming())) ||
+        (isOwner(userId) && safePushTokenCleanup())
+      );
+
+      allow delete: if isOwner(userId);
+    }
+
+    // Owner-only private user data. Never store secrets or device tokens in public profiles.
+    match /userPrivate/{userId} {
+      function validPrivateUserDoc(data) {
+        return data.keys().hasOnly([
+          'pushTokens',
+          'webNotificationsEnabled',
+          'webNotificationsUpdatedAt',
+          'updatedAt'
+        ]) &&
+          (!data.keys().hasAny(['pushTokens']) ||
+            (data.pushTokens is list && data.pushTokens.size() <= 20)) &&
+          (!data.keys().hasAny(['webNotificationsEnabled']) || data.webNotificationsEnabled is bool);
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create, update: if isOwner(userId) && validPrivateUserDoc(incoming());
       allow delete: if isOwner(userId);
     }
 
     // ------------------------------------------------------------
-    // POSTS (Founder Feed)
+    // Presence / online status
     // ------------------------------------------------------------
-    match /posts/{postId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
-
-      function isValidPost(data) {
-        return data.authorId == request.auth.uid &&
-          data.content is string && data.content.size() <= 2000 &&
-          data.timestamp == request.time &&
-          data.type in ['build', 'launch', 'achievement', 'update'];
+    match /presence/{userId} {
+      function isValidPresence(data) {
+        return data.keys().hasOnly(['isOnline', 'lastActiveAt']) &&
+          data.isOnline is bool;
       }
 
-      allow create: if isSignedIn() && isValidPost(incoming()) &&
-                      incoming().likesCount == 0 &&
-                      incoming().commentsCount == 0;
-
-      allow update: if isSignedIn() && (
-        // Action: Owner Edit
-        (isOwner(existing().authorId) && 
-         incoming().timestamp == existing().timestamp && // Prevent timestamp spoof
-         incoming().authorId == existing().authorId && // Immobility
-         incoming().diff(existing()).affectedKeys().hasOnly(['content', 'type', 'mediaUrl'])) ||
-        
-        // Action: Social Interaction (Any signed-in user can like/comment/view)
-        (incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'viewsCount', 'likedBy', 'viewedBy']) &&
-         incoming().authorId == existing().authorId &&
-         incoming().content == existing().content)
+      allow get: if isOwner(userId) || (
+        isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(userId)).data.hideOnlineStatus != true
       );
-
-      allow delete: if isSignedIn() && isOwner(existing().authorId);
-
-      // Comments Subcollection
-      match /comments/{commentId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn() && 
-                        incoming().userId == request.auth.uid &&
-                        incoming().timestamp == request.time;
-        allow update: if isSignedIn() && (
-          incoming().diff(existing()).affectedKeys().hasOnly(['likes'])
-        );
-        allow delete: if isSignedIn() && (isOwner(existing().userId) || isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorId));
-
-        // Replies Subcollection
-        match /replies/{replyId} {
-          allow read: if isSignedIn();
-          allow create: if isSignedIn() && 
-                          incoming().userId == request.auth.uid &&
-                          incoming().timestamp == request.time;
-          allow update: if isSignedIn() && (
-            incoming().diff(existing()).affectedKeys().hasOnly(['likes'])
-          );
-          allow delete: if isSignedIn() && (isOwner(existing().userId) || isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorId));
-        }
-      }
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidPresence(incoming());
+      allow update: if isOwner(userId) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['isOnline', 'lastActiveAt']) &&
+        isValidPresence(incoming());
+      allow delete: if isOwner(userId);
     }
 
     // ------------------------------------------------------------
-    // BLOCKS
+    // Blocks
     // ------------------------------------------------------------
     match /blocks/{blockId} {
-      // Allow users to see who they blocked or who blocked them
-      allow get: if isSignedIn() && (existing().blockedById == request.auth.uid || existing().blockedUserId == request.auth.uid);
-      allow list: if isSignedIn() && (resource.data.blockedById == request.auth.uid || resource.data.blockedUserId == request.auth.uid);
-      
-      allow create: if isSignedIn() && 
-                      incoming().blockedById == request.auth.uid &&
-                      incoming().timestamp == request.time &&
-                      isValidId(incoming().blockedUserId);
-      
-      allow delete: if isSignedIn() && isOwner(existing().blockedById);
+      function userIsInBlock(data) {
+        return data.blockedById == request.auth.uid || data.blockedUserId == request.auth.uid;
+      }
+
+      function isRequesterBlockPath() {
+        return isSignedIn() && blockId.matches('^' + request.auth.uid + '_[a-zA-Z0-9_\\-]+$');
+      }
+
+      allow get: if isRequesterBlockPath() || (isSignedIn() && userIsInBlock(existing()));
+      allow list: if isSignedIn() && userIsInBlock(existing());
+      allow create: if isSignedIn() &&
+        incoming().keys().hasOnly(['blockedById', 'blockedUserId', 'timestamp']) &&
+        blockId == request.auth.uid + "_" + incoming().blockedUserId &&
+        incoming().blockedById == request.auth.uid &&
+        isValidId(incoming().blockedUserId) &&
+        incoming().blockedUserId != request.auth.uid &&
+        incoming().timestamp == request.time;
+      allow delete: if isSignedIn() && existing().blockedById == request.auth.uid;
+      allow update: if false;
     }
 
     // ------------------------------------------------------------
-    // REPORTS
-    // ------------------------------------------------------------
-    match /reports/{reportId} {
-      allow read: if false; // Admins only (handled in console)
-      allow create: if isSignedIn() && 
-                      incoming().reportedById == request.auth.uid &&
-                      incoming().timestamp == request.time;
-    }
-
-    // ------------------------------------------------------------
-    // SWIPES
+    // Swipes / likes
     // ------------------------------------------------------------
     match /swipes/{swipeId} {
-      allow get: if isSignedIn() && (existing().fromId == request.auth.uid || existing().toId == request.auth.uid);
-      allow list: if isSignedIn() && (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
-      
-      allow create: if isSignedIn() && 
-                      incoming().fromId == request.auth.uid &&
-                      incoming().timestamp == request.time &&
-                      isValidId(incoming().toId);
+      function userIsInSwipe(data) {
+        return data.fromId == request.auth.uid || data.toId == request.auth.uid;
+      }
+
+      allow get, list: if isSignedIn() && userIsInSwipe(existing());
+      allow create: if isSignedIn() &&
+        incoming().keys().hasOnly(['fromId', 'toId', 'type', 'timestamp']) &&
+        incoming().fromId == request.auth.uid &&
+        isValidId(incoming().toId) &&
+        incoming().toId != request.auth.uid &&
+        incoming().type in ['like', 'skip'] &&
+        incoming().timestamp == request.time;
+      allow update, delete: if false;
     }
 
     // ------------------------------------------------------------
-    // MATCHES & MESSAGES
-    // ------------------------------------------------------------
-
-    // ------------------------------------------------------------
-    // AI MATCH CACHE (server-generated)
+    // AI match cache (Cloud Functions/Admin SDK writes only)
     // ------------------------------------------------------------
     match /aiMatches/{pairId} {
-      // Users may read cached scores only if they are part of the pair.
-      allow get: if isSignedIn() && (existing().u1 == request.auth.uid || existing().u2 == request.auth.uid);
-      allow list: if false;
-
-      // Never allow clients to write AI cache. Cloud Functions (Admin SDK) bypasses rules.
-      allow create, update, delete: if false;
+      allow get: if isSignedIn() &&
+        (existing().u1 == request.auth.uid || existing().u2 == request.auth.uid);
+      allow list, create, update, delete: if false;
     }
 
+    // ------------------------------------------------------------
+    // Matches / conversations / messages
+    // ------------------------------------------------------------
     match /matches/{matchId} {
-      allow get: if isSignedIn() && request.auth.uid in existing().userIds;
-      allow list: if isSignedIn() && request.auth.uid in resource.data.userIds;
-      
-      allow create: if isSignedIn() && request.auth.uid in incoming().userIds;
-      allow update: if isSignedIn() && request.auth.uid in existing().userIds &&
-                      incoming().userIds == existing().userIds;
-      allow delete: if isSignedIn() && request.auth.uid in existing().userIds;
+      function validMatchUsers(userIds) {
+        return userIds is list &&
+          userIds.size() == 2 &&
+          request.auth.uid in userIds &&
+          userIds[0] is string &&
+          userIds[1] is string;
+      }
+
+      function validParticipants(data) {
+        return data.participants is map &&
+          data.participants.keys().hasOnly(data.userIds) &&
+          data.participants[data.userIds[0]] == true &&
+          data.participants[data.userIds[1]] == true;
+      }
+
+      function participantsValidOrMissing(data) {
+        return !data.keys().hasAny(['participants']) || validParticipants(data);
+      }
+
+      function isParticipantMap(participants) {
+        return isSignedIn() && participants is map && participants[request.auth.uid] == true;
+      }
+
+      function validMatchCreate(data) {
+        return data.keys().hasOnly([
+          'userIds', 'timestamp',
+          'participants',
+          'lastMessage', 'lastMessageTime',
+          'pinnedBy', 'archivedBy', 'importantBy', 'mutedUntilBy',
+          'deletedBy', 'confidentialBy'
+        ]) &&
+        validMatchUsers(data.userIds) &&
+        validParticipants(data) &&
+        !isPairBlocked(data.userIds);
+      }
+
+      function validParticipantArray(data, field) {
+        return !data.keys().hasAny([field]) ||
+          (data[field] is list && data[field].size() <= 2 && data[field].hasOnly(data.userIds));
+      }
+
+      function validMatchMutableData(data) {
+        return validParticipantArray(data, 'pinnedBy') &&
+          validParticipantArray(data, 'archivedBy') &&
+          validParticipantArray(data, 'importantBy') &&
+          validParticipantArray(data, 'deletedBy') &&
+          validParticipantArray(data, 'confidentialBy') &&
+          (!data.keys().hasAny(['mutedUntilBy']) ||
+            (data.mutedUntilBy is map && data.mutedUntilBy.keys().hasOnly(data.userIds))) &&
+          (!data.keys().hasAny(['lastMessage']) ||
+            (data.lastMessage is string && data.lastMessage.size() <= 4000));
+      }
+
+      function validMatchUpdate() {
+        return incoming().userIds == existing().userIds &&
+          participantsValidOrMissing(incoming()) &&
+          validMatchMutableData(incoming()) &&
+          (!incoming().diff(existing()).affectedKeys().hasAny(['timestamp']) ||
+            incoming().timestamp == request.time) &&
+          (!incoming().diff(existing()).affectedKeys().hasAny(['lastMessageTime']) ||
+            incoming().lastMessageTime == request.time) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'timestamp', 'participants',
+            'lastMessage', 'lastMessageTime',
+            'pinnedBy', 'archivedBy', 'importantBy', 'mutedUntilBy',
+            'deletedBy', 'confidentialBy'
+          ]);
+      }
+
+      allow get: if isParticipant(existing().userIds) || isParticipantMap(existing().participants);
+      allow list: if isParticipantMap(existing().participants);
+      allow create: if isSignedIn() && validMatchCreate(incoming());
+      allow update: if isParticipant(existing().userIds) && validMatchUpdate();
+      allow delete: if false;
 
       match /messages/{messageId} {
-        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.userIds;
-        allow create: if isSignedIn() && 
-                        request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.userIds &&
-                        incoming().senderId == request.auth.uid &&
-                        incoming().timestamp == request.time;
-        allow delete: if isSignedIn() &&
-                        request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.userIds &&
-                        existing().senderId == request.auth.uid;
+        function canUseConversation() {
+          return isParticipant(get(/databases/$(database)/documents/matches/$(matchId)).data.userIds) &&
+            !isPairBlocked(get(/databases/$(database)/documents/matches/$(matchId)).data.userIds);
+        }
+
+        function validMessage(data) {
+          return data.keys().hasOnly([
+            'senderId', 'content', 'timestamp', 'type',
+            'replyToMessageId', 'replyToSenderId', 'replyToText'
+          ]) &&
+          data.senderId == request.auth.uid &&
+          data.content is string &&
+          data.content.size() > 0 &&
+          data.content.size() <= 4000 &&
+          data.type in ['text'] &&
+          data.timestamp == request.time;
+        }
+
+        allow read: if canUseConversation();
+        allow create: if canUseConversation() && validMessage(incoming());
+        allow delete: if canUseConversation() && existing().senderId == request.auth.uid;
         allow update: if false;
       }
     }
 
     // ------------------------------------------------------------
-    // NOTIFICATIONS
+    // In-app notifications
     // ------------------------------------------------------------
     match /notifications/{notificationId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn(); 
-      allow update: if isSignedIn() && isOwner(existing().userId) &&
-                      incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
-      allow delete: if isOwner(existing().userId);
+      function isNotificationOwner(data) {
+        return isSignedIn() && data.userId == request.auth.uid;
+      }
+
+      function validNotification(data) {
+        return data.keys().hasOnly([
+          'userId', 'fromId', 'fromName', 'fromPic',
+          'type', 'content', 'matchId',
+          'isRead', 'timestamp'
+        ]) &&
+        data.userId is string &&
+        isValidId(data.userId) &&
+        data.isRead == false &&
+        data.content is string &&
+        data.content.size() <= 500 &&
+        data.type in ['like', 'match', 'view', 'message', 'comment', 'system'] &&
+        data.timestamp == request.time &&
+        (!data.keys().hasAny(['fromId']) || isValidId(data.fromId)) &&
+        (
+          data.userId == request.auth.uid ||
+          (data.keys().hasAny(['fromId']) && data.fromId == request.auth.uid)
+        );
+      }
+
+      allow get, list: if isNotificationOwner(existing());
+      allow create: if isSignedIn() && validNotification(incoming());
+      allow update: if isNotificationOwner(existing()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['isRead']) &&
+        incoming().isRead is bool;
+      allow delete: if isNotificationOwner(existing());
     }
 
     // ------------------------------------------------------------
-    // STORIES (Insta-Stories)
+    // Profile analytics / viewers
     // ------------------------------------------------------------
-    match /stories/{storyId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isOwner(request.resource.data.authorId);
-      // Allow any signed-in user to update only `viewers`/`likes` for social interactions.
-      // Allow the author to update their own story document.
-      allow update: if isSignedIn() && (
-        (isOwner(existing().authorId)) ||
-        (incoming().diff(existing()).affectedKeys().hasOnly(['viewers', 'likes']))
-      );
-      allow delete: if isOwner(resource.data.authorId);
+    match /profileViews/{viewId} {
+      function validProfileViewCreate(data) {
+        return data.keys().hasOnly([
+          'profileId', 'viewerId', 'viewerName', 'viewerPic',
+          'createdAt', 'lastViewedAt'
+        ]) &&
+        data.profileId is string &&
+        isValidId(data.profileId) &&
+        data.viewerId == request.auth.uid &&
+        data.profileId != request.auth.uid &&
+        viewId == data.profileId + "_" + request.auth.uid &&
+        data.createdAt == request.time &&
+        data.lastViewedAt == request.time;
+      }
+
+      function validProfileViewUpdate() {
+        return existing().viewerId == request.auth.uid &&
+          incoming().profileId == existing().profileId &&
+          incoming().viewerId == existing().viewerId &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'viewerName', 'viewerPic', 'lastViewedAt'
+          ]) &&
+          incoming().lastViewedAt == request.time;
+      }
+
+      allow get: if isSignedIn() &&
+        (existing().profileId == request.auth.uid || existing().viewerId == request.auth.uid);
+      allow list: if isSignedIn() && existing().profileId == request.auth.uid;
+      allow create: if isSignedIn() && validProfileViewCreate(incoming());
+      allow update: if isSignedIn() && validProfileViewUpdate();
+      allow delete: if false;
     }
   }
 }
-

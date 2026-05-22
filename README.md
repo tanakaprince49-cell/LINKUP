@@ -26,6 +26,9 @@ This repo includes `vercel.json`, so Vercel deploys the Expo web build automatic
 - Install command: `cd mobile && npm ci`
 - Build command: `cd mobile && npm run build:web`
 - Output directory: `mobile/dist`
+- Web analytics: `@vercel/analytics/react` is loaded only on Expo Web.
+- PWA install: the web build injects `manifest.webmanifest` and `service-worker.js` after export.
+- Web notifications: browser notifications mirror in-app notifications while the web/PWA app is running.
 
 Set this environment variable in Vercel before launching:
 

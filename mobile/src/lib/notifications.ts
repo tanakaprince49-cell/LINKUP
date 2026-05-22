@@ -15,6 +15,7 @@ import {
 import { db } from './firebase';
 
 let notificationHandlerReady = false;
+const WEB_NOTIFICATIONS_STORAGE_KEY = 'linkup:web-notifications-enabled';
 
 function getExpoConstants() {
   try {
@@ -40,8 +41,12 @@ async function loadNotificationsModule() {
 }
 
 export async function registerForPushNotificationsAsync(userId: string) {
-  if (!userId || Platform.OS === 'web') {
+  if (!userId) {
     return;
+  }
+
+  if (Platform.OS === 'web') {
+    return registerForWebNotificationsAsync(userId);
   }
 
   if (isExpoGo()) {
@@ -107,6 +112,108 @@ export async function registerForPushNotificationsAsync(userId: string) {
   }
 
   return token;
+}
+
+export async function registerForWebNotificationsAsync(userId: string) {
+  if (!userId || Platform.OS !== 'web' || typeof window === 'undefined' || !('Notification' in window)) {
+    return;
+  }
+
+  try {
+    const permission =
+      window.Notification.permission === 'default'
+        ? await window.Notification.requestPermission()
+        : window.Notification.permission;
+
+    window.localStorage?.setItem(WEB_NOTIFICATIONS_STORAGE_KEY, permission === 'granted' ? 'true' : 'false');
+
+    await setDoc(
+      doc(db, 'userPrivate', userId),
+      {
+        webNotificationsEnabled: permission === 'granted',
+        webNotificationsUpdatedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    ).catch(() => undefined);
+
+    return permission;
+  } catch (error) {
+    console.warn('Web notifications setup skipped:', error);
+  }
+}
+
+export function subscribeToBrowserNotificationToasts(userId: string) {
+  if (
+    !userId ||
+    Platform.OS !== 'web' ||
+    typeof window === 'undefined' ||
+    !('Notification' in window)
+  ) {
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, 'notifications'),
+    where('userId', '==', userId),
+    where('isRead', '==', false)
+  );
+
+  const seenIds = new Set<string>();
+  let bootstrapped = false;
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      snap.docs.forEach((notificationDoc) => {
+        const data = notificationDoc.data() as any;
+        const notificationId = notificationDoc.id;
+
+        if (!bootstrapped) {
+          seenIds.add(notificationId);
+          return;
+        }
+
+        if (seenIds.has(notificationId)) return;
+        seenIds.add(notificationId);
+
+        if (window.Notification.permission !== 'granted') return;
+
+        const title = data.type === 'message'
+          ? `New message from ${data.fromName || 'LINKUP'}`
+          : data.type === 'match'
+            ? 'New LINKUP match'
+            : data.content?.startsWith('AI Opportunity')
+              ? 'AI Opportunity found'
+              : 'LINKUP notification';
+
+        const targetUrl = data.matchId
+          ? `/chat/${data.matchId}`
+          : data.content?.startsWith('AI Opportunity') && data.fromId
+            ? `/opportunity/${data.fromId}`
+            : '/alerts';
+
+        const browserNotification = new window.Notification(title, {
+          body: String(data.content || 'Open LINKUP for the latest update.'),
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          tag: notificationId,
+          data: { targetUrl },
+        });
+
+        browserNotification.onclick = () => {
+          window.focus();
+          window.location.assign(targetUrl);
+          browserNotification.close();
+        };
+      });
+
+      bootstrapped = true;
+    },
+    (err) => {
+      console.warn('Web notification listener unavailable:', err);
+    }
+  );
 }
 
 export function subscribeToUnreadNotificationsCount(

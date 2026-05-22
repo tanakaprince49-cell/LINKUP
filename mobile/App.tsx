@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
 import React from 'react';
-import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text } from 'react-native';
+import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -30,8 +30,10 @@ import ActiveOpportunityScreen from './src/screens/ActiveOpportunityScreen';
 import ActiveOpportunitiesScreen from './src/screens/ActiveOpportunitiesScreen';
 import TrendingBuildersScreen from './src/screens/TrendingBuildersScreen';
 import RecommendedMatchesScreen from './src/screens/RecommendedMatchesScreen';
-import { subscribeToUnreadNotificationsCount } from './src/lib/notifications';
+import { subscribeToBrowserNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
 import OpportunityRadar from './src/components/OpportunityRadar';
+import WebAnalytics from './src/components/WebAnalytics';
+import PWAInstallPrompt from './src/components/PWAInstallPrompt';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -235,6 +237,11 @@ function AppContent() {
   }, [user?.uid]);
 
   React.useEffect(() => {
+    if (!user?.uid || Platform.OS !== 'web') return;
+    return subscribeToBrowserNotificationToasts(user.uid);
+  }, [user?.uid]);
+
+  React.useEffect(() => {
     if (!user?.uid || isOnboarded) return;
     if (theme !== 'light') {
       setThemeMode('light').catch(() => {});
@@ -280,6 +287,8 @@ function AppContent() {
         <Stack.Screen name="RecommendedMatches" component={RecommendedMatchesScreen} />
       </Stack.Navigator>
       <OpportunityRadar />
+      <WebAnalytics />
+      <PWAInstallPrompt />
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </NavigationContainer>
   );
