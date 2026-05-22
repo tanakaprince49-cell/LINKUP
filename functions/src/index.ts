@@ -389,7 +389,7 @@ function clippedJson(value: unknown, max = 3500) {
   return JSON.stringify(value ?? {}).slice(0, max);
 }
 
-export const aiAssist = onCall({ region: 'us-central1', secrets: [GEMINI_API_KEY] }, async (request) => {
+export const aiAssist = onCall({ region: 'us-central1', secrets: [GEMINI_API_KEY], cors: true }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in.');
 
@@ -498,7 +498,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: nu
   return results;
 }
 
-export const rankCandidates = onCall({ region: 'us-central1', secrets: [GEMINI_API_KEY] }, async (request) => {
+export const rankCandidates = onCall({ region: 'us-central1', secrets: [GEMINI_API_KEY], cors: true }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in.');
 

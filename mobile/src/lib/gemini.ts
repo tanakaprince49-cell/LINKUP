@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { describeAIError, getGeminiApiKey, recordAIError, requestGeminiText } from './aiDiagnostics';
@@ -123,14 +122,6 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     recordAIError(error, 'Direct Gemini unavailable');
   }
 
-  if (Platform.OS === 'web') {
-    throw new Error(
-      directError
-        ? describeAIError(directError)
-        : 'Missing EXPO_PUBLIC_GEMINI_API_KEY on web. Add it to Vercel Environment Variables and redeploy.'
-    );
-  }
-
   try {
     const callable = httpsCallable(functions, 'aiAssist');
     const res = await callable({ task, payload });
@@ -138,6 +129,10 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     if (typeof text === 'string' && text.trim()) return text.trim();
   } catch (error) {
     recordAIError(error, 'Cloud Functions AI fallback unavailable');
+  }
+
+  if (directError) {
+    throw new Error(describeAIError(directError));
   }
 
   throw new Error('AI returned empty content.');
