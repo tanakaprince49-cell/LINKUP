@@ -33,6 +33,7 @@ const SWIPE_THRESHOLD = 0.22 * width;
 const DISCOVERY_LIMIT = 12;
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800';
 const MAX_SWIPE_DATA_URI_CHARS = 220_000;
+const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
 
 const isSafeSwipePhoto = (uri: unknown): uri is string => {
   if (typeof uri !== 'string') return false;
@@ -393,7 +394,7 @@ export default function SwipeScreen({ navigation }: any) {
       toValue: { x: 0, y: 0 },
       tension: 85,
       friction: 9,
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
     }).start(() => {
       isAnimatingRef.current = false;
     });
@@ -409,7 +410,7 @@ export default function SwipeScreen({ navigation }: any) {
       toValue: { x: exitX, y: direction === 'right' ? 34 : -34 },
       duration: 280,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
     }).start(({ finished }) => {
       swipePosition.setValue({ x: 0, y: 0 });
       isAnimatingRef.current = false;

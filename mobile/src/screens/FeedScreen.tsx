@@ -41,6 +41,7 @@ import { generateFeedback } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 
 const { width } = Dimensions.get('window');
+const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
 
 const formatTimeAgo = (timestamp: any) => {
   if (!timestamp) return 'Just now';
@@ -298,8 +299,8 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, friction: 8, useNativeDriver: true })
+      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 8, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER })
     ]).start();
 
     if (user && !post.viewedBy?.includes(user.uid)) {
@@ -313,8 +314,8 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
   const handleLike = async () => {
     if (!user) return;
     Animated.sequence([
-      Animated.timing(likeScale, { toValue: 1.4, duration: 100, useNativeDriver: true }),
-      Animated.spring(likeScale, { toValue: 1, friction: 3, useNativeDriver: true })
+      Animated.timing(likeScale, { toValue: 1.4, duration: 100, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER }),
+      Animated.spring(likeScale, { toValue: 1, friction: 3, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER })
     ]).start();
     const postRef = doc(db, 'posts', post.id);
     if (isLiked) {
@@ -464,8 +465,8 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
           style={styles.actionBtn} 
           onPress={() => {
             Animated.sequence([
-              Animated.timing(commentScale, { toValue: 1.2, duration: 100, useNativeDriver: true }),
-              Animated.spring(commentScale, { toValue: 1, friction: 3, useNativeDriver: true })
+              Animated.timing(commentScale, { toValue: 1.2, duration: 100, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER }),
+              Animated.spring(commentScale, { toValue: 1, friction: 3, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER })
             ]).start();
             openComments();
           }}
