@@ -176,10 +176,13 @@ service cloud.firestore {
           'pushTokens',
           'webNotificationsEnabled',
           'webNotificationsUpdatedAt',
+          'savedSearchAlerts',
           'updatedAt'
         ]) &&
           (!data.keys().hasAny(['pushTokens']) ||
             (data.pushTokens is list && data.pushTokens.size() <= 20)) &&
+          (!data.keys().hasAny(['savedSearchAlerts']) ||
+            (data.savedSearchAlerts is list && data.savedSearchAlerts.size() <= 25)) &&
           (!data.keys().hasAny(['webNotificationsEnabled']) || data.webNotificationsEnabled is bool);
       }
 

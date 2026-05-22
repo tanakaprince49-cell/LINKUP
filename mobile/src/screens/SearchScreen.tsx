@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -26,6 +26,25 @@ const LOOKING_FOR_FILTERS = ['CTO', 'Designer', 'Marketer', 'Developer', 'Invest
 const STAGE_FILTERS = ['Idea', 'MVP', 'Early Users', 'Revenue', 'Scaling', 'Fundraising'];
 const INDUSTRY_FILTERS = ['AI', 'SaaS', 'Fintech', 'Healthtech', 'EdTech', 'Gaming', 'E-commerce', 'Crypto'];
 
+type SavedSearchAlert = {
+  id: string;
+  label: string;
+  queryText: string;
+  location: string;
+  skills: string;
+  experience: string;
+  industry: string;
+  availability: string;
+  timezone: string;
+  lookingForRole: string;
+  stageFilter: string;
+  lookingForCofounder: boolean;
+  verifiedOnly: boolean;
+  activeWithin: 'any' | 'today' | 'week';
+  minCompatibility: number;
+  createdAt: number;
+};
+
 const includesAny = (haystack: string, needles: string[]) => {
   const h = normalize(haystack);
   return needles.some((n) => h.includes(normalize(n)));
@@ -36,6 +55,41 @@ const cleanUsername = (value: string) => value.replace(/^@+/, '').toLowerCase().
 const profileHandle = (profile: Partial<UserProfile>) => {
   const raw = (profile as any).username || profile.displayName || 'builder';
   return `@${cleanUsername(String(raw)) || 'builder'}`;
+};
+
+const projectSearchText = (profile: Partial<UserProfile>) => {
+  const projects = Array.isArray(profile.projects) ? profile.projects : [];
+  return projects
+    .map((project: any) => [project?.title, project?.description, project?.status].filter(Boolean).join(' '))
+    .join(' ');
+};
+
+const buildMatchReason = (
+  me: UserProfile | null | undefined,
+  candidate: UserProfile,
+  aiRankMap: Record<string, { score: number; reason: string }>,
+  queryText: string
+) => {
+  const ai = aiRankMap[candidate.uid];
+  if (ai?.reason) return ai.reason;
+
+  const normalizeList = (value: unknown) =>
+    Array.isArray(value) ? value.map((entry) => normalize(String(entry))).filter(Boolean) : [];
+  const mySkills = normalizeList(me?.skills);
+  const theirSkills = normalizeList(candidate.skills);
+  const myIndustries = normalizeList((me as any)?.industries);
+  const theirIndustries = normalizeList((candidate as any).industries);
+  const sharedSkills = theirSkills.filter((skill) => mySkills.includes(skill));
+  const sharedIndustries = theirIndustries.filter((industry) => myIndustries.includes(industry));
+  const projectHit = queryText.trim() && includesAny(projectSearchText(candidate), [queryText]);
+  const reasonParts = [
+    sharedSkills.length ? `${sharedSkills.length} shared skill${sharedSkills.length === 1 ? '' : 's'}` : '',
+    sharedIndustries.length ? `${sharedIndustries.length} shared startup interest${sharedIndustries.length === 1 ? '' : 's'}` : '',
+    projectHit ? 'their project matches your search intent' : '',
+    (candidate as any).availability ? `availability: ${(candidate as any).availability}` : '',
+  ].filter(Boolean);
+
+  return reasonParts.slice(0, 3).join(' / ') || 'Strong potential builder fit based on profile intent, skills, and availability.';
 };
 
 const lookingForNeedles = (option: string) => {
@@ -75,6 +129,8 @@ export default function SearchScreen({ navigation }: any) {
   const [aiRankLoading, setAiRankLoading] = useState(false);
   const [aiRankMode, setAiRankMode] = useState(false);
   const [aiRankMap, setAiRankMap] = useState<Record<string, { score: number; reason: string }>>({});
+  const [savedAlerts, setSavedAlerts] = useState<SavedSearchAlert[]>([]);
+  const [savingAlert, setSavingAlert] = useState(false);
 
   // Filters (simple + client-side for now)
   const [filterOpen, setFilterOpen] = useState(false);
@@ -171,6 +227,24 @@ export default function SearchScreen({ navigation }: any) {
     return () => unsub();
   }, [user?.uid]);
 
+  useEffect(() => {
+    if (!user?.uid) {
+      setSavedAlerts([]);
+      return;
+    }
+    const unsub = onSnapshot(
+      doc(db, 'userPrivate', user.uid),
+      (snap) => {
+        const alerts = snap.data()?.savedSearchAlerts;
+        setSavedAlerts(Array.isArray(alerts) ? alerts.slice(0, 25) : []);
+      },
+      (error) => {
+        console.warn('Saved search alerts unavailable:', error);
+      }
+    );
+    return () => unsub();
+  }, [user?.uid]);
+
   const filtered = useMemo(() => {
     const q = normalize(queryText);
     const skillList = skills
@@ -196,6 +270,7 @@ export default function SearchScreen({ navigation }: any) {
       const goals = (p as any).goals || '';
       const lookingArr = Array.isArray((p as any).lookingFor) ? (p as any).lookingFor : [];
       const startupStage = (p as any).startupStage || '';
+      const projectText = projectSearchText(p);
       const looking = !!(p as any).lookingForCofounder || lookingArr.map(normalize).includes('cofounder');
       const isVerified = !!(p as any).isVerified;
       const lastActiveAt = (p as any).lastActiveAt;
@@ -213,7 +288,8 @@ export default function SearchScreen({ navigation }: any) {
           userSkills.some((s) => includesAny(s, [q])) ||
           industries.some((s: string) => includesAny(s, [q])) ||
           interests.some((s: string) => includesAny(s, [q])) ||
-          includesAny(goals, [q]);
+          includesAny(goals, [q]) ||
+          includesAny(projectText, [q]);
         if (!textHit) return false;
       }
 
@@ -316,6 +392,85 @@ export default function SearchScreen({ navigation }: any) {
     }
   };
 
+  const currentSearchAlert = (): SavedSearchAlert => ({
+    id: `${Date.now()}`,
+    label: aiQuery.trim() || queryText.trim() || lookingForRole || industry || 'Builder search',
+    queryText,
+    location,
+    skills,
+    experience,
+    industry,
+    availability,
+    timezone,
+    lookingForRole,
+    stageFilter,
+    lookingForCofounder,
+    verifiedOnly,
+    activeWithin,
+    minCompatibility,
+    createdAt: Date.now(),
+  });
+
+  const applySavedAlert = (alert: SavedSearchAlert) => {
+    setQueryText(alert.queryText || '');
+    setLocation(alert.location || '');
+    setSkills(alert.skills || '');
+    setExperience(alert.experience || '');
+    setIndustry(alert.industry || '');
+    setAvailability(alert.availability || '');
+    setTimezone(alert.timezone || '');
+    setLookingForRole(alert.lookingForRole || '');
+    setStageFilter(alert.stageFilter || '');
+    setLookingForCofounder(!!alert.lookingForCofounder);
+    setVerifiedOnly(!!alert.verifiedOnly);
+    setActiveWithin(alert.activeWithin || 'any');
+    setMinCompatibility(Number(alert.minCompatibility || 0));
+    knobX.current = (Number(alert.minCompatibility || 0) / 100) * sliderWidth;
+    setFilterOpen(true);
+  };
+
+  const saveSearchAlert = async () => {
+    if (!user?.uid) return;
+    const hasSignal = [
+      queryText,
+      location,
+      skills,
+      experience,
+      industry,
+      availability,
+      timezone,
+      lookingForRole,
+      stageFilter,
+      aiQuery,
+    ].some((value) => String(value || '').trim()) || lookingForCofounder || verifiedOnly || minCompatibility > 0;
+
+    if (!hasSignal) {
+      Alert.alert('Add a search first', 'Type what you are building or choose filters before saving an alert.');
+      return;
+    }
+
+    setSavingAlert(true);
+    try {
+      const nextAlert = currentSearchAlert();
+      const nextAlerts = [nextAlert, ...savedAlerts.filter((alert) => alert.label !== nextAlert.label)].slice(0, 10);
+      await setDoc(
+        doc(db, 'userPrivate', user.uid),
+        {
+          savedSearchAlerts: nextAlerts,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      setSavedAlerts(nextAlerts);
+      Alert.alert('Search alert saved', 'LINKUP will keep this high-signal search ready on mobile and web.');
+    } catch (error) {
+      console.error('Save search alert error:', error);
+      Alert.alert('Could not save alert', 'Deploy the latest Firestore rules, then try again.');
+    } finally {
+      setSavingAlert(false);
+    }
+  };
+
   const clearFilters = () => {
     setLocation('');
     setSkills('');
@@ -360,6 +515,17 @@ export default function SearchScreen({ navigation }: any) {
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
       >
+      <View style={[styles.searchHero, { backgroundColor: isDark ? '#111115' : '#FFFCE7', borderColor: isDark ? '#222226' : '#FBE61855' }]}>
+        <View style={styles.heroTitleRow}>
+          <Sparkles size={18} color="#FBE618" />
+          <Text style={[styles.heroKicker, { color: isDark ? '#FBE618' : '#2563EB' }]}>AI BUILDER SEARCH</Text>
+        </View>
+        <Text style={[styles.heroTitle, { color: isDark ? '#FFF' : '#000' }]}>Who can help me build this?</Text>
+        <Text style={styles.heroCopy}>
+          Search names, @handles, skills, industries, projects, locations, and live intent — then rank by AI compatibility.
+        </Text>
+      </View>
+
       <View style={styles.header}>
         <View style={[styles.searchBar, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
           <Search size={18} color="#666" />
@@ -406,6 +572,45 @@ export default function SearchScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
       </View>
+
+      <View style={styles.searchActionsRow}>
+        <TouchableOpacity
+          disabled={savingAlert}
+          onPress={saveSearchAlert}
+          style={[styles.saveAlertBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE', opacity: savingAlert ? 0.6 : 1 }]}
+        >
+          <Text style={[styles.saveAlertText, { color: isDark ? '#FFF' : '#000' }]}>
+            {savingAlert ? 'SAVING...' : 'SAVE SEARCH ALERT'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          disabled={aiRankLoading || filtered.length === 0}
+          onPress={runAiRanking}
+          style={[styles.rankBtn, { opacity: aiRankLoading || filtered.length === 0 ? 0.6 : 1 }]}
+        >
+          <Text style={styles.rankBtnText}>{aiRankLoading ? 'RANKING...' : 'AI RANK'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {savedAlerts.length > 0 && (
+        <View style={styles.savedAlertsWrap}>
+          <Text style={[styles.savedAlertsTitle, { color: isDark ? '#FFF' : '#000' }]}>SAVED SEARCH ALERTS</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedAlertsScroller}>
+            {savedAlerts.map((alert) => (
+              <TouchableOpacity
+                key={alert.id}
+                onPress={() => applySavedAlert(alert)}
+                style={[styles.savedAlertPill, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+              >
+                <Text style={[styles.savedAlertLabel, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                  {String(alert.label || 'Builder search').toUpperCase()}
+                </Text>
+                <Text style={styles.savedAlertMeta}>{displayed.length} possible matches</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {filterOpen && (
         <View style={[styles.filtersCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
@@ -644,11 +849,10 @@ export default function SearchScreen({ navigation }: any) {
                   </View>
                   <TouchableOpacity
                     onPress={() => {
-                      const ai = aiRankMap[item.uid];
-                      if (!ai) return;
-                      Alert.alert('AI Compatibility', `${ai.score}%\n\n${ai.reason}`);
+                      const score = aiRankMap[item.uid]?.score ?? computeCompatibility(item);
+                      Alert.alert('Why this match?', `${score}% compatibility\n\n${buildMatchReason(me, item, aiRankMap, queryText)}`);
                     }}
-                    activeOpacity={aiRankMap[item.uid] ? 0.8 : 1}
+                    activeOpacity={0.8}
                     style={styles.compatPill}
                   >
                     <Text style={styles.compatText}>{aiRankMap[item.uid]?.score ?? computeCompatibility(item)}%</Text>
@@ -673,6 +877,9 @@ export default function SearchScreen({ navigation }: any) {
                     {(item as any).availability || 'Open'}
                   </Text>
                 </View>
+                <Text style={styles.whyLine} numberOfLines={2}>
+                  WHY: {buildMatchReason(me, item, aiRankMap, queryText)}
+                </Text>
                 <Text style={styles.resultSkills} numberOfLines={1}>
                   {(item.skills || []).slice(0, 4).map((s) => String(s).toUpperCase()).join(' • ')}
                 </Text>
@@ -696,6 +903,100 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   searchContent: {
     paddingBottom: 180,
+  },
+  searchHero: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 18,
+    borderRadius: 24,
+    borderWidth: 1,
+  },
+  heroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroKicker: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  heroTitle: {
+    marginTop: 10,
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: -0.8,
+  },
+  heroCopy: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 18,
+    color: '#666',
+  },
+  searchActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  saveAlertBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveAlertText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.3,
+  },
+  rankBtn: {
+    width: 104,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rankBtnText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    color: '#000',
+  },
+  savedAlertsWrap: {
+    paddingTop: 14,
+  },
+  savedAlertsTitle: {
+    paddingHorizontal: 16,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 2,
+  },
+  savedAlertsScroller: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    gap: 10,
+  },
+  savedAlertPill: {
+    width: 190,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  savedAlertLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  savedAlertMeta: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#666',
   },
   resultsList: {
     padding: 16,
@@ -898,6 +1199,13 @@ const styles = StyleSheet.create({
     color: '#666',
     fontWeight: '900',
     marginTop: 4,
+  },
+  whyLine: {
+    marginTop: 6,
+    fontSize: 10,
+    lineHeight: 15,
+    color: '#666',
+    fontWeight: '800',
   },
   compatPill: {
     height: 24,

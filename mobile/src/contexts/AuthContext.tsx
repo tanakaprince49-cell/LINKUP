@@ -21,7 +21,7 @@ import {
   signOut,
   verifyBeforeUpdateEmail,
 } from 'firebase/auth';
-import { deleteDoc, deleteField, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, deleteField, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { UserProfile } from '../types';
 
@@ -77,6 +77,96 @@ const getGoogleIdToken = async (GoogleSignin: any, signInResult: any) => {
   return tokens?.idToken || null;
 };
 
+const cleanUsernameFromAuth = (authUser: User) => {
+  const raw = authUser.displayName || authUser.email?.split('@')[0] || 'builder';
+  return raw.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 14) || `builder${authUser.uid.slice(0, 5)}`;
+};
+
+const buildLocalUserProfile = (authUser: User, onboarded: boolean): any => {
+  const authName = authUser.displayName || authUser.email?.split('@')[0] || 'Builder';
+  return {
+    uid: authUser.uid,
+    displayName: authName,
+    username: cleanUsernameFromAuth(authUser),
+    profileLink: `linkup://profile/${authUser.uid}`,
+    bio: '',
+    profilePic: authUser.photoURL || '',
+    photos: [],
+    occupation: 'Founder',
+    company: '',
+    country: '',
+    city: '',
+    age: 20,
+    skills: [],
+    interests: [],
+    goals: '',
+    experience: '',
+    personalityType: '',
+    commitmentLevel: '',
+    industries: [],
+    ambition: '',
+    reputationScore: 0,
+    streakCount: 0,
+    founderScore: 0,
+    reputationMetrics: {
+      reliability: 0,
+      responseRate: 0,
+      collaboration: 0,
+      consistency: 0,
+      completion: 0,
+    },
+    availability: 'Open',
+    timezone: '',
+    languages: ['English'],
+    lookingFor: ['Networking'],
+    startupStage: 'Idea',
+    fundingStage: 'Pre-revenue',
+    workStyle: '',
+    education: '',
+    remoteOnly: false,
+    willingToRelocate: false,
+    teamSizePreference: 'Solo Founder',
+    aiMatchInsights: '',
+    networkingIntent: 'Serious Builder',
+    onboarded,
+    isVisible: onboarded ? false : true,
+    isStealthMode: false,
+    turboConnect: false,
+    hideOnlineStatus: false,
+    isBot: false,
+    lastActiveAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+    circles: [],
+    personalityAnswers: {},
+    socialLinks: {},
+    resume: {
+      shippedProducts: [],
+      sideProjects: [],
+      startupAttempts: [],
+      hackathonWins: [],
+      buildStreaks: 0,
+    },
+    badges: [],
+    projects: [],
+    viewedBy: [],
+    hasExit: false,
+  };
+};
+
+const toWritableProfile = (profile: any) => {
+  const writable = { ...profile };
+  delete writable.reputationScore;
+  delete writable.streakCount;
+  delete writable.founderScore;
+  delete writable.reputationMetrics;
+  delete writable.isBot;
+  delete writable.lastActiveAt;
+  delete writable.badges;
+  delete writable.viewedBy;
+  delete writable.hasExit;
+  return writable;
+};
+
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
@@ -105,6 +195,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authVersion, setAuthVersion] = useState(0);
   const [completedOnboardingUid, setCompletedOnboardingUid] = useState<string | null>(null);
   const isOnboarded = Boolean(user?.uid && (profile?.onboarded || completedOnboardingUid === user.uid));
+
+  const rememberOnboardedUser = async (authUser: User) => {
+    const userDocRef = doc(db, 'users', authUser.uid);
+
+    await AsyncStorage.setItem(onboardingStorageKey(authUser.uid), 'true');
+    setCompletedOnboardingUid(authUser.uid);
+    setProfile((current) => {
+      const nextProfile = Object.assign({}, buildLocalUserProfile(authUser, true), current || {}, {
+        uid: authUser.uid,
+        onboarded: true,
+      });
+      return nextProfile as UserProfile;
+    });
+    setAuthVersion((value) => value + 1);
+
+    try {
+      const userSnap = await getDoc(userDocRef);
+      if (userSnap.exists()) {
+        await setDoc(userDocRef, { onboarded: true }, { merge: true });
+      } else {
+        await setDoc(userDocRef, toWritableProfile(buildLocalUserProfile(authUser, true)), { merge: true });
+      }
+    } catch (error) {
+      console.warn('Returning user onboarding sync unavailable:', error);
+    }
+  };
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -182,65 +298,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
           }
 
-          const authName = authenticatedUser.displayName || '';
-          const authUsername = (authName || authenticatedUser.email?.split('@')[0] || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, '')
-            .slice(0, 14);
-
-          // Keep a local draft only. Do not write a public placeholder profile before onboarding.
-          const newProfile: any = {
-            uid: authenticatedUser.uid,
-            displayName: authName,
-            username: authUsername,
-            profileLink: `linkup://profile/${authenticatedUser.uid}`,
-            bio: '',
-            profilePic: authenticatedUser.photoURL || '',
-            photos: [],
-            occupation: 'Founder',
-            company: '',
-            country: '',
-            city: '',
-            age: 20,
-            skills: [],
-            interests: [],
-            goals: '',
-            experience: '',
-            personalityType: '',
-            commitmentLevel: '',
-            industries: [],
-            ambition: '',
-            availability: 'Open',
-            timezone: '',
-            languages: ['English'],
-            lookingFor: ['Networking'],
-            startupStage: 'Idea',
-            fundingStage: 'Pre-revenue',
-            workStyle: '',
-            education: '',
-            remoteOnly: false,
-            willingToRelocate: false,
-            teamSizePreference: 'Solo Founder',
-            aiMatchInsights: '',
-            networkingIntent: 'Serious Builder',
-            onboarded: storedOnboarded,
-            isVisible: true,
-            isStealthMode: false,
-            turboConnect: false,
-            hideOnlineStatus: false,
-            createdAt: serverTimestamp(),
-            circles: [],
-            personalityAnswers: {},
-            socialLinks: {},
-            resume: {
-              shippedProducts: [],
-              sideProjects: [],
-              startupAttempts: [],
-              hackathonWins: [],
-              buildStreaks: 0,
-            },
-            projects: [],
-          };
+          const newProfile = buildLocalUserProfile(authenticatedUser, storedOnboarded);
 
           if (storedOnboarded) {
             setCompletedOnboardingUid(authenticatedUser.uid);
@@ -411,7 +469,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       if (code.includes('email-already-in-use')) {
-        Alert.alert('Email Already Used', 'That email already exists. Tap SIGN IN instead.');
+        Alert.alert('Account already exists', 'That email is already registered. Tap SIGN IN instead, or use Forgot Password if you need a new password.');
+        return;
+      }
+      if (code.includes('weak-password')) {
+        Alert.alert('Password too weak', 'Use at least 6 characters for your password.');
+        return;
+      }
+      if (code.includes('invalid-email')) {
+        Alert.alert('Invalid email', 'Enter a valid email address and try again.');
         return;
       }
       Alert.alert('Sign Up Error', e?.message || 'Could not create account.');
@@ -426,9 +492,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      await signInWithEmailAndPassword(auth, trimmedEmail, password);
+      const result = await signInWithEmailAndPassword(auth, trimmedEmail, password);
+      await rememberOnboardedUser(result.user);
     } catch (e: any) {
       console.error('Email sign-in error:', e);
+      const code = String(e?.code || '');
+      if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
+        Alert.alert('Sign In Failed', 'Email or password is incorrect. If this account exists, use Forgot Password to reset it.');
+        return;
+      }
+      if (code.includes('invalid-email')) {
+        Alert.alert('Invalid email', 'Enter a valid email address and try again.');
+        return;
+      }
+      if (code.includes('too-many-requests')) {
+        Alert.alert('Try again later', 'Too many failed attempts. Wait a bit, then try again or reset your password.');
+        return;
+      }
       Alert.alert('Sign In Error', e?.message || 'Could not sign in.');
     }
   };
@@ -452,7 +532,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await sendPasswordResetEmail(auth, trimmedEmail);
       Alert.alert(
         'Reset email sent',
-        `We sent a password reset link to ${trimmedEmail}. Check your inbox and your spam/junk folder if you do not see it.`
+        `We sent a password reset link to ${trimmedEmail}. It might land in spam, junk, or promotions, so check those folders too.`
       );
     } catch (error: any) {
       console.error('Password reset error:', error);
