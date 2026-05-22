@@ -740,7 +740,6 @@ export default function OnboardingScreen({ navigation }: any) {
   const [country, setCountry] = useState('');
   const [city, setCity] = useState('');
   const [profilePicUri, setProfilePicUri] = useState<string>('');
-  const [proofPhotos, setProofPhotos] = useState<string[]>(['', '', '']);
   const [customSkillsText, setCustomSkillsText] = useState('');
 
   const [role, setRole] = useState('');
@@ -791,7 +790,7 @@ export default function OnboardingScreen({ navigation }: any) {
     }
   }, [isOnboarded, navigation, saving]);
 
-  const pickPhoto = async (slot: 'profile' | number) => {
+  const pickPhoto = async () => {
     try {
       const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (lib.status !== 'granted') {
@@ -803,7 +802,7 @@ export default function OnboardingScreen({ navigation }: any) {
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: slot === 'profile' ? 0.08 : 0.06,
+        quality: 0.08,
         base64: true,
       });
 
@@ -815,15 +814,7 @@ export default function OnboardingScreen({ navigation }: any) {
         return;
       }
 
-      if (slot === 'profile') {
-        setProfilePicUri(dataUri);
-      } else {
-        setProofPhotos((prev) => {
-          const next = [...prev];
-          next[slot] = dataUri;
-          return next;
-        });
-      }
+      setProfilePicUri(dataUri);
     } catch (e: any) {
       console.error('pickPhoto error', e);
       Alert.alert('Error', e?.message || 'Could not pick photo.');
@@ -1397,35 +1388,24 @@ export default function OnboardingScreen({ navigation }: any) {
       },
       {
         key: 'photos',
-        title: 'Your Photos',
-        subtitle: 'Add a profile picture (required) + up to 3 extra photos (optional).',
+        title: 'Profile Picture',
+        subtitle: 'Add one clear profile picture. Extra swipe photos can be edited later from your profile.',
         body: (
-          <View>
+          <View style={{ alignItems: 'center' }}>
             <View style={{ alignItems: 'center' }}>
               <PhotoSlot
-                label="Profile"
+                label="Profile Photo"
                 uri={profilePicUri || null}
-                onPress={() => pickPhoto('profile')}
+                onPress={pickPhoto}
                 isDark={isDark}
                 circular
               />
             </View>
-            <Text style={{ marginTop: 4, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16, textAlign: 'center' }}>
+            <Text style={{ marginTop: 12, maxWidth: 360, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16, textAlign: 'center' }}>
               This circular preview matches how your profile photo will look on LINKUP.
             </Text>
-            <View style={{ height: 14 }} />
-            <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'space-between' }}>
-              <PhotoSlot label="Photo 1" uri={proofPhotos[0] || null} onPress={() => pickPhoto(0)} isDark={isDark} />
-              <PhotoSlot label="Photo 2" uri={proofPhotos[1] || null} onPress={() => pickPhoto(1)} isDark={isDark} />
-            </View>
-            <View style={{ height: 10 }} />
-            <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
-              <View style={{ width: '48%' }}>
-              <PhotoSlot label="Photo 3" uri={proofPhotos[2] || null} onPress={() => pickPhoto(2)} isDark={isDark} />
-              </View>
-            </View>
-            <Text style={{ marginTop: 12, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16 }}>
-              Optional photos show on your swipe profile. You can edit them later from your profile page.
+            <Text style={{ marginTop: 8, maxWidth: 420, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16, textAlign: 'center' }}>
+              Want more swipe photos? Open Profile after onboarding and add them there.
             </Text>
           </View>
         ),
@@ -1449,7 +1429,6 @@ export default function OnboardingScreen({ navigation }: any) {
       country,
       city,
       profilePicUri,
-      proofPhotos,
       role,
       isDark,
       roleSteps,
@@ -1501,7 +1480,7 @@ export default function OnboardingScreen({ navigation }: any) {
         networkingIntent,
         circles,
         profilePic: profilePicUri,
-        photos: proofPhotos.filter(Boolean).slice(0, 3),
+        photos: [],
         onboarded: true,
         isStealthMode: false,
         isVisible: true,
