@@ -31,6 +31,7 @@ import { analyzeStartupIdea } from '../lib/ai';
 import { imageAssetToDataUri } from '../lib/imageUploadLimits';
 import { ensureDirectMatch } from '../lib/chat';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
+import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
 
 const { width } = Dimensions.get('window');
 
@@ -338,15 +339,20 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const generateInsights = async () => {
     setIsSaving(true);
+    const previousDiagnosticAt = getLastAIDiagnostic()?.timestamp || 0;
     try {
       const insight = await geminiProfileInsights(profile);
       await updateDoc(doc(db, 'users', profile.uid), { aiMatchInsights: insight });
       if (isViewingOther) {
         setViewedProfile((p: any) => ({ ...p, aiMatchInsights: insight }));
       }
+      const diagnostic = getLastAIDiagnostic();
+      if (diagnostic && !diagnostic.ok && diagnostic.timestamp > previousDiagnosticAt) {
+        Alert.alert('AI Insight Fallback', `${diagnostic.message}\n\nI saved a local profile insight so the profile still works.`);
+      }
     } catch (e: any) {
       console.error('Insights error:', e);
-      Alert.alert('AI Insights Error', e?.message || 'Could not generate insights.');
+      Alert.alert('AI Insights Error', describeAIError(e));
     } finally {
       setIsSaving(false);
     }
@@ -690,11 +696,16 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
 
     setStartupAnalyzing(true);
+    const previousDiagnosticAt = getLastAIDiagnostic()?.timestamp || 0;
     try {
       const result = await analyzeStartupIdea(idea);
       setStartupAnalysis(result);
+      const diagnostic = getLastAIDiagnostic();
+      if (diagnostic && !diagnostic.ok && diagnostic.timestamp > previousDiagnosticAt) {
+        Alert.alert('Analyzer Fallback', `${diagnostic.message}\n\nI used the built-in startup analyzer so you still get feedback.`);
+      }
     } catch (error: any) {
-      Alert.alert('Analyzer error', error?.message || 'Could not analyze this idea.');
+      Alert.alert('Analyzer error', describeAIError(error));
     } finally {
       setStartupAnalyzing(false);
     }
@@ -1263,6 +1274,11 @@ export default function ProfileScreen({ navigation, route }: any) {
                       <Text style={styles.analysisSmall}>Overall score / 100</Text>
                     </View>
                   </View>
+                  {!!startupAnalysis.aiDiagnostic && (
+                    <View style={styles.analysisDiagnostic}>
+                      <Text style={styles.analysisDiagnosticText}>AI FALLBACK: {startupAnalysis.aiDiagnostic}</Text>
+                    </View>
+                  )}
                   {[
                     ['Market', startupAnalysis.marketPotential],
                     ['Customer', startupAnalysis.targetCustomer],
@@ -2138,6 +2154,19 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: '#777',
+  },
+  analysisDiagnostic: {
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: '#FFF4CC',
+    borderWidth: 1,
+    borderColor: '#FBE618',
+  },
+  analysisDiagnosticText: {
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 15,
+    color: '#92400E',
   },
   analysisItem: {
     borderTopWidth: 1,

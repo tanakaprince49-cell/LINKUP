@@ -2,8 +2,7 @@ import { Platform } from 'react-native';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { UserProfile } from '../types';
-
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
+import { describeAIError, getGeminiApiKey, recordAIError, requestGeminiText } from './aiDiagnostics';
 
 export type RankedCandidate = {
   uid: string;
@@ -28,7 +27,8 @@ export async function rankCandidatesWithAI(candidateIds: string[], maxCandidates
         cached: !!r?.cached,
       }))
       .filter((r: RankedCandidate) => r.uid && Number.isFinite(r.score) && r.reason);
-  } catch {
+  } catch (error) {
+    recordAIError(error, 'Cloud Functions AI ranking unavailable');
     return [];
   }
 }
@@ -55,7 +55,7 @@ const extractJsonArray = (text: string) => {
 };
 
 async function directGeminiRank(me: UserProfile | null | undefined, candidates: UserProfile[], maxCandidates: number): Promise<RankedCandidate[]> {
-  if (!GEMINI_API_KEY.trim() || !me || candidates.length === 0) return [];
+  if (!getGeminiApiKey() || !me || candidates.length === 0) return [];
 
   const localTop = localCommonalityRank(me, candidates, Math.min(maxCandidates, 20));
   const localOrder = new Map(localTop.map((rank, index) => [rank.uid, index]));
@@ -73,29 +73,11 @@ async function directGeminiRank(me: UserProfile | null | undefined, candidates: 
     `Candidates: ${JSON.stringify(compactCandidates)}`,
   ].join('\n');
 
-  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-goog-api-key': GEMINI_API_KEY.trim(),
-    },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 900,
-        responseMimeType: 'application/json',
-      },
-    }),
+  const text = await requestGeminiText(prompt, {
+    temperature: 0.2,
+    maxOutputTokens: 900,
+    responseMimeType: 'application/json',
   });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`Gemini ranking failed: ${response.status}${body ? ` ${body.slice(0, 120)}` : ''}`);
-  }
-
-  const data = await response.json();
-  const text = data?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || '').join('').trim();
   const jsonText = extractJsonArray(String(text || '')) || String(text || '');
   const parsed = JSON.parse(jsonText);
   if (!Array.isArray(parsed)) return [];
@@ -124,7 +106,8 @@ export async function rankCandidatesHybrid(
     const geminiRanked = await directGeminiRank(me, candidates, maxCandidates);
     if (geminiRanked.length) return geminiRanked;
   } catch (error) {
-    console.warn('Direct Gemini ranking unavailable:', error);
+    console.warn('Direct Gemini ranking unavailable:', describeAIError(error));
+    recordAIError(error, 'Direct Gemini ranking unavailable');
   }
 
   const functionRanked = await rankCandidatesWithAI(candidateIds, maxCandidates);

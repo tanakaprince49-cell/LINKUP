@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
+import { describeAIError, getGeminiApiKey, recordAIError, requestGeminiText } from './aiDiagnostics';
 
 type GeminiFilterResult = {
   query?: string;
@@ -13,8 +14,6 @@ type GeminiFilterResult = {
   lookingForCofounder?: boolean;
 };
 
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-
 const extractJsonObject = (text: string) => {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
@@ -23,26 +22,8 @@ const extractJsonObject = (text: string) => {
 };
 
 async function directGeminiText(prompt: string) {
-  if (!GEMINI_API_KEY.trim()) return null;
-
-  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-goog-api-key': GEMINI_API_KEY.trim(),
-    },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Gemini request failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const text = data?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || '').join('').trim();
-  return typeof text === 'string' && text ? text : null;
+  if (!getGeminiApiKey()) return null;
+  return requestGeminiText(prompt, { temperature: 0.2, maxOutputTokens: 500 });
 }
 
 const localSearchFilters = (input: string): GeminiFilterResult => {
@@ -62,6 +43,7 @@ const localSearchFilters = (input: string): GeminiFilterResult => {
 };
 
 async function aiText(task: string, payload: Record<string, unknown>) {
+  let directError: unknown = null;
   try {
     if (task === 'searchFilters') {
       const direct = await directGeminiText(
@@ -77,14 +59,15 @@ async function aiText(task: string, payload: Record<string, unknown>) {
       if (direct) return direct;
     }
   } catch (error) {
-    console.warn('Direct Gemini unavailable:', error);
+    directError = error;
+    recordAIError(error, 'Direct Gemini unavailable');
   }
 
   if (Platform.OS === 'web') {
     throw new Error(
-      GEMINI_API_KEY.trim()
-        ? 'Gemini request failed and web Functions fallback is disabled to avoid CORS.'
-        : 'Missing EXPO_PUBLIC_GEMINI_API_KEY on web.'
+      directError
+        ? describeAIError(directError)
+        : 'Missing EXPO_PUBLIC_GEMINI_API_KEY on web. Add it to Vercel Environment Variables and redeploy.'
     );
   }
 
@@ -93,8 +76,8 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     const res = await callable({ task, payload });
     const text = (res.data as any)?.text;
     if (typeof text === 'string' && text.trim()) return text.trim();
-  } catch {
-    // Fall through to direct Gemini/local fallbacks for Expo Web demos.
+  } catch (error) {
+    recordAIError(error, 'Cloud Functions AI fallback unavailable');
   }
 
   throw new Error('AI returned empty content.');
@@ -105,7 +88,8 @@ export async function geminiToSearchFilters(input: string): Promise<GeminiFilter
     const text = await aiText('searchFilters', { input });
     const jsonText = extractJsonObject(text) ?? text;
     return JSON.parse(jsonText);
-  } catch {
+  } catch (error) {
+    recordAIError(error, 'AI search fallback active');
     return localSearchFilters(input);
   }
 }
@@ -113,7 +97,8 @@ export async function geminiToSearchFilters(input: string): Promise<GeminiFilter
 export async function geminiProfileInsights(profile: any): Promise<string> {
   try {
     return await aiText('profileInsights', { profile });
-  } catch {
+  } catch (error) {
+    recordAIError(error, 'AI profile insight fallback active');
     const role = profile?.occupation || 'builder';
     const skills = Array.isArray(profile?.skills) ? profile.skills.slice(0, 2).join(' + ') : 'execution';
     const lookingFor = Array.isArray(profile?.lookingFor) ? profile.lookingFor[0] : 'high-signal collaborators';
