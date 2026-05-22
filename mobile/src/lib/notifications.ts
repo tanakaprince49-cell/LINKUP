@@ -16,6 +16,8 @@ import {
 import { db } from './firebase';
 
 let notificationHandlerReady = false;
+let lastInAppSoundAt = 0;
+let webAudioContext: any = null;
 const WEB_NOTIFICATIONS_STORAGE_KEY = 'linkup:web-notifications-enabled';
 const NOTIFICATION_QUERY_LIMIT = 75;
 
@@ -97,6 +99,55 @@ function notificationTargetUrl(data: any) {
     return `/opportunity/${data.fromId}`;
   }
   return '/alerts';
+}
+
+export async function playInAppNotificationSound(type?: string) {
+  const now = Date.now();
+  if (now - lastInAppSoundAt < 650) return;
+  lastInAppSoundAt = now;
+
+  if (Platform.OS !== 'web') return;
+
+  try {
+    const win = globalThis as any;
+    const AudioContextCtor = win?.AudioContext || win?.webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    webAudioContext = webAudioContext || new AudioContextCtor();
+    if (webAudioContext.state === 'suspended') {
+      await webAudioContext.resume();
+    }
+
+    const frequencies: Record<string, number[]> = {
+      message: [740, 980],
+      match: [620, 880, 1180],
+      like: [780, 1040],
+      view: [520, 700],
+      system: [640, 860],
+      comment: [680, 900],
+    };
+    const tones = frequencies[String(type || '')] || [660, 880];
+    const startTime = webAudioContext.currentTime;
+
+    tones.slice(0, 3).forEach((frequency, index) => {
+      const oscillator = webAudioContext.createOscillator();
+      const gain = webAudioContext.createGain();
+      const toneStart = startTime + index * 0.09;
+      const toneEnd = toneStart + 0.08;
+
+      oscillator.type = index % 2 ? 'triangle' : 'sine';
+      oscillator.frequency.setValueAtTime(frequency, toneStart);
+      gain.gain.setValueAtTime(0.0001, toneStart);
+      gain.gain.exponentialRampToValueAtTime(0.08, toneStart + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, toneEnd);
+      oscillator.connect(gain);
+      gain.connect(webAudioContext.destination);
+      oscillator.start(toneStart);
+      oscillator.stop(toneEnd + 0.02);
+    });
+  } catch (error) {
+    console.warn('In-app notification sound skipped:', error);
+  }
 }
 
 async function ensureNotificationPermission(Notifications: any) {
@@ -202,6 +253,7 @@ export function subscribeToNotificationToasts(userId: string) {
   return onSnapshot(
     q,
     (snap) => {
+      let playedSoundForBatch = false;
       snap.docs
         .filter((notificationDoc) => (notificationDoc.data() as any)?.isRead === false)
         .forEach((notificationDoc) => {
@@ -221,6 +273,11 @@ export function subscribeToNotificationToasts(userId: string) {
         const targetUrl = notificationTargetUrl(data);
 
         if (Platform.OS === 'web') {
+          if (!playedSoundForBatch) {
+            playedSoundForBatch = true;
+            void playInAppNotificationSound(data.type);
+          }
+
           if (typeof window === 'undefined' || !('Notification' in window)) return;
           if (window.Notification.permission !== 'granted') return;
 
