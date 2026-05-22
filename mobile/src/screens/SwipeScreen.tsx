@@ -85,16 +85,8 @@ export default function SwipeScreen({ navigation }: any) {
   const topProfile = profiles[0];
   const nextProfile = profiles[1];
   const ScreenRoot = isWeb ? View : SafeAreaView;
-  const deckWidth = isWeb
-    ? isWideWeb
-      ? Math.min(460, Math.max(380, safeViewportWidth - 96))
-      : Math.min(360, Math.max(300, safeViewportWidth - 32))
-    : undefined;
-  const deckHeight = isWeb
-    ? isWideWeb
-      ? Math.min(680, Math.max(560, safeViewportHeight - 250))
-      : Math.min(570, Math.max(430, safeViewportHeight - 275))
-    : undefined;
+  const deckWidth = isWeb ? safeViewportWidth : undefined;
+  const deckHeight = isWeb ? safeViewportHeight : undefined;
   const motionWidth = Math.max(deckWidth ?? safeViewportWidth, width);
   const swipeThreshold = Math.min(170, Math.max(92, (deckWidth ?? safeViewportWidth) * 0.27));
   const deckExitDistance = Math.max(deckWidth ?? safeViewportWidth, 360) + 190;
@@ -549,6 +541,43 @@ export default function SwipeScreen({ navigation }: any) {
     const matchRank = myProfile ? localCommonalityRank(myProfile, [topProfile], 1)[0] : null;
     const compatibility = Math.max(isDemoBuilder(topProfile) ? 72 : 1, Math.min(99, Math.round(matchRank?.score || 82)));
     const compatibilityReason = matchRank?.reason || 'AI compatibility preview from profile signals';
+    const renderCardActions = () => (
+      <View style={[styles.actionRow, isWideWeb && styles.webActionRow, isCompactWeb && styles.compactActionRow]}>
+        <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={() => animateSwipeOut('left')}>
+          <X size={24} color="#EF4444" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.contactActionBtn,
+            isCompactWeb && styles.compactContactActionBtn,
+            connectionRequest?.status === 'approved' && styles.contactApprovedBtn,
+            connectionRequest?.status === 'pending' && styles.contactPendingBtn,
+            connectionRequest?.status === 'rejected' && styles.contactRejectedBtn,
+          ]}
+          disabled={contactBusy || !topProfile || isDemoBuilder(topProfile)}
+          onPress={handleContactRequest}
+        >
+          <MessageSquare size={18} color="#000" />
+          <Text style={styles.contactActionText}>
+            {contactBusy
+              ? '...'
+              : connectionRequest?.status === 'approved'
+                ? 'CHAT'
+                : connectionRequest?.status === 'pending'
+                  ? 'SENT'
+                  : connectionRequest?.status === 'rejected'
+                    ? 'NO'
+                    : 'CONTACT'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.actionBtnLarge, isCompactWeb && styles.compactActionBtnLarge]} onPress={() => animateSwipeOut('right')}>
+          <Heart size={32} color="#FFF" fill="#FFF" />
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={resetDeck}>
+          <RotateCcw size={24} color="#888" />
+        </TouchableOpacity>
+      </View>
+    );
 
     return (
       <Animated.View
@@ -718,6 +747,7 @@ export default function SwipeScreen({ navigation }: any) {
             </ScrollView>
           )}
         </View>
+        {!infoExpanded && renderCardActions()}
       </Animated.View>
     );
   };
@@ -764,42 +794,6 @@ export default function SwipeScreen({ navigation }: any) {
           {renderPreviewCard()}
           {renderCard()}
         </View>
-
-        <View style={[styles.actionRow, isWideWeb && styles.webActionRow, isCompactWeb && styles.compactActionRow]}>
-          <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={() => animateSwipeOut('left')}>
-            <X size={24} color="#EF4444" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.contactActionBtn,
-              isCompactWeb && styles.compactContactActionBtn,
-              connectionRequest?.status === 'approved' && styles.contactApprovedBtn,
-              connectionRequest?.status === 'pending' && styles.contactPendingBtn,
-              connectionRequest?.status === 'rejected' && styles.contactRejectedBtn,
-            ]}
-            disabled={contactBusy || !topProfile || isDemoBuilder(topProfile)}
-            onPress={handleContactRequest}
-          >
-            <MessageSquare size={18} color="#000" />
-            <Text style={styles.contactActionText}>
-              {contactBusy
-                ? '...'
-                : connectionRequest?.status === 'approved'
-                  ? 'CHAT'
-                  : connectionRequest?.status === 'pending'
-                    ? 'SENT'
-                    : connectionRequest?.status === 'rejected'
-                      ? 'NO'
-                      : 'CONTACT'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtnLarge, isCompactWeb && styles.compactActionBtnLarge]} onPress={() => animateSwipeOut('right')}>
-            <Heart size={32} color="#FFF" fill="#FFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={resetDeck}>
-            <RotateCcw size={24} color="#888" />
-          </TouchableOpacity>
-        </View>
       </View>
     </ScreenRoot>
   );
@@ -820,18 +814,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   webStageDesktop: {
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: 24,
-    paddingBottom: 22,
-  },
-  webStageMobile: {
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'flex-start',
     paddingTop: 0,
-    paddingBottom: 8,
+    paddingBottom: 0,
+  },
+  webStageMobile: {
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   topBar: {
+    position: 'absolute',
+    top: 8,
+    left: 0,
+    right: 0,
+    zIndex: 80,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -853,8 +852,8 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
   },
   compactTopBar: {
-    paddingHorizontal: 4,
-    paddingTop: 2,
+    paddingHorizontal: 10,
+    paddingTop: 0,
     paddingBottom: 0,
     minHeight: 38,
   },
@@ -869,21 +868,21 @@ const styles = StyleSheet.create({
   },
   stackArea: {
     flex: 1,
-    marginHorizontal: 20,
-    marginTop: 10,
-    marginBottom: 16,
+    marginHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 0,
     justifyContent: 'center',
     position: 'relative',
   },
   compactStackArea: {
-    marginTop: 4,
-    marginBottom: 8,
+    marginTop: 0,
+    marginBottom: 0,
   },
   card: {
     flex: 1,
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: '#222226',
+    borderRadius: 0,
+    borderWidth: 0,
+    borderColor: 'transparent',
     overflow: 'hidden',
   },
   webCard: {
@@ -953,10 +952,14 @@ const styles = StyleSheet.create({
   cardInfo: {
     ...StyleSheet.absoluteFillObject,
     padding: 24,
+    paddingTop: 84,
+    paddingBottom: 128,
     justifyContent: 'space-between',
   },
   compactCardInfo: {
     padding: 14,
+    paddingTop: 70,
+    paddingBottom: 116,
   },
   cardTopRow: {
     flexDirection: 'row',
@@ -1255,20 +1258,25 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   actionRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 22,
+    zIndex: 70,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 25,
-    paddingBottom: 36,
+    paddingBottom: 0,
   },
   webActionRow: {
     paddingBottom: 0,
-    marginTop: 18,
+    bottom: 24,
   },
   compactActionRow: {
-    gap: 18,
+    gap: 14,
     paddingBottom: 0,
-    marginTop: 10,
+    bottom: 18,
   },
   actionBtnSmall: {
     width: 60,
