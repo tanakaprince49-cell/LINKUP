@@ -124,6 +124,7 @@ service cloud.firestore {
 
       function safeProfileUpdateKeys() {
         return incoming().diff(existing()).affectedKeys().hasOnly([
+          'uid',
           'displayName', 'username', 'profileLink',
           'occupation', 'company', 'bio',
           'age', 'country', 'city',

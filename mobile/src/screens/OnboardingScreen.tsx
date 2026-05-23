@@ -844,7 +844,7 @@ export default function OnboardingScreen({ navigation }: any) {
 
       if (result.canceled) return;
       const asset = result.assets?.[0];
-      const { dataUri, error } = imageAssetToDataUri(asset);
+      const { dataUri, error } = await imageAssetToDataUri(asset);
       if (!dataUri) {
         Alert.alert('Photo too large', error || 'Please choose a smaller photo.');
         return;

@@ -170,6 +170,33 @@ export default function ProfileScreen({ navigation, route }: any) {
   const isViewingOther = Boolean(targetUserId && targetUserId !== myProfile?.uid);
   const profile = isViewingOther ? viewedProfile : myProfile;
 
+  const ownerIdentityPatch = () => {
+    const fallbackName =
+      String(myProfile?.displayName || '').trim() && myProfile?.displayName !== 'New Builder'
+        ? String(myProfile.displayName).trim()
+        : String(user?.displayName || user?.email?.split('@')[0] || 'LINKUP Builder').trim();
+
+    return {
+      uid: myProfile?.uid,
+      displayName: fallbackName || 'LINKUP Builder',
+      profileLink: profileLinkFor({ uid: myProfile?.uid, profileLink: myProfile?.profileLink }),
+    };
+  };
+
+  const updateOwnProfileDoc = async (patch: Record<string, unknown>) => {
+    if (!myProfile?.uid) throw new Error('No signed-in profile found.');
+    const profileRef = doc(db, 'users', myProfile.uid);
+    try {
+      await updateDoc(profileRef, patch);
+    } catch (error: any) {
+      if (String(error?.code || '').includes('permission-denied')) {
+        await updateDoc(profileRef, { ...ownerIdentityPatch(), ...patch });
+        return;
+      }
+      throw error;
+    }
+  };
+
   const goBackOrHome = () => {
     if (navigation?.canGoBack?.()) {
       navigation.goBack();
@@ -390,7 +417,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     });
 
     if (result.canceled) return;
-    const { dataUri, error } = imageAssetToDataUri(result.assets?.[0]);
+    const { dataUri, error } = await imageAssetToDataUri(result.assets?.[0], 260_000);
     if (!dataUri) {
       Alert.alert('Photo too large', error || 'Please choose a smaller photo.');
       return;
@@ -403,9 +430,10 @@ export default function ProfileScreen({ navigation, route }: any) {
     setEditData({ ...editData, photos: current.filter((p: string) => !!p).slice(0, 3) });
     setIsSaving(true);
     try {
-      await updateDoc(doc(db, 'users', myProfile.uid), { photos: current.filter((p) => !!p).slice(0, 3) });
-    } catch (e) {
-      Alert.alert('Error', 'Failed to update photos.');
+      await updateOwnProfileDoc({ photos: current.filter((p) => !!p).slice(0, 3) });
+    } catch (e: any) {
+      handleFirestoreError(e, OperationType.UPDATE, `users/${myProfile.uid}`);
+      Alert.alert('Upload failed', e?.message || 'Failed to update photos.');
     } finally {
       setIsSaving(false);
     }
@@ -430,22 +458,21 @@ export default function ProfileScreen({ navigation, route }: any) {
     });
 
     if (!result.canceled) {
-      const { dataUri, error } = imageAssetToDataUri(result.assets?.[0]);
+      const { dataUri, error } = await imageAssetToDataUri(result.assets?.[0]);
       if (!dataUri) {
         Alert.alert('Photo too large', error || 'Please choose a smaller photo.');
         return;
       }
       setIsSaving(true);
       try {
-        await updateDoc(doc(db, 'users', myProfile.uid), {
-          profilePic: dataUri
-        });
+        await updateOwnProfileDoc({ profilePic: dataUri });
         
         if (isEditing) {
           setEditData({ ...editData, profilePic: dataUri });
         }
-      } catch (e) {
-        Alert.alert("Error", "Failed to update profile picture.");
+      } catch (e: any) {
+        handleFirestoreError(e, OperationType.UPDATE, `users/${myProfile.uid}`);
+        Alert.alert("Upload failed", e?.message || "Failed to update profile picture.");
       } finally {
         setIsSaving(false);
       }
