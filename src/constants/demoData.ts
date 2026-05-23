@@ -1,6 +1,6 @@
 import { UserProfile, Post } from '../types';
 
-export const DEMO_PROFILES: UserProfile[] = [
+const ALL_DEMO_PROFILES: UserProfile[] = [
   {
     uid: 'demo1',
     displayName: 'Alex Rivers',
@@ -333,6 +333,8 @@ export const DEMO_PROFILES: UserProfile[] = [
     onboarded: true
   }
 ];
+
+export const DEMO_PROFILES: UserProfile[] = ALL_DEMO_PROFILES.slice(0, 1);
 
 export const DEMO_POSTS: Post[] = [
   {

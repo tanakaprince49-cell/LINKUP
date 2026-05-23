@@ -305,7 +305,7 @@ const allDemoBuilders: UserProfile[] = [
   }),
 ];
 
-export const demoBuilders: UserProfile[] = allDemoBuilders.slice(0, 5);
+export const demoBuilders: UserProfile[] = allDemoBuilders.slice(0, 1);
 
 export function isDemoBuilder(profile?: Pick<UserProfile, 'uid' | 'isBot'> | null) {
   return Boolean(profile?.isBot || String(profile?.uid || '').startsWith('demo-builder-'));
