@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, setDoc } from 'firebase/firestore';
@@ -624,12 +625,13 @@ const PhotoSlot = ({
       ]}
     >
       {uri ? (
-        <Image source={{ uri }} style={[styles.photoSlotImg, circular ? styles.photoSlotImgCircle : null]} />
+        <Image source={{ uri }} style={[styles.photoSlotImg, circular ? styles.photoSlotImgCircle : null]} resizeMode="cover" />
       ) : (
-        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: isDark ? '#FFF' : '#000' }}>
-            ADD
-          </Text>
+        <View style={styles.photoSlotEmpty}>
+          <View style={styles.photoPlusCircle}>
+            <Text style={styles.photoPlusText}>+</Text>
+          </View>
+          <Text style={[styles.photoEmptyText, { color: isDark ? '#FFF' : '#000' }]}>TAP TO ADD</Text>
         </View>
       )}
       <View style={[styles.photoSlotLabel, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
@@ -792,17 +794,19 @@ export default function OnboardingScreen({ navigation }: any) {
 
   const pickPhoto = async () => {
     try {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (lib.status !== 'granted') {
-        Alert.alert('Permission Denied', 'Please allow photo library access.');
-        return;
+      if (Platform.OS !== 'web') {
+        const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (lib.status !== 'granted') {
+          Alert.alert('Permission Denied', 'Please allow photo library access.');
+          return;
+        }
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
+        mediaTypes: (ImagePicker as any).MediaType?.Images ? [(ImagePicker as any).MediaType.Images] : ['images'],
+        allowsEditing: Platform.OS !== 'web',
         aspect: [1, 1],
-        quality: 0.08,
+        quality: 0.1,
         base64: true,
       });
 
@@ -1625,22 +1629,60 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   photoSlotCircle: {
-    width: 172,
-    height: 172,
+    width: 190,
+    height: 190,
     flex: 0,
-    borderRadius: 999,
+    borderRadius: 95,
     alignSelf: 'center',
+    borderWidth: 3,
+    borderColor: '#FBE618',
+    backgroundColor: '#FFFBEA',
+    shadowColor: '#FBE618',
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
   photoSlotImg: { width: '100%', height: '100%' },
-  photoSlotImgCircle: { borderRadius: 999 },
+  photoSlotImgCircle: { borderRadius: 95 },
+  photoSlotEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingBottom: 18,
+  },
+  photoPlusCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  photoPlusText: {
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '900',
+    color: '#000',
+  },
+  photoEmptyText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
   photoSlotLabel: {
     position: 'absolute',
-    left: 10,
-    right: 10,
-    bottom: 10,
-    paddingVertical: 10,
+    left: 18,
+    right: 18,
+    bottom: 12,
+    paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 16,
     borderWidth: 1,

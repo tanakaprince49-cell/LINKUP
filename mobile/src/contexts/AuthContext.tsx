@@ -60,8 +60,8 @@ const describeAuthError = (flow: string, error: any) => {
     hint = 'The browser blocked the Google popup. Allow popups for this site and try again.';
   } else if (code.includes('network-request-failed')) {
     hint = 'Network request failed. Check connection, ad blockers, VPN, or browser privacy settings.';
-  } else if (message.toLowerCase().includes('cookie') || message.toLowerCase().includes('storage')) {
-    hint = 'Google auth needs cookies/local storage. Disable strict tracking blockers for this site and try again.';
+  } else if (message.toLowerCase().includes('cookie') || message.toLowerCase().includes('storage') || message.toLowerCase().includes('initial state')) {
+    hint = 'Google auth needs same-site browser storage. Open LINKUP directly in Chrome/Safari and make sure Vercel rewrites /__/auth to Firebase Hosting.';
   }
 
   return `${flow}\nCode: ${code}\nHost: ${host || 'native app'}\nFix: ${hint}\nFirebase: ${message}`;

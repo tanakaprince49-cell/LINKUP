@@ -373,15 +373,17 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const pickGalleryPhoto = async (index: number) => {
     if (isViewingOther || !myProfile) return;
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need access to your photos to update your pictures.');
-      return;
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'We need access to your photos to update your pictures.');
+        return;
+      }
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
+      mediaTypes: (ImagePicker as any).MediaType?.Images ? [(ImagePicker as any).MediaType.Images] : ['images'],
+      allowsEditing: Platform.OS !== 'web',
       aspect: [1, 1],
       quality: 0.06,
       base64: true,
@@ -411,15 +413,17 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const pickProfilePic = async () => {
     if (isViewingOther || !myProfile) return;
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need access to your photos to update your profile picture.');
-      return;
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'We need access to your photos to update your profile picture.');
+        return;
+      }
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
+      mediaTypes: (ImagePicker as any).MediaType?.Images ? [(ImagePicker as any).MediaType.Images] : ['images'],
+      allowsEditing: Platform.OS !== 'web',
       aspect: [1, 1],
       quality: 0.08,
       base64: true,
@@ -1596,7 +1600,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: 120,
     height: 120,
-    borderRadius: 50,
+    borderRadius: 60,
     borderWidth: 3,
     borderColor: '#FBE618',
   },
