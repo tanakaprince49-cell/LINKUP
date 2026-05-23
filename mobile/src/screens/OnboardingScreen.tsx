@@ -611,13 +611,45 @@ const PhotoSlot = ({
   isDark: boolean;
   circular?: boolean;
 }) => {
+  if (circular) {
+    return (
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={onPress}
+        style={[
+          styles.profilePhotoPicker,
+          {
+            backgroundColor: isDark ? '#16161A' : '#FFFBEA',
+            borderColor: '#FBE618',
+          },
+        ]}
+      >
+        {uri ? (
+          <Image source={{ uri }} style={styles.profilePhotoPickerImg} resizeMode="cover" />
+        ) : (
+          <View style={styles.profilePhotoPickerEmpty}>
+            <View style={styles.profilePhotoPlusCircle}>
+              <Text style={styles.profilePhotoPlusText}>+</Text>
+            </View>
+            <Text style={[styles.profilePhotoEmptyText, { color: isDark ? '#FFF' : '#000' }]}>ADD PROFILE PHOTO</Text>
+            <Text style={styles.profilePhotoHint}>Tap to open gallery</Text>
+          </View>
+        )}
+        <View style={[styles.profilePhotoPickerLabel, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+          <Text style={{ fontSize: 9, fontWeight: '900', letterSpacing: 1, color: isDark ? '#FFF' : '#000' }} numberOfLines={1}>
+            {label.toUpperCase()}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={onPress}
       style={[
         styles.photoSlot,
-        circular ? styles.photoSlotCircle : null,
         {
           backgroundColor: isDark ? '#16161A' : '#F8F8F8',
           borderColor: isDark ? '#222226' : '#EEEEEE',
@@ -625,7 +657,7 @@ const PhotoSlot = ({
       ]}
     >
       {uri ? (
-        <Image source={{ uri }} style={[styles.photoSlotImg, circular ? styles.photoSlotImgCircle : null]} resizeMode="cover" />
+        <Image source={{ uri }} style={styles.photoSlotImg} resizeMode="cover" />
       ) : (
         <View style={styles.photoSlotEmpty}>
           <View style={styles.photoPlusCircle}>
@@ -1632,23 +1664,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  photoSlotCircle: {
-    width: 190,
-    height: 190,
-    flex: 0,
-    borderRadius: 95,
-    alignSelf: 'center',
-    borderWidth: 3,
-    borderColor: '#FBE618',
-    backgroundColor: '#FFFBEA',
-    shadowColor: '#FBE618',
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
-  },
   photoSlotImg: { width: '100%', height: '100%' },
-  photoSlotImgCircle: { borderRadius: 95 },
   photoSlotEmpty: {
     flex: 1,
     alignItems: 'center',
@@ -1685,6 +1701,84 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#00000010',
+    alignItems: 'center',
+  },
+  profilePhotoPicker: {
+    width: 210,
+    height: 210,
+    minWidth: 210,
+    minHeight: 210,
+    maxWidth: 210,
+    maxHeight: 210,
+    borderRadius: 105,
+    borderWidth: 4,
+    overflow: 'hidden',
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    flexGrow: 0,
+    flexShrink: 0,
+    shadowColor: '#FBE618',
+    shadowOpacity: 0.35,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  profilePhotoPickerImg: {
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+  },
+  profilePhotoPickerEmpty: {
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    paddingBottom: 24,
+  },
+  profilePhotoPlusCircle: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  profilePhotoPlusText: {
+    fontSize: 40,
+    lineHeight: 44,
+    fontWeight: '900',
+    color: '#000',
+  },
+  profilePhotoEmptyText: {
+    marginTop: 12,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    textAlign: 'center',
+  },
+  profilePhotoHint: {
+    marginTop: 5,
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#777',
+    textAlign: 'center',
+  },
+  profilePhotoPickerLabel: {
+    position: 'absolute',
+    left: 32,
+    right: 32,
+    bottom: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: '#00000010',
     alignItems: 'center',
