@@ -94,6 +94,20 @@ const earnedReputation = (profile: any) => {
 const cleanUsername = (value: string) => value.replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
 const profileLinkFor = (profile: any) => profile?.profileLink || (profile?.uid ? `linkup://profile/${encodeURIComponent(profile.uid)}` : '');
 const toTextValue = (value: unknown) => (typeof value === 'string' ? value : value == null ? '' : String(value));
+const parseProfileList = (value: unknown) => {
+  const items = Array.isArray(value)
+    ? value
+    : String(value || '').split(',').map((entry) => entry.trim());
+
+  return Array.from(
+    new Map(
+      items
+        .map((entry) => String(entry || '').trim())
+        .filter(Boolean)
+        .map((entry) => [entry.toLowerCase(), entry])
+    ).values()
+  );
+};
 const webConfirm = (message: string) => {
   const confirmFn = (globalThis as any)?.confirm;
   if (Platform.OS !== 'web' || typeof confirmFn !== 'function') return null;
@@ -541,9 +555,9 @@ export default function ProfileScreen({ navigation, route }: any) {
     if (!editData) return;
     setIsSaving(true);
     try {
-      const skillsArray = typeof editData.skills === 'string' 
-        ? editData.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '')
-        : (Array.isArray(editData.skills) ? editData.skills : []);
+      const skillsArray = parseProfileList(editData.skills).slice(0, 30);
+      const industriesArray = parseProfileList(editData.industries).slice(0, 20);
+      const lookingForArray = parseProfileList(editData.lookingFor).slice(0, 20);
       const existingProjects = Array.isArray((profile as any).projects) ? (profile as any).projects : [];
       const projectTitle = String(editData.projectTitle || '').trim();
       const projectDescription = String(editData.projectDescription || '').trim();
@@ -566,16 +580,8 @@ export default function ProfileScreen({ navigation, route }: any) {
         bio: editData.bio || '',
         city: editData.city || '',
         skills: skillsArray,
-        industries: Array.isArray(editData.industries)
-          ? editData.industries
-          : (typeof editData.industries === 'string'
-              ? editData.industries.split(',').map((s: string) => s.trim()).filter(Boolean)
-              : []),
-        lookingFor: Array.isArray(editData.lookingFor)
-          ? editData.lookingFor
-          : (typeof editData.lookingFor === 'string'
-              ? editData.lookingFor.split(',').map((s: string) => s.trim()).filter(Boolean)
-              : []),
+        industries: industriesArray,
+        lookingFor: lookingForArray,
         startupStage: editData.startupStage || '',
         fundingStage: editData.fundingStage || '',
         availability: editData.availability || '',
@@ -738,9 +744,8 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
-  const currentSkills = isEditing
-    ? (typeof editData?.skills === 'string' ? editData.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '') : [])
-    : (Array.isArray(profile.skills) ? profile.skills : []);
+  const currentSkills = isEditing ? parseProfileList(editData?.skills) : parseProfileList(profile.skills);
+  const organizedSkills = [...currentSkills].sort((a, b) => a.localeCompare(b)).slice(0, 30);
 
   const industries = (isEditing
     ? (typeof editData?.industries === 'string'
@@ -754,6 +759,10 @@ export default function ProfileScreen({ navigation, route }: any) {
         : (Array.isArray(editData?.lookingFor) ? editData.lookingFor : []))
     : (Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor : [])) as string[];
   const projects = Array.isArray((profile as any).projects) ? (profile as any).projects : [];
+  const visibleProjects = projects
+    .filter((project: any) => String(project?.title || project?.description || '').trim())
+    .slice(0, 3);
+  const profileBio = String(profile.bio || '').trim();
   const stealthModeValue = isEditing
     ? !!(editData?.isStealthMode ?? false)
     : preferenceValue('isStealthMode', !!profile.isStealthMode);
@@ -930,6 +939,21 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholderTextColor="#666"
               />
               <TextInput
+                multiline
+                style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.bio)}
+                onChangeText={(t: string) => setEditData({ ...editData, bio: t })}
+                placeholder="Bio: who are you, what are you building, and what help do you want?"
+                placeholderTextColor="#666"
+              />
+              <TextInput
+                style={[styles.skillsInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.skills)}
+                onChangeText={(t: string) => setEditData({ ...editData, skills: t })}
+                placeholder="Skills & stack (comma-separated): React, AI, Sales..."
+                placeholderTextColor="#666"
+              />
+              <TextInput
                 style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.startupStage)}
                 onChangeText={(t: string) => setEditData({ ...editData, startupStage: t })}
@@ -1044,6 +1068,71 @@ export default function ProfileScreen({ navigation, route }: any) {
           )}
         </View>
 
+        {!isEditing && (
+          <>
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>ABOUT</Text>
+              <View style={[styles.profileStoryCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
+                <Text style={[styles.bioText, { color: isDark ? '#DDD' : '#333' }]}>
+                  {profileBio || (isViewingOther
+                    ? 'This builder has not added a bio yet.'
+                    : 'Add your bio in Edit Profile so builders instantly understand who you are and what you need.')}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>SKILLS & STACK</Text>
+              {organizedSkills.length ? (
+                <View style={styles.organizedSkillsGrid}>
+                  {organizedSkills.map((skill: string, index: number) => (
+                    <View key={`${skill}-${index}`} style={[styles.skillPill, { backgroundColor: isDark ? '#101014' : '#FFFFFF', borderColor: isDark ? '#2A2A30' : '#E5E7EB' }]}>
+                      <View style={styles.skillDot} />
+                      <Text style={[styles.skillPillText, { color: isDark ? '#FFF' : '#111' }]}>{skill.toUpperCase()}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={[styles.emptyProfileCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
+                  <Text style={[styles.emptyProfileText, { color: isDark ? '#AAA' : '#555' }]}>
+                    {isViewingOther ? 'No skills listed yet.' : 'Add your skills and stack so LINKUP can match you with the right builders.'}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>BUILDING NOW</Text>
+              {visibleProjects.length ? (
+                visibleProjects.map((project: any, index: number) => (
+                  <View
+                    key={project?.id || `${profile.uid}-project-${index}`}
+                    style={[styles.projectCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                      <Text style={[styles.projectTitle, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                        {project?.title || 'Untitled project'}
+                      </Text>
+                      <View style={styles.projectStagePill}>
+                        <Text style={styles.projectStageText}>{String(project?.status || 'mvp').toUpperCase()}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.projectDescription}>
+                      {project?.description || 'Ongoing project looking for relevant collaborators.'}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <View style={[styles.emptyProfileCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
+                  <Text style={[styles.emptyProfileText, { color: isDark ? '#AAA' : '#555' }]}>
+                    {isViewingOther ? 'This builder has not added what they are building yet.' : 'Add your current project in Edit Profile so people can discover what you are building.'}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </>
+        )}
+
         {/* AI COMPATIBILITY */}
         {isViewingOther && compatibility !== null && (
           <View style={[styles.section, { marginTop: -8 }]}>
@@ -1059,7 +1148,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 </View>
               </View>
               <Text style={[styles.compatHint, { color: isDark ? '#AAA' : '#444' }]}>
-                {compatibilityReason || `Best match for: ${[(profile as any).occupation || 'Builders', industries[0] ? `${industries[0]} teams` : null, (profile as any).commitmentLevel ? `${(profile as any).commitmentLevel} builders` : null].filter(Boolean).slice(0, 3).join(' • ')}`}
+                {compatibilityReason || `Best match for: ${[(profile as any).occupation || 'Builders', industries[0] ? `${industries[0]} teams` : null, (profile as any).commitmentLevel ? `${(profile as any).commitmentLevel} builders` : null].filter(Boolean).slice(0, 3).join(' â€¢ ')}`}
               </Text>
             </View>
           </View>
@@ -1101,30 +1190,6 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
           </View>
         </View>
-
-        {!!projects.length && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>ONGOING PROJECTS</Text>
-            {projects.slice(0, 3).map((project: any, index: number) => (
-              <View
-                key={project?.id || `${profile.uid}-project-${index}`}
-                style={[styles.projectCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
-              >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
-                  <Text style={[styles.projectTitle, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
-                    {project?.title || 'Untitled project'}
-                  </Text>
-                  <View style={styles.projectStagePill}>
-                    <Text style={styles.projectStageText}>{String(project?.status || 'mvp').toUpperCase()}</Text>
-                  </View>
-                </View>
-                <Text style={styles.projectDescription}>
-                  {project?.description || 'Ongoing project looking for relevant collaborators.'}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
 
         {/* INDUSTRY INTERESTS */}
         {!!industries.length && (
@@ -1207,44 +1272,6 @@ export default function ProfileScreen({ navigation, route }: any) {
                 {profile.vibeMedia ? "PLAY VIBE INTRO" : "NO VIBE INTRO SET"}
               </Text>
             </TouchableOpacity>
-          )}
-        </View>
-
-        {/* BIO SECTION */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>IDENTITY</Text>
-          {isEditing ? (
-            <TextInput
-              multiline
-              style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
-              value={toTextValue(editData?.bio)}
-              onChangeText={(t: string) => setEditData({...editData, bio: t})}
-              placeholder="Tell your story..."
-              placeholderTextColor="#444"
-            />
-          ) : (
-            <Text style={[styles.bioText, { color: isDark ? '#AAA' : '#444' }]}>
-              "{profile.bio || 'No bio provided yet. Complete your identity to stand out.'}"
-            </Text>
-          )}
-        </View>
-
-        {/* SKILLS SECTION */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>SKILLS & STACK</Text>
-          <View style={styles.badgesGrid}>
-            {currentSkills.map((skill: string, i: number) => (
-              <Badge key={i} name={skill.toUpperCase()} iconName="Rocket" />
-            ))}
-          </View>
-          {isEditing && (
-            <TextInput 
-              style={[styles.skillsInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
-              value={toTextValue(editData?.skills)}
-              onChangeText={(t: string) => setEditData({...editData, skills: t})}
-              placeholder="React, Node, AI..."
-              placeholderTextColor="#444"
-            />
           )}
         </View>
 
@@ -1775,12 +1802,53 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   bioInput: {
+    width: '100%',
     padding: 16,
     borderRadius: 20,
     borderWidth: 1,
     fontSize: 15,
     minHeight: 100,
     textAlignVertical: 'top',
+  },
+  profileStoryCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 16,
+  },
+  organizedSkillsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  skillPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  skillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FBE618',
+  },
+  skillPillText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  emptyProfileCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 14,
+  },
+  emptyProfileText: {
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 18,
   },
   badgesGrid: {
     flexDirection: 'row',
@@ -1801,6 +1869,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   skillsInput: {
+    width: '100%',
     marginTop: 12,
     padding: 16,
     borderRadius: 16,
