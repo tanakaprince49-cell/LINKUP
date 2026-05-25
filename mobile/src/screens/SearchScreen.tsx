@@ -153,37 +153,7 @@ export default function SearchScreen({ navigation }: any) {
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
   const computeCompatibility = (p: UserProfile) => {
-    if (!me) return 0;
-    const scoreParts: number[] = [];
-
-    const mySkills = Array.isArray(me.skills) ? me.skills : [];
-    const theirSkills = Array.isArray(p.skills) ? p.skills : [];
-    const sharedSkills = mySkills.filter((s) => theirSkills.map(normalize).includes(normalize(s))).length;
-    const skillScore = mySkills.length ? Math.min(1, sharedSkills / Math.max(3, Math.min(6, mySkills.length))) : 0;
-    scoreParts.push(skillScore * 0.45);
-
-    const myIndustries = Array.isArray((me as any).industries) ? (me as any).industries : [];
-    const theirIndustries = Array.isArray((p as any).industries) ? (p as any).industries : [];
-    const sharedIndustries = myIndustries.filter((s: string) =>
-      theirIndustries.map(normalize).includes(normalize(s))
-    ).length;
-    const industryScore = myIndustries.length ? Math.min(1, sharedIndustries / Math.max(1, myIndustries.length)) : 0;
-    scoreParts.push(industryScore * 0.20);
-
-    const commitmentScore =
-      me.commitmentLevel && p.commitmentLevel && normalize(me.commitmentLevel) === normalize(p.commitmentLevel) ? 1 : 0.4;
-    scoreParts.push(commitmentScore * 0.15);
-
-    const ambitionScore =
-      (me as any).ambition && (p as any).ambition && normalize((me as any).ambition) === normalize((p as any).ambition) ? 1 : 0.4;
-    scoreParts.push(ambitionScore * 0.10);
-
-    const personalityScore =
-      me.personalityType && p.personalityType && normalize(me.personalityType) === normalize(p.personalityType) ? 1 : 0.5;
-    scoreParts.push(personalityScore * 0.10);
-
-    const total = scoreParts.reduce((a, b) => a + b, 0);
-    return Math.round(clamp(total, 0, 1) * 100);
+    return localCommonalityRank(me, [p], 1)[0]?.score ?? 0;
   };
 
   const sliderResponder = useMemo(
@@ -845,7 +815,14 @@ export default function SearchScreen({ navigation }: any) {
             <TouchableOpacity
               key={item.uid}
               style={[styles.resultCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
-              onPress={() => navigation.navigate('Profile', { userId: item.uid })}
+              onPress={() => {
+                const score = aiRankMap[item.uid]?.score ?? computeCompatibility(item);
+                navigation.navigate('Profile', {
+                  userId: item.uid,
+                  compatibilityScore: score,
+                  compatibilityReason: buildMatchReason(me, item, aiRankMap, queryText),
+                });
+              }}
             >
               <Image
                 source={{ uri: item.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }}

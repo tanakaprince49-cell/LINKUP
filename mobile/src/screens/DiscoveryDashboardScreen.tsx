@@ -6,7 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { UserProfile } from '../types';
-import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
+import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
 import { earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
@@ -22,6 +22,9 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   const [aiRank, setAiRank] = useState<Record<string, { score: number; reason: string }>>({});
   const [aiLoading, setAiLoading] = useState(false);
   const [opportunityRadar, setOpportunityRadar] = useState<OpportunityAlert[]>([]);
+  const localRank = useMemo(() => {
+    return rankedCandidatesToMap(localCommonalityRank(me, people, Math.max(people.length, 15)));
+  }, [me, people]);
 
   useEffect(() => {
     if (!user) return;
@@ -52,27 +55,21 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
     if (!user) return;
     if (people.length === 0) return;
     let cancelled = false;
+    const localRanked = localCommonalityRank(me, people, 15);
+    setAiRank(rankedCandidatesToMap(localRanked));
+
     (async () => {
       try {
         setAiLoading(true);
         let ranked = await rankCandidatesHybrid(me, people.slice(0, 40), 15);
         // Fallback: always provide recommendations even when Functions/AI isn't available.
-        if (!ranked.length) ranked = localCommonalityRank(me, people, 15);
+        if (!ranked.length) ranked = localRanked;
         if (cancelled) return;
-        const next: Record<string, { score: number; reason: string }> = {};
-        ranked.forEach((r) => {
-          next[r.uid] = { score: r.score, reason: r.reason };
-        });
-        setAiRank(next);
+        setAiRank(rankedCandidatesToMap(ranked));
       } catch (e: any) {
         if (!cancelled) {
           console.warn('dashboard AI ranking unavailable', e?.message || String(e));
-          const ranked = localCommonalityRank(me, people, 15);
-          const next: Record<string, { score: number; reason: string }> = {};
-          ranked.forEach((r) => {
-            next[r.uid] = { score: r.score, reason: r.reason };
-          });
-          setAiRank(next);
+          setAiRank(rankedCandidatesToMap(localRanked));
         }
       } finally {
         if (!cancelled) setAiLoading(false);
@@ -81,13 +78,13 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
     return () => {
       cancelled = true;
     };
-  }, [user?.uid, people.length]);
+  }, [user?.uid, me?.uid, people]);
 
   const recommended = useMemo(() => {
-    const list = people.map((p) => ({ p, s: (aiRank[p.uid]?.score ?? -1) + ((p as any).turboConnect ? 8 : 0) }));
+    const list = people.map((p) => ({ p, s: (aiRank[p.uid]?.score ?? localRank[p.uid]?.score ?? 1) + ((p as any).turboConnect ? 8 : 0) }));
     list.sort((a, b) => b.s - a.s);
     return list.filter((x) => x.s >= 0).slice(0, 12).map((x) => x.p);
-  }, [people, aiRank]);
+  }, [people, aiRank, localRank]);
 
   const trending = useMemo(() => {
     const list = [...people];
@@ -121,10 +118,11 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   const topOpportunityAlert = opportunityRadar[0];
 
   const Card = ({ item, showScore }: { item: UserProfile; showScore?: boolean }) => {
-    const score = aiRank[item.uid]?.score;
+    const match = aiRank[item.uid] || localRank[item.uid];
+    const score = match?.score;
     return (
       <TouchableOpacity
-        onPress={() => navigation.navigate('Profile', { userId: item.uid })}
+        onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: score, compatibilityReason: match?.reason })}
         style={[styles.card, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
       >
         <Image
@@ -141,7 +139,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           </Text>
           {!!showScore && typeof score === 'number' && (
             <TouchableOpacity
-              onPress={() => Alert.alert('AI Compatibility', `${score}%\n\n${aiRank[item.uid]?.reason || ''}`)}
+              onPress={() => Alert.alert('AI Compatibility', `${score}%\n\n${match?.reason || ''}`)}
               style={styles.scorePill}
               activeOpacity={0.85}
             >

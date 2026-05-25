@@ -11,6 +11,31 @@ export type RankedCandidate = {
   cached: boolean;
 };
 
+export type MatchScoreMap = Record<string, RankedCandidate>;
+
+export const rankedCandidatesToMap = (ranked: RankedCandidate[]): MatchScoreMap => {
+  const map: MatchScoreMap = {};
+  ranked.forEach((rank) => {
+    if (rank.uid) map[rank.uid] = rank;
+  });
+  return map;
+};
+
+export const compatibilityForPair = (
+  me: UserProfile | null | undefined,
+  person: UserProfile | null | undefined
+): RankedCandidate | null => {
+  if (!person?.uid) return null;
+  return (
+    localCommonalityRank(me, [person], 1)[0] || {
+      uid: person.uid,
+      score: 1,
+      reason: 'Promising builder match',
+      cached: true,
+    }
+  );
+};
+
 export async function rankCandidatesWithAI(candidateIds: string[], maxCandidates = 20): Promise<RankedCandidate[]> {
   try {
     const callable = httpsCallable(functions, 'rankCandidates');

@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { handleFor, isDiscoverableProfile } from '../lib/discovery';
-import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
+import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
 import { ensureDirectMatch } from '../lib/chat';
 
 type MatchScore = {
@@ -39,6 +39,10 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+
+  const localScores = useMemo(() => {
+    return rankedCandidatesToMap(localCommonalityRank(me, people, Math.max(people.length, 30)));
+  }, [me, people]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -79,26 +83,20 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
     }
 
     let cancelled = false;
+    const localRanked = localCommonalityRank(me, people, 30);
+    setScores(rankedCandidatesToMap(localRanked));
+
     (async () => {
       setAiLoading(true);
       try {
         let ranked = await rankCandidatesHybrid(me, people.slice(0, 40), 30);
-        if (!ranked.length) ranked = localCommonalityRank(me, people, 30);
+        if (!ranked.length) ranked = localRanked;
         if (cancelled) return;
 
-        const next: Record<string, MatchScore> = {};
-        ranked.forEach((rank) => {
-          next[rank.uid] = { score: rank.score, reason: rank.reason, cached: rank.cached };
-        });
-        setScores(next);
+        setScores(rankedCandidatesToMap(ranked));
       } catch (error) {
         if (cancelled) return;
-        const ranked = localCommonalityRank(me, people, 30);
-        const next: Record<string, MatchScore> = {};
-        ranked.forEach((rank) => {
-          next[rank.uid] = { score: rank.score, reason: rank.reason, cached: true };
-        });
-        setScores(next);
+        setScores(rankedCandidatesToMap(localRanked));
       } finally {
         if (!cancelled) setAiLoading(false);
       }
@@ -107,12 +105,12 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
     return () => {
       cancelled = true;
     };
-  }, [user?.uid, people.length, me?.uid]);
+  }, [user?.uid, me?.uid, people]);
 
   const recommended = useMemo(() => {
     return people
       .map((person) => {
-        const score = scores[person.uid]?.score ?? 0;
+        const score = scores[person.uid]?.score ?? localScores[person.uid]?.score ?? 1;
         const boost = (person as any).turboConnect ? 8 : 0;
         return { person, weight: score + boost };
       })
@@ -120,7 +118,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       .sort((left, right) => right.weight - left.weight)
       .slice(0, 40)
       .map((entry) => entry.person);
-  }, [people, scores]);
+  }, [people, scores, localScores]);
 
   const openChat = async (profile: UserProfile) => {
     if (!user?.uid || !profile?.uid) return;
@@ -137,7 +135,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
   };
 
   const renderItem = ({ item, index }: { item: UserProfile; index: number }) => {
-    const match = scores[item.uid] || { score: 1, reason: 'Promising builder match' };
+    const match = scores[item.uid] || localScores[item.uid] || { score: 1, reason: 'Promising builder match' };
     const location = [item.city, item.country].filter(Boolean).join(', ') || 'Remote';
     const signals = sharedSignalsFor(me, item);
     const tags = signals.length
@@ -162,7 +160,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
 
         <TouchableOpacity
           activeOpacity={0.88}
-          onPress={() => navigation.navigate('Profile', { userId: item.uid })}
+          onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: match.score, compatibilityReason: match.reason })}
           style={styles.profileRow}
         >
           <Image
@@ -222,7 +220,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         <View style={styles.actionsRow}>
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
-            onPress={() => navigation.navigate('Profile', { userId: item.uid })}
+            onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: match.score, compatibilityReason: match.reason })}
           >
             <User size={16} color={isDark ? '#FFF' : '#000'} />
             <Text style={[styles.actionText, { color: isDark ? '#FFF' : '#000' }]}>PROFILE</Text>

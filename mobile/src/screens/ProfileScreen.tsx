@@ -32,6 +32,7 @@ import { imageAssetToDataUri } from '../lib/imageUploadLimits';
 import { ensureDirectMatch } from '../lib/chat';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
+import { compatibilityForPair } from '../lib/matchmaking';
 
 const { width } = Dimensions.get('window');
 
@@ -163,6 +164,8 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   // If a userId param is passed and it's not the current user, fetch that profile
   const rawTargetUserId = route?.params?.userId;
+  const routedCompatibilityScore = Number(route?.params?.compatibilityScore);
+  const routedCompatibilityReason = String(route?.params?.compatibilityReason || '').trim();
   const targetUserId =
     typeof rawTargetUserId === 'string' && rawTargetUserId.trim() && rawTargetUserId !== 'undefined'
       ? rawTargetUserId.trim()
@@ -292,25 +295,17 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const compatibility = useMemo(() => {
     if (!myProfile || !isViewingOther || !profile) return null;
-    const mySkills = Array.isArray(myProfile.skills) ? myProfile.skills : [];
-    const theirSkills = Array.isArray(profile.skills) ? profile.skills : [];
-    const shared = mySkills.filter((s) =>
-      theirSkills.map((t: any) => String(t).toLowerCase()).includes(String(s).toLowerCase())
-    ).length;
-    const skillScore = mySkills.length ? Math.min(1, shared / Math.max(3, Math.min(6, mySkills.length))) : 0;
-    const myIndustries = Array.isArray((myProfile as any).industries) ? (myProfile as any).industries : [];
-    const theirIndustries = Array.isArray((profile as any).industries) ? (profile as any).industries : [];
-    const sharedInd = myIndustries.filter((s: string) =>
-      theirIndustries.map((t: string) => String(t).toLowerCase()).includes(String(s).toLowerCase())
-    ).length;
-    const indScore = myIndustries.length ? Math.min(1, sharedInd / Math.max(1, myIndustries.length)) : 0;
-    const commitmentScore =
-      myProfile.commitmentLevel && (profile as any).commitmentLevel && myProfile.commitmentLevel === (profile as any).commitmentLevel ? 1 : 0.4;
-    const ambitionScore =
-      (myProfile as any).ambition && (profile as any).ambition && (myProfile as any).ambition === (profile as any).ambition ? 1 : 0.4;
-    const total = skillScore * 0.55 + indScore * 0.20 + commitmentScore * 0.15 + ambitionScore * 0.10;
-    return Math.round(Math.max(0, Math.min(1, total)) * 100);
-  }, [myProfile?.uid, (profile as any)?.uid, isViewingOther]);
+    if (Number.isFinite(routedCompatibilityScore) && routedCompatibilityScore > 0) {
+      return clampScore(routedCompatibilityScore);
+    }
+    return compatibilityForPair(myProfile, profile)?.score ?? null;
+  }, [myProfile, profile, isViewingOther, routedCompatibilityScore]);
+
+  const compatibilityReason = useMemo(() => {
+    if (!myProfile || !isViewingOther || !profile) return '';
+    if (routedCompatibilityReason) return routedCompatibilityReason;
+    return compatibilityForPair(myProfile, profile)?.reason || '';
+  }, [myProfile, profile, isViewingOther, routedCompatibilityReason]);
 
   if (viewedError && isViewingOther) {
     return (
@@ -1064,7 +1059,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 </View>
               </View>
               <Text style={[styles.compatHint, { color: isDark ? '#AAA' : '#444' }]}>
-                Best match for: {[(profile as any).occupation || 'Builders', industries[0] ? `${industries[0]} teams` : null, (profile as any).commitmentLevel ? `${(profile as any).commitmentLevel} builders` : null].filter(Boolean).slice(0, 3).join(' â€¢ ')}
+                {compatibilityReason || `Best match for: ${[(profile as any).occupation || 'Builders', industries[0] ? `${industries[0]} teams` : null, (profile as any).commitmentLevel ? `${(profile as any).commitmentLevel} builders` : null].filter(Boolean).slice(0, 3).join(' • ')}`}
               </Text>
             </View>
           </View>
