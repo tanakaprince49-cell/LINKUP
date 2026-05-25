@@ -81,9 +81,10 @@ const SafeIcon = ({ name, size = 20, color = "#FBE618", fill = "transparent" }: 
 // Global Header Component
 const AppHeader = ({ navigation, title }: any) => {
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const isDark = theme === 'dark';
   const [messageCount, setMessageCount] = React.useState(0);
+  const profilePhoto = profile?.profilePic || user?.photoURL || '';
 
   React.useEffect(() => {
     if (!user?.uid) {
@@ -121,7 +122,11 @@ const AppHeader = ({ navigation, title }: any) => {
               if (user?.uid) navigation.navigate('Profile', { userId: user.uid });
             }}
           >
-            <SafeIcon name="User" size={18} color={isDark ? '#CCC' : '#444'} />
+            {profilePhoto ? (
+              <Image source={{ uri: profilePhoto }} style={styles.headerAvatar} />
+            ) : (
+              <SafeIcon name="User" size={18} color={isDark ? '#CCC' : '#444'} />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -432,6 +437,12 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2,
     position: 'relative',
+    overflow: 'hidden',
+  },
+  headerAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 14,
   },
   headerBadgeBubble: {
     position: 'absolute',
