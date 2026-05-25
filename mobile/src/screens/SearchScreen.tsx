@@ -118,7 +118,7 @@ const stageNeedles = (option: string) => {
   return aliases[key] || [option];
 };
 
-export default function SearchScreen({ navigation }: any) {
+export default function SearchScreen({ navigation, route }: any) {
   const { user, profile: me } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -148,6 +148,9 @@ export default function SearchScreen({ navigation }: any) {
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [activeWithin, setActiveWithin] = useState<'any' | 'today' | 'week'>('any');
   const [minCompatibility, setMinCompatibility] = useState(0); // 0..100
+  const routedSkill = String(route?.params?.skill || route?.params?.initialSkill || '').trim();
+  const routedQuery = String(route?.params?.query || '').trim();
+  const routedSearchToken = String(route?.params?.searchToken || '');
 
   const sliderWidth = 240;
   const knobX = useRef(0);
@@ -198,6 +201,20 @@ export default function SearchScreen({ navigation }: any) {
     );
     return () => unsub();
   }, [user?.uid]);
+
+  useEffect(() => {
+    if (routedSkill) {
+      setQueryText(routedQuery || routedSkill);
+      setSkills(routedSkill);
+      setFilterOpen(false);
+      return;
+    }
+
+    if (routedQuery) {
+      setQueryText(routedQuery);
+      setFilterOpen(false);
+    }
+  }, [routedSkill, routedQuery, routedSearchToken]);
 
   useEffect(() => {
     if (!user?.uid) {

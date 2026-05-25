@@ -125,7 +125,7 @@ const toTextValue = (value: unknown) => (typeof value === 'string' ? value : val
 const parseProfileList = (value: unknown) => {
   const items = Array.isArray(value)
     ? value
-    : String(value || '').split(',').map((entry) => entry.trim());
+    : String(value || '').split(/[,\n;]+/).map((entry) => entry.trim());
 
   return Array.from(
     new Map(
@@ -609,7 +609,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     if (!editData) return;
     setIsSaving(true);
     try {
-      const skillsArray = parseProfileList(editData.skills).slice(0, 30);
+      const skillsArray = parseProfileList(editData.skills).slice(0, 50);
       const industriesArray = parseProfileList(editData.industries).slice(0, 20);
       const lookingForArray = parseProfileList(editData.lookingFor).slice(0, 20);
       const sourceProjects = Array.isArray(editData.projects) ? editData.projects : [];
@@ -622,16 +622,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           description: project.description || editData.bio || 'Ongoing project looking for relevant collaborators.',
         }))
         .slice(0, 10);
-      const earnedScore = earnedReputation({
-        ...profile,
-        ...editData,
-        skills: skillsArray,
-        industries: industriesArray,
-        lookingFor: lookingForArray,
-        projects: nextProjects,
-      }).founderScore;
-
-      await updateDoc(doc(db, 'users', profile.uid), {
+      await updateOwnProfileDoc({
         displayName: editData.displayName || '',
         username: cleanUsername(editData.username || editData.displayName || ''),
         occupation: editData.occupation || '',
@@ -654,8 +645,6 @@ export default function ProfileScreen({ navigation, route }: any) {
         vibeMedia: editData.vibeMedia || '',
         photos: Array.isArray(editData.photos) ? editData.photos.filter((p: string) => !!p).slice(0, 3) : [],
         projects: nextProjects,
-        reputationScore: earnedScore,
-        founderScore: earnedScore,
       });
       setIsEditing(false);
     } catch (err) {
@@ -838,7 +827,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const currentSkills = isEditing ? parseProfileList(editData?.skills) : parseProfileList(profile.skills);
-  const organizedSkills = [...currentSkills].sort((a, b) => a.localeCompare(b)).slice(0, 30);
+  const organizedSkills = [...currentSkills].sort((a, b) => a.localeCompare(b)).slice(0, 50);
 
   const industries = (isEditing
     ? (typeof editData?.industries === 'string'
@@ -916,6 +905,18 @@ export default function ProfileScreen({ navigation, route }: any) {
   const closeFullPhoto = () => {
     blurActiveElementOnWeb();
     setFullPhotoUri('');
+  };
+  const searchSkill = (skill: string) => {
+    const cleanSkill = String(skill || '').trim();
+    if (!cleanSkill) return;
+    navigation.navigate('Main', {
+      screen: 'Search',
+      params: {
+        skill: cleanSkill,
+        query: cleanSkill,
+        searchToken: Date.now(),
+      },
+    });
   };
 
   return (
@@ -1090,10 +1091,11 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholderTextColor="#666"
               />
               <TextInput
+                multiline
                 style={[styles.skillsInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.skills)}
                 onChangeText={(t: string) => setEditData({ ...editData, skills: t })}
-                placeholder="Skills & stack (comma-separated): React, Automation, Sales..."
+                placeholder="Skills & stack (comma, semicolon, or line separated): React, Automation, Sales..."
                 placeholderTextColor="#666"
               />
               <TextInput
@@ -1174,9 +1176,15 @@ export default function ProfileScreen({ navigation, route }: any) {
           ) : (
             <>
               <View style={styles.nameRowCentered}>
-                <Text style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}>{profile.displayName || 'Builder'}</Text>
+                <Text
+                  style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {profile.displayName || 'Builder'}
+                </Text>
                 {profile.isVerified && (
-                  <VerifiedBadge size={30} />
+                  <VerifiedBadge size={30} style={styles.inlineVerifiedBadge} />
                 )}
               </View>
               <Text style={styles.handleText}>
@@ -1259,10 +1267,15 @@ export default function ProfileScreen({ navigation, route }: any) {
               {organizedSkills.length ? (
                 <View style={styles.organizedSkillsGrid}>
                   {organizedSkills.map((skill: string, index: number) => (
-                    <View key={`${skill}-${index}`} style={[styles.skillPill, { backgroundColor: isDark ? '#101014' : '#FFFFFF', borderColor: isDark ? '#2A2A30' : '#E5E7EB' }]}>
+                    <TouchableOpacity
+                      key={`${skill}-${index}`}
+                      style={[styles.skillPill, { backgroundColor: isDark ? '#101014' : '#FFFFFF', borderColor: isDark ? '#2A2A30' : '#E5E7EB' }]}
+                      onPress={() => searchSkill(skill)}
+                      activeOpacity={0.82}
+                    >
                       <View style={styles.skillDot} />
                       <Text style={[styles.skillPillText, { color: isDark ? '#FFF' : '#111' }]}>{skill.toUpperCase()}</Text>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </View>
               ) : (
@@ -1906,6 +1919,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     textAlign: 'center',
     flexShrink: 1,
+    maxWidth: '82%',
   },
   nameRowCentered: {
     flexDirection: 'row',
@@ -1913,7 +1927,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingHorizontal: 16,
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
+    maxWidth: '100%',
+    alignSelf: 'center',
+  },
+  inlineVerifiedBadge: {
+    flexShrink: 0,
   },
   verifiedNameBadge: {
     width: 28,
@@ -2124,6 +2143,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     fontSize: 14,
     fontWeight: '600',
+    minHeight: 96,
+    textAlignVertical: 'top',
   },
   compatCard: {
     borderRadius: 22,
