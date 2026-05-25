@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
 import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Briefcase, MapPin, Search, Target, Users } from 'lucide-react-native';
+import { BadgeCheck, ChevronLeft, Briefcase, MapPin, Search, Target, Users } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -94,9 +94,16 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
             style={styles.avatar}
           />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
-              {details.title}
-            </Text>
+            <View style={styles.titleRow}>
+              <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                {details.title}
+              </Text>
+              {!!item.isVerified && (
+                <View style={styles.verifiedMiniBadge}>
+                  <BadgeCheck size={12} color="#000" fill="#FBE618" />
+                </View>
+              )}
+            </View>
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
           </View>
           <View style={styles.livePill}>
@@ -248,6 +255,22 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
+    flexShrink: 1,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  verifiedMiniBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
   },
   handle: {
     marginTop: 2,

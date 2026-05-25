@@ -96,6 +96,7 @@ export interface Post {
   authorId: string;
   authorName: string;
   authorPic?: string;
+  authorVerified?: boolean;
   content: string;
   type: 'build' | 'launch' | 'achievement' | 'update';
   timestamp: Timestamp | FieldValue;

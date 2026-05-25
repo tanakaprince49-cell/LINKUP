@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { doc, getDoc } from 'firebase/firestore';
-import { ChevronLeft, Briefcase, MapPin, Target, Clock, MessageSquare, User, Sparkles } from 'lucide-react-native';
+import { BadgeCheck, ChevronLeft, Briefcase, MapPin, Target, Clock, MessageSquare, User, Sparkles } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -104,7 +104,14 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
           <View style={styles.heroTop}>
             <Image source={{ uri: profile.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.avatar} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>{profile.displayName || 'Builder'}</Text>
+              <View style={styles.nameRow}>
+                <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{profile.displayName || 'Builder'}</Text>
+                {!!profile.isVerified && (
+                  <View style={styles.verifiedMiniBadge}>
+                    <BadgeCheck size={13} color="#000" fill="#FBE618" />
+                  </View>
+                )}
+              </View>
               <Text style={styles.handle}>{handleFor(profile)}</Text>
             </View>
             <View style={styles.scorePill}>
@@ -188,7 +195,18 @@ const styles = StyleSheet.create({
   heroCard: { borderRadius: 26, borderWidth: 1, padding: 16 },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: { width: 58, height: 58, borderRadius: 20 },
-  name: { fontSize: 18, fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic' },
+  name: { fontSize: 18, fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic', flexShrink: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  verifiedMiniBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
   handle: { marginTop: 2, fontSize: 11, fontWeight: '900', color: '#2563EB' },
   scorePill: { width: 48, height: 48, borderRadius: 18, backgroundColor: '#FBE618', alignItems: 'center', justifyContent: 'center' },
   scoreText: { fontSize: 16, fontWeight: '900', color: '#000' },

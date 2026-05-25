@@ -834,7 +834,11 @@ export default function SearchScreen({ navigation }: any) {
                     <Text style={[styles.resultName, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
                       {item.displayName || 'Builder'}
                     </Text>
-                    {!!(item as any).isVerified && <BadgeCheck size={14} color="#FBE618" />}
+                    {!!(item as any).isVerified && (
+                      <View style={styles.verifiedMiniBadge}>
+                        <BadgeCheck size={12} color="#000" fill="#FBE618" />
+                      </View>
+                    )}
                   </View>
                   <TouchableOpacity
                     onPress={() => {
@@ -1158,6 +1162,17 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
     fontStyle: 'italic',
+    flexShrink: 1,
+  },
+  verifiedMiniBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
   },
   resultMeta: {
     fontSize: 10,

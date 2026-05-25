@@ -414,7 +414,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
           <View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Text style={[styles.authorName, { color: isDark ? '#FFF' : '#000' }]}>{post.authorName}</Text>
-            {post.authorId === 'M9JgG7Bv2kS5K8W0jZ1P4nL3cQv2' /* Or any verification check */ && (
+            {!!(post as any).authorVerified && (
               <SafeIcon name="BadgeCheck" size={14} color="#FBE618" fill="#FBE618" />
             )}
           </View>

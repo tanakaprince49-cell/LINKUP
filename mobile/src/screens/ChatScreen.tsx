@@ -6,7 +6,7 @@ import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, u
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { ChevronLeft, Send, Camera, Zap, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X } from 'lucide-react-native';
+import { BadgeCheck, ChevronLeft, Send, Camera, Zap, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X } from 'lucide-react-native';
 import { generateWarmIntro } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 
@@ -631,7 +631,14 @@ export default function ChatScreen({ route, navigation }: any) {
             >
               <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.avatar} />
               <View>
-                <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>{otherUser.displayName || 'Builder'}</Text>
+                <View style={styles.chatNameRow}>
+                  <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{otherUser.displayName || 'Builder'}</Text>
+                  {!!otherUser.isVerified && (
+                    <View style={styles.verifiedMiniBadge}>
+                      <BadgeCheck size={12} color="#000" fill="#FBE618" />
+                    </View>
+                  )}
+                </View>
                 <Text style={[styles.status, { color: headerStatusColor }]}>
                   {headerStatus}
                 </Text>
@@ -892,6 +899,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     textTransform: 'uppercase',
+    flexShrink: 1,
+  },
+  chatNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    maxWidth: 220,
+  },
+  verifiedMiniBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
   },
   status: {
     fontSize: 10,

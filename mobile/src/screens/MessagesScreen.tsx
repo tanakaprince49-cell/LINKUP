@@ -6,7 +6,7 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
-import { MessageSquare, ChevronRight, Pin, Star, Archive, ChevronLeft } from 'lucide-react-native';
+import { BadgeCheck, MessageSquare, ChevronRight, Pin, Star, Archive, ChevronLeft } from 'lucide-react-native';
 
 const formatTimeAgo = (timestamp: any) => {
   if (!timestamp) return '';
@@ -124,7 +124,14 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
       </View>
       <View style={styles.chatInfo}>
         <View style={styles.chatHeader}>
-          <Text style={[styles.chatName, { color: isDark ? '#FFF' : '#000' }]}>{otherUser.displayName}</Text>
+          <View style={styles.chatNameRow}>
+            <Text style={[styles.chatName, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{otherUser.displayName}</Text>
+            {!!otherUser.isVerified && (
+              <View style={styles.verifiedMiniBadge}>
+                <BadgeCheck size={12} color="#000" fill="#FBE618" />
+              </View>
+            )}
+          </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isPinned && <Pin size={12} color="#FBE618" />}
             {isImportant && <Star size={12} color="#FBE618" fill="#FBE618" />}
@@ -333,6 +340,24 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
     fontStyle: 'italic',
+    flexShrink: 1,
+  },
+  chatNameRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingRight: 10,
+  },
+  verifiedMiniBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
   },
   chatTime: {
     fontSize: 10,

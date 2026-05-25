@@ -73,6 +73,7 @@ export default function CreatePostScreen({ navigation }: any) {
         authorId: user.uid,
         authorName: profile?.displayName || user.displayName || 'Builder',
         authorPic: profile?.profilePic || '',
+        authorVerified: !!profile?.isVerified,
         content,
         timestamp: serverTimestamp(),
         likesCount: 0,

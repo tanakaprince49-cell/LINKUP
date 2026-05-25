@@ -6,7 +6,7 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { ChevronLeft, Eye, UserPlus } from 'lucide-react-native';
+import { BadgeCheck, ChevronLeft, Eye, UserPlus } from 'lucide-react-native';
 
 type ProfileViewRow = {
   viewerId: string;
@@ -159,7 +159,14 @@ export default function ViewersScreen({ navigation }: any) {
     >
       <Image source={{ uri: item.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.avatar} />
       <View style={styles.info}>
-        <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>{item.displayName}</Text>
+        <View style={styles.nameRow}>
+          <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{item.displayName}</Text>
+          {!!item.isVerified && (
+            <View style={styles.verifiedMiniBadge}>
+              <BadgeCheck size={12} color="#000" fill="#FBE618" />
+            </View>
+          )}
+        </View>
         <Text style={styles.bio} numberOfLines={1}>{item.bio || 'Building the future'}</Text>
         <Text style={styles.timeText}>{formatTimeAgo(item.lastViewedAt)}</Text>
       </View>
@@ -236,6 +243,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     textTransform: 'uppercase',
+    flexShrink: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  verifiedMiniBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
   },
   bio: {
     fontSize: 12,

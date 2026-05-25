@@ -598,9 +598,16 @@ export default function SwipeScreen({ navigation }: any) {
         <View style={styles.previewOverlay} pointerEvents="none" />
         <View style={styles.previewInfo}>
           <Text style={styles.previewEyebrow}>NEXT BUILDER</Text>
-          <Text style={styles.previewName} numberOfLines={1}>
-            {nextProfile.displayName || 'Builder'}{ageText}
-          </Text>
+          <View style={styles.previewNameRow}>
+            <Text style={styles.previewName} numberOfLines={1}>
+              {nextProfile.displayName || 'Builder'}{ageText}
+            </Text>
+            {!!nextProfile.isVerified && (
+              <View style={styles.verifiedMiniBadge}>
+                <BadgeCheck size={15} color="#000" fill="#FBE618" />
+              </View>
+            )}
+          </View>
           <Text style={styles.previewRole} numberOfLines={1}>{roleText}</Text>
         </View>
       </Animated.View>
@@ -798,9 +805,16 @@ export default function SwipeScreen({ navigation }: any) {
               </View>
 
               <View style={styles.expandedProfileHeader}>
-                <Text style={styles.expandedName} numberOfLines={2}>
-                  {topProfile.displayName || 'Builder'}{ageText}
-                </Text>
+                <View style={styles.expandedNameRow}>
+                  <Text style={styles.expandedName} numberOfLines={2}>
+                    {topProfile.displayName || 'Builder'}{ageText}
+                  </Text>
+                  {!!topProfile.isVerified && (
+                    <View style={styles.verifiedMiniBadge}>
+                      <BadgeCheck size={15} color="#000" fill="#FBE618" />
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.expandedMetaText} numberOfLines={2}>{roleText}</Text>
                 <Text style={styles.expandedMetaText} numberOfLines={1}>{locationText}</Text>
               </View>
@@ -1069,6 +1083,12 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontStyle: 'italic',
     textTransform: 'uppercase',
+    flexShrink: 1,
+  },
+  previewNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   previewRole: {
     marginTop: 4,
@@ -1262,6 +1282,12 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontStyle: 'italic',
     textTransform: 'uppercase',
+    flexShrink: 1,
+  },
+  expandedNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   expandedMetaText: {
     marginTop: 7,
