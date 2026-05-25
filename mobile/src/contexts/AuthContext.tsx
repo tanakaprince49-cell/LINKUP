@@ -62,6 +62,14 @@ const describeAuthError = (flow: string, error: any) => {
     hint = 'Network request failed. Check connection, ad blockers, VPN, or browser privacy settings.';
   } else if (message.toLowerCase().includes('cookie') || message.toLowerCase().includes('storage') || message.toLowerCase().includes('initial state')) {
     hint = 'Google auth needs same-site browser storage. Open LINKUP directly in Chrome/Safari and make sure Vercel rewrites /__/auth to Firebase Hosting.';
+  } else if (
+    code.includes('invalid-request') ||
+    message.toLowerCase().includes('redirect_uri_mismatch') ||
+    message.toLowerCase().includes('access blocked') ||
+    message.toLowerCase().includes('request is invalid')
+  ) {
+    hint =
+      'Google rejected the OAuth redirect. Use the Firebase auth domain in the app and make sure Google provider is enabled in Firebase Authentication.';
   }
 
   return `${flow}\nCode: ${code}\nHost: ${host || 'native app'}\nFix: ${hint}\nFirebase: ${message}`;

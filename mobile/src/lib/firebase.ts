@@ -7,18 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const getFirebaseConfig = () => {
-  const config = { ...(firebaseConfig as Record<string, any>) };
-
-  if (Platform.OS === 'web') {
-    const hostname = String((globalThis as any)?.location?.hostname || '');
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '';
-
-    if (!isLocalhost) {
-      config.authDomain = hostname;
-    }
-  }
-
-  return config;
+  return { ...(firebaseConfig as Record<string, any>) };
 };
 
 const app = initializeApp(getFirebaseConfig());
