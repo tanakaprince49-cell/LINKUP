@@ -822,6 +822,8 @@ export default function ProfileScreen({ navigation, route }: any) {
     .filter((project: any) => String(project?.title || project?.description || '').trim())
     .slice(0, 10);
   const profileBio = String(profile.bio || '').trim();
+  const viewerIsVerified = !!(myProfile as any)?.isVerified;
+  const showHighVoiceNotice = isViewingOther && !!(profile as any).isVerified && !viewerIsVerified;
   const editedProjects = isEditing
     ? (Array.isArray(editData?.projects) && editData.projects.length
         ? editData.projects
@@ -1137,10 +1139,12 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
           ) : (
             <>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+              <View style={styles.nameRowCentered}>
                 <Text style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}>{profile.displayName || 'Builder'}</Text>
                 {profile.isVerified && (
-                  <SafeIcon name="BadgeCheck" size={24} color="#FBE618" fill="#FBE618" />
+                  <View style={styles.verifiedNameBadge}>
+                    <SafeIcon name="BadgeCheck" size={18} color="#000" fill="#FBE618" />
+                  </View>
                 )}
               </View>
               <Text style={styles.handleText}>
@@ -1192,6 +1196,20 @@ export default function ProfileScreen({ navigation, route }: any) {
             </>
           )}
         </View>
+
+        {showHighVoiceNotice && (
+          <View style={[styles.highVoiceCard, { backgroundColor: isDark ? '#16161A' : '#FFFDF0', borderColor: '#FBE618' }]}>
+            <View style={styles.highVoiceIcon}>
+              <SafeIcon name="BadgeCheck" size={22} color="#000" fill="#FBE618" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.highVoiceTitle, { color: isDark ? '#FFF' : '#000' }]}>LINKUP HIGH VOICE PROGRAM</Text>
+              <Text style={styles.highVoiceText}>
+                This verified builder has been marked by LINKUP as a trusted, high-signal voice in the network.
+              </Text>
+            </View>
+          </View>
+        )}
 
         {!isEditing && (
           <>
@@ -1856,6 +1874,67 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontStyle: 'italic',
     textTransform: 'uppercase',
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  nameRowCentered: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    flexWrap: 'wrap',
+  },
+  verifiedNameBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+    shadowColor: '#FBE618',
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  highVoiceCard: {
+    marginTop: -8,
+    marginBottom: 24,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    shadowColor: '#FBE618',
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  highVoiceIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  highVoiceTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+  },
+  highVoiceText: {
+    marginTop: 5,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+    color: '#666',
   },
   handleText: {
     fontSize: 10,

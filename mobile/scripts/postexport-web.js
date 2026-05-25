@@ -32,15 +32,38 @@ if (!fs.existsSync(indexPath)) {
 }
 
 let html = fs.readFileSync(indexPath, 'utf8');
+html = html.replace(/<meta\s+name=["']viewport["'][^>]*>\s*/i, '');
 
 const pwaHead = [
   '<!-- linkup-pwa-meta -->',
+  '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />',
+  '<meta name="format-detection" content="telephone=no" />',
   '<link rel="manifest" href="/manifest.webmanifest" />',
   '<meta name="theme-color" content="#FBE618" />',
   '<meta name="apple-mobile-web-app-capable" content="yes" />',
   '<meta name="apple-mobile-web-app-title" content="LINKUP" />',
   '<meta name="mobile-web-app-capable" content="yes" />',
   '<link rel="apple-touch-icon" href="/icons/icon-192.png" />',
+  '<link rel="preconnect" href="https://firestore.googleapis.com" />',
+  '<link rel="preconnect" href="https://identitytoolkit.googleapis.com" />',
+  '<link rel="preconnect" href="https://www.googleapis.com" />',
+  '<style id="linkup-mobile-viewport-fix">',
+  'html, body, #root { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; }',
+  'body { margin: 0; touch-action: manipulation; -webkit-text-size-adjust: 100%; }',
+  '@media (max-width: 767px), (hover: none) and (pointer: coarse) {',
+  '  html, body, #root { min-height: 100dvh; }',
+  '  body { overscroll-behavior-y: contain; }',
+  '}',
+  '.linkup-linkedin-mobile body { min-width: 0 !important; max-width: 100vw !important; overflow-x: hidden !important; }',
+  '</style>',
+  '<script id="linkup-linkedin-mobile-detect">',
+  '(function () {',
+  "  var ua = navigator.userAgent || '';",
+  "  var isLinkedIn = /LinkedInApp|LinkedIn/i.test(ua);",
+  '  var narrowDevice = Math.min(screen.width || 9999, screen.height || 9999) < 768;',
+  '  if (isLinkedIn && narrowDevice) document.documentElement.classList.add("linkup-linkedin-mobile");',
+  '}());',
+  '</script>',
 ].join('\n');
 
 const pwaScript = [

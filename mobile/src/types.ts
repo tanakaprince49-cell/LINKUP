@@ -56,6 +56,9 @@ export interface UserProfile {
   hasExit: boolean; // Verified serial founder
   vibeMedia?: string; // Base64 audio/video intro
   isVerified?: boolean;
+  verificationProgram?: string;
+  verifiedAt?: Timestamp | FieldValue;
+  verifiedBy?: string;
   availability?: string; // e.g. "Available now", "Weekends"
   timezone?: string; // e.g. "UTC+2"
   languages?: string[];

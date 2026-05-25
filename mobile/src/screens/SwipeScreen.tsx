@@ -29,7 +29,7 @@ import { demoBuilders, isDemoBuilder } from '../lib/demoBuilders';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare } from 'lucide-react-native';
+import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare, BadgeCheck } from 'lucide-react-native';
 
 const windowSize = Dimensions.get('window');
 const { width } = windowSize;
@@ -39,6 +39,24 @@ const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1519085360753-af0119f7
 const MAX_SWIPE_DATA_URI_CHARS = 220_000;
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
 const discoveryCacheKey = (uid: string) => `linkup:discovery:${uid}`;
+
+const getWebRuntimeFlags = () => {
+  if (Platform.OS !== 'web') {
+    return { isMobileWeb: false, screenWidth: 0 };
+  }
+
+  const nav = (globalThis as any)?.navigator;
+  const screenLike = (globalThis as any)?.screen;
+  const ua = String(nav?.userAgent || '');
+  const screenWidth = Number(screenLike?.width || 0);
+  const screenHeight = Number(screenLike?.height || 0);
+  const shortestScreenSide = Math.min(screenWidth || 9999, screenHeight || 9999);
+  const isMobileWeb =
+    /LinkedInApp|LinkedIn|Android|iPhone|iPad|iPod|Mobile/i.test(ua) ||
+    shortestScreenSide < 768;
+
+  return { isMobileWeb, screenWidth };
+};
 
 const readCachedDiscovery = async (uid: string): Promise<UserProfile[]> => {
   try {
@@ -73,6 +91,7 @@ const writeCachedDiscovery = async (uid: string, profiles: UserProfile[]) => {
       turboConnect: !!(profile as any).turboConnect,
       isVisible: profile.isVisible !== false,
       isStealthMode: !!profile.isStealthMode,
+      isVerified: !!profile.isVerified,
       isBot: !!profile.isBot,
       onboarded: !!profile.onboarded,
       projects: Array.isArray((profile as any).projects) ? (profile as any).projects.slice(0, 3) : [],
@@ -104,11 +123,12 @@ export default function SwipeScreen({ navigation }: any) {
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const isDark = theme === 'dark';
   const isWeb = Platform.OS === 'web';
+  const webRuntime = useMemo(() => getWebRuntimeFlags(), []);
   const safeViewportWidth = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : width;
   const safeViewportHeight =
     Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : windowSize.height || 900;
-  const isWideWeb = isWeb && safeViewportWidth >= 768;
-  const isCompactWeb = isWeb && !isWideWeb;
+  const isWideWeb = isWeb && !webRuntime.isMobileWeb && safeViewportWidth >= 768;
+  const isCompactWeb = isWeb && (webRuntime.isMobileWeb || !isWideWeb);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
@@ -131,7 +151,8 @@ export default function SwipeScreen({ navigation }: any) {
   const topProfile = profiles[0];
   const nextProfile = profiles[1];
   const ScreenRoot = isWeb ? View : SafeAreaView;
-  const deckWidth = isWeb ? safeViewportWidth : undefined;
+  const compactWebWidth = Math.max(320, Math.min(safeViewportWidth, webRuntime.screenWidth || safeViewportWidth, 480));
+  const deckWidth = isWeb ? (isCompactWeb ? compactWebWidth : safeViewportWidth) : undefined;
   const deckHeight = isWeb ? safeViewportHeight : undefined;
   const motionWidth = Math.max(deckWidth ?? safeViewportWidth, width);
   const swipeThreshold = Math.min(170, Math.max(92, (deckWidth ?? safeViewportWidth) * 0.27));
@@ -723,6 +744,11 @@ export default function SwipeScreen({ navigation }: any) {
           <View style={[styles.compactMeta, isCompactWeb && styles.compactWebMeta]}>
             <View style={styles.nameRow}>
               <Text style={[styles.nameText, isCompactWeb && styles.compactNameText]}>{topProfile.displayName || 'Builder'}{ageText}</Text>
+              {topProfile.isVerified && (
+                <View style={styles.verifiedMiniBadge}>
+                  <BadgeCheck size={15} color="#000" fill="#FBE618" />
+                </View>
+              )}
               {topProfile.hasExit && (
                 <View style={styles.exitBadge}>
                   <Target size={12} color="#000" />
@@ -1263,6 +1289,16 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     color: '#000',
+  },
+  verifiedMiniBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
   },
   nameText: {
     fontSize: 28,

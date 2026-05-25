@@ -196,6 +196,8 @@ const buildLocalUserProfile = (authUser: User, onboarded: boolean): any => {
     turboConnect: false,
     hideOnlineStatus: false,
     isBot: false,
+    isVerified: false,
+    verificationProgram: '',
     lastActiveAt: serverTimestamp(),
     createdAt: serverTimestamp(),
     circles: [],

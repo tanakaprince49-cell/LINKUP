@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert } from 'react-native';
 import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, MessageSquare, Search, Sparkles, Target, User, Zap } from 'lucide-react-native';
+import { BadgeCheck, ChevronLeft, MessageSquare, Search, Sparkles, Target, User, Zap } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -168,9 +168,16 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
             style={styles.avatar}
           />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
-              {item.displayName || 'Builder'}
-            </Text>
+            <View style={styles.nameRow}>
+              <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                {item.displayName || 'Builder'}
+              </Text>
+              {item.isVerified && (
+                <View style={styles.verifiedMiniBadge}>
+                  <BadgeCheck size={13} color="#000" fill="#FBE618" />
+                </View>
+              )}
+            </View>
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
             <Text style={styles.meta} numberOfLines={2}>
               {(item.occupation || 'Builder')} • {location}
@@ -395,6 +402,22 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
     fontStyle: 'italic',
+    flexShrink: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  verifiedMiniBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
   },
   handle: {
     marginTop: 2,

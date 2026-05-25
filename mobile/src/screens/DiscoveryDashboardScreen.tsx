@@ -12,7 +12,7 @@ import { earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } fro
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
 import { demoBuilders } from '../lib/demoBuilders';
-import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket } from 'lucide-react-native';
+import { BadgeCheck, Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket } from 'lucide-react-native';
 
 const dashboardCacheKey = (uid: string) => `linkup:dashboard:${uid}`;
 const readCachedDashboardPeople = async (uid: string): Promise<UserProfile[]> => {
@@ -163,9 +163,16 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           style={styles.avatar}
         />
         <View style={{ flex: 1 }}>
-          <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
-            {item.displayName || 'Builder'}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+              {item.displayName || 'Builder'}
+            </Text>
+            {item.isVerified && (
+              <View style={styles.verifiedMiniBadge}>
+                <BadgeCheck size={12} color="#000" fill="#FBE618" />
+              </View>
+            )}
+          </View>
           <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
           <Text style={styles.meta} numberOfLines={1}>
             {(item as any).occupation || 'Builder'} • {(item.city || item.country) ? [item.city, item.country].filter(Boolean).join(', ') : 'Remote'}
@@ -536,7 +543,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   avatar: { width: 52, height: 52, borderRadius: 18 },
-  name: { fontSize: 14, fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic' },
+  name: { fontSize: 14, fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic', flexShrink: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  verifiedMiniBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FBE618',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
   handle: { marginTop: 2, fontSize: 10, color: '#2563EB', fontWeight: '900' },
   meta: { marginTop: 4, fontSize: 10, color: '#666', fontWeight: '900' },
   scorePill: {

@@ -75,6 +75,10 @@ service cloud.firestore {
         return !data.keys().hasAny([field]) || data[field] is bool;
       }
 
+      function validOptionalTimestamp(data, field) {
+        return !data.keys().hasAny([field]) || data[field] is timestamp;
+      }
+
       function validProfileShape(data) {
         return validOptionalString(data, 'username', 30) &&
           validOptionalString(data, 'profileLink', 180) &&
@@ -98,6 +102,10 @@ service cloud.firestore {
           validOptionalBool(data, 'isStealthMode') &&
           validOptionalBool(data, 'turboConnect') &&
           validOptionalBool(data, 'hideOnlineStatus') &&
+          validOptionalBool(data, 'isVerified') &&
+          validOptionalString(data, 'verificationProgram', 80) &&
+          validOptionalString(data, 'verifiedBy', 128) &&
+          validOptionalTimestamp(data, 'verifiedAt') &&
           (!data.keys().hasAny(['age']) ||
             (data.age is int && (data.age == 0 || (data.age >= 13 && data.age <= 120))));
       }
@@ -145,6 +153,15 @@ service cloud.firestore {
         ]);
       }
 
+      function verificationFieldsUnchanged() {
+        return !incoming().diff(existing()).affectedKeys().hasAny([
+          'isVerified',
+          'verificationProgram',
+          'verifiedAt',
+          'verifiedBy'
+        ]);
+      }
+
       function safePushTokenCleanup() {
         return existing().keys().hasAny(['pushTokens']) &&
           !incoming().keys().hasAny(['pushTokens']) &&
@@ -163,7 +180,7 @@ service cloud.firestore {
       allow create: if isOwner(userId) && isValidUser(incoming()) && safeProfileCreateKeys() && validProfileShape(incoming());
 
       allow update: if isSignedIn() && (
-        (isOwner(userId) && isValidUser(incoming()) && safeProfileUpdateKeys() && validProfileShape(incoming())) ||
+        (isOwner(userId) && isValidUser(incoming()) && safeProfileUpdateKeys() && verificationFieldsUnchanged() && validProfileShape(incoming())) ||
         (isOwner(userId) && safePushTokenCleanup())
       );
 
