@@ -79,6 +79,23 @@ service cloud.firestore {
         return !data.keys().hasAny([field]) || data[field] is timestamp;
       }
 
+      function validOptionalSettings(data) {
+        return !data.keys().hasAny(['settings']) ||
+          (data.settings is map &&
+            data.settings.keys().hasOnly([
+              'publicDiscovery',
+              'stealthMode',
+              'turboConnect',
+              'hideOnlineStatus',
+              'darkMode'
+            ]) &&
+            (!data.settings.keys().hasAny(['publicDiscovery']) || data.settings.publicDiscovery is bool) &&
+            (!data.settings.keys().hasAny(['stealthMode']) || data.settings.stealthMode is bool) &&
+            (!data.settings.keys().hasAny(['turboConnect']) || data.settings.turboConnect is bool) &&
+            (!data.settings.keys().hasAny(['hideOnlineStatus']) || data.settings.hideOnlineStatus is bool) &&
+            (!data.settings.keys().hasAny(['darkMode']) || data.settings.darkMode is bool));
+      }
+
       function validProfileShape(data) {
         return validOptionalString(data, 'username', 30) &&
           validOptionalString(data, 'profileLink', 180) &&
@@ -106,8 +123,16 @@ service cloud.firestore {
           validOptionalString(data, 'verificationProgram', 80) &&
           validOptionalString(data, 'verifiedBy', 128) &&
           validOptionalTimestamp(data, 'verifiedAt') &&
+          validOptionalSettings(data) &&
           (!data.keys().hasAny(['age']) ||
             (data.age is int && (data.age == 0 || (data.age >= 13 && data.age <= 120))));
+      }
+
+      function verificationCreateDefaultsOnly() {
+        return (!incoming().keys().hasAny(['isVerified']) || incoming().isVerified == false) &&
+          (!incoming().keys().hasAny(['verificationProgram']) || incoming().verificationProgram == '') &&
+          (!incoming().keys().hasAny(['verifiedBy']) || incoming().verifiedBy == '') &&
+          !incoming().keys().hasAny(['verifiedAt']);
       }
 
       function safeProfileCreateKeys() {
@@ -125,6 +150,8 @@ service cloud.firestore {
           'socialLinks', 'education', 'remoteOnly', 'willingToRelocate',
           'teamSizePreference', 'ambition',
           'isVisible', 'isStealthMode', 'turboConnect', 'hideOnlineStatus',
+          'settings',
+          'isVerified', 'verificationProgram', 'verifiedBy',
           'onboarded', 'createdAt',
           'circles', 'aiMatchInsights'
         ]);
@@ -147,19 +174,23 @@ service cloud.firestore {
           'education', 'remoteOnly', 'willingToRelocate', 'teamSizePreference',
           'ambition',
           'isVisible', 'isStealthMode', 'turboConnect', 'hideOnlineStatus',
+          'settings',
+          'isVerified', 'verificationProgram', 'verifiedBy',
           'onboarded',
           'aiMatchInsights',
           'circles'
         ]);
       }
 
-      function verificationFieldsUnchanged() {
-        return !incoming().diff(existing()).affectedKeys().hasAny([
-          'isVerified',
-          'verificationProgram',
-          'verifiedAt',
-          'verifiedBy'
-        ]);
+      function verificationFieldsSafe() {
+        return
+          (!incoming().diff(existing()).affectedKeys().hasAny(['isVerified']) ||
+            (!existing().keys().hasAny(['isVerified']) && incoming().isVerified == false)) &&
+          (!incoming().diff(existing()).affectedKeys().hasAny(['verificationProgram']) ||
+            (!existing().keys().hasAny(['verificationProgram']) && incoming().verificationProgram == '')) &&
+          (!incoming().diff(existing()).affectedKeys().hasAny(['verifiedBy']) ||
+            (!existing().keys().hasAny(['verifiedBy']) && incoming().verifiedBy == '')) &&
+          !incoming().diff(existing()).affectedKeys().hasAny(['verifiedAt']);
       }
 
       function safePushTokenCleanup() {
@@ -177,10 +208,10 @@ service cloud.firestore {
       // Search/discovery can only list public, non-stealth profiles with no public push tokens.
       allow list: if isSignedIn() && isPublicProfile(existing());
 
-      allow create: if isOwner(userId) && isValidUser(incoming()) && safeProfileCreateKeys() && validProfileShape(incoming());
+      allow create: if isOwner(userId) && isValidUser(incoming()) && safeProfileCreateKeys() && verificationCreateDefaultsOnly() && validProfileShape(incoming());
 
       allow update: if isSignedIn() && (
-        (isOwner(userId) && isValidUser(incoming()) && safeProfileUpdateKeys() && verificationFieldsUnchanged() && validProfileShape(incoming())) ||
+        (isOwner(userId) && isValidUser(incoming()) && safeProfileUpdateKeys() && verificationFieldsSafe() && validProfileShape(incoming())) ||
         (isOwner(userId) && safePushTokenCleanup())
       );
 

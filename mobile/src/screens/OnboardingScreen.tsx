@@ -1522,6 +1522,16 @@ export default function OnboardingScreen({ navigation }: any) {
         isVisible: true,
         turboConnect: false,
         hideOnlineStatus: false,
+        settings: {
+          publicDiscovery: true,
+          stealthMode: false,
+          turboConnect: false,
+          hideOnlineStatus: false,
+          darkMode: false,
+        },
+        isVerified: false,
+        verificationProgram: '',
+        verifiedBy: '',
       } as any;
       await setDoc(doc(db, 'users', user.uid), onboardingProfile, { merge: true });
       await markOnboardingComplete(onboardingProfile);

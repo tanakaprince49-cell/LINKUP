@@ -37,6 +37,13 @@ export interface UserProfile {
   onboarded: boolean;
   isVisible: boolean;
   turboConnect?: boolean;
+  settings?: {
+    publicDiscovery?: boolean;
+    stealthMode?: boolean;
+    turboConnect?: boolean;
+    hideOnlineStatus?: boolean;
+    darkMode?: boolean;
+  };
   isBot: boolean;
   isOnline?: boolean;
   lastActiveAt: Timestamp | FieldValue;

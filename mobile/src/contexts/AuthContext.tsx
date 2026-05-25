@@ -48,6 +48,44 @@ const writeCachedProfile = async (uid: string, profileData: any) => {
   }
 };
 
+const defaultProfileSettings = (profileData: any = {}) => ({
+  publicDiscovery: profileData?.isVisible !== false,
+  stealthMode: !!profileData?.isStealthMode,
+  turboConnect: !!profileData?.turboConnect,
+  hideOnlineStatus: !!profileData?.hideOnlineStatus,
+  darkMode: !!profileData?.settings?.darkMode,
+});
+
+const missingProfileDefaultsPatch = (profileData: any = {}) => {
+  const patch: Record<string, unknown> = {};
+  const existingSettings = profileData?.settings && typeof profileData.settings === 'object' ? profileData.settings : {};
+  const nextSettings = {
+    ...defaultProfileSettings(profileData),
+    ...existingSettings,
+  };
+
+  if (typeof profileData.isVisible === 'undefined') patch.isVisible = true;
+  if (typeof profileData.isStealthMode === 'undefined') patch.isStealthMode = false;
+  if (typeof profileData.turboConnect === 'undefined') patch.turboConnect = false;
+  if (typeof profileData.hideOnlineStatus === 'undefined') patch.hideOnlineStatus = false;
+  if (typeof profileData.isVerified === 'undefined') patch.isVerified = false;
+  if (typeof profileData.verificationProgram === 'undefined') patch.verificationProgram = '';
+  if (typeof profileData.verifiedBy === 'undefined') patch.verifiedBy = '';
+
+  if (
+    !profileData.settings ||
+    typeof existingSettings.publicDiscovery === 'undefined' ||
+    typeof existingSettings.stealthMode === 'undefined' ||
+    typeof existingSettings.turboConnect === 'undefined' ||
+    typeof existingSettings.hideOnlineStatus === 'undefined' ||
+    typeof existingSettings.darkMode === 'undefined'
+  ) {
+    patch.settings = nextSettings;
+  }
+
+  return patch;
+};
+
 const currentWebHost = () => {
   if (Platform.OS !== 'web') return '';
   const location = (globalThis as any)?.location;
@@ -191,10 +229,11 @@ const buildLocalUserProfile = (authUser: User, onboarded: boolean): any => {
     aiMatchInsights: '',
     networkingIntent: 'Serious Builder',
     onboarded,
-    isVisible: onboarded ? false : true,
+    isVisible: true,
     isStealthMode: false,
     turboConnect: false,
     hideOnlineStatus: false,
+    settings: defaultProfileSettings({ isVisible: true }),
     isBot: false,
     isVerified: false,
     verificationProgram: '',
@@ -269,6 +308,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const userSnap = await getDoc(userDocRef);
       if (userSnap.exists()) {
         const rawProfile = userSnap.data() as any;
+        const defaultsPatch = missingProfileDefaultsPatch(rawProfile);
+        if (Object.keys(defaultsPatch).length) {
+          setDoc(userDocRef, defaultsPatch, { merge: true }).catch(() => {});
+        }
         const storedOnboarded = await readStoredOnboarding(authUser.uid);
         const inferredOnboarded = Boolean(rawProfile.onboarded || hasCompletedProfileSignals(rawProfile) || storedOnboarded);
 
@@ -405,6 +448,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } as UserProfile;
             if (rawProfile.pushTokens) {
               updateDoc(userDocRef, { pushTokens: deleteField() }).catch(() => {});
+            }
+            const defaultsPatch = missingProfileDefaultsPatch(rawProfile);
+            if (Object.keys(defaultsPatch).length) {
+              setDoc(userDocRef, defaultsPatch, { merge: true }).catch(() => {});
             }
             if (inferredOnboarded) {
               setCompletedOnboardingUid(authenticatedUser.uid);

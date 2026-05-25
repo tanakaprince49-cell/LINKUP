@@ -190,7 +190,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     requestEmailChange,
     showMfaEnrollmentNotice,
   } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setThemeMode } = useTheme();
   const isDark = theme === 'dark';
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -340,6 +340,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const founderScore = earnedRep.founderScore;
   const profileLink = useMemo(() => profileLinkFor(safeProfile), [safeProfile?.uid, safeProfile?.profileLink]);
   const visibleProfileViewCount = Math.max(profileViewCount, Array.isArray((profile as any)?.viewedBy) ? (profile as any).viewedBy.length : 0);
+  const firestoreSettings = ((profile as any)?.settings && typeof (profile as any).settings === 'object') ? (profile as any).settings : {};
 
   const compatibility = useMemo(() => {
     if (!myProfile || !isViewingOther || !profile) return null;
@@ -688,11 +689,43 @@ export default function ProfileScreen({ navigation, route }: any) {
     const previous = preferenceValue(field, !!(profile as any)?.[field]);
     setPreferenceOverrides((prev) => ({ ...prev, [field]: value }));
     setSavingPreference(field);
-    const ok = await updatePreference({ [field]: value });
+    const settingKeyByField: Record<PreferenceField, string> = {
+      isVisible: 'publicDiscovery',
+      isStealthMode: 'stealthMode',
+      turboConnect: 'turboConnect',
+      hideOnlineStatus: 'hideOnlineStatus',
+    };
+    const ok = await updatePreference({
+      [field]: value,
+      settings: {
+        publicDiscovery: profile.isVisible !== false,
+        stealthMode: !!profile.isStealthMode,
+        turboConnect: !!(profile as any).turboConnect,
+        hideOnlineStatus: !!(profile as any).hideOnlineStatus,
+        darkMode: isDark,
+        ...firestoreSettings,
+        [settingKeyByField[field]]: value,
+      },
+    });
     if (!ok) {
       setPreferenceOverrides((prev) => ({ ...prev, [field]: previous }));
     }
     setSavingPreference(null);
+  };
+
+  const setDarkModePreference = async (value: boolean) => {
+    await setThemeMode(value ? 'dark' : 'light');
+    if (!profile?.uid || isViewingOther) return;
+    await updatePreference({
+      settings: {
+        publicDiscovery: profile.isVisible !== false,
+        stealthMode: !!profile.isStealthMode,
+        turboConnect: !!(profile as any).turboConnect,
+        hideOnlineStatus: !!(profile as any).hideOnlineStatus,
+        ...firestoreSettings,
+        darkMode: value,
+      },
+    });
   };
 
   const performLogout = async () => {
@@ -1554,7 +1587,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 <Text style={styles.prefHelp}>Switches LINKUP between clean light mode and premium dark mode.</Text>
               </View>
             </View>
-            <PreferenceSwitch value={isDark} isDark={isDark} onValueChange={toggleTheme} />
+            <PreferenceSwitch value={isDark} isDark={isDark} onValueChange={setDarkModePreference} />
           </View>
 
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
