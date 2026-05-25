@@ -627,7 +627,7 @@ export default function SwipeScreen({ navigation }: any) {
         </Animated.View>
 
         <Image source={{ uri: photos[safeIndex] || FALLBACK_PHOTO }} style={[styles.cardImg, styles.faceFocusedImg]} resizeMode="cover" fadeDuration={0} />
-        <View style={styles.cardOverlay} pointerEvents="none" />
+        <View style={[styles.cardOverlay, infoExpanded && styles.cardOverlayExpanded]} pointerEvents="none" />
 
         <View style={[styles.cardInfo, isCompactWeb && styles.compactCardInfo]}>
           <View style={styles.cardTopRow}>
@@ -691,26 +691,37 @@ export default function SwipeScreen({ navigation }: any) {
 
           {infoExpanded && (
             <ScrollView
-              style={styles.bottomMeta}
-              contentContainerStyle={styles.bottomMetaContent}
+              style={[styles.bottomMeta, isCompactWeb && styles.compactBottomMeta]}
+              contentContainerStyle={[styles.bottomMetaContent, isCompactWeb && styles.compactBottomMetaContent]}
               showsVerticalScrollIndicator
               nestedScrollEnabled
               bounces
               scrollEventThrottle={16}
             >
-            <View style={styles.detailsHeader}>
-              <Text style={styles.detailsTitle}>BUILDER DETAILS</Text>
-              <TouchableOpacity onPress={() => setInfoExpanded(false)} style={styles.closeInfoBtn}>
-                <Text style={styles.closeInfoText}>HIDE</Text>
-              </TouchableOpacity>
-            </View>
+              <View style={styles.detailsHeader}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.detailsTitle}>BUILDER DETAILS</Text>
+                  <Text style={styles.detailsSubtitle}>Clear profile signals for this match</Text>
+                </View>
+                <TouchableOpacity onPress={() => setInfoExpanded(false)} style={styles.closeInfoBtn}>
+                  <Text style={styles.closeInfoText}>HIDE</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.expandedProfileHeader}>
+                <Text style={styles.expandedName} numberOfLines={2}>
+                  {topProfile.displayName || 'Builder'}{ageText}
+                </Text>
+                <Text style={styles.expandedMetaText} numberOfLines={2}>{roleText}</Text>
+                <Text style={styles.expandedMetaText} numberOfLines={1}>{locationText}</Text>
+              </View>
             <View style={styles.bioCard}>
               <Text style={styles.detailLabel}>BIO</Text>
               <Text style={styles.bioText}>{bio}</Text>
             </View>
 
             <View style={styles.tagGrid}>
-              {topProfile.skills?.slice(0, 5).map((skill, idx) => (
+              {topProfile.skills?.slice(0, 8).map((skill, idx) => (
                 <View key={`${topProfile.uid}-${skill}-${idx}`} style={styles.skillTag}>
                   <Text style={styles.skillTagText}>{String(skill).toUpperCase()}</Text>
                 </View>
@@ -724,7 +735,7 @@ export default function SwipeScreen({ navigation }: any) {
               </View>
               <View style={styles.detailCard}>
                 <Text style={styles.detailLabel}>LOOKING FOR</Text>
-                <Text style={styles.detailValue}>{lookingFor.slice(0, 3).join(' • ') || 'Networking'}</Text>
+                <Text style={styles.detailValue}>{lookingFor.slice(0, 4).join(' • ') || 'Networking'}</Text>
               </View>
               <View style={styles.detailCard}>
                 <Text style={styles.detailLabel}>STAGE</Text>
@@ -732,7 +743,7 @@ export default function SwipeScreen({ navigation }: any) {
               </View>
               <View style={styles.detailCard}>
                 <Text style={styles.detailLabel}>INDUSTRY</Text>
-                <Text style={styles.detailValue}>{industries.slice(0, 3).join(' • ') || 'Open'}</Text>
+                <Text style={styles.detailValue}>{industries.slice(0, 4).join(' • ') || 'Open'}</Text>
               </View>
               <View style={styles.detailCard}>
                 <Text style={styles.detailLabel}>AVAILABILITY</Text>
@@ -938,6 +949,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.1)',
   },
+  cardOverlayExpanded: {
+    backgroundColor: 'rgba(0,0,0,0.52)',
+  },
   previewOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.26)',
@@ -1087,15 +1101,31 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    maxHeight: '68%',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    zIndex: 20,
+    maxHeight: '78%',
+    backgroundColor: '#090A0F',
+    borderTopLeftRadius: 34,
+    borderTopRightRadius: 34,
+    zIndex: 90,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    shadowColor: '#000',
+    shadowOpacity: 0.38,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: -10 },
+    elevation: 16,
+  },
+  compactBottomMeta: {
+    maxHeight: '74%',
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
   },
   bottomMetaContent: {
-    padding: 24,
-    paddingBottom: 34,
+    padding: 22,
+    paddingBottom: 42,
+  },
+  compactBottomMetaContent: {
+    padding: 16,
+    paddingBottom: 30,
   },
   detailsHeader: {
     flexDirection: 'row',
@@ -1104,22 +1134,52 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   detailsTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '900',
     color: '#FFF',
     letterSpacing: 1.6,
   },
+  detailsSubtitle: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#A1A1AA',
+    lineHeight: 15,
+  },
   closeInfoBtn: {
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    backgroundColor: '#FBE618',
   },
   closeInfoText: {
-    color: '#FFF',
+    color: '#000',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
+  },
+  expandedProfileHeader: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 22,
+    backgroundColor: '#14161D',
+    borderWidth: 1,
+    borderColor: 'rgba(251,230,24,0.22)',
+  },
+  expandedName: {
+    fontSize: 25,
+    lineHeight: 30,
+    fontWeight: '900',
+    color: '#FFF',
+    fontStyle: 'italic',
+    textTransform: 'uppercase',
+  },
+  expandedMetaText: {
+    marginTop: 7,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+    color: '#E5E7EB',
   },
   nameRow: {
     flexDirection: 'row',
@@ -1192,18 +1252,18 @@ const styles = StyleSheet.create({
   },
   bioCard: {
     marginTop: 14,
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.09)',
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: '#11131A',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(255,255,255,0.16)',
   },
   bioText: {
-    fontSize: 14,
-    color: '#F3F4F6',
-    marginTop: 6,
-    fontWeight: '500',
-    lineHeight: 20,
+    fontSize: 15,
+    color: '#F8FAFC',
+    marginTop: 9,
+    fontWeight: '700',
+    lineHeight: 23,
   },
   tagGrid: {
     flexDirection: 'row',
@@ -1213,28 +1273,28 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   skillTag: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
+    backgroundColor: 'rgba(251,230,24,0.16)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(251,230,24,0.28)',
   },
   skillTagText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
-    color: '#FFF',
+    color: '#FBE618',
   },
   detailGrid: {
     gap: 10,
     marginTop: 8,
   },
   detailCard: {
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: '#14161D',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.14)',
   },
   detailLabel: {
     fontSize: 9,
@@ -1243,11 +1303,11 @@ const styles = StyleSheet.create({
     color: '#FBE618',
   },
   detailValue: {
-    marginTop: 6,
-    fontSize: 12,
+    marginTop: 8,
+    fontSize: 14,
     color: '#FFF',
     fontWeight: '800',
-    lineHeight: 17,
+    lineHeight: 20,
   },
   scrollIndicator: {
     alignItems: 'center',
