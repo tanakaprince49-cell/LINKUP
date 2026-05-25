@@ -67,9 +67,9 @@ const parseSearchFilterText = (text: string, input: string): GeminiFilterResult 
   return result;
 };
 
-async function directGeminiText(prompt: string) {
+async function directGeminiText(prompt: string, maxOutputTokens = 220) {
   if (!getGeminiApiKey()) return null;
-  return requestGeminiText(prompt, { temperature: 0.2, maxOutputTokens: 220 });
+  return requestGeminiText(prompt, { temperature: 0.2, maxOutputTokens });
 }
 
 async function vercelAiText(task: string, payload: Record<string, unknown>) {
@@ -129,7 +129,13 @@ async function aiText(task: string, payload: Record<string, unknown>) {
 
     if (task === 'profileInsights') {
       const direct = await directGeminiText(
-        `Write one short premium startup-networking match insight for this profile. Keep under 22 words:\n${JSON.stringify(payload.profile || {})}`
+        [
+          'You generate short, punchy "Match Insights" for a founder profile in the LINKUP app.',
+          'Return ONLY plain text (max 2 sentences). No quotes, no markdown.',
+          'Focus on: work style, who they work best with, and what type of startup/team fits them.',
+          'Profile JSON: ' + JSON.stringify(payload.profile || {}).slice(0, 2500),
+        ].join('\n'),
+        140
       );
       if (direct) return direct;
     }

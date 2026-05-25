@@ -171,9 +171,10 @@ export default function ProfileScreen({ navigation, route }: any) {
   const profile = isViewingOther ? viewedProfile : myProfile;
 
   const ownerIdentityPatch = () => {
+    const currentDisplayName = String(myProfile?.displayName || '').trim();
     const fallbackName =
-      String(myProfile?.displayName || '').trim() && myProfile?.displayName !== 'New Builder'
-        ? String(myProfile.displayName).trim()
+      currentDisplayName && currentDisplayName !== 'New Builder'
+        ? currentDisplayName
         : String(user?.displayName || user?.email?.split('@')[0] || 'LINKUP Builder').trim();
 
     return {

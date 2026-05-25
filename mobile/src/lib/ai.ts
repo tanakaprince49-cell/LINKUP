@@ -3,25 +3,76 @@ import { Platform } from 'react-native';
 import { functions } from './firebase';
 import { describeAIError, getGeminiApiKey, recordAIError, requestGeminiText } from './aiDiagnostics';
 
-const promptsByTask: Record<string, (payload: Record<string, unknown>) => string> = {
-  matchingExplanation: (payload) =>
-    `Explain in one concise sentence why these two LINKUP builders may be compatible:\nUser A: ${JSON.stringify(payload.user1 || {})}\nUser B: ${JSON.stringify(payload.user2 || {})}`,
-  startupAnalyzer: (payload) =>
-    `Analyze this startup idea as JSON with score, verdict, targetCustomer, marketPotential, competition, monetization, keyRisks array, nextValidationStep, summary. JSON only.\nIdea: ${String(payload.idea || '')}`,
-  aiComment: (payload) =>
-    `Write one smart, supportive LINKUP comment for this builder post. Keep it short:\n${String(payload.postContent || '')}`,
-  buildFeedback: (payload) =>
-    `Give concise founder/product feedback for this LINKUP build update. Mention one strength and one next step:\n${String(payload.postContent || '')}`,
-  warmIntro: (payload) =>
-    `Write a warm first message between matched startup builders. Keep under 28 words.\nMe: ${JSON.stringify(payload.me || {})}\nOther: ${JSON.stringify(payload.other || {})}`,
+type AiPromptConfig = {
+  prompt: string;
+  maxOutputTokens?: number;
+  temperature?: number;
+};
+
+const clippedJson = (value: unknown, max = 1800) => JSON.stringify(value ?? {}).slice(0, max);
+
+const promptsByTask: Record<string, (payload: Record<string, unknown>) => AiPromptConfig> = {
+  matchingExplanation: (payload) => ({
+    maxOutputTokens: 220,
+    temperature: 0.2,
+    prompt: [
+      'You are a professional co-founder matchmaker.',
+      'Write a concise, encouraging explanation (2-4 sentences).',
+      'Focus on skills compatibility, goals alignment, and personality fit.',
+      'FounderA=' + clippedJson(payload.user1),
+      'FounderB=' + clippedJson(payload.user2),
+    ].join('\n'),
+  }),
+  startupAnalyzer: (payload) => ({
+    maxOutputTokens: 520,
+    temperature: 0.25,
+    prompt: [
+      'You are LINKUP Startup Analyzer: a sharp startup operator, VC, and product strategist.',
+      'Be critical, practical, and concise. Do not hype weak ideas.',
+      'Respond ONLY with a valid JSON object and nothing else.',
+      `Evaluate this startup idea: "${String(payload.idea || '').trim().slice(0, 1500)}"`,
+      'Return format:',
+      '{"score":72,"verdict":"Promising but needs sharper wedge","targetCustomer":"...","marketPotential":"...","competition":"...","differentiation":"...","monetization":"...","keyRisks":["...","..."],"nextValidationStep":"...","summary":"..."}',
+    ].join('\n'),
+  }),
+  aiComment: (payload) => ({
+    maxOutputTokens: 120,
+    temperature: 0.35,
+    prompt: [
+      'You are a supportive AI mentor for founders. Keep it short and punchy (1-2 sentences).',
+      `Post: "${String(payload.postContent || '').slice(0, 1200)}"`,
+    ].join('\n'),
+  }),
+  buildFeedback: (payload) => ({
+    maxOutputTokens: 220,
+    temperature: 0.4,
+    prompt: [
+      "You are the 'Brutal Build Roaster'. Be raw but helpful. Be punchy (3-6 sentences).",
+      'End with exactly 1 actionable improvement as a single bullet.',
+      `Build update: "${String(payload.postContent || '').slice(0, 1200)}"`,
+    ].join('\n'),
+  }),
+  warmIntro: (payload) => ({
+    maxOutputTokens: 220,
+    temperature: 0.45,
+    prompt: [
+      'You are a professional co-founder matchmaker.',
+      'Write a warm, enthusiastic opening message that feels human and specific.',
+      'Write 4-6 sentences. End with 1 clear question.',
+      'Me=' + clippedJson(payload.me),
+      'Other=' + clippedJson(payload.other),
+    ].join('\n'),
+  }),
 };
 
 async function directGeminiText(task: string, payload: Record<string, unknown>) {
   if (!getGeminiApiKey()) return null;
-  const prompt = promptsByTask[task]?.(payload);
-  if (!prompt) return null;
-  const maxOutputTokens = task === 'startupAnalyzer' ? 420 : 180;
-  return requestGeminiText(prompt, { temperature: 0.2, maxOutputTokens });
+  const promptConfig = promptsByTask[task]?.(payload);
+  if (!promptConfig) return null;
+  return requestGeminiText(promptConfig.prompt, {
+    temperature: promptConfig.temperature,
+    maxOutputTokens: promptConfig.maxOutputTokens,
+  });
 }
 
 async function vercelAiText(task: string, payload: Record<string, unknown>) {

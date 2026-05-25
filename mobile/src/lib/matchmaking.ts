@@ -156,10 +156,8 @@ async function directGeminiRank(me: UserProfile | null | undefined, candidates: 
   const prompt = [
     'You are LINKUP AI matchmaking for startup builders.',
     'Rank candidates for the current user by useful collaboration potential, complementary skills, shared industries/goals, work style, commitment, and startup intent.',
-    'Return plain text only, no JSON and no markdown.',
-    'One candidate per line using this exact tab-separated format:',
-    'uid<TAB>score<TAB>reason',
-    'Keep reason under 14 words and do not use quotation marks.',
+    'Return STRICT JSON array only, no markdown, no prose.',
+    'Schema: [{"uid":"candidate-id","score":88,"reason":"short reason under 14 words"}]',
     `Return at most ${Math.min(maxCandidates, 20)} candidates.`,
     `Current user: ${JSON.stringify(compactProfile(me))}`,
     `Candidates: ${JSON.stringify(compactCandidates)}`,
@@ -168,6 +166,7 @@ async function directGeminiRank(me: UserProfile | null | undefined, candidates: 
   const text = await requestGeminiText(prompt, {
     temperature: 0.2,
     maxOutputTokens: 700,
+    responseMimeType: 'application/json',
   });
   const jsonRanks = parseRankedJsonQuietly(String(text || ''), candidates, maxCandidates);
   if (jsonRanks.length) return jsonRanks;
