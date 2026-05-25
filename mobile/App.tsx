@@ -239,7 +239,7 @@ function TabNavigator({ navigation }: any) {
 
 function AppContent() {
   const { user, profile, loading, authVersion, isOnboarded } = useAuth();
-  const { theme, setThemeMode } = useTheme();
+  const { theme } = useTheme();
   const isDark = theme === 'dark';
   const requiresEmailVerification = Boolean(
     user?.email &&
@@ -318,13 +318,6 @@ function AppContent() {
     if (!user?.uid) return;
     return subscribeToNotificationToasts(user.uid);
   }, [user?.uid]);
-
-  React.useEffect(() => {
-    if (!user?.uid || isOnboarded) return;
-    if (theme !== 'light') {
-      setThemeMode('light').catch(() => {});
-    }
-  }, [user?.uid, isOnboarded, theme, setThemeMode]);
 
   React.useEffect(() => {
     if (Platform.OS !== 'web' || user?.uid) return;

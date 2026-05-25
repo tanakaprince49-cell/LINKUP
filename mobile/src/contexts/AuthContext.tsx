@@ -224,15 +224,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!loading) return;
     const timeout = setTimeout(() => {
-      setLoading(false);
-    }, Platform.OS === 'web' ? 3500 : 6500);
+      if (!auth.currentUser || profile) {
+        setLoading(false);
+      }
+    }, Platform.OS === 'web' ? 10000 : 12000);
     return () => clearTimeout(timeout);
-  }, [loading]);
+  }, [loading, profile]);
 
   const syncSignedInUserProfile = async (authUser: User) => {
     const userDocRef = doc(db, 'users', authUser.uid);
     setUser(authUser);
-    setLoading(false);
+    setLoading(true);
     setAuthError(null);
 
     try {
@@ -260,6 +262,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           onboarded: inferredOnboarded,
         } as UserProfile);
         setAuthVersion((value) => value + 1);
+        setLoading(false);
         return;
       }
 
@@ -267,6 +270,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCompletedOnboardingUid(null);
       setProfile(buildLocalUserProfile(authUser, false) as UserProfile);
       setAuthVersion((value) => value + 1);
+      setLoading(false);
     } catch (error) {
       const storedOnboarded = await readStoredOnboarding(authUser.uid);
       if (storedOnboarded) {
@@ -276,6 +280,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setProfile(buildLocalUserProfile(authUser, storedOnboarded) as UserProfile);
       setAuthVersion((value) => value + 1);
+      setLoading(false);
       console.warn('Signed-in profile sync unavailable:', error);
     }
   };
@@ -333,9 +338,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const userDocRef = doc(db, 'users', authenticatedUser.uid);
+      setLoading(true);
       setCompletedOnboardingUid(null);
-      setProfile(buildLocalUserProfile(authenticatedUser, false) as UserProfile);
-      setLoading(false);
+
+      const storedOnboardedBeforeSnapshot = await readStoredOnboarding(authenticatedUser.uid);
+      if (storedOnboardedBeforeSnapshot) {
+        setCompletedOnboardingUid(authenticatedUser.uid);
+        setProfile(buildLocalUserProfile(authenticatedUser, true) as UserProfile);
+        setLoading(false);
+      } else {
+        setProfile(null);
+      }
 
       unsubscribeProfile = onSnapshot(
         userDocRef,
@@ -378,7 +391,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
         (error) => {
           console.error('Profile listener error:', error);
-          setLoading(false);
+          readStoredOnboarding(authenticatedUser.uid)
+            .then((storedOnboarded) => {
+              if (storedOnboarded) {
+                setCompletedOnboardingUid(authenticatedUser.uid);
+                setProfile(buildLocalUserProfile(authenticatedUser, true) as UserProfile);
+              } else {
+                setCompletedOnboardingUid(null);
+                setProfile(buildLocalUserProfile(authenticatedUser, false) as UserProfile);
+              }
+            })
+            .finally(() => {
+              setLoading(false);
+            });
         }
       );
     });
