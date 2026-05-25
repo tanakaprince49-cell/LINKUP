@@ -6,7 +6,8 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
-import { BadgeCheck, MessageSquare, ChevronRight, Pin, Star, Archive, ChevronLeft } from 'lucide-react-native';
+import { MessageSquare, ChevronRight, Pin, Star, Archive, ChevronLeft } from 'lucide-react-native';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 const formatTimeAgo = (timestamp: any) => {
   if (!timestamp) return '';
@@ -126,11 +127,7 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
         <View style={styles.chatHeader}>
           <View style={styles.chatNameRow}>
             <Text style={[styles.chatName, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{otherUser.displayName}</Text>
-            {!!otherUser.isVerified && (
-              <View style={styles.verifiedMiniBadge}>
-                <BadgeCheck size={12} color="#000" fill="#FBE618" />
-              </View>
-            )}
+            {!!otherUser.isVerified && <VerifiedBadge size={20} />}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isPinned && <Pin size={12} color="#FBE618" />}

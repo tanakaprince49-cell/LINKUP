@@ -6,8 +6,9 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
-import { BadgeCheck, MessageSquare, User, Zap, Sparkles, ChevronRight, Briefcase } from 'lucide-react-native';
+import { MessageSquare, User, Zap, Sparkles, ChevronRight, Briefcase } from 'lucide-react-native';
 import { ensureDirectMatch } from '../lib/chat';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 const { width } = Dimensions.get('window');
 
@@ -41,11 +42,7 @@ const MatchItem = ({ match, navigation }: { match: Match, navigation: any }) => 
         <View style={styles.infoContainer}>
           <View style={styles.nameRow}>
             <Text style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}>{otherUser.displayName}</Text>
-            {!!otherUser.isVerified && (
-              <View style={styles.verifiedMiniBadge}>
-                <BadgeCheck size={12} color="#000" fill="#FBE618" />
-              </View>
-            )}
+            {!!otherUser.isVerified && <VerifiedBadge size={20} />}
             <View style={styles.roleBadge}>
               <Text style={styles.roleText}>{otherUser.ambition?.toUpperCase() || 'FOUNDER'}</Text>
             </View>

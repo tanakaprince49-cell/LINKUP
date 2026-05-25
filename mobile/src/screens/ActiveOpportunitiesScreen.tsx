@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
 import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BadgeCheck, ChevronLeft, Briefcase, MapPin, Search, Target, Users } from 'lucide-react-native';
+import { ChevronLeft, Briefcase, MapPin, Search, Target, Users } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { getBestProjectRecommendations, scoreProjectFit } from '../lib/projectRecommendations';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 export default function ActiveOpportunitiesScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
@@ -98,11 +99,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
               <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
                 {details.title}
               </Text>
-              {!!item.isVerified && (
-                <View style={styles.verifiedMiniBadge}>
-                  <BadgeCheck size={12} color="#000" fill="#FBE618" />
-                </View>
-              )}
+              {!!item.isVerified && <VerifiedBadge size={20} />}
             </View>
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
           </View>

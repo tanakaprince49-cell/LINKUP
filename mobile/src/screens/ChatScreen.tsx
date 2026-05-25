@@ -6,9 +6,10 @@ import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, u
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { BadgeCheck, ChevronLeft, Send, Camera, Zap, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X } from 'lucide-react-native';
+import { ChevronLeft, Send, Camera, Zap, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X } from 'lucide-react-native';
 import { generateWarmIntro } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 const getFutureDate = (value: any) => {
   if (!value) return null;
@@ -633,11 +634,7 @@ export default function ChatScreen({ route, navigation }: any) {
               <View>
                 <View style={styles.chatNameRow}>
                   <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{otherUser.displayName || 'Builder'}</Text>
-                  {!!otherUser.isVerified && (
-                    <View style={styles.verifiedMiniBadge}>
-                      <BadgeCheck size={12} color="#000" fill="#FBE618" />
-                    </View>
-                  )}
+                  {!!otherUser.isVerified && <VerifiedBadge size={20} />}
                 </View>
                 <Text style={[styles.status, { color: headerStatusColor }]}>
                   {headerStatus}

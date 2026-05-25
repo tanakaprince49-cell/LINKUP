@@ -39,6 +39,7 @@ import { Post } from '../types';
 import * as Icons from 'lucide-react-native';
 import { generateFeedback } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 const { width } = Dimensions.get('window');
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
@@ -415,7 +416,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Text style={[styles.authorName, { color: isDark ? '#FFF' : '#000' }]}>{post.authorName}</Text>
             {!!(post as any).authorVerified && (
-              <SafeIcon name="BadgeCheck" size={14} color="#FBE618" fill="#FBE618" />
+              <VerifiedBadge size={18} />
             )}
           </View>
           <Text style={styles.postTime}>{formatTimeAgo(post.timestamp)}</Text>

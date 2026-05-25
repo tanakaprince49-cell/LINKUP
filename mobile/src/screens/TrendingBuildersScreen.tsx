@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
 import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
-import { BadgeCheck, ChevronLeft, MessageSquare, Sparkles, TrendingUp, User } from 'lucide-react-native';
+import { ChevronLeft, MessageSquare, Sparkles, TrendingUp, User } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +9,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { earnedScore, handleFor, isDiscoverableProfile } from '../lib/discovery';
 import { ensureDirectMatch } from '../lib/chat';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 export default function TrendingBuildersScreen({ navigation }: any) {
   const { user } = useAuth();
@@ -106,11 +107,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
               <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
                 {item.displayName || 'Builder'}
               </Text>
-              {item.isVerified && (
-                <View style={styles.verifiedMiniBadge}>
-                  <BadgeCheck size={13} color="#000" fill="#FBE618" />
-                </View>
-              )}
+              {item.isVerified && <VerifiedBadge size={22} />}
             </View>
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
             <Text style={styles.meta} numberOfLines={2}>

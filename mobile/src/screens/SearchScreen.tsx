@@ -17,10 +17,11 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { Search, SlidersHorizontal, X, Sparkles, BadgeCheck, MapPin, Briefcase, Clock } from 'lucide-react-native';
+import { Search, SlidersHorizontal, X, Sparkles, MapPin, Briefcase, Clock } from 'lucide-react-native';
 import { geminiToSearchFilters } from '../lib/gemini';
 import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 const normalize = (v: string) => v.trim().toLowerCase();
 const LOOKING_FOR_FILTERS = ['CTO', 'Designer', 'Marketer', 'Developer', 'Investor', 'Cofounder', 'Startup Team', 'Mentor'];
@@ -834,11 +835,7 @@ export default function SearchScreen({ navigation }: any) {
                     <Text style={[styles.resultName, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
                       {item.displayName || 'Builder'}
                     </Text>
-                    {!!(item as any).isVerified && (
-                      <View style={styles.verifiedMiniBadge}>
-                        <BadgeCheck size={12} color="#000" fill="#FBE618" />
-                      </View>
-                    )}
+                    {!!(item as any).isVerified && <VerifiedBadge size={20} />}
                   </View>
                   <TouchableOpacity
                     onPress={() => {

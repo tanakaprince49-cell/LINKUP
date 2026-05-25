@@ -33,6 +33,7 @@ import { ensureDirectMatch } from '../lib/chat';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
 import { compatibilityForPair } from '../lib/matchmaking';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 const { width } = Dimensions.get('window');
 
@@ -1175,9 +1176,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               <View style={styles.nameRowCentered}>
                 <Text style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}>{profile.displayName || 'Builder'}</Text>
                 {profile.isVerified && (
-                  <View style={styles.verifiedNameBadge}>
-                    <SafeIcon name="BadgeCheck" size={18} color="#000" fill="#FBE618" />
-                  </View>
+                  <VerifiedBadge size={30} />
                 )}
               </View>
               <Text style={styles.handleText}>
@@ -1232,9 +1231,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         {showHighVoiceNotice && (
           <View style={[styles.highVoiceCard, { backgroundColor: isDark ? '#16161A' : '#FFFDF0', borderColor: '#FBE618' }]}>
-            <View style={styles.highVoiceIcon}>
-              <SafeIcon name="BadgeCheck" size={22} color="#000" fill="#FBE618" />
-            </View>
+            <VerifiedBadge size={46} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.highVoiceTitle, { color: isDark ? '#FFF' : '#000' }]}>LINKUP HIGH VOICE PROGRAM</Text>
               <Text style={styles.highVoiceText}>

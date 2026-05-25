@@ -29,7 +29,8 @@ import { demoBuilders, isDemoBuilder } from '../lib/demoBuilders';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare, BadgeCheck } from 'lucide-react-native';
+import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare } from 'lucide-react-native';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 const windowSize = Dimensions.get('window');
 const { width } = windowSize;
@@ -602,11 +603,7 @@ export default function SwipeScreen({ navigation }: any) {
             <Text style={styles.previewName} numberOfLines={1}>
               {nextProfile.displayName || 'Builder'}{ageText}
             </Text>
-            {!!nextProfile.isVerified && (
-              <View style={styles.verifiedMiniBadge}>
-                <BadgeCheck size={15} color="#000" fill="#FBE618" />
-              </View>
-            )}
+            {!!nextProfile.isVerified && <VerifiedBadge size={24} />}
           </View>
           <Text style={styles.previewRole} numberOfLines={1}>{roleText}</Text>
         </View>
@@ -751,11 +748,7 @@ export default function SwipeScreen({ navigation }: any) {
           <View style={[styles.compactMeta, isCompactWeb && styles.compactWebMeta]}>
             <View style={styles.nameRow}>
               <Text style={[styles.nameText, isCompactWeb && styles.compactNameText]}>{topProfile.displayName || 'Builder'}{ageText}</Text>
-              {topProfile.isVerified && (
-                <View style={styles.verifiedMiniBadge}>
-                  <BadgeCheck size={15} color="#000" fill="#FBE618" />
-                </View>
-              )}
+              {topProfile.isVerified && <VerifiedBadge size={24} />}
               {topProfile.hasExit && (
                 <View style={styles.exitBadge}>
                   <Target size={12} color="#000" />
@@ -809,11 +802,7 @@ export default function SwipeScreen({ navigation }: any) {
                   <Text style={styles.expandedName} numberOfLines={2}>
                     {topProfile.displayName || 'Builder'}{ageText}
                   </Text>
-                  {!!topProfile.isVerified && (
-                    <View style={styles.verifiedMiniBadge}>
-                      <BadgeCheck size={15} color="#000" fill="#FBE618" />
-                    </View>
-                  )}
+                  {!!topProfile.isVerified && <VerifiedBadge size={24} />}
                 </View>
                 <Text style={styles.expandedMetaText} numberOfLines={2}>{roleText}</Text>
                 <Text style={styles.expandedMetaText} numberOfLines={1}>{locationText}</Text>

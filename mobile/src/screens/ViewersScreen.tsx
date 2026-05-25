@@ -6,7 +6,8 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { BadgeCheck, ChevronLeft, Eye, UserPlus } from 'lucide-react-native';
+import { ChevronLeft, Eye, UserPlus } from 'lucide-react-native';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 type ProfileViewRow = {
   viewerId: string;
@@ -161,11 +162,7 @@ export default function ViewersScreen({ navigation }: any) {
       <View style={styles.info}>
         <View style={styles.nameRow}>
           <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{item.displayName}</Text>
-          {!!item.isVerified && (
-            <View style={styles.verifiedMiniBadge}>
-              <BadgeCheck size={12} color="#000" fill="#FBE618" />
-            </View>
-          )}
+          {!!item.isVerified && <VerifiedBadge size={20} />}
         </View>
         <Text style={styles.bio} numberOfLines={1}>{item.bio || 'Building the future'}</Text>
         <Text style={styles.timeText}>{formatTimeAgo(item.lastViewedAt)}</Text>

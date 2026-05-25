@@ -12,7 +12,8 @@ import { earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } fro
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
 import { demoBuilders } from '../lib/demoBuilders';
-import { BadgeCheck, Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket } from 'lucide-react-native';
+import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket } from 'lucide-react-native';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 const dashboardCacheKey = (uid: string) => `linkup:dashboard:${uid}`;
 const readCachedDashboardPeople = async (uid: string): Promise<UserProfile[]> => {
@@ -167,11 +168,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
             <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
               {item.displayName || 'Builder'}
             </Text>
-            {item.isVerified && (
-              <View style={styles.verifiedMiniBadge}>
-                <BadgeCheck size={12} color="#000" fill="#FBE618" />
-              </View>
-            )}
+            {item.isVerified && <VerifiedBadge size={20} />}
           </View>
           <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
           <Text style={styles.meta} numberOfLines={1}>

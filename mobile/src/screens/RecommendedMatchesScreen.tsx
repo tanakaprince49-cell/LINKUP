@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert } from 'react-native';
 import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BadgeCheck, ChevronLeft, MessageSquare, Search, Sparkles, Target, User, Zap } from 'lucide-react-native';
+import { ChevronLeft, MessageSquare, Search, Sparkles, Target, User, Zap } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -10,6 +10,7 @@ import { UserProfile } from '../types';
 import { handleFor, isDiscoverableProfile } from '../lib/discovery';
 import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
 import { ensureDirectMatch } from '../lib/chat';
+import VerifiedBadge from '../components/VerifiedBadge';
 
 type MatchScore = {
   score: number;
@@ -172,11 +173,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
               <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
                 {item.displayName || 'Builder'}
               </Text>
-              {item.isVerified && (
-                <View style={styles.verifiedMiniBadge}>
-                  <BadgeCheck size={13} color="#000" fill="#FBE618" />
-                </View>
-              )}
+              {item.isVerified && <VerifiedBadge size={22} />}
             </View>
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
             <Text style={styles.meta} numberOfLines={2}>
