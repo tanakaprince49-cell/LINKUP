@@ -150,7 +150,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           </View>
           <TouchableOpacity
             style={styles.scorePill}
-            onPress={() => Alert.alert('AI Compatibility', `${match.score}%\n\n${match.reason}`)}
+            onPress={() => Alert.alert('Compatibility', `${match.score}%\n\n${match.reason}`)}
             activeOpacity={0.85}
           >
             <Sparkles size={12} color="#000" />
@@ -251,12 +251,12 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       <View style={[styles.heroCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
         <View style={styles.heroRow}>
           <Sparkles size={20} color="#FBE618" />
-          <Text style={[styles.heroTitle, { color: isDark ? '#FFF' : '#000' }]}>AI-ranked people for you</Text>
+          <Text style={[styles.heroTitle, { color: isDark ? '#FFF' : '#000' }]}>Recommended people for you</Text>
         </View>
         <Text style={styles.heroSub}>
-          Ranked by shared skills, industries, goals, work style, and AI compatibility so you can find useful people faster.
+          Ranked by shared skills, industries, goals, work style, and compatibility so you can find useful people faster.
         </Text>
-        <Text style={styles.aiStatus}>{aiLoading ? 'AI RANKING…' : 'MATCHES READY'}</Text>
+        <Text style={styles.aiStatus}>{aiLoading ? 'RANKING…' : 'MATCHES READY'}</Text>
       </View>
 
       {loading ? (

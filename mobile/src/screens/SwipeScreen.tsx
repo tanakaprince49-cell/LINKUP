@@ -18,7 +18,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, query, onSnapshot, where, addDoc, limit, serverTimestamp, getDocs } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../lib/firebase';
+import { earnedScore } from '../lib/discovery';
 import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 import { trackProfileView } from '../lib/analytics';
 import { ensureDirectMatch } from '../lib/chat';
@@ -36,6 +38,50 @@ const DISCOVERY_LIMIT = 12;
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800';
 const MAX_SWIPE_DATA_URI_CHARS = 220_000;
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
+const discoveryCacheKey = (uid: string) => `linkup:discovery:${uid}`;
+
+const readCachedDiscovery = async (uid: string): Promise<UserProfile[]> => {
+  try {
+    const raw = await AsyncStorage.getItem(discoveryCacheKey(uid));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((profile) => profile?.uid && !profile.deleted).slice(0, DISCOVERY_LIMIT) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeCachedDiscovery = async (uid: string, profiles: UserProfile[]) => {
+  try {
+    const compactProfiles = profiles.slice(0, DISCOVERY_LIMIT).map((profile) => ({
+      uid: profile.uid,
+      displayName: profile.displayName,
+      username: (profile as any).username || '',
+      bio: profile.bio || '',
+      profilePic: profile.profilePic || '',
+      photos: Array.isArray((profile as any).photos) ? (profile as any).photos.slice(0, 3) : [],
+      occupation: (profile as any).occupation || '',
+      company: (profile as any).company || '',
+      city: profile.city || '',
+      country: profile.country || '',
+      age: Number(profile.age || 0),
+      skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 12) : [],
+      industries: Array.isArray((profile as any).industries) ? (profile as any).industries.slice(0, 12) : [],
+      lookingFor: Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor.slice(0, 12) : [],
+      startupStage: (profile as any).startupStage || '',
+      availability: (profile as any).availability || '',
+      reputationScore: earnedScore(profile),
+      turboConnect: !!(profile as any).turboConnect,
+      isVisible: profile.isVisible !== false,
+      isStealthMode: !!profile.isStealthMode,
+      isBot: !!profile.isBot,
+      onboarded: !!profile.onboarded,
+      projects: Array.isArray((profile as any).projects) ? (profile as any).projects.slice(0, 3) : [],
+    }));
+    await AsyncStorage.setItem(discoveryCacheKey(uid), JSON.stringify(compactProfiles));
+  } catch {
+    // Cache is only used to make the deck appear instantly.
+  }
+};
 
 const isSafeSwipePhoto = (uri: unknown): uri is string => {
   if (typeof uri !== 'string') return false;
@@ -195,7 +241,20 @@ export default function SwipeScreen({ navigation }: any) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    let isMounted = true;
+    readCachedDiscovery(user.uid).then((cachedProfiles) => {
+      if (!isMounted || hasUserSwipedRef.current) return;
+      const instantProfiles = cachedProfiles.length
+        ? cachedProfiles
+        : demoBuilders.filter((profile) => profile.uid !== user.uid);
+      if (instantProfiles.length) {
+        allProfilesRef.current = instantProfiles;
+        setProfiles(instantProfiles);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    });
     const usersQuery = query(
       collection(db, 'users'),
       where('isVisible', '==', true),
@@ -224,6 +283,7 @@ export default function SwipeScreen({ navigation }: any) {
           : mergedUsers;
 
         allProfilesRef.current = orderedUsers;
+        writeCachedDiscovery(user.uid, orderedUsers.filter((profile) => !isDemoBuilder(profile))).catch(() => {});
         if (hasUserSwipedRef.current) {
           setProfiles((current) => {
             const currentIds = new Set(current.map((profile) => profile.uid));
@@ -244,7 +304,10 @@ export default function SwipeScreen({ navigation }: any) {
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [user?.uid, myProfile?.uid]);
 
   useEffect(() => {
@@ -537,10 +600,10 @@ export default function SwipeScreen({ navigation }: any) {
     const lookingFor = Array.isArray((topProfile as any).lookingFor) ? (topProfile as any).lookingFor : [];
     const industries = Array.isArray((topProfile as any).industries) ? (topProfile as any).industries : [];
     const bio = topProfile.bio || 'No bio yet. Open their profile to learn more.';
-    const reputation = Math.max(0, Number((topProfile as any).reputationScore ?? 0));
+    const reputation = earnedScore(topProfile);
     const matchRank = myProfile ? localCommonalityRank(myProfile, [topProfile], 1)[0] : null;
     const compatibility = Math.max(isDemoBuilder(topProfile) ? 72 : 1, Math.min(99, Math.round(matchRank?.score || 82)));
-    const compatibilityReason = matchRank?.reason || 'AI compatibility preview from profile signals';
+    const compatibilityReason = matchRank?.reason || 'Compatibility preview from profile signals';
     const renderCardActions = () => (
       <View style={[styles.actionRow, isWideWeb && styles.webActionRow, isCompactWeb && styles.compactActionRow]}>
         <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={() => animateSwipeOut('left')}>
@@ -634,7 +697,7 @@ export default function SwipeScreen({ navigation }: any) {
             <View style={styles.topBadgeColumn}>
               <View style={styles.aiBadge}>
                 <Zap size={11} color="#000" fill="#000" />
-                <Text style={styles.aiBadgeText}>AI {compatibility}% MATCH</Text>
+                <Text style={styles.aiBadgeText}>{compatibility}% MATCH</Text>
               </View>
               <View style={styles.repBadge}>
                 <Zap size={10} color="#000" fill="#000" />
@@ -730,7 +793,7 @@ export default function SwipeScreen({ navigation }: any) {
 
             <View style={styles.detailGrid}>
               <View style={styles.detailCard}>
-                <Text style={styles.detailLabel}>AI MATCH</Text>
+                <Text style={styles.detailLabel}>MATCH FIT</Text>
                 <Text style={styles.detailValue}>{compatibility}% • {compatibilityReason}</Text>
               </View>
               <View style={styles.detailCard}>
@@ -769,7 +832,7 @@ export default function SwipeScreen({ navigation }: any) {
         <View style={styles.authGate}>
           <Zap size={44} color="#FBE618" fill="#FBE618" />
           <Text style={[styles.authGateTitle, { color: isDark ? '#FFF' : '#000' }]}>JOIN LINKUP FIRST</Text>
-          <Text style={styles.authGateCopy}>Sign in to unlock AI matchmaking, builder search, and swipe discovery.</Text>
+          <Text style={styles.authGateCopy}>Sign in to unlock smart matchmaking, builder search, and swipe discovery.</Text>
           <TouchableOpacity
             style={styles.authGateButton}
             onPress={() => navigation?.reset?.({ index: 0, routes: [{ name: 'Landing' }] }) || navigation?.navigate?.('Landing')}

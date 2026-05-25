@@ -33,7 +33,7 @@ export default function OpportunityRadar() {
         setPeople(rows);
       },
       (error) => {
-        console.warn('AI opportunity radar unavailable:', error);
+        console.warn('Opportunity radar unavailable:', error);
         setPeople([]);
       }
     );
@@ -47,7 +47,7 @@ export default function OpportunityRadar() {
       maybeCreateOpportunityAlerts(user.uid, profile, people),
       maybeCreateProjectRecommendationAlerts(user.uid, profile, people),
     ]).catch((error) => {
-      console.warn('AI opportunity/project alert skipped:', error);
+      console.warn('Opportunity/project alert skipped:', error);
     });
   }, [isOnboarded, people, profile, user?.uid]);
 

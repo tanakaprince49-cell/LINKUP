@@ -81,7 +81,7 @@ async function vercelAiText(task: string, payload: Record<string, unknown>) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.technical || data?.error || `Vercel AI failed: ${response.status}`);
+    throw new Error(data?.technical || data?.error || `Vercel Gemini failed: ${response.status}`);
   }
   return typeof data?.text === 'string' && data.text.trim() ? data.text.trim() : null;
 }
@@ -95,7 +95,7 @@ const localSearchFilters = (input: string): GeminiFilterResult => {
   const locationMatch = input.match(/\bin\s+([a-zA-Z\s]+)$/i);
   return {
     query: input,
-    skills: skills.map((skill) => (skill === 'ai' ? 'AI' : skill === 'ml' ? 'AI/ML' : skill)),
+    skills: skills.map((skill) => (skill === 'ai' ? 'Automation' : skill === 'ml' ? 'ML' : skill)),
     industry: industry ? industry.toUpperCase().replace('SAAS', 'SaaS') : undefined,
     location: locationMatch?.[1]?.trim(),
     lookingForCofounder: normalized.includes('cofounder') || normalized.includes('co-founder'),
@@ -149,7 +149,7 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     if (server) return server;
   } catch (error) {
     serverError = error;
-    recordAIError(error, 'Vercel AI fallback unavailable');
+    recordAIError(error, 'Vercel Gemini fallback unavailable');
     if (Platform.OS === 'web') {
       throw new Error(describeAIError(directError || serverError));
     }
@@ -161,7 +161,7 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     const text = (res.data as any)?.text;
     if (typeof text === 'string' && text.trim()) return text.trim();
   } catch (error) {
-    recordAIError(error, 'Cloud Functions AI fallback unavailable');
+    recordAIError(error, 'Cloud Functions Gemini fallback unavailable');
   }
 
   if (directError) {
@@ -171,7 +171,7 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     throw new Error(describeAIError(serverError));
   }
 
-  throw new Error('AI returned empty content.');
+  throw new Error('Gemini returned empty content.');
 }
 
 export async function geminiToSearchFilters(input: string): Promise<GeminiFilterResult> {
@@ -194,7 +194,7 @@ export async function geminiToSearchFilters(input: string): Promise<GeminiFilter
       skills: parsed.skills?.length ? parsed.skills : local.skills,
     };
   } catch (error) {
-    recordAIError(error, 'AI search fallback active');
+    recordAIError(error, 'Search fallback active');
     return localSearchFilters(input);
   }
 }
@@ -203,7 +203,7 @@ export async function geminiProfileInsights(profile: any): Promise<string> {
   try {
     return await aiText('profileInsights', { profile });
   } catch (error) {
-    recordAIError(error, 'AI profile insight fallback active');
+    recordAIError(error, 'Profile insight fallback active');
     const role = profile?.occupation || 'builder';
     const skills = Array.isArray(profile?.skills) ? profile.skills.slice(0, 2).join(' + ') : 'execution';
     const lookingFor = Array.isArray(profile?.lookingFor) ? profile.lookingFor[0] : 'high-signal collaborators';

@@ -193,7 +193,7 @@ export async function maybeCreateProjectRecommendationAlerts(
 
       const ownerName = recommendation.owner.displayName || 'A builder';
       const content =
-        `AI Project Match: ${recommendation.project.title} by ${ownerName} fits you (${recommendation.reason}). Tap to view.`;
+        `Project Match: ${recommendation.project.title} by ${ownerName} fits you (${recommendation.reason}). Tap to view.`;
 
       await setDoc(notificationRef, {
         userId,

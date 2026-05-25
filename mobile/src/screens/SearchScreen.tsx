@@ -25,7 +25,7 @@ import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
 const normalize = (v: string) => v.trim().toLowerCase();
 const LOOKING_FOR_FILTERS = ['CTO', 'Designer', 'Marketer', 'Developer', 'Investor', 'Cofounder', 'Startup Team', 'Mentor'];
 const STAGE_FILTERS = ['Idea', 'MVP', 'Early Users', 'Revenue', 'Scaling', 'Fundraising'];
-const INDUSTRY_FILTERS = ['AI', 'SaaS', 'Fintech', 'Healthtech', 'EdTech', 'Gaming', 'E-commerce', 'Crypto'];
+const INDUSTRY_FILTERS = ['Automation', 'SaaS', 'Fintech', 'Healthtech', 'EdTech', 'Gaming', 'E-commerce', 'Crypto'];
 
 type SavedSearchAlert = {
   id: string;
@@ -350,10 +350,10 @@ export default function SearchScreen({ navigation }: any) {
       setAiRankMode(true);
       const diagnostic = getLastAIDiagnostic();
       if (diagnostic && !diagnostic.ok && ranked.every((rank) => rank.cached)) {
-        Alert.alert('AI Ranking Fallback', `${diagnostic.message}\n\nShowing best matches based on local skills/interests.`);
+        Alert.alert('Ranking Fallback', `${diagnostic.message}\n\nShowing best matches based on local skills/interests.`);
       }
     } catch (e: any) {
-      console.error('AI ranking error:', e);
+      console.error('ranking error:', e);
       const ranked = localCommonalityRank(me, filtered, 20);
       const nextMap: Record<string, { score: number; reason: string }> = {};
       ranked.forEach((r) => {
@@ -362,7 +362,7 @@ export default function SearchScreen({ navigation }: any) {
       setAiRankMap(nextMap);
       setAiRankMode(true);
       const message = describeAIError(e);
-      Alert.alert('AI Ranking Unavailable', `${message}\n\nShowing best matches based on common skills/interests.`);
+      Alert.alert('Ranking Unavailable', `${message}\n\nShowing best matches based on common skills/interests.`);
     } finally {
       setAiRankLoading(false);
     }
@@ -479,12 +479,12 @@ export default function SearchScreen({ navigation }: any) {
       setFilterOpen(true);
       const diagnostic = getLastAIDiagnostic();
       if (diagnostic && !diagnostic.ok && diagnostic.timestamp > previousDiagnosticAt) {
-        Alert.alert('AI Search Fallback', `${diagnostic.message}\n\nI applied local keyword filters so search still works.`);
+        Alert.alert('Search Fallback', `${diagnostic.message}\n\nI applied local keyword filters so search still works.`);
       }
     } catch (e: any) {
       console.error('Gemini search error:', e);
       const message = describeAIError(e);
-      Alert.alert('AI Search Error', message);
+      Alert.alert('Search Error', message);
     } finally {
       setAiLoading(false);
     }
@@ -500,11 +500,11 @@ export default function SearchScreen({ navigation }: any) {
       <View style={[styles.searchHero, { backgroundColor: isDark ? '#111115' : '#FFFCE7', borderColor: isDark ? '#222226' : '#FBE61855' }]}>
         <View style={styles.heroTitleRow}>
           <Sparkles size={18} color="#FBE618" />
-          <Text style={[styles.heroKicker, { color: isDark ? '#FBE618' : '#2563EB' }]}>AI BUILDER SEARCH</Text>
+          <Text style={[styles.heroKicker, { color: isDark ? '#FBE618' : '#2563EB' }]}>BUILDER SEARCH</Text>
         </View>
         <Text style={[styles.heroTitle, { color: isDark ? '#FFF' : '#000' }]}>Who can help me build this?</Text>
         <Text style={styles.heroCopy}>
-          Search names, @handles, skills, industries, projects, locations, and live intent — then rank by AI compatibility.
+          Search names, @handles, skills, industries, projects, locations, and live intent — then rank by compatibility.
         </Text>
       </View>
 
@@ -537,7 +537,7 @@ export default function SearchScreen({ navigation }: any) {
         <View style={[styles.aiBar, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
           <Sparkles size={18} color="#FBE618" />
           <TextInput
-            placeholder='Try: "AI engineer in South Africa into fintech"'
+            placeholder='Try: "ML engineer in South Africa into fintech"'
             placeholderTextColor="#666"
             value={aiQuery}
             onChangeText={setAiQuery}
@@ -570,7 +570,7 @@ export default function SearchScreen({ navigation }: any) {
           onPress={runAiRanking}
           style={[styles.rankBtn, { opacity: aiRankLoading || filtered.length === 0 ? 0.6 : 1 }]}
         >
-          <Text style={styles.rankBtnText}>{aiRankLoading ? 'RANKING...' : 'AI RANK'}</Text>
+          <Text style={styles.rankBtnText}>{aiRankLoading ? 'RANKING...' : 'RANK'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -741,7 +741,7 @@ export default function SearchScreen({ navigation }: any) {
           </TouchableOpacity>
 
           <View style={{ marginTop: 4 }}>
-            <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>AI COMPATIBILITY {minCompatibility}%+</Text>
+            <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>COMPATIBILITY {minCompatibility}%+</Text>
             <View style={styles.sliderRow}>
               <View style={[styles.sliderTrack, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
                 <View style={[styles.sliderFill, { width: `${minCompatibility}%` }]} />
@@ -790,7 +790,7 @@ export default function SearchScreen({ navigation }: any) {
               ]}
             >
               <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: aiRankMode ? '#000' : (isDark ? '#FFF' : '#000') }}>
-                {aiRankLoading ? 'AI RANKING...' : aiRankMode ? 'AI RANKING: ON' : 'AI RANK RESULTS'}
+                {aiRankLoading ? 'RANKING...' : aiRankMode ? 'RANKING: ON' : 'RANK RESULTS'}
               </Text>
             </TouchableOpacity>
           </View>

@@ -64,7 +64,7 @@ const builderGoalsChoices: Choice[] = [
 ];
 
 const industryChoices: Choice[] = [
-  { id: 'AI', label: 'AI' },
+  { id: 'Automation', label: 'Automation' },
   { id: 'SaaS', label: 'SaaS' },
   { id: 'Fintech', label: 'Fintech' },
   { id: 'Healthtech', label: 'Healthtech' },
@@ -83,7 +83,7 @@ const skillChoices: Choice[] = [
   { id: 'Marketing', label: 'Marketing' },
   { id: 'Finance', label: 'Finance' },
   { id: 'Product', label: 'Product management' },
-  { id: 'AI engineering', label: 'AI engineering' },
+  { id: 'ML engineering', label: 'ML engineering' },
 ];
 
 const founderSkillChoices: Choice[] = [
@@ -99,7 +99,7 @@ const developerSkillChoices: Choice[] = [
   { id: 'React', label: 'React' },
   { id: 'Node.js', label: 'Node.js' },
   { id: 'Python', label: 'Python' },
-  { id: 'AI/ML', label: 'AI/ML' },
+  { id: 'ML', label: 'ML' },
   { id: 'Mobile', label: 'Mobile' },
   { id: 'DevOps', label: 'DevOps' },
 ];
@@ -239,7 +239,7 @@ const roleQuestionBanks: Record<string, RoleQuestion[]> = {
       choices: [
         { id: 'Frontend Engineer', label: 'Frontend Engineer' },
         { id: 'Backend Engineer', label: 'Backend Engineer' },
-        { id: 'AI Engineer', label: 'AI Engineer' },
+        { id: 'ML Engineer', label: 'ML Engineer' },
         { id: 'Mobile Developer', label: 'Mobile Developer' },
         { id: 'Full-stack Builder', label: 'Full-stack Builder' },
         { id: 'DevOps', label: 'DevOps' },
@@ -252,7 +252,7 @@ const roleQuestionBanks: Record<string, RoleQuestion[]> = {
       choices: [
         { id: 'Greenfield MVPs', label: 'Greenfield MVPs' },
         { id: 'Scaling Products', label: 'Scaling Products' },
-        { id: 'AI Products', label: 'AI Products' },
+        { id: 'Automation Products', label: 'Automation Products' },
         { id: 'Consumer Apps', label: 'Consumer Apps' },
         { id: 'Hackathon Speed', label: 'Hackathon Speed' },
       ],
@@ -584,7 +584,7 @@ function buildCircles(input: {
   const circles: string[] = [];
   if (input.role) circles.push(`${input.role}s`);
   input.industries.slice(0, 3).forEach((i) => circles.push(`${i} Builders`));
-  if (input.skills.some((s) => s.toLowerCase().includes('ai'))) circles.push('AI Builders');
+  if (input.skills.some((s) => s.toLowerCase().includes('ai'))) circles.push('Automation Builders');
   if (input.skills.some((s) => s.toLowerCase().includes('frontend'))) circles.push('Frontend Builders');
   if (input.skills.some((s) => s.toLowerCase().includes('backend'))) circles.push('Backend Builders');
   if (input.experience) circles.push(input.experience);
@@ -755,7 +755,7 @@ const SkillsInput = ({
       autoCapitalize="words"
     />
     <Text style={{ marginTop: 8, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16 }}>
-      Add at least one skill. These power search, swipe ranking, and AI matching.
+      Add at least one skill. These power search, swipe ranking, and smart matching.
     </Text>
   </View>
 );
@@ -866,7 +866,7 @@ export default function OnboardingScreen({ navigation }: any) {
     return {
       key: 'personality',
       title: `${role || 'Builder'} Personality`,
-      subtitle: 'These answers sharpen AI compatibility and who naturally fits your energy.',
+      subtitle: 'These answers sharpen compatibility and who naturally fits your energy.',
       body: (
         <View style={{ gap: 12 }}>
           {currentPersonalityQuestions.map((q) => {
@@ -1286,7 +1286,7 @@ export default function OnboardingScreen({ navigation }: any) {
               Better answers = better matches
             </Text>
             <Text style={[styles.introText, { color: isDark ? '#CFCFCF' : '#555' }]}>
-              Be honest about your goals, skills, work style, and availability. The AI matching system uses this profile to understand who can actually help you build.
+              Be honest about your goals, skills, work style, and availability. The smart matching system uses this profile to understand who can actually help you build.
             </Text>
             <View style={styles.introBullets}>
               {[
@@ -1345,7 +1345,7 @@ export default function OnboardingScreen({ navigation }: any) {
             <TextInput
               value={bio}
               onChangeText={setBio}
-              placeholder="Example: Execution-focused founder building an AI SaaS. Looking for a technical cofounder."
+              placeholder="Example: Execution-focused founder building an automation SaaS. Looking for a technical cofounder."
               placeholderTextColor="#666"
               style={[
                 styles.bioInput,

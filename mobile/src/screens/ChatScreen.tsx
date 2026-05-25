@@ -711,7 +711,7 @@ export default function ChatScreen({ route, navigation }: any) {
           <TouchableOpacity 
             style={[styles.toolBtn, { backgroundColor: '#2563EB20' }]} 
             onPress={async () => {
-              Alert.alert("AI INTRO", "Drafting a perfect opening based on your profiles...");
+              Alert.alert("INTRO", "Drafting a perfect opening based on your profiles...");
               const intro = await generateWarmIntro(profile, otherUser);
               setInputText((intro || '').trim());
             }}

@@ -65,7 +65,7 @@ export function describeAIError(error: unknown) {
   const lower = rawMessage.toLowerCase();
 
   if (lower.includes('cors') || lower.includes('failed to fetch') || lower.includes('network') || lower.includes('preflight')) {
-    return `Network/CORS problem reaching the AI backend. The web app will use the same-origin Vercel AI route when deployed. Details: ${rawMessage}`;
+    return `Network/CORS problem reaching the smart backend. The web app will use the same-origin Vercel smart route when deployed. Details: ${rawMessage}`;
   }
   if (lower.includes('cloudfunctions.net') || lower.includes('not-found') || lower.includes('404')) {
     return `Firebase Cloud Function is unavailable or not deployed. The web app should use /api/aiAssist and /api/rankCandidates on Vercel instead. Details: ${rawMessage}`;
@@ -75,7 +75,7 @@ export function describeAIError(error: unknown) {
     lower.includes('missing gemini_api_key') ||
     lower.includes('missing google_api_key')
   ) {
-    return 'Vercel AI key is missing. Add GEMINI_API_KEY in Vercel Environment Variables, then create a new production deployment.';
+    return 'Vercel Gemini key is missing. Add GEMINI_API_KEY in Vercel Environment Variables, then create a new production deployment.';
   }
 
   if (!key) {
@@ -88,7 +88,7 @@ export function describeAIError(error: unknown) {
   }
   if (status === 404) return `Gemini model is not available for this key/API version. Current model: ${GEMINI_MODEL}. Details: ${rawMessage}`;
   if (status === 429 || lower.includes('quota') || lower.includes('rate limit')) {
-    return `Gemini quota/rate limit hit. Wait a minute or raise quota in Google AI Studio. Details: ${rawMessage}`;
+    return `Gemini quota/rate limit hit. Wait a minute or raise quota in Google Studio. Details: ${rawMessage}`;
   }
   if (status === 503 || lower.includes('high demand') || lower.includes('unavailable')) {
     return `Gemini is temporarily overloaded. Try again shortly. Details: ${rawMessage}`;
@@ -99,7 +99,7 @@ export function describeAIError(error: unknown) {
   return rawMessage || 'Unknown Gemini error. Open the browser console for the technical details.';
 }
 
-export function recordAIError(error: unknown, title = 'AI problem found') {
+export function recordAIError(error: unknown, title = 'Smart feature problem found') {
   const diagnostic = setLastAIDiagnostic({
     ok: false,
     title,
@@ -170,7 +170,7 @@ export async function requestGeminiText(prompt: string, options: GeminiRequestOp
 
   setLastAIDiagnostic({
     ok: true,
-    title: 'AI online',
+    title: 'Smart features online',
     message: `Gemini is responding with ${GEMINI_MODEL}.`,
     timestamp: Date.now(),
   });
@@ -186,11 +186,11 @@ export async function testGeminiConnection() {
     });
     return setLastAIDiagnostic({
       ok: true,
-      title: 'AI online',
+      title: 'Smart features online',
       message: `Gemini API key is working. Model: ${GEMINI_MODEL}.`,
       timestamp: Date.now(),
     });
   } catch (error) {
-    return recordAIError(error, 'AI setup check failed');
+    return recordAIError(error, 'Smart feature setup check failed');
   }
 }

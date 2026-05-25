@@ -51,7 +51,7 @@ export async function rankCandidatesWithAI(candidateIds: string[], maxCandidates
       }))
       .filter((r: RankedCandidate) => r.uid && Number.isFinite(r.score) && r.reason);
   } catch (error) {
-    recordAIError(error, 'Cloud Functions AI ranking unavailable');
+    recordAIError(error, 'Cloud Functions ranking unavailable');
     return [];
   }
 }
@@ -86,7 +86,7 @@ async function serverGeminiRank(me: UserProfile | null | undefined, candidates: 
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.technical || data?.error || `Vercel AI ranking failed: ${response.status}`);
+    throw new Error(data?.technical || data?.error || `Vercel ranking failed: ${response.status}`);
   }
 
   const ranked = data?.ranked;
@@ -130,7 +130,7 @@ const parseRankedLines = (text: string, candidates: UserProfile[], maxCandidates
           .replace(scoreText, '')
           .replace(/^[\s|:,-]+/, '')
           .trim() ||
-        'AI-ranked startup fit';
+        'Ranked startup fit';
 
       seen.add(uid);
       rows.push({
@@ -157,7 +157,7 @@ const parseRankedJsonQuietly = (text: string, candidates: UserProfile[], maxCand
       .map((rank: any) => ({
         uid: String(rank?.uid || ''),
         score: Math.max(1, Math.min(100, Math.round(Number(rank?.score || 0)))),
-        reason: String(rank?.reason || 'AI-ranked startup fit').slice(0, 120),
+        reason: String(rank?.reason || 'Ranked startup fit').slice(0, 120),
         cached: false,
       }))
       .filter((rank: RankedCandidate) => allowedIds.has(rank.uid) && Number.isFinite(rank.score) && rank.reason)
@@ -179,7 +179,7 @@ async function directGeminiRank(me: UserProfile | null | undefined, candidates: 
     .map(compactProfile);
 
   const prompt = [
-    'You are LINKUP AI matchmaking for startup builders.',
+    'You are LINKUP matchmaking for startup builders.',
     'Rank candidates for the current user by useful collaboration potential, complementary skills, shared industries/goals, work style, commitment, and startup intent.',
     'Return STRICT JSON array only, no markdown, no prose.',
     'Schema: [{"uid":"candidate-id","score":88,"reason":"short reason under 14 words"}]',
@@ -217,7 +217,7 @@ export async function rankCandidatesHybrid(
     const serverRanked = await serverGeminiRank(me, candidates, maxCandidates);
     if (serverRanked.length) return serverRanked;
   } catch (error) {
-    recordAIError(error, 'Vercel AI ranking unavailable');
+    recordAIError(error, 'Vercel ranking unavailable');
     if (Platform.OS === 'web') {
       return localCommonalityRank(me, candidates, maxCandidates);
     }

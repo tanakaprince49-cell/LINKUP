@@ -84,7 +84,7 @@ const AppHeader = ({ navigation, title }: any) => {
   const { user, profile } = useAuth();
   const isDark = theme === 'dark';
   const [messageCount, setMessageCount] = React.useState(0);
-  const profilePhoto = profile?.profilePic || user?.photoURL || '';
+  const profilePhoto = profile?.profilePic || '';
 
   React.useEffect(() => {
     if (!user?.uid) {
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2,
     position: 'relative',
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   headerAvatar: {
     width: '100%',
@@ -446,8 +446,8 @@ const styles = StyleSheet.create({
   },
   headerBadgeBubble: {
     position: 'absolute',
-    top: -9,
-    right: -9,
+    top: -7,
+    right: -7,
     minWidth: 24,
     height: 24,
     paddingHorizontal: 6,
@@ -457,6 +457,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
+    zIndex: 20,
   },
   headerBadgeText: {
     fontSize: 11,

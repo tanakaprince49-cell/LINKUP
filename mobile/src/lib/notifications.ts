@@ -66,7 +66,7 @@ async function ensureNativeNotificationRuntime() {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'LINKUP alerts',
-      description: 'Matches, messages, profile views, and AI opportunity alerts.',
+      description: 'Matches, messages, profile views, and opportunity alerts.',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FBE618',
@@ -87,8 +87,8 @@ function notificationTitle(data: any) {
   if (data?.type === 'connection_rejected') return 'Contact request rejected';
   if (data?.type === 'view') return 'New profile view';
   if (data?.type === 'comment') return 'New comment';
-  if (String(data?.content || '').startsWith('AI Project Match')) return 'AI Project Match found';
-  if (String(data?.content || '').startsWith('AI Opportunity')) return 'AI Opportunity found';
+  if (String(data?.content || '').startsWith('Project Match')) return 'Project Match found';
+  if (String(data?.content || '').startsWith('Opportunity')) return 'Opportunity found';
   return 'LINKUP notification';
 }
 
@@ -96,8 +96,8 @@ function notificationTargetUrl(data: any) {
   if (data?.matchId) return `/chat/${data.matchId}`;
   if (
     data?.fromId &&
-    (String(data?.content || '').startsWith('AI Opportunity') ||
-      String(data?.content || '').startsWith('AI Project Match'))
+    (String(data?.content || '').startsWith('Opportunity') ||
+      String(data?.content || '').startsWith('Project Match'))
   ) {
     return `/opportunity/${data.fromId}`;
   }

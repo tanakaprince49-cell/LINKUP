@@ -39,7 +39,7 @@ const promptsByTask: Record<string, (payload: Record<string, unknown>) => AiProm
     maxOutputTokens: 120,
     temperature: 0.35,
     prompt: [
-      'You are a supportive AI mentor for founders. Keep it short and punchy (1-2 sentences).',
+      'You are a supportive mentor for founders. Keep it short and punchy (1-2 sentences).',
       `Post: "${String(payload.postContent || '').slice(0, 1200)}"`,
     ].join('\n'),
   }),
@@ -84,7 +84,7 @@ async function vercelAiText(task: string, payload: Record<string, unknown>) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.technical || data?.error || `Vercel AI failed: ${response.status}`);
+    throw new Error(data?.technical || data?.error || `Vercel Gemini failed: ${response.status}`);
   }
   return typeof data?.text === 'string' && data.text.trim() ? data.text.trim() : null;
 }
@@ -105,7 +105,7 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     if (server) return server;
   } catch (error) {
     serverError = error;
-    recordAIError(error, 'Vercel AI fallback unavailable');
+    recordAIError(error, 'Vercel Gemini fallback unavailable');
     if (Platform.OS === 'web') {
       throw new Error(describeAIError(directError || serverError));
     }
@@ -117,7 +117,7 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     const text = (res.data as any)?.text;
     if (typeof text === 'string' && text.trim()) return text.trim();
   } catch (error) {
-    recordAIError(error, 'Cloud Functions AI fallback unavailable');
+    recordAIError(error, 'Cloud Functions Gemini fallback unavailable');
   }
 
   if (directError) {
@@ -127,7 +127,7 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     throw new Error(describeAIError(serverError));
   }
 
-  throw new Error('AI returned empty content.');
+  throw new Error('Gemini returned empty content.');
 }
 
 function extractFirstJsonBlock(text: string) {
@@ -139,7 +139,7 @@ export const getMatchingExplanation = async (user1: any, user2: any) => {
   try {
     return await aiText('matchingExplanation', { user1, user2 });
   } catch (error) {
-    console.error('AI matching explanation unavailable:', describeAIError(error));
+    console.error('Matching explanation unavailable:', describeAIError(error));
     const role1 = user1?.occupation || 'builder';
     const role2 = user2?.occupation || 'builder';
     return `Strong potential fit: ${role1} and ${role2} bring complementary startup signals.`;
@@ -152,7 +152,7 @@ export const analyzeStartupIdea = async (idea: string) => {
     return JSON.parse(extractFirstJsonBlock(text) || '{}');
   } catch (error) {
     const diagnostic = describeAIError(error);
-    console.error('AI startup analyzer unavailable:', diagnostic);
+    console.error('Startup analyzer unavailable:', diagnostic);
     const trimmed = idea.trim();
     const hasCustomer = /\b(for|helps|students|founders|businesses|teams|creators|developers|investors)\b/i.test(trimmed);
     const hasAi = /\b(ai|automation|agent|machine learning|gemini)\b/i.test(trimmed);
@@ -164,7 +164,7 @@ export const analyzeStartupIdea = async (idea: string) => {
       targetCustomer: hasCustomer ? 'Implied by the idea, but should be narrowed to one painful niche.' : 'Unclear. Pick one exact user group.',
       marketPotential: 'Potential depends on how urgent and frequent the problem is.',
       competition: 'Assume competitors exist; win with a narrower wedge, speed, or distribution advantage.',
-      differentiation: hasAi ? 'AI can help, but the workflow/result must be clearly better than existing tools.' : 'Needs a sharper unfair advantage.',
+      differentiation: hasAi ? 'Automation can help, but the workflow/result must be clearly better than existing tools.' : 'Needs a sharper unfair advantage.',
       monetization: hasMonetization ? 'Monetization is mentioned; validate willingness to pay early.' : 'Define who pays, when they pay, and why now.',
       keyRisks: ['Weak customer definition', 'Unproven willingness to pay', 'Distribution may be harder than product'],
       nextValidationStep: 'Interview 10 target users and ask what they currently use, what hurts, and what they would pay for.',
@@ -178,7 +178,7 @@ export const generateAIComment = async (postContent: string) => {
   try {
     return await aiText('aiComment', { postContent });
   } catch (error) {
-    console.error('AI comment unavailable:', describeAIError(error));
+    console.error('Comment unavailable:', describeAIError(error));
     return null;
   }
 };
@@ -187,7 +187,7 @@ export const generateFeedback = async (postContent: string) => {
   try {
     return await aiText('buildFeedback', { postContent });
   } catch (error) {
-    console.error('AI feedback unavailable:', describeAIError(error));
+    console.error('Feedback unavailable:', describeAIError(error));
     return 'Strong build signal. Next step: validate the sharpest user pain with 5 real conversations this week.';
   }
 };
@@ -196,7 +196,7 @@ export const generateWarmIntro = async (me: any, other: any) => {
   try {
     return await aiText('warmIntro', { me, other });
   } catch (error) {
-    console.error('AI intro unavailable:', describeAIError(error));
+    console.error('Intro unavailable:', describeAIError(error));
     return 'Hey! Saw we matched, excited to see what we can build together.';
   }
 };

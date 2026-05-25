@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
@@ -10,7 +11,26 @@ import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } fro
 import { earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
+import { demoBuilders } from '../lib/demoBuilders';
 import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket } from 'lucide-react-native';
+
+const dashboardCacheKey = (uid: string) => `linkup:dashboard:${uid}`;
+const readCachedDashboardPeople = async (uid: string): Promise<UserProfile[]> => {
+  try {
+    const raw = await AsyncStorage.getItem(dashboardCacheKey(uid));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((profile) => profile?.uid && !profile.deleted).slice(0, 60) : [];
+  } catch {
+    return [];
+  }
+};
+const writeCachedDashboardPeople = async (uid: string, people: UserProfile[]) => {
+  try {
+    await AsyncStorage.setItem(dashboardCacheKey(uid), JSON.stringify(people.slice(0, 60)));
+  } catch {
+    // Cache only makes the dashboard feel instant.
+  }
+};
 
 export default function DiscoveryDashboardScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
@@ -28,6 +48,15 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 
   useEffect(() => {
     if (!user) return;
+    let isMounted = true;
+    readCachedDashboardPeople(user.uid).then((cachedPeople) => {
+      if (!isMounted) return;
+      const instantPeople = cachedPeople.length ? cachedPeople : demoBuilders.filter((profile) => profile.uid !== user.uid);
+      if (instantPeople.length) {
+        setPeople(instantPeople);
+        setLoading(false);
+      }
+    });
     const q = query(
       collection(db, 'users'),
       where('isVisible', '==', true),
@@ -41,6 +70,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           .map((d) => d.data() as UserProfile)
           .filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
         setPeople(list);
+        writeCachedDashboardPeople(user.uid, list).catch(() => {});
         setLoading(false);
       },
       (err) => {
@@ -48,7 +78,10 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         setLoading(false);
       }
     );
-    return () => unsub();
+    return () => {
+      isMounted = false;
+      unsub();
+    };
   }, [user?.uid]);
 
   useEffect(() => {
@@ -62,13 +95,13 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
       try {
         setAiLoading(true);
         let ranked = await rankCandidatesHybrid(me, people.slice(0, 40), 15);
-        // Fallback: always provide recommendations even when Functions/AI isn't available.
+        // Fallback: always provide recommendations even when Functions/ranking isn't available.
         if (!ranked.length) ranked = localRanked;
         if (cancelled) return;
         setAiRank(rankedCandidatesToMap(ranked));
       } catch (e: any) {
         if (!cancelled) {
-          console.warn('dashboard AI ranking unavailable', e?.message || String(e));
+          console.warn('dashboard ranking unavailable', e?.message || String(e));
           setAiRank(rankedCandidatesToMap(localRanked));
         }
       } finally {
@@ -139,7 +172,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           </Text>
           {!!showScore && typeof score === 'number' && (
             <TouchableOpacity
-              onPress={() => Alert.alert('AI Compatibility', `${score}%\n\n${match?.reason || ''}`)}
+              onPress={() => Alert.alert('Compatibility', `${score}%\n\n${match?.reason || ''}`)}
               style={styles.scorePill}
               activeOpacity={0.85}
             >
@@ -312,7 +345,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 
               <View style={{ marginTop: 10 }}>
                 <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 2, color: '#666' }}>
-                  {aiLoading ? 'AI RANKING…' : 'AI RANKING READY'}
+                  {aiLoading ? 'RANKING…' : 'RANKING READY'}
                 </Text>
               </View>
 
@@ -327,7 +360,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
                       <BellRing size={16} color="#000" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.radarTitle, { color: isDark ? '#FFF' : '#000' }]}>AI OPPORTUNITY RADAR</Text>
+                      <Text style={[styles.radarTitle, { color: isDark ? '#FFF' : '#000' }]}>OPPORTUNITY RADAR</Text>
                       <Text style={styles.radarSub} numberOfLines={2}>
                         {topOpportunityAlert.profile.displayName || 'A builder'} matches your interests: {topOpportunityAlert.reason}
                       </Text>
@@ -342,7 +375,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
                 </TouchableOpacity>
               ) : (
                 <View style={[styles.radarCard, { backgroundColor: isDark ? '#16161A' : '#F8FAFC', borderColor: isDark ? '#222226' : '#E2E8F0' }]}>
-                  <Text style={[styles.radarTitle, { color: isDark ? '#FFF' : '#000' }]}>AI OPPORTUNITY RADAR</Text>
+                  <Text style={[styles.radarTitle, { color: isDark ? '#FFF' : '#000' }]}>OPPORTUNITY RADAR</Text>
                   <Text style={styles.radarSub}>No strong opportunity yet. Add more skills/interests to sharpen alerts.</Text>
                 </View>
               )}
@@ -360,7 +393,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
             <TouchableOpacity style={styles.sectionHeader} onPress={() => navigation.navigate('ActiveOpportunities')} activeOpacity={0.8}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Rocket size={18} color="#FBE618" />
-                <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#000' }]}>AI Project Matches</Text>
+                <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#000' }]}>Project Matches</Text>
               </View>
               <ChevronRight size={18} color="#666" />
             </TouchableOpacity>

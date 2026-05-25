@@ -153,7 +153,7 @@ export async function maybeCreateOpportunityAlerts(
       if (existing?.exists()) return;
 
       const name = alert.profile.displayName || 'A builder';
-      const content = `AI Opportunity: ${name} is working on something that matches you (${alert.reason}). Tap to view.`;
+      const content = `Opportunity: ${name} is working on something that matches you (${alert.reason}). Tap to view.`;
       await setDoc(notificationRef, {
         userId,
         fromId: alert.profile.uid,

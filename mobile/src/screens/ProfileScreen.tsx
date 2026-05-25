@@ -62,31 +62,58 @@ const earnedReputation = (profile: any) => {
   const lookingFor = Array.isArray(profile?.lookingFor) ? profile.lookingFor : [];
   const photos = Array.isArray(profile?.photos) ? profile.photos : [];
   const projects = Array.isArray(profile?.projects) ? profile.projects : [];
-  const responseRate = Number(profile?.reputationMetrics?.responseRate ?? 70);
-
-  const profileQuality =
-    (profile?.displayName ? 10 : 0) +
-    (profile?.bio ? 12 : 0) +
-    (profile?.profilePic ? 12 : 0) +
-    (profile?.city && profile?.country ? 8 : 0) +
-    Math.min(18, skills.length * 4) +
-    Math.min(12, industries.length * 4) +
-    Math.min(10, lookingFor.length * 5) +
-    Math.min(8, photos.length * 3);
-
-  const activity =
-    Math.min(10, Number(profile?.streakCount || 0) * 2) +
-    Math.min(8, projects.length * 4) +
-    (profile?.isVerified ? 8 : 0) +
-    (profile?.onboarded ? 6 : 0);
-
-  const founderScore = clampScore(profileQuality + activity);
+  const resume = profile?.resume || {};
+  const shippedProducts = Array.isArray(resume.shippedProducts) ? resume.shippedProducts.length : 0;
+  const startupAttempts = Array.isArray(resume.startupAttempts) ? resume.startupAttempts.length : 0;
+  const projectEvidence = projects.reduce((score: number, project: any) => {
+    const status = String(project?.status || '').toLowerCase();
+    return score + (project?.title ? 4 : 0) + (project?.description ? 5 : 0) + (status === 'live' ? 8 : status === 'mvp' ? 5 : 2);
+  }, 0);
+  const profileCompleteness = clampScore(
+    (profile?.displayName ? 8 : 0) +
+      (profile?.bio ? 10 : 0) +
+      (profile?.profilePic ? 10 : 0) +
+      (profile?.city && profile?.country ? 7 : 0) +
+      Math.min(18, skills.length * 3) +
+      Math.min(12, industries.length * 3) +
+      Math.min(12, lookingFor.length * 4) +
+      Math.min(8, photos.length * 2)
+  );
+  const responseRate = clampScore(Number(profile?.reputationMetrics?.responseRate ?? 0));
+  const collaborationSignals = clampScore(
+    Math.min(26, lookingFor.length * 6) +
+      Math.min(22, skills.length * 3) +
+      Math.min(12, industries.length * 3) +
+      (profile?.availability ? 10 : 0) +
+      (profile?.networkingIntent ? 10 : 0)
+  );
+  const consistencySignals = clampScore(
+    Math.min(28, Number(profile?.streakCount || 0) * 5) +
+      Math.min(24, Number(resume.buildStreaks || 0) * 6) +
+      (profile?.lastActiveAt ? 10 : 0) +
+      (profile?.onboarded ? 12 : 0)
+  );
+  const completionSignals = clampScore(
+    Math.min(34, projectEvidence) +
+      Math.min(18, shippedProducts * 9) +
+      Math.min(14, startupAttempts * 7) +
+      (profile?.hasExit ? 18 : 0) +
+      (profile?.isVerified ? 10 : 0)
+  );
+  const reliability = clampScore(profileCompleteness * 0.55 + consistencySignals * 0.25 + responseRate * 0.2);
+  const founderScore = clampScore(
+    profileCompleteness * 0.35 +
+      collaborationSignals * 0.2 +
+      consistencySignals * 0.2 +
+      completionSignals * 0.2 +
+      (profile?.isVerified ? 5 : 0)
+  );
   return {
-    reliability: clampScore(40 + profileQuality * 0.45 + activity * 0.6),
+    reliability,
     responseRate: clampScore(responseRate),
-    collaboration: clampScore(45 + Math.min(30, lookingFor.length * 8) + Math.min(25, skills.length * 3)),
-    consistency: clampScore(35 + Math.min(35, Number(profile?.streakCount || 0) * 4) + (profile?.onboarded ? 20 : 0)),
-    completion: clampScore(35 + Math.min(40, projects.length * 12) + (profile?.bio ? 15 : 0)),
+    collaboration: collaborationSignals,
+    consistency: consistencySignals,
+    completion: completionSignals,
     founderScore,
   };
 };
@@ -119,6 +146,13 @@ const normalizeProjectStatus = (value: unknown) => {
   if (normalized.includes('idea')) return 'idea';
   return 'mvp';
 };
+const normalizeProjectDraft = (project: any, uid: string, index: number) => ({
+  id: String(project?.id || `project_${uid}_${index}_${Date.now()}`),
+  title: String(project?.title || '').trim(),
+  description: String(project?.description || '').trim(),
+  status: normalizeProjectStatus(project?.status),
+  ...(project?.link ? { link: String(project.link).trim() } : {}),
+});
 type PreferenceField = 'isStealthMode' | 'isVisible' | 'turboConnect' | 'hideOnlineStatus';
 
 const PreferenceSwitch = ({
@@ -348,7 +382,9 @@ export default function ProfileScreen({ navigation, route }: any) {
   // From here onward, `profile` is guaranteed to exist.
 
   const startEditing = () => {
-    const firstProject = Array.isArray((profile as any).projects) ? (profile as any).projects[0] : null;
+    const existingProjects = Array.isArray((profile as any).projects)
+      ? (profile as any).projects.map((project: any, index: number) => normalizeProjectDraft(project, profile.uid, index))
+      : [];
     setEditData({ 
       ...profile,
       username: (profile as any).username || '',
@@ -367,9 +403,9 @@ export default function ProfileScreen({ navigation, route }: any) {
       turboConnect: !!(profile as any).turboConnect,
       hasExit: profile.hasExit || false,
       photos: Array.isArray((profile as any).photos) ? (profile as any).photos.slice(0, 3) : [],
-      projectTitle: firstProject?.title || '',
-      projectDescription: firstProject?.description || '',
-      projectStatus: firstProject?.status || (profile as any).startupStage || 'mvp',
+      projects: existingProjects.length
+        ? existingProjects
+        : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any).startupStage || 'mvp') }],
     });
     setIsEditing(true);
   };
@@ -385,11 +421,11 @@ export default function ProfileScreen({ navigation, route }: any) {
       }
       const diagnostic = getLastAIDiagnostic();
       if (diagnostic && !diagnostic.ok && diagnostic.timestamp > previousDiagnosticAt) {
-        Alert.alert('AI Insight Fallback', `${diagnostic.message}\n\nI saved a local profile insight so the profile still works.`);
+        Alert.alert('Insight fallback', `${diagnostic.message}\n\nI saved a local profile insight so the profile still works.`);
       }
     } catch (e: any) {
       console.error('Insights error:', e);
-      Alert.alert('AI Insights Error', describeAIError(e));
+      Alert.alert('Insights error', describeAIError(e));
     } finally {
       setIsSaving(false);
     }
@@ -444,6 +480,22 @@ export default function ProfileScreen({ navigation, route }: any) {
     } catch (e: any) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${myProfile.uid}`);
       Alert.alert('Upload failed', e?.message || 'Failed to update photos.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const removeGalleryPhoto = async (index: number) => {
+    if (isViewingOther || !myProfile) return;
+    const current = Array.isArray(editData?.photos) ? [...editData.photos] : [];
+    const nextPhotos = current.filter((_photo: string, photoIndex: number) => photoIndex !== index).filter(Boolean).slice(0, 3);
+    setEditData({ ...editData, photos: nextPhotos });
+    setIsSaving(true);
+    try {
+      await updateOwnProfileDoc({ photos: nextPhotos });
+    } catch (e: any) {
+      handleFirestoreError(e, OperationType.UPDATE, `users/${myProfile.uid}`);
+      Alert.alert('Delete failed', e?.message || 'Failed to remove photo.');
     } finally {
       setIsSaving(false);
     }
@@ -558,19 +610,24 @@ export default function ProfileScreen({ navigation, route }: any) {
       const skillsArray = parseProfileList(editData.skills).slice(0, 30);
       const industriesArray = parseProfileList(editData.industries).slice(0, 20);
       const lookingForArray = parseProfileList(editData.lookingFor).slice(0, 20);
-      const existingProjects = Array.isArray((profile as any).projects) ? (profile as any).projects : [];
-      const projectTitle = String(editData.projectTitle || '').trim();
-      const projectDescription = String(editData.projectDescription || '').trim();
-      const mainProject = projectTitle || projectDescription
-        ? [{
-            id: existingProjects[0]?.id || `project_${profile.uid}_main`,
-            title: projectTitle || `${editData.company || editData.displayName || 'LINKUP'} project`,
-            description: projectDescription || editData.bio || 'Ongoing project looking for relevant collaborators.',
-            status: normalizeProjectStatus(editData.projectStatus),
-            ...(existingProjects[0]?.link ? { link: existingProjects[0].link } : {}),
-          }]
-        : [];
-      const nextProjects = [...mainProject, ...existingProjects.slice(1)].slice(0, 20);
+      const sourceProjects = Array.isArray(editData.projects) ? editData.projects : [];
+      const nextProjects = sourceProjects
+        .map((project: any, index: number) => normalizeProjectDraft(project, profile.uid, index))
+        .filter((project: any) => project.title || project.description)
+        .map((project: any, index: number) => ({
+          ...project,
+          title: project.title || `${editData.company || editData.displayName || 'LINKUP'} project ${index + 1}`,
+          description: project.description || editData.bio || 'Ongoing project looking for relevant collaborators.',
+        }))
+        .slice(0, 10);
+      const earnedScore = earnedReputation({
+        ...profile,
+        ...editData,
+        skills: skillsArray,
+        industries: industriesArray,
+        lookingFor: lookingForArray,
+        projects: nextProjects,
+      }).founderScore;
 
       await updateDoc(doc(db, 'users', profile.uid), {
         displayName: editData.displayName || '',
@@ -595,6 +652,8 @@ export default function ProfileScreen({ navigation, route }: any) {
         vibeMedia: editData.vibeMedia || '',
         photos: Array.isArray(editData.photos) ? editData.photos.filter((p: string) => !!p).slice(0, 3) : [],
         projects: nextProjects,
+        reputationScore: earnedScore,
+        founderScore: earnedScore,
       });
       setIsEditing(false);
     } catch (err) {
@@ -761,8 +820,42 @@ export default function ProfileScreen({ navigation, route }: any) {
   const projects = Array.isArray((profile as any).projects) ? (profile as any).projects : [];
   const visibleProjects = projects
     .filter((project: any) => String(project?.title || project?.description || '').trim())
-    .slice(0, 3);
+    .slice(0, 10);
   const profileBio = String(profile.bio || '').trim();
+  const editedProjects = isEditing
+    ? (Array.isArray(editData?.projects) && editData.projects.length
+        ? editData.projects
+        : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any).startupStage || 'mvp') }])
+    : [];
+  const updateEditedProject = (index: number, patch: Record<string, unknown>) => {
+    const current = editedProjects.map((project: any, projectIndex: number) =>
+      normalizeProjectDraft(project, profile.uid, projectIndex)
+    );
+    current[index] = { ...current[index], ...patch };
+    setEditData({ ...editData, projects: current });
+  };
+  const addEditedProject = () => {
+    if (editedProjects.length >= 10) {
+      Alert.alert('Project limit', 'You can add up to 10 active projects.');
+      return;
+    }
+    setEditData({
+      ...editData,
+      projects: [
+        ...editedProjects,
+        { id: `project_${profile.uid}_${editedProjects.length}_${Date.now()}`, title: '', description: '', status: 'idea' },
+      ],
+    });
+  };
+  const removeEditedProject = (index: number) => {
+    const nextProjects = editedProjects.filter((_project: any, projectIndex: number) => projectIndex !== index);
+    setEditData({
+      ...editData,
+      projects: nextProjects.length
+        ? nextProjects
+        : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any).startupStage || 'mvp') }],
+    });
+  };
   const stealthModeValue = isEditing
     ? !!(editData?.isStealthMode ?? false)
     : preferenceValue('isStealthMode', !!profile.isStealthMode);
@@ -879,7 +972,21 @@ export default function ProfileScreen({ navigation, route }: any) {
                       style={[styles.photoSlot, { borderColor: isDark ? '#222226' : '#EEEEEE', backgroundColor: isDark ? '#111115' : '#F8F8F8' }]}
                     >
                       {uri ? (
-                        <Image source={{ uri }} style={styles.photoSlotImg} />
+                        <>
+                          <Image source={{ uri }} style={styles.photoSlotImg} />
+                          {isEditing && (
+                            <TouchableOpacity
+                              style={styles.photoDeleteButton}
+                              onPress={(event: any) => {
+                                event?.stopPropagation?.();
+                                removeGalleryPhoto(idx);
+                              }}
+                              activeOpacity={0.85}
+                            >
+                              <SafeIcon name="X" size={13} color="#FFF" />
+                            </TouchableOpacity>
+                          )}
+                        </>
                       ) : (
                         <SafeIcon name="Plus" size={18} color={isDark ? '#CCC' : '#444'} />
                       )}
@@ -888,7 +995,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 })}
               </View>
               <Text style={{ marginTop: 8, fontSize: 10, color: '#666', fontWeight: '900', textAlign: 'center' }}>
-                {isEditing ? 'Tap a slot to change it' : 'Tap to edit your 3 swipe photos'}
+                {isEditing ? 'Tap a slot to change it or X to delete it' : 'Tap to edit your swipe photos'}
               </Text>
             </View>
           )}
@@ -914,7 +1021,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.occupation)}
                 onChangeText={(t: string) => setEditData({ ...editData, occupation: t })}
-                placeholder="Occupation (e.g. Founder, AI Engineer)"
+                placeholder="Occupation (e.g. Founder, ML Engineer)"
                 placeholderTextColor="#666"
               />
               <TextInput
@@ -950,7 +1057,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 style={[styles.skillsInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.skills)}
                 onChangeText={(t: string) => setEditData({ ...editData, skills: t })}
-                placeholder="Skills & stack (comma-separated): React, AI, Sales..."
+                placeholder="Skills & stack (comma-separated): React, Automation, Sales..."
                 placeholderTextColor="#666"
               />
               <TextInput
@@ -982,31 +1089,49 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholderTextColor="#666"
               />
               <View style={[styles.projectEditCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
-                <Text style={styles.projectEditLabel}>ONGOING PROJECT</Text>
-                <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
-                  value={toTextValue(editData?.projectTitle)}
-                  onChangeText={(t: string) => setEditData({ ...editData, projectTitle: t })}
-                  placeholder="Project title (e.g. AI founder marketplace)"
-                  placeholderTextColor="#666"
-                />
-                <TextInput
-                  multiline
-                  style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
-                  value={toTextValue(editData?.projectDescription)}
-                  onChangeText={(t: string) => setEditData({ ...editData, projectDescription: t })}
-                  placeholder="What are you building, and who should LINKUP recommend it to?"
-                  placeholderTextColor="#666"
-                />
-                <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
-                  value={toTextValue(editData?.projectStatus)}
-                  onChangeText={(t: string) => setEditData({ ...editData, projectStatus: t })}
-                  placeholder="Stage: idea, mvp, live"
-                  placeholderTextColor="#666"
-                />
+                <View style={styles.projectEditHeader}>
+                  <Text style={styles.projectEditLabel}>ONGOING PROJECTS</Text>
+                  <TouchableOpacity style={styles.projectAddButton} onPress={addEditedProject} activeOpacity={0.85}>
+                    <SafeIcon name="Plus" size={14} color="#000" />
+                    <Text style={styles.projectAddText}>ADD</Text>
+                  </TouchableOpacity>
+                </View>
+                {editedProjects.map((project: any, index: number) => (
+                  <View key={project?.id || `project-${index}`} style={[styles.projectDraftCard, { borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
+                    <View style={styles.projectDraftHeader}>
+                      <Text style={styles.projectDraftLabel}>PROJECT {index + 1}</Text>
+                      {editedProjects.length > 1 && (
+                        <TouchableOpacity onPress={() => removeEditedProject(index)} style={styles.projectRemoveButton}>
+                          <SafeIcon name="Trash2" size={13} color="#E30613" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <TextInput
+                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      value={toTextValue(project?.title)}
+                      onChangeText={(t: string) => updateEditedProject(index, { title: t })}
+                      placeholder="Project title (e.g. founder marketplace)"
+                      placeholderTextColor="#666"
+                    />
+                    <TextInput
+                      multiline
+                      style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      value={toTextValue(project?.description)}
+                      onChangeText={(t: string) => updateEditedProject(index, { description: t })}
+                      placeholder="What are you building, and who should LINKUP recommend it to?"
+                      placeholderTextColor="#666"
+                    />
+                    <TextInput
+                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      value={toTextValue(project?.status)}
+                      onChangeText={(t: string) => updateEditedProject(index, { status: t })}
+                      placeholder="Stage: idea, mvp, live"
+                      placeholderTextColor="#666"
+                    />
+                  </View>
+                ))}
                 <Text style={styles.projectEditHelp}>
-                  LINKUP recommends this project to people with matching skills, interests, roles, and goals.
+                  LINKUP recommends each project to people with matching skills, interests, roles, and goals.
                 </Text>
               </View>
             </View>
@@ -1133,10 +1258,10 @@ export default function ProfileScreen({ navigation, route }: any) {
           </>
         )}
 
-        {/* AI COMPATIBILITY */}
+        {/* COMPATIBILITY */}
         {isViewingOther && compatibility !== null && (
           <View style={[styles.section, { marginTop: -8 }]}>
-            <Text style={styles.sectionLabel}>AI COMPATIBILITY</Text>
+            <Text style={styles.sectionLabel}>COMPATIBILITY</Text>
             <View style={[styles.compatCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <View>
@@ -1226,16 +1351,16 @@ export default function ProfileScreen({ navigation, route }: any) {
             ))}
           </View>
           <Text style={styles.repHelp}>
-            Earned from profile quality, skills, projects, verification, consistency, and activity.
+            Earned from real profile signals: completed fields, response rate, shipped work, project evidence, verification, and consistency.
           </Text>
         </View>
 
         {/* MATCH INSIGHTS */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>MATCH INSIGHTS (AI)</Text>
+          <Text style={styles.sectionLabel}>MATCH INSIGHTS</Text>
           <View style={[styles.insightCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
             <Text style={[styles.insightText, { color: isDark ? '#DDD' : '#333' }]}>
-              {(profile as any).aiMatchInsights || 'Generate an AI insight for this profile.'}
+              {(profile as any).aiMatchInsights || 'Generate a profile insight for this builder.'}
             </Text>
             {!isViewingOther && (
               <TouchableOpacity style={[styles.insightBtn, { opacity: isSaving ? 0.6 : 1 }]} disabled={isSaving} onPress={generateInsights}>
@@ -1299,13 +1424,13 @@ export default function ProfileScreen({ navigation, route }: any) {
             <View style={[styles.analyzerCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
               <Text style={[styles.analyzerTitle, { color: isDark ? '#FFF' : '#000' }]}>Test your startup idea</Text>
               <Text style={styles.analyzerHelp}>
-                Get a fast AI score for market, competition, monetization, risks, and your next validation move.
+                Get a fast score for market, competition, monetization, risks, and your next validation move.
               </Text>
               <TextInput
                 multiline
                 value={startupIdeaText}
                 onChangeText={setStartupIdeaText}
-                placeholder="Example: An AI assistant that helps student founders find technical cofounders in Africa..."
+                placeholder="Example: A smart assistant that helps student founders find technical cofounders in Africa..."
                 placeholderTextColor="#666"
                 style={[styles.analyzerInput, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#0F0F12' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}
               />
@@ -1330,7 +1455,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   </View>
                   {!!startupAnalysis.aiDiagnostic && (
                     <View style={styles.analysisDiagnostic}>
-                      <Text style={styles.analysisDiagnosticText}>AI FALLBACK: {startupAnalysis.aiDiagnostic}</Text>
+                      <Text style={styles.analysisDiagnosticText}>FALLBACK: {startupAnalysis.aiDiagnostic}</Text>
                     </View>
                   )}
                   {[
@@ -1638,10 +1763,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    position: 'relative',
   },
   photoSlotImg: {
     width: '100%',
     height: '100%',
+  },
+  photoDeleteButton: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E30613',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFF',
   },
   avatarContainer: {
     position: 'relative',
@@ -2322,11 +2461,57 @@ const styles = StyleSheet.create({
     padding: 12,
     marginTop: 4,
   },
+  projectEditHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   projectEditLabel: {
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 1.5,
     color: '#2563EB',
+  },
+  projectAddButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    backgroundColor: '#FBE618',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  projectAddText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+    color: '#000',
+  },
+  projectDraftCard: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 10,
+  },
+  projectDraftHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  projectDraftLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+    color: '#777',
+  },
+  projectRemoveButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E3061312',
   },
   projectEditHelp: {
     marginTop: 8,

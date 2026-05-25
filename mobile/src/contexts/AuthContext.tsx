@@ -29,6 +29,24 @@ const GOOGLE_WEB_CLIENT_ID =
 
 let warnedPresenceRules = false;
 const onboardingStorageKey = (uid: string) => `linkup:onboarded:${uid}`;
+const profileCacheKey = (uid: string) => `linkup:profile:${uid}`;
+
+const readCachedProfile = async (uid: string) => {
+  try {
+    const raw = await AsyncStorage.getItem(profileCacheKey(uid));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedProfile = async (uid: string, profileData: any) => {
+  try {
+    await AsyncStorage.setItem(profileCacheKey(uid), JSON.stringify(profileData || {}));
+  } catch {
+    // Cache is only for instant UI hydration.
+  }
+};
 
 const currentWebHost = () => {
   if (Platform.OS !== 'web') return '';
@@ -134,7 +152,7 @@ const buildLocalUserProfile = (authUser: User, onboarded: boolean): any => {
     username: cleanUsernameFromAuth(authUser),
     profileLink: `linkup://profile/${authUser.uid}`,
     bio: '',
-    profilePic: authUser.photoURL || '',
+    profilePic: '',
     photos: [],
     occupation: 'Founder',
     company: '',
@@ -269,6 +287,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           uid: authUser.uid,
           onboarded: inferredOnboarded,
         } as UserProfile);
+        writeCachedProfile(authUser.uid, {
+          ...rawProfile,
+          uid: authUser.uid,
+          onboarded: inferredOnboarded,
+        }).catch(() => {});
         setAuthVersion((value) => value + 1);
         setLoading(false);
         return;
@@ -350,9 +373,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCompletedOnboardingUid(null);
 
       const storedOnboardedBeforeSnapshot = await readStoredOnboarding(authenticatedUser.uid);
+      const cachedProfileBeforeSnapshot = await readCachedProfile(authenticatedUser.uid);
       if (storedOnboardedBeforeSnapshot) {
         setCompletedOnboardingUid(authenticatedUser.uid);
-        setProfile(buildLocalUserProfile(authenticatedUser, true) as UserProfile);
+        setProfile({
+          ...buildLocalUserProfile(authenticatedUser, true),
+          ...(cachedProfileBeforeSnapshot || {}),
+          uid: authenticatedUser.uid,
+          onboarded: true,
+        } as UserProfile);
         setLoading(false);
       } else {
         setProfile(null);
@@ -386,6 +415,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               updateDoc(userDocRef, { onboarded: true }).catch(() => {});
             }
             setProfile(data);
+            writeCachedProfile(authenticatedUser.uid, data).catch(() => {});
             setLoading(false);
             return;
           }
@@ -706,7 +736,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     await AsyncStorage.setItem(onboardingStorageKey(uid), 'true');
     setCompletedOnboardingUid(uid);
-    setProfile((current) => Object.assign({}, current || {}, profilePatch, { uid, onboarded: true }) as unknown as UserProfile);
+    const nextProfile = Object.assign({}, profile || {}, profilePatch, { uid, onboarded: true }) as unknown as UserProfile;
+    setProfile(nextProfile);
+    writeCachedProfile(uid, nextProfile).catch(() => {});
     setAuthVersion((value) => value + 1);
   };
 
