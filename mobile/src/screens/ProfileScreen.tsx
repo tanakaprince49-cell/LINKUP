@@ -154,6 +154,16 @@ const normalizeProjectDraft = (project: any, uid: string, index: number) => ({
   status: normalizeProjectStatus(project?.status),
   ...(project?.link ? { link: String(project.link).trim() } : {}),
 });
+const STARTUP_STATUS_OPTIONS = [
+  'Idea Stage',
+  'Building MVP',
+  'Early Users',
+  'Revenue',
+  'Scaling',
+  'Fundraising',
+  'Hiring',
+  'Open to Collaboration',
+];
 type PreferenceField = 'isStealthMode' | 'isVisible' | 'turboConnect' | 'hideOnlineStatus';
 
 const PreferenceSwitch = ({
@@ -1098,13 +1108,34 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholder="Skills & stack (comma, semicolon, or line separated): React, Automation, Sales..."
                 placeholderTextColor="#666"
               />
-              <TextInput
-                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
-                value={toTextValue(editData?.startupStage)}
-                onChangeText={(t: string) => setEditData({ ...editData, startupStage: t })}
-                placeholder="Startup Stage (Idea, MVP, Revenue...)"
-                placeholderTextColor="#666"
-              />
+              <View style={[styles.statusEditorCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+                <Text style={styles.projectEditLabel}>STARTUP STATUS</Text>
+                <TextInput
+                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  value={toTextValue(editData?.startupStage)}
+                  onChangeText={(t: string) => setEditData({ ...editData, startupStage: t })}
+                  placeholder="Startup Status (Idea Stage, Building MVP, Revenue...)"
+                  placeholderTextColor="#666"
+                />
+                <View style={styles.statusOptionsRow}>
+                  {STARTUP_STATUS_OPTIONS.map((status) => {
+                    const isSelected = toTextValue(editData?.startupStage).toLowerCase() === status.toLowerCase();
+                    return (
+                      <TouchableOpacity
+                        key={status}
+                        style={[styles.statusOptionChip, isSelected && styles.statusOptionChipActive]}
+                        onPress={() => setEditData({ ...editData, startupStage: status })}
+                        activeOpacity={0.82}
+                      >
+                        <Text style={[styles.statusOptionText, isSelected && styles.statusOptionTextActive]}>{status.toUpperCase()}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={styles.projectEditHelp}>
+                  This appears on your profile and helps builders understand what stage you are in.
+                </Text>
+              </View>
               <TextInput
                 style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.fundingStage)}
@@ -2649,6 +2680,40 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 15,
     color: '#777',
+  },
+  statusEditorCard: {
+    width: '100%',
+    marginTop: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 14,
+  },
+  statusOptionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  statusOptionChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F8F8F8',
+  },
+  statusOptionChipActive: {
+    backgroundColor: '#FBE618',
+    borderColor: '#FBE618',
+  },
+  statusOptionText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    color: '#666',
+  },
+  statusOptionTextActive: {
+    color: '#000',
   },
   projectCard: {
     borderRadius: 20,
