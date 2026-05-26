@@ -164,6 +164,19 @@ const STARTUP_STATUS_OPTIONS = [
   'Hiring',
   'Open to Collaboration',
 ];
+const ROLE_OPTIONS = ['Founder', 'Developer', 'Designer', 'Investor', 'Marketer', 'Student', 'Operator'];
+const EXPERIENCE_OPTIONS = ['Beginner', 'Intermediate', 'Experienced', 'Senior', 'Exited Founder'];
+const FUNDING_OPTIONS = ['Pre-revenue', 'Bootstrapped', 'Angel-backed', 'Raised Funding', 'Revenue Generating'];
+const AVAILABILITY_OPTIONS = ['Available Now', 'Busy but Open', 'Hiring', 'Open to Networking', 'Not Available'];
+const WORK_STYLE_OPTIONS = ['Fast-paced', 'Structured', 'Experimental', 'Analytical', 'Creative'];
+const COMMITMENT_OPTIONS = ['Weekends Only', 'Part-time', 'Full-time', 'Actively Building'];
+const INTENT_OPTIONS = ['Casual Networking', 'Serious Builder', 'Actively Hiring', 'Looking for Cofounder'];
+const TEAM_SIZE_OPTIONS = ['Solo Founder', 'Small Team', 'Growing Team', 'Large Startup'];
+const EDUCATION_OPTIONS = ['Student', 'Self-Taught', 'Bootcamp', 'University Graduate', 'PhD'];
+const AMBITION_OPTIONS = ['Impact', 'High Growth', 'Revenue', 'Lifestyle', 'Learning'];
+const INDUSTRY_SUGGESTIONS = ['Automation', 'SaaS', 'Fintech', 'Healthtech', 'Gaming', 'E-commerce', 'Crypto', 'Education', 'Media'];
+const LOOKING_FOR_SUGGESTIONS = ['Cofounder', 'Technical Cofounder', 'Startup Team', 'Hiring', 'Investment', 'Mentorship', 'Networking'];
+const SKILL_SUGGESTIONS = ['React', 'Node.js', 'Python', 'Machine Learning', 'UI/UX', 'Sales', 'Marketing', 'Figma', 'Flutter', 'Finance', 'Product', 'Automation', 'Backend', 'Frontend', 'Branding'];
 type PreferenceField = 'isStealthMode' | 'isVisible' | 'turboConnect' | 'hideOnlineStatus';
 
 const PreferenceSwitch = ({
@@ -402,14 +415,26 @@ export default function ProfileScreen({ navigation, route }: any) {
       username: (profile as any).username || '',
       occupation: (profile as any).occupation || '',
       company: (profile as any).company || '',
+      age: (profile as any).age ? String((profile as any).age) : '',
+      country: (profile as any).country || '',
       skills: Array.isArray(profile.skills) ? profile.skills.join(', ') : (profile.skills || ''),
       industries: Array.isArray((profile as any).industries) ? (profile as any).industries.join(', ') : '',
       lookingFor: Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor.join(', ') : '',
+      languages: Array.isArray((profile as any).languages) ? (profile as any).languages.join(', ') : '',
+      goals: (profile as any).goals || '',
+      experience: (profile as any).experience || '',
       startupStage: (profile as any).startupStage || '',
       fundingStage: (profile as any).fundingStage || '',
       availability: (profile as any).availability || '',
+      commitmentLevel: (profile as any).commitmentLevel || '',
       workStyle: (profile as any).workStyle || '',
       networkingIntent: (profile as any).networkingIntent || '',
+      ambition: (profile as any).ambition || '',
+      timezone: (profile as any).timezone || '',
+      education: (profile as any).education || '',
+      teamSizePreference: (profile as any).teamSizePreference || '',
+      remoteOnly: !!(profile as any).remoteOnly,
+      willingToRelocate: !!(profile as any).willingToRelocate,
       isStealthMode: profile.isStealthMode || false,
       hideOnlineStatus: !!(profile as any).hideOnlineStatus,
       turboConnect: !!(profile as any).turboConnect,
@@ -622,6 +647,8 @@ export default function ProfileScreen({ navigation, route }: any) {
       const skillsArray = parseProfileList(editData.skills).slice(0, 50);
       const industriesArray = parseProfileList(editData.industries).slice(0, 20);
       const lookingForArray = parseProfileList(editData.lookingFor).slice(0, 20);
+      const languagesArray = parseProfileList(editData.languages).slice(0, 20);
+      const nextAge = Number.parseInt(String(editData.age || ''), 10);
       const sourceProjects = Array.isArray(editData.projects) ? editData.projects : [];
       const nextProjects = sourceProjects
         .map((project: any, index: number) => normalizeProjectDraft(project, profile.uid, index))
@@ -639,14 +666,26 @@ export default function ProfileScreen({ navigation, route }: any) {
         company: editData.company || '',
         bio: editData.bio || '',
         city: editData.city || '',
+        country: editData.country || '',
+        age: Number.isFinite(nextAge) ? Math.max(0, Math.min(120, nextAge)) : 0,
         skills: skillsArray,
         industries: industriesArray,
         lookingFor: lookingForArray,
+        languages: languagesArray,
+        goals: editData.goals || lookingForArray.join(', '),
+        experience: editData.experience || '',
         startupStage: editData.startupStage || '',
         fundingStage: editData.fundingStage || '',
         availability: editData.availability || '',
+        commitmentLevel: editData.commitmentLevel || '',
         workStyle: editData.workStyle || '',
         networkingIntent: editData.networkingIntent || '',
+        ambition: editData.ambition || '',
+        timezone: editData.timezone || '',
+        education: editData.education || '',
+        remoteOnly: !!editData.remoteOnly,
+        willingToRelocate: !!editData.willingToRelocate,
+        teamSizePreference: editData.teamSizePreference || '',
         socialLinks: editData.socialLinks || {},
         isStealthMode: !!editData.isStealthMode,
         hideOnlineStatus: !!editData.hideOnlineStatus,
@@ -928,6 +967,74 @@ export default function ProfileScreen({ navigation, route }: any) {
       },
     });
   };
+  const setEditField = (field: string, value: unknown) => {
+    setEditData((current: any) => ({ ...(current || {}), [field]: value }));
+  };
+  const setSocialLinkField = (field: string, value: string) => {
+    setEditData((current: any) => ({
+      ...(current || {}),
+      socialLinks: {
+        ...((current || {}).socialLinks || {}),
+        [field]: value,
+      },
+    }));
+  };
+  const toggleEditListValue = (field: string, value: string) => {
+    const current = parseProfileList(editData?.[field]);
+    const exists = current.some((entry) => entry.toLowerCase() === value.toLowerCase());
+    const next = exists
+      ? current.filter((entry) => entry.toLowerCase() !== value.toLowerCase())
+      : [...current, value];
+    setEditField(field, next.join(', '));
+  };
+  const renderChoiceGroup = (label: string, field: string, options: string[]) => (
+    <View style={styles.choiceEditorBlock}>
+      <Text style={styles.choiceEditorLabel}>{label}</Text>
+      <View style={styles.statusOptionsRow}>
+        {options.map((option) => {
+          const selected = toTextValue(editData?.[field]).toLowerCase() === option.toLowerCase();
+          return (
+            <TouchableOpacity
+              key={`${field}-${option}`}
+              style={[
+                styles.statusOptionChip,
+                { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#2A2A30' : '#E5E7EB' },
+                selected && styles.statusOptionChipActive,
+              ]}
+              onPress={() => setEditField(field, option)}
+              activeOpacity={0.82}
+            >
+              <Text style={[styles.statusOptionText, selected && styles.statusOptionTextActive]}>{option.toUpperCase()}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+  const renderMultiChoiceGroup = (label: string, field: string, options: string[]) => (
+    <View style={styles.choiceEditorBlock}>
+      <Text style={styles.choiceEditorLabel}>{label}</Text>
+      <View style={styles.statusOptionsRow}>
+        {options.map((option) => {
+          const selected = parseProfileList(editData?.[field]).some((entry) => entry.toLowerCase() === option.toLowerCase());
+          return (
+            <TouchableOpacity
+              key={`${field}-${option}`}
+              style={[
+                styles.statusOptionChip,
+                { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#2A2A30' : '#E5E7EB' },
+                selected && styles.statusOptionChipActive,
+              ]}
+              onPress={() => toggleEditListValue(field, option)}
+              activeOpacity={0.82}
+            >
+              <Text style={[styles.statusOptionText, selected && styles.statusOptionTextActive]}>{option.toUpperCase()}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
@@ -1067,36 +1174,53 @@ export default function ProfileScreen({ navigation, route }: any) {
               <TextInput
                 style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.occupation)}
-                onChangeText={(t: string) => setEditData({ ...editData, occupation: t })}
+                onChangeText={(t: string) => setEditField('occupation', t)}
                 placeholder="Occupation (e.g. Founder, ML Engineer)"
                 placeholderTextColor="#666"
               />
+              {renderChoiceGroup('ROLE / PROFESSION', 'occupation', ROLE_OPTIONS)}
               <TextInput
                 style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.company)}
-                onChangeText={(t: string) => setEditData({ ...editData, company: t })}
+                onChangeText={(t: string) => setEditField('company', t)}
                 placeholder="Company / Startup (optional)"
                 placeholderTextColor="#666"
               />
               <TextInput 
                 style={[styles.locationInput, styles.editTextBox, editFieldStyle, { color: '#FBE618' }]}
                 value={toTextValue(editData?.city)}
-                onChangeText={(t: string) => setEditData({...editData, city: t})}
-                placeholder="City, Country"
+                onChangeText={(t: string) => setEditField('city', t)}
+                placeholder="City"
                 placeholderTextColor="#666"
               />
               <TextInput
                 style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.country)}
+                onChangeText={(t: string) => setEditField('country', t)}
+                placeholder="Country"
+                placeholderTextColor="#666"
+              />
+              <TextInput
+                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                value={toTextValue(editData?.age)}
+                onChangeText={(t: string) => setEditField('age', t.replace(/[^0-9]/g, '').slice(0, 3))}
+                placeholder="Age"
+                placeholderTextColor="#666"
+                keyboardType="number-pad"
+              />
+              <TextInput
+                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.availability)}
-                onChangeText={(t: string) => setEditData({ ...editData, availability: t })}
+                onChangeText={(t: string) => setEditField('availability', t)}
                 placeholder="Availability (e.g. Open, Weekends)"
                 placeholderTextColor="#666"
               />
+              {renderChoiceGroup('AVAILABILITY', 'availability', AVAILABILITY_OPTIONS)}
               <TextInput
                 multiline
                 style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.bio)}
-                onChangeText={(t: string) => setEditData({ ...editData, bio: t })}
+                onChangeText={(t: string) => setEditField('bio', t)}
                 placeholder="Bio: who are you, what are you building, and what help do you want?"
                 placeholderTextColor="#666"
               />
@@ -1104,16 +1228,17 @@ export default function ProfileScreen({ navigation, route }: any) {
                 multiline
                 style={[styles.skillsInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.skills)}
-                onChangeText={(t: string) => setEditData({ ...editData, skills: t })}
+                onChangeText={(t: string) => setEditField('skills', t)}
                 placeholder="Skills & stack (comma, semicolon, or line separated): React, Automation, Sales..."
                 placeholderTextColor="#666"
               />
+              {renderMultiChoiceGroup('QUICK ADD SKILLS', 'skills', SKILL_SUGGESTIONS)}
               <View style={[styles.statusEditorCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
                 <Text style={styles.projectEditLabel}>STARTUP STATUS</Text>
                 <TextInput
                   style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                   value={toTextValue(editData?.startupStage)}
-                  onChangeText={(t: string) => setEditData({ ...editData, startupStage: t })}
+                  onChangeText={(t: string) => setEditField('startupStage', t)}
                   placeholder="Startup Status (Idea Stage, Building MVP, Revenue...)"
                   placeholderTextColor="#666"
                 />
@@ -1123,8 +1248,12 @@ export default function ProfileScreen({ navigation, route }: any) {
                     return (
                       <TouchableOpacity
                         key={status}
-                        style={[styles.statusOptionChip, isSelected && styles.statusOptionChipActive]}
-                        onPress={() => setEditData({ ...editData, startupStage: status })}
+                        style={[
+                          styles.statusOptionChip,
+                          { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#2A2A30' : '#E5E7EB' },
+                          isSelected && styles.statusOptionChipActive,
+                        ]}
+                        onPress={() => setEditField('startupStage', status)}
                         activeOpacity={0.82}
                       >
                         <Text style={[styles.statusOptionText, isSelected && styles.statusOptionTextActive]}>{status.toUpperCase()}</Text>
@@ -1139,24 +1268,118 @@ export default function ProfileScreen({ navigation, route }: any) {
               <TextInput
                 style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.fundingStage)}
-                onChangeText={(t: string) => setEditData({ ...editData, fundingStage: t })}
+                onChangeText={(t: string) => setEditField('fundingStage', t)}
                 placeholder="Funding (Bootstrapped, Raised, Pre-revenue...)"
                 placeholderTextColor="#666"
               />
+              {renderChoiceGroup('FUNDING STAGE', 'fundingStage', FUNDING_OPTIONS)}
               <TextInput
                 style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.lookingFor)}
-                onChangeText={(t: string) => setEditData({ ...editData, lookingFor: t })}
+                onChangeText={(t: string) => setEditField('lookingFor', t)}
                 placeholder="Looking For (comma-separated)"
                 placeholderTextColor="#666"
               />
+              {renderMultiChoiceGroup('LOOKING FOR', 'lookingFor', LOOKING_FOR_SUGGESTIONS)}
               <TextInput
                 style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
                 value={toTextValue(editData?.industries)}
-                onChangeText={(t: string) => setEditData({ ...editData, industries: t })}
+                onChangeText={(t: string) => setEditField('industries', t)}
                 placeholder="Industries (comma-separated)"
                 placeholderTextColor="#666"
               />
+              {renderMultiChoiceGroup('INDUSTRIES', 'industries', INDUSTRY_SUGGESTIONS)}
+              <View style={[styles.statusEditorCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+                <Text style={styles.projectEditLabel}>MATCHING DETAILS</Text>
+                <TextInput
+                  multiline
+                  style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                  value={toTextValue(editData?.goals)}
+                  onChangeText={(t: string) => setEditField('goals', t)}
+                  placeholder="Primary goal right now"
+                  placeholderTextColor="#666"
+                />
+                {renderChoiceGroup('EXPERIENCE LEVEL', 'experience', EXPERIENCE_OPTIONS)}
+                {renderChoiceGroup('COMMITMENT LEVEL', 'commitmentLevel', COMMITMENT_OPTIONS)}
+                {renderChoiceGroup('WORK STYLE', 'workStyle', WORK_STYLE_OPTIONS)}
+                {renderChoiceGroup('NETWORKING INTENT', 'networkingIntent', INTENT_OPTIONS)}
+                {renderChoiceGroup('TEAM SIZE PREFERENCE', 'teamSizePreference', TEAM_SIZE_OPTIONS)}
+                {renderChoiceGroup('EDUCATION / BACKGROUND', 'education', EDUCATION_OPTIONS)}
+                {renderChoiceGroup('AMBITION', 'ambition', AMBITION_OPTIONS)}
+                <TextInput
+                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  value={toTextValue(editData?.languages)}
+                  onChangeText={(t: string) => setEditField('languages', t)}
+                  placeholder="Languages (comma-separated)"
+                  placeholderTextColor="#666"
+                />
+                <TextInput
+                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  value={toTextValue(editData?.timezone)}
+                  onChangeText={(t: string) => setEditField('timezone', t)}
+                  placeholder="Timezone (e.g. GMT+2, EST, CAT)"
+                  placeholderTextColor="#666"
+                />
+                <View style={styles.switchEditorRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.choiceEditorLabel, { marginBottom: 2 }]}>REMOTE ONLY</Text>
+                    <Text style={styles.choiceHelp}>Only show remote-friendly collaboration preference.</Text>
+                  </View>
+                  <Switch
+                    value={!!editData?.remoteOnly}
+                    onValueChange={(v) => setEditField('remoteOnly', v)}
+                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#2563EB' }}
+                    thumbColor="#FFF"
+                  />
+                </View>
+                <View style={styles.switchEditorRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.choiceEditorLabel, { marginBottom: 2 }]}>WILLING TO RELOCATE</Text>
+                    <Text style={styles.choiceHelp}>Useful for local teams and investor-backed opportunities.</Text>
+                  </View>
+                  <Switch
+                    value={!!editData?.willingToRelocate}
+                    onValueChange={(v) => setEditField('willingToRelocate', v)}
+                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#2563EB' }}
+                    thumbColor="#FFF"
+                  />
+                </View>
+              </View>
+              <View style={[styles.statusEditorCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+                <Text style={styles.projectEditLabel}>LINKS</Text>
+                <TextInput
+                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  value={toTextValue(editData?.socialLinks?.portfolio)}
+                  onChangeText={(t: string) => setSocialLinkField('portfolio', t)}
+                  placeholder="Portfolio / website"
+                  placeholderTextColor="#666"
+                  autoCapitalize="none"
+                />
+                <TextInput
+                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  value={toTextValue(editData?.socialLinks?.linkedin)}
+                  onChangeText={(t: string) => setSocialLinkField('linkedin', t)}
+                  placeholder="LinkedIn URL"
+                  placeholderTextColor="#666"
+                  autoCapitalize="none"
+                />
+                <TextInput
+                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  value={toTextValue(editData?.socialLinks?.github)}
+                  onChangeText={(t: string) => setSocialLinkField('github', t)}
+                  placeholder="GitHub URL"
+                  placeholderTextColor="#666"
+                  autoCapitalize="none"
+                />
+                <TextInput
+                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  value={toTextValue(editData?.socialLinks?.twitter)}
+                  onChangeText={(t: string) => setSocialLinkField('twitter', t)}
+                  placeholder="X / Twitter URL"
+                  placeholderTextColor="#666"
+                  autoCapitalize="none"
+                />
+              </View>
               <View style={[styles.projectEditCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
                 <View style={styles.projectEditHeader}>
                   <Text style={styles.projectEditLabel}>ONGOING PROJECTS</Text>
@@ -1196,6 +1419,14 @@ export default function ProfileScreen({ navigation, route }: any) {
                       onChangeText={(t: string) => updateEditedProject(index, { status: t })}
                       placeholder="Stage: idea, mvp, live"
                       placeholderTextColor="#666"
+                    />
+                    <TextInput
+                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      value={toTextValue(project?.link)}
+                      onChangeText={(t: string) => updateEditedProject(index, { link: t })}
+                      placeholder="Project link (optional)"
+                      placeholderTextColor="#666"
+                      autoCapitalize="none"
                     />
                   </View>
                 ))}
@@ -2693,6 +2924,33 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 10,
+  },
+  choiceEditorBlock: {
+    width: '100%',
+    marginTop: 12,
+  },
+  choiceEditorLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    color: '#777',
+    textTransform: 'uppercase',
+  },
+  choiceHelp: {
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 14,
+    color: '#777',
+  },
+  switchEditorRow: {
+    width: '100%',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   statusOptionChip: {
     paddingHorizontal: 10,
