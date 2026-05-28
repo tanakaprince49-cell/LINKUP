@@ -33,6 +33,8 @@ import { ensureDirectMatch } from '../lib/chat';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
 import { compatibilityForPair } from '../lib/matchmaking';
+import { normalizeIdeaDraft } from '../lib/ideas';
+import { displayNameFor } from '../lib/discovery';
 import VerifiedBadge from '../components/VerifiedBadge';
 
 const { width } = Dimensions.get('window');
@@ -410,6 +412,9 @@ export default function ProfileScreen({ navigation, route }: any) {
     const existingProjects = Array.isArray((profile as any).projects)
       ? (profile as any).projects.map((project: any, index: number) => normalizeProjectDraft(project, profile.uid, index))
       : [];
+    const existingIdeas = Array.isArray((profile as any).startupIdeas)
+      ? (profile as any).startupIdeas.map((idea: any, index: number) => normalizeIdeaDraft(idea, profile.uid, index))
+      : [];
     setEditData({ 
       ...profile,
       username: (profile as any).username || '',
@@ -443,6 +448,9 @@ export default function ProfileScreen({ navigation, route }: any) {
       projects: existingProjects.length
         ? existingProjects
         : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any).startupStage || 'mvp') }],
+      startupIdeas: existingIdeas.length
+        ? existingIdeas
+        : [{ id: `idea_${profile.uid}_0`, title: '', description: '', stage: 'Idea Stage', lookingFor: [], tags: [] }],
     });
     setIsEditing(true);
   };
@@ -607,7 +615,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       await setDoc(saveRef, {
         ownerId: myProfile.uid,
         profileId: targetUserId,
-        profileName: profile.displayName || 'Builder',
+        profileName: displayNameFor(profile),
         profilePic: profile.profilePic || '',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -659,6 +667,16 @@ export default function ProfileScreen({ navigation, route }: any) {
           description: project.description || editData.bio || 'Ongoing project looking for relevant collaborators.',
         }))
         .slice(0, 10);
+      const sourceIdeas = Array.isArray(editData.startupIdeas) ? editData.startupIdeas : [];
+      const nextIdeas = sourceIdeas
+        .map((idea: any, index: number) => normalizeIdeaDraft(idea, profile.uid, index))
+        .filter((idea: any) => idea.title || idea.description)
+        .map((idea: any, index: number) => ({
+          ...idea,
+          title: idea.title || `${editData.company || editData.displayName || 'LINKUP'} idea ${index + 1}`,
+          description: idea.description || editData.bio || 'Idea looking for the right builders to make it real.',
+        }))
+        .slice(0, 20);
       await updateOwnProfileDoc({
         displayName: editData.displayName || '',
         username: cleanUsername(editData.username || editData.displayName || ''),
@@ -694,6 +712,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         vibeMedia: editData.vibeMedia || '',
         photos: Array.isArray(editData.photos) ? editData.photos.filter((p: string) => !!p).slice(0, 3) : [],
         projects: nextProjects,
+        startupIdeas: nextIdeas,
       });
       setIsEditing(false);
     } catch (err) {
@@ -893,6 +912,10 @@ export default function ProfileScreen({ navigation, route }: any) {
   const visibleProjects = projects
     .filter((project: any) => String(project?.title || project?.description || '').trim())
     .slice(0, 10);
+  const startupIdeas = Array.isArray((profile as any).startupIdeas) ? (profile as any).startupIdeas : [];
+  const visibleStartupIdeas = startupIdeas
+    .filter((idea: any) => String(idea?.title || idea?.description || '').trim())
+    .slice(0, 20);
   const profileBio = String(profile.bio || '').trim();
   const viewerIsVerified = !!(myProfile as any)?.isVerified;
   const showHighVoiceNotice = isViewingOther && !!(profile as any).isVerified && !viewerIsVerified;
@@ -928,6 +951,38 @@ export default function ProfileScreen({ navigation, route }: any) {
       projects: nextProjects.length
         ? nextProjects
         : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any).startupStage || 'mvp') }],
+    });
+  };
+  const editedIdeas = isEditing
+    ? (Array.isArray(editData?.startupIdeas) && editData.startupIdeas.length
+        ? editData.startupIdeas
+        : [{ id: `idea_${profile.uid}_0`, title: '', description: '', stage: 'Idea Stage', lookingFor: [], tags: [] }])
+    : [];
+  const updateEditedIdea = (index: number, patch: Record<string, unknown>) => {
+    const current = editedIdeas.map((idea: any, ideaIndex: number) => normalizeIdeaDraft(idea, profile.uid, ideaIndex));
+    current[index] = { ...current[index], ...patch };
+    setEditData({ ...editData, startupIdeas: current });
+  };
+  const addEditedIdea = () => {
+    if (editedIdeas.length >= 20) {
+      Alert.alert('Idea limit', 'You can add up to 20 ideas.');
+      return;
+    }
+    setEditData({
+      ...editData,
+      startupIdeas: [
+        ...editedIdeas,
+        { id: `idea_${profile.uid}_${editedIdeas.length}_${Date.now()}`, title: '', description: '', stage: 'Idea Stage', lookingFor: [], tags: [] },
+      ],
+    });
+  };
+  const removeEditedIdea = (index: number) => {
+    const nextIdeas = editedIdeas.filter((_idea: any, ideaIndex: number) => ideaIndex !== index);
+    setEditData({
+      ...editData,
+      startupIdeas: nextIdeas.length
+        ? nextIdeas
+        : [{ id: `idea_${profile.uid}_0`, title: '', description: '', stage: 'Idea Stage', lookingFor: [], tags: [] }],
     });
   };
   const stealthModeValue = isEditing
@@ -1434,6 +1489,66 @@ export default function ProfileScreen({ navigation, route }: any) {
                   LINKUP recommends each project to people with matching skills, interests, roles, and goals.
                 </Text>
               </View>
+              <View style={[styles.projectEditCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+                <View style={styles.projectEditHeader}>
+                  <Text style={styles.projectEditLabel}>IDEAS</Text>
+                  <TouchableOpacity style={styles.projectAddButton} onPress={addEditedIdea} activeOpacity={0.85}>
+                    <SafeIcon name="Plus" size={14} color="#000" />
+                    <Text style={styles.projectAddText}>ADD</Text>
+                  </TouchableOpacity>
+                </View>
+                {editedIdeas.map((idea: any, index: number) => (
+                  <View key={idea?.id || `idea-${index}`} style={[styles.projectDraftCard, { borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
+                    <View style={styles.projectDraftHeader}>
+                      <Text style={styles.projectDraftLabel}>IDEA {index + 1}</Text>
+                      {editedIdeas.length > 1 && (
+                        <TouchableOpacity onPress={() => removeEditedIdea(index)} style={styles.projectRemoveButton}>
+                          <SafeIcon name="Trash2" size={13} color="#E30613" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <TextInput
+                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      value={toTextValue(idea?.title)}
+                      onChangeText={(t: string) => updateEditedIdea(index, { title: t })}
+                      placeholder="Idea title (e.g. marketplace for student founders)"
+                      placeholderTextColor="#666"
+                    />
+                    <TextInput
+                      multiline
+                      style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      value={toTextValue(idea?.description)}
+                      onChangeText={(t: string) => updateEditedIdea(index, { description: t })}
+                      placeholder="What is the idea, who is it for, and why should someone build it with you?"
+                      placeholderTextColor="#666"
+                    />
+                    <TextInput
+                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      value={toTextValue(idea?.stage)}
+                      onChangeText={(t: string) => updateEditedIdea(index, { stage: t })}
+                      placeholder="Stage: Idea Stage, Research, MVP..."
+                      placeholderTextColor="#666"
+                    />
+                    <TextInput
+                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      value={Array.isArray(idea?.lookingFor) ? idea.lookingFor.join(', ') : toTextValue(idea?.lookingFor)}
+                      onChangeText={(t: string) => updateEditedIdea(index, { lookingFor: parseProfileList(t) })}
+                      placeholder="Looking for: CTO, designer, marketer..."
+                      placeholderTextColor="#666"
+                    />
+                    <TextInput
+                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      value={Array.isArray(idea?.tags) ? idea.tags.join(', ') : toTextValue(idea?.tags)}
+                      onChangeText={(t: string) => updateEditedIdea(index, { tags: parseProfileList(t) })}
+                      placeholder="Tags: fintech, SaaS, mobile, social..."
+                      placeholderTextColor="#666"
+                    />
+                  </View>
+                ))}
+                <Text style={styles.projectEditHelp}>
+                  Ideas appear in the Ideas deck. When two builders like the same idea, LINKUP opens a match.
+                </Text>
+              </View>
             </View>
           ) : (
             <>
@@ -1443,14 +1558,14 @@ export default function ProfileScreen({ navigation, route }: any) {
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
-                  {profile.displayName || 'Builder'}
+                  {displayNameFor(profile)}
                 </Text>
                 {profile.isVerified && (
                   <VerifiedBadge size={30} style={styles.inlineVerifiedBadge} />
                 )}
               </View>
               <Text style={styles.handleText}>
-                @{cleanUsername((profile as any).username || profile.displayName || 'builder')}
+                @{cleanUsername((profile as any).username || displayNameFor(profile) || 'builder')}
               </Text>
               <Text style={styles.roleTextLine} numberOfLines={1}>
                 {[(profile as any).occupation, (profile as any).company ? `@ ${(profile as any).company}` : null].filter(Boolean).join(' ') || 'Builder'}
@@ -1574,6 +1689,45 @@ export default function ProfileScreen({ navigation, route }: any) {
                 <View style={[styles.emptyProfileCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
                   <Text style={[styles.emptyProfileText, { color: isDark ? '#AAA' : '#555' }]}>
                     {isViewingOther ? 'This builder has not added what they are building yet.' : 'Add your current project in Edit Profile so people can discover what you are building.'}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>IDEAS</Text>
+              {visibleStartupIdeas.length ? (
+                visibleStartupIdeas.map((idea: any, index: number) => (
+                  <View
+                    key={idea?.id || `${profile.uid}-idea-${index}`}
+                    style={[styles.projectCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                      <Text style={[styles.projectTitle, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                        {idea?.title || 'Untitled idea'}
+                      </Text>
+                      <View style={styles.projectStagePill}>
+                        <Text style={styles.projectStageText}>{String(idea?.stage || 'idea').toUpperCase()}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.projectDescription}>
+                      {idea?.description || 'Idea looking for collaborators.'}
+                    </Text>
+                    <View style={styles.chipsRow}>
+                      {[...(Array.isArray(idea?.lookingFor) ? idea.lookingFor : []), ...(Array.isArray(idea?.tags) ? idea.tags : [])]
+                        .slice(0, 6)
+                        .map((tag: string, tagIndex: number) => (
+                          <View key={`${idea?.id || index}-${tag}-${tagIndex}`} style={styles.chip}>
+                            <Text style={styles.chipText}>{String(tag).toUpperCase()}</Text>
+                          </View>
+                        ))}
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <View style={[styles.emptyProfileCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
+                  <Text style={[styles.emptyProfileText, { color: isDark ? '#AAA' : '#555' }]}>
+                    {isViewingOther ? 'This builder has not posted ideas yet.' : 'Add ideas in Edit Profile so builders can swipe into what you want to build.'}
                   </Text>
                 </View>
               )}

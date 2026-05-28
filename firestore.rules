@@ -114,6 +114,7 @@ service cloud.firestore {
           validOptionalList(data, 'lookingFor', 30) &&
           validOptionalList(data, 'languages', 20) &&
           validOptionalList(data, 'projects', 20) &&
+          validOptionalList(data, 'startupIdeas', 20) &&
           validOptionalList(data, 'circles', 20) &&
           validOptionalBool(data, 'isVisible') &&
           validOptionalBool(data, 'isStealthMode') &&
@@ -304,6 +305,38 @@ service cloud.firestore {
         incoming().type in ['like', 'skip'] &&
         incoming().timestamp == request.time;
       allow update, delete: if false;
+    }
+
+    // ------------------------------------------------------------
+    // Idea swipes / "Tinder for Ideas"
+    // ------------------------------------------------------------
+    match /ideaSwipes/{swipeId} {
+      function validIdeaSwipe(data) {
+        return data.keys().hasOnly([
+          'ideaId', 'ideaOwnerId', 'ideaTitle',
+          'swiperId', 'swiperName', 'swiperPic',
+          'direction', 'createdAt'
+        ]) &&
+        data.ideaId is string &&
+        data.ideaId.size() > 0 &&
+        data.ideaId.size() <= 160 &&
+        data.ideaOwnerId is string &&
+        isValidId(data.ideaOwnerId) &&
+        data.swiperId == request.auth.uid &&
+        data.ideaOwnerId != request.auth.uid &&
+        data.direction == 'right' &&
+        data.createdAt == request.time &&
+        (!data.keys().hasAny(['ideaTitle']) || (data.ideaTitle is string && data.ideaTitle.size() <= 180)) &&
+        (!data.keys().hasAny(['swiperName']) || (data.swiperName is string && data.swiperName.size() <= 120)) &&
+        (!data.keys().hasAny(['swiperPic']) || (data.swiperPic is string && data.swiperPic.size() <= 900000));
+      }
+
+      allow get: if isSignedIn() && (existing().swiperId == request.auth.uid || existing().ideaOwnerId == request.auth.uid);
+      allow list: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+        swipeId == incoming().ideaId + "_" + request.auth.uid &&
+        validIdeaSwipe(incoming());
+      allow delete: if isSignedIn() && existing().swiperId == request.auth.uid;
     }
 
     // ------------------------------------------------------------

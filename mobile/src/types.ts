@@ -57,6 +57,7 @@ export interface UserProfile {
   resume: StartupResume;
   badges: string[];
   projects: Project[];
+  startupIdeas?: StartupIdea[];
   viewedBy: string[];
   isStealthMode: boolean; // For private discovery
   hideOnlineStatus?: boolean;
@@ -96,6 +97,16 @@ export interface Project {
   description: string;
   link?: string;
   status: 'idea' | 'mvp' | 'live';
+}
+
+export interface StartupIdea {
+  id: string;
+  title: string;
+  description: string;
+  stage?: string;
+  lookingFor?: string[];
+  tags?: string[];
+  createdAt?: Timestamp | FieldValue;
 }
 
 export interface Post {

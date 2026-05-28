@@ -14,6 +14,7 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import SwipeScreen from './src/screens/SwipeScreen';
+import IdeaDeckScreen from './src/screens/IdeaDeckScreen';
 import DiscoveryDashboardScreen from './src/screens/DiscoveryDashboardScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import MatchScreen from './src/screens/MatchScreen';
@@ -62,6 +63,7 @@ const linking: any = {
       Chat: 'chat/:matchId',
       ArchivedChats: 'messages/archived',
       SwipeDeck: 'swipe',
+      IdeaDeck: 'ideas',
       Viewers: 'viewers',
       ActiveOpportunity: 'opportunity/:userId',
       ActiveOpportunities: 'opportunities',
@@ -370,6 +372,7 @@ function AppContent() {
             <Stack.Screen name="ArchivedChats" component={MessagesScreen} initialParams={{ archivedOnly: true }} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="SwipeDeck" component={SwipeScreen} />
+            <Stack.Screen name="IdeaDeck" component={IdeaDeckScreen} />
             <Stack.Screen name="Viewers" component={ViewersScreen} />
             <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
             <Stack.Screen name="ActiveOpportunities" component={ActiveOpportunitiesScreen} />

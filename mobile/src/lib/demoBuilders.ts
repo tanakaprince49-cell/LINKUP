@@ -43,6 +43,16 @@ const makeDemoBuilder = (profile: Partial<UserProfile> & Pick<UserProfile, 'uid'
   },
   badges: ['Demo Builder'],
   projects: [],
+  startupIdeas: [
+    {
+      id: `${profile.uid}_starter_idea`,
+      title: `${profile.company || profile.occupation} collaboration sprint`,
+      description: `A lightweight product experiment around ${profile.industries?.[0] || 'startups'} that needs people with ${profile.skills?.slice(0, 2).join(' and ') || 'builder'} skills.`,
+      stage: profile.startupStage || 'Idea Stage',
+      lookingFor: profile.lookingFor?.slice(0, 3) || ['Startup Team'],
+      tags: [...(profile.industries || []), ...(profile.skills || [])].slice(0, 5),
+    },
+  ],
   viewedBy: [],
   isStealthMode: false,
   hideOnlineStatus: false,

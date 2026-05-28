@@ -3,8 +3,25 @@ import { Project, UserProfile } from '../types';
 export const cleanUsername = (value: string) =>
   value.replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
 
+export const displayNameFor = (profile: Partial<UserProfile> | any) => {
+  const direct = String(profile?.displayName || '').trim();
+  if (direct && direct !== 'Builder' && direct !== 'New Builder') return direct;
+
+  const fullName = String(profile?.fullName || profile?.name || '').trim();
+  if (fullName) return fullName;
+
+  const composed = [profile?.firstName, profile?.lastName]
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean)
+    .join(' ');
+  if (composed) return composed;
+
+  const emailName = String(profile?.email || '').split('@')[0]?.trim();
+  return emailName || 'Builder';
+};
+
 export const handleFor = (profile: Partial<UserProfile>) =>
-  `@${cleanUsername(String((profile as any).username || profile.displayName || 'builder')) || 'builder'}`;
+  `@${cleanUsername(String((profile as any).username || displayNameFor(profile) || 'builder')) || 'builder'}`;
 
 export const isDiscoverableProfile = (profile: any) =>
   !!profile && !profile.deleted && !profile.isStealthMode && profile.isVisible !== false;
@@ -61,7 +78,7 @@ export const opportunityDetails = (profile: any, selectedProject?: Project | nul
   const projects = Array.isArray(profile?.projects) ? profile.projects : [];
   const project = selectedProject || projects[0];
   const roleNeed = lookingFor.length ? lookingFor.slice(0, 3).join(', ') : 'Collaborators';
-  const title = project?.title ? `${project.title}` : `${profile?.displayName || 'Builder'} is building`;
+  const title = project?.title ? `${project.title}` : `${displayNameFor(profile)} is building`;
   const summary =
     project?.description ||
     profile?.bio ||

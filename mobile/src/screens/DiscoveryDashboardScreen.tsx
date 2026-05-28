@@ -8,11 +8,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
 import { UserProfile } from '../types';
 import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
-import { earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
+import { displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
 import { demoBuilders } from '../lib/demoBuilders';
-import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket } from 'lucide-react-native';
+import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb } from 'lucide-react-native';
 import VerifiedBadge from '../components/VerifiedBadge';
 
 const dashboardCacheKey = (uid: string) => `linkup:dashboard:${uid}`;
@@ -50,11 +50,15 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
+    const instantPeople = demoBuilders.filter((profile) => profile.uid !== user.uid);
+    if (instantPeople.length) {
+      setPeople((current) => (current.length ? current : instantPeople));
+      setLoading(false);
+    }
     readCachedDashboardPeople(user.uid).then((cachedPeople) => {
       if (!isMounted) return;
-      const instantPeople = cachedPeople.length ? cachedPeople : demoBuilders.filter((profile) => profile.uid !== user.uid);
-      if (instantPeople.length) {
-        setPeople(instantPeople);
+      if (cachedPeople.length) {
+        setPeople(cachedPeople);
         setLoading(false);
       }
     });
@@ -70,7 +74,10 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         const list = snap.docs
           .map((d) => d.data() as UserProfile)
           .filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        setPeople(list);
+        const merged = [...list, ...demoBuilders]
+          .filter((profile: any) => profile.uid !== user.uid)
+          .filter((profile, index, all) => all.findIndex((item) => item.uid === profile.uid) === index);
+        setPeople(merged);
         writeCachedDashboardPeople(user.uid, list).catch(() => {});
         setLoading(false);
       },
@@ -166,7 +173,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         <View style={{ flex: 1 }}>
           <View style={styles.nameRow}>
             <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
-              {item.displayName || 'Builder'}
+              {displayNameFor(item)}
             </Text>
             {item.isVerified && <VerifiedBadge size={20} />}
           </View>
@@ -340,10 +347,13 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
                   <Text style={[styles.heroBtnText, { color: '#000' }]}>OPEN SWIPE</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => navigation.navigate('Search')}
+                  onPress={() => navigation.navigate('IdeaDeck')}
                   style={[styles.heroBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE', borderWidth: 1 }]}
                 >
-                  <Text style={[styles.heroBtnText, { color: isDark ? '#FFF' : '#000' }]}>SEARCH</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Lightbulb size={15} color={isDark ? '#FFF' : '#000'} />
+                    <Text style={[styles.heroBtnText, { color: isDark ? '#FFF' : '#000' }]}>IDEAS</Text>
+                  </View>
                 </TouchableOpacity>
               </View>
 
@@ -366,7 +376,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.radarTitle, { color: isDark ? '#FFF' : '#000' }]}>OPPORTUNITY RADAR</Text>
                       <Text style={styles.radarSub} numberOfLines={2}>
-                        {topOpportunityAlert.profile.displayName || 'A builder'} matches your interests: {topOpportunityAlert.reason}
+                        {displayNameFor(topOpportunityAlert.profile)} matches your interests: {topOpportunityAlert.reason}
                       </Text>
                     </View>
                     <View style={styles.radarScore}>

@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, query, onSnapshot, where, addDoc, limit, serverTimestamp, getDocs } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../lib/firebase';
-import { earnedScore } from '../lib/discovery';
+import { displayNameFor, earnedScore } from '../lib/discovery';
 import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 import { trackProfileView } from '../lib/analytics';
 import { ensureDirectMatch } from '../lib/chat';
@@ -73,7 +73,7 @@ const writeCachedDiscovery = async (uid: string, profiles: UserProfile[]) => {
   try {
     const compactProfiles = profiles.slice(0, DISCOVERY_LIMIT).map((profile) => ({
       uid: profile.uid,
-      displayName: profile.displayName,
+      displayName: displayNameFor(profile),
       username: (profile as any).username || '',
       bio: profile.bio || '',
       profilePic: profile.profilePic || '',
@@ -264,6 +264,12 @@ export default function SwipeScreen({ navigation }: any) {
       return;
     }
     let isMounted = true;
+    const fallbackProfiles = demoBuilders.filter((profile) => profile.uid !== user.uid);
+    if (fallbackProfiles.length) {
+      allProfilesRef.current = fallbackProfiles;
+      setProfiles((current) => (current.length ? current : fallbackProfiles));
+      setLoading(false);
+    }
     readCachedDiscovery(user.uid).then((cachedProfiles) => {
       if (!isMounted || hasUserSwipedRef.current) return;
       const instantProfiles = cachedProfiles.length
@@ -474,12 +480,12 @@ export default function SwipeScreen({ navigation }: any) {
     }
 
     if (connectionRequest?.status === 'pending') {
-      Alert.alert('Request pending', `${target.displayName || 'This builder'} has not answered yet.`);
+      Alert.alert('Request pending', `${displayNameFor(target)} has not answered yet.`);
       return;
     }
 
     if (connectionRequest?.status === 'rejected') {
-      Alert.alert('Request rejected', `${target.displayName || 'This builder'} declined this request.`);
+      Alert.alert('Request rejected', `${displayNameFor(target)} declined this request.`);
       return;
     }
 
@@ -488,11 +494,11 @@ export default function SwipeScreen({ navigation }: any) {
       const request = await requestConnection({
         senderId: user.uid,
         recipientId: target.uid,
-        senderName: myProfile?.displayName || user.displayName || 'Someone',
+        senderName: displayNameFor(myProfile || user),
         senderPic: myProfile?.profilePic || user.photoURL || '',
       });
       setConnectionRequest(request);
-      Alert.alert('Request sent', `${target.displayName || 'This builder'} can approve or reject it.`);
+      Alert.alert('Request sent', `${displayNameFor(target)} can approve or reject it.`);
     } catch (error) {
       console.warn('Contact request failed:', error);
       Alert.alert('Request failed', 'Could not send this contact request. Check Firebase rules and try again.');
@@ -601,7 +607,7 @@ export default function SwipeScreen({ navigation }: any) {
           <Text style={styles.previewEyebrow}>NEXT BUILDER</Text>
           <View style={styles.previewNameRow}>
             <Text style={styles.previewName} numberOfLines={1}>
-              {nextProfile.displayName || 'Builder'}{ageText}
+              {displayNameFor(nextProfile)}{ageText}
             </Text>
             {!!nextProfile.isVerified && <VerifiedBadge size={24} />}
           </View>
@@ -747,7 +753,7 @@ export default function SwipeScreen({ navigation }: any) {
 
           <View style={[styles.compactMeta, isCompactWeb && styles.compactWebMeta]}>
             <View style={styles.nameRow}>
-              <Text style={[styles.nameText, isCompactWeb && styles.compactNameText]}>{topProfile.displayName || 'Builder'}{ageText}</Text>
+              <Text style={[styles.nameText, isCompactWeb && styles.compactNameText]}>{displayNameFor(topProfile)}{ageText}</Text>
               {topProfile.isVerified && <VerifiedBadge size={24} />}
               {topProfile.hasExit && (
                 <View style={styles.exitBadge}>
@@ -800,7 +806,7 @@ export default function SwipeScreen({ navigation }: any) {
               <View style={styles.expandedProfileHeader}>
                 <View style={styles.expandedNameRow}>
                   <Text style={styles.expandedName} numberOfLines={2}>
-                    {topProfile.displayName || 'Builder'}{ageText}
+                    {displayNameFor(topProfile)}{ageText}
                   </Text>
                   {!!topProfile.isVerified && <VerifiedBadge size={24} />}
                 </View>
