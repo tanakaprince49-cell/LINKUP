@@ -366,7 +366,11 @@ service cloud.firestore {
           data.senderName.size() > 0 &&
           data.senderName.size() <= 120 &&
           data.senderPic is string &&
-          data.senderPic.size() <= 5000;
+          data.senderPic.size() <= 5000 &&
+          (!data.keys().hasAny(['message']) || (data.message is string && data.message.size() <= 600)) &&
+          (!data.keys().hasAny(['contextType']) || data.contextType == 'idea') &&
+          (!data.keys().hasAny(['ideaId']) || (data.ideaId is string && data.ideaId.size() <= 120)) &&
+          (!data.keys().hasAny(['ideaTitle']) || (data.ideaTitle is string && data.ideaTitle.size() <= 140));
       }
 
       allow get: if requestPathInvolvesSignedInUser() || userIsInConnectionRequest(existing());
@@ -374,7 +378,8 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         incoming().keys().hasOnly([
           'senderId', 'recipientId', 'senderName', 'senderPic',
-          'status', 'createdAt', 'updatedAt'
+          'status', 'message', 'contextType', 'ideaId', 'ideaTitle',
+          'createdAt', 'updatedAt'
         ]) &&
         requestId == request.auth.uid + "_" + incoming().recipientId &&
         validConnectionRequestBase(incoming()) &&
@@ -389,6 +394,10 @@ service cloud.firestore {
         incoming().recipientId == existing().recipientId &&
         incoming().senderName == existing().senderName &&
         incoming().senderPic == existing().senderPic &&
+        (!existing().keys().hasAny(['message']) || incoming().message == existing().message) &&
+        (!existing().keys().hasAny(['contextType']) || incoming().contextType == existing().contextType) &&
+        (!existing().keys().hasAny(['ideaId']) || incoming().ideaId == existing().ideaId) &&
+        (!existing().keys().hasAny(['ideaTitle']) || incoming().ideaTitle == existing().ideaTitle) &&
         incoming().status in ['approved', 'rejected'] &&
         incoming().reviewedAt == request.time &&
         incoming().updatedAt == request.time &&

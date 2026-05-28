@@ -18,9 +18,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { addDoc, collection, doc, getDoc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { ChevronLeft, Heart, Lightbulb, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
+import { ChevronLeft, Heart, Lightbulb, MessageSquare, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { ensureDirectMatch } from '../lib/chat';
+import { requestConnection } from '../lib/connectionRequests';
 import { displayNameFor, isDiscoverableProfile } from '../lib/discovery';
 import { collectIdeaDeck, IdeaDeckItem, safeIdeaId } from '../lib/ideas';
 import { demoBuilders } from '../lib/demoBuilders';
@@ -54,6 +55,9 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const [ideaLookingFor, setIdeaLookingFor] = useState<string[]>([]);
   const [ideaFields, setIdeaFields] = useState<string[]>([]);
   const [confettiActive, setConfettiActive] = useState(false);
+  const [inviteIdea, setInviteIdea] = useState<IdeaDeckItem | null>(null);
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [inviteBusy, setInviteBusy] = useState(false);
   const swipedIdeasRef = useRef<Set<string>>(new Set());
   const position = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const animateSwipeRef = useRef<(direction: 'left' | 'right') => void>(() => {});
@@ -320,6 +324,55 @@ export default function IdeaDeckScreen({ navigation }: any) {
     }
   };
 
+  const openInviteComposer = (idea: IdeaDeckItem) => {
+    setInviteIdea(idea);
+    setInviteMessage(`I like this idea. I can help with ${String((myProfile as any)?.occupation || 'building it')}.`);
+  };
+
+  const limitInviteMessageLines = (value: string) => {
+    const lines = value.replace(/\r/g, '').split('\n').slice(0, 5);
+    setInviteMessage(lines.join('\n').slice(0, 600));
+  };
+
+  const sendIdeaInvite = async () => {
+    if (!user?.uid || !inviteIdea || inviteBusy) return;
+    const message = inviteMessage.trim();
+    if (!message) {
+      Alert.alert('Add a message', 'Write a short message so the idea owner knows why you want to connect.');
+      return;
+    }
+    if (inviteIdea.ownerId === user.uid) {
+      Alert.alert('This is your idea', 'Other builders can request to connect with you from this card.');
+      return;
+    }
+
+    setInviteBusy(true);
+    try {
+      const request = await requestConnection({
+        senderId: user.uid,
+        recipientId: inviteIdea.ownerId,
+        senderName: displayNameFor(myProfile || user),
+        senderPic: myProfile?.profilePic || user.photoURL || '',
+        message,
+        contextType: 'idea',
+        ideaId: inviteIdea.id,
+        ideaTitle: inviteIdea.title,
+      });
+      setInviteIdea(null);
+      setInviteMessage('');
+      Alert.alert(
+        request.status === 'approved' ? 'Already connected' : 'Invite sent',
+        request.status === 'approved'
+          ? 'You can already message this builder.'
+          : `${inviteIdea.ownerName} can approve or reject your invite from notifications.`
+      );
+    } catch (error: any) {
+      Alert.alert('Could not send invite', error?.message || 'Please deploy the latest Firestore rules and try again.');
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
   const renderIdeaCard = (idea: IdeaDeckItem, isPreview = false) => (
     <Animated.View
       key={idea.id}
@@ -381,6 +434,13 @@ export default function IdeaDeckScreen({ navigation }: any) {
           </View>
         ))}
       </View>
+
+      {!isPreview && (
+        <TouchableOpacity onPress={() => openInviteComposer(idea)} style={styles.ideaInviteBtn}>
+          <MessageSquare size={17} color="#000" />
+          <Text style={styles.ideaInviteText}>SEND 5-LINE INVITE</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={[styles.ownerCard, { backgroundColor: isDark ? '#17171C' : '#F8F8F8' }]}>
         <Image source={{ uri: idea.ownerPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.ownerPic} />
@@ -474,6 +534,47 @@ export default function IdeaDeckScreen({ navigation }: any) {
     </Modal>
   );
 
+  const renderInviteComposer = () => (
+    <Modal visible={!!inviteIdea} transparent animationType="fade" onRequestClose={() => setInviteIdea(null)}>
+      <View style={styles.modalBackdrop}>
+        <View style={[styles.composeSheet, styles.inviteSheet, { backgroundColor: isDark ? '#101014' : '#FFFFFF' }]}>
+          <View style={styles.composeHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.composeTitle, { color: isDark ? '#FFF' : '#000' }]}>REQUEST TO CONNECT</Text>
+              <Text style={styles.composeSub} numberOfLines={2}>
+                {inviteIdea ? `About: ${inviteIdea.title}` : 'Send a short invite.'}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setInviteIdea(null)} style={styles.composeCloseBtn}>
+              <X size={22} color={isDark ? '#FFF' : '#000'} />
+            </TouchableOpacity>
+          </View>
+
+          <TextInput
+            value={inviteMessage}
+            onChangeText={limitInviteMessageLines}
+            placeholder="Write up to 5 lines..."
+            placeholderTextColor="#777"
+            multiline
+            numberOfLines={5}
+            maxLength={600}
+            textAlignVertical="top"
+            style={[
+              styles.composeInput,
+              styles.inviteTextArea,
+              { color: isDark ? '#FFF' : '#000', borderColor: isDark ? '#27272A' : '#E5E7EB' },
+            ]}
+          />
+          <Text style={styles.inviteHint}>The idea owner can approve or reject this request before chat opens.</Text>
+
+          <TouchableOpacity onPress={sendIdeaInvite} disabled={inviteBusy} style={[styles.postIdeaBtn, inviteBusy && styles.postIdeaBtnDisabled]}>
+            {inviteBusy ? <ActivityIndicator color="#000" /> : <Text style={styles.postIdeaText}>SEND INVITE</Text>}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
       <View style={styles.header}>
@@ -521,6 +622,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
         </View>
       )}
       {renderIdeaComposer()}
+      {renderInviteComposer()}
       <ConfettiBurst active={confettiActive} width={width} />
     </SafeAreaView>
   );
@@ -648,6 +750,8 @@ const styles = StyleSheet.create({
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 20 },
   tagPill: { borderRadius: 999, backgroundColor: '#FBE61818', borderWidth: 1, borderColor: '#FBE61844', paddingHorizontal: 10, paddingVertical: 7 },
   tagText: { fontSize: 9, fontWeight: '900', color: '#8A7900', letterSpacing: 0.9 },
+  ideaInviteBtn: { marginTop: 18, height: 50, borderRadius: 18, backgroundColor: '#FBE618', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  ideaInviteText: { color: '#000', fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
   ownerCard: { marginTop: 'auto', borderRadius: 22, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
   ownerPic: { width: 48, height: 48, borderRadius: 18 },
   ownerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -670,6 +774,7 @@ const styles = StyleSheet.create({
   emptyButtonText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.5, color: '#000' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.58)', alignItems: 'center', justifyContent: 'center', padding: 18 },
   composeSheet: { width: '100%', maxWidth: 560, maxHeight: '88%', borderRadius: 30, padding: 18 },
+  inviteSheet: { maxHeight: 440 },
   composeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   composeTitle: { fontSize: 20, fontWeight: '900', letterSpacing: 1.8 },
   composeSub: { marginTop: 4, color: '#777', fontSize: 12, fontWeight: '800' },
@@ -677,6 +782,8 @@ const styles = StyleSheet.create({
   composeScroll: { paddingTop: 16, paddingBottom: 12 },
   composeInput: { minHeight: 54, borderWidth: 1, borderRadius: 18, paddingHorizontal: 16, fontSize: 15, fontWeight: '800', marginBottom: 12 },
   composeTextArea: { minHeight: 112, paddingTop: 14, lineHeight: 22 },
+  inviteTextArea: { minHeight: 150, marginTop: 18, paddingTop: 14, lineHeight: 22 },
+  inviteHint: { marginBottom: 14, color: '#777', fontSize: 11, fontWeight: '800', lineHeight: 17 },
   composeLabel: { marginTop: 8, marginBottom: 10, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
   composeChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   composeChip: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: '#FFF' },

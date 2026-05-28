@@ -12,6 +12,10 @@ export type ConnectionRequest = {
   senderName?: string;
   senderPic?: string;
   matchId?: string;
+  message?: string;
+  contextType?: 'idea';
+  ideaId?: string;
+  ideaTitle?: string;
 };
 
 export function connectionRequestId(senderId: string, recipientId: string) {
@@ -55,16 +59,27 @@ export async function requestConnection({
   recipientId,
   senderName,
   senderPic,
+  message,
+  contextType,
+  ideaId,
+  ideaTitle,
 }: {
   senderId: string;
   recipientId: string;
   senderName?: string;
   senderPic?: string;
+  message?: string;
+  contextType?: 'idea';
+  ideaId?: string;
+  ideaTitle?: string;
 }) {
   const requestId = connectionRequestId(senderId, recipientId);
   const requestRef = doc(db, 'connectionRequests', requestId);
   const existing = await getDoc(requestRef).catch(() => null);
   const safeSenderPic = safeContactImage(senderPic);
+  const safeMessage = String(message || '').trim().slice(0, 600);
+  const safeIdeaId = String(ideaId || '').trim().slice(0, 120);
+  const safeIdeaTitle = String(ideaTitle || '').trim().slice(0, 140);
 
   if (existing?.exists()) {
     return { id: existing.id, ...(existing.data() as any) } as ConnectionRequest;
@@ -76,9 +91,19 @@ export async function requestConnection({
     senderName: senderName || 'Someone',
     senderPic: safeSenderPic,
     status: 'pending',
+    ...(safeMessage ? { message: safeMessage } : {}),
+    ...(contextType === 'idea' ? { contextType: 'idea' } : {}),
+    ...(safeIdeaId ? { ideaId: safeIdeaId } : {}),
+    ...(safeIdeaTitle ? { ideaTitle: safeIdeaTitle } : {}),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  const notificationContent = (
+    contextType === 'idea' && safeIdeaTitle
+      ? `wants to connect about "${safeIdeaTitle}"${safeMessage ? `: ${safeMessage}` : '.'}`
+      : safeMessage || 'requested to talk with you.'
+  ).slice(0, 500);
 
   await addDoc(collection(db, 'notifications'), {
     userId: recipientId,
@@ -86,7 +111,7 @@ export async function requestConnection({
     fromName: senderName || 'Someone',
     fromPic: safeSenderPic,
     type: 'connection_request',
-    content: 'requested to talk with you.',
+    content: notificationContent,
     requestId,
     isRead: false,
     timestamp: serverTimestamp(),
@@ -99,6 +124,10 @@ export async function requestConnection({
     senderName,
     senderPic: safeSenderPic,
     status: 'pending' as const,
+    message: safeMessage,
+    ...(contextType === 'idea' ? { contextType: 'idea' as const } : {}),
+    ideaId: safeIdeaId,
+    ideaTitle: safeIdeaTitle,
   };
 }
 
