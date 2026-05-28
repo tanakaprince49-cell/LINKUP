@@ -123,9 +123,9 @@ export default function TrendingBuildersScreen({ navigation }: any) {
         )}
 
         <View style={styles.tagsRow}>
-          {highlights.length ? highlights.map((tag) => (
+          {highlights.length ? highlights.map((tag, index) => (
             <View
-              key={`${item.uid}-${tag}`}
+              key={`${item.uid}-${tag}-${index}`}
               style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
             >
               <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>

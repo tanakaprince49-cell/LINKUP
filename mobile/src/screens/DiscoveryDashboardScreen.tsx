@@ -248,8 +248,8 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         </View>
 
         <View style={styles.tagsRow}>
-          {details.tags.map((tag) => (
-            <View key={tag} style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+          {details.tags.map((tag, index) => (
+            <View key={`${item.uid}-${tag}-${index}`} style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
               <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{tag.toUpperCase()}</Text>
             </View>
           ))}
@@ -297,8 +297,8 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         </Text>
       </View>
       <View style={styles.tagsRow}>
-        {[item.roleNeed, item.project.status, ...item.matchingSignals].filter(Boolean).slice(0, 4).map((tag) => (
-          <View key={`${item.id}-${tag}`} style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+        {[item.roleNeed, item.project.status, ...item.matchingSignals].filter(Boolean).slice(0, 4).map((tag, index) => (
+          <View key={`${item.id}-${tag}-${index}`} style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
             <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{String(tag).toUpperCase()}</Text>
           </View>
         ))}

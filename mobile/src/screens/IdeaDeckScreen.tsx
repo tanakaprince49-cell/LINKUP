@@ -428,8 +428,8 @@ export default function IdeaDeckScreen({ navigation }: any) {
       </View>
 
       <View style={styles.tagsRow}>
-        {(idea.tags || []).slice(0, 6).map((tag) => (
-          <View key={`${idea.id}-${tag}`} style={styles.tagPill}>
+        {(idea.tags || []).slice(0, 6).map((tag, index) => (
+          <View key={`${idea.id}-${tag}-${index}`} style={styles.tagPill}>
             <Text style={styles.tagText}>{String(tag).toUpperCase()}</Text>
           </View>
         ))}

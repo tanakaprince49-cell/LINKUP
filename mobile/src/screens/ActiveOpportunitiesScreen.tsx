@@ -128,8 +128,8 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
         </View>
 
         <View style={styles.tagsRow}>
-          {details.tags.slice(0, 4).map((tag) => (
-            <View key={`${item.uid}-${tag}`} style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+          {details.tags.slice(0, 4).map((tag, index) => (
+            <View key={`${item.uid}-${tag}-${index}`} style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
               <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]}>{String(tag).toUpperCase()}</Text>
             </View>
           ))}

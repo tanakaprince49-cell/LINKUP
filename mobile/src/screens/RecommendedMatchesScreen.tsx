@@ -205,9 +205,9 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         </View>
 
         <View style={styles.tagsRow}>
-          {tags.length ? tags.map((tag) => (
+          {tags.length ? tags.map((tag, index) => (
             <View
-              key={`${item.uid}-${tag}`}
+              key={`${item.uid}-${tag}-${index}`}
               style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
             >
               <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
