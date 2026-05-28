@@ -419,17 +419,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const storedOnboardedBeforeSnapshot = await readStoredOnboarding(authenticatedUser.uid);
       const cachedProfileBeforeSnapshot = await readCachedProfile(authenticatedUser.uid);
-      if (storedOnboardedBeforeSnapshot) {
+      const cachedOnboardedBeforeSnapshot = Boolean(
+        storedOnboardedBeforeSnapshot ||
+          cachedProfileBeforeSnapshot?.onboarded ||
+          hasCompletedProfileSignals(cachedProfileBeforeSnapshot)
+      );
+
+      if (cachedOnboardedBeforeSnapshot) {
         setCompletedOnboardingUid(authenticatedUser.uid);
         setProfile({
-          ...buildLocalUserProfile(authenticatedUser, true),
+          ...buildLocalUserProfile(authenticatedUser, cachedOnboardedBeforeSnapshot),
           ...(cachedProfileBeforeSnapshot || {}),
           uid: authenticatedUser.uid,
-          onboarded: true,
+          onboarded: cachedOnboardedBeforeSnapshot,
         } as UserProfile);
         setLoading(false);
       } else {
-        setProfile(null);
+        setProfile(buildLocalUserProfile(authenticatedUser, false) as UserProfile);
+        setLoading(false);
       }
 
       unsubscribeProfile = onSnapshot(

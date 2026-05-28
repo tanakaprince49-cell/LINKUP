@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
@@ -37,9 +37,10 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const remoteRankTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [people, setPeople] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [people, setPeople] = useState<UserProfile[]>(() => demoBuilders);
   const [aiRank, setAiRank] = useState<Record<string, { score: number; reason: string }>>({});
   const [aiLoading, setAiLoading] = useState(false);
   const [opportunityRadar, setOpportunityRadar] = useState<OpportunityAlert[]>([]);
@@ -99,7 +100,11 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
     const localRanked = localCommonalityRank(me, people, 15);
     setAiRank(rankedCandidatesToMap(localRanked));
 
-    (async () => {
+    if (remoteRankTimerRef.current) {
+      clearTimeout(remoteRankTimerRef.current);
+    }
+
+    remoteRankTimerRef.current = setTimeout(() => void (async () => {
       try {
         setAiLoading(true);
         let ranked = await rankCandidatesHybrid(me, people.slice(0, 40), 15);
@@ -115,9 +120,13 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
       } finally {
         if (!cancelled) setAiLoading(false);
       }
-    })();
+    })(), 3500);
     return () => {
       cancelled = true;
+      if (remoteRankTimerRef.current) {
+        clearTimeout(remoteRankTimerRef.current);
+        remoteRankTimerRef.current = null;
+      }
     };
   }, [user?.uid, me?.uid, people]);
 
@@ -328,7 +337,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
-      {loading ? (
+      {loading && people.length === 0 ? (
         <ActivityIndicator color="#FBE618" style={{ marginTop: 40 }} />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
@@ -359,7 +368,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 
               <View style={{ marginTop: 10 }}>
                 <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 2, color: '#666' }}>
-                  {aiLoading ? 'RANKING…' : 'RANKING READY'}
+                  {aiLoading ? 'UPDATING MATCHES…' : 'PEOPLE READY'}
                 </Text>
               </View>
 

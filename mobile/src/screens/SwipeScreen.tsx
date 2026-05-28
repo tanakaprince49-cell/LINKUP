@@ -130,8 +130,8 @@ export default function SwipeScreen({ navigation }: any) {
     Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : windowSize.height || 900;
   const isWideWeb = isWeb && !webRuntime.isMobileWeb && safeViewportWidth >= 768;
   const isCompactWeb = isWeb && (webRuntime.isMobileWeb || !isWideWeb);
-  const [profiles, setProfiles] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [profiles, setProfiles] = useState<UserProfile[]>(() => demoBuilders);
+  const [loading, setLoading] = useState(false);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [aiOrderingDone, setAiOrderingDone] = useState(false);
   const [infoExpanded, setInfoExpanded] = useState(false);
@@ -145,6 +145,7 @@ export default function SwipeScreen({ navigation }: any) {
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const resetSwipePositionRef = useRef<() => void>(() => {});
   const isAnimatingRef = useRef(false);
+  const rankingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const swipePosition = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const swipeThresholdRef = useRef(SWIPE_THRESHOLD);
   const deckExitDistanceRef = useRef(width + 160);
@@ -280,7 +281,7 @@ export default function SwipeScreen({ navigation }: any) {
         setProfiles(instantProfiles);
         setLoading(false);
       } else {
-        setLoading(true);
+        setLoading(false);
       }
     });
     const usersQuery = query(
@@ -342,7 +343,13 @@ export default function SwipeScreen({ navigation }: any) {
     if (!user?.uid || aiOrderingDone || profiles.length < 2 || hasUserSwipedRef.current) return;
 
     let cancelled = false;
-    const interaction = InteractionManager.runAfterInteractions(() => {
+    let interaction: { cancel?: () => void } | null = null;
+    if (rankingTimerRef.current) {
+      clearTimeout(rankingTimerRef.current);
+    }
+
+    rankingTimerRef.current = setTimeout(() => {
+      interaction = InteractionManager.runAfterInteractions(() => {
       void (async () => {
         try {
           const candidates = profiles
@@ -366,11 +373,16 @@ export default function SwipeScreen({ navigation }: any) {
           if (!cancelled) setAiOrderingDone(true);
         }
       })();
-    });
+      });
+    }, 3500);
 
     return () => {
       cancelled = true;
-      interaction.cancel();
+      if (rankingTimerRef.current) {
+        clearTimeout(rankingTimerRef.current);
+        rankingTimerRef.current = null;
+      }
+      interaction?.cancel?.();
     };
   }, [user?.uid, myProfile?.uid, profileIdsKey, aiOrderingDone, profiles.length]);
 
@@ -880,7 +892,7 @@ export default function SwipeScreen({ navigation }: any) {
     );
   }
 
-  if (loading) {
+  if (loading && profiles.length === 0) {
     return (
       <View style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', justifyContent: 'center' }]}>
         <ActivityIndicator color="#FBE618" />
