@@ -917,8 +917,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     .filter((idea: any) => String(idea?.title || idea?.description || '').trim())
     .slice(0, 20);
   const profileBio = String(profile.bio || '').trim();
-  const viewerIsVerified = !!(myProfile as any)?.isVerified;
-  const showHighVoiceNotice = isViewingOther && !!(profile as any).isVerified && !viewerIsVerified;
+  const showHighVoiceNotice = isViewingOther && !!(profile as any).isVerified;
   const editedProjects = isEditing
     ? (Array.isArray(editData?.projects) && editData.projects.length
         ? editData.projects

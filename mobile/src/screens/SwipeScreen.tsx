@@ -141,7 +141,7 @@ export default function SwipeScreen({ navigation }: any) {
   const swipedSessionIdsRef = useRef<Set<string>>(new Set());
   const hasUserSwipedRef = useRef(false);
   const allProfilesRef = useRef<UserProfile[]>([]);
-  const completeSwipeRef = useRef<(direction: 'left' | 'right') => void>(() => {});
+  const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedItem?: UserProfile) => void>(() => {});
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const resetSwipePositionRef = useRef<() => void>(() => {});
   const isAnimatingRef = useRef(false);
@@ -519,15 +519,18 @@ export default function SwipeScreen({ navigation }: any) {
     }
   };
 
-  const completeSwipe = (direction: 'left' | 'right') => {
-    const item = profiles[0];
+  const completeSwipe = (direction: 'left' | 'right', swipedItem?: UserProfile) => {
+    const item = swipedItem || profiles[0];
     if (!item) return;
 
     hasUserSwipedRef.current = true;
     swipedSessionIdsRef.current.add(item.uid);
     setActivePhotoIndex(0);
     setInfoExpanded(false);
-    setProfiles((current) => current.slice(1));
+    setProfiles((current) => {
+      if (current[0]?.uid === item.uid) return current.slice(1);
+      return current.filter((profile) => profile.uid !== item.uid);
+    });
 
     if (direction === 'right') {
       void handleLike(item);
@@ -547,7 +550,8 @@ export default function SwipeScreen({ navigation }: any) {
   };
 
   const animateSwipeOut = (direction: 'left' | 'right') => {
-    if (isAnimatingRef.current || !profiles[0]) return;
+    const swipedItem = profiles[0];
+    if (isAnimatingRef.current || !swipedItem) return;
     isAnimatingRef.current = true;
     setInfoExpanded(false);
     const exitX = direction === 'right' ? deckExitDistanceRef.current : -deckExitDistanceRef.current;
@@ -558,9 +562,16 @@ export default function SwipeScreen({ navigation }: any) {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
     }).start(({ finished }) => {
+      if (finished) {
+        completeSwipe(direction, swipedItem);
+        requestAnimationFrame(() => {
+          swipePosition.setValue({ x: 0, y: 0 });
+          isAnimatingRef.current = false;
+        });
+        return;
+      }
       swipePosition.setValue({ x: 0, y: 0 });
       isAnimatingRef.current = false;
-      if (finished) completeSwipe(direction);
     });
   };
 
@@ -600,6 +611,7 @@ export default function SwipeScreen({ navigation }: any) {
 
     return (
       <Animated.View
+        key={`preview-${nextProfile.uid}`}
         pointerEvents="none"
         style={[
           styles.card,
@@ -687,7 +699,7 @@ export default function SwipeScreen({ navigation }: any) {
 
     return (
       <Animated.View
-        key={topProfile.uid}
+        key={`top-${topProfile.uid}`}
         style={[
           styles.card,
           styles.deckCardLayer,

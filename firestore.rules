@@ -113,6 +113,7 @@ service cloud.firestore {
           validOptionalList(data, 'industries', 40) &&
           validOptionalList(data, 'lookingFor', 30) &&
           validOptionalList(data, 'languages', 20) &&
+          validOptionalList(data, 'badges', 50) &&
           validOptionalList(data, 'projects', 20) &&
           validOptionalList(data, 'startupIdeas', 20) &&
           validOptionalList(data, 'circles', 20) &&
@@ -147,7 +148,7 @@ service cloud.firestore {
           'availability', 'timezone', 'languages', 'workStyle',
           'lookingFor', 'networkingIntent',
           'profilePic', 'photos', 'coverPhoto', 'vibeMedia',
-          'projects', 'portfolioLinks', 'startupIdeas', 'resume',
+          'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'badges',
           'socialLinks', 'education', 'remoteOnly', 'willingToRelocate',
           'teamSizePreference', 'ambition',
           'isVisible', 'isStealthMode', 'turboConnect', 'hideOnlineStatus',
@@ -170,7 +171,7 @@ service cloud.firestore {
           'availability', 'timezone', 'languages', 'workStyle',
           'lookingFor', 'networkingIntent',
           'profilePic', 'photos', 'coverPhoto', 'vibeMedia',
-          'projects', 'portfolioLinks', 'startupIdeas', 'resume',
+          'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'badges',
           'socialLinks',
           'education', 'remoteOnly', 'willingToRelocate', 'teamSizePreference',
           'ambition',

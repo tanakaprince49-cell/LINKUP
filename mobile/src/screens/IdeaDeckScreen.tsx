@@ -1,33 +1,42 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Easing,
   Image,
+  Modal,
   PanResponder,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { addDoc, collection, doc, getDoc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { ChevronLeft, Heart, Lightbulb, MessageSquare, RefreshCw, X, Zap } from 'lucide-react-native';
+import { ChevronLeft, Heart, Lightbulb, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { ensureDirectMatch } from '../lib/chat';
 import { displayNameFor, isDiscoverableProfile } from '../lib/discovery';
-import { collectIdeaDeck, IdeaDeckItem } from '../lib/ideas';
+import { collectIdeaDeck, IdeaDeckItem, safeIdeaId } from '../lib/ideas';
 import { demoBuilders } from '../lib/demoBuilders';
-import { UserProfile } from '../types';
+import { StartupIdea, UserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import VerifiedBadge from '../components/VerifiedBadge';
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const SWIPE_DISTANCE = 140;
+const IDEA_STAGE_OPTIONS = ['Idea Stage', 'Research', 'Prototype', 'MVP', 'Early Users', 'Revenue', 'Fundraising'];
+const IDEA_LOOKING_FOR_OPTIONS = ['CTO', 'Developer', 'Designer', 'Marketer', 'Investor', 'Cofounder', 'Beta Users', 'Mentor'];
+const IDEA_FIELD_OPTIONS = ['SaaS', 'AI', 'Fintech', 'Healthtech', 'EdTech', 'Gaming', 'E-commerce', 'Creator Economy', 'Social', 'Cybersecurity', 'Robotics'];
+
+const toggleValue = (values: string[], value: string) =>
+  values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
 
 export default function IdeaDeckScreen({ navigation }: any) {
   const { user, profile: myProfile } = useAuth();
@@ -37,10 +46,18 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const [ideas, setIdeas] = useState<IdeaDeckItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [ideaTitle, setIdeaTitle] = useState('');
+  const [ideaDescription, setIdeaDescription] = useState('');
+  const [ideaStage, setIdeaStage] = useState(IDEA_STAGE_OPTIONS[0]);
+  const [ideaLookingFor, setIdeaLookingFor] = useState<string[]>([]);
+  const [ideaFields, setIdeaFields] = useState<string[]>([]);
+  const [confettiActive, setConfettiActive] = useState(false);
   const swipedIdeasRef = useRef<Set<string>>(new Set());
   const position = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const animateSwipeRef = useRef<(direction: 'left' | 'right') => void>(() => {});
-  const completeSwipeRef = useRef<(direction: 'left' | 'right') => void>(() => {});
+  const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedIdea?: IdeaDeckItem) => void>(() => {});
 
   const topIdea = ideas[0];
   const nextIdea = ideas[1];
@@ -198,12 +215,15 @@ export default function IdeaDeckScreen({ navigation }: any) {
     });
   };
 
-  const completeSwipe = async (direction: 'left' | 'right') => {
-    const idea = ideas[0];
+  const completeSwipe = async (direction: 'left' | 'right', swipedIdea?: IdeaDeckItem) => {
+    const idea = swipedIdea || ideas[0];
     if (!idea || busy) return;
     swipedIdeasRef.current.add(idea.id);
-    setIdeas((current) => current.slice(1));
-    position.setValue({ x: 0, y: 0 });
+    setIdeas((current) => {
+      if (current[0]?.id === idea.id) return current.slice(1);
+      return current.filter((item) => item.id !== idea.id);
+    });
+    requestAnimationFrame(() => position.setValue({ x: 0, y: 0 }));
     if (direction !== 'right') return;
     setBusy(true);
     try {
@@ -217,18 +237,88 @@ export default function IdeaDeckScreen({ navigation }: any) {
   };
 
   const animateSwipe = (direction: 'left' | 'right') => {
+    const swipedIdea = ideas[0];
+    if (!swipedIdea) return;
     Animated.timing(position, {
       toValue: { x: direction === 'right' ? width + 220 : -width - 220, y: 18 },
       duration: 230,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: USE_NATIVE_DRIVER,
-    }).start(() => completeSwipeRef.current(direction));
+    }).start(({ finished }) => {
+      if (finished) completeSwipeRef.current(direction, swipedIdea);
+      else position.setValue({ x: 0, y: 0 });
+    });
   };
 
   useEffect(() => {
     animateSwipeRef.current = animateSwipe;
     completeSwipeRef.current = completeSwipe;
   }, [animateSwipe, completeSwipe]);
+
+  const resetIdeaComposer = () => {
+    setIdeaTitle('');
+    setIdeaDescription('');
+    setIdeaStage(IDEA_STAGE_OPTIONS[0]);
+    setIdeaLookingFor([]);
+    setIdeaFields([]);
+  };
+
+  const postIdea = async () => {
+    if (!user?.uid) {
+      Alert.alert('Sign in required', 'Please sign in before posting an idea.');
+      return;
+    }
+
+    const title = ideaTitle.trim();
+    const description = ideaDescription.trim();
+    if (!title || !description) {
+      Alert.alert('Finish your idea', 'Add a title and short description so builders understand what you want to build.');
+      return;
+    }
+    if (ideaFields.length === 0 || ideaLookingFor.length === 0) {
+      Alert.alert('Add signals', 'Choose at least one field and one thing you are looking for.');
+      return;
+    }
+
+    setPosting(true);
+    try {
+      const currentIdeas = Array.isArray((myProfile as any)?.startupIdeas)
+        ? ((myProfile as any).startupIdeas as StartupIdea[]).filter((idea) => String(idea?.title || idea?.description || '').trim())
+        : [];
+      const nextIdea: StartupIdea = {
+        id: safeIdeaId(`${user.uid}_${Date.now()}_${title}`),
+        title: title.slice(0, 90),
+        description: description.slice(0, 500),
+        stage: ideaStage,
+        lookingFor: ideaLookingFor,
+        tags: ideaFields,
+      };
+      const nextIdeas = [nextIdea, ...currentIdeas.filter((idea) => idea.id !== nextIdea.id)].slice(0, 20);
+      const existingBadges = Array.isArray((myProfile as any)?.badges) ? ((myProfile as any).badges as string[]) : [];
+      const ideaBadges = ['Idea Starter'];
+      if (nextIdeas.length >= 3) ideaBadges.push('Idea Builder');
+      if (nextIdeas.length >= 7) ideaBadges.push('Idea Machine');
+      const nextBadges = Array.from(new Set([...existingBadges, ...ideaBadges]));
+
+      await setDoc(
+        doc(db, 'users', user.uid),
+        {
+          startupIdeas: nextIdeas,
+          badges: nextBadges,
+        },
+        { merge: true }
+      );
+
+      setComposerOpen(false);
+      resetIdeaComposer();
+      setConfettiActive(true);
+      setTimeout(() => setConfettiActive(false), 1200);
+    } catch (error: any) {
+      Alert.alert('Could not post idea', error?.message || 'Please deploy the latest Firestore rules and try again.');
+    } finally {
+      setPosting(false);
+    }
+  };
 
   const renderIdeaCard = (idea: IdeaDeckItem, isPreview = false) => (
     <Animated.View
@@ -305,11 +395,83 @@ export default function IdeaDeckScreen({ navigation }: any) {
             {[idea.ownerOccupation || 'Builder', [idea.ownerCity, idea.ownerCountry].filter(Boolean).join(', ')].filter(Boolean).join(' • ')}
           </Text>
         </View>
-        <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: idea.ownerId })} style={styles.profileBtn}>
-          <Text style={styles.profileBtnText}>VIEW</Text>
-        </TouchableOpacity>
+        <View style={styles.ideaOwnerBadge}>
+          <Text style={styles.ideaOwnerBadgeText}>IDEA OWNER</Text>
+        </View>
       </View>
     </Animated.View>
+  );
+
+  const renderChip = (label: string, active: boolean, onPress: () => void) => (
+    <TouchableOpacity key={label} onPress={onPress} style={[styles.composeChip, active && styles.composeChipActive]}>
+      <Text style={[styles.composeChipText, active && styles.composeChipTextActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+
+  const renderIdeaComposer = () => (
+    <Modal visible={composerOpen} transparent animationType="fade" onRequestClose={() => setComposerOpen(false)}>
+      <View style={styles.modalBackdrop}>
+        <View style={[styles.composeSheet, { backgroundColor: isDark ? '#101014' : '#FFFFFF' }]}>
+          <View style={styles.composeHeader}>
+            <View>
+              <Text style={[styles.composeTitle, { color: isDark ? '#FFF' : '#000' }]}>POST AN IDEA</Text>
+              <Text style={styles.composeSub}>Builders can swipe right if they want in.</Text>
+            </View>
+            <TouchableOpacity onPress={() => setComposerOpen(false)} style={styles.composeCloseBtn}>
+              <X size={22} color={isDark ? '#FFF' : '#000'} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.composeScroll}>
+            <TextInput
+              value={ideaTitle}
+              onChangeText={setIdeaTitle}
+              placeholder="Idea title"
+              placeholderTextColor="#777"
+              maxLength={90}
+              style={[styles.composeInput, { color: isDark ? '#FFF' : '#000', borderColor: isDark ? '#27272A' : '#E5E7EB' }]}
+            />
+            <TextInput
+              value={ideaDescription}
+              onChangeText={setIdeaDescription}
+              placeholder="What do you want to build?"
+              placeholderTextColor="#777"
+              maxLength={500}
+              multiline
+              textAlignVertical="top"
+              style={[
+                styles.composeInput,
+                styles.composeTextArea,
+                { color: isDark ? '#FFF' : '#000', borderColor: isDark ? '#27272A' : '#E5E7EB' },
+              ]}
+            />
+
+            <Text style={[styles.composeLabel, { color: isDark ? '#FFF' : '#000' }]}>STAGE</Text>
+            <View style={styles.composeChipRow}>
+              {IDEA_STAGE_OPTIONS.map((stage) => renderChip(stage, ideaStage === stage, () => setIdeaStage(stage)))}
+            </View>
+
+            <Text style={[styles.composeLabel, { color: isDark ? '#FFF' : '#000' }]}>LOOKING FOR</Text>
+            <View style={styles.composeChipRow}>
+              {IDEA_LOOKING_FOR_OPTIONS.map((item) =>
+                renderChip(item, ideaLookingFor.includes(item), () => setIdeaLookingFor((current) => toggleValue(current, item)))
+              )}
+            </View>
+
+            <Text style={[styles.composeLabel, { color: isDark ? '#FFF' : '#000' }]}>FIELD</Text>
+            <View style={styles.composeChipRow}>
+              {IDEA_FIELD_OPTIONS.map((field) =>
+                renderChip(field, ideaFields.includes(field), () => setIdeaFields((current) => toggleValue(current, field)))
+              )}
+            </View>
+          </ScrollView>
+
+          <TouchableOpacity onPress={postIdea} disabled={posting} style={[styles.postIdeaBtn, posting && styles.postIdeaBtnDisabled]}>
+            {posting ? <ActivityIndicator color="#000" /> : <Text style={styles.postIdeaText}>POST IDEA</Text>}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   );
 
   return (
@@ -322,7 +484,9 @@ export default function IdeaDeckScreen({ navigation }: any) {
           <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>IDEAS</Text>
           <Text style={styles.headerSub}>Swipe ideas. Match on intent.</Text>
         </View>
-        <View style={styles.headerBtnGhost} />
+        <TouchableOpacity onPress={() => setComposerOpen(true)} style={[styles.headerBtn, styles.plusBtn]}>
+          <Plus size={22} color="#000" />
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -349,14 +513,74 @@ export default function IdeaDeckScreen({ navigation }: any) {
         <View style={styles.emptyWrap}>
           <Zap size={48} color="#FBE618" fill="#FBE618" />
           <Text style={[styles.emptyTitle, { color: isDark ? '#FFF' : '#000' }]}>NO IDEAS YET</Text>
-          <Text style={styles.emptyText}>Post an idea from your profile so builders can swipe into it.</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: user?.uid })} style={styles.emptyButton}>
-            <MessageSquare size={16} color="#000" />
+          <Text style={styles.emptyText}>Post an idea here so builders can swipe into it.</Text>
+          <TouchableOpacity onPress={() => setComposerOpen(true)} style={styles.emptyButton}>
+            <Plus size={16} color="#000" />
             <Text style={styles.emptyButtonText}>ADD AN IDEA</Text>
           </TouchableOpacity>
         </View>
       )}
+      {renderIdeaComposer()}
+      <ConfettiBurst active={confettiActive} width={width} />
     </SafeAreaView>
+  );
+}
+
+function ConfettiBurst({ active, width }: { active: boolean; width: number }) {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!active) return;
+    progress.setValue(0);
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 1100,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: USE_NATIVE_DRIVER,
+    }).start();
+  }, [active, progress]);
+
+  if (!active) return null;
+
+  const colors = ['#FBE618', '#2563EB', '#22C55E', '#FF4D4D', '#A855F7'];
+  const safeWidth = Math.max(width || 360, 320);
+
+  return (
+    <View pointerEvents="none" style={styles.confettiLayer}>
+      {Array.from({ length: 24 }).map((_, index) => {
+        const translateY = progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-36, 360 + (index % 5) * 46],
+        });
+        const translateX = progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, ((index % 2 === 0 ? 1 : -1) * (24 + (index % 7) * 12))],
+        });
+        const rotate = progress.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['0deg', `${180 + index * 37}deg`],
+        });
+        const opacity = progress.interpolate({
+          inputRange: [0, 0.82, 1],
+          outputRange: [1, 1, 0],
+        });
+
+        return (
+          <Animated.View
+            key={`confetti-${index}`}
+            style={[
+              styles.confettiPiece,
+              {
+                left: (index * 53) % safeWidth,
+                backgroundColor: colors[index % colors.length],
+                opacity,
+                transform: [{ translateX }, { translateY }, { rotate }],
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
   );
 }
 
@@ -376,6 +600,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  plusBtn: { backgroundColor: '#FBE618' },
   headerBtnGhost: { width: 44, height: 44 },
   headerTitle: { fontSize: 16, fontWeight: '900', letterSpacing: 4 },
   headerSub: { marginTop: 4, color: '#666', fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
@@ -428,8 +653,8 @@ const styles = StyleSheet.create({
   ownerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   ownerName: { fontSize: 13, fontWeight: '900', textTransform: 'uppercase', flexShrink: 1 },
   ownerMeta: { marginTop: 3, fontSize: 10, fontWeight: '800', color: '#777' },
-  profileBtn: { height: 38, borderRadius: 14, backgroundColor: '#FBE618', paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
-  profileBtnText: { fontSize: 10, fontWeight: '900', letterSpacing: 1.2, color: '#000' },
+  ideaOwnerBadge: { height: 38, borderRadius: 14, backgroundColor: '#FBE618', paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+  ideaOwnerBadgeText: { fontSize: 9, fontWeight: '900', letterSpacing: 1, color: '#000' },
   swipeBadge: { position: 'absolute', top: 24, zIndex: 4, borderWidth: 4, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.32)' },
   likeBadge: { right: 22, borderColor: '#22C55E' },
   skipBadge: { left: 22, borderColor: '#FF4D4D' },
@@ -443,4 +668,24 @@ const styles = StyleSheet.create({
   emptyText: { marginTop: 8, maxWidth: 340, textAlign: 'center', color: '#666', fontSize: 13, lineHeight: 20, fontWeight: '800' },
   emptyButton: { marginTop: 18, height: 52, borderRadius: 18, backgroundColor: '#FBE618', paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', gap: 8 },
   emptyButtonText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.5, color: '#000' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.58)', alignItems: 'center', justifyContent: 'center', padding: 18 },
+  composeSheet: { width: '100%', maxWidth: 560, maxHeight: '88%', borderRadius: 30, padding: 18 },
+  composeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  composeTitle: { fontSize: 20, fontWeight: '900', letterSpacing: 1.8 },
+  composeSub: { marginTop: 4, color: '#777', fontSize: 12, fontWeight: '800' },
+  composeCloseBtn: { width: 42, height: 42, borderRadius: 16, backgroundColor: '#F4F4F5', alignItems: 'center', justifyContent: 'center' },
+  composeScroll: { paddingTop: 16, paddingBottom: 12 },
+  composeInput: { minHeight: 54, borderWidth: 1, borderRadius: 18, paddingHorizontal: 16, fontSize: 15, fontWeight: '800', marginBottom: 12 },
+  composeTextArea: { minHeight: 112, paddingTop: 14, lineHeight: 22 },
+  composeLabel: { marginTop: 8, marginBottom: 10, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
+  composeChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  composeChip: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: '#FFF' },
+  composeChipActive: { borderColor: '#FBE618', backgroundColor: '#FBE618' },
+  composeChipText: { color: '#555', fontSize: 11, fontWeight: '900' },
+  composeChipTextActive: { color: '#000' },
+  postIdeaBtn: { height: 56, borderRadius: 18, backgroundColor: '#FBE618', alignItems: 'center', justifyContent: 'center' },
+  postIdeaBtnDisabled: { opacity: 0.55 },
+  postIdeaText: { color: '#000', fontSize: 13, fontWeight: '900', letterSpacing: 1.8 },
+  confettiLayer: { ...StyleSheet.absoluteFillObject, zIndex: 50 },
+  confettiPiece: { position: 'absolute', top: 42, width: 10, height: 18, borderRadius: 4 },
 });
