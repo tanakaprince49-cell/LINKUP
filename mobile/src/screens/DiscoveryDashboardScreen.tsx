@@ -11,7 +11,6 @@ import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } fro
 import { displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { demoBuilders } from '../lib/demoBuilders';
 import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb } from 'lucide-react-native';
 import VerifiedBadge from '../components/VerifiedBadge';
 
@@ -20,7 +19,7 @@ const readCachedDashboardPeople = async (uid: string): Promise<UserProfile[]> =>
   try {
     const raw = await AsyncStorage.getItem(dashboardCacheKey(uid));
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((profile) => profile?.uid && !profile.deleted).slice(0, 60) : [];
+    return Array.isArray(parsed) ? parsed.filter((profile) => profile?.uid && isDiscoverableProfile(profile)).slice(0, 60) : [];
   } catch {
     return [];
   }
@@ -40,7 +39,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   const remoteRankTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [loading, setLoading] = useState(false);
-  const [people, setPeople] = useState<UserProfile[]>(() => demoBuilders);
+  const [people, setPeople] = useState<UserProfile[]>([]);
   const [aiRank, setAiRank] = useState<Record<string, { score: number; reason: string }>>({});
   const [aiLoading, setAiLoading] = useState(false);
   const [opportunityRadar, setOpportunityRadar] = useState<OpportunityAlert[]>([]);
@@ -51,11 +50,6 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
-    const instantPeople = demoBuilders.filter((profile) => profile.uid !== user.uid);
-    if (instantPeople.length) {
-      setPeople((current) => (current.length ? current : instantPeople));
-      setLoading(false);
-    }
     readCachedDashboardPeople(user.uid).then((cachedPeople) => {
       if (!isMounted) return;
       if (cachedPeople.length) {
@@ -75,10 +69,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         const list = snap.docs
           .map((d) => d.data() as UserProfile)
           .filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        const merged = [...list, ...demoBuilders]
-          .filter((profile: any) => profile.uid !== user.uid)
-          .filter((profile, index, all) => all.findIndex((item) => item.uid === profile.uid) === index);
-        setPeople(merged);
+        setPeople(list);
         writeCachedDashboardPeople(user.uid, list).catch(() => {});
         setLoading(false);
       },

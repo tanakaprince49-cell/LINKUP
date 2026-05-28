@@ -20,12 +20,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, query, onSnapshot, where, addDoc, limit, serverTimestamp, getDocs } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../lib/firebase';
-import { displayNameFor, earnedScore } from '../lib/discovery';
+import { displayNameFor, earnedScore, isDiscoverableProfile, isSyntheticProfile } from '../lib/discovery';
 import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 import { trackProfileView } from '../lib/analytics';
 import { ensureDirectMatch } from '../lib/chat';
 import { ConnectionRequest, requestConnection, subscribeToConnectionRequest } from '../lib/connectionRequests';
-import { demoBuilders, isDemoBuilder } from '../lib/demoBuilders';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
@@ -63,7 +62,7 @@ const readCachedDiscovery = async (uid: string): Promise<UserProfile[]> => {
   try {
     const raw = await AsyncStorage.getItem(discoveryCacheKey(uid));
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((profile) => profile?.uid && !profile.deleted).slice(0, DISCOVERY_LIMIT) : [];
+    return Array.isArray(parsed) ? parsed.filter((profile) => profile?.uid && profile.uid !== uid && isDiscoverableProfile(profile)).slice(0, DISCOVERY_LIMIT) : [];
   } catch {
     return [];
   }
@@ -130,7 +129,7 @@ export default function SwipeScreen({ navigation }: any) {
     Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : windowSize.height || 900;
   const isWideWeb = isWeb && !webRuntime.isMobileWeb && safeViewportWidth >= 768;
   const isCompactWeb = isWeb && (webRuntime.isMobileWeb || !isWideWeb);
-  const [profiles, setProfiles] = useState<UserProfile[]>(() => demoBuilders);
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [aiOrderingDone, setAiOrderingDone] = useState(false);
@@ -265,17 +264,9 @@ export default function SwipeScreen({ navigation }: any) {
       return;
     }
     let isMounted = true;
-    const fallbackProfiles = demoBuilders.filter((profile) => profile.uid !== user.uid);
-    if (fallbackProfiles.length) {
-      allProfilesRef.current = fallbackProfiles;
-      setProfiles((current) => (current.length ? current : fallbackProfiles));
-      setLoading(false);
-    }
     readCachedDiscovery(user.uid).then((cachedProfiles) => {
       if (!isMounted || hasUserSwipedRef.current) return;
-      const instantProfiles = cachedProfiles.length
-        ? cachedProfiles
-        : demoBuilders.filter((profile) => profile.uid !== user.uid);
+      const instantProfiles = cachedProfiles;
       if (instantProfiles.length) {
         allProfilesRef.current = instantProfiles;
         setProfiles(instantProfiles);
@@ -296,11 +287,9 @@ export default function SwipeScreen({ navigation }: any) {
       (snap) => {
         const allUsers = snap.docs.map((docSnap) => docSnap.data() as UserProfile);
         const visibleUsers = allUsers
-          .filter((profile: any) => profile.uid !== user.uid && !profile.deleted)
+          .filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile))
           .sort((a: any, b: any) => (b.turboConnect ? 1 : 0) - (a.turboConnect ? 1 : 0));
-        const mergedUsers = [...visibleUsers, ...demoBuilders].filter(
-          (profile, index, list) => list.findIndex((item) => item.uid === profile.uid) === index
-        );
+        const mergedUsers = visibleUsers;
         const locallyRanked = myProfile ? localCommonalityRank(myProfile, mergedUsers, mergedUsers.length) : [];
         const localScoreById = new Map(locallyRanked.map((rank) => [rank.uid, rank.score]));
         const orderedUsers = locallyRanked.length
@@ -312,7 +301,7 @@ export default function SwipeScreen({ navigation }: any) {
           : mergedUsers;
 
         allProfilesRef.current = orderedUsers;
-        writeCachedDiscovery(user.uid, orderedUsers.filter((profile) => !isDemoBuilder(profile))).catch(() => {});
+        writeCachedDiscovery(user.uid, orderedUsers.filter((profile) => !isSyntheticProfile(profile))).catch(() => {});
         if (hasUserSwipedRef.current) {
           setProfiles((current) => {
             const currentIds = new Set(current.map((profile) => profile.uid));
@@ -353,7 +342,7 @@ export default function SwipeScreen({ navigation }: any) {
       void (async () => {
         try {
           const candidates = profiles
-            .filter((profile) => !isDemoBuilder(profile))
+            .filter((profile) => !isSyntheticProfile(profile))
             .slice(0, DISCOVERY_LIMIT);
           if (candidates.length < 2) return;
           const ranked = await rankCandidatesHybrid(myProfile, candidates, Math.min(candidates.length, 12));
@@ -387,7 +376,7 @@ export default function SwipeScreen({ navigation }: any) {
   }, [user?.uid, myProfile?.uid, profileIdsKey, aiOrderingDone, profiles.length]);
 
   useEffect(() => {
-    if (!user?.uid || !topProfile || isDemoBuilder(topProfile)) return;
+    if (!user?.uid || !topProfile || isSyntheticProfile(topProfile)) return;
 
     let cancelled = false;
     const interaction = InteractionManager.runAfterInteractions(() => {
@@ -420,7 +409,7 @@ export default function SwipeScreen({ navigation }: any) {
   }, [topProfile?.uid]);
 
   useEffect(() => {
-    if (!user?.uid || !topProfile?.uid || isDemoBuilder(topProfile)) {
+    if (!user?.uid || !topProfile?.uid || isSyntheticProfile(topProfile)) {
       setConnectionRequest(null);
       return;
     }
@@ -429,7 +418,7 @@ export default function SwipeScreen({ navigation }: any) {
   }, [topProfile?.uid, user?.uid]);
 
   const handleLike = async (target: UserProfile) => {
-    if (!user?.uid || !target || isDemoBuilder(target)) return;
+    if (!user?.uid || !target || isSyntheticProfile(target)) return;
     try {
       await addDoc(collection(db, 'swipes'), {
         fromId: user.uid,
@@ -483,7 +472,7 @@ export default function SwipeScreen({ navigation }: any) {
 
   const handleContactRequest = async () => {
     const target = profiles[0];
-    if (!user?.uid || !target || isDemoBuilder(target) || contactBusy) return;
+    if (!user?.uid || !target || isSyntheticProfile(target) || contactBusy) return;
 
     if (connectionRequest?.status === 'approved') {
       const matchId = await ensureDirectMatch(user.uid, target.uid);
@@ -657,7 +646,7 @@ export default function SwipeScreen({ navigation }: any) {
     const bio = topProfile.bio || 'No bio yet. Open their profile to learn more.';
     const reputation = earnedScore(topProfile);
     const matchRank = myProfile ? localCommonalityRank(myProfile, [topProfile], 1)[0] : null;
-    const compatibility = Math.max(isDemoBuilder(topProfile) ? 72 : 1, Math.min(99, Math.round(matchRank?.score || 82)));
+    const compatibility = Math.max(1, Math.min(99, Math.round(matchRank?.score || 82)));
     const compatibilityReason = matchRank?.reason || 'Compatibility preview from profile signals';
     const renderCardActions = () => (
       <View style={[styles.actionRow, isWideWeb && styles.webActionRow, isCompactWeb && styles.compactActionRow]}>
@@ -672,7 +661,7 @@ export default function SwipeScreen({ navigation }: any) {
             connectionRequest?.status === 'pending' && styles.contactPendingBtn,
             connectionRequest?.status === 'rejected' && styles.contactRejectedBtn,
           ]}
-          disabled={contactBusy || !topProfile || isDemoBuilder(topProfile)}
+          disabled={contactBusy || !topProfile || isSyntheticProfile(topProfile)}
           onPress={handleContactRequest}
         >
           <MessageSquare size={18} color="#000" />

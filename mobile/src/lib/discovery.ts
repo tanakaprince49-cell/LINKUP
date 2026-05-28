@@ -23,8 +23,14 @@ export const displayNameFor = (profile: Partial<UserProfile> | any) => {
 export const handleFor = (profile: Partial<UserProfile>) =>
   `@${cleanUsername(String((profile as any).username || displayNameFor(profile) || 'builder')) || 'builder'}`;
 
+export const isSyntheticProfile = (profile: any) =>
+  !!profile &&
+  (!!profile.isBot ||
+    String(profile.uid || '').startsWith('demo-') ||
+    String(profile.uid || '').startsWith('bot-'));
+
 export const isDiscoverableProfile = (profile: any) =>
-  !!profile && !profile.deleted && !profile.isStealthMode && profile.isVisible !== false;
+  !!profile && !profile.deleted && !profile.isStealthMode && profile.isVisible !== false && !isSyntheticProfile(profile);
 
 export const earnedScore = (profile: any) => {
   const skills = Array.isArray(profile?.skills) ? profile.skills.length : 0;

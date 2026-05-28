@@ -24,7 +24,6 @@ import { ensureDirectMatch } from '../lib/chat';
 import { requestConnection } from '../lib/connectionRequests';
 import { displayNameFor, isDiscoverableProfile } from '../lib/discovery';
 import { collectIdeaDeck, IdeaDeckItem, safeIdeaId } from '../lib/ideas';
-import { demoBuilders } from '../lib/demoBuilders';
 import { StartupIdea, UserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -111,10 +110,6 @@ export default function IdeaDeckScreen({ navigation }: any) {
       return;
     }
 
-    const instantIdeas = collectIdeaDeck(demoBuilders as UserProfile[], user.uid);
-    setIdeas(instantIdeas);
-    setLoading(false);
-
     const usersQuery = query(
       collection(db, 'users'),
       where('isVisible', '==', true),
@@ -128,14 +123,13 @@ export default function IdeaDeckScreen({ navigation }: any) {
         const users = snapshot.docs
           .map((snap) => snap.data() as UserProfile)
           .filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        const merged = [...users, ...demoBuilders].filter(
-          (profile, index, list) => list.findIndex((item) => item.uid === profile.uid) === index
-        );
-        const deck = collectIdeaDeck(merged as UserProfile[], user.uid).filter((idea) => !swipedIdeasRef.current.has(idea.id));
+        const deck = collectIdeaDeck(users as UserProfile[], user.uid).filter((idea) => !swipedIdeasRef.current.has(idea.id));
         setIdeas(deck);
+        setLoading(false);
       },
       (error) => {
         console.warn('Ideas deck unavailable:', error);
+        setLoading(false);
       }
     );
 
