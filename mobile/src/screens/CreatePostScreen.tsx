@@ -6,6 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, increment, query, where, getDocs, limit } from 'firebase/firestore';
 import { uploadMedia } from '../lib/storage';
+import { isDiscoverableProfile } from '../lib/discovery';
 import * as ImagePicker from 'expo-image-picker';
 import { X, Camera, Video, Send, Image as ImageIcon } from 'lucide-react-native';
 
@@ -27,13 +28,11 @@ export default function CreatePostScreen({ navigation }: any) {
       const fetchUsers = async () => {
         const q = query(
           collection(db, 'users'),
-          where('isVisible', '==', true),
-          where('isStealthMode', '==', false),
           where('displayName', '>=', tagQuery),
           limit(5)
         );
         const snap = await getDocs(q);
-        setSuggestedUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setSuggestedUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(isDiscoverableProfile));
       };
       fetchUsers();
     } else {

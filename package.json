@@ -40,5 +40,18 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3"
-  }
+  },
+  "description": "LINKUP is an Expo React Native app for mobile and web. The production web deploy now serves the same Expo app from `mobile/`, so Vercel shows the same experience as the mobile build.",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tanakaprince49-cell/LINKUP.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/tanakaprince49-cell/LINKUP/issues"
+  },
+  "homepage": "https://github.com/tanakaprince49-cell/LINKUP#readme"
 }

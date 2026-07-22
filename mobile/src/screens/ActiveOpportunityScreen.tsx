@@ -53,7 +53,12 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
   const score = useMemo(() => earnedScore(profile), [profile]);
 
   const openChat = async () => {
-    if (!user?.uid || !profile?.uid) return;
+    if (!user?.uid) {
+      Alert.alert('Sign in to message', 'Create or sign in to a LINKUP account to message this builder.');
+      navigation.navigate('EmailAuth');
+      return;
+    }
+    if (!profile?.uid) return;
     setOpeningChat(true);
     try {
       const matchId = await ensureDirectMatch(user.uid, profile.uid);

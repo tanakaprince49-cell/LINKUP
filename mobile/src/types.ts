@@ -67,6 +67,12 @@ export interface UserProfile {
   verificationProgram?: string;
   verifiedAt?: Timestamp | FieldValue;
   verifiedBy?: string;
+  isPro?: boolean;
+  plan?: string;
+  subscriptionPlan?: string;
+  subscriptionStatus?: string;
+  proUnlockedAt?: Timestamp | FieldValue | string;
+  subscriptionUpdatedAt?: Timestamp | FieldValue | string;
   availability?: string; // e.g. "Available now", "Weekends"
   timezone?: string; // e.g. "UTC+2"
   languages?: string[];
@@ -147,7 +153,11 @@ export interface Message {
   senderId: string;
   content: string;
   timestamp: Timestamp | FieldValue;
-  type: 'text' | 'image' | 'pow';
+  type: 'text' | 'image' | 'video' | 'pow';
+  mediaUrl?: string;
+  mediaName?: string;
+  mediaType?: string;
+  mediaSize?: number;
   replyToMessageId?: string;
   replyToSenderId?: string;
   replyToText?: string;

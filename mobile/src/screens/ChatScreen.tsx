@@ -1,15 +1,31 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Alert, StatusBar, Modal, Pressable, ScrollView, Linking, Share } from 'react-native';
-import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Alert, StatusBar, Modal, Pressable, ScrollView, Linking, Share, ActivityIndicator } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, increment } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, increment, limitToLast } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { ChevronLeft, Send, Camera, Zap, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X } from 'lucide-react-native';
 import { generateWarmIntro } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
+import { profileLinkFor, publicProfileLink } from '../lib/profileLinks';
 import VerifiedBadge from '../components/VerifiedBadge';
+import { COLORS, appBackground, liquidGlass } from '../theme/theme';
+import { imageAssetToDataUri } from '../lib/imageUploadLimits';
+import PaywallModal from '../components/PaywallModal';
+import { isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
+import { MOBILE_CHAT_MESSAGE_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
+import { conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
+
+const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
+const MAX_FREE_INLINE_IMAGE_CHARS = 900_000;
+const MAX_PRO_INLINE_IMAGE_CHARS = 900_000;
+const MAX_CHAT_VIDEO_BYTES = 75 * 1024 * 1024;
+const CLOUDINARY_CLOUD_NAME = String(process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || '').trim();
+const CLOUDINARY_UPLOAD_PRESET = String(process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || '').trim();
+const cloudinaryEnabled = () => !!CLOUDINARY_CLOUD_NAME && !!CLOUDINARY_UPLOAD_PRESET;
 
 const getFutureDate = (value: any) => {
   if (!value) return null;
@@ -46,6 +62,60 @@ const formatMessageTime = (timestamp: any) => {
   return `${hh}:${mm}`;
 };
 
+const guessMediaExtension = (asset: ImagePicker.ImagePickerAsset, mediaKind: 'image' | 'video') => {
+  const fromName = asset.fileName?.split('.').pop()?.toLowerCase();
+  if (fromName && /^[a-z0-9]{2,5}$/.test(fromName)) return fromName;
+  const mimeExt = asset.mimeType?.split('/').pop()?.toLowerCase();
+  if (mimeExt && /^[a-z0-9]{2,5}$/.test(mimeExt)) return mimeExt === 'jpeg' ? 'jpg' : mimeExt;
+  return mediaKind === 'video' ? 'mp4' : 'jpg';
+};
+
+const mediaLabel = (mediaKind: 'image' | 'video') => (mediaKind === 'video' ? 'Video' : 'Photo');
+
+const inlineImageDataUri = (asset: ImagePicker.ImagePickerAsset) => {
+  if (!asset.base64) return '';
+  const mimeType = asset.mimeType || 'image/jpeg';
+  return `data:${mimeType};base64,${asset.base64}`;
+};
+
+const webUploadFileFor = async (asset: ImagePicker.ImagePickerAsset, mediaKind: 'image' | 'video') => {
+  if (Platform.OS !== 'web') return null;
+  const response = await fetch(asset.uri);
+  if (!response.ok) throw new Error('Could not prepare selected media.');
+  const blob = await response.blob();
+  const fileName = asset.fileName || `linkup-chat-${Date.now()}.${guessMediaExtension(asset, mediaKind)}`;
+  const mimeType = asset.mimeType || blob.type || (mediaKind === 'video' ? 'video/mp4' : 'image/jpeg');
+  const WebFile = (globalThis as any).File;
+  return typeof WebFile === 'function' ? new WebFile([blob], fileName, { type: mimeType }) : blob;
+};
+
+const uploadToCloudinary = async (asset: ImagePicker.ImagePickerAsset, mediaKind: 'image' | 'video') => {
+  if (!cloudinaryEnabled()) return null;
+  const form = new FormData();
+  const webFile = await webUploadFileFor(asset, mediaKind);
+  form.append(
+    'file',
+    webFile ||
+      ({
+        uri: asset.uri,
+        name: asset.fileName || `linkup-chat-${Date.now()}.${guessMediaExtension(asset, mediaKind)}`,
+        type: asset.mimeType || (mediaKind === 'video' ? 'video/mp4' : 'image/jpeg'),
+      } as any)
+  );
+  form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  form.append('folder', 'linkup/chat');
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${mediaKind}/upload`, {
+    method: 'POST',
+    body: form,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || typeof data?.secure_url !== 'string') {
+    throw new Error(data?.error?.message || 'Media host upload failed.');
+  }
+  return data.secure_url as string;
+};
+
 export default function ChatScreen({ route, navigation }: any) {
   const matchId = route?.params?.matchId;
   const otherUserParam = route?.params?.otherUser;
@@ -62,12 +132,26 @@ export default function ChatScreen({ route, navigation }: any) {
   const [matchMeta, setMatchMeta] = useState<any>(null);
   const [replyTo, setReplyTo] = useState<null | { messageId: string; senderId: string; text: string }>(null);
   const [hasBlockedUser, setHasBlockedUser] = useState(false);
+  const [mediaBusy, setMediaBusy] = useState(false);
+  const [paywallFeature, setPaywallFeature] = useState('');
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingValueRef = useRef(false);
+  const sendingTextRef = useRef(false);
   const myUid = user?.uid;
+  const proLocked = isAndroidProLocked(profile);
+  const openPaywall = (feature: string) => setPaywallFeature(feature);
   const otherUserId = useMemo(
-    () => otherUser?.uid || otherUserParam?.uid || (Array.isArray(matchMeta?.userIds) ? matchMeta.userIds.find((id: string) => id !== myUid) : ''),
-    [matchMeta?.userIds, myUid, otherUser?.uid, otherUserParam?.uid]
+    () => {
+      if (otherUser?.uid) return otherUser.uid;
+      if (otherUserParam?.uid) return otherUserParam.uid;
+      if (Array.isArray(matchMeta?.userIds)) {
+        return matchMeta.userIds.find((id: string) => id && id !== myUid) || '';
+      }
+      const participants = matchMeta?.participants && typeof matchMeta.participants === 'object' ? matchMeta.participants : {};
+      return Object.keys(participants).find((id) => id && id !== myUid && participants[id]) || '';
+    },
+    [matchMeta?.participants, matchMeta?.userIds, myUid, otherUser?.uid, otherUserParam?.uid]
   );
   const openOptionsMenu = () => {
     blurActiveElementOnWeb();
@@ -94,9 +178,16 @@ export default function ChatScreen({ route, navigation }: any) {
 
   useEffect(() => {
     if (!matchId) return;
+    const scrollToLatest = () => {
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: Platform.OS !== 'android' });
+      }, Platform.OS === 'android' ? 0 : 80);
+    };
     const q = query(
       collection(db, 'matches', matchId, 'messages'),
-      orderBy('timestamp', 'asc')
+      orderBy('timestamp', 'asc'),
+      limitToLast(MOBILE_CHAT_MESSAGE_LIMIT)
     );
 
     const unsub = onSnapshot(
@@ -104,7 +195,7 @@ export default function ChatScreen({ route, navigation }: any) {
       (snap) => {
         const msgs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setMessages(msgs);
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+        scrollToLatest();
       },
       (err) => {
         console.warn('Chat messages unavailable:', err);
@@ -112,7 +203,10 @@ export default function ChatScreen({ route, navigation }: any) {
       }
     );
 
-    return () => unsub();
+    return () => {
+      unsub();
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    };
   }, [matchId]);
 
   useEffect(() => {
@@ -135,25 +229,28 @@ export default function ChatScreen({ route, navigation }: any) {
     const otherId = otherUserId;
     if (!otherId) return;
 
-    const unsubUser = onSnapshot(
-      doc(db, 'users', otherId),
-      (snap) => {
-        if (!snap.exists()) return;
-        setOtherUser((prev: any) => ({ ...(prev || {}), uid: otherId, ...(snap.data() as any) }));
-      },
-      (err) => {
+    let cancelled = false;
+    const profileMap = matchMeta?.participantProfiles || matchMeta?.profiles || {};
+    const fallback = normalizeConversationProfile(otherId, profileMap?.[otherId] || otherUserParam || otherUser || {});
+    setOtherUser((prev: any) => normalizeConversationProfile(otherId, prev || {}, fallback));
+
+    loadConversationProfile(otherId, fallback)
+      .then((profile) => {
+        if (!cancelled) setOtherUser((prev: any) => ({ ...(prev || {}), ...profile }));
+      })
+      .catch((err) => {
+        if (cancelled || isPermissionDenied(err)) return;
         console.warn('Chat user unavailable:', err);
-      }
-    );
+      });
 
     return () => {
-      unsubUser();
+      cancelled = true;
     };
-  }, [otherUserId]);
+  }, [matchMeta?.participantProfiles, otherUserId]);
 
   useEffect(() => {
     const otherId = otherUserId;
-    if (!otherId) return;
+    if (!otherId || !otherUser) return;
     if (otherUser?.hideOnlineStatus) {
       setOtherUser((prev: any) => ({ ...(prev || {}), isOnline: false, lastActiveAt: null }));
       return;
@@ -170,7 +267,9 @@ export default function ChatScreen({ route, navigation }: any) {
         setOtherUser((prev: any) => ({ ...(prev || {}), isOnline: isPresenceOnline(p), lastActiveAt: p.lastActiveAt }));
       },
       (err) => {
-        console.warn('Chat presence unavailable:', err);
+        if (!isPermissionDenied(err)) {
+          console.warn('Chat presence unavailable:', err);
+        }
         setOtherUser((prev: any) => ({ ...(prev || {}), isOnline: false }));
       }
     );
@@ -308,7 +407,7 @@ export default function ChatScreen({ route, navigation }: any) {
           userId: recipientId,
           fromId: user.uid,
           fromName: profile?.displayName || 'Someone',
-          fromPic: profile?.profilePic || '',
+          fromPic: safeProfileImageUri(profile?.profilePic, MOBILE_LIST_IMAGE_LIMIT),
           type: 'message',
           content: notificationContent,
           matchId,
@@ -324,9 +423,155 @@ export default function ChatScreen({ route, navigation }: any) {
     }
   };
 
+  const sendChatMedia = async (asset: ImagePicker.ImagePickerAsset, mediaKind: 'image' | 'video') => {
+    if (!user || !matchId) return;
+    if (hasBlockedUser) {
+      Alert.alert('User blocked', 'Unblock this user before sending media.');
+      return;
+    }
+
+    const size = Number(asset.fileSize || 0);
+    if (mediaKind === 'video' && !cloudinaryEnabled()) {
+      Alert.alert(
+        'Video host needed',
+        'Firebase Storage is not available on your plan, so videos need a free media host. Add Cloudinary cloud name and unsigned upload preset to enable video chat.'
+      );
+      return;
+    }
+    if (mediaKind === 'video' && size > MAX_CHAT_VIDEO_BYTES) {
+      Alert.alert('File too large', `Video must be under ${Math.round(MAX_CHAT_VIDEO_BYTES / 1024 / 1024)} MB.`);
+      return;
+    }
+
+    setMediaBusy(true);
+    try {
+      const ext = guessMediaExtension(asset, mediaKind);
+      const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      let mediaUrl = '';
+      let storedMediaSize = size;
+      if (cloudinaryEnabled()) {
+        mediaUrl = await uploadToCloudinary(asset, mediaKind) || '';
+      } else {
+        const inlineLimit = proLocked ? MAX_FREE_INLINE_IMAGE_CHARS : MAX_PRO_INLINE_IMAGE_CHARS;
+        const preparedImage = await imageAssetToDataUri(asset, inlineLimit);
+        mediaUrl = preparedImage.dataUri || inlineImageDataUri(asset);
+        if (mediaUrl.length > inlineLimit) {
+          if (proLocked) openPaywall(PRO_FEATURES.largerMedia);
+          else Alert.alert('Photo too large', 'Choose a smaller photo. This no-storage mode supports compact chat photos only.');
+          return;
+        }
+        if (!mediaUrl) {
+          throw new Error(preparedImage.error || 'Image data was unavailable.');
+        }
+        storedMediaSize = mediaUrl.length;
+      }
+
+      const caption = inputText.trim();
+      setInputText('');
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      void setTypingState(false);
+      const replyPayload = replyTo
+        ? { replyToMessageId: replyTo.messageId, replyToSenderId: replyTo.senderId, replyToText: replyTo.text }
+        : {};
+      setReplyTo(null);
+
+      await addDoc(collection(db, 'matches', matchId, 'messages'), {
+        senderId: user.uid,
+        content: caption || mediaLabel(mediaKind),
+        timestamp: serverTimestamp(),
+        type: mediaKind,
+        mediaUrl,
+        mediaName: asset.fileName || fileName,
+        mediaType: asset.mimeType || (mediaKind === 'video' ? 'video/mp4' : 'image/jpeg'),
+        mediaSize: storedMediaSize || mediaUrl.length || 0,
+        ...replyPayload,
+      });
+
+      const recipientId = otherUserId || otherUser?.uid;
+      const lastMessage = caption || (mediaKind === 'video' ? 'Sent a video' : 'Sent a photo');
+      const matchPatch: Record<string, unknown> = {
+        lastMessage,
+        lastMessageTime: serverTimestamp(),
+        [`unreadBy.${user.uid}`]: 0,
+      };
+      if (recipientId && recipientId !== user.uid) {
+        matchPatch[`unreadBy.${recipientId}`] = increment(1);
+      }
+      await updateDoc(doc(db, 'matches', matchId), matchPatch as any);
+
+      if (recipientId && recipientId !== user.uid && !isRecipientMuted(recipientId)) {
+        await addDoc(collection(db, 'notifications'), {
+          userId: recipientId,
+          fromId: user.uid,
+          fromName: profile?.displayName || 'Someone',
+          fromPic: safeProfileImageUri(profile?.profilePic, MOBILE_LIST_IMAGE_LIMIT),
+          type: 'message',
+          content: mediaKind === 'video' ? 'sent you a video.' : 'sent you a photo.',
+          matchId,
+          isRead: false,
+          timestamp: serverTimestamp(),
+        });
+      }
+
+      await setDoc(doc(db, 'presence', user.uid), { isOnline: true, lastActiveAt: serverTimestamp() }, { merge: true });
+    } catch (e) {
+      console.error('Media message failed:', e);
+      Alert.alert('Media failed', 'Could not send this media. Check your connection and try a smaller file.');
+    } finally {
+      setMediaBusy(false);
+    }
+  };
+
+  const pickAndSendMedia = async (source: 'library' | 'camera', mediaKind: 'image' | 'video') => {
+    if (mediaBusy) return;
+    const permission =
+      source === 'camera'
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', source === 'camera' ? 'Allow camera access to take media.' : 'Allow photo access to send media.');
+      return;
+    }
+
+    const pickerOptions: ImagePicker.ImagePickerOptions = {
+      mediaTypes: mediaKind === 'video' ? ['videos'] : ['images'],
+      quality: mediaKind === 'image' ? (proLocked ? 0.22 : 0.5) : 1,
+      allowsEditing: false,
+      base64: mediaKind === 'image' && !cloudinaryEnabled(),
+      videoMaxDuration: 60,
+    };
+    const result =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync(pickerOptions)
+        : await ImagePicker.launchImageLibraryAsync(pickerOptions);
+    if (result.canceled || !result.assets?.[0]) return;
+    await sendChatMedia(result.assets[0], mediaKind);
+  };
+
+  const openMediaPicker = () => {
+    if (!user || !matchId) return;
+    if (hasBlockedUser) {
+      Alert.alert('User blocked', 'Unblock this user before sending media.');
+      return;
+    }
+    if (Platform.OS === 'web') {
+      void pickAndSendMedia('library', 'image');
+      return;
+    }
+    Alert.alert('Send media', 'Choose what to send.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Photo Library', onPress: () => pickAndSendMedia('library', 'image') },
+      { text: 'Video Library', onPress: () => proLocked ? openPaywall(PRO_FEATURES.largerMedia) : pickAndSendMedia('library', 'video') },
+      { text: 'Take Photo', onPress: () => pickAndSendMedia('camera', 'image') },
+      { text: 'Record Video', onPress: () => proLocked ? openPaywall(PRO_FEATURES.largerMedia) : pickAndSendMedia('camera', 'video') },
+    ]);
+  };
+
   const handleSend = async () => {
     if (!inputText.trim() || !user) return;
+    if (sendingTextRef.current) return;
 
+    sendingTextRef.current = true;
     const text = inputText.trim();
     setInputText('');
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
@@ -335,10 +580,27 @@ export default function ChatScreen({ route, navigation }: any) {
       ? { replyToMessageId: replyTo.messageId, replyToSenderId: replyTo.senderId, replyToText: replyTo.text }
       : {};
     setReplyTo(null);
-    await sendChatText(text, replyPayload);
+    try {
+      await sendChatText(text, replyPayload);
+    } finally {
+      sendingTextRef.current = false;
+    }
+  };
+
+  const handleComposerKeyPress = (event: any) => {
+    if (Platform.OS !== 'web') return;
+    const nativeEvent = event?.nativeEvent || {};
+    if (nativeEvent.key !== 'Enter' || nativeEvent.shiftKey) return;
+    event?.preventDefault?.();
+    nativeEvent?.preventDefault?.();
+    void handleSend();
   };
 
   const toggleArrayField = async (field: 'pinnedBy' | 'archivedBy' | 'importantBy' | 'confidentialBy' | 'deletedBy') => {
+    if (field === 'importantBy' && proLocked) {
+      openPaywall(PRO_FEATURES.messagePriority);
+      return;
+    }
     if (!matchId) {
       Alert.alert('Demo chat', 'Pin/Archive/Important works on real chats (a matchId is required).');
       return;
@@ -455,7 +717,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
   const inviteToTeam = async () => {
     if (!otherUser?.uid) return;
-    const inviteText = `Team invite: I’d like to explore building together on LINKUP. Are you open to joining a startup/project conversation?`;
+    const inviteText = `Team invite: I'd like to explore building together on LINKUP. Are you open to joining a startup/project conversation?`;
     await sendChatText(inviteText, {}, 'invited you to collaborate on a team.');
     closeOptionsMenu();
     Alert.alert('Invite Sent', 'A team invite message was sent in this chat.');
@@ -487,7 +749,7 @@ export default function ChatScreen({ route, navigation }: any) {
         `${profile?.displayName || user?.displayName || 'LINKUP Builder'}`,
         profile?.occupation ? `${profile.occupation}${profile?.company ? ` @ ${profile.company}` : ''}` : '',
         profile?.city || profile?.country ? [profile.city, profile.country].filter(Boolean).join(', ') : '',
-        profile?.profileLink || (user?.uid ? `linkup://profile/${user.uid}` : ''),
+        profileLinkFor(profile) || publicProfileLink(user?.uid),
       ].filter(Boolean).join('\n');
       await Share.share({ title: 'LINKUP contact card', message: card });
       closeOptionsMenu();
@@ -517,6 +779,44 @@ export default function ChatScreen({ route, navigation }: any) {
     }
   };
 
+  const deleteMessage = (messageId: string) => {
+    if (!matchId || !messageId) return;
+    Alert.alert('Delete message', 'Delete this message for everyone?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteDoc(doc(db, 'matches', matchId, 'messages', messageId));
+          } catch (e) {
+            console.error('Delete message error:', e);
+            Alert.alert('Error', 'Could not delete message.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const replyToMessage = (item: any) => {
+    setReplyTo({
+      messageId: String(item.id),
+      senderId: String(item.senderId),
+      text: String(item.content ?? '').slice(0, 180),
+    });
+  };
+
+  const openMessageOptions = (item: any, isMe: boolean) => {
+    const options: any[] = [
+      { text: 'Reply', onPress: () => replyToMessage(item) },
+    ];
+    if (isMe) {
+      options.push({ text: 'Delete', style: 'destructive', onPress: () => deleteMessage(String(item.id)) });
+    }
+    options.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Message options', '', options);
+  };
+
   const MenuItem = ({ icon, title, subtitle, danger, onPress }: any) => (
     <TouchableOpacity
       disabled={busyAction}
@@ -535,79 +835,64 @@ export default function ChatScreen({ route, navigation }: any) {
 
   const renderMessage = ({ item }: { item: any }) => {
     const isMe = item.senderId === user?.uid;
-    const swipeRef = React.createRef<Swipeable>();
     return (
       <View style={[styles.messageWrapper, isMe ? styles.myMessageWrapper : styles.theirMessageWrapper]}>
-        <Swipeable
-          ref={swipeRef as any}
-          friction={2}
-          leftThreshold={40}
-          rightThreshold={40}
-          renderLeftActions={() => (
-            <View style={[styles.replyAction, { backgroundColor: isDark ? '#16161A' : '#EEF2FF' }]}>
-              <Reply size={18} color={isDark ? '#FBE618' : '#2563EB'} />
-            </View>
-          )}
-          renderRightActions={() => (
-            <View style={[styles.replyAction, { backgroundColor: isDark ? '#16161A' : '#EEF2FF' }]}>
-              <Reply size={18} color={isDark ? '#FBE618' : '#2563EB'} />
-            </View>
-          )}
-          onSwipeableOpen={() => {
-            setReplyTo({
-              messageId: String(item.id),
-              senderId: String(item.senderId),
-              text: String(item.content ?? '').slice(0, 180),
-            });
-            // close immediately so the row resets
-            setTimeout(() => (swipeRef.current as any)?.close?.(), 10);
+        <Pressable
+          onLongPress={() => {
+            if (!matchId) return;
+            openMessageOptions(item, isMe);
           }}
+          delayLongPress={350}
         >
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onLongPress={() => {
-              if (!matchId) return;
-              if (!isMe) return;
-              Alert.alert('Delete message', 'Delete this message for everyone?', [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete',
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      await deleteDoc(doc(db, 'matches', matchId, 'messages', item.id));
-                    } catch (e) {
-                      console.error('Delete message error:', e);
-                      Alert.alert('Error', 'Could not delete message.');
-                    }
-                  },
-                },
-              ]);
-            }}
-          >
-            <View style={[
-              styles.messageBubble,
-              isMe ? styles.myBubble : [styles.theirBubble, { backgroundColor: isDark ? '#16161A' : '#F0F0F0' }]
-            ]}>
-              {!!item.replyToText && (
-                <View style={[styles.replyPreviewInBubble, { borderLeftColor: isMe ? '#00000035' : (isDark ? '#FFFFFF35' : '#00000025') }]}>
-                  <Text style={[styles.replyPreviewSender, { color: isMe ? '#00000090' : (isDark ? '#FFFFFF90' : '#00000090') }]}>
-                    Replying to {item.replyToSenderId === user?.uid ? 'you' : 'them'}
-                  </Text>
-                  <Text style={[styles.replyPreviewText, { color: isMe ? '#00000090' : (isDark ? '#FFFFFF90' : '#00000090') }]} numberOfLines={2}>
-                    {String(item.replyToText)}
+          <View style={[
+            styles.messageBubble,
+            isMe ? styles.myBubble : styles.theirBubble,
+            liquidGlass(isDark, false),
+            {
+              backgroundColor: isMe ? COLORS.primary : (isDark ? COLORS.darkCard : COLORS.lightCard),
+              borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
+            }
+          ]}>
+            {!!item.replyToText && (
+              <View style={[styles.replyPreviewInBubble, { borderLeftColor: isMe ? '#00000035' : (isDark ? '#FFFFFF35' : '#00000025') }]}>
+                <Text style={[styles.replyPreviewSender, { color: isMe ? '#00000090' : (isDark ? '#FFFFFF90' : '#00000090') }]}>
+                  Replying to {item.replyToSenderId === user?.uid ? 'you' : 'them'}
+                </Text>
+                <Text style={[styles.replyPreviewText, { color: isMe ? '#00000090' : (isDark ? '#FFFFFF90' : '#00000090') }]} numberOfLines={2}>
+                  {String(item.replyToText)}
+                </Text>
+              </View>
+            )}
+            {item.type === 'image' && !!item.mediaUrl && (
+              <TouchableOpacity activeOpacity={0.92} onPress={() => Linking.openURL(item.mediaUrl).catch(() => {})}>
+                <Image source={{ uri: safeProfileImageUri(item.mediaUrl, MOBILE_LIST_IMAGE_LIMIT) || item.mediaUrl }} style={styles.messageImage} resizeMode="cover" />
+              </TouchableOpacity>
+            )}
+            {item.type === 'video' && !!item.mediaUrl && (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={[styles.videoMessageCard, { backgroundColor: isMe ? '#00000018' : (isDark ? '#222226' : '#FFFFFF') }]}
+                onPress={() => Linking.openURL(item.mediaUrl).catch(() => Alert.alert('Video unavailable', 'Could not open this video.'))}
+              >
+                <Camera size={24} color={isMe ? '#000' : (isDark ? '#FFF' : '#000')} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.videoMessageTitle, { color: isMe ? '#000' : (isDark ? '#FFF' : '#000') }]}>VIDEO</Text>
+                  <Text style={[styles.videoMessageSub, { color: isMe ? '#00000080' : (isDark ? '#FFFFFF80' : '#00000080') }]} numberOfLines={1}>
+                    Tap to open
                   </Text>
                 </View>
-              )}
+              </TouchableOpacity>
+            )}
+            {!!item.content && item.content !== 'Photo' && item.content !== 'Video' && (
               <Text style={[styles.messageText, { color: isMe ? '#000' : (isDark ? '#FFF' : '#000') }]}>
                 {item.content}
               </Text>
-              <Text style={[styles.messageTime, { color: isMe ? '#00000080' : (isDark ? '#FFFFFF80' : '#00000080') }]}>
-                {formatMessageTime(item.timestamp)}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </Swipeable>
+            )}
+            <Text style={[styles.messageTime, { color: isMe ? '#00000080' : (isDark ? '#FFFFFF80' : '#00000080') }]}>
+              {formatMessageTime(item.timestamp)}
+            </Text>
+          </View>
+        </Pressable>
       </View>
     );
   };
@@ -616,11 +901,25 @@ export default function ChatScreen({ route, navigation }: any) {
   const otherIsOnline = isPresenceOnline(otherUser);
   const headerStatus = otherIsTyping ? 'TYPING...' : (otherIsOnline ? 'ONLINE' : formatLastSeen(otherUser?.lastActiveAt));
   const headerStatusColor = otherIsTyping ? '#2563EB' : (otherIsOnline ? '#4ADE80' : '#888');
+  const headerAvatarUri = conversationAvatarUri(otherUser?.profilePic);
+  const headerInitial = String(otherUser?.displayName || 'L').trim().charAt(0).toUpperCase() || 'L';
+  const canOpenOtherProfile = !!otherUserId && otherUserId !== 'undefined';
+  const openOtherProfile = () => {
+    if (!canOpenOtherProfile) {
+      Alert.alert('Profile unavailable', 'This chat is missing the other builder profile. Try reopening it from Messages.');
+      return;
+    }
+    navigation.navigate('Profile', { userId: otherUserId });
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
-      <View style={[styles.header, { borderBottomColor: isDark ? '#1A1A1F' : '#EEE', justifyContent: 'space-between' }]}>
+    <SafeAreaView style={[styles.container, appBackground(isDark)]}>
+      <View style={styles.scene} pointerEvents="none">
+        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
+        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(223,251,63,0.08)' : 'rgba(223,251,63,0.16)' }]} />
+      </View>
+      <View style={[styles.header, liquidGlass(isDark, false), { borderBottomColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, justifyContent: 'space-between' }]}> 
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <ChevronLeft size={24} color={isDark ? '#FFF' : '#000'} />
@@ -628,9 +927,15 @@ export default function ChatScreen({ route, navigation }: any) {
           {otherUser ? (
             <TouchableOpacity 
               style={{ flexDirection: 'row', alignItems: 'center' }} 
-              onPress={() => navigation.navigate('Profile', { userId: otherUser.uid })}
+              onPress={openOtherProfile}
             >
-              <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.avatar} />
+              {headerAvatarUri ? (
+                <Image source={{ uri: headerAvatarUri }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: isDark ? '#181818' : '#FFF8B8' }]}>
+                  <Text style={styles.avatarFallbackText}>{headerInitial}</Text>
+                </View>
+              )}
               <View>
                 <View style={styles.chatNameRow}>
                   <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{otherUser.displayName || 'Builder'}</Text>
@@ -650,7 +955,7 @@ export default function ChatScreen({ route, navigation }: any) {
               <View style={[styles.avatar, { backgroundColor: isDark ? '#16161A' : '#EEE' }]} />
               <View>
                 <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>CHAT</Text>
-                <Text style={styles.status}>Loading…</Text>
+                <Text style={styles.status}>Loading...</Text>
                 <View style={styles.securityLine}>
                   <Shield size={10} color="#22C55E" />
                   <Text style={styles.securityText}>END-TO-END ENCRYPTED</Text>
@@ -676,7 +981,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : ((StatusBar.currentHeight || 0) + 90)}
       >
         <FlatList
@@ -685,11 +990,16 @@ export default function ChatScreen({ route, navigation }: any) {
           renderItem={renderMessage}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: Platform.OS !== 'android' })}
           keyboardShouldPersistTaps="handled"
+          initialNumToRender={Platform.OS === 'android' ? 10 : 20}
+          maxToRenderPerBatch={Platform.OS === 'android' ? 6 : 12}
+          updateCellsBatchingPeriod={80}
+          windowSize={Platform.OS === 'android' ? 5 : 7}
+          removeClippedSubviews={Platform.OS !== 'web'}
         />
 
-        <View style={[styles.inputContainer, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
+        <View style={[styles.inputContainer, liquidGlass(isDark, false), { borderTopColor: 'transparent' }]}>
           {otherIsTyping && (
             <View style={[styles.typingPill, { backgroundColor: isDark ? '#111115' : '#EEF2FF', borderColor: isDark ? '#222226' : '#DBEAFE' }]}>
               <Text style={[styles.typingText, { color: isDark ? '#FBE618' : '#2563EB' }]}>
@@ -713,8 +1023,12 @@ export default function ChatScreen({ route, navigation }: any) {
             </View>
           )}
           <TouchableOpacity 
-            style={[styles.toolBtn, { backgroundColor: '#2563EB20' }]} 
+            style={[styles.toolBtn, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]} 
             onPress={async () => {
+              if (proLocked) {
+                openPaywall(PRO_FEATURES.warmIntro);
+                return;
+              }
               Alert.alert("INTRO", "Drafting a perfect opening based on your profiles...");
               const intro = await generateWarmIntro(profile, otherUser);
               setInputText((intro || '').trim());
@@ -722,8 +1036,8 @@ export default function ChatScreen({ route, navigation }: any) {
           >
             <Zap size={20} color="#2563EB" fill="#2563EB" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolBtn}>
-            <Camera size={20} color="#666" />
+          <TouchableOpacity style={[styles.toolBtn, liquidGlass(isDark, false), mediaBusy && styles.toolBtnDisabled, { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]} onPress={openMediaPicker} disabled={mediaBusy}>
+            {mediaBusy ? <ActivityIndicator size="small" color="#666" /> : <Camera size={20} color="#666" />}
           </TouchableOpacity>
           <TextInput
             style={[styles.input, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
@@ -731,6 +1045,11 @@ export default function ChatScreen({ route, navigation }: any) {
             placeholderTextColor="#666"
             value={inputText}
             onChangeText={handleInputChange}
+            onKeyPress={handleComposerKeyPress}
+            onSubmitEditing={handleSend}
+            blurOnSubmit={false}
+            returnKeyType="send"
+            submitBehavior="submit"
             multiline
           />
           <TouchableOpacity 
@@ -761,8 +1080,7 @@ export default function ChatScreen({ route, navigation }: any) {
               subtitle="Open full business profile"
               onPress={() => {
                 closeOptionsMenu();
-                if (!otherUser?.uid) return;
-                navigation.navigate('Profile', { userId: otherUser.uid });
+                openOtherProfile();
               }}
             />
 
@@ -793,7 +1111,7 @@ export default function ChatScreen({ route, navigation }: any) {
             <MenuItem
               icon={<Star size={18} color={isDark ? '#FFF' : '#000'} fill={isImportant ? '#FBE618' : 'transparent'} />}
               title={isImportant ? 'Unmark Important' : 'Mark as Important'}
-              subtitle="⭐ Highlight serious conversations"
+              subtitle="Highlight serious conversations"
               onPress={() => toggleArrayField('importantBy')}
             />
 
@@ -867,6 +1185,12 @@ export default function ChatScreen({ route, navigation }: any) {
           <MenuItem icon={<BellOff size={18} color={isDark ? '#FFF' : '#000'} />} title="Unmute" onPress={() => setMute('off')} />
         </View>
       </Modal>
+      <PaywallModal
+        visible={!!paywallFeature}
+        feature={paywallFeature || PRO_FEATURES.warmIntro}
+        description="AI warm intros, message priority, and larger media sending are LINKUP PLUS features on Android."
+        onClose={() => setPaywallFeature('')}
+      />
     </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -875,6 +1199,26 @@ export default function ChatScreen({ route, navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scene: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  scenePane: {
+    position: 'absolute',
+    width: 280,
+    height: 130,
+    borderRadius: 34,
+  },
+  scenePaneA: {
+    top: 90,
+    right: -120,
+    transform: [{ rotate: '-16deg' }],
+  },
+  scenePaneB: {
+    top: 330,
+    left: -120,
+    transform: [{ rotate: '16deg' }],
   },
   header: {
     flexDirection: 'row',
@@ -891,6 +1235,18 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 14,
     marginRight: 12,
+  },
+  avatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FBE618',
+  },
+  avatarFallbackText: {
+    color: '#000',
+    fontSize: 17,
+    fontWeight: '900',
+    fontStyle: 'italic',
   },
   name: {
     fontSize: 16,
@@ -964,6 +1320,33 @@ const styles = StyleSheet.create({
     padding: 12,
     paddingHorizontal: 16,
     borderRadius: 20,
+  },
+  messageImage: {
+    width: 220,
+    height: 260,
+    borderRadius: 16,
+    marginBottom: 6,
+    backgroundColor: '#00000018',
+  },
+  videoMessageCard: {
+    width: 220,
+    minHeight: 82,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  videoMessageTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  videoMessageSub: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: '800',
   },
   messageTime: {
     fontSize: 10,
@@ -1063,6 +1446,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  toolBtnDisabled: {
+    opacity: 0.55,
   },
   input: {
     flex: 1,

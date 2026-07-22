@@ -49,7 +49,7 @@ export const BottomNavigation: React.FC<NavigationProps> = ({ activeTab, setActi
       className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-4 transition-all duration-300"
     >
       <div className="mx-auto max-w-md">
-        <div className="liquid-card h-16 px-4 flex items-center justify-around border-white/5">
+        <div className="liquid-card h-18 px-4 flex items-center justify-around border-white/10 bg-white/10 dark:bg-[#0A0B12]/80">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -58,7 +58,7 @@ export const BottomNavigation: React.FC<NavigationProps> = ({ activeTab, setActi
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className="group relative flex flex-col items-center justify-center p-2 h-full flex-1 transition-all duration-300"
+                className="group relative flex flex-col items-center justify-center p-2 h-full flex-1 rounded-3xl transition-all duration-300 hover:bg-white/10 dark:hover:bg-white/10"
               >
                 <div className={`relative z-10 flex flex-col items-center gap-1 transition-all duration-300 ${
                   isActive ? 'text-accent-yellow scale-110' : 'text-white/30 group-hover:text-white/60'
@@ -113,11 +113,11 @@ export const Header: React.FC<{ onProfileClick: () => void; onPostClick: () => v
     <motion.header 
       initial={false}
       animate={{ y: isActuallyHidden ? -100 : 0, opacity: isActuallyHidden ? 0 : 1 }}
-      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 bg-white/80 dark:bg-[#050508]/80 backdrop-blur-3xl border-b border-black/5 dark:border-white/5 transition-all duration-300"
+      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 liquid-card bg-white/10 dark:bg-[#0A0B12]/80 border-white/10 transition-all duration-300"
     >
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-yellow text-black shadow-glow">
+          <div className="flex h-10 w-10 items-center justify-center rounded-3xl bg-accent-yellow text-black shadow-glow">
             <Zap size={18} fill="currentColor" />
           </div>
           <h1 className="text-xl font-black font-display tracking-tighter text-black dark:text-white italic">
@@ -129,7 +129,7 @@ export const Header: React.FC<{ onProfileClick: () => void; onPostClick: () => v
       <div className="flex items-center gap-3">
         <button 
           onClick={onPostClick}
-          className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-yellow text-black shadow-glow active:scale-95 transition-all"
+          className="flex h-11 w-11 items-center justify-center rounded-3xl bg-accent-yellow text-black shadow-glow active:scale-95 transition-all hover:scale-[1.03]"
         >
           <Plus size={20} className="font-bold" />
         </button>
@@ -138,7 +138,7 @@ export const Header: React.FC<{ onProfileClick: () => void; onPostClick: () => v
         
         <button
           onClick={onProfileClick}
-          className="relative h-9 w-9 overflow-hidden rounded-xl border border-white/10 p-0.5 shadow-lg active:scale-95 transition-all shrink-0 hover:border-accent-yellow/30"
+          className="relative h-11 w-11 overflow-hidden rounded-3xl border border-white/10 p-0.5 shadow-lg active:scale-95 transition-all shrink-0 hover:border-accent-yellow/30"
         >
           {profile?.profilePic ? (
             <img src={profile.profilePic} alt="Profile" className="h-full w-full object-cover rounded-[10px]" />

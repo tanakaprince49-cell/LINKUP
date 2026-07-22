@@ -17,7 +17,8 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, query, onSnapshot, where, addDoc, limit, serverTimestamp, getDocs } from 'firebase/firestore';
+import { useIsFocused } from '@react-navigation/native';
+import { collection, query, where, addDoc, limit, serverTimestamp, getDocs } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../lib/firebase';
 import { displayNameFor, earnedScore, isDiscoverableProfile, isSyntheticProfile } from '../lib/discovery';
@@ -28,17 +29,26 @@ import { ConnectionRequest, requestConnection, subscribeToConnectionRequest } fr
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+import { roleInfoFor } from '../lib/roles';
 import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare } from 'lucide-react-native';
 import VerifiedBadge from '../components/VerifiedBadge';
+import PaywallModal from '../components/PaywallModal';
+import { consumeWindowUsage, FREE_LIMITS, isAndroidProLocked, PRO_FEATURES, SWIPE_USAGE_WINDOW_HOURS } from '../lib/paywall';
+import { MOBILE_DISCOVERY_QUERY_LIMIT, MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
+import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 
 const windowSize = Dimensions.get('window');
 const { width } = windowSize;
 const SWIPE_THRESHOLD = 0.22 * width;
 const DISCOVERY_LIMIT = 12;
+const DISCOVERY_QUERY_LIMIT = MOBILE_DISCOVERY_QUERY_LIMIT;
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800';
-const MAX_SWIPE_DATA_URI_CHARS = 220_000;
+const MAX_SWIPE_DATA_URI_CHARS = 900_000;
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
-const discoveryCacheKey = (uid: string) => `linkup:discovery:${uid}`;
+const discoveryCacheKey = (uid: string) => `linkup:discovery:v3:${uid}`;
+const swipeProgressKey = (uid: string) => `linkup:swipe-progress:v1:${uid}`;
+const MAX_STORED_SWIPED_IDS = 500;
 
 const getWebRuntimeFlags = () => {
   if (Platform.OS !== 'web') {
@@ -75,8 +85,8 @@ const writeCachedDiscovery = async (uid: string, profiles: UserProfile[]) => {
       displayName: displayNameFor(profile),
       username: (profile as any).username || '',
       bio: profile.bio || '',
-      profilePic: profile.profilePic || '',
-      photos: Array.isArray((profile as any).photos) ? (profile as any).photos.slice(0, 3) : [],
+      profilePic: isSafeSwipePhoto(profile.profilePic) ? profile.profilePic : '',
+      photos: Array.isArray((profile as any).photos) ? (profile as any).photos.filter(isSafeSwipePhoto).slice(0, 3) : [],
       occupation: (profile as any).occupation || '',
       company: (profile as any).company || '',
       city: profile.city || '',
@@ -102,6 +112,42 @@ const writeCachedDiscovery = async (uid: string, profiles: UserProfile[]) => {
   }
 };
 
+const readSwipeProgress = async (uid: string) => {
+  try {
+    const raw = await AsyncStorage.getItem(swipeProgressKey(uid));
+    const parsed = raw ? JSON.parse(raw) : [];
+    const ids = Array.isArray(parsed?.ids) ? parsed.ids : parsed;
+    return new Set(
+      (Array.isArray(ids) ? ids : [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)
+        .slice(0, MAX_STORED_SWIPED_IDS)
+    );
+  } catch {
+    return new Set<string>();
+  }
+};
+
+const writeSwipeProgress = async (uid: string, ids: string[]) => {
+  try {
+    const compactIds = Array.from(new Set(ids.filter(Boolean))).slice(-MAX_STORED_SWIPED_IDS);
+    await AsyncStorage.setItem(
+      swipeProgressKey(uid),
+      JSON.stringify({ ids: compactIds, updatedAt: new Date().toISOString() })
+    );
+  } catch {
+    // Swipe progress is a convenience cache. Firestore swipe writes still happen separately.
+  }
+};
+
+const clearSwipeProgress = async (uid: string) => {
+  try {
+    await AsyncStorage.removeItem(swipeProgressKey(uid));
+  } catch {
+    // Best effort reset.
+  }
+};
+
 const isSafeSwipePhoto = (uri: unknown): uri is string => {
   if (typeof uri !== 'string') return false;
   const value = uri.trim();
@@ -120,6 +166,7 @@ const getSwipePhotos = (profile: UserProfile): string[] => {
 export default function SwipeScreen({ navigation }: any) {
   const { user, profile: myProfile } = useAuth();
   const { theme } = useTheme();
+  const isFocused = useIsFocused();
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const isDark = theme === 'dark';
   const isWeb = Platform.OS === 'web';
@@ -136,6 +183,8 @@ export default function SwipeScreen({ navigation }: any) {
   const [infoExpanded, setInfoExpanded] = useState(false);
   const [connectionRequest, setConnectionRequest] = useState<ConnectionRequest | null>(null);
   const [contactBusy, setContactBusy] = useState(false);
+  const [paywallFeature, setPaywallFeature] = useState('');
+  const [progressHydrated, setProgressHydrated] = useState(false);
 
   const swipedSessionIdsRef = useRef<Set<string>>(new Set());
   const hasUserSwipedRef = useRef(false);
@@ -145,6 +194,7 @@ export default function SwipeScreen({ navigation }: any) {
   const resetSwipePositionRef = useRef<() => void>(() => {});
   const isAnimatingRef = useRef(false);
   const rankingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRankedProfileIdsRef = useRef('');
   const swipePosition = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const swipeThresholdRef = useRef(SWIPE_THRESHOLD);
   const deckExitDistanceRef = useRef(width + 160);
@@ -172,6 +222,12 @@ export default function SwipeScreen({ navigation }: any) {
           marginHorizontal: 0,
         }
       : null;
+  const proLocked = isAndroidProLocked(myProfile);
+  const openPaywall = (feature: string = PRO_FEATURES.swipeLimit) => setPaywallFeature(feature);
+  const closePaywallToHome = () => {
+    setPaywallFeature('');
+    navigation?.navigate?.('Main', { screen: 'Swipe' });
+  };
 
   const cardRotate = swipePosition.x.interpolate({
     inputRange: [-motionWidth, 0, motionWidth],
@@ -226,10 +282,44 @@ export default function SwipeScreen({ navigation }: any) {
 
   const profileIdsKey = useMemo(() => profiles.map((profile) => profile.uid).join('|'), [profiles]);
 
+  const unswipedProfiles = (items: UserProfile[]) =>
+    items.filter((profile) => profile?.uid && !swipedSessionIdsRef.current.has(profile.uid));
+
   useEffect(() => {
     swipeThresholdRef.current = swipeThreshold;
     deckExitDistanceRef.current = deckExitDistance;
   }, [deckExitDistance, swipeThreshold]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      swipedSessionIdsRef.current.clear();
+      hasUserSwipedRef.current = false;
+      allProfilesRef.current = [];
+      setProfiles([]);
+      setProgressHydrated(false);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    allProfilesRef.current = [];
+    setProfiles([]);
+    setActivePhotoIndex(0);
+    setInfoExpanded(false);
+    setAiOrderingDone(false);
+    setProgressHydrated(false);
+    setLoading(true);
+    readSwipeProgress(user.uid).then((storedIds) => {
+      if (cancelled) return;
+      swipedSessionIdsRef.current = storedIds;
+      hasUserSwipedRef.current = storedIds.size > 0;
+      setProgressHydrated(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -263,29 +353,21 @@ export default function SwipeScreen({ navigation }: any) {
       setLoading(false);
       return;
     }
+    if (!isFocused || !progressHydrated) return;
     let isMounted = true;
+    if (allProfilesRef.current.length === 0) setLoading(true);
     readCachedDiscovery(user.uid).then((cachedProfiles) => {
-      if (!isMounted || hasUserSwipedRef.current) return;
-      const instantProfiles = cachedProfiles;
+      if (!isMounted) return;
+      const instantProfiles = unswipedProfiles(cachedProfiles);
       if (instantProfiles.length) {
-        allProfilesRef.current = instantProfiles;
+        allProfilesRef.current = cachedProfiles;
         setProfiles(instantProfiles);
-        setLoading(false);
-      } else {
         setLoading(false);
       }
     });
-    const usersQuery = query(
-      collection(db, 'users'),
-      where('isVisible', '==', true),
-      where('isStealthMode', '==', false),
-      limit(DISCOVERY_LIMIT)
-    );
-
-    const unsubscribe = onSnapshot(
-      usersQuery,
-      (snap) => {
-        const allUsers = snap.docs.map((docSnap) => docSnap.data() as UserProfile);
+    const unsubscribe = subscribeToDiscoveryProfiles({
+      userId: user.uid,
+      onData: (allUsers) => {
         const visibleUsers = allUsers
           .filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile))
           .sort((a: any, b: any) => (b.turboConnect ? 1 : 0) - (a.turboConnect ? 1 : 0));
@@ -300,41 +382,69 @@ export default function SwipeScreen({ navigation }: any) {
             )
           : mergedUsers;
 
+        if (orderedUsers.length === 0 && allProfilesRef.current.length > 0) {
+          setLoading(false);
+          return;
+        }
+
         allProfilesRef.current = orderedUsers;
         writeCachedDiscovery(user.uid, orderedUsers.filter((profile) => !isSyntheticProfile(profile))).catch(() => {});
+        const remainingUsers = unswipedProfiles(orderedUsers);
         if (hasUserSwipedRef.current) {
           setProfiles((current) => {
             const currentIds = new Set(current.map((profile) => profile.uid));
-            const additions = orderedUsers.filter(
+            const additions = remainingUsers.filter(
               (profile) => !swipedSessionIdsRef.current.has(profile.uid) && !currentIds.has(profile.uid)
             );
             return additions.length ? [...current, ...additions] : current;
           });
         } else {
-          setProfiles(orderedUsers);
+          setProfiles(remainingUsers);
         }
         setAiOrderingDone(false);
         setLoading(false);
       },
-      (error) => {
+      onError: (error) => {
         console.error('SwipeScreen query error:', error);
         setLoading(false);
-      }
-    );
+      },
+    });
 
     return () => {
       isMounted = false;
       unsubscribe();
     };
-  }, [user?.uid, myProfile?.uid]);
+  }, [isFocused, progressHydrated, user?.uid, myProfile?.uid]);
 
   useEffect(() => {
-    if (!user?.uid || aiOrderingDone || profiles.length < 2 || hasUserSwipedRef.current) return;
+    if (!user?.uid || !isFocused || aiOrderingDone || profiles.length < 2 || hasUserSwipedRef.current) return;
 
     let cancelled = false;
     let interaction: { cancel?: () => void } | null = null;
     if (rankingTimerRef.current) {
       clearTimeout(rankingTimerRef.current);
+      rankingTimerRef.current = null;
+    }
+
+    if (Platform.OS !== 'web') {
+      setAiOrderingDone(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const currentProfileIds = profiles
+      .filter((profile) => !isSyntheticProfile(profile))
+      .slice(0, DISCOVERY_LIMIT)
+      .map(p => p.uid)
+      .sort()
+      .join(',');
+
+    if (currentProfileIds === lastRankedProfileIdsRef.current) {
+      setAiOrderingDone(true);
+      return () => {
+        cancelled = true;
+      };
     }
 
     rankingTimerRef.current = setTimeout(() => {
@@ -348,6 +458,7 @@ export default function SwipeScreen({ navigation }: any) {
           const ranked = await rankCandidatesHybrid(myProfile, candidates, Math.min(candidates.length, 12));
           if (cancelled || ranked.length === 0 || hasUserSwipedRef.current) return;
 
+          lastRankedProfileIdsRef.current = currentProfileIds;
           const scoreById = new Map(ranked.map((rank) => [rank.uid, rank.score]));
           setProfiles((current) =>
             [...current].sort(
@@ -373,10 +484,10 @@ export default function SwipeScreen({ navigation }: any) {
       }
       interaction?.cancel?.();
     };
-  }, [user?.uid, myProfile?.uid, profileIdsKey, aiOrderingDone, profiles.length]);
+  }, [isFocused, user?.uid, myProfile?.uid, profileIdsKey, aiOrderingDone, profiles.length]);
 
   useEffect(() => {
-    if (!user?.uid || !topProfile || isSyntheticProfile(topProfile)) return;
+    if (!user?.uid || !isFocused || !topProfile || isSyntheticProfile(topProfile)) return;
 
     let cancelled = false;
     const interaction = InteractionManager.runAfterInteractions(() => {
@@ -393,7 +504,7 @@ export default function SwipeScreen({ navigation }: any) {
       cancelled = true;
       interaction.cancel();
     };
-  }, [topProfile?.uid, user?.uid]);
+  }, [isFocused, topProfile?.uid, user?.uid]);
 
   useEffect(() => {
     [topProfile, nextProfile].filter(Boolean).forEach((profile) => {
@@ -409,13 +520,13 @@ export default function SwipeScreen({ navigation }: any) {
   }, [topProfile?.uid]);
 
   useEffect(() => {
-    if (!user?.uid || !topProfile?.uid || isSyntheticProfile(topProfile)) {
+    if (!user?.uid || !isFocused || !topProfile?.uid || isSyntheticProfile(topProfile)) {
       setConnectionRequest(null);
       return;
     }
 
     return subscribeToConnectionRequest(user.uid, topProfile.uid, setConnectionRequest);
-  }, [topProfile?.uid, user?.uid]);
+  }, [isFocused, topProfile?.uid, user?.uid]);
 
   const handleLike = async (target: UserProfile) => {
     if (!user?.uid || !target || isSyntheticProfile(target)) return;
@@ -496,7 +607,7 @@ export default function SwipeScreen({ navigation }: any) {
         senderId: user.uid,
         recipientId: target.uid,
         senderName: displayNameFor(myProfile || user),
-        senderPic: myProfile?.profilePic || user.photoURL || '',
+        senderPic: safeProfileImageUri(myProfile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT),
       });
       setConnectionRequest(request);
       Alert.alert('Request sent', `${displayNameFor(target)} can approve or reject it.`);
@@ -514,6 +625,9 @@ export default function SwipeScreen({ navigation }: any) {
 
     hasUserSwipedRef.current = true;
     swipedSessionIdsRef.current.add(item.uid);
+    if (user?.uid) {
+      void writeSwipeProgress(user.uid, Array.from(swipedSessionIdsRef.current));
+    }
     setActivePhotoIndex(0);
     setInfoExpanded(false);
     setProfiles((current) => {
@@ -538,9 +652,7 @@ export default function SwipeScreen({ navigation }: any) {
     });
   };
 
-  const animateSwipeOut = (direction: 'left' | 'right') => {
-    const swipedItem = profiles[0];
-    if (isAnimatingRef.current || !swipedItem) return;
+  const startSwipeAnimation = (direction: 'left' | 'right', swipedItem: UserProfile) => {
     isAnimatingRef.current = true;
     setInfoExpanded(false);
     const exitX = direction === 'right' ? deckExitDistanceRef.current : -deckExitDistanceRef.current;
@@ -564,19 +676,53 @@ export default function SwipeScreen({ navigation }: any) {
     });
   };
 
+  const animateSwipeOut = (direction: 'left' | 'right') => {
+    const swipedItem = profiles[0];
+    if (isAnimatingRef.current || !swipedItem) return;
+
+    if (proLocked) {
+      consumeWindowUsage(user?.uid || 'anonymous', 'builder-swipes', FREE_LIMITS.swipesPer12Hours, SWIPE_USAGE_WINDOW_HOURS)
+        .then((usage) => {
+          if (!usage.allowed) {
+            openPaywall(PRO_FEATURES.swipeLimit);
+            return;
+          }
+          startSwipeAnimation(direction, swipedItem);
+        })
+        .catch(() => startSwipeAnimation(direction, swipedItem));
+      return;
+    }
+
+    startSwipeAnimation(direction, swipedItem);
+  };
+
   completeSwipeRef.current = completeSwipe;
   animateSwipeOutRef.current = animateSwipeOut;
   resetSwipePositionRef.current = resetSwipePosition;
 
   const resetDeck = () => {
+    if (proLocked) {
+      openPaywall(PRO_FEATURES.swipeLimit);
+      return;
+    }
     swipedSessionIdsRef.current.clear();
     hasUserSwipedRef.current = false;
+    if (user?.uid) {
+      void clearSwipeProgress(user.uid);
+    }
     setActivePhotoIndex(0);
     setInfoExpanded(false);
     setAiOrderingDone(false);
     swipePosition.setValue({ x: 0, y: 0 });
     isAnimatingRef.current = false;
     setProfiles(allProfilesRef.current);
+  };
+
+  const openInfoPanel = () => {
+    if (isAnimatingRef.current || !topProfile) return;
+    swipePosition.stopAnimation();
+    swipePosition.setValue({ x: 0, y: 0 });
+    setInfoExpanded(true);
   };
 
   const renderEmpty = () => (
@@ -644,10 +790,9 @@ export default function SwipeScreen({ navigation }: any) {
     const lookingFor = Array.isArray((topProfile as any).lookingFor) ? (topProfile as any).lookingFor : [];
     const industries = Array.isArray((topProfile as any).industries) ? (topProfile as any).industries : [];
     const bio = topProfile.bio || 'No bio yet. Open their profile to learn more.';
-    const reputation = earnedScore(topProfile);
     const matchRank = myProfile ? localCommonalityRank(myProfile, [topProfile], 1)[0] : null;
-    const compatibility = Math.max(1, Math.min(99, Math.round(matchRank?.score || 82)));
-    const compatibilityReason = matchRank?.reason || 'Compatibility preview from profile signals';
+    const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
+    const compatibilityReason = matchRank?.reason || 'Compatibility based on profile signals';
     const renderCardActions = () => (
       <View style={[styles.actionRow, isWideWeb && styles.webActionRow, isCompactWeb && styles.compactActionRow]}>
         <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={() => animateSwipeOut('left')}>
@@ -741,11 +886,7 @@ export default function SwipeScreen({ navigation }: any) {
             <View style={styles.topBadgeColumn}>
               <View style={styles.aiBadge}>
                 <Zap size={11} color="#000" fill="#000" />
-                <Text style={styles.aiBadgeText}>{compatibility}% MATCH</Text>
-              </View>
-              <View style={styles.repBadge}>
-                <Zap size={10} color="#000" fill="#000" />
-                <Text style={styles.repVal}>{reputation} REP</Text>
+                <Text style={styles.aiBadgeText}>{compatibility}%</Text>
               </View>
             </View>
             {photos.length > 1 && (
@@ -779,6 +920,9 @@ export default function SwipeScreen({ navigation }: any) {
               <Briefcase size={13} color="#FBE618" />
               <Text style={styles.metaLineText} numberOfLines={1}>{roleText}</Text>
             </View>
+            <View style={styles.roleBadge}>
+              <Text style={styles.roleBadgeText}>{roleInfoFor((topProfile as any).occupation).badge}</Text>
+            </View>
             <View style={styles.metaLine}>
               <MapPin size={13} color="#FBE618" />
               <Text style={styles.metaLineText} numberOfLines={1}>{locationText}</Text>
@@ -789,8 +933,9 @@ export default function SwipeScreen({ navigation }: any) {
             </View>
             <TouchableOpacity
               activeOpacity={0.9}
-              style={[styles.moreInfoBtn, isCompactWeb && styles.compactMoreInfoBtn]}
-              onPress={() => setInfoExpanded(true)}
+              style={[styles.moreInfoBtn, isCompactWeb && styles.compactMoreInfoBtn, liquidGlass(isDark, false), { backgroundColor: COLORS.primary, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+              onPressIn={openInfoPanel}
+              onPress={openInfoPanel}
             >
               <Text style={styles.moreInfoText}>MORE INFO ABOUT THIS PERSON</Text>
               <ChevronDown size={15} color="#000" />
@@ -799,72 +944,72 @@ export default function SwipeScreen({ navigation }: any) {
 
           {infoExpanded && (
             <ScrollView
-              style={[styles.bottomMeta, isCompactWeb && styles.compactBottomMeta]}
+              style={[styles.bottomMeta, liquidGlass(isDark, false), isCompactWeb && styles.compactBottomMeta, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
               contentContainerStyle={[styles.bottomMetaContent, isCompactWeb && styles.compactBottomMetaContent]}
               showsVerticalScrollIndicator
               nestedScrollEnabled
               bounces
               scrollEventThrottle={16}
             >
-              <View style={styles.detailsHeader}>
+              <View style={[styles.detailsHeader, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard }] }>
                 <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={styles.detailsTitle}>BUILDER DETAILS</Text>
-                  <Text style={styles.detailsSubtitle}>Clear profile signals for this match</Text>
+                  <Text style={[styles.detailsTitle, { color: textColor(isDark) }]}>BUILDER DETAILS</Text>
+                  <Text style={[styles.detailsSubtitle, { color: textColor(isDark, 'secondary') }]}>Clear profile signals for this match</Text>
                 </View>
                 <TouchableOpacity onPress={() => setInfoExpanded(false)} style={styles.closeInfoBtn}>
                   <Text style={styles.closeInfoText}>HIDE</Text>
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.expandedProfileHeader}>
+              <View style={[styles.expandedProfileHeader, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
                 <View style={styles.expandedNameRow}>
-                  <Text style={styles.expandedName} numberOfLines={2}>
+                  <Text style={[styles.expandedName, { color: textColor(isDark) }]} numberOfLines={2}>
                     {displayNameFor(topProfile)}{ageText}
                   </Text>
                   {!!topProfile.isVerified && <VerifiedBadge size={24} />}
                 </View>
-                <Text style={styles.expandedMetaText} numberOfLines={2}>{roleText}</Text>
-                <Text style={styles.expandedMetaText} numberOfLines={1}>{locationText}</Text>
+                <Text style={[styles.expandedMetaText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{roleText}</Text>
+                <Text style={[styles.expandedMetaText, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>{locationText}</Text>
               </View>
-            <View style={styles.bioCard}>
-              <Text style={styles.detailLabel}>BIO</Text>
-              <Text style={styles.bioText}>{bio}</Text>
+            <View style={[styles.bioCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
+              <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>BIO</Text>
+              <Text style={[styles.bioText, { color: textColor(isDark) }]}>{bio}</Text>
             </View>
 
             <View style={styles.tagGrid}>
               {topProfile.skills?.slice(0, 8).map((skill, idx) => (
-                <View key={`${topProfile.uid}-${skill}-${idx}`} style={styles.skillTag}>
-                  <Text style={styles.skillTagText}>{String(skill).toUpperCase()}</Text>
+                <View key={`${topProfile.uid}-${skill}-${idx}`} style={[styles.skillTag, liquidGlass(isDark, false), { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(251,230,24,0.16)', borderColor: isDark ? COLORS.darkBorder : '#FBE618' }] }>
+                  <Text style={[styles.skillTagText, { color: textColor(isDark) }]}>{String(skill).toUpperCase()}</Text>
                 </View>
               ))}
             </View>
 
             <View style={styles.detailGrid}>
-              <View style={styles.detailCard}>
-                <Text style={styles.detailLabel}>MATCH FIT</Text>
-                <Text style={styles.detailValue}>{compatibility}% • {compatibilityReason}</Text>
+              <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
+                <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>MATCH FIT</Text>
+                <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{compatibility}% - {compatibilityReason}</Text>
               </View>
-              <View style={styles.detailCard}>
-                <Text style={styles.detailLabel}>LOOKING FOR</Text>
-                <Text style={styles.detailValue}>{lookingFor.slice(0, 4).join(' • ') || 'Networking'}</Text>
+              <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
+                <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>LOOKING FOR</Text>
+                <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{lookingFor.slice(0, 4).join(' - ') || 'Networking'}</Text>
               </View>
-              <View style={styles.detailCard}>
-                <Text style={styles.detailLabel}>STAGE</Text>
-                <Text style={styles.detailValue}>{(topProfile as any).startupStage || 'Exploring'}</Text>
+              <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
+                <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>STAGE</Text>
+                <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{(topProfile as any).startupStage || 'Exploring'}</Text>
               </View>
-              <View style={styles.detailCard}>
-                <Text style={styles.detailLabel}>INDUSTRY</Text>
-                <Text style={styles.detailValue}>{industries.slice(0, 4).join(' • ') || 'Open'}</Text>
+              <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
+                <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>INDUSTRY</Text>
+                <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{industries.slice(0, 4).join(' - ') || 'Open'}</Text>
               </View>
-              <View style={styles.detailCard}>
-                <Text style={styles.detailLabel}>AVAILABILITY</Text>
-                <Text style={styles.detailValue}>{(topProfile as any).availability || 'Open'}</Text>
+              <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
+                <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>AVAILABILITY</Text>
+                <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{(topProfile as any).availability || 'Open'}</Text>
               </View>
             </View>
 
             <View style={styles.scrollIndicator}>
               <ChevronDown size={14} color="#FBE618" />
-              <Text style={styles.scrollText}>SCROLL FOR DETAILS</Text>
+              <Text style={[styles.scrollText, { color: textColor(isDark, 'secondary') }]}>SCROLL FOR DETAILS</Text>
             </View>
             </ScrollView>
           )}
@@ -876,7 +1021,7 @@ export default function SwipeScreen({ navigation }: any) {
 
   if (!user?.uid) {
     return (
-      <ScreenRoot style={[styles.container, isWeb && styles.webRoot, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
+      <ScreenRoot style={[styles.container, isWeb && styles.webRoot, appBackground(isDark)]}>
         <View style={styles.authGate}>
           <Zap size={44} color="#FBE618" fill="#FBE618" />
           <Text style={[styles.authGateTitle, { color: isDark ? '#FFF' : '#000' }]}>JOIN LINKUP FIRST</Text>
@@ -893,22 +1038,46 @@ export default function SwipeScreen({ navigation }: any) {
     );
   }
 
-  if (loading && profiles.length === 0) {
+  if ((!progressHydrated || loading) && profiles.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFF', justifyContent: 'center' }]}>
-        <ActivityIndicator color="#FBE618" />
+      <View style={[styles.container, appBackground(isDark), { justifyContent: 'center' }]}>
+        <ActivityIndicator color={COLORS.primary} />
       </View>
     );
   }
 
   return (
-    <ScreenRoot style={[styles.container, isWeb && styles.webRoot, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
+    <ScreenRoot style={[styles.container, isWeb && styles.webRoot, appBackground(isDark)]}>
+      <View style={styles.scene} pointerEvents="none">
+        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
+        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(223,251,63,0.08)' : 'rgba(223,251,63,0.16)' }]} />
+      </View>
       <View style={[styles.webStage, isWideWeb && styles.webStageDesktop, isCompactWeb && styles.webStageMobile]}>
         <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }, isCompactWeb && styles.compactTopBar]}>
-          <TouchableOpacity onPress={() => navigation?.goBack?.()} style={[styles.topBtn, isCompactWeb && styles.compactTopBtn]}>
-            <ChevronLeft size={22} color="#000" />
-          </TouchableOpacity>
-          <Text style={[styles.topTitle, isCompactWeb && styles.compactTopTitle]}>SWIPE</Text>
+          {navigation?.canGoBack() ? (
+            <TouchableOpacity 
+              onPress={() => navigation?.goBack?.()} 
+              style={[
+                styles.topBtn, 
+                isCompactWeb && styles.compactTopBtn,
+                { 
+                  ...liquidGlass(isDark, false)
+                }
+              ]}
+            >
+              <ChevronLeft size={22} color={textColor(isDark)} />
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.topBtn, styles.topBtnGhost, isCompactWeb && styles.compactTopBtn]} />
+          )}
+          <Text style={[
+            styles.topTitle, 
+            isCompactWeb && styles.compactTopTitle,
+            {
+              color: textColor(isDark),
+              ...liquidGlass(isDark, false)
+            }
+          ]}>SWIPE MATCH</Text>
           <View style={[styles.topBtn, styles.topBtnGhost, isCompactWeb && styles.compactTopBtn]} />
         </View>
 
@@ -917,6 +1086,14 @@ export default function SwipeScreen({ navigation }: any) {
           {renderCard()}
         </View>
       </View>
+      <PaywallModal
+        visible={!!paywallFeature}
+        feature={paywallFeature || PRO_FEATURES.swipeLimit}
+        description={`Free Android accounts get ${FREE_LIMITS.swipesPer12Hours} builder swipes every ${SWIPE_USAGE_WINDOW_HOURS} hours. LINKUP PLUS unlocks unlimited discovery.`}
+        onClose={closePaywallToHome}
+        onUnlocked={() => setPaywallFeature('')}
+        restoreDisabled
+      />
     </ScreenRoot>
   );
 }
@@ -926,6 +1103,26 @@ const SparkleDot = () => <View style={styles.sparkleDot} />;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scene: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  scenePane: {
+    position: 'absolute',
+    width: 280,
+    height: 130,
+    borderRadius: 34,
+  },
+  scenePaneA: {
+    top: 90,
+    right: -120,
+    transform: [{ rotate: '-16deg' }],
+  },
+  scenePaneB: {
+    top: 330,
+    left: -120,
+    transform: [{ rotate: '16deg' }],
   },
   webRoot: {
     height: '100dvh' as any,
@@ -963,16 +1160,9 @@ const styles = StyleSheet.create({
   topBtn: {
     width: 44,
     height: 44,
-    borderRadius: 16,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    shadowColor: '#000',
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
   },
   topBtnGhost: {
     opacity: 0,
@@ -982,17 +1172,10 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 3,
     color: '#000',
-    backgroundColor: 'rgba(255,255,255,0.9)',
     borderRadius: 999,
     overflow: 'hidden',
     paddingHorizontal: 18,
     paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
   },
   compactTopBar: {
     paddingHorizontal: 10,
@@ -1023,8 +1206,8 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    borderRadius: 0,
-    borderWidth: 0,
+    borderRadius: 28,
+    borderWidth: 1,
     borderColor: 'transparent',
     overflow: 'hidden',
   },
@@ -1110,6 +1293,8 @@ const styles = StyleSheet.create({
     paddingTop: 84,
     paddingBottom: 128,
     justifyContent: 'space-between',
+    zIndex: 20,
+    elevation: 20,
   },
   compactCardInfo: {
     padding: 14,
@@ -1146,16 +1331,6 @@ const styles = StyleSheet.create({
     color: '#000',
     letterSpacing: 0.4,
   },
-  repBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    gap: 4,
-    alignSelf: 'flex-start',
-  },
   photoThumbRow: {
     flexDirection: 'row',
     gap: 8,
@@ -1177,17 +1352,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  repVal: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#FFF',
-  },
   compactMeta: {
     borderRadius: 26,
     padding: 18,
     backgroundColor: 'rgba(0,0,0,0.48)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
+    zIndex: 30,
+    elevation: 30,
   },
   compactWebMeta: {
     borderRadius: 22,
@@ -1202,6 +1374,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    zIndex: 40,
+    elevation: 40,
   },
   compactMoreInfoBtn: {
     minHeight: 40,
@@ -1219,14 +1393,14 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     maxHeight: '78%',
-    backgroundColor: '#090A0F',
-    borderTopLeftRadius: 34,
-    borderTopRightRadius: 34,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     zIndex: 90,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
+    borderWidth: 2,
+    borderColor: '#FBE618',
     shadowColor: '#000',
-    shadowOpacity: 0.38,
+    shadowOpacity: 0.22,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: -10 },
     elevation: 16,
@@ -1249,28 +1423,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 4,
+    borderRadius: 20,
+    padding: 14,
   },
   detailsTitle: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#FFF',
+    color: '#000',
     letterSpacing: 1.6,
   },
   detailsSubtitle: {
     marginTop: 4,
     fontSize: 11,
     fontWeight: '800',
-    color: '#A1A1AA',
+    color: '#343434',
     lineHeight: 15,
   },
   closeInfoBtn: {
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 9,
-    backgroundColor: '#FBE618',
+    backgroundColor: '#000',
   },
   closeInfoText: {
-    color: '#000',
+    color: '#FBE618',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
@@ -1278,16 +1454,14 @@ const styles = StyleSheet.create({
   expandedProfileHeader: {
     marginTop: 16,
     padding: 16,
-    borderRadius: 22,
-    backgroundColor: '#14161D',
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(251,230,24,0.22)',
   },
   expandedName: {
     fontSize: 25,
     lineHeight: 30,
     fontWeight: '900',
-    color: '#FFF',
+    color: '#000',
     fontStyle: 'italic',
     textTransform: 'uppercase',
     flexShrink: 1,
@@ -1302,7 +1476,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '800',
-    color: '#E5E7EB',
+    color: '#202020',
   },
   nameRow: {
     flexDirection: 'row',
@@ -1358,6 +1532,20 @@ const styles = StyleSheet.create({
     color: '#F3F4F6',
     fontWeight: '800',
   },
+  roleBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    borderRadius: 999,
+    backgroundColor: '#FBE618',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  roleBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#000',
+    letterSpacing: 1,
+  },
   aiReasonPill: {
     marginTop: 12,
     borderRadius: 14,
@@ -1387,13 +1575,11 @@ const styles = StyleSheet.create({
     marginTop: 14,
     padding: 16,
     borderRadius: 20,
-    backgroundColor: '#11131A',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
   },
   bioText: {
     fontSize: 15,
-    color: '#F8FAFC',
+    color: '#111827',
     marginTop: 9,
     fontWeight: '700',
     lineHeight: 23,
@@ -1411,12 +1597,12 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(251,230,24,0.28)',
+    borderColor: '#FBE618',
   },
   skillTagText: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#FBE618',
+    color: '#000',
   },
   detailGrid: {
     gap: 10,
@@ -1424,21 +1610,19 @@ const styles = StyleSheet.create({
   },
   detailCard: {
     padding: 16,
-    borderRadius: 20,
-    backgroundColor: '#14161D',
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
   },
   detailLabel: {
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 1.4,
-    color: '#FBE618',
+    color: '#000',
   },
   detailValue: {
     marginTop: 8,
     fontSize: 14,
-    color: '#FFF',
+    color: '#111827',
     fontWeight: '800',
     lineHeight: 20,
   },
@@ -1448,7 +1632,7 @@ const styles = StyleSheet.create({
   },
   scrollText: {
     fontSize: 8,
-    color: '#AAA',
+    color: '#555',
     fontWeight: '900',
     marginTop: 4,
   },

@@ -61,7 +61,7 @@ export default async function handler(req: any, res: any) {
     let ranked = local;
     try {
       const text = await geminiText(prompt, {
-        temperature: 0.2,
+        temperature: 0.0,
         maxOutputTokens: 700,
         responseMimeType: 'application/json',
       });

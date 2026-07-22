@@ -69,11 +69,12 @@ function AppContent() {
   };
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-white dark:bg-[#050508] text-black dark:text-white font-sans transition-colors">
+    <div className="relative h-screen w-full overflow-hidden theme-bg text-black dark:text-white font-sans transition-colors liquid-shell">
       {/* Background Atmosphere - Immersive UI Style */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className="bg-glow -top-[200px] -left-[100px]" />
-        <div className="bg-glow -bottom-[200px] -right-[100px] opacity-20" style={{ background: 'radial-gradient(circle, #FBE618 0%, transparent 70%)' }} />
+        <div className="bg-glow -top-[220px] -left-[120px] opacity-60" />
+        <div className="bg-glow -bottom-[220px] -right-[120px] opacity-40" style={{ background: 'radial-gradient(circle, #FBE618 0%, transparent 70%)' }} />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(251,230,24,0.08),_transparent_45%),radial-gradient(circle_at_bottom_right,_rgba(251,230,24,0.06),_transparent_40%)] opacity-70" />
       </div>
 
       <div className="relative z-10 flex h-full flex-col">

@@ -1,6 +1,6 @@
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { opportunityDetails } from './discovery';
+import { hasActiveOpportunityIntent, opportunityDetails } from './discovery';
 import { UserProfile } from '../types';
 
 export type OpportunityAlert = {
@@ -91,10 +91,7 @@ export function scoreOpportunityFit(me: UserProfile | null | undefined, candidat
     lookingFor.some((need) => need.includes(myRole) || myRole.includes(need) || need.includes('cofounder'));
   const sameLocation =
     normalize(me.country) && normalize(candidate.country) && normalize(me.country) === normalize(candidate.country);
-  const activeOpportunity =
-    lookingFor.length > 0 ||
-    (Array.isArray(candidate.projects) && candidate.projects.length > 0) ||
-    /open|available|hiring|team|cofounder|collaboration/i.test(String(candidate.availability || ''));
+  const activeOpportunity = hasActiveOpportunityIntent(candidate);
 
   const score =
     Math.min(36, exactMatches.length * 9) +

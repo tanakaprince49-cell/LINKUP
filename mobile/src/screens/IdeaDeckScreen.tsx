@@ -17,7 +17,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { addDoc, collection, doc, getDoc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { useIsFocused } from '@react-navigation/native';
+import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { ChevronLeft, Heart, Lightbulb, MessageSquare, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { ensureDirectMatch } from '../lib/chat';
@@ -28,6 +29,10 @@ import { StartupIdea, UserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import VerifiedBadge from '../components/VerifiedBadge';
+import PaywallModal from '../components/PaywallModal';
+import { consumeDailyUsage, FREE_LIMITS, isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
+import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
+import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const SWIPE_DISTANCE = 140;
@@ -41,6 +46,7 @@ const toggleValue = (values: string[], value: string) =>
 export default function IdeaDeckScreen({ navigation }: any) {
   const { user, profile: myProfile } = useAuth();
   const { theme } = useTheme();
+  const isFocused = useIsFocused();
   const { width, height } = useWindowDimensions();
   const isDark = theme === 'dark';
   const [ideas, setIdeas] = useState<IdeaDeckItem[]>([]);
@@ -57,6 +63,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const [inviteIdea, setInviteIdea] = useState<IdeaDeckItem | null>(null);
   const [inviteMessage, setInviteMessage] = useState('');
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [paywallFeature, setPaywallFeature] = useState('');
   const swipedIdeasRef = useRef<Set<string>>(new Set());
   const position = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const animateSwipeRef = useRef<(direction: 'left' | 'right') => void>(() => {});
@@ -64,6 +71,8 @@ export default function IdeaDeckScreen({ navigation }: any) {
 
   const topIdea = ideas[0];
   const nextIdea = ideas[1];
+  const proLocked = isAndroidProLocked(myProfile);
+  const openPaywall = (feature: string = PRO_FEATURES.ideaSwipeLimit) => setPaywallFeature(feature);
   const cardWidth = Math.min(Math.max(width - 28, 320), 720);
   const cardHeight = Math.min(Math.max(height * 0.62, 500), 660);
 
@@ -109,32 +118,24 @@ export default function IdeaDeckScreen({ navigation }: any) {
       setLoading(false);
       return;
     }
+    if (!isFocused) return;
 
-    const usersQuery = query(
-      collection(db, 'users'),
-      where('isVisible', '==', true),
-      where('isStealthMode', '==', false),
-      limit(80)
-    );
-
-    const unsubscribe = onSnapshot(
-      usersQuery,
-      (snapshot) => {
-        const users = snapshot.docs
-          .map((snap) => snap.data() as UserProfile)
-          .filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
+    const unsubscribe = subscribeToDiscoveryProfiles({
+      userId: user.uid,
+      onData: (profiles) => {
+        const users = profiles.filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
         const deck = collectIdeaDeck(users as UserProfile[], user.uid).filter((idea) => !swipedIdeasRef.current.has(idea.id));
-        setIdeas(deck);
+        setIdeas((current) => (deck.length > 0 || current.length === 0 ? deck : current));
         setLoading(false);
       },
-      (error) => {
+      onError: (error) => {
         console.warn('Ideas deck unavailable:', error);
         setLoading(false);
-      }
-    );
+      },
+    });
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [isFocused, user?.uid]);
 
   const notify = async (payload: Record<string, any>) => {
     try {
@@ -152,7 +153,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
     if (!user?.uid || !idea?.id) return;
     const swipeId = `${idea.id}_${user.uid}`;
     const myName = displayNameFor(myProfile || user);
-    const myPic = myProfile?.profilePic || user.photoURL || '';
+    const myPic = safeProfileImageUri(myProfile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT);
 
     await setDoc(
       doc(db, 'ideaSwipes', swipeId),
@@ -191,7 +192,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
         userId: user.uid,
         fromId: partnerDoc.swiperId,
         fromName: partnerProfile ? displayNameFor(partnerProfile) : partnerDoc.swiperName || 'Builder',
-        fromPic: partnerProfile?.profilePic || partnerDoc.swiperPic || '',
+        fromPic: safeProfileImageUri(partnerProfile?.profilePic || partnerDoc.swiperPic || '', MOBILE_LIST_IMAGE_LIMIT),
         type: 'match',
         matchId,
         content: `You both liked "${idea.title}".`,
@@ -234,9 +235,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
     }
   };
 
-  const animateSwipe = (direction: 'left' | 'right') => {
-    const swipedIdea = ideas[0];
-    if (!swipedIdea) return;
+  const startIdeaSwipeAnimation = (direction: 'left' | 'right', swipedIdea: IdeaDeckItem) => {
     Animated.timing(position, {
       toValue: { x: direction === 'right' ? width + 220 : -width - 220, y: 18 },
       duration: 230,
@@ -246,6 +245,26 @@ export default function IdeaDeckScreen({ navigation }: any) {
       if (finished) completeSwipeRef.current(direction, swipedIdea);
       else position.setValue({ x: 0, y: 0 });
     });
+  };
+
+  const animateSwipe = (direction: 'left' | 'right') => {
+    const swipedIdea = ideas[0];
+    if (!swipedIdea) return;
+
+    if (proLocked) {
+      consumeDailyUsage(user?.uid || 'anonymous', 'idea-swipes', FREE_LIMITS.dailyIdeaSwipes)
+        .then((usage) => {
+          if (!usage.allowed) {
+            openPaywall(PRO_FEATURES.ideaSwipeLimit);
+            return;
+          }
+          startIdeaSwipeAnimation(direction, swipedIdea);
+        })
+        .catch(() => startIdeaSwipeAnimation(direction, swipedIdea));
+      return;
+    }
+
+    startIdeaSwipeAnimation(direction, swipedIdea);
   };
 
   useEffect(() => {
@@ -283,6 +302,10 @@ export default function IdeaDeckScreen({ navigation }: any) {
       const currentIdeas = Array.isArray((myProfile as any)?.startupIdeas)
         ? ((myProfile as any).startupIdeas as StartupIdea[]).filter((idea) => String(idea?.title || idea?.description || '').trim())
         : [];
+      if (proLocked && currentIdeas.length >= FREE_LIMITS.startupIdeas) {
+        openPaywall(PRO_FEATURES.moreProjects);
+        return;
+      }
       const nextIdea: StartupIdea = {
         id: safeIdeaId(`${user.uid}_${Date.now()}_${title}`),
         title: title.slice(0, 90),
@@ -291,7 +314,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
         lookingFor: ideaLookingFor,
         tags: ideaFields,
       };
-      const nextIdeas = [nextIdea, ...currentIdeas.filter((idea) => idea.id !== nextIdea.id)].slice(0, 20);
+      const nextIdeas = [nextIdea, ...currentIdeas.filter((idea) => idea.id !== nextIdea.id)].slice(0, proLocked ? FREE_LIMITS.startupIdeas : 20);
       const existingBadges = Array.isArray((myProfile as any)?.badges) ? ((myProfile as any).badges as string[]) : [];
       const ideaBadges = ['Idea Starter'];
       if (nextIdeas.length >= 3) ideaBadges.push('Idea Builder');
@@ -446,7 +469,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
             {idea.ownerVerified ? <VerifiedBadge size={18} /> : null}
           </View>
           <Text style={styles.ownerMeta} numberOfLines={1}>
-            {[idea.ownerOccupation || 'Builder', [idea.ownerCity, idea.ownerCountry].filter(Boolean).join(', ')].filter(Boolean).join(' • ')}
+            {[idea.ownerOccupation || 'Builder', [idea.ownerCity, idea.ownerCountry].filter(Boolean).join(', ')].filter(Boolean).join(' - ')}
           </Text>
         </View>
         <View style={styles.ideaOwnerBadge}>
@@ -584,7 +607,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {loading && ideas.length === 0 ? (
         <View style={styles.center}>
           <ActivityIndicator color="#FBE618" />
         </View>
@@ -618,6 +641,12 @@ export default function IdeaDeckScreen({ navigation }: any) {
       {renderIdeaComposer()}
       {renderInviteComposer()}
       <ConfettiBurst active={confettiActive} width={width} />
+      <PaywallModal
+        visible={!!paywallFeature}
+        feature={paywallFeature || PRO_FEATURES.ideaSwipeLimit}
+        description={`Free Android accounts get ${FREE_LIMITS.dailyIdeaSwipes} idea swipes per day and ${FREE_LIMITS.startupIdeas} posted ideas. LINKUP PLUS unlocks unlimited ideas.`}
+        onClose={() => setPaywallFeature('')}
+      />
     </SafeAreaView>
   );
 }

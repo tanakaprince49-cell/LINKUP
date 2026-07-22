@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
 import React from 'react';
-import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text, Platform } from 'react-native';
+import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text, Platform, InteractionManager } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -31,16 +31,37 @@ import ActiveOpportunityScreen from './src/screens/ActiveOpportunityScreen';
 import ActiveOpportunitiesScreen from './src/screens/ActiveOpportunitiesScreen';
 import TrendingBuildersScreen from './src/screens/TrendingBuildersScreen';
 import RecommendedMatchesScreen from './src/screens/RecommendedMatchesScreen';
-import { subscribeToNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
+import { setupNativeNotificationRuntimeAsync, subscribeToNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
 import { subscribeToUnreadMessagesCount } from './src/lib/chat';
 import OpportunityRadar from './src/components/OpportunityRadar';
 import WebAnalytics from './src/components/WebAnalytics';
 import PWAInstallPrompt from './src/components/PWAInstallPrompt';
+import LinkupAlertProvider from './src/components/LinkupAlertProvider';
 import { blurActiveElementOnWeb } from './src/lib/webFocus';
+import { hasLinkupPro } from './src/lib/paywall';
+import { IS_LOW_END_ANDROID, safeProfileImageUri } from './src/lib/profilePerformance';
+import { preloadProfileScreen, scheduleScreenPreloads } from './src/lib/preloadScreens';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 const navigationRef = createNavigationContainerRef<any>();
+
+const runAfterStartup = (task: () => void) => {
+  if (Platform.OS !== 'android') {
+    const timeout = setTimeout(task, 0);
+    return () => clearTimeout(timeout);
+  }
+
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const interaction = InteractionManager.runAfterInteractions(() => {
+    timeout = setTimeout(task, 900);
+  });
+
+  return () => {
+    interaction.cancel?.();
+    if (timeout) clearTimeout(timeout);
+  };
+};
 
 const linking: any = {
   prefixes: [ExpoLinking.createURL('/'), 'linkup://'],
@@ -52,14 +73,16 @@ const linking: any = {
       Onboarding: 'onboarding',
       Main: {
         screens: {
-          Swipe: '',
+          Dashboard: '',
+          Swipe: 'swipe-deck',
           Search: 'search',
-          Matches: 'connections',
-          Alerts: 'alerts',
+          Inbox: 'inbox',
         },
       },
       Profile: 'profile/:userId',
       Messages: 'messages',
+      Alerts: 'alerts',
+      Matches: 'connections',
       Chat: 'chat/:matchId',
       ArchivedChats: 'messages/archived',
       SwipeDeck: 'swipe',
@@ -73,53 +96,88 @@ const linking: any = {
   },
 };
 
+// Import custom theme settings
+import { COLORS, appBackground, liquidGlass, textColor } from './src/theme/theme';
+
 // Safe Icon Helper
-const SafeIcon = ({ name, size = 20, color = "#FBE618", fill = "transparent" }: any) => {
+const SafeIcon = ({ name, size = 20, color = COLORS.primary, fill = "transparent" }: any) => {
   const IconComponent = (Icons as any)[name];
   if (!IconComponent) return <View style={{ width: size, height: size, backgroundColor: color + '20' }} />;
   return <IconComponent size={size} color={color} fill={fill} />;
 };
+
+const ProTitleCrown = () => (
+  <View style={styles.proTitleCrown}>
+    <SafeIcon name="Crown" size={15} color="#000" fill="#000" />
+  </View>
+);
 
 // Global Header Component
 const AppHeader = ({ navigation, title }: any) => {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
   const isDark = theme === 'dark';
-  const [messageCount, setMessageCount] = React.useState(0);
-  const profilePhoto = profile?.profilePic || '';
+  const [unreadNotifications, setUnreadNotifications] = React.useState(0);
+  const profilePhoto = safeProfileImageUri(profile?.profilePic, IS_LOW_END_ANDROID ? 140_000 : 260_000);
+  const isPro = hasLinkupPro(profile);
 
   React.useEffect(() => {
     if (!user?.uid) {
-      setMessageCount(0);
+      setUnreadNotifications(0);
       return;
     }
-    return subscribeToUnreadMessagesCount(user.uid, setMessageCount);
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    const cancelStartupTask = runAfterStartup(() => {
+      if (cancelled) return;
+      unsubscribe = subscribeToUnreadNotificationsCount(user.uid, setUnreadNotifications);
+    });
+
+    return () => {
+      cancelled = true;
+      cancelStartupTask();
+      unsubscribe?.();
+    };
   }, [user?.uid]);
 
   return (
-    <SafeAreaView style={[styles.headerContainer, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView edges={['top']} style={[styles.headerContainer, { 
+      ...liquidGlass(isDark, false),
+      borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.08)'
+    }]}>
       <View style={styles.headerContent}>
-        <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>
-          {title === 'LINKUP' ? (
-            <>LIN<Text style={{ color: '#FBE618' }}>KUP</Text></>
-          ) : title}
-        </Text>
+        <View style={styles.headerTitleRow}>
+          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>
+            {title === 'LINKUP' ? (
+              <>LIN<Text style={{ color: COLORS.primary }}>KUP</Text></>
+            ) : title}
+          </Text>
+          {isPro ? <ProTitleCrown /> : null}
+        </View>
         <View style={styles.headerActions}>
           <TouchableOpacity 
-            style={[styles.headerIconBtn, { backgroundColor: isDark ? '#1A1A1F' : '#F8F8F8' }]}
-            onPress={() => navigation.navigate('Messages')}
+            style={[styles.headerIconBtn, { 
+              ...liquidGlass(isDark, false)
+            }]}
+            onPress={() => {
+              const parentNav = navigation.getParent?.() || navigation;
+              parentNav.navigate('Alerts');
+            }}
           >
-            <SafeIcon name="MessageSquare" size={18} color={isDark ? '#CCC' : '#444'} />
-            {messageCount > 0 && (
+            <SafeIcon name="Bell" size={18} color={isDark ? '#E5E7EB' : '#4B5563'} />
+            {unreadNotifications > 0 && (
               <View style={styles.headerBadgeBubble}>
                 <Text style={styles.headerBadgeText} numberOfLines={1}>
-                  {messageCount > 99 ? '99+' : String(messageCount)}
+                  {unreadNotifications > 99 ? '99+' : String(unreadNotifications)}
                 </Text>
               </View>
             )}
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.headerIconBtn, { backgroundColor: isDark ? '#1A1A1F' : '#F8F8F8' }]}
+            style={[styles.headerIconBtn, { 
+              ...liquidGlass(isDark, false)
+            }]}
+            onPressIn={preloadProfileScreen}
             onPress={() => {
               if (user?.uid) navigation.navigate('Profile', { userId: user.uid });
             }}
@@ -127,7 +185,7 @@ const AppHeader = ({ navigation, title }: any) => {
             {profilePhoto ? (
               <Image source={{ uri: profilePhoto }} style={styles.headerAvatar} />
             ) : (
-              <SafeIcon name="User" size={18} color={isDark ? '#CCC' : '#444'} />
+              <SafeIcon name="User" size={18} color={isDark ? '#E5E7EB' : '#4B5563'} />
             )}
           </TouchableOpacity>
         </View>
@@ -140,56 +198,58 @@ function TabNavigator({ navigation }: any) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const isDark = theme === 'dark';
-  const [unreadCount, setUnreadCount] = React.useState(0);
+  const [unreadMessages, setUnreadMessages] = React.useState(0);
   const tabLabels: Record<string, string> = {
-    Swipe: 'Home',
+    Dashboard: 'Home',
+    Swipe: 'Swipe',
     Search: 'Search',
-    Matches: 'Connections',
-    Alerts: 'Notifications',
+    Inbox: 'Inbox',
   };
 
   React.useEffect(() => {
     if (!user?.uid) {
-      setUnreadCount(0);
+      setUnreadMessages(0);
       return;
     }
-    const unsub = subscribeToUnreadNotificationsCount(user.uid, setUnreadCount);
-    return () => unsub();
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    const cancelStartupTask = runAfterStartup(() => {
+      if (cancelled) return;
+      unsubscribe = subscribeToUnreadMessagesCount(user.uid, setUnreadMessages);
+    });
+
+    return () => {
+      cancelled = true;
+      cancelStartupTask();
+      unsubscribe?.();
+    };
   }, [user?.uid]);
 
   return (
     <Tab.Navigator
-      initialRouteName="Swipe"
+      initialRouteName="Dashboard"
+      detachInactiveScreens={Platform.OS !== 'web'}
       screenOptions={({ route }) => ({
+        lazy: true,
         tabBarIcon: ({ focused, color, size }) => {
           let iconName = "Home";
-          if (focused) {
-            if (route.name === 'Swipe') iconName = "Home";
-            else if (route.name === 'Search') iconName = "Search";
-            else if (route.name === 'Matches') iconName = "Users";
-            else if (route.name === 'Alerts') iconName = "Bell";
-          } else {
-            if (route.name === 'Swipe') iconName = "Home";
-            else if (route.name === 'Search') iconName = "Search";
-            else if (route.name === 'Matches') iconName = "Users";
-            else if (route.name === 'Alerts') iconName = "Bell";
-          }
+          if (route.name === 'Dashboard') iconName = "Home";
+          else if (route.name === 'Swipe') iconName = "Zap";
+          else if (route.name === 'Search') iconName = "Search";
+          else if (route.name === 'Inbox') iconName = "Mail";
 
           return (
-            <View style={[
-              styles.tabIconContainer,
-              route.name === 'Alerts' ? styles.alertTabIconContainer : null,
-            ]}>
+            <View style={styles.tabIconContainer}>
               <SafeIcon 
                 name={iconName}
                 size={22} 
-                color={focused ? '#FBE618' : '#666'} 
-                fill={focused ? '#FBE61820' : 'transparent'}
+                color={focused ? COLORS.primary : (isDark ? '#8E8E93' : '#636366')} 
+                fill={focused ? COLORS.primaryGlow : 'transparent'}
               />
-              {route.name === 'Alerts' && unreadCount > 0 && (
+              {route.name === 'Inbox' && unreadMessages > 0 && (
                 <View style={styles.badgeBubble}>
                   <Text style={styles.badgeText} numberOfLines={1}>
-                    {unreadCount > 99 ? '99+' : String(unreadCount)}
+                    {unreadMessages > 99 ? '99+' : String(unreadMessages)}
                   </Text>
                 </View>
               )}
@@ -197,8 +257,8 @@ function TabNavigator({ navigation }: any) {
             </View>
           );
         },
-        tabBarActiveTintColor: '#FBE618',
-        tabBarInactiveTintColor: '#666',
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: isDark ? '#8E8E93' : '#636366',
         tabBarShowLabel: true,
         tabBarLabel: tabLabels[route.name] || route.name,
         tabBarLabelStyle: {
@@ -207,39 +267,42 @@ function TabNavigator({ navigation }: any) {
           marginTop: 2,
         },
         tabBarStyle: {
-          backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF',
+          backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
           borderTopWidth: 1,
-          borderTopColor: isDark ? '#1A1A1A' : '#EEEEEE',
-          height: 74,
-          paddingTop: 7,
+          borderTopColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
+          height: 92,
+          paddingTop: 12,
           paddingBottom: 8,
-          position: 'absolute',
-          bottom: 12,
-          left: 16,
-          right: 16,
-          borderRadius: 26,
-          elevation: 10,
+          justifyContent: 'flex-start',
+          position: 'relative',
+          borderRadius: 0,
+          marginHorizontal: 0,
+          marginBottom: 0,
+          elevation: IS_LOW_END_ANDROID ? 0 : 10,
           shadowColor: '#000',
-          shadowOpacity: 0.12,
-          shadowRadius: 14,
-          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: IS_LOW_END_ANDROID ? 0 : 0.12,
+          shadowRadius: IS_LOW_END_ANDROID ? 0 : 10,
+          shadowOffset: { width: 0, height: IS_LOW_END_ANDROID ? 0 : 4 },
+        },
+        sceneContainerStyle: {
+          backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg,
         },
         headerShown: true,
         header: (props) => {
           const titles: Record<string, string> = {
-            'Swipe': 'DISCOVER',
-            'Search': 'SEARCH',
-            'Matches': 'CONNECTIONS',
-            'Alerts': 'NOTIFICATIONS'
+            Dashboard: 'LINKUP',
+            Swipe: 'SWIPE MATCH',
+            Search: 'AI SEARCH',
+            Inbox: 'CHATS',
           };
-          return <AppHeader navigation={props.navigation} title={titles[route.name] || 'LINKUP'} />;
-        }
+          return <AppHeader navigation={props.navigation} title={titles[props.route.name] || 'LINKUP'} />;
+        },
       })}
     >
-      <Tab.Screen name="Swipe" component={DiscoveryDashboardScreen} />
+      <Tab.Screen name="Dashboard" component={DiscoveryDashboardScreen} />
+      <Tab.Screen name="Swipe" component={SwipeScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
-      <Tab.Screen name="Matches" component={MatchScreen} />
-      <Tab.Screen name="Alerts" component={AlertsScreen} />
+      <Tab.Screen name="Inbox" component={MessagesScreen} />
     </Tab.Navigator>
   );
 }
@@ -248,12 +311,23 @@ function AppContent() {
   const { user, profile, loading, authVersion, isOnboarded } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const webPathname =
+    Platform.OS === 'web' ? String((globalThis as any)?.location?.pathname || '') : '';
+  const isPublicSharedWebPath =
+    webPathname.startsWith('/profile/') || webPathname.startsWith('/opportunity/');
   const requiresEmailVerification = Boolean(
     user?.email &&
       !user.emailVerified &&
       user.providerData?.some((provider) => provider.providerId === 'password')
   );
   const navigationStateKey = `${user?.uid || 'guest'}-${isOnboarded ? 'onboarded' : 'new'}-${requiresEmailVerification ? 'unverified' : 'verified'}-${authVersion}`;
+
+  React.useEffect(() => {
+    if (Platform.OS === 'web') return;
+    setupNativeNotificationRuntimeAsync().catch((error) => {
+      console.warn('Native notification runtime unavailable:', error);
+    });
+  }, []);
 
   const openNotificationTarget = React.useCallback((data: any) => {
     if (!navigationRef.isReady()) return;
@@ -285,11 +359,22 @@ function AppContent() {
 
   React.useEffect(() => {
     if (!user?.uid) return;
-    import('./src/lib/notifications')
-      .then((m) => m.registerForPushNotificationsAsync(user.uid))
-      .catch((error) => {
-        console.warn('Notifications setup unavailable:', error);
-      });
+    let cancelled = false;
+    const cancelStartupTask = runAfterStartup(() => {
+      if (cancelled) return;
+      import('./src/lib/notifications')
+        .then((m) => {
+          if (!cancelled) return m.registerForPushNotificationsAsync(user.uid);
+        })
+        .catch((error) => {
+          console.warn('Notifications setup unavailable:', error);
+        });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelStartupTask();
+    };
   }, [user?.uid]);
 
   React.useEffect(() => {
@@ -323,8 +408,25 @@ function AppContent() {
 
   React.useEffect(() => {
     if (!user?.uid) return;
-    return subscribeToNotificationToasts(user.uid);
+
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    const cancelStartupTask = runAfterStartup(() => {
+      if (cancelled) return;
+      unsubscribe = subscribeToNotificationToasts(user.uid);
+    });
+
+    return () => {
+      cancelled = true;
+      cancelStartupTask();
+      unsubscribe?.();
+    };
   }, [user?.uid]);
+
+  React.useEffect(() => {
+    if (!user?.uid || !isOnboarded) return;
+    scheduleScreenPreloads();
+  }, [user?.uid, isOnboarded]);
 
   React.useEffect(() => {
     if (Platform.OS !== 'web' || user?.uid) return;
@@ -332,25 +434,47 @@ function AppContent() {
     const history = (globalThis as any)?.history;
     const pathname = String(location?.pathname || '');
     const publicPaths = new Set(['', '/', '/landing', '/login']);
+    const isPublicSharedPath = pathname.startsWith('/profile/') || pathname.startsWith('/opportunity/');
 
-    if (history?.replaceState && !publicPaths.has(pathname)) {
+    if (history?.replaceState && !publicPaths.has(pathname) && !isPublicSharedPath) {
       history.replaceState(null, '', '/landing');
     }
   }, [user?.uid]);
 
   if (loading) return (
-    <View style={{ flex: 1, backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
-      <ActivityIndicator color="#FBE618" />
+    <View style={{ flex: 1, ...appBackground(isDark), alignItems: 'center', justifyContent: 'center' }}>
+      <ActivityIndicator color={COLORS.primary} />
     </View>
   );
 
   return (
-    <NavigationContainer ref={navigationRef} key={navigationStateKey} linking={linking} onStateChange={blurActiveElementOnWeb}>
-      <Stack.Navigator key={navigationStateKey} screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}>
+    <NavigationContainer
+      ref={navigationRef}
+      key={navigationStateKey}
+      linking={linking}
+      onStateChange={blurActiveElementOnWeb}
+    >
+      <Stack.Navigator
+        key={navigationStateKey}
+        screenOptions={{
+          headerShown: false,
+          animation: IS_LOW_END_ANDROID ? 'none' : Platform.OS === 'android' ? 'simple_push' : 'fade_from_bottom',
+        }}
+      >
         {!user ? (
           <>
             <Stack.Screen name="Landing" component={LandingScreen} />
             <Stack.Screen name="EmailAuth" component={EmailAuthScreen} />
+            {isPublicSharedWebPath ? (
+              <>
+                <Stack.Screen
+              name="Profile"
+              component={ProfileScreen}
+              options={{ animation: Platform.OS === 'android' ? 'none' : 'fade_from_bottom' }}
+            />
+                <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
+              </>
+            ) : null}
           </>
         ) : requiresEmailVerification ? (
           <>
@@ -367,7 +491,12 @@ function AppContent() {
         )}
         {user ? (
           <>
-            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen
+              name="Profile"
+              component={ProfileScreen}
+              options={{ animation: Platform.OS === 'android' ? 'none' : 'fade_from_bottom' }}
+            />
+            <Stack.Screen name="Alerts" component={AlertsScreen} />
             <Stack.Screen name="Messages" component={MessagesScreen} />
             <Stack.Screen name="ArchivedChats" component={MessagesScreen} initialParams={{ archivedOnly: true }} />
             <Stack.Screen name="Chat" component={ChatScreen} />
@@ -381,9 +510,13 @@ function AppContent() {
           </>
         ) : null}
       </Stack.Navigator>
-      <OpportunityRadar />
-      <WebAnalytics />
-      <PWAInstallPrompt />
+      {Platform.OS === 'web' ? (
+        <>
+          <OpportunityRadar />
+          <WebAnalytics />
+          <PWAInstallPrompt />
+        </>
+      ) : null}
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </NavigationContainer>
   );
@@ -394,9 +527,11 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <AuthProvider>
-            <AppContent />
-          </AuthProvider>
+          <LinkupAlertProvider>
+            <AuthProvider>
+              <AppContent />
+            </AuthProvider>
+          </LinkupAlertProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -406,14 +541,13 @@ export default function App() {
 const styles = StyleSheet.create({
   headerContainer: {
     borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1A20',
   },
   headerContent: {
-    height: 60,
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
   },
   headerTitle: {
     fontSize: 20,
@@ -422,10 +556,34 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
+  headerTitleRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
+  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+  },
+  proTitleCrown: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    borderWidth: 1.5,
+    borderColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   headerIconBtn: {
     width: 42,
@@ -433,11 +591,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FBE61830',
+    borderWidth: 1,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
     elevation: 2,
     position: 'relative',
     overflow: 'visible',
@@ -449,21 +606,21 @@ const styles = StyleSheet.create({
   },
   headerBadgeBubble: {
     position: 'absolute',
-    top: -7,
-    right: -7,
-    minWidth: 24,
-    height: 24,
-    paddingHorizontal: 6,
-    borderRadius: 12,
-    backgroundColor: '#E30613',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: COLORS.danger,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#FFFFFF',
     zIndex: 20,
   },
   headerBadgeText: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '900',
     color: '#FFF',
   },
@@ -472,34 +629,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 34,
     width: 42,
-  },
-  alertTabIconContainer: {
-    overflow: 'visible',
+    transform: [{ translateY: -6 }],
+    position: 'relative',
   },
   focusedDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     position: 'absolute',
     bottom: -3,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 0 },
   },
   badgeBubble: {
     position: 'absolute',
-    top: -13,
-    right: -12,
-    minWidth: 30,
-    height: 30,
-    paddingHorizontal: 7,
-    borderRadius: 15,
-    backgroundColor: '#E30613',
+    top: -6,
+    right: -8,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: COLORS.danger,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#FFFFFF',
+    zIndex: 20,
   },
   badgeText: {
-    fontSize: 14,
+    fontSize: 9,
     fontWeight: '900',
     color: '#FFF',
     letterSpacing: 0,

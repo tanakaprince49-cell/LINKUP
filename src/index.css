@@ -2,50 +2,55 @@
 @import "tailwindcss";
 
 :root {
-  --color-bg: #FFFFFF;
-  --color-text: #000000;
-  --color-glass: rgba(0, 0, 0, 0.04);
-  --color-glass-border: rgba(0, 0, 0, 0.08);
+  --color-bg: #F4F2E9;
+  --color-text: #0F172A;
+  --color-glass: rgba(255, 255, 255, 0.52);
+  --color-glass-border: rgba(251, 230, 24, 0.18);
+  --color-card-bg: rgba(255, 255, 255, 0.65);
   --color-accent-yellow: #FBE618;
-  --color-card-bg: #F8F8F8;
-  --color-card-border: rgba(0, 0, 0, 0.05);
-  --color-input-bg: rgba(0, 0, 0, 0.03);
-  --color-nav-bg: rgba(255, 255, 255, 0.8);
-  --color-text-muted: rgba(0, 0, 0, 0.4);
+  --color-input-bg: rgba(255, 255, 255, 0.78);
+  --color-nav-bg: rgba(255, 255, 255, 0.7);
+  --color-text-muted: rgba(15, 23, 42, 0.55);
 }
 
 .dark {
   --color-bg: #050508;
-  --color-text: #FFFFFF;
-  --color-glass: rgba(255, 255, 255, 0.04);
-  --color-glass-border: rgba(255, 255, 255, 0.08);
-  --color-card-bg: #111111;
-  --color-card-border: rgba(255, 255, 255, 0.05);
-  --color-input-bg: rgba(255, 255, 255, 0.03);
-  --color-nav-bg: rgba(5, 5, 8, 0.8);
-  --color-text-muted: rgba(255, 255, 255, 0.4);
+  --color-text: #F8F7F2;
+  --color-glass: rgba(10, 12, 20, 0.75);
+  --color-glass-border: rgba(251, 230, 24, 0.18);
+  --color-card-bg: rgba(10, 12, 20, 0.72);
+  --color-input-bg: rgba(255, 255, 255, 0.08);
+  --color-nav-bg: rgba(5, 5, 8, 0.78);
+  --color-text-muted: rgba(255, 255, 255, 0.55);
 }
 
 @theme {
+  --color-accent-yellow: #FBE618;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Plus Jakarta Sans", sans-serif;
-  --shadow-glow: 0 0 20px rgba(251, 230, 24, 0.2);
+  --shadow-glow: 0 0 28px rgba(251, 230, 24, 0.22);
 }
 
 @layer base {
   body {
+    min-height: 100vh;
     background-color: var(--color-bg);
     color: var(--color-text);
+    background-image:
+      radial-gradient(circle at top left, rgba(251, 230, 24, 0.12), transparent 22%),
+      radial-gradient(circle at 80% 15%, rgba(251, 230, 24, 0.08), transparent 16%),
+      radial-gradient(circle at 50% 80%, rgba(251, 230, 24, 0.06), transparent 22%),
+      linear-gradient(180deg, rgba(255,255,255,0.96), rgba(255,255,255,0.88));
     @apply antialiased selection:bg-accent-yellow/30 selection:text-accent-yellow transition-colors duration-300;
     margin: 0;
-    overflow: hidden;
+    overflow-x: hidden;
     font-size: 0.8125rem;
   }
 
   /* Custom Scrollbar */
   .custom-scrollbar::-webkit-scrollbar {
-    width: 3px;
-    height: 3px;
+    width: 7px;
+    height: 7px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
@@ -54,38 +59,60 @@
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
     background-color: var(--color-text-muted);
-    @apply rounded-full opacity-10 hover:opacity-20 transition-opacity;
+    @apply rounded-full opacity-20 hover:opacity-40 transition-opacity;
   }
 }
 
 /* Native App Components */
 .liquid-card {
-  background-color: var(--color-card-bg);
-  border-color: var(--color-card-border);
-  @apply backdrop-blur-3xl border rounded-xl shadow-2xl;
+  background-color: var(--color-glass);
+  border-color: var(--color-glass-border);
+  @apply backdrop-blur-3xl border rounded-[32px] shadow-[0_30px_90px_rgba(0,0,0,0.14)];
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.12);
+  background-clip: padding-box;
+}
+
+.liquid-panel {
+  background-color: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  @apply backdrop-blur-3xl rounded-[40px] shadow-[0_24px_80px_rgba(0,0,0,0.12)];
+}
+
+.liquid-shell {
+  background-image: radial-gradient(circle at top left, rgba(251, 230, 24, 0.14), transparent 18%),
+    radial-gradient(circle at bottom right, rgba(251, 230, 24, 0.08), transparent 20%);
 }
 
 .brand-button {
-  @apply bg-accent-yellow text-black font-black uppercase tracking-widest px-4 py-2.5 rounded-lg active:scale-95 transition-all shadow-lg shadow-accent-yellow/10 hover:shadow-accent-yellow/20 text-[10px];
+  @apply bg-accent-yellow text-black font-black uppercase tracking-[0.35em] px-6 py-3 rounded-[28px] transition-all shadow-[0_0_40px_rgba(251,230,24,0.22)] hover:shadow-[0_0_55px_rgba(251,230,24,0.25)] active:scale-[0.97] text-[10px];
 }
 
 .glass-pill {
-  @apply backdrop-blur-md bg-white/5 border border-white/10 rounded-full;
-}
-
-.badge-yellow {
-  @apply bg-accent-yellow text-black shadow-glow;
+  @apply backdrop-blur-2xl bg-white/10 border border-white/15 rounded-full text-[10px] font-black uppercase tracking-[0.35em] text-white/80 px-4 py-2 shadow-[0_0_30px_rgba(251,230,24,0.08)];
 }
 
 .bg-glow {
-  @apply absolute w-[600px] h-[600px] rounded-full blur-[60px] opacity-15 pointer-events-none;
-  background: radial-gradient(circle, var(--color-accent-yellow) 0%, transparent 70%);
+  @apply absolute w-[600px] h-[600px] rounded-full blur-[80px] opacity-30 pointer-events-none;
+  background: radial-gradient(circle, var(--color-accent-yellow) 0%, transparent 68%);
 }
 
-/* Helper classes for theming */
-.theme-bg { background-color: var(--color-bg); }
-.theme-text { color: var(--color-text); }
-.theme-text-muted { color: var(--color-text-muted); }
-.theme-card { background-color: var(--color-card-bg); border-color: var(--color-card-border); }
-.theme-input { background-color: var(--color-input-bg); border-color: var(--color-card-border); }
-.theme-nav { background-color: var(--color-nav-bg); }
+.theme-bg {
+  background-color: var(--color-bg);
+}
+.theme-text {
+  color: var(--color-text);
+}
+.theme-text-muted {
+  color: var(--color-text-muted);
+}
+.theme-card {
+  background-color: var(--color-card-bg);
+  border-color: var(--color-card-border);
+}
+.theme-input {
+  background-color: var(--color-input-bg);
+  border-color: var(--color-card-border);
+}
+.theme-nav {
+  background-color: var(--color-nav-bg);
+}

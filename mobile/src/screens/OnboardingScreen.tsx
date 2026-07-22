@@ -18,6 +18,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import * as ImagePicker from 'expo-image-picker';
 import { imageAssetToDataUri } from '../lib/imageUploadLimits';
+import { publicProfileLink } from '../lib/profileLinks';
+import { LINKUP_ROLE_OPTIONS, roleInfoFor } from '../lib/roles';
 
 type Choice = { id: string; label: string; desc?: string };
 type RoleQuestion = { id: string; title: string; subtitle: string; choices: Choice[]; multi?: boolean };
@@ -28,15 +30,7 @@ type PersonalityQuestion = {
   b: { id: string; label: string };
 };
 
-const identityChoices: Choice[] = [
-  { id: 'Founder', label: 'Founder' },
-  { id: 'Developer', label: 'Developer' },
-  { id: 'Designer', label: 'Designer' },
-  { id: 'Investor', label: 'Investor' },
-  { id: 'Marketer', label: 'Marketer' },
-  { id: 'Student', label: 'Student' },
-  { id: 'Operator', label: 'Operator' },
-];
+const identityChoices: Choice[] = LINKUP_ROLE_OPTIONS;
 
 const goalsChoices: Choice[] = [
   { id: 'Cofounder', label: 'Cofounder' },
@@ -149,6 +143,60 @@ const operatorSkillChoices: Choice[] = [
   { id: 'Partnerships', label: 'Partnerships' },
 ];
 
+const salesSkillChoices: Choice[] = [
+  { id: 'Outbound Sales', label: 'Outbound' },
+  { id: 'Partnerships', label: 'Partnerships' },
+  { id: 'CRM', label: 'CRM' },
+  { id: 'Negotiation', label: 'Negotiation' },
+  { id: 'Account Management', label: 'Accounts' },
+  { id: 'Revenue Ops', label: 'Revenue ops' },
+];
+
+const productSkillChoices: Choice[] = [
+  { id: 'Product Strategy', label: 'Strategy' },
+  { id: 'Roadmapping', label: 'Roadmaps' },
+  { id: 'User Research', label: 'User research' },
+  { id: 'Analytics', label: 'Analytics' },
+  { id: 'Growth Loops', label: 'Growth loops' },
+  { id: 'MVP Scoping', label: 'MVP scoping' },
+];
+
+const creatorSkillChoices: Choice[] = [
+  { id: 'Short-form Video', label: 'Short-form' },
+  { id: 'Audience Growth', label: 'Audience' },
+  { id: 'Storytelling', label: 'Storytelling' },
+  { id: 'Brand Deals', label: 'Brand deals' },
+  { id: 'Community', label: 'Community' },
+  { id: 'Content Production', label: 'Production' },
+];
+
+const freelancerSkillChoices: Choice[] = [
+  { id: 'Client Delivery', label: 'Delivery' },
+  { id: 'Portfolio Building', label: 'Portfolio' },
+  { id: 'Project Scoping', label: 'Scoping' },
+  { id: 'Remote Collaboration', label: 'Remote work' },
+  { id: 'Consulting', label: 'Consulting' },
+  { id: 'Proposal Writing', label: 'Proposals' },
+];
+
+const expertSkillChoices: Choice[] = [
+  { id: 'Advisory', label: 'Advisory' },
+  { id: 'Due Diligence', label: 'Due diligence' },
+  { id: 'Compliance', label: 'Compliance' },
+  { id: 'Finance', label: 'Finance' },
+  { id: 'Research', label: 'Research' },
+  { id: 'Strategy', label: 'Strategy' },
+];
+
+const aiDataSkillChoices: Choice[] = [
+  { id: 'Machine Learning', label: 'ML' },
+  { id: 'Data Analysis', label: 'Data analysis' },
+  { id: 'Automation', label: 'Automation' },
+  { id: 'Prompt Engineering', label: 'Prompting' },
+  { id: 'Python', label: 'Python' },
+  { id: 'Data Pipelines', label: 'Pipelines' },
+];
+
 const experienceChoices: Choice[] = [
   { id: 'Beginner', label: 'Beginner' },
   { id: 'Intermediate', label: 'Intermediate' },
@@ -201,6 +249,19 @@ const roleSkillChoicesByRole: Record<string, Choice[]> = {
   Marketer: marketerSkillChoices,
   Student: studentSkillChoices,
   Operator: operatorSkillChoices,
+  'Co-founder': founderSkillChoices,
+  'Sales / Business Development': salesSkillChoices,
+  'Product Manager': productSkillChoices,
+  'Creator / Influencer': creatorSkillChoices,
+  'Mentor / Advisor': expertSkillChoices,
+  Freelancer: freelancerSkillChoices,
+  'Recruiter / Talent Scout': salesSkillChoices,
+  'Finance / Accountant': expertSkillChoices,
+  'Legal / Compliance': expertSkillChoices,
+  Researcher: expertSkillChoices,
+  'Community Builder': marketerSkillChoices,
+  'Content Strategist / Copywriter': creatorSkillChoices,
+  'Data / AI Specialist': aiDataSkillChoices,
 };
 
 const roleQuestionBanks: Record<string, RoleQuestion[]> = {
@@ -390,6 +451,40 @@ const roleQuestionBanks: Record<string, RoleQuestion[]> = {
   ],
 };
 
+const safeQuestionId = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'builder';
+
+const genericRoleQuestions = (role: string): RoleQuestion[] => {
+  const info = roleInfoFor(role);
+  const key = safeQuestionId(info.id);
+  return [
+    {
+      id: `${key}_path`,
+      title: `${info.badge} path`,
+      subtitle: `What kind of ${info.label.toLowerCase()} opportunity fits you best?`,
+      choices: [
+        { id: 'Startup team', label: 'Startup team' },
+        { id: 'Freelance work', label: 'Freelance work' },
+        { id: 'Mentorship', label: 'Mentorship' },
+        { id: 'Partnerships', label: 'Partnerships' },
+        { id: 'Hiring', label: 'Hiring' },
+      ],
+    },
+    {
+      id: `${key}_impact`,
+      title: 'Best contribution',
+      subtitle: 'What should people come to you for first?',
+      multi: true,
+      choices: [
+        { id: 'Strategy', label: 'Strategy' },
+        { id: 'Execution', label: 'Execution' },
+        { id: 'Creative direction', label: 'Creative direction' },
+        { id: 'Network access', label: 'Network access' },
+        { id: 'Specialist expertise', label: 'Specialist expertise' },
+      ],
+    },
+  ];
+};
+
 const personalityQuestionsByRole: Record<string, readonly PersonalityQuestion[]> = {
   Founder: [
     {
@@ -575,6 +670,33 @@ const personalityQuestionsByRole: Record<string, readonly PersonalityQuestion[]>
   ],
 };
 
+const genericPersonalityQuestions = (role: string): readonly PersonalityQuestion[] => [
+  {
+    id: `${safeQuestionId(role)}_pace`,
+    title: 'Move fast or build carefully?',
+    a: { id: 'Move fast', label: 'Move fast' },
+    b: { id: 'Build carefully', label: 'Build carefully' },
+  },
+  {
+    id: `${safeQuestionId(role)}_team`,
+    title: 'Lead from the front or support the team?',
+    a: { id: 'Lead from front', label: 'Lead from front' },
+    b: { id: 'Support the team', label: 'Support the team' },
+  },
+  {
+    id: `${safeQuestionId(role)}_signal`,
+    title: 'Creative intuition or analytical proof?',
+    a: { id: 'Creative intuition', label: 'Creative intuition' },
+    b: { id: 'Analytical proof', label: 'Analytical proof' },
+  },
+  {
+    id: `${safeQuestionId(role)}_work`,
+    title: 'Independent work or constant collaboration?',
+    a: { id: 'Independent work', label: 'Independent work' },
+    b: { id: 'Constant collaboration', label: 'Constant collaboration' },
+  },
+];
+
 function buildCircles(input: {
   role: string;
   industries: string[];
@@ -733,10 +855,12 @@ const SkillsInput = ({
   value,
   onChangeText,
   isDark,
+  selectedSkills = [],
 }: {
   value: string;
   onChangeText: (text: string) => void;
   isDark: boolean;
+  selectedSkills?: string[];
 }) => (
   <View style={{ marginTop: 12 }}>
     <TextInput
@@ -757,6 +881,19 @@ const SkillsInput = ({
     <Text style={{ marginTop: 8, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16 }}>
       Add at least one skill. These power search, swipe ranking, and smart matching.
     </Text>
+    {selectedSkills.length > 0 ? (
+      <View style={styles.selectedSkillsWrap}>
+        {selectedSkills.map((skill) => (
+          <View key={skill} style={styles.selectedSkillPill}>
+            <Text style={styles.selectedSkillText}>{skill.toUpperCase()}</Text>
+          </View>
+        ))}
+      </View>
+    ) : (
+      <Text style={{ marginTop: 8, fontSize: 11, color: '#999', fontWeight: '800', lineHeight: 16 }}>
+        No skills added yet.
+      </Text>
+    )}
   </View>
 );
 
@@ -858,7 +995,7 @@ export default function OnboardingScreen({ navigation }: any) {
   };
 
   const currentPersonalityQuestions = useMemo(
-    () => personalityQuestionsByRole[role] || personalityQuestionsByRole.Founder,
+    () => personalityQuestionsByRole[role] || genericPersonalityQuestions(role),
     [role]
   );
 
@@ -1016,7 +1153,7 @@ export default function OnboardingScreen({ navigation }: any) {
         {
           key: 'availability',
           title: 'Availability',
-          subtitle: 'What’s your current availability?',
+          subtitle: "What's your current availability?",
           body: <ChoiceGrid value={availability} onChange={(v) => setAvailability(String(v))} choices={availabilityChoices} isDark={isDark} />,
           canNext: !!availability,
         },
@@ -1080,7 +1217,7 @@ export default function OnboardingScreen({ navigation }: any) {
       {
         key: 'funding',
         title: 'Funding',
-        subtitle: 'What’s your current funding stage?',
+        subtitle: "What's your current funding stage?",
         body: <ChoiceGrid value={fundingStage} onChange={(v) => setFundingStage(String(v))} choices={fundingStageChoices} isDark={isDark} />,
         canNext: !!fundingStage,
       },
@@ -1105,7 +1242,7 @@ export default function OnboardingScreen({ navigation }: any) {
 
   const roleSteps = useMemo(() => {
     const roleSkillChoices = roleSkillChoicesByRole[role] || skillChoices;
-    const roleQuestions = roleQuestionBanks[role] || roleQuestionBanks.Founder;
+    const roleQuestions = roleQuestionBanks[role] || genericRoleQuestions(role);
 
     const buildSingleChoiceStep = (
       key: string,
@@ -1167,7 +1304,7 @@ export default function OnboardingScreen({ navigation }: any) {
       body: (
         <View>
           <ChoiceGrid value={skills} onChange={(v) => setSkills(v as string[])} choices={roleSkillChoices} multi isDark={isDark} />
-          <SkillsInput value={customSkillsText} onChangeText={setCustomSkillsText} isDark={isDark} />
+          <SkillsInput value={customSkillsText} onChangeText={setCustomSkillsText} isDark={isDark} selectedSkills={finalSkills} />
         </View>
       ),
       canNext: finalSkills.length > 0,
@@ -1177,18 +1314,18 @@ export default function OnboardingScreen({ navigation }: any) {
       case 'Investor':
         return [
           buildMultiChoiceStep('investor_goals', 'Investor Intent', 'What are you here for?', lookingFor, setLookingFor, investorGoalsChoices),
+          buildSkillsStep('Core Skills For Matching', 'Choose your investor edge so founders and opportunities can match properly.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Sectors', 'Which industries do you invest in?', industries, setIndustries, industryChoices),
-          buildSkillsStep('Investor Strengths', 'Choose the investor skills and edge you bring to founders.'),
           buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           personalityStep,
         ];
       case 'Developer':
         return [
           buildMultiChoiceStep('developer_goals', 'Developer Goals', 'What kind of opportunity are you looking for?', lookingFor, setLookingFor, builderGoalsChoices),
+          buildSkillsStep('Core Skills For Matching', 'Add your stack and strengths so founders can find you.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Products You Want To Build', 'Which startup spaces pull you in?', industries, setIndustries, industryChoices),
-          buildSkillsStep('Developer Skills', 'Show your technical stack so founders can see the fit.'),
           buildSingleChoiceStep('experience', 'Experience Level', 'How battle-tested are you right now?', experience, setExperience, experienceChoices),
           buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to build with teams?', workStyle, setWorkStyle, workStyleChoices),
@@ -1197,9 +1334,9 @@ export default function OnboardingScreen({ navigation }: any) {
       case 'Designer':
         return [
           buildMultiChoiceStep('designer_goals', 'Designer Goals', 'What kind of opportunity are you looking for?', lookingFor, setLookingFor, builderGoalsChoices),
+          buildSkillsStep('Core Skills For Matching', 'Add your design strengths so teams can find the right fit.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Products You Want To Shape', 'Which startup spaces would you love to design for?', industries, setIndustries, industryChoices),
-          buildSkillsStep('Designer Skills', 'Show the design strengths you bring to ambitious teams.'),
           buildSingleChoiceStep('experience', 'Experience Level', 'Where are you in your design journey?', experience, setExperience, experienceChoices),
           buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you collaborate best?', workStyle, setWorkStyle, workStyleChoices),
@@ -1208,9 +1345,9 @@ export default function OnboardingScreen({ navigation }: any) {
       case 'Marketer':
         return [
           buildMultiChoiceStep('marketer_goals', 'Marketing Goals', 'What kind of opportunity are you looking for?', lookingFor, setLookingFor, builderGoalsChoices),
+          buildSkillsStep('Core Skills For Matching', 'Add your growth channels and strengths so builders can discover you.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Markets You Understand', 'Which startup spaces do you know best?', industries, setIndustries, industryChoices),
-          buildSkillsStep('Marketing Skills', 'Show the channels and strengths you bring to growth.'),
           buildSingleChoiceStep('experience', 'Experience Level', 'How experienced are you in startup growth?', experience, setExperience, experienceChoices),
           buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to execute growth?', workStyle, setWorkStyle, workStyleChoices),
@@ -1219,9 +1356,9 @@ export default function OnboardingScreen({ navigation }: any) {
       case 'Student':
         return [
           buildMultiChoiceStep('student_goals', 'Student Goals', 'What are you hoping to unlock on LINKUP?', lookingFor, setLookingFor, builderGoalsChoices),
+          buildSkillsStep('Core Skills For Matching', 'Add what you can do now and what you want to sharpen.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Startup Interests', 'Which spaces make you want to build?', industries, setIndustries, industryChoices),
-          buildSkillsStep('Student Strengths', 'Show the skills you already have and want to sharpen.'),
           buildSingleChoiceStep('experience', 'Experience Level', 'How far into building are you?', experience, setExperience, experienceChoices),
           buildSingleChoiceStep('commitment', 'Commitment Level', 'How available are you to build right now?', commitmentLevel, setCommitmentLevel, commitmentChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like working with others?', workStyle, setWorkStyle, workStyleChoices),
@@ -1230,20 +1367,33 @@ export default function OnboardingScreen({ navigation }: any) {
       case 'Operator':
         return [
           buildMultiChoiceStep('operator_goals', 'Operator Goals', 'What kind of opportunity are you looking for?', lookingFor, setLookingFor, builderGoalsChoices),
+          buildSkillsStep('Core Skills For Matching', 'Add the systems and execution strengths you bring.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Operating Environments', 'Which kinds of startups do you want to support?', industries, setIndustries, industryChoices),
-          buildSkillsStep('Operator Skills', 'Show the systems and execution strengths you bring.'),
           buildSingleChoiceStep('experience', 'Experience Level', 'How experienced are you in operations?', experience, setExperience, experienceChoices),
           buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to run execution?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
       default:
+        if (role && role !== 'Founder') {
+          const info = roleInfoFor(role);
+          return [
+            buildMultiChoiceStep('role_goals', `${info.badge} Goals`, 'What kind of opportunity are you looking for?', lookingFor, setLookingFor, builderGoalsChoices),
+            buildSkillsStep('Core Skills For Matching', 'Add the strengths people should discover you for.'),
+            ...roleQuestions.map(buildRoleQuestionStep),
+            buildMultiChoiceStep('industries', 'Focus Areas', 'Which startup spaces do you want to be around?', industries, setIndustries, industryChoices),
+            buildSingleChoiceStep('experience', 'Experience Level', 'Where are you in your journey?', experience, setExperience, experienceChoices),
+            buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
+            buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to collaborate?', workStyle, setWorkStyle, workStyleChoices),
+            personalityStep,
+          ];
+        }
         return [
           buildMultiChoiceStep('founder_goals', 'Founder Goals', 'What are you looking for right now?', lookingFor, setLookingFor, goalsChoices),
+          buildSkillsStep('Core Skills For Matching', 'Add the founder strengths you bring so matches are useful.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Startup Industries', 'Select the spaces you are building in or obsessed with.', industries, setIndustries, industryChoices),
-          buildSkillsStep('Founder Strengths', 'Show the founder strengths you bring to the table.'),
           buildSingleChoiceStep('commitment', 'Commitment Level', 'How available are you right now?', commitmentLevel, setCommitmentLevel, commitmentChoices),
           buildSingleChoiceStep('stage', 'Startup Stage', 'Where is your startup today?', startupStage, setStartupStage, startupStageChoices),
           buildSingleChoiceStep('funding', 'Funding Stage', 'What is your current funding stage?', fundingStage, setFundingStage, fundingStageChoices),
@@ -1339,7 +1489,7 @@ export default function OnboardingScreen({ navigation }: any) {
       {
         key: 'bio',
         title: 'Your Bio',
-        subtitle: 'In 1–2 lines, what are you building or good at?',
+        subtitle: 'In 1-2 lines, what are you building or good at?',
         body: (
           <View>
             <TextInput
@@ -1486,13 +1636,13 @@ export default function OnboardingScreen({ navigation }: any) {
       const circles = buildCircles({ role, industries, skills: finalSkills, experience });
       const roleSignalValues = Object.values(roleAnswers).flatMap((answer) => (Array.isArray(answer) ? answer : answer ? [answer] : []));
       const personalitySignalValues = Object.values(personalityAnswers).filter(Boolean);
-      const personalityType = [role, workStyle, roleSignalValues[0], personalitySignalValues[0]].filter(Boolean).join(' • ');
+      const personalityType = [role, workStyle, roleSignalValues[0], personalitySignalValues[0]].filter(Boolean).join(' - ');
       const networkingIntent = lookingFor[0] || (role ? `${role} Opportunities` : 'Serious Builder');
       const onboardingProfile: Record<string, unknown> = {
         uid: user.uid,
         displayName: finalName,
         ...(derivedUsername ? { username: derivedUsername } : {}),
-        profileLink: `linkup://profile/${user.uid}`,
+        profileLink: publicProfileLink(user.uid),
         bio: bio.trim(),
         age: Number(ageText) || 0,
         country: country.trim(),
@@ -1529,9 +1679,6 @@ export default function OnboardingScreen({ navigation }: any) {
           hideOnlineStatus: false,
           darkMode: false,
         },
-        isVerified: false,
-        verificationProgram: '',
-        verifiedBy: '',
       } as any;
       await setDoc(doc(db, 'users', user.uid), onboardingProfile, { merge: true });
       await markOnboardingComplete(onboardingProfile);
@@ -1663,6 +1810,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     lineHeight: 18,
+  },
+  selectedSkillsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  selectedSkillPill: {
+    borderRadius: 999,
+    backgroundColor: '#FBE618',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  selectedSkillText: {
+    color: '#000',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
   },
   photoSlot: {
     flex: 1,

@@ -76,6 +76,68 @@ export const earnedScore = (profile: any) => {
 };
 
 const asList = (value: any) => (Array.isArray(value) ? value.map((x) => String(x)).filter(Boolean) : []);
+const normalizeSignal = (value: unknown) => String(value ?? '').trim().toLowerCase();
+const activeNeedPattern =
+  /\b(co[- ]?founder|technical co[- ]?founder|cto|hiring|hire|recruit|startup team|team member|collaborator|collaboration|partner|partnership|investment|investor|funding|capital|mentor|mentorship|advisor|developer|engineer|designer|marketer|growth|sales|operator|beta user|beta tester|internship|freelance|client|talent)\b/i;
+const passiveNeedPattern = /\b(networking|casual networking|open to networking|friends|learning|learn|community)\b/i;
+const inactiveProjectPattern = /\b(done|complete|completed|closed|archived|paused|inactive|cancelled|canceled)\b/i;
+const activeAvailabilityPattern = /\b(hiring|recruiting|seeking|looking for|open to collaboration|actively building)\b/i;
+
+export const hasActiveOpportunityIntent = (profile: any) => {
+  if (!profile || profile.deleted || profile.isStealthMode || profile.isVisible === false || isSyntheticProfile(profile)) return false;
+
+  const lookingFor = asList(profile.lookingFor).map(normalizeSignal);
+  const explicitNeeds = lookingFor.filter((need) => activeNeedPattern.test(need) && !passiveNeedPattern.test(need));
+  const availability = normalizeSignal(profile.availability);
+  const activeAvailability = activeAvailabilityPattern.test(availability) && !/not available|open to networking/.test(availability);
+  const projects = Array.isArray(profile.projects) ? profile.projects : [];
+  const activeProjects = projects.filter((project: any) => {
+    const title = String(project?.title || '').trim();
+    const description = String(project?.description || '').trim();
+    const status = normalizeSignal(project?.status || profile.startupStage);
+    return (title || description) && !inactiveProjectPattern.test(status);
+  });
+  const contextText = [
+    profile.goals,
+    profile.bio,
+    profile.networkingIntent,
+    profile.startupStage,
+    profile.occupation,
+    profile.company,
+    ...activeProjects.flatMap((project: any) => [project?.title, project?.description, project?.status]),
+  ]
+    .map(normalizeSignal)
+    .join(' ');
+  const textHasNeed = activeNeedPattern.test(contextText);
+  const hasBuildContext = activeProjects.length > 0 || /\b(idea|mvp|traction|scaling|fundraising|revenue|building|launch|startup|project)\b/.test(contextText);
+
+  return (explicitNeeds.length > 0 || activeAvailability || textHasNeed) && hasBuildContext;
+};
+
+export const activeOpportunityScore = (profile: any) => {
+  if (!hasActiveOpportunityIntent(profile)) return 0;
+
+  const lookingFor = asList(profile.lookingFor).map(normalizeSignal);
+  const explicitNeeds = lookingFor.filter((need) => activeNeedPattern.test(need) && !passiveNeedPattern.test(need)).length;
+  const projects = Array.isArray(profile.projects) ? profile.projects : [];
+  const activeProjectCount = projects.filter((project: any) => {
+    const title = String(project?.title || '').trim();
+    const description = String(project?.description || '').trim();
+    const status = normalizeSignal(project?.status || profile.startupStage);
+    return (title || description) && !inactiveProjectPattern.test(status);
+  }).length;
+  const availability = normalizeSignal(profile.availability);
+  const activeAvailability = activeAvailabilityPattern.test(availability) ? 1 : 0;
+
+  return (
+    Math.min(50, explicitNeeds * 24) +
+    Math.min(36, activeProjectCount * 18) +
+    activeAvailability * 18 +
+    (activeNeedPattern.test(normalizeSignal(profile.goals || profile.bio || profile.networkingIntent)) ? 12 : 0) +
+    (profile.turboConnect ? 5 : 0) +
+    earnedScore(profile) * 0.08
+  );
+};
 
 export const opportunityDetails = (profile: any, selectedProject?: Project | null) => {
   const lookingFor = asList(profile?.lookingFor);

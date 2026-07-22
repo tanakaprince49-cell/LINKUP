@@ -1,19 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
-import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
 import { ChevronLeft, MessageSquare, Sparkles, TrendingUp, User } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { db } from '../lib/firebase';
+import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { earnedScore, handleFor, isDiscoverableProfile } from '../lib/discovery';
 import { ensureDirectMatch } from '../lib/chat';
 import VerifiedBadge from '../components/VerifiedBadge';
+import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 
 export default function TrendingBuildersScreen({ navigation }: any) {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const isFocused = useIsFocused();
   const isDark = theme === 'dark';
   const [builders, setBuilders] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,30 +26,23 @@ export default function TrendingBuildersScreen({ navigation }: any) {
       setLoading(false);
       return;
     }
+    if (!isFocused) return;
 
-    const q = query(
-      collection(db, 'users'),
-      where('isVisible', '==', true),
-      where('isStealthMode', '==', false),
-      limit(80)
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const list = snap.docs
-          .map((docSnap) => ({ uid: docSnap.id, ...(docSnap.data() as any) } as UserProfile))
-          .filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        setBuilders(list);
+    const unsub = subscribeToDiscoveryProfiles({
+      userId: user.uid,
+      onData: (profiles) => {
+        const list = profiles.filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
+        setBuilders((current) => (list.length > 0 || current.length === 0 ? list : current));
         setLoading(false);
       },
-      (error) => {
+      onError: (error) => {
         console.error('Trending builders error:', error);
         setLoading(false);
-      }
-    );
+      },
+    });
 
     return () => unsub();
-  }, [user?.uid]);
+  }, [isFocused, user?.uid]);
 
   const trending = useMemo(() => {
     return [...builders]
@@ -111,7 +105,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
             </View>
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
             <Text style={styles.meta} numberOfLines={2}>
-              {(item.occupation || 'Builder')} • {location}
+              {(item.occupation || 'Builder')} - {location}
             </Text>
           </View>
         </TouchableOpacity>
@@ -184,7 +178,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
         </Text>
       </View>
 
-      {loading ? (
+      {loading && builders.length === 0 ? (
         <ActivityIndicator color="#FBE618" style={{ marginTop: 48 }} />
       ) : (
         <FlatList
@@ -192,11 +186,15 @@ export default function TrendingBuildersScreen({ navigation }: any) {
           keyExtractor={(item) => item.uid}
           renderItem={renderItem}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={80}
+          windowSize={6}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={[styles.emptyCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
               <Text style={[styles.emptyTitle, { color: isDark ? '#FFF' : '#000' }]}>No trending builders yet</Text>
-              <Text style={styles.emptySub}>Once more discoverable profiles join, they’ll show up here.</Text>
+              <Text style={styles.emptySub}>Once more discoverable profiles join, they'll show up here.</Text>
             </View>
           }
         />

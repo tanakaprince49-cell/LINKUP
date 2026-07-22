@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { defineSecret } from 'firebase-functions/params';
 import crypto from 'node:crypto';
@@ -166,14 +166,15 @@ function sortedPairId(a: string, b: string) {
 }
 
 function notificationTitle(data: LinkupNotification) {
-  if (data.type === 'message') return `New message from ${data.fromName || 'LINKUP'}`;
-  if (data.type === 'match') return 'New LINKUP match';
-  if (data.type === 'like') return 'New profile like';
-  if (data.type === 'view') return 'New profile view';
-  if (data.type === 'comment') return 'New comment';
-  if (String(data.content || '').startsWith('AI Project Match')) return 'AI Project Match found';
-  if (String(data.content || '').startsWith('AI Opportunity')) return 'AI Opportunity found';
-  return 'LINKUP notification';
+  return 'LINKUP';
+}
+
+function notificationBody(data: LinkupNotification) {
+  const content = String(data.content || '').trim();
+  if (data.type === 'message') return `${data.fromName || 'Someone'} ${content || 'sent you a message.'}`;
+  if (data.type === 'like') return `${data.fromName || 'Someone'} ${content || 'liked your profile.'}`;
+  if (data.type === 'view') return `${data.fromName || 'Someone'} viewed your profile.`;
+  return content || 'Open LINKUP for the latest update.';
 }
 
 function notificationUrl(data: LinkupNotification) {
@@ -198,6 +199,132 @@ function isExpoPushToken(token: unknown): token is string {
     token.endsWith(']')
   );
 }
+
+function clip(value: unknown, max = 240) {
+  return String(value ?? '').trim().slice(0, max);
+}
+
+function compactList(value: unknown, maxItems = 16, maxChars = 80) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => clip(entry, maxChars)).filter(Boolean).slice(0, maxItems);
+}
+
+function safePublicImage(value: unknown) {
+  const uri = clip(value, 900000);
+  if (!uri) return '';
+  return uri.startsWith('data:') && uri.length > 120000 ? '' : uri.slice(0, 150000);
+}
+
+function compactPublicProject(project: any, index: number) {
+  return {
+    id: clip(project?.id || `project_${index}`, 100),
+    title: clip(project?.title, 120),
+    description: clip(project?.description, 300),
+    status: clip(project?.status, 80),
+    lookingFor: compactList(project?.lookingFor, 6, 80),
+    tags: compactList(project?.tags, 6, 80),
+  };
+}
+
+function compactPublicIdea(idea: any, index: number) {
+  return {
+    id: clip(idea?.id || `idea_${index}`, 100),
+    title: clip(idea?.title, 120),
+    description: clip(idea?.description, 300),
+    stage: clip(idea?.stage, 80),
+    lookingFor: compactList(idea?.lookingFor, 6, 80),
+    tags: compactList(idea?.tags, 6, 80),
+  };
+}
+
+function displayNameForIndex(data: any) {
+  const direct = clip(data?.displayName || data?.fullName || data?.name, 100);
+  if (direct && direct !== 'New Builder') return direct;
+  const emailName = clip(String(data?.email || '').split('@')[0], 100);
+  return emailName || 'LINKUP Builder';
+}
+
+function buildPublicProfileIndex(userId: string, data: any) {
+  if (!data || data.deleted || data.isStealthMode === true || data.isVisible === false || data.onboarded === false) {
+    return null;
+  }
+
+  return {
+    uid: userId,
+    displayName: displayNameForIndex(data),
+    username: clip(data.username, 40),
+    bio: clip(data.bio, 700),
+    profilePic: safePublicImage(data.profilePic),
+    occupation: clip(data.occupation, 100),
+    company: clip(data.company, 120),
+    country: clip(data.country, 80),
+    city: clip(data.city, 80),
+    age: Number(data.age || 0) || 0,
+    skills: compactList(data.skills, 20, 80),
+    interests: compactList(data.interests, 20, 80),
+    industries: compactList(data.industries, 16, 80),
+    lookingFor: compactList(data.lookingFor, 16, 80),
+    goals: clip(data.goals, 420),
+    experience: clip(data.experience, 80),
+    personalityType: clip(data.personalityType, 80),
+    commitmentLevel: clip(data.commitmentLevel, 80),
+    startupStage: clip(data.startupStage, 80),
+    fundingStage: clip(data.fundingStage, 80),
+    availability: clip(data.availability, 80),
+    timezone: clip(data.timezone, 80),
+    languages: compactList(data.languages, 12, 80),
+    workStyle: clip(data.workStyle, 80),
+    education: clip(data.education, 80),
+    networkingIntent: clip(data.networkingIntent, 120),
+    ambition: clip(data.ambition, 120),
+    remoteOnly: !!data.remoteOnly,
+    willingToRelocate: !!data.willingToRelocate,
+    teamSizePreference: clip(data.teamSizePreference, 80),
+    projects: Array.isArray(data.projects) ? data.projects.slice(0, 5).map(compactPublicProject) : [],
+    startupIdeas: Array.isArray(data.startupIdeas) ? data.startupIdeas.slice(0, 8).map(compactPublicIdea) : [],
+    profileViews: Number(data.profileViews || 0) || 0,
+    profileClicks: Number(data.profileClicks || data.clicks || 0) || 0,
+    profileSaves: Number(data.profileSaves || data.saves || 0) || 0,
+    responseRate: Number(data.responseRate || data.reputationMetrics?.responseRate || 0) || 0,
+    isVisible: true,
+    isStealthMode: false,
+    turboConnect: !!data.turboConnect,
+    hideOnlineStatus: !!data.hideOnlineStatus,
+    isVerified: !!data.isVerified,
+    verificationProgram: clip(data.verificationProgram, 80),
+    isPro: !!data.isPro,
+    plan: clip(data.plan, 40),
+    subscriptionPlan: clip(data.subscriptionPlan, 40),
+    subscriptionStatus: clip(data.subscriptionStatus, 40),
+    onboarded: data.onboarded !== false,
+    deleted: false,
+    lastActiveAt: data.lastActiveAt || null,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+export const syncPublicProfileIndex = onDocumentWritten(
+  { region: 'us-central1', document: 'users/{userId}' },
+  async (event) => {
+    const userId = String(event.params.userId || '');
+    if (!userId) return;
+
+    const publicRef = admin.firestore().collection('publicProfiles').doc(userId);
+    const after = event.data?.after;
+    if (!after?.exists) {
+      await publicRef.delete().catch(() => {});
+      return;
+    }
+
+    const index = buildPublicProfileIndex(userId, after.data());
+    if (!index) {
+      await publicRef.delete().catch(() => {});
+      return;
+    }
+
+    await publicRef.set(index, { merge: true });
+  }
+);
 
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -229,7 +356,7 @@ export const sendPushForNotification = onDocumentCreated(
     }
 
     const title = notificationTitle(notification);
-    const body = String(notification.content || 'Open LINKUP for the latest update.').slice(0, 180);
+    const body = notificationBody(notification).slice(0, 180);
     const url = notificationUrl(notification);
     const messages = tokens.map((to) => ({
       to,
@@ -329,7 +456,7 @@ async function geminiScorePair(me: CompactProfile, them: CompactProfile): Promis
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 120 },
+      generationConfig: { temperature: 0.0, maxOutputTokens: 120 },
     }),
   });
 
@@ -447,12 +574,14 @@ export const aiAssist = onCall({ region: 'us-central1', secrets: [GEMINI_API_KEY
       'Profile JSON: ' + clippedJson(payload.profile, 2500),
     ].join('\n');
   } else if (task === 'warmIntro') {
-    maxOutputTokens = 220;
-    temperature = 0.45;
+    maxOutputTokens = 260;
+    temperature = 0.55;
     prompt = [
-      'You are a professional co-founder matchmaker.',
-      'Write a warm, enthusiastic opening message that feels human and specific.',
-      'Write 4-6 sentences. End with 1 clear question.',
+      'You write excellent first messages for serious founders and builders.',
+      'Draft a message from Me to Other.',
+      'Make it specific to both profiles: mention 1-2 concrete overlaps, complementary skills, projects, industries, goals, or work style.',
+      'Sound confident, warm, and natural. No generic networking fluff. No markdown. No subject line.',
+      'Write 3-5 short sentences. End with one clear collaboration question.',
       'Me=' + clippedJson(payload.me, 1800),
       'Other=' + clippedJson(payload.other, 1800),
     ].join('\n');

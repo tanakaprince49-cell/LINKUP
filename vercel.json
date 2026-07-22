@@ -39,6 +39,22 @@
       "destination": "https://linkup-e0906.firebaseapp.com/__/firebase/:path*"
     },
     {
+      "source": "/data-deletion",
+      "destination": "/data-deletion.html"
+    },
+    {
+      "source": "/account-deletion",
+      "destination": "/data-deletion.html"
+    },
+    {
+      "source": "/privacy-policy",
+      "destination": "/privacy-policy.html"
+    },
+    {
+      "source": "/child-safety-standards",
+      "destination": "/child-safety-standards.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

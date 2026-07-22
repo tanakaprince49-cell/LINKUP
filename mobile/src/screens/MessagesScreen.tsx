@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, getDoc, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
 import { MessageSquare, ChevronRight, Pin, Star, Archive, ChevronLeft } from 'lucide-react-native';
 import VerifiedBadge from '../components/VerifiedBadge';
+import { buildConversationProfileSnapshot, conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+
+const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
 
 const formatTimeAgo = (timestamp: any) => {
   if (!timestamp) return '';
@@ -35,58 +39,79 @@ const formatLastSeen = (timestamp: any) => {
   return ago ? `Last seen ${ago} ago` : 'Offline';
 };
 
-const ConversationItem = ({ match, navigation }: { match: Match, navigation: any }) => {
+const matchUserIds = (match: Match) =>
+  Array.isArray(match.userIds) && match.userIds.length > 0
+    ? match.userIds
+    : Object.keys((match as any).participants || {}).filter((uid) => (match as any).participants?.[uid]);
+
+const otherParticipantId = (match: Match, currentUid?: string) =>
+  matchUserIds(match).find((id) => id && id !== currentUid) || '';
+
+const fallbackConversationUser = (match: Match, otherId?: string): UserProfile | null => {
+  if (!otherId) return null;
+  const profileMap = (match as any).participantProfiles || (match as any).profiles || {};
+  const profile = profileMap?.[otherId] || {};
+  return normalizeConversationProfile(otherId, profile);
+};
+
+const ConversationItem = React.memo(({ match, navigation }: { match: Match, navigation: any }) => {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
-  const otherId = match.userIds.find(id => id !== user?.uid);
+  const otherId = otherParticipantId(match, user?.uid);
+  const [otherUser, setOtherUser] = useState<UserProfile | null>(() => fallbackConversationUser(match, otherId));
 
   useEffect(() => {
-    if (!otherId) return;
+    if (!otherId) {
+      setOtherUser(null);
+      return;
+    }
 
-    const unsub = onSnapshot(
-      doc(db, 'users', otherId),
-      (snap) => {
-        if (!snap.exists()) return;
-        setOtherUser({ uid: otherId, ...(snap.data() as any) } as UserProfile);
-      },
-      (err) => {
-        console.warn('Conversation profile unavailable:', err);
-        setOtherUser(null);
-      }
-    );
+    let cancelled = false;
+    const fallback = fallbackConversationUser(match, otherId);
+    setOtherUser((current) => normalizeConversationProfile(otherId, current || {}, fallback));
+
+    loadConversationProfile(otherId, fallback)
+      .then((profile) => {
+        if (!cancelled) setOtherUser((current) => ({ ...(current || {}), ...profile }));
+      })
+      .catch((error) => {
+        if (!cancelled && !isPermissionDenied(error)) console.warn('Conversation profile unavailable:', error);
+      });
 
     return () => {
-      unsub();
+      cancelled = true;
     };
-  }, [otherId]);
+  }, [otherId, match]);
 
   useEffect(() => {
-    if (!otherId) return;
+    if (!otherId || !otherUser) return;
     if ((otherUser as any)?.hideOnlineStatus) {
       setOtherUser((prev) => (prev ? ({ ...prev, isOnline: false, lastActiveAt: null } as any) : prev));
       return;
     }
 
-    const unsubPresence = onSnapshot(
-      doc(db, 'presence', otherId),
-      (snap) => {
+    let cancelled = false;
+    getDoc(doc(db, 'presence', otherId))
+      .then((snap) => {
+        if (cancelled) return;
         if (!snap.exists()) {
           setOtherUser((prev) => (prev ? ({ ...prev, isOnline: false } as any) : prev));
           return;
         }
         const p = snap.data() as any;
         setOtherUser((prev) => (prev ? ({ ...prev, isOnline: isPresenceOnline(p), lastActiveAt: p.lastActiveAt } as any) : prev));
-      },
-      (err) => {
-        console.warn('Conversation presence unavailable:', err);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (!isPermissionDenied(err)) {
+          console.warn('Conversation presence unavailable:', err);
+        }
         setOtherUser((prev) => (prev ? ({ ...prev, isOnline: false } as any) : prev));
-      }
-    );
+      });
 
     return () => {
-      unsubPresence();
+      cancelled = true;
     };
   }, [otherId, (otherUser as any)?.hideOnlineStatus]);
 
@@ -95,11 +120,14 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
   const isPinned = Array.isArray((match as any).pinnedBy) && (match as any).pinnedBy.includes(user?.uid);
   const isImportant = Array.isArray((match as any).importantBy) && (match as any).importantBy.includes(user?.uid);
   const unreadCount = Math.max(0, Number((match as any).unreadBy?.[user?.uid || ''] || 0));
+  const avatarUri = conversationAvatarUri(otherUser.profilePic);
+  const avatarInitial = String(otherUser.displayName || 'L').trim().charAt(0).toUpperCase() || 'L';
+  const chatUserSnapshot = buildConversationProfileSnapshot(otherId, otherUser);
 
   return (
     <TouchableOpacity 
-      style={[styles.chatItem, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
-      onPress={() => navigation.navigate('Chat', { matchId: match.id, otherUser })}
+      style={[styles.chatItem, liquidGlass(isDark, false)]}
+      onPress={() => navigation.navigate('Chat', { matchId: match.id, otherUser: chatUserSnapshot })}
       onLongPress={() => {
         if (!user?.uid) return;
         Alert.alert('Delete chat', 'Remove this chat from your inbox?', [
@@ -120,13 +148,19 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
       }}
     >
       <View style={styles.avatarContainer}>
-        <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.avatar} />
+        {avatarUri ? (
+          <Image source={{ uri: avatarUri }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: isDark ? '#181818' : '#FFF8B8' }]}>
+            <Text style={styles.avatarFallbackText}>{avatarInitial}</Text>
+          </View>
+        )}
         <View style={[styles.statusDot, { backgroundColor: isOnline ? '#22C55E' : '#666' }]} />
       </View>
       <View style={styles.chatInfo}>
         <View style={styles.chatHeader}>
           <View style={styles.chatNameRow}>
-            <Text style={[styles.chatName, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{otherUser.displayName}</Text>
+            <Text style={[styles.chatName, { color: textColor(isDark) }]} numberOfLines={1}>{otherUser.displayName}</Text>
             {!!otherUser.isVerified && <VerifiedBadge size={20} />}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -150,7 +184,7 @@ const ConversationItem = ({ match, navigation }: { match: Match, navigation: any
       <ChevronRight size={16} color="#666" />
     </TouchableOpacity>
   );
-};
+});
 
 export default function MessagesScreen({ navigation, route }: any) {
   const { user } = useAuth();
@@ -162,7 +196,7 @@ export default function MessagesScreen({ navigation, route }: any) {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'matches'), where(new FieldPath('participants', user.uid), '==', true));
+    const q = query(collection(db, 'matches'), where(new FieldPath('participants', user.uid), '==', true), limit(80));
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -195,16 +229,20 @@ export default function MessagesScreen({ navigation, route }: any) {
   }, [user, archivedOnly]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
-      <View style={styles.topBar}>
+    <SafeAreaView style={[styles.container, appBackground(isDark)]}>
+      <View style={styles.scene} pointerEvents="none">
+        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
+        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(223,251,63,0.08)' : 'rgba(223,251,63,0.16)' }]} />
+      </View>
+      <View style={[styles.topBar, liquidGlass(isDark, false)]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
           {(archivedOnly || navigation.canGoBack?.()) && (
-            <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, { backgroundColor: isDark ? '#16161A' : '#F5F5F5' }]}>
-              <ChevronLeft size={20} color={isDark ? '#FFF' : '#000'} />
+            <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, liquidGlass(isDark, false)]}>
+              <ChevronLeft size={20} color={textColor(isDark)} />
             </TouchableOpacity>
           )}
           <View style={{ flex: 1 }}>
-            <Text style={[styles.screenTitle, { color: isDark ? '#FFF' : '#000' }]}>
+            <Text style={[styles.screenTitle, { color: textColor(isDark) }]}>
               {archivedOnly ? 'ARCHIVED CHATS' : 'MESSAGES'}
             </Text>
             <Text style={styles.screenSub}>
@@ -215,20 +253,25 @@ export default function MessagesScreen({ navigation, route }: any) {
         {!archivedOnly && (
           <TouchableOpacity
             onPress={() => navigation.navigate('ArchivedChats', { archivedOnly: true })}
-            style={[styles.archiveBtn, { backgroundColor: isDark ? '#16161A' : '#F5F5F5', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+            style={[styles.archiveBtn, liquidGlass(isDark, false)]}
           >
-            <Archive size={17} color={isDark ? '#FFF' : '#000'} />
-            <Text style={[styles.archiveBtnText, { color: isDark ? '#FFF' : '#000' }]}>ARCHIVE</Text>
+            <Archive size={17} color={textColor(isDark)} />
+            <Text style={[styles.archiveBtnText, { color: textColor(isDark) }]}>ARCHIVE</Text>
           </TouchableOpacity>
         )}
       </View>
       {loading ? (
-        <ActivityIndicator color="#FBE618" style={{ marginTop: 50 }} />
+        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} />
       ) : (
         <FlatList
           data={matches}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <ConversationItem match={item} navigation={navigation} />}
+          initialNumToRender={12}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={80}
+          windowSize={6}
+          removeClippedSubviews
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
@@ -247,6 +290,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  scene: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  scenePane: {
+    position: 'absolute',
+    width: 280,
+    height: 130,
+    borderRadius: 34,
+  },
+  scenePaneA: {
+    top: 90,
+    right: -120,
+    transform: [{ rotate: '-16deg' }],
+  },
+  scenePaneB: {
+    top: 330,
+    left: -120,
+    transform: [{ rotate: '16deg' }],
+  },
   topBar: {
     paddingHorizontal: 24,
     paddingTop: 22,
@@ -259,15 +322,14 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 42,
     height: 42,
-    borderRadius: 16,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   screenTitle: {
-    fontSize: 20,
+    fontSize: 26,
     fontWeight: '900',
-    letterSpacing: 1.5,
-    fontStyle: 'italic',
+    letterSpacing: 0,
   },
   screenSub: {
     marginTop: 4,
@@ -279,8 +341,7 @@ const styles = StyleSheet.create({
   archiveBtn: {
     height: 42,
     paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 18,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -310,6 +371,18 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
+  },
+  avatarFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FBE618',
+  },
+  avatarFallbackText: {
+    color: '#000',
+    fontSize: 20,
+    fontWeight: '900',
+    fontStyle: 'italic',
   },
   statusDot: {
     position: 'absolute',

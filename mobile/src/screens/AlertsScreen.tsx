@@ -2,13 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, query, where, onSnapshot, doc, updateDoc, limit } from 'firebase/firestore';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppNotification } from '../types';
 import { markUnreadNotificationsRead } from '../lib/notifications';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { respondToConnectionRequest } from '../lib/connectionRequests';
+import { MOBILE_LIST_IMAGE_LIMIT, MOBILE_NOTIFICATION_QUERY_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { Bell, Eye, Heart, MessageSquare, Sparkles, Zap } from 'lucide-react-native';
 
 const formatTimeAgo = (timestamp: any) => {
@@ -45,16 +47,16 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
 
   const getIcon = () => {
     switch (notification.type) {
-      case 'like': return <Heart size={18} color="#FBE618" fill="#FBE61820" />;
-      case 'match': return <Zap size={18} color="#FBE618" fill="#FBE61820" />;
-      case 'message': return <MessageSquare size={18} color="#2563EB" />;
-      case 'connection_request': return <MessageSquare size={18} color="#FBE618" />;
-      case 'connection_approved': return <Zap size={18} color="#22C55E" fill="#22C55E20" />;
-      case 'connection_rejected': return <MessageSquare size={18} color="#EF4444" />;
-      case 'comment': return <MessageSquare size={18} color="#F97316" />;
-      case 'view': return <Eye size={18} color="#22C55E" />;
-      case 'system': return <Sparkles size={18} color="#FBE618" />;
-      default: return <Bell size={18} color="#FBE618" />;
+      case 'like': return <Heart size={18} color={COLORS.primary} fill={`${COLORS.primary}20`} />;
+      case 'match': return <Zap size={18} color={COLORS.primary} fill={`${COLORS.primary}20`} />;
+      case 'message': return <MessageSquare size={18} color={COLORS.secondary} />;
+      case 'connection_request': return <MessageSquare size={18} color={COLORS.primary} />;
+      case 'connection_approved': return <Zap size={18} color={COLORS.success} fill={`${COLORS.success}20`} />;
+      case 'connection_rejected': return <MessageSquare size={18} color={COLORS.danger} />;
+      case 'comment': return <MessageSquare size={18} color={COLORS.warning} />;
+      case 'view': return <Eye size={18} color={COLORS.success} />;
+      case 'system': return <Sparkles size={18} color={COLORS.primary} />;
+      default: return <Bell size={18} color={COLORS.primary} />;
     }
   };
 
@@ -74,7 +76,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         senderId: notification.fromId,
         approved,
         responderName: profile?.displayName || user.displayName || 'Someone',
-        responderPic: profile?.profilePic || user.photoURL || '',
+        responderPic: safeProfileImageUri(profile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT),
       });
 
       if (approved && result.matchId) {
@@ -83,7 +85,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           otherUser: {
             uid: notification.fromId,
             displayName: notification.fromName || 'Builder',
-            profilePic: notification.fromPic || '',
+            profilePic: safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT),
           },
         });
       } else {
@@ -99,7 +101,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
 
   return (
     <TouchableOpacity 
-      style={[styles.item, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E2E8F0', shadowColor: isDark ? '#000' : '#E2E8F0', shadowOpacity: isDark ? 0 : 0.5, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: isDark ? 0 : 2 }]}
+      style={[styles.item, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
       onPress={async () => {
         try {
           await markRead();
@@ -114,7 +116,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
               ? {
                   uid: notification.fromId,
                   displayName: notification.fromName || 'Builder',
-                  profilePic: notification.fromPic || '',
+                  profilePic: safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT),
                 }
               : undefined,
           });
@@ -135,20 +137,20 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         }
       }}
     >
-      <View style={styles.iconContainer}>
-        {notification.fromPic ? (
-          <Image source={{ uri: notification.fromPic }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+      <View style={[styles.iconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.22)', borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}> 
+        {safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT) ? (
+          <Image source={{ uri: safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT) }} style={{ width: 44, height: 44, borderRadius: 22 }} />
         ) : getIcon()}
         
-        {notification.fromPic && (
-          <View style={{ position: 'absolute', bottom: -4, right: -4, backgroundColor: isDark ? '#111115' : '#FFF', borderRadius: 10, padding: 2 }}>
+        {safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT) && (
+          <View style={{ position: 'absolute', bottom: -4, right: -4, backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderRadius: 10, padding: 2 }}>
             {getIcon()}
           </View>
         )}
       </View>
       <View style={styles.content}>
-        <Text style={[styles.contentText, { color: isDark ? '#FFF' : '#334155' }]}>
-          <Text style={{ fontWeight: 'bold', color: isDark ? '#FFF' : '#0F172A' }}>{notification.fromName || 'Someone'} </Text>
+        <Text style={[styles.contentText, { color: textColor(isDark) }]}>
+          <Text style={{ fontWeight: '900', color: textColor(isDark) }}>{notification.fromName || 'Someone'} </Text>
           {notification.content}
         </Text>
         <Text style={styles.timeText}>{formatTimeAgo(notification.timestamp)}</Text>
@@ -165,14 +167,14 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
               <Text style={[styles.requestActionText, styles.rejectText]}>{busy ? '...' : 'REJECT'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.requestActionBtn}
+              style={[styles.requestActionBtn, styles.approveBtn]}
               disabled={busy}
               onPress={(event: any) => {
                 event?.stopPropagation?.();
                 void respondToRequest(true);
               }}
             >
-              <Text style={styles.requestActionText}>{busy ? '...' : 'APPROVE'}</Text>
+              <Text style={[styles.requestActionText, styles.approveText]}>{busy ? '...' : 'APPROVE'}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -185,6 +187,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
 export default function AlertsScreen({ navigation }: any) {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const isFocused = useIsFocused();
   const isDark = theme === 'dark';
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -199,11 +202,11 @@ export default function AlertsScreen({ navigation }: any) {
   );
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isFocused) return;
     const q = query(
       collection(db, 'notifications'), 
       where('userId', '==', user.uid),
-      limit(75)
+      limit(MOBILE_NOTIFICATION_QUERY_LIMIT)
     );
     const unsub = onSnapshot(q, (snap) => {
       const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as NotificationRow));
@@ -215,22 +218,26 @@ export default function AlertsScreen({ navigation }: any) {
         setLoading(false);
     });
     return () => unsub();
-  }, [user]);
+  }, [isFocused, user?.uid]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#F8FAFC' }]}>
+    <SafeAreaView style={[styles.container, appBackground(isDark)]}>
       <FlatList
         data={notifications}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <NotificationItem notification={item} navigation={navigation} />}
+        initialNumToRender={12}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={80}
+        windowSize={6}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          loading ? <ActivityIndicator color="#FBE618" style={{ marginTop: 50 }} /> : (
+          loading ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} /> : (
             <View style={styles.emptyContainer}>
-              <Bell size={48} color="#222" />
-              <Text style={styles.emptyText}>NO NEW NOTIFICATIONS</Text>
-              <Text style={styles.emptySubText}>STAY ACTIVE TO RECEIVE UPDATES</Text>
+              <Bell size={48} color={textColor(isDark, 'secondary')} />
+              <Text style={[styles.emptyText, { color: textColor(isDark) }]}>NO NEW NOTIFICATIONS</Text>
+              <Text style={[styles.emptySubText, { color: textColor(isDark, 'secondary') }]}>STAY ACTIVE TO RECEIVE UPDATES</Text>
             </View>
           )
         }
@@ -274,7 +281,7 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 9,
-    color: '#3B82F6',
+    color: COLORS.primary,
     marginTop: 4,
     fontWeight: '900',
     letterSpacing: 1,
@@ -288,15 +295,17 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 34,
     borderRadius: 14,
-    backgroundColor: '#FBE618',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#EAB308',
+  },
+  approveBtn: {
+    backgroundColor: COLORS.primary,
+    borderColor: 'transparent',
   },
   rejectBtn: {
-    backgroundColor: '#111115',
-    borderColor: '#222226',
+    backgroundColor: COLORS.darkCard,
+    borderColor: COLORS.darkBorder,
   },
   requestActionText: {
     color: '#000',
@@ -304,14 +313,17 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
   },
+  approveText: {
+    color: '#000',
+  },
   rejectText: {
-    color: '#FFF',
+    color: COLORS.darkTextPrimary,
   },
   unreadDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     marginLeft: 10,
   },
   emptyContainer: {
@@ -322,13 +334,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#444',
     letterSpacing: 2,
     marginTop: 16,
   },
   emptySubText: {
     fontSize: 10,
-    color: '#222',
     fontWeight: '900',
   }
 });

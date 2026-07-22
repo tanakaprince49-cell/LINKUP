@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,24 +9,35 @@ import {
   ActivityIndicator,
   Alert,
   PanResponder,
+  Platform,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { useIsFocused } from '@react-navigation/native';
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { Search, SlidersHorizontal, X, Sparkles, MapPin, Briefcase, Clock } from 'lucide-react-native';
+import { Search, SlidersHorizontal, X, Star, MapPin, Briefcase, Clock } from 'lucide-react-native';
 import { geminiToSearchFilters } from '../lib/gemini';
 import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
 import VerifiedBadge from '../components/VerifiedBadge';
+import { isDiscoverableProfile } from '../lib/discovery';
+import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
+import PaywallModal from '../components/PaywallModal';
+import { isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
+import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
+import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, MOBILE_SEARCH_RENDER_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 const normalize = (v: string) => v.trim().toLowerCase();
-const LOOKING_FOR_FILTERS = ['CTO', 'Designer', 'Marketer', 'Developer', 'Investor', 'Cofounder', 'Startup Team', 'Mentor'];
+const LOOKING_FOR_FILTERS = ['Cofounder', 'Startup Team', 'Mentor', 'Internship', 'Freelance Work', 'Investment', ...LINKUP_ROLE_LABELS];
 const STAGE_FILTERS = ['Idea', 'MVP', 'Early Users', 'Revenue', 'Scaling', 'Fundraising'];
 const INDUSTRY_FILTERS = ['Automation', 'SaaS', 'Fintech', 'Healthtech', 'EdTech', 'Gaming', 'E-commerce', 'Crypto'];
+const WEB_RESULT_RENDER_LIMIT = 40;
+const NATIVE_RESULT_RENDER_LIMIT = MOBILE_SEARCH_RENDER_LIMIT;
 
 type SavedSearchAlert = {
   id: string;
@@ -121,6 +132,7 @@ const stageNeedles = (option: string) => {
 export default function SearchScreen({ navigation, route }: any) {
   const { user, profile: me } = useAuth();
   const { theme } = useTheme();
+  const isFocused = useIsFocused();
   const isDark = theme === 'dark';
 
   const [loading, setLoading] = useState(true);
@@ -133,6 +145,7 @@ export default function SearchScreen({ navigation, route }: any) {
   const [aiRankMap, setAiRankMap] = useState<Record<string, { score: number; reason: string }>>({});
   const [savedAlerts, setSavedAlerts] = useState<SavedSearchAlert[]>([]);
   const [savingAlert, setSavingAlert] = useState(false);
+  const [paywallFeature, setPaywallFeature] = useState('');
 
   // Filters (simple + client-side for now)
   const [filterOpen, setFilterOpen] = useState(false);
@@ -151,56 +164,70 @@ export default function SearchScreen({ navigation, route }: any) {
   const routedSkill = String(route?.params?.skill || route?.params?.initialSkill || '').trim();
   const routedQuery = String(route?.params?.query || '').trim();
   const routedSearchToken = String(route?.params?.searchToken || '');
+  const proLocked = isAndroidProLocked(me);
+  const openPaywall = (feature: string) => setPaywallFeature(feature);
 
   const sliderWidth = 240;
   const knobX = useRef(0);
 
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-  const computeCompatibility = (p: UserProfile) => {
-    return localCommonalityRank(me, [p], 1)[0]?.score ?? 0;
-  };
+  const compatibilityMap = useMemo(() => {
+    const ranked = localCommonalityRank(me, allProfiles, Math.max(allProfiles.length, 1));
+    return ranked.reduce<Record<string, number>>((map, rank) => {
+      map[rank.uid] = rank.score;
+      return map;
+    }, {});
+  }, [allProfiles, me]);
+
+  const computeCompatibility = useCallback(
+    (p: UserProfile) => compatibilityMap[p.uid] ?? 0,
+    [compatibilityMap]
+  );
 
   const sliderResponder = useMemo(
     () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderMove: (_evt, gesture) => {
-          const next = clamp(knobX.current + gesture.dx, 0, sliderWidth);
-          const pct = Math.round((next / sliderWidth) * 100);
-          setMinCompatibility(pct);
-        },
-        onPanResponderRelease: (_evt, gesture) => {
-          const next = clamp(knobX.current + gesture.dx, 0, sliderWidth);
-          knobX.current = next;
-          const pct = Math.round((next / sliderWidth) * 100);
-          setMinCompatibility(pct);
-        },
-      }),
+      Platform.OS === 'web'
+        ? null
+        : PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: () => true,
+            onPanResponderMove: (_evt, gesture) => {
+              const next = clamp(knobX.current + gesture.dx, 0, sliderWidth);
+              const pct = Math.round((next / sliderWidth) * 100);
+              setMinCompatibility(pct);
+            },
+            onPanResponderRelease: (_evt, gesture) => {
+              const next = clamp(knobX.current + gesture.dx, 0, sliderWidth);
+              knobX.current = next;
+              const pct = Math.round((next / sliderWidth) * 100);
+              setMinCompatibility(pct);
+            },
+          }),
     [sliderWidth]
   );
+  const sliderPanHandlers = sliderResponder?.panHandlers || {};
 
   useEffect(() => {
-    if (!user) return;
-    const q = query(
-      collection(db, 'users'),
-      where('isVisible', '==', true),
-      where('isStealthMode', '==', false)
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const data = snap.docs.map((d) => d.data() as UserProfile);
-        setAllProfiles(data.filter((p: any) => p.uid !== user.uid && !p.deleted));
+    if (!user || !isFocused) return;
+    setLoading(allProfiles.length === 0);
+    const unsub = subscribeToDiscoveryProfiles({
+      userId: user.uid,
+      onData: (data) => {
+        const nextProfiles = data.filter((p: any) => p.uid !== user.uid && isDiscoverableProfile(p));
+        setAllProfiles((current) => (nextProfiles.length > 0 || current.length === 0 ? nextProfiles : current));
         setLoading(false);
       },
-      (err) => {
+      onError: (err) => {
         console.error('Search users error:', err);
         setLoading(false);
-      }
-    );
+      },
+    });
     return () => unsub();
-  }, [user?.uid]);
+  }, [isFocused, user?.uid]);
+
+  useEffect(() => {
+    if (proLocked) setFilterOpen(false);
+  }, [proLocked]);
 
   useEffect(() => {
     if (routedSkill) {
@@ -221,6 +248,18 @@ export default function SearchScreen({ navigation, route }: any) {
       setSavedAlerts([]);
       return;
     }
+    if (!isFocused) return;
+    if (IS_LOW_END_ANDROID) {
+      getDoc(doc(db, 'userPrivate', user.uid))
+        .then((snap) => {
+          const alerts = snap.data()?.savedSearchAlerts;
+          setSavedAlerts(Array.isArray(alerts) ? alerts.slice(0, 10) : []);
+        })
+        .catch((error) => {
+          console.warn('Saved search alerts unavailable:', error);
+        });
+      return;
+    }
     const unsub = onSnapshot(
       doc(db, 'userPrivate', user.uid),
       (snap) => {
@@ -232,7 +271,7 @@ export default function SearchScreen({ navigation, route }: any) {
       }
     );
     return () => unsub();
-  }, [user?.uid]);
+  }, [isFocused, user?.uid]);
 
   const filtered = useMemo(() => {
     const q = normalize(queryText);
@@ -282,28 +321,28 @@ export default function SearchScreen({ navigation, route }: any) {
         if (!textHit) return false;
       }
 
-      if (location.trim()) {
+      if (!proLocked && location.trim()) {
         const loc = normalize(location);
         if (!includesAny(`${city} ${country}`, [loc])) return false;
       }
 
-      if (skillList.length > 0) {
+      if (!proLocked && skillList.length > 0) {
         const ok = skillList.every((needle) =>
           userSkills.some((s) => includesAny(s, [needle]))
         );
         if (!ok) return false;
       }
 
-      if (experience.trim()) {
+      if (!proLocked && experience.trim()) {
         if (!includesAny(exp, [experience])) return false;
       }
 
-      if (industry.trim()) {
+      if (!proLocked && industry.trim()) {
         const ok = industries.some((s: string) => includesAny(s, [industry]));
         if (!ok) return false;
       }
 
-      if (lookingForRole.trim()) {
+      if (!proLocked && lookingForRole.trim()) {
         const needles = lookingForNeedles(lookingForRole);
         const roleHit =
           lookingArr.some((s: string) => includesAny(s, needles)) ||
@@ -312,23 +351,23 @@ export default function SearchScreen({ navigation, route }: any) {
         if (!roleHit) return false;
       }
 
-      if (stageFilter.trim()) {
+      if (!proLocked && stageFilter.trim()) {
         if (!includesAny(startupStage, stageNeedles(stageFilter))) return false;
       }
 
-      if (availability.trim()) {
+      if (!proLocked && availability.trim()) {
         if (!includesAny(avail, [availability])) return false;
       }
 
-      if (timezone.trim()) {
+      if (!proLocked && timezone.trim()) {
         if (!includesAny(tz, [timezone])) return false;
       }
 
-      if (lookingForCofounder && !looking) return false;
+      if (!proLocked && lookingForCofounder && !looking) return false;
 
-      if (verifiedOnly && !isVerified) return false;
+      if (!proLocked && verifiedOnly && !isVerified) return false;
 
-      if (activeWithin !== 'any') {
+      if (!proLocked && activeWithin !== 'any') {
         const date = lastActiveAt?.toDate ? lastActiveAt.toDate() : (lastActiveAt ? new Date(lastActiveAt) : null);
         if (!date) return false;
         const now = Date.now();
@@ -337,28 +376,37 @@ export default function SearchScreen({ navigation, route }: any) {
         if (diffMs > limitMs) return false;
       }
 
-      if (compatibility < minCompatibility) return false;
+      if (!proLocked && compatibility < minCompatibility) return false;
 
       return true;
     });
-  }, [allProfiles, queryText, location, skills, experience, industry, availability, timezone, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, activeWithin, minCompatibility, me?.uid]);
+  }, [allProfiles, queryText, location, skills, experience, industry, availability, timezone, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, activeWithin, minCompatibility, computeCompatibility, proLocked]);
 
   const displayed = useMemo(() => {
     const turboBoost = (p: UserProfile) => ((p as any).turboConnect ? 1 : 0);
-    if (!aiRankMode) return [...filtered].sort((a, b) => turboBoost(b) - turboBoost(a));
+    if (proLocked || !aiRankMode) return [...filtered].sort((a, b) => turboBoost(b) - turboBoost(a));
     const withScores = filtered.map((p) => ({ p, s: aiRankMap[p.uid]?.score ?? -1 }));
     withScores.sort((a, b) => (b.s + turboBoost(b.p) * 8) - (a.s + turboBoost(a.p) * 8));
     return withScores.map((x) => x.p);
-  }, [filtered, aiRankMode, aiRankMap]);
+  }, [filtered, aiRankMode, aiRankMap, proLocked]);
+  const resultRenderLimit = Platform.OS === 'web' ? WEB_RESULT_RENDER_LIMIT : NATIVE_RESULT_RENDER_LIMIT;
+  const visibleResults = useMemo(() => displayed.slice(0, resultRenderLimit), [displayed, resultRenderLimit]);
 
   const runAiRanking = async () => {
     if (!user) return;
+    if (proLocked) {
+      openPaywall(PRO_FEATURES.compatibilityDetails);
+      return;
+    }
     const candidateIds = filtered.map((p) => p.uid).filter(Boolean).slice(0, 40);
     if (candidateIds.length === 0) return;
 
     setAiRankLoading(true);
     try {
-      let ranked = await rankCandidatesHybrid(me, filtered.filter((profile) => candidateIds.includes(profile.uid)), 20);
+      let ranked =
+        Platform.OS === 'web'
+          ? await rankCandidatesHybrid(me, filtered.filter((profile) => candidateIds.includes(profile.uid)), 20)
+          : localCommonalityRank(me, filtered.filter((profile) => candidateIds.includes(profile.uid)), 20);
       if (!ranked.length) ranked = localCommonalityRank(me, filtered, 20);
       const nextMap: Record<string, { score: number; reason: string }> = {};
       ranked.forEach((r) => {
@@ -406,6 +454,10 @@ export default function SearchScreen({ navigation, route }: any) {
   });
 
   const applySavedAlert = (alert: SavedSearchAlert) => {
+    if (proLocked) {
+      openPaywall(PRO_FEATURES.savedSearchAlerts);
+      return;
+    }
     setQueryText(alert.queryText || '');
     setLocation(alert.location || '');
     setSkills(alert.skills || '');
@@ -425,6 +477,10 @@ export default function SearchScreen({ navigation, route }: any) {
 
   const saveSearchAlert = async () => {
     if (!user?.uid) return;
+    if (proLocked) {
+      openPaywall(PRO_FEATURES.savedSearchAlerts);
+      return;
+    }
     const hasSignal = [
       queryText,
       location,
@@ -482,6 +538,10 @@ export default function SearchScreen({ navigation, route }: any) {
 
   const applyAiQuery = async () => {
     if (!aiQuery.trim()) return;
+    if (proLocked) {
+      openPaywall(PRO_FEATURES.aiSearch);
+      return;
+    }
     setAiLoading(true);
     const previousDiagnosticAt = getLastAIDiagnostic()?.timestamp || 0;
     try {
@@ -500,7 +560,7 @@ export default function SearchScreen({ navigation, route }: any) {
         Alert.alert('Search Fallback', `${diagnostic.message}\n\nI applied local keyword filters so search still works.`);
       }
     } catch (e: any) {
-      console.error('Gemini search error:', e);
+      console.error('Smart search error:', e);
       const message = describeAIError(e);
       Alert.alert('Search Error', message);
     } finally {
@@ -509,25 +569,26 @@ export default function SearchScreen({ navigation, route }: any) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, appBackground(isDark)]}>
+      <View style={styles.scene} pointerEvents="none">
+        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
+        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(124,58,237,0.12)' : 'rgba(124,58,237,0.1)' }]} />
+      </View>
       <ScrollView
         contentContainerStyle={styles.searchContent}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
       >
-      <View style={[styles.searchHero, { backgroundColor: isDark ? '#111115' : '#FFFCE7', borderColor: isDark ? '#222226' : '#FBE61855' }]}>
-        <View style={styles.heroTitleRow}>
-          <Sparkles size={18} color="#FBE618" />
-          <Text style={[styles.heroKicker, { color: isDark ? '#FBE618' : '#2563EB' }]}>BUILDER SEARCH</Text>
-        </View>
-        <Text style={[styles.heroTitle, { color: isDark ? '#FFF' : '#000' }]}>Who can help me build this?</Text>
-        <Text style={styles.heroCopy}>
-          Search names, @handles, skills, industries, projects, locations, and live intent — then rank by compatibility.
+      <View style={[styles.searchHero, liquidGlass(isDark)]}>
+        <Text style={[styles.heroKicker, { color: COLORS.secondary }]}>BUILDER SEARCH</Text>
+        <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Find the missing person in your plan.</Text>
+        <Text style={[styles.heroCopy, { color: textColor(isDark, 'secondary') }]}>
+          Search handles, skills, projects, locations, and live intent. Then rank results by builder compatibility.
         </Text>
       </View>
 
       <View style={styles.header}>
-        <View style={[styles.searchBar, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+        <View style={[styles.searchBar, liquidGlass(isDark, false)]}>
           <Search size={18} color="#666" />
           <TextInput
             placeholder="SEARCH BUILDERS..."
@@ -544,16 +605,16 @@ export default function SearchScreen({ navigation, route }: any) {
         </View>
 
         <TouchableOpacity
-          style={[styles.filterBtn, { backgroundColor: isDark ? '#16161A' : '#FBE61815', borderColor: isDark ? '#222226' : '#FBE61830' }]}
-          onPress={() => setFilterOpen((v) => !v)}
+          style={[styles.filterBtn, liquidGlass(isDark, false)]}
+          onPress={() => proLocked ? openPaywall(PRO_FEATURES.advancedSearch) : setFilterOpen((v) => !v)}
         >
-          <SlidersHorizontal size={18} color={isDark ? '#FBE618' : '#2563EB'} />
+          <SlidersHorizontal size={18} color={COLORS.secondary} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.aiRow}>
-        <View style={[styles.aiBar, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-          <Sparkles size={18} color="#FBE618" />
+        <View style={[styles.aiBar, liquidGlass(isDark, false)]}>
+          <Star size={18} color={COLORS.primary} />
           <TextInput
             placeholder='Try: "ML engineer in South Africa into fintech"'
             placeholderTextColor="#666"
@@ -577,9 +638,9 @@ export default function SearchScreen({ navigation, route }: any) {
         <TouchableOpacity
           disabled={savingAlert}
           onPress={saveSearchAlert}
-          style={[styles.saveAlertBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE', opacity: savingAlert ? 0.6 : 1 }]}
+          style={[styles.saveAlertBtn, liquidGlass(isDark, false), { opacity: savingAlert ? 0.6 : 1 }]}
         >
-          <Text style={[styles.saveAlertText, { color: isDark ? '#FFF' : '#000' }]}>
+          <Text style={[styles.saveAlertText, { color: textColor(isDark) }]}>
             {savingAlert ? 'SAVING...' : 'SAVE SEARCH ALERT'}
           </Text>
         </TouchableOpacity>
@@ -765,10 +826,34 @@ export default function SearchScreen({ navigation, route }: any) {
                 <View style={[styles.sliderFill, { width: `${minCompatibility}%` }]} />
                 <View
                   style={[styles.sliderKnob, { left: (minCompatibility / 100) * sliderWidth }]}
-                  {...sliderResponder.panHandlers}
+                  {...sliderPanHandlers}
                 />
               </View>
             </View>
+            {Platform.OS === 'web' && (
+              <View style={styles.pillsRow}>
+                {[0, 25, 50, 75].map((value) => (
+                  <TouchableOpacity
+                    key={value}
+                    onPress={() => {
+                      setMinCompatibility(value);
+                      knobX.current = (value / 100) * sliderWidth;
+                    }}
+                    style={[
+                      styles.smallPill,
+                      {
+                        backgroundColor: minCompatibility === value ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
+                        borderColor: isDark ? '#222226' : '#EEEEEE',
+                      },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 9, fontWeight: '900', letterSpacing: 1, color: minCompatibility === value ? '#000' : (isDark ? '#FFF' : '#000') }}>
+                      {value}%
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
           <View style={{ marginTop: 4 }}>
@@ -825,14 +910,14 @@ export default function SearchScreen({ navigation, route }: any) {
         </View>
       )}
 
-      {loading ? (
+      {loading && allProfiles.length === 0 ? (
         <ActivityIndicator color="#FBE618" style={{ marginTop: 30 }} />
       ) : (
         <View style={styles.resultsList}>
-          {displayed.map((item) => (
+          {visibleResults.map((item) => (
             <TouchableOpacity
               key={item.uid}
-              style={[styles.resultCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+              style={[styles.resultCard, liquidGlass(isDark, false)]}
               onPress={() => {
                 const score = aiRankMap[item.uid]?.score ?? computeCompatibility(item);
                 navigation.navigate('Profile', {
@@ -843,7 +928,7 @@ export default function SearchScreen({ navigation, route }: any) {
               }}
             >
               <Image
-                source={{ uri: item.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }}
+                source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }}
                 style={styles.resultAvatar}
               />
               <View style={{ flex: 1 }}>
@@ -862,10 +947,13 @@ export default function SearchScreen({ navigation, route }: any) {
                     activeOpacity={0.8}
                     style={styles.compatPill}
                   >
-                    <Text style={styles.compatText}>{aiRankMap[item.uid]?.score ?? computeCompatibility(item)}%</Text>
+                    <Text style={styles.compatText}>{`${aiRankMap[item.uid]?.score ?? computeCompatibility(item)}%`}</Text>
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.resultHandle} numberOfLines={1}>{profileHandle(item)}</Text>
+                <View style={styles.roleBadge}>
+                  <Text style={styles.roleBadgeText}>{roleInfoFor((item as any).occupation).badge}</Text>
+                </View>
                 <View style={styles.metaRow}>
                   <MapPin size={12} color="#666" />
                   <Text style={styles.metaText} numberOfLines={1}>
@@ -885,14 +973,21 @@ export default function SearchScreen({ navigation, route }: any) {
                   </Text>
                 </View>
                 <Text style={styles.whyLine} numberOfLines={2}>
-                  WHY: {buildMatchReason(me, item, aiRankMap, queryText)}
+                  {buildMatchReason(me, item, aiRankMap, queryText)}
                 </Text>
                 <Text style={styles.resultSkills} numberOfLines={1}>
-                  {(item.skills || []).slice(0, 4).map((s) => String(s).toUpperCase()).join(' • ')}
+                  {(item.skills || []).slice(0, 4).map((s) => String(s).toUpperCase()).join(' - ')}
                 </Text>
               </View>
             </TouchableOpacity>
           ))}
+          {displayed.length > visibleResults.length && (
+            <View style={[styles.resultsLimitCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+              <Text style={styles.resultsLimitText}>
+                Showing top {visibleResults.length} of {displayed.length}. Search or filter to narrow it down.
+              </Text>
+            </View>
+          )}
           {displayed.length === 0 && (
             <View style={{ alignItems: 'center', marginTop: 60, gap: 10 }}>
               <Text style={{ fontSize: 12, fontWeight: '900', letterSpacing: 2, color: '#666' }}>NO RESULTS</Text>
@@ -901,6 +996,12 @@ export default function SearchScreen({ navigation, route }: any) {
           )}
         </View>
       )}
+      <PaywallModal
+        visible={!!paywallFeature}
+        feature={paywallFeature || PRO_FEATURES.advancedSearch}
+        description="Basic Android search stays free. AI search, advanced filters, saved alerts, ranking, and detailed match reasons are LINKUP PLUS features."
+        onClose={() => setPaywallFeature('')}
+      />
       </ScrollView>
     </SafeAreaView>
   );
@@ -908,15 +1009,34 @@ export default function SearchScreen({ navigation, route }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  scene: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  scenePane: {
+    position: 'absolute',
+    width: 280,
+    height: 140,
+    borderRadius: 36,
+  },
+  scenePaneA: {
+    top: 76,
+    right: -130,
+    transform: [{ rotate: '-16deg' }],
+  },
+  scenePaneB: {
+    top: 300,
+    left: -120,
+    transform: [{ rotate: '18deg' }],
+  },
   searchContent: {
     paddingBottom: 180,
   },
   searchHero: {
     marginHorizontal: 16,
     marginTop: 12,
-    padding: 18,
-    borderRadius: 24,
-    borderWidth: 1,
+    padding: 20,
+    borderRadius: 28,
   },
   heroTitleRow: {
     flexDirection: 'row',
@@ -930,16 +1050,16 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     marginTop: 10,
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '900',
-    letterSpacing: -0.8,
+    letterSpacing: 0,
+    lineHeight: 34,
   },
   heroCopy: {
     marginTop: 8,
     fontSize: 12,
     fontWeight: '800',
     lineHeight: 18,
-    color: '#666',
   },
   searchActionsRow: {
     flexDirection: 'row',
@@ -950,8 +1070,7 @@ const styles = StyleSheet.create({
   saveAlertBtn: {
     flex: 1,
     height: 44,
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -991,8 +1110,7 @@ const styles = StyleSheet.create({
   savedAlertPill: {
     width: 190,
     padding: 12,
-    borderRadius: 18,
-    borderWidth: 1,
+    borderRadius: 20,
   },
   savedAlertLabel: {
     fontSize: 10,
@@ -1008,6 +1126,23 @@ const styles = StyleSheet.create({
   resultsList: {
     padding: 16,
     paddingBottom: 20,
+  },
+  resultsLimitCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
+    backgroundColor: '#FFFFFF',
+  },
+  resultsLimitText: {
+    textAlign: 'center',
+    fontSize: 10,
+    lineHeight: 15,
+    color: '#666',
+    fontWeight: '800',
   },
   header: {
     flexDirection: 'row',
@@ -1026,8 +1161,7 @@ const styles = StyleSheet.create({
     gap: 10,
     height: 52,
     paddingHorizontal: 16,
-    borderRadius: 18,
-    borderWidth: 1,
+    borderRadius: 20,
   },
   aiInput: {
     flex: 1,
@@ -1055,8 +1189,7 @@ const styles = StyleSheet.create({
     gap: 10,
     height: 52,
     paddingHorizontal: 16,
-    borderRadius: 18,
-    borderWidth: 1,
+    borderRadius: 20,
   },
   searchInput: {
     flex: 1,
@@ -1081,8 +1214,7 @@ const styles = StyleSheet.create({
   filtersCard: {
     margin: 16,
     padding: 16,
-    borderRadius: 22,
-    borderWidth: 1,
+    borderRadius: 24,
     gap: 10,
   },
   filtersScrollContent: {
@@ -1199,6 +1331,20 @@ const styles = StyleSheet.create({
     color: '#2563EB',
     fontWeight: '900',
     marginTop: 2,
+  },
+  roleBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 5,
+    borderRadius: 999,
+    backgroundColor: '#FBE618',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  roleBadgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#000',
+    letterSpacing: 0.8,
   },
   metaRow: {
     flexDirection: 'row',
