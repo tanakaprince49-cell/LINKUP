@@ -1165,7 +1165,7 @@ export default function SwipeScreen({ navigation }: any) {
       Animated.timing(scrollPosition, {
         toValue: -screenH,
         duration: 250,
-        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+        useNativeDriver: false,
       }).start(() => {
         scrollPosition.setValue(0);
         setScrollIndex(idx + 1);
@@ -1173,7 +1173,7 @@ export default function SwipeScreen({ navigation }: any) {
       });
     } else {
       Animated.spring(scrollPosition, {
-        toValue: 0, friction: 7, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+        toValue: 0, friction: 7, useNativeDriver: false,
       }).start(() => { isScrollingRef.current = false; });
     }
   };
@@ -1186,7 +1186,7 @@ export default function SwipeScreen({ navigation }: any) {
       Animated.timing(scrollPosition, {
         toValue: screenH,
         duration: 250,
-        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+        useNativeDriver: false,
       }).start(() => {
         scrollPosition.setValue(0);
         setScrollIndex(idx - 1);
@@ -1194,7 +1194,7 @@ export default function SwipeScreen({ navigation }: any) {
       });
     } else {
       Animated.spring(scrollPosition, {
-        toValue: 0, friction: 7, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+        toValue: 0, friction: 7, useNativeDriver: false,
       }).start(() => { isScrollingRef.current = false; });
     }
   };
@@ -1235,7 +1235,7 @@ export default function SwipeScreen({ navigation }: any) {
       goToPrevProfile();
     } else {
       Animated.spring(scrollPosition, {
-        toValue: scrollTouchStartPos.current, friction: 7, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+        toValue: scrollTouchStartPos.current, friction: 7, useNativeDriver: false,
       }).start(() => { isScrollingRef.current = false; });
     }
   };
