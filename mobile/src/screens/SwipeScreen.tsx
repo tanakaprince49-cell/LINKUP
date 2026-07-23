@@ -895,19 +895,6 @@ export default function SwipeScreen({ navigation }: any) {
     const swipedItem = profiles[0];
     if (isAnimatingRef.current || !swipedItem) return;
 
-    if (proLocked) {
-      consumeWindowUsage(user?.uid || 'anonymous', 'builder-swipes', FREE_LIMITS.swipesPer12Hours, SWIPE_USAGE_WINDOW_HOURS)
-        .then((usage) => {
-          if (!usage.allowed) {
-            openPaywall(PRO_FEATURES.swipeLimit);
-            return;
-          }
-          startSwipeAnimation(direction, swipedItem);
-        })
-        .catch(() => startSwipeAnimation(direction, swipedItem));
-      return;
-    }
-
     startSwipeAnimation(direction, swipedItem);
   };
 
@@ -927,10 +914,6 @@ export default function SwipeScreen({ navigation }: any) {
   };
 
   const resetDeck = () => {
-    if (proLocked) {
-      openPaywall(PRO_FEATURES.swipeLimit);
-      return;
-    }
     swipedSessionIdsRef.current.clear();
     hasUserSwipedRef.current = false;
     if (user?.uid) {
