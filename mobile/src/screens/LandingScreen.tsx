@@ -30,12 +30,6 @@ export default function LandingScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
-      <View style={styles.scene} pointerEvents="none">
-        <View style={[styles.lightPlane, styles.lightPlaneOne, { backgroundColor: isDark ? 'rgba(0, 194, 255, 0.14)' : 'rgba(0, 194, 255, 0.16)' }]} />
-        <View style={[styles.lightPlane, styles.lightPlaneTwo, { backgroundColor: isDark ? 'rgba(223, 251, 63, 0.12)' : 'rgba(223, 251, 63, 0.2)' }]} />
-        <View style={[styles.lightPlane, styles.lightPlaneThree, { backgroundColor: isDark ? 'rgba(124, 58, 237, 0.16)' : 'rgba(124, 58, 237, 0.12)' }]} />
-      </View>
-
       <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.logoBadge}>
@@ -129,31 +123,6 @@ export default function LandingScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  scene: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  lightPlane: {
-    position: 'absolute',
-    width: width * 0.9,
-    height: height * 0.22,
-    borderRadius: 36,
-  },
-  lightPlaneOne: {
-    top: height * 0.08,
-    right: -width * 0.34,
-    transform: [{ rotate: '-18deg' }],
-  },
-  lightPlaneTwo: {
-    top: height * 0.28,
-    left: -width * 0.28,
-    transform: [{ rotate: '14deg' }],
-  },
-  lightPlaneThree: {
-    bottom: height * 0.1,
-    right: -width * 0.22,
-    transform: [{ rotate: '10deg' }],
   },
   content: {
     flex: 1,

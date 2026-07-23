@@ -1116,10 +1116,6 @@ export default function SwipeScreen({ navigation }: any) {
 
   return (
     <ScreenRoot style={[styles.container, isWeb && styles.webRoot, appBackground(isDark)]}>
-      <View style={styles.scene} pointerEvents="none">
-        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
-        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(251,230,24,0.08)' : 'rgba(251,230,24,0.16)' }]} />
-      </View>
       <View style={[styles.webStage, isWideWeb && styles.webStageDesktop, isCompactWeb && styles.webStageMobile]}>
         <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }, isCompactWeb && styles.compactTopBar]}>
           {navigation?.canGoBack() ? (
@@ -1171,26 +1167,6 @@ const SparkleDot = () => <View style={styles.sparkleDot} />;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  scene: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  scenePane: {
-    position: 'absolute',
-    width: 280,
-    height: 130,
-    borderRadius: 34,
-  },
-  scenePaneA: {
-    top: 90,
-    right: -120,
-    transform: [{ rotate: '-16deg' }],
-  },
-  scenePaneB: {
-    top: 330,
-    left: -120,
-    transform: [{ rotate: '16deg' }],
   },
   webRoot: {
     height: '100dvh' as any,

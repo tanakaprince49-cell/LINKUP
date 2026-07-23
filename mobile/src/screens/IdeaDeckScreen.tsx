@@ -810,7 +810,7 @@ const styles = StyleSheet.create({
   inviteHint: { marginBottom: 14, color: '#777', fontSize: 11, fontWeight: '800', lineHeight: 17 },
   composeLabel: { marginTop: 8, marginBottom: 10, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
   composeChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  composeChip: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: '#FFF' },
+  composeChip: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: COLORS.lightCard },
   composeChipActive: {     borderColor: COLORS.primary, backgroundColor: COLORS.primary },
   composeChipText: { color: '#555', fontSize: 11, fontWeight: '900' },
   composeChipTextActive: { color: '#000' },

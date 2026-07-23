@@ -570,10 +570,6 @@ export default function SearchScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
-      <View style={styles.scene} pointerEvents="none">
-        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
-        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(124,58,237,0.12)' : 'rgba(124,58,237,0.1)' }]} />
-      </View>
       <ScrollView
         contentContainerStyle={styles.searchContent}
         showsVerticalScrollIndicator
@@ -1009,26 +1005,6 @@ export default function SearchScreen({ navigation, route }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scene: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  scenePane: {
-    position: 'absolute',
-    width: 280,
-    height: 140,
-    borderRadius: 36,
-  },
-  scenePaneA: {
-    top: 76,
-    right: -130,
-    transform: [{ rotate: '-16deg' }],
-  },
-  scenePaneB: {
-    top: 300,
-    left: -120,
-    transform: [{ rotate: '18deg' }],
-  },
   searchContent: {
     paddingBottom: 180,
   },
@@ -1135,7 +1111,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#EEEEEE',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.lightCard,
   },
   resultsLimitText: {
     textAlign: 'center',

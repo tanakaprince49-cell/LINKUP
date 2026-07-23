@@ -103,7 +103,7 @@ export default function PaywallModal({
   const [selectedPlan, setSelectedPlan] = React.useState<PlusPlan['id']>('monthly');
   const isPro = hasLinkupPro(profile);
   const selectedPrice = PRICING_PLANS.find((plan) => plan.id === selectedPlan) || PRICING_PLANS[0];
-  const perksMaxHeight = Math.max(128, Math.min(285, Math.round(height * 0.27)));
+  const perksMaxHeight = Math.max(280, Math.min(420, Math.round(height * 0.38)));
   const {
     connected,
     subscriptions,
@@ -491,10 +491,9 @@ const styles = StyleSheet.create({
     left: 14,
     right: 14,
     bottom: 18,
-    maxHeight: '92%',
+    maxHeight: '94%',
     borderRadius: 24,
     borderWidth: 1,
-    overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.32,
     shadowRadius: 24,

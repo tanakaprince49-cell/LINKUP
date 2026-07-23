@@ -1807,10 +1807,6 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
-      <View style={styles.scene} pointerEvents="none">
-        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
-        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(223,251,63,0.08)' : 'rgba(223,251,63,0.16)' }]} />
-      </View>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -3111,26 +3107,6 @@ export default function ProfileScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  scene: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  scenePane: {
-    position: 'absolute',
-    width: 280,
-    height: 130,
-    borderRadius: 34,
-  },
-  scenePaneA: {
-    top: 90,
-    right: -120,
-    transform: [{ rotate: '-16deg' }],
-  },
-  scenePaneB: {
-    top: 330,
-    left: -120,
-    transform: [{ rotate: '16deg' }],
   },
   scrollContent: {
     padding: 24,
