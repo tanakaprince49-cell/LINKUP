@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,6 @@ import {
   Easing,
   PanResponder,
   ScrollView,
-  FlatList,
   InteractionManager,
   Platform,
   useWindowDimensions,
@@ -318,6 +317,10 @@ export default function SwipeScreen({ navigation }: any) {
   const lastSwipedProfileRef = useRef<UserProfile | null>(null);
   const [dailyRemaining, setDailyRemaining] = useState<number>(FREE_LIMITS.dailyRecommendations);
   const [mode, setMode] = useState<'swipe' | 'scroll'>('swipe');
+  const [scrollIndex, setScrollIndex] = useState(0);
+  const scrollPosition = useRef(new Animated.Value(0)).current;
+  const isScrollingRef = useRef(false);
+  const scrollProfiles = useRef<UserProfile[]>([]);
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedItem?: UserProfile) => void>(() => {});
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const resetSwipePositionRef = useRef<() => void>(() => {});
@@ -336,6 +339,7 @@ export default function SwipeScreen({ navigation }: any) {
   const deckHeight = isWeb ? safeViewportHeight : undefined;
   const motionWidth = Math.max(deckWidth ?? safeViewportWidth, width);
   const swipeThreshold = Math.min(170, Math.max(92, (deckWidth ?? safeViewportWidth) * 0.27));
+  const verticalSwipeThreshold = 80;
   const deckExitDistance = Math.max(deckWidth ?? safeViewportWidth, 360) + 190;
   const webDeckStyle =
     isWeb && deckWidth && deckHeight
@@ -1181,115 +1185,207 @@ export default function SwipeScreen({ navigation }: any) {
     );
   };
 
+  const scrollProfilesCache = useMemo(() => profiles.filter(Boolean).slice(0, 12), [profiles]);
+
+  useEffect(() => {
+    if (mode === 'scroll' && scrollIndex >= scrollProfilesCache.length) {
+      setScrollIndex(Math.max(0, scrollProfilesCache.length - 1));
+    }
+  }, [mode, scrollIndex, scrollProfilesCache.length]);
+
+  const goToNextProfile = useCallback(() => {
+    if (scrollIndex < scrollProfilesCache.length - 1) {
+      const nextIdx = scrollIndex + 1;
+      const nextUid = scrollProfilesCache[nextIdx]?.uid;
+      Animated.timing(scrollPosition, {
+        toValue: -Dimensions.get('window').height,
+        duration: 250,
+        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+      }).start(() => {
+        scrollPosition.setValue(0);
+        setScrollIndex(nextIdx);
+        isScrollingRef.current = false;
+        if (nextUid && nextUid === topProfile?.uid) {
+          const swipeDir = prevScrollDirRef.current === 'up' ? 'right' : 'left';
+          animateSwipeOutRef.current(swipeDir);
+        }
+      });
+    } else {
+      resetScrollPosition();
+    }
+  }, [scrollIndex, scrollProfilesCache.length, topProfile?.uid]);
+
+  const goToPrevProfile = useCallback(() => {
+    if (scrollIndex > 0) {
+      const prevIdx = scrollIndex - 1;
+      Animated.timing(scrollPosition, {
+        toValue: Dimensions.get('window').height,
+        duration: 250,
+        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+      }).start(() => {
+        scrollPosition.setValue(0);
+        setScrollIndex(prevIdx);
+        isScrollingRef.current = false;
+      });
+    } else {
+      resetScrollPosition();
+    }
+  }, [scrollIndex]);
+
+  const resetScrollPosition = useCallback(() => {
+    Animated.spring(scrollPosition, {
+      toValue: 0,
+      friction: 7,
+      useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+    }).start(() => {
+      isScrollingRef.current = false;
+    });
+  }, [scrollPosition]);
+
+  const prevScrollDirRef = useRef<'up' | 'down'>('up');
+
+  const verticalPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponderCapture: (_evt, gs) =>
+        !isScrollingRef.current && Math.abs(gs.dy) > 14 && Math.abs(gs.dy) > Math.abs(gs.dx) * 1.25,
+      onMoveShouldSetPanResponder: (_evt, gs) =>
+        !isScrollingRef.current && Math.abs(gs.dy) > 14 && Math.abs(gs.dy) > Math.abs(gs.dx) * 1.25,
+      onPanResponderMove: (_evt, gs) => {
+        if (isScrollingRef.current) return;
+        const limited = gs.dy * 0.6;
+        if ((limited > 0 && scrollIndex === 0) || (limited < 0 && scrollIndex === scrollProfilesCache.length - 1)) {
+          scrollPosition.setValue(limited * 0.25);
+        } else {
+          scrollPosition.setValue(limited);
+        }
+      },
+      onPanResponderRelease: (_evt, gs) => {
+        if (isScrollingRef.current) return;
+        if (gs.dy < -verticalSwipeThreshold && scrollIndex < scrollProfilesCache.length - 1) {
+          prevScrollDirRef.current = 'up';
+          isScrollingRef.current = true;
+          goToNextProfile();
+        } else if (gs.dy > verticalSwipeThreshold && scrollIndex > 0) {
+          prevScrollDirRef.current = 'down';
+          isScrollingRef.current = true;
+          goToPrevProfile();
+        } else {
+          resetScrollPosition();
+        }
+      },
+      onPanResponderTerminate: () => resetScrollPosition(),
+      onPanResponderTerminationRequest: () => false,
+    })
+  ).current;
+
   const renderScrollProfile = () => {
-    const feedProfiles = profiles.filter(Boolean).slice(0, 12);
-    if (feedProfiles.length === 0) return renderEmpty();
-    const cardH = (Dimensions.get('window').height * 0.65);
+    const feed = scrollProfilesCache;
+    if (feed.length === 0) return renderEmpty();
+    const currentProfile = feed[scrollIndex] || feed[0];
+    const photos = getSwipePhotos(currentProfile);
+    const ageText = Number(currentProfile.age) > 0 ? `, ${currentProfile.age}` : '';
+    const locationText = [currentProfile.city, currentProfile.country].filter(Boolean).join(', ') || 'Remote';
+    const roleText = [
+      (currentProfile as any).occupation || 'Builder',
+      (currentProfile as any).company ? `@ ${(currentProfile as any).company}` : null,
+    ].filter(Boolean).join(' ');
+    const existingScore = scoreByIdRef.current.get(currentProfile.uid);
+    const matchRank = existingScore != null ? { score: existingScore, reason: '' } : (myProfile ? localCommonalityRank(myProfile, [currentProfile], 1)[0] : null);
+    const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
+    const skills = Array.isArray(currentProfile.skills) ? currentProfile.skills.slice(0, 6) : [];
+    const hasNext = scrollIndex < feed.length - 1;
 
-    const renderFeedCard = ({ item }: { item: UserProfile }) => {
-      const photos = getSwipePhotos(item);
-      const ageText = Number(item.age) > 0 ? `, ${item.age}` : '';
-      const locationText = [item.city, item.country].filter(Boolean).join(', ') || 'Remote';
-      const roleText = [
-        (item as any).occupation || 'Builder',
-        (item as any).company ? `@ ${(item as any).company}` : null,
-      ].filter(Boolean).join(' ');
-      const existingScore = scoreByIdRef.current.get(item.uid);
-      const matchRank = existingScore != null ? { score: existingScore, reason: '' } : (myProfile ? localCommonalityRank(myProfile, [item], 1)[0] : null);
-      const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
-      const skills = Array.isArray(item.skills) ? item.skills.slice(0, 6) : [];
-      const isTop = item.uid === topProfile?.uid;
-
-      return (
-        <View style={[styles.feedCard, { height: cardH }]}>
-          <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.feedCardImg} resizeMode="cover" />
-          <View style={styles.feedCardOverlay} />
-          <View style={styles.feedCardInfo}>
-            <View style={styles.feedCardTopRow}>
-              <View style={[styles.feedCompatibilityPill, { backgroundColor: COLORS.primary }]}>
+    return (
+      <View style={styles.scrollRoot}>
+        <Animated.View
+          style={[styles.scrollCard, { transform: [{ translateY: scrollPosition }] }]}
+          {...verticalPanResponder.panHandlers}
+        >
+          <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.scrollCardImg} resizeMode="cover" />
+          <View style={styles.scrollCardOverlay} />
+          <View style={styles.scrollCardBody}>
+            <View style={styles.scrollCardTop}>
+              <View style={[styles.scrollCompatPill, { backgroundColor: COLORS.primary }]}>
                 <Zap size={10} color="#000" fill="#000" />
-                <Text style={styles.feedCompatibilityText}>{compatibility}%</Text>
+                <Text style={styles.scrollCompatText}>{compatibility}%</Text>
               </View>
             </View>
-            <View style={styles.feedCardMeta}>
-              <View style={styles.feedNameRow}>
-                <Text style={styles.feedName}>{displayNameFor(item)}{ageText}</Text>
-                {item.isVerified && <VerifiedBadge size={18} />}
+            <View style={styles.scrollCardMeta}>
+              <View style={styles.scrollCardNameRow}>
+                <Text style={styles.scrollCardName}>{displayNameFor(currentProfile)}{ageText}</Text>
+                {currentProfile.isVerified && <VerifiedBadge size={18} />}
               </View>
-              <Text style={styles.feedRole} numberOfLines={1}>{roleText}</Text>
-              <Text style={styles.feedLocation} numberOfLines={1}>{locationText}</Text>
+              <Text style={styles.scrollCardRole} numberOfLines={1}>{roleText}</Text>
+              <Text style={styles.scrollCardLocation} numberOfLines={1}>{locationText}</Text>
               {skills.length > 0 && (
-                <View style={styles.feedSkillsRow}>
+                <View style={styles.scrollSkillsRow}>
                   {skills.map((s: string, i: number) => (
-                    <View key={i} style={styles.feedSkillTag}>
-                      <Text style={styles.feedSkillText}>{s}</Text>
+                    <View key={i} style={styles.scrollSkillTag}>
+                      <Text style={styles.scrollSkillText}>{s}</Text>
                     </View>
                   ))}
                 </View>
               )}
             </View>
-            <View style={styles.feedActions}>
-              <TouchableOpacity
-                style={[styles.feedActionBtn, { backgroundColor: 'rgba(0,0,0,0.5)', borderColor: 'rgba(255,255,255,0.2)' }]}
-                onPress={() => {
-                  if (isTop) animateSwipeOut('left');
-                  else setProfiles((prev) => prev.filter((p) => p.uid !== item.uid));
-                }}
-              >
-                <X size={18} color="#FF6B6B" />
-                <Text style={styles.feedActionLabel}>PASS</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.feedActionBtn, styles.feedContactBtn]}
-                disabled={contactBusy || isSyntheticProfile(item)}
-                onPress={() => {
-                  if (!isTop) {
-                    setProfiles((prev) => {
-                      const idx = prev.findIndex((p) => p.uid === item.uid);
-                      if (idx > 0) {
-                        const reordered = [...prev];
-                        const [profile] = reordered.splice(idx, 1);
-                        reordered.unshift(profile);
-                        return reordered;
-                      }
-                      return prev;
-                    });
-                  }
-                  setTimeout(() => handleContactRequest(), 100);
-                }}
-              >
-                <MessageSquare size={14} color="#000" />
-                <Text style={[styles.feedActionLabel, { color: '#000' }]}>
-                  {connectionRequest?.status === 'approved' && isTop ? 'CHAT' : connectionRequest?.status === 'pending' && isTop ? 'SENT' : 'CONTACT'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.feedActionBtn, { backgroundColor: '#FF3B5C' }]}
-                onPress={() => {
-                  if (isTop) animateSwipeOut('right');
-                  else setProfiles((prev) => prev.filter((p) => p.uid !== item.uid));
-                }}
-              >
-                <Heart size={18} color="#000" fill="#000" />
-                <Text style={styles.feedActionLabel}>LIKE</Text>
-              </TouchableOpacity>
+            <View style={styles.scrollIndicatorRow}>
+              <View style={[styles.scrollDot, { backgroundColor: COLORS.primary }]} />
+              <Text style={styles.scrollDotLabel}>{scrollIndex + 1} / {feed.length}</Text>
             </View>
           </View>
-        </View>
-      );
-    };
+        </Animated.View>
 
-    return (
-      <FlatList
-        data={feedProfiles}
-        renderItem={renderFeedCard}
-        keyExtractor={(item) => item.uid}
-        showsVerticalScrollIndicator={false}
-        snapToInterval={cardH + 12}
-        decelerationRate="fast"
-        contentContainerStyle={{ paddingVertical: 6, gap: 12 }}
-        style={{ flex: 1 }}
-      />
+        <View style={styles.scrollBottomActions}>
+          <TouchableOpacity
+            style={[styles.scrollBottomBtn, { backgroundColor: 'rgba(0,0,0,0.5)', borderColor: 'rgba(255,255,255,0.2)' }]}
+            onPress={() => {
+              isScrollingRef.current = true;
+              animateSwipeOutRef.current('left');
+              setScrollIndex((i) => Math.min(i, feed.length - 2));
+            }}
+          >
+            <X size={20} color="#FF6B6B" />
+            <Text style={styles.scrollBottomLabel}>PASS</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.scrollBottomContact]}
+            disabled={contactBusy || isSyntheticProfile(currentProfile)}
+            onPress={() => {
+              if (currentProfile.uid !== topProfile?.uid) {
+                const reordered = [...profiles];
+                const idx = reordered.findIndex((p) => p.uid === currentProfile.uid);
+                if (idx > 0) {
+                  const [p] = reordered.splice(idx, 1);
+                  reordered.unshift(p);
+                  setProfiles(reordered);
+                }
+              }
+              setTimeout(() => handleContactRequest(), 150);
+            }}
+          >
+            <MessageSquare size={16} color="#000" />
+            <Text style={[styles.scrollBottomLabel, { color: '#000' }]}>
+              {connectionRequest?.status === 'approved' ? 'CHAT' : connectionRequest?.status === 'pending' ? 'SENT' : 'CONTACT'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.scrollBottomBtn, { backgroundColor: '#FF3B5C' }]}
+            onPress={() => {
+              isScrollingRef.current = true;
+              animateSwipeOutRef.current('right');
+              setScrollIndex((i) => Math.min(i, feed.length - 2));
+            }}
+          >
+            <Heart size={20} color="#000" fill="#000" />
+            <Text style={styles.scrollBottomLabel}>LIKE</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.scrollSwipeHint}>
+          <Text style={styles.scrollSwipeHintText}>
+            {hasNext ? '↑ swipe up for next' : 'last profile'}
+          </Text>
+        </View>
+      </View>
     );
   };
 
@@ -2182,31 +2278,38 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '900',
   },
-  feedCard: {
+  scrollRoot: {
+    flex: 1,
     borderRadius: 24,
     overflow: 'hidden',
     marginHorizontal: 8,
+    marginBottom: 8,
   },
-  feedCardImg: {
+  scrollCard: {
+    flex: 1,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  scrollCardImg: {
     ...StyleSheet.absoluteFillObject,
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  feedCardOverlay: {
+  scrollCardOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
-  feedCardInfo: {
+  scrollCardBody: {
     flex: 1,
     justifyContent: 'space-between',
     padding: 18,
   },
-  feedCardTopRow: {
+  scrollCardTop: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
   },
-  feedCompatibilityPill: {
+  scrollCompatPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -2214,77 +2317,110 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 20,
   },
-  feedCompatibilityText: {
+  scrollCompatText: {
     fontSize: 10,
     fontWeight: '900',
     color: '#000',
   },
-  feedCardMeta: {
+  scrollCardMeta: {
     gap: 4,
   },
-  feedNameRow: {
+  scrollCardNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  feedName: {
+  scrollCardName: {
     fontSize: 22,
     fontWeight: '900',
     fontStyle: 'italic',
     letterSpacing: -0.5,
     color: '#FFF',
   },
-  feedRole: {
+  scrollCardRole: {
     fontSize: 13,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.85)',
   },
-  feedLocation: {
+  scrollCardLocation: {
     fontSize: 11,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.6)',
   },
-  feedSkillsRow: {
+  scrollSkillsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 5,
     marginTop: 6,
   },
-  feedSkillTag: {
+  scrollSkillTag: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  feedSkillText: {
+  scrollSkillText: {
     fontSize: 10,
     fontWeight: '700',
     color: '#FFF',
   },
-  feedActions: {
+  scrollIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    justifyContent: 'center',
+  },
+  scrollDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  scrollDotLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 0.5,
+  },
+  scrollBottomActions: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 12,
-    marginTop: 12,
+    gap: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
-  feedActionBtn: {
+  scrollBottomBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  feedContactBtn: {
+  scrollBottomContact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 14,
     backgroundColor: '#FFF',
-    borderColor: '#FFF',
   },
-  feedActionLabel: {
+  scrollBottomLabel: {
     fontSize: 9,
     fontWeight: '900',
     color: '#FFF',
     letterSpacing: 0.6,
+  },
+  scrollSwipeHint: {
+    alignItems: 'center',
+    paddingBottom: 4,
+  },
+  scrollSwipeHintText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.3)',
+    letterSpacing: 0.5,
   },
 });
