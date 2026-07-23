@@ -929,7 +929,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       mediaTypes: (ImagePicker as any).MediaType?.Images ? [(ImagePicker as any).MediaType.Images] : ['images'],
       allowsEditing: Platform.OS !== 'web',
       aspect: [1, 1],
-      quality: 0.06,
+      quality: 0.7,
       base64: true,
     });
 
@@ -993,7 +993,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       mediaTypes: (ImagePicker as any).MediaType?.Images ? [(ImagePicker as any).MediaType.Images] : ['images'],
       allowsEditing: Platform.OS !== 'web',
       aspect: [1, 1],
-      quality: 0.08,
+      quality: 0.7,
       base64: true,
     });
 

@@ -1,5 +1,5 @@
 export const MAX_PICKED_PHOTO_BYTES = 6 * 1024 * 1024;
-export const MAX_FIRESTORE_IMAGE_CHARS = 180_000;
+export const MAX_FIRESTORE_IMAGE_CHARS = 500_000;
 
 const formatMegabytes = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 
