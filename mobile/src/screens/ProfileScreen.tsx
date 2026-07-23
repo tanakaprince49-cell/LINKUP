@@ -816,7 +816,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       company: (profile as any).company || '',
       age: (profile as any).age ? String((profile as any).age) : '',
       country: (profile as any).country || '',
-      skills: Array.isArray(profile.skills) ? profile.skills.join(', ') : (profile.skills || ''),
+      skills: Array.isArray(profile?.skills) ? profile.skills.join(', ') : (profile?.skills || ''),
       interests: Array.isArray((profile as any).interests) ? (profile as any).interests.join(', ') : '',
       industries: Array.isArray((profile as any).industries) ? (profile as any).industries.join(', ') : '',
       lookingFor: Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor.join(', ') : '',
@@ -1574,30 +1574,30 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
-  const currentSkills = isEditing ? parseProfileList(editData?.skills) : parseProfileList(profile.skills);
+  const currentSkills = isEditing ? parseProfileList(editData?.skills) : parseProfileList(profile?.skills ?? []);
   const organizedSkills = [...currentSkills].sort((a, b) => a.localeCompare(b)).slice(0, 50);
 
   const industries = (isEditing
     ? (typeof editData?.industries === 'string'
         ? editData.industries.split(',').map((s: string) => s.trim()).filter(Boolean)
         : (Array.isArray(editData?.industries) ? editData.industries : []))
-    : (Array.isArray((profile as any).industries) ? (profile as any).industries : [])) as string[];
+    : (Array.isArray((profile as any)?.industries) ? (profile as any).industries : [])) as string[];
 
   const lookingFor = (isEditing
     ? (typeof editData?.lookingFor === 'string'
         ? editData.lookingFor.split(',').map((s: string) => s.trim()).filter(Boolean)
         : (Array.isArray(editData?.lookingFor) ? editData.lookingFor : []))
-    : (Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor : [])) as string[];
-  const projects = Array.isArray((profile as any).projects) ? (profile as any).projects : [];
+    : (Array.isArray((profile as any)?.lookingFor) ? (profile as any).lookingFor : [])) as string[];
+  const projects = Array.isArray((profile as any)?.projects) ? (profile as any).projects : [];
   const visibleProjects = projects
     .filter((project: any) => String(project?.title || project?.description || '').trim())
     .slice(0, 10);
-  const startupIdeas = Array.isArray((profile as any).startupIdeas) ? (profile as any).startupIdeas : [];
+  const startupIdeas = Array.isArray((profile as any)?.startupIdeas) ? (profile as any).startupIdeas : [];
   const visibleStartupIdeas = startupIdeas
     .filter((idea: any) => String(idea?.title || idea?.description || '').trim())
     .slice(0, 20);
-  const profileBio = String(profile.bio || '').trim();
-  const showHighVoiceNotice = isViewingOther && !!(profile as any).isVerified;
+  const profileBio = String(profile?.bio || '').trim();
+  const showHighVoiceNotice = isViewingOther && !!(profile as any)?.isVerified;
   const editedProjects = isEditing
     ? (Array.isArray(editData?.projects) && editData.projects.length
         ? editData.projects
