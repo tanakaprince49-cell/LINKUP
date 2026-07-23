@@ -1160,9 +1160,17 @@ export default function SwipeScreen({ navigation }: any) {
     const feed = scrollProfilesCache;
     const idx = scrollIndex;
     if (idx < feed.length - 1) {
-      scrollPosition.setValue(0);
-      setScrollIndex(idx + 1);
-      isScrollingRef.current = false;
+      const screenH = Dimensions.get('window').height;
+      isScrollingRef.current = true;
+      Animated.timing(scrollPosition, {
+        toValue: -screenH,
+        duration: 250,
+        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+      }).start(() => {
+        scrollPosition.setValue(0);
+        setScrollIndex(idx + 1);
+        isScrollingRef.current = false;
+      });
     } else {
       Animated.spring(scrollPosition, {
         toValue: 0, friction: 7, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
@@ -1173,9 +1181,17 @@ export default function SwipeScreen({ navigation }: any) {
   const goToPrevProfile = () => {
     const idx = scrollIndex;
     if (idx > 0) {
-      scrollPosition.setValue(0);
-      setScrollIndex(idx - 1);
-      isScrollingRef.current = false;
+      const screenH = Dimensions.get('window').height;
+      isScrollingRef.current = true;
+      Animated.timing(scrollPosition, {
+        toValue: screenH,
+        duration: 250,
+        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+      }).start(() => {
+        scrollPosition.setValue(0);
+        setScrollIndex(idx - 1);
+        isScrollingRef.current = false;
+      });
     } else {
       Animated.spring(scrollPosition, {
         toValue: 0, friction: 7, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
