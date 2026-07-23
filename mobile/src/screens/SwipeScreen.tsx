@@ -316,6 +316,7 @@ export default function SwipeScreen({ navigation }: any) {
   const dailyLimitReachedRef = useRef(false);
   const lastSwipedProfileRef = useRef<UserProfile | null>(null);
   const [dailyRemaining, setDailyRemaining] = useState<number>(FREE_LIMITS.dailyRecommendations);
+  const [mode, setMode] = useState<'swipe' | 'scroll'>('swipe');
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedItem?: UserProfile) => void>(() => {});
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const resetSwipePositionRef = useRef<() => void>(() => {});
@@ -1179,6 +1180,120 @@ export default function SwipeScreen({ navigation }: any) {
     );
   };
 
+  const renderScrollProfile = () => {
+    if (!topProfile) return renderEmpty();
+    const photos = getSwipePhotos(topProfile);
+    const ageText = Number(topProfile.age) > 0 ? `, ${topProfile.age}` : '';
+    const locationText = [topProfile.city, topProfile.country].filter(Boolean).join(', ') || 'Remote';
+    const roleText = [
+      (topProfile as any).occupation || 'Builder',
+      (topProfile as any).company ? `@ ${(topProfile as any).company}` : null,
+    ].filter(Boolean).join(' ');
+    const lookingFor = Array.isArray((topProfile as any).lookingFor) ? (topProfile as any).lookingFor : [];
+    const industries = Array.isArray((topProfile as any).industries) ? (topProfile as any).industries : [];
+    const bio = topProfile.bio || 'No bio yet. Open their profile to learn more.';
+    const existingScore = scoreByIdRef.current.get(topProfile.uid);
+    const matchRank = existingScore != null ? { score: existingScore, reason: '' } : (myProfile ? localCommonalityRank(myProfile, [topProfile], 1)[0] : null);
+    const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
+    const compatibilityReason = matchRank?.reason || 'Compatibility based on profile signals';
+    const skills = Array.isArray(topProfile.skills) ? topProfile.skills.slice(0, 8) : [];
+
+    return (
+      <View style={styles.scrollProfileRoot}>
+        <ScrollView style={styles.scrollProfileScroll} contentContainerStyle={styles.scrollProfileContent} showsVerticalScrollIndicator={false}>
+          <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.scrollProfileImg} resizeMode="cover" />
+          <View style={styles.scrollProfileOverlay} />
+          <View style={[styles.scrollProfileInfo, { backgroundColor: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)' }]}>
+            <View style={styles.scrollProfileTop}>
+              <Text style={[styles.scrollProfileName, { color: textColor(isDark) }]}>
+                {displayNameFor(topProfile)}{ageText}
+              </Text>
+              {topProfile.isVerified && <VerifiedBadge size={22} />}
+            </View>
+            <Text style={[styles.scrollProfileRole, { color: textColor(isDark, 'secondary') }]}>{roleText}</Text>
+            <Text style={[styles.scrollProfileLocation, { color: textColor(isDark, 'muted') }]}>{locationText}</Text>
+
+            <View style={styles.scrollProfileCompatRow}>
+              <Zap size={14} color={COLORS.primary} fill={COLORS.primary} />
+              <Text style={[styles.scrollProfileCompatText, { color: COLORS.primary }]}>
+                {compatibility}% Match · {compatibilityReason}
+              </Text>
+            </View>
+
+            <Text style={[styles.scrollProfileSectionLabel, { color: textColor(isDark) }]}>BIO</Text>
+            <Text style={[styles.scrollProfileBio, { color: textColor(isDark, 'secondary') }]}>{bio}</Text>
+
+            {skills.length > 0 && (
+              <>
+                <Text style={[styles.scrollProfileSectionLabel, { color: textColor(isDark) }]}>SKILLS</Text>
+                <View style={styles.scrollProfileTags}>
+                  {skills.map((s: string, i: number) => (
+                    <View key={i} style={[styles.scrollProfileTag, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}>
+                      <Text style={[styles.scrollProfileTagText, { color: textColor(isDark) }]}>{s}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {industries.length > 0 && (
+              <>
+                <Text style={[styles.scrollProfileSectionLabel, { color: textColor(isDark) }]}>INDUSTRIES</Text>
+                <View style={styles.scrollProfileTags}>
+                  {industries.map((s: string, i: number) => (
+                    <View key={i} style={[styles.scrollProfileTag, { backgroundColor: COLORS.primary + '20' }]}>
+                      <Text style={[styles.scrollProfileTagText, { color: COLORS.primary }]}>{s}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {lookingFor.length > 0 && (
+              <>
+                <Text style={[styles.scrollProfileSectionLabel, { color: textColor(isDark) }]}>LOOKING FOR</Text>
+                <View style={styles.scrollProfileTags}>
+                  {lookingFor.map((s: string, i: number) => (
+                    <View key={i} style={[styles.scrollProfileTag, { backgroundColor: '#22C55E' + '20' }]}>
+                      <Text style={[styles.scrollProfileTagText, { color: '#22C55E' }]}>{s}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            <View style={{ height: 100 }} />
+          </View>
+        </ScrollView>
+
+        <View style={[styles.scrollProfileActions, { backgroundColor: isDark ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.95)' }]}>
+          <TouchableOpacity style={[styles.scrollActionBtn, styles.scrollPassBtn]} onPress={() => animateSwipeOut('left')}>
+            <X size={20} color="#FF6B6B" />
+            <Text style={styles.scrollActionLabel}>PASS</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.scrollContactBtn]}
+            disabled={contactBusy || !topProfile || isSyntheticProfile(topProfile)}
+            onPress={handleContactRequest}
+          >
+            <MessageSquare size={16} color="#000" />
+            <Text style={styles.scrollContactText}>
+              {contactBusy ? '...' : connectionRequest?.status === 'approved' ? 'CHAT' : connectionRequest?.status === 'pending' ? 'SENT' : connectionRequest?.status === 'rejected' ? 'NO' : 'CONTACT'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.scrollActionBtn, styles.scrollLikeBtn]} onPress={() => animateSwipeOut('right')}>
+            <Heart size={22} color="#000" fill="#000" />
+            <Text style={[styles.scrollActionLabel, { color: '#000' }]}>LIKE</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.scrollActionBtn, styles.scrollRewindBtn]} onPress={rewindLast}>
+            <RotateCcw size={18} color="#000" />
+            <Text style={[styles.scrollActionLabel, { color: '#000' }]}>REWIND</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   if (!user?.uid) {
     return (
       <ScreenRoot style={[styles.container, isWeb && styles.webRoot, appBackground(isDark)]}>
@@ -1216,7 +1331,7 @@ export default function SwipeScreen({ navigation }: any) {
       )}
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <View style={[styles.webStage, isWideWeb && styles.webStageDesktop, isCompactWeb && styles.webStageMobile]}>
-        <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }, isCompactWeb && styles.compactTopBar]}>
+          <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }, isCompactWeb && styles.compactTopBar]}>
           {navigation?.canGoBack() ? (
             <TouchableOpacity 
               onPress={() => navigation?.goBack?.()} 
@@ -1234,12 +1349,27 @@ export default function SwipeScreen({ navigation }: any) {
             styles.topTitle, 
             isCompactWeb && styles.compactTopTitle,
           ]}>SPARK</Text>
-          <View style={[styles.topBtn, styles.topBtnGhost, isCompactWeb && styles.compactTopBtn]} />
+          <TouchableOpacity
+            style={[styles.modeToggle, { backgroundColor: mode === 'swipe' ? COLORS.primary : 'rgba(255,255,255,0.12)' }]}
+            onPress={() => setMode((m) => m === 'swipe' ? 'scroll' : 'swipe')}
+          >
+            <View style={[styles.modeToggleKnob, mode === 'scroll' && styles.modeToggleKnobRight]}>
+              <Text style={[styles.modeToggleIcon, mode === 'scroll' && styles.modeToggleIconRight]}>
+                {mode === 'swipe' ? '↔' : '↕'}
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         <View style={[styles.stackArea, webDeckStyle, isCompactWeb && styles.compactStackArea]}>
-          {renderPreviewCard()}
-          {renderCard()}
+          {mode === 'swipe' ? (
+            <>
+              {renderPreviewCard()}
+              {renderCard()}
+            </>
+          ) : (
+            renderScrollProfile()
+          )}
         </View>
       </View>
       <PaywallModal
@@ -2026,5 +2156,163 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#000',
     letterSpacing: 1,
+  },
+  modeToggle: {
+    width: 56,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  modeToggleKnob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeToggleKnobRight: {
+    alignSelf: 'flex-end',
+  },
+  modeToggleIcon: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '900',
+  },
+  modeToggleIconRight: {
+    color: '#FFF',
+  },
+  scrollProfileRoot: {
+    flex: 1,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  scrollProfileScroll: {
+    flex: 1,
+  },
+  scrollProfileContent: {
+    flexGrow: 1,
+  },
+  scrollProfileImg: {
+    width: '100%',
+    height: 300,
+  },
+  scrollProfileOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    height: 300,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  scrollProfileInfo: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginTop: -24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
+    gap: 12,
+  },
+  scrollProfileTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  scrollProfileName: {
+    fontSize: 24,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    letterSpacing: -0.5,
+  },
+  scrollProfileRole: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  scrollProfileLocation: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  scrollProfileCompatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  scrollProfileCompatText: {
+    fontSize: 12,
+    fontWeight: '800',
+    flex: 1,
+  },
+  scrollProfileSectionLabel: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginTop: 4,
+  },
+  scrollProfileBio: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  scrollProfileTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  scrollProfileTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  scrollProfileTagText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  scrollProfileActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  scrollActionBtn: {
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  scrollPassBtn: {
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  scrollLikeBtn: {
+    backgroundColor: '#FF3B5C',
+  },
+  scrollRewindBtn: {
+    backgroundColor: COLORS.primary,
+  },
+  scrollContactBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    width: 56,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#FFF',
+  },
+  scrollContactText: {
+    fontSize: 7,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    color: '#000',
+  },
+  scrollActionLabel: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.6)',
+    letterSpacing: 0.8,
   },
 });
