@@ -170,7 +170,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
 
       <View style={[styles.heroCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
         <View style={styles.heroRow}>
-          <TrendingUp size={20} color="#2563EB" />
+          <TrendingUp size={20} color="#FBE618" />
           <Text style={[styles.heroTitle, { color: isDark ? '#FFF' : '#000' }]}>Top builders in your network</Text>
         </View>
         <Text style={styles.heroSub}>
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   rankPill: {
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#2563EB20',
+    backgroundColor: '#FBE61820',
     paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
-    color: '#2563EB',
+    color: '#FBE618',
   },
   scorePill: {
     height: 30,
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 10,
     fontWeight: '900',
-    color: '#2563EB',
+    color: '#FBE618',
   },
   meta: {
     marginTop: 4,

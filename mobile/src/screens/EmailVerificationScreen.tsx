@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   },
   spamNote: {
     marginTop: 12,
-    color: '#2563EB',
+    color: '#FBE618',
     fontSize: 12,
     fontWeight: '900',
     textAlign: 'center',

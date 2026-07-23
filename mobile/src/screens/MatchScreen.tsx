@@ -98,7 +98,7 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
             }
           }}
         >
-          <MessageSquare size={20} color={isDark ? '#FBE618' : '#2563EB'} fill="transparent" />
+          <MessageSquare size={20} color={isDark ? '#FBE618' : '#FBE618'} fill="transparent" />
         </TouchableOpacity>
       </View>
     </View>

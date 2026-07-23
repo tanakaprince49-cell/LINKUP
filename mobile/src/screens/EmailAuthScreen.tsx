@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   forgotText: {
-    color: '#2563EB',
+    color: '#FBE618',
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 1.2,

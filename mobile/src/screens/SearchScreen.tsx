@@ -902,7 +902,7 @@ export default function SearchScreen({ navigation, route }: any) {
             <TouchableOpacity onPress={clearFilters} style={[styles.smallBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
               <Text style={[styles.smallBtnText, { color: isDark ? '#FFF' : '#000' }]}>CLEAR</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setFilterOpen(false)} style={[styles.smallBtn, { backgroundColor: '#2563EB' }]}>
+            <TouchableOpacity onPress={() => setFilterOpen(false)} style={[styles.smallBtn, { backgroundColor: '#FBE618' }]}>
               <Text style={[styles.smallBtnText, { color: '#FFF' }]}>DONE</Text>
             </TouchableOpacity>
           </View>
@@ -1328,7 +1328,7 @@ const styles = StyleSheet.create({
   },
   resultHandle: {
     fontSize: 10,
-    color: '#2563EB',
+    color: '#FBE618',
     fontWeight: '900',
     marginTop: 2,
   },

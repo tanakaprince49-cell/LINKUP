@@ -667,7 +667,7 @@ function ConfettiBurst({ active, width }: { active: boolean; width: number }) {
 
   if (!active) return null;
 
-  const colors = ['#FBE618', '#2563EB', '#22C55E', '#FF4D4D', '#A855F7'];
+  const colors = ['#FBE618', '#0A84FF', '#22C55E', '#FF4D4D', '#A855F7'];
   const safeWidth = Math.max(width || 360, 320);
 
   return (
@@ -762,7 +762,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sourcePill: { borderRadius: 999, backgroundColor: '#2563EB', paddingHorizontal: 12, paddingVertical: 7 },
+  sourcePill: { borderRadius: 999, backgroundColor: '#FBE618', paddingHorizontal: 12, paddingVertical: 7 },
   sourceText: { color: '#FFF', fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
   ideaTitle: { marginTop: 36, fontSize: 34, lineHeight: 40, fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase' },
   ideaDescription: { marginTop: 16, fontSize: 16, lineHeight: 24, fontWeight: '800' },
@@ -789,7 +789,7 @@ const styles = StyleSheet.create({
   skipBadgeText: { color: '#FF4D4D', fontSize: 28, fontWeight: '900' },
   actionRow: { position: 'absolute', bottom: 24, left: 0, right: 0, zIndex: 5, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 24 },
   actionBtn: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#111217', alignItems: 'center', justifyContent: 'center' },
-  likeBtn: { width: 84, height: 84, borderRadius: 42, backgroundColor: '#2563EB', shadowColor: '#2563EB', shadowOpacity: 0.24, shadowRadius: 18, elevation: 8 },
+  likeBtn: { width: 84, height: 84, borderRadius: 42, backgroundColor: '#FBE618', shadowColor: '#FBE618', shadowOpacity: 0.24, shadowRadius: 18, elevation: 8 },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
   emptyTitle: { marginTop: 14, fontSize: 24, fontWeight: '900', fontStyle: 'italic' },
   emptyText: { marginTop: 8, maxWidth: 340, textAlign: 'center', color: '#666', fontSize: 13, lineHeight: 20, fontWeight: '800' },

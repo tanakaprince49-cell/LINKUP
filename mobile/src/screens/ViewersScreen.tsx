@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 10,
-    color: '#2563EB',
+    color: '#FBE618',
     fontWeight: '900',
     marginTop: 4,
     letterSpacing: 0.8,

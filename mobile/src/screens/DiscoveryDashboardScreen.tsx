@@ -266,7 +266,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
             <Text style={styles.opportunityMetaText} numberOfLines={1}>{details.roleNeed}</Text>
           </View>
           <View style={styles.opportunityMeta}>
-            <Briefcase size={12} color="#2563EB" />
+            <Briefcase size={12} color="#FBE618" />
             <Text style={styles.opportunityMetaText} numberOfLines={1}>{details.stage}</Text>
           </View>
           <View style={styles.opportunityMeta}>
@@ -471,7 +471,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           </View>
           <Section
             title="Trending Builders"
-            icon={<TrendingUp size={18} color="#2563EB" />}
+            icon={<TrendingUp size={18} color="#FBE618" />}
             data={trending}
             onViewAll={() => navigation.navigate('TrendingBuilders')}
           />
@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
     height: 30,
     minWidth: 44,
     borderRadius: 15,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#FBE618',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
@@ -608,7 +608,7 @@ const styles = StyleSheet.create({
   radarScoreText: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#FFF',
+    color: '#000',
     letterSpacing: 0.6,
   },
   radarSummary: {
@@ -651,7 +651,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#000',
   },
-  handle: { marginTop: 2, fontSize: 10, color: '#2563EB', fontWeight: '900' },
+  handle: { marginTop: 2, fontSize: 10, color: '#FBE618', fontWeight: '900' },
   meta: { marginTop: 4, fontSize: 10, color: '#666', fontWeight: '900' },
   scorePill: {
     marginTop: 8,
@@ -699,7 +699,7 @@ const styles = StyleSheet.create({
     height: 30,
     minWidth: 46,
     borderRadius: 15,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#FBE618',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
@@ -707,7 +707,7 @@ const styles = StyleSheet.create({
   projectScoreText: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#FFF',
+    color: '#000',
     letterSpacing: 0.6,
   },
   projectSummary: {

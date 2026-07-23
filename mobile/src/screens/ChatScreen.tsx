@@ -900,7 +900,7 @@ export default function ChatScreen({ route, navigation }: any) {
   const otherIsTyping = !!(otherUserId && matchMeta?.typingBy?.[otherUserId]);
   const otherIsOnline = isPresenceOnline(otherUser);
   const headerStatus = otherIsTyping ? 'TYPING...' : (otherIsOnline ? 'ONLINE' : formatLastSeen(otherUser?.lastActiveAt));
-  const headerStatusColor = otherIsTyping ? '#2563EB' : (otherIsOnline ? '#4ADE80' : '#888');
+  const headerStatusColor = otherIsTyping ? '#FBE618' : (otherIsOnline ? '#4ADE80' : '#888');
   const headerAvatarUri = conversationAvatarUri(otherUser?.profilePic);
   const headerInitial = String(otherUser?.displayName || 'L').trim().charAt(0).toUpperCase() || 'L';
   const canOpenOtherProfile = !!otherUserId && otherUserId !== 'undefined';
@@ -1002,7 +1002,7 @@ export default function ChatScreen({ route, navigation }: any) {
         <View style={[styles.inputContainer, liquidGlass(isDark, false), { borderTopColor: 'transparent' }]}>
           {otherIsTyping && (
             <View style={[styles.typingPill, { backgroundColor: isDark ? '#111115' : '#EEF2FF', borderColor: isDark ? '#222226' : '#DBEAFE' }]}>
-              <Text style={[styles.typingText, { color: isDark ? '#FBE618' : '#2563EB' }]}>
+              <Text style={[styles.typingText, { color: isDark ? '#FBE618' : '#FBE618' }]}>
                 {(otherUser?.displayName || 'Builder').split(' ')[0]} is typing...
               </Text>
             </View>
@@ -1034,7 +1034,7 @@ export default function ChatScreen({ route, navigation }: any) {
               setInputText((intro || '').trim());
             }}
           >
-            <Zap size={20} color="#2563EB" fill="#2563EB" />
+            <Zap size={20} color="#FBE618" fill="#FBE618" />
           </TouchableOpacity>
           <TouchableOpacity style={[styles.toolBtn, liquidGlass(isDark, false), mediaBusy && styles.toolBtnDisabled, { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]} onPress={openMediaPicker} disabled={mediaBusy}>
             {mediaBusy ? <ActivityIndicator size="small" color="#666" /> : <Camera size={20} color="#666" />}
@@ -1053,11 +1053,11 @@ export default function ChatScreen({ route, navigation }: any) {
             multiline
           />
           <TouchableOpacity 
-            style={[styles.sendBtn, { opacity: inputText.trim() ? 1 : 0.5, backgroundColor: '#2563EB' }]} 
+            style={[styles.sendBtn, { opacity: inputText.trim() ? 1 : 0.5, backgroundColor: '#FBE618' }]} 
             onPress={handleSend}
             disabled={!inputText.trim()}
           >
-            <Send size={20} color="#FFF" />
+            <Send size={20} color="#000" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

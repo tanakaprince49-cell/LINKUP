@@ -126,7 +126,7 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
 
           <View style={styles.grid}>
             <InfoTile icon={<Target size={16} color="#FBE618" />} label="Looking For" value={details.roleNeed} isDark={isDark} />
-            <InfoTile icon={<Briefcase size={16} color="#2563EB" />} label="Stage" value={details.stage} isDark={isDark} />
+            <InfoTile icon={<Briefcase size={16} color="#FBE618" />} label="Stage" value={details.stage} isDark={isDark} />
             <InfoTile icon={<Clock size={16} color="#4ADE80" />} label="Availability" value={details.availability} isDark={isDark} />
             <InfoTile icon={<MapPin size={16} color="#EF4444" />} label="Location" value={details.location} isDark={isDark} />
           </View>
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#000',
   },
-  handle: { marginTop: 2, fontSize: 11, fontWeight: '900', color: '#2563EB' },
+  handle: { marginTop: 2, fontSize: 11, fontWeight: '900', color: '#FBE618' },
   scorePill: { width: 48, height: 48, borderRadius: 18, backgroundColor: '#FBE618', alignItems: 'center', justifyContent: 'center' },
   scoreText: { fontSize: 16, fontWeight: '900', color: '#000' },
   title: { marginTop: 18, fontSize: 24, lineHeight: 29, fontWeight: '900', letterSpacing: 0.5 },

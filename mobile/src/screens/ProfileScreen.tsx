@@ -297,12 +297,12 @@ const PreferenceSwitch = ({
   isDark: boolean;
 }) => (
   <View style={[styles.switchWrap, disabled ? { opacity: 0.55 } : null]}>
-    <Text style={[styles.switchState, { color: value ? '#2563EB' : '#777' }]}>{value ? 'ON' : 'OFF'}</Text>
+    <Text style={[styles.switchState, { color: value ? '#FBE618' : '#777' }]}>{value ? 'ON' : 'OFF'}</Text>
     <Switch
       value={value}
       onValueChange={onValueChange}
       disabled={!!disabled}
-      trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#2563EB' }}
+      trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#FBE618' }}
       ios_backgroundColor={isDark ? '#2A2A30' : '#D1D5DB'}
       thumbColor="#FFF"
     />
@@ -2125,7 +2125,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Switch
                     value={!!editData?.remoteOnly}
                     onValueChange={(v) => setEditField('remoteOnly', v)}
-                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#2563EB' }}
+                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#FBE618' }}
                     thumbColor="#FFF"
                   />
                 </View>
@@ -2137,7 +2137,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Switch
                     value={!!editData?.willingToRelocate}
                     onValueChange={(v) => setEditField('willingToRelocate', v)}
-                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#2563EB' }}
+                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#FBE618' }}
                     thumbColor="#FFF"
                   />
                 </View>
@@ -2364,7 +2364,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               {!isViewingOther && !!profileLink && (
                 <View style={[styles.profileLinkCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
                   <View style={styles.profileLinkHeader}>
-                    <SafeIcon name="Link" size={18} color="#2563EB" />
+                    <SafeIcon name="Link" size={18} color="#FBE618" />
                     <View style={styles.profileLinkCopy}>
                     <Text style={styles.profileLinkLabel}>YOUR LINKUP LINK</Text>
                     <Text
@@ -2529,8 +2529,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                       {[...(Array.isArray(idea?.lookingFor) ? idea.lookingFor : []), ...(Array.isArray(idea?.tags) ? idea.tags : [])]
                         .slice(0, 6)
                         .map((tag: string, tagIndex: number) => (
-                          <View key={`${idea?.id || index}-${tag}-${tagIndex}`} style={styles.chip}>
-                            <Text style={styles.chipText}>{String(tag).toUpperCase()}</Text>
+                          <View key={`${idea?.id || index}-${tag}-${tagIndex}`} style={[styles.chip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+                            <Text style={[styles.chipText, { color: textColor(isDark) }]}>{String(tag).toUpperCase()}</Text>
                           </View>
                         ))}
                     </View>
@@ -2799,7 +2799,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               onPress={() => setSettingsExpanded(true)}
               activeOpacity={0.86}
             >
-              <SafeIcon name="Settings" size={18} color="#2563EB" />
+              <SafeIcon name="Settings" size={18} color="#FBE618" />
               <Text style={[styles.lazyPanelText, { color: isDark ? '#FFF' : '#000' }]}>OPEN SETTINGS</Text>
             </TouchableOpacity>
           ) : (
@@ -2822,7 +2822,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
           <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
-              <SafeIcon name="Globe2" size={18} color="#2563EB" />
+              <SafeIcon name="Globe2" size={18} color="#FBE618" />
               <View style={styles.prefCopy}>
                 <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Public Discovery</Text>
                 <Text style={styles.prefHelp}>When on, your profile can appear in swipe, search, and active opportunity discovery.</Text>
@@ -2974,7 +2974,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
           <View style={[styles.accountSecurityCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
             <View style={styles.accountSecurityHeader}>
-              <SafeIcon name="MailCheck" size={19} color="#2563EB" />
+              <SafeIcon name="MailCheck" size={19} color="#FBE618" />
               <View style={styles.prefCopy}>
                 <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Email Security</Text>
                 <Text style={styles.prefHelp}>
@@ -4001,13 +4001,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
     minHeight: 46,
     borderRadius: 16,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#FBE618',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
   },
   emailChangeText: {
-    color: '#FFF',
+    color: '#000',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
@@ -4143,7 +4143,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 1.5,
-    color: '#2563EB',
+    color: '#FBE618',
   },
   analysisText: {
     marginTop: 4,
@@ -4197,13 +4197,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2563EB14',
+    backgroundColor: '#FBE61814',
   },
   profileLinkAction: {
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
-    color: '#2563EB',
+    color: '#FBE618',
   },
   projectEditCard: {
     width: '100%',
@@ -4224,7 +4224,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 1.5,
-    color: '#2563EB',
+    color: '#FBE618',
   },
   projectAddButton: {
     flexDirection: 'row',

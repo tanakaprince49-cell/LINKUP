@@ -239,7 +239,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
             </Text>
           </View>
           <View style={styles.infoItem}>
-            <Search size={12} color="#2563EB" />
+            <Search size={12} color="#FBE618" />
             <Text style={styles.infoText} numberOfLines={1}>
               {(item as any).startupStage || 'Exploring'}
             </Text>
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 10,
     fontWeight: '900',
-    color: '#2563EB',
+    color: '#FBE618',
   },
   meta: {
     marginTop: 4,

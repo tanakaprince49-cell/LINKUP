@@ -273,7 +273,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
                 onChangeText={setNewComment}
               />
               <TouchableOpacity style={styles.sendBtn} onPress={handlePostComment}>
-                <SafeIcon name="Send" size={20} color="#FFF" />
+                <SafeIcon name="Send" size={20} color="#000" />
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
@@ -730,7 +730,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 15,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#FBE618',
     alignItems: 'center',
     justifyContent: 'center',
   },

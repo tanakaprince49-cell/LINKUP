@@ -103,7 +103,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
             <Text style={styles.metaText} numberOfLines={1}>{details.roleNeed}</Text>
           </View>
           <View style={styles.metaItem}>
-            <Briefcase size={12} color="#2563EB" />
+            <Briefcase size={12} color="#FBE618" />
             <Text style={styles.metaText} numberOfLines={1}>{details.stage}</Text>
           </View>
           <View style={styles.metaItem}>
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   handle: {
     marginTop: 2,
     fontSize: 10,
-    color: '#2563EB',
+    color: '#FBE618',
     fontWeight: '900',
   },
   livePill: {
