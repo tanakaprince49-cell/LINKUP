@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -320,7 +320,11 @@ export default function SwipeScreen({ navigation }: any) {
   const [scrollIndex, setScrollIndex] = useState(0);
   const scrollPosition = useRef(new Animated.Value(0)).current;
   const isScrollingRef = useRef(false);
-  const scrollProfiles = useRef<UserProfile[]>([]);
+  const scrollProfilesCache = useMemo(() => profiles.filter(Boolean).slice(0, 12), [profiles]);
+  const goToNextRef = useRef<() => void>(() => {});
+  const goToPrevRef = useRef<() => void>(() => {});
+  const resetScrollRef = useRef<() => void>(() => {});
+  const prevScrollDirRef = useRef<'up' | 'down'>('up');
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedItem?: UserProfile) => void>(() => {});
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const resetSwipePositionRef = useRef<() => void>(() => {});
@@ -1185,18 +1189,15 @@ export default function SwipeScreen({ navigation }: any) {
     );
   };
 
-  const scrollProfilesCache = useMemo(() => profiles.filter(Boolean).slice(0, 12), [profiles]);
-
   useEffect(() => {
     if (mode === 'scroll' && scrollIndex >= scrollProfilesCache.length) {
       setScrollIndex(Math.max(0, scrollProfilesCache.length - 1));
     }
   }, [mode, scrollIndex, scrollProfilesCache.length]);
 
-  const goToNextProfile = useCallback(() => {
+  const goToNextProfile = () => {
     if (scrollIndex < scrollProfilesCache.length - 1) {
       const nextIdx = scrollIndex + 1;
-      const nextUid = scrollProfilesCache[nextIdx]?.uid;
       Animated.timing(scrollPosition, {
         toValue: -Dimensions.get('window').height,
         duration: 250,
@@ -1205,17 +1206,13 @@ export default function SwipeScreen({ navigation }: any) {
         scrollPosition.setValue(0);
         setScrollIndex(nextIdx);
         isScrollingRef.current = false;
-        if (nextUid && nextUid === topProfile?.uid) {
-          const swipeDir = prevScrollDirRef.current === 'up' ? 'right' : 'left';
-          animateSwipeOutRef.current(swipeDir);
-        }
       });
     } else {
-      resetScrollPosition();
+      resetScrollRef.current();
     }
-  }, [scrollIndex, scrollProfilesCache.length, topProfile?.uid]);
+  };
 
-  const goToPrevProfile = useCallback(() => {
+  const goToPrevProfile = () => {
     if (scrollIndex > 0) {
       const prevIdx = scrollIndex - 1;
       Animated.timing(scrollPosition, {
@@ -1228,11 +1225,11 @@ export default function SwipeScreen({ navigation }: any) {
         isScrollingRef.current = false;
       });
     } else {
-      resetScrollPosition();
+      resetScrollRef.current();
     }
-  }, [scrollIndex]);
+  };
 
-  const resetScrollPosition = useCallback(() => {
+  const resetScrollPosition = () => {
     Animated.spring(scrollPosition, {
       toValue: 0,
       friction: 7,
@@ -1240,9 +1237,11 @@ export default function SwipeScreen({ navigation }: any) {
     }).start(() => {
       isScrollingRef.current = false;
     });
-  }, [scrollPosition]);
+  };
 
-  const prevScrollDirRef = useRef<'up' | 'down'>('up');
+  goToNextRef.current = goToNextProfile;
+  goToPrevRef.current = goToPrevProfile;
+  resetScrollRef.current = resetScrollPosition;
 
   const verticalPanResponder = useRef(
     PanResponder.create({
@@ -1265,16 +1264,16 @@ export default function SwipeScreen({ navigation }: any) {
         if (gs.dy < -verticalSwipeThreshold && scrollIndex < scrollProfilesCache.length - 1) {
           prevScrollDirRef.current = 'up';
           isScrollingRef.current = true;
-          goToNextProfile();
+          goToNextRef.current();
         } else if (gs.dy > verticalSwipeThreshold && scrollIndex > 0) {
           prevScrollDirRef.current = 'down';
           isScrollingRef.current = true;
-          goToPrevProfile();
+          goToPrevRef.current();
         } else {
-          resetScrollPosition();
+          resetScrollRef.current();
         }
       },
-      onPanResponderTerminate: () => resetScrollPosition(),
+      onPanResponderTerminate: () => resetScrollRef.current(),
       onPanResponderTerminationRequest: () => false,
     })
   ).current;
