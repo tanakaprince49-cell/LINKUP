@@ -3,8 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
-import { RotateCcw, Share2 } from 'lucide-react-native';
-import GameChallengeModal from '../components/GameChallengeModal';
+import { RotateCcw } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_SIZE = (SCREEN_WIDTH - 80) / 4;
@@ -36,7 +35,6 @@ const FounderFlipScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [matchedPairs, setMatchedPairs] = useState(0);
   const [moves, setMoves] = useState(0);
   const [gameOver, setGameOver] = useState(false);
-  const [challengeVisible, setChallengeVisible] = useState(false);
   const lockRef = useRef(false);
 
   const initGame = useCallback(() => {
@@ -105,10 +103,6 @@ const FounderFlipScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     }
   }, [cards, flippedIndices]);
 
-  const challengeFriend = useCallback(() => {
-    setChallengeVisible(true);
-  }, []);
-
   return (
     <View style={{ flex: 1 }}>
       <SafeAreaView style={[styles.root, appBackground(isDark)]} edges={['top']}>
@@ -162,27 +156,11 @@ const FounderFlipScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               <RotateCcw size={16} color="#000" />
               <Text style={styles.gameOverBtnText}>Play Again</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.gameOverBtn, { backgroundColor: '#FFF' }]} onPress={challengeFriend}>
-              <Share2 size={16} color="#000" />
-              <Text style={[styles.gameOverBtnText, { color: '#000' }]}>Challenge</Text>
-            </TouchableOpacity>
           </View>
         </View>
       )}
 
-        {!gameOver && (
-          <TouchableOpacity style={styles.challengeBtn} onPress={challengeFriend}>
-            <Share2 size={14} color="#000" />
-            <Text style={styles.challengeText}>Challenge a Connection</Text>
-          </TouchableOpacity>
-        )}
       </SafeAreaView>
-      <GameChallengeModal
-        visible={challengeVisible}
-        gameType="founderflip"
-        gameLabel="Founder Flip"
-        onClose={() => setChallengeVisible(false)}
-      />
     </View>
   );
 };
@@ -252,18 +230,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.1)',
   },
   gameOverBtnText: { fontSize: 12, fontWeight: '900', color: '#000' },
-  challengeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    marginTop: 12,
-  },
-  challengeText: { fontSize: 12, fontWeight: '900', color: '#000', letterSpacing: 0.5 },
 });
 
 export default FounderFlipScreen;

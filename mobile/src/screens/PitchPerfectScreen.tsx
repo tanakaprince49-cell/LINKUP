@@ -1,13 +1,12 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Alert,
-  Share,
+  View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions,
+  Share, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
-import { RefreshCw, Heart, Share2, Zap, Star, Swords } from 'lucide-react-native';
-import GameChallengeModal from '../components/GameChallengeModal';
+import { RefreshCw, Heart, Share2, Zap, Lightbulb, Trophy } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -37,17 +36,16 @@ const DESCRIPTIONS = [
 interface Pitch {
   name: string;
   description: string;
-  rating: number;
 }
 
 const PitchPerfectScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [pitch, setPitch] = useState<Pitch | null>(null);
-  const [saved, setSaved] = useState<string[]>([]);
+  const [generatedCount, setGeneratedCount] = useState(0);
   const [faves, setFaves] = useState<string[]>([]);
-  const [challengeVisible, setChallengeVisible] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const generatePitch = useCallback(() => {
     const p1 = PREFIXES[Math.floor(Math.random() * PREFIXES.length)];
@@ -61,20 +59,23 @@ const PitchPerfectScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       `${p2}${p1}`,
     ];
     const name = nameOptions[Math.floor(Math.random() * nameOptions.length)];
-    setPitch({ name, description: d, rating: 0 });
+    setPitch({ name, description: d });
+    setGeneratedCount((c) => c + 1);
 
-    Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.95, duration: 80, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 1, duration: 80, useNativeDriver: true }),
+    fadeAnim.setValue(0);
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 0.92, duration: 60, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
+      ]),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, [scaleAnim]);
+  }, [scaleAnim, fadeAnim]);
 
   const savePitch = useCallback(() => {
-    if (!pitch) return;
-    setSaved((prev) => [...prev, pitch.name]);
-    setFaves((prev) => [...prev, pitch.name]);
-    setPitch((prev) => prev ? { ...prev, rating: 1 } : null);
-  }, [pitch]);
+    if (!pitch || faves.includes(pitch.name)) return;
+    setFaves((prev) => [pitch.name, ...prev]);
+  }, [pitch, faves]);
 
   const sharePitch = useCallback(async () => {
     if (!pitch) return;
@@ -91,92 +92,100 @@ const PitchPerfectScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={[styles.backText, { color: textColor(isDark) }]}>← Back</Text>
         </TouchableOpacity>
-        <Text style={[styles.title, { color: textColor(isDark) }]}>Pitch Perfect</Text>
-        <View style={styles.headerRight} />
-      </View>
-
-      <View style={styles.subtitleRow}>
-        <Zap size={14} color={COLORS.primary} />
-        <Text style={[styles.subtitle, { color: textColor(isDark, 'muted') }]}>
-          Random startup ideas, infinite possibilities
-        </Text>
-      </View>
-
-      {!pitch && (
-        <View style={styles.placeholder}>
-          <Text style={[styles.placeholderEmoji]}>💭</Text>
-          <Text style={[styles.placeholderText, { color: textColor(isDark, 'muted') }]}>
-            Tap generate to create your next unicorn
-          </Text>
+        <View style={styles.headerCenter}>
+          <Lightbulb size={16} color={COLORS.primary} />
+          <Text style={[styles.title, { color: textColor(isDark) }]}>Pitch Perfect</Text>
         </View>
-      )}
-
-      {pitch && (
-        <Animated.View style={[styles.pitchCard, { transform: [{ scale: scaleAnim }], backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-          <Text style={styles.pitchName}>{pitch.name}</Text>
-          <View style={styles.divider} />
-          <Text style={[styles.pitchDesc, { color: textColor(isDark, 'muted') }]}>{pitch.description}</Text>
-          <View style={styles.pitchRating}>
-            {[1, 2, 3, 4, 5].map((r) => (
-              <Star
-                key={r}
-                size={18}
-                color={COLORS.primary}
-                fill={pitch.rating >= r ? COLORS.primary : 'transparent'}
-              />
-            ))}
-          </View>
-        </Animated.View>
-      )}
-
-      <View style={styles.actions}>
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]} onPress={generatePitch}>
+        <TouchableOpacity style={styles.headerRight} onPress={generatePitch}>
           <RefreshCw size={18} color={COLORS.primary} />
-          <Text style={styles.actionLabel}>Generate</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.faveBtn]}
-          onPress={savePitch}
-          disabled={!pitch}
-        >
-          <Heart size={18} color="#FFF" />
-          <Text style={[styles.actionLabel, { color: '#FFF' }]}>Fave</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: '#FFF' }]}
-          onPress={sharePitch}
-          disabled={!pitch}
-        >
-          <Share2 size={18} color="#000" />
-          <Text style={[styles.actionLabel, { color: '#000' }]}>Share</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: COLORS.primary }]}
-          onPress={() => setChallengeVisible(true)}
-        >
-          <Swords size={18} color="#000" />
-          <Text style={[styles.actionLabel, { color: '#000' }]}>Challenge</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.statsRow}>
         <View style={[styles.statChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-          <Text style={[styles.statText, { color: textColor(isDark) }]}>
-            Ideas generated: {saved.length}
-          </Text>
+          <Zap size={12} color={COLORS.primary} />
+          <Text style={[styles.statText, { color: textColor(isDark) }]}>{generatedCount} generated</Text>
         </View>
         <View style={[styles.statChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-          <Text style={[styles.statText, { color: textColor(isDark) }]}>
-            Faves: {faves.length}
-          </Text>
+          <Heart size={12} color="#FF3B5C" />
+          <Text style={[styles.statText, { color: textColor(isDark) }]}>{faves.length} faves</Text>
         </View>
       </View>
-      <GameChallengeModal
-        visible={challengeVisible}
-        gameType="pitchperfect"
-        gameLabel="Pitch Perfect"
-        onClose={() => setChallengeVisible(false)}
-      />
+
+      {!pitch && (
+        <View style={styles.heroEmpty}>
+          <View style={styles.heroEmptyIconWrap}>
+            <Lightbulb size={40} color={COLORS.primary} />
+          </View>
+          <Text style={[styles.heroEmptyTitle, { color: textColor(isDark) }]}>
+            Your Next Big Idea
+          </Text>
+          <Text style={[styles.heroEmptySub, { color: textColor(isDark, 'muted') }]}>
+            Tap the spark below to generate a random startup name and pitch
+          </Text>
+          <TouchableOpacity style={styles.bigGenBtn} onPress={generatePitch} activeOpacity={0.8}>
+            <Zap size={28} color="#000" fill={COLORS.primary} />
+            <Text style={styles.bigGenText}>Generate Idea</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {pitch && (
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Animated.View
+            style={[
+              styles.heroCard,
+              {
+                transform: [{ scale: scaleAnim }],
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+              },
+            ]}
+          >
+            <View style={styles.heroBadge}>
+              <Zap size={12} color="#000" />
+              <Text style={styles.heroBadgeText}>STARTUP IDEA</Text>
+            </View>
+            <Text style={styles.heroName}>{pitch.name}</Text>
+            <View style={styles.heroDivider} />
+            <Text style={[styles.heroDesc, { color: textColor(isDark, 'muted') }]}>
+              {pitch.description}
+            </Text>
+          </Animated.View>
+
+          <View style={styles.actionBar}>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]} onPress={generatePitch}>
+              <RefreshCw size={16} color={COLORS.primary} />
+              <Text style={[styles.actionLabel, { color: textColor(isDark) }]}>New</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, faves.includes(pitch.name) ? { backgroundColor: '#FF3B5C' } : { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
+              onPress={savePitch}
+            >
+              <Heart size={16} color={faves.includes(pitch.name) ? '#FFF' : '#FF3B5C'} fill={faves.includes(pitch.name) ? '#FFF' : 'transparent'} />
+              <Text style={[styles.actionLabel, { color: faves.includes(pitch.name) ? '#FFF' : textColor(isDark) }]}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FFF' }]} onPress={sharePitch}>
+              <Share2 size={16} color="#000" />
+              <Text style={[styles.actionLabel, { color: '#000' }]}>Share</Text>
+            </TouchableOpacity>
+          </View>
+
+          {faves.length > 0 && (
+            <View style={styles.favesSection}>
+              <View style={styles.favesHeader}>
+                <Trophy size={14} color={COLORS.primary} />
+                <Text style={[styles.favesTitle, { color: textColor(isDark) }]}>Saved Ideas</Text>
+              </View>
+              {faves.slice(0, 5).map((name, i) => (
+                <View key={i} style={[styles.faveRow, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)' }]}>
+                  <Text style={[styles.faveIndex, { color: textColor(isDark, 'muted') }]}>#{i + 1}</Text>
+                  <Text style={[styles.faveName, { color: textColor(isDark) }]} numberOfLines={1}>{name}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -192,73 +201,143 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 4 },
   backText: { fontSize: 16, fontWeight: '800' },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   title: { fontSize: 20, fontWeight: '900', fontStyle: 'italic', letterSpacing: -0.5 },
-  headerRight: { width: 60 },
-  subtitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginBottom: 20,
+  headerRight: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(251,230,24,0.15)',
   },
-  subtitle: { fontSize: 12, fontWeight: '600', letterSpacing: 0.3 },
-  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  placeholderEmoji: { fontSize: 48 },
-  placeholderText: { fontSize: 13, fontWeight: '600', maxWidth: 200, textAlign: 'center' },
-  pitchCard: {
-    marginHorizontal: 24,
-    borderRadius: 24,
-    padding: 28,
-    alignItems: 'center',
-    gap: 16,
-  },
-  pitchName: {
-    fontSize: 32,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    letterSpacing: -1,
-    color: COLORS.primary,
-    textAlign: 'center',
-  },
-  divider: {
-    width: 40,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: COLORS.primary,
-    opacity: 0.5,
-  },
-  pitchDesc: { fontSize: 14, fontWeight: '600', textAlign: 'center', lineHeight: 20 },
-  pitchRating: { flexDirection: 'row', gap: 4 },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 12,
-    marginTop: 24,
-    marginBottom: 16,
-    paddingHorizontal: 24,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 16,
-  },
-  faveBtn: { backgroundColor: '#FF3B5C' },
-  actionLabel: { fontSize: 11, fontWeight: '900', color: COLORS.primary, letterSpacing: 0.3 },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 10,
-    marginBottom: 20,
+    gap: 8,
+    marginBottom: 16,
   },
   statChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
   },
   statText: { fontSize: 11, fontWeight: '700' },
+  heroEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+    gap: 12,
+  },
+  heroEmptyIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(251,230,24,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  heroEmptyTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  heroEmptySub: { fontSize: 13, fontWeight: '600', textAlign: 'center', lineHeight: 18, maxWidth: 280 },
+  bigGenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 100,
+    marginTop: 12,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  bigGenText: { fontSize: 16, fontWeight: '900', color: '#000', letterSpacing: 0.5 },
+  content: {
+    paddingBottom: 40,
+    alignItems: 'center',
+  },
+  heroCard: {
+    marginHorizontal: 24,
+    borderRadius: 28,
+    padding: 32,
+    alignItems: 'center',
+    gap: 14,
+    width: SCREEN_WIDTH - 48,
+  },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  heroBadgeText: { fontSize: 10, fontWeight: '900', color: '#000', letterSpacing: 1 },
+  heroName: {
+    fontSize: 36,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    letterSpacing: -1.5,
+    color: COLORS.primary,
+    textAlign: 'center',
+  },
+  heroDivider: {
+    width: 32,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: COLORS.primary,
+    opacity: 0.4,
+  },
+  heroDesc: { fontSize: 14, fontWeight: '600', textAlign: 'center', lineHeight: 20 },
+  actionBar: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 20,
+    marginBottom: 24,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 100,
+  },
+  actionLabel: { fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
+  favesSection: {
+    width: SCREEN_WIDTH - 48,
+    marginTop: 4,
+  },
+  favesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  favesTitle: { fontSize: 14, fontWeight: '900' },
+  faveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 6,
+  },
+  faveIndex: { fontSize: 12, fontWeight: '700', width: 28 },
+  faveName: { fontSize: 13, fontWeight: '800', flex: 1 },
 });
 
 export default PitchPerfectScreen;

@@ -1161,20 +1161,12 @@ export default function SwipeScreen({ navigation }: any) {
     const idx = scrollIndex;
     if (idx < feed.length - 1) {
       const screenH = Dimensions.get('window').height;
-      isScrollingRef.current = true;
-      Animated.timing(scrollPosition, {
-        toValue: -screenH,
-        duration: 250,
-        useNativeDriver: false,
-      }).start(() => {
-        scrollPosition.setValue(0);
-        setScrollIndex(idx + 1);
-        isScrollingRef.current = false;
-      });
-    } else {
+      scrollPosition.setValue(screenH);
+      setScrollIndex(idx + 1);
+      isScrollingRef.current = false;
       Animated.spring(scrollPosition, {
-        toValue: 0, friction: 7, useNativeDriver: false,
-      }).start(() => { isScrollingRef.current = false; });
+        toValue: 0, friction: 8, useNativeDriver: false,
+      }).start();
     }
   };
 
@@ -1182,20 +1174,12 @@ export default function SwipeScreen({ navigation }: any) {
     const idx = scrollIndex;
     if (idx > 0) {
       const screenH = Dimensions.get('window').height;
-      isScrollingRef.current = true;
-      Animated.timing(scrollPosition, {
-        toValue: screenH,
-        duration: 250,
-        useNativeDriver: false,
-      }).start(() => {
-        scrollPosition.setValue(0);
-        setScrollIndex(idx - 1);
-        isScrollingRef.current = false;
-      });
-    } else {
+      scrollPosition.setValue(-screenH);
+      setScrollIndex(idx - 1);
+      isScrollingRef.current = false;
       Animated.spring(scrollPosition, {
-        toValue: 0, friction: 7, useNativeDriver: false,
-      }).start(() => { isScrollingRef.current = false; });
+        toValue: 0, friction: 8, useNativeDriver: false,
+      }).start();
     }
   };
 
