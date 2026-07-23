@@ -321,12 +321,9 @@ export default function SwipeScreen({ navigation }: any) {
   const scrollPosition = useRef(new Animated.Value(0)).current;
   const isScrollingRef = useRef(false);
   const scrollProfilesCache = useMemo(() => profiles.filter(Boolean).slice(0, 12), [profiles]);
-  const goToNextRef = useRef<() => void>(() => {});
-  const goToPrevRef = useRef<() => void>(() => {});
-  const resetScrollRef = useRef<() => void>(() => {});
+  const scrollTouchStartY = useRef(0);
+  const scrollTouchStartPos = useRef(0);
   const prevScrollDirRef = useRef<'up' | 'down'>('up');
-  const scrollIdxRef = useRef(0);
-  const scrollCacheRef = useRef<UserProfile[]>([]);
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedItem?: UserProfile) => void>(() => {});
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const resetSwipePositionRef = useRef<() => void>(() => {});
@@ -345,7 +342,6 @@ export default function SwipeScreen({ navigation }: any) {
   const deckHeight = isWeb ? safeViewportHeight : undefined;
   const motionWidth = Math.max(deckWidth ?? safeViewportWidth, width);
   const swipeThreshold = Math.min(170, Math.max(92, (deckWidth ?? safeViewportWidth) * 0.27));
-  const verticalSwipeThreshold = 80;
   const deckExitDistance = Math.max(deckWidth ?? safeViewportWidth, 360) + 190;
   const webDeckStyle =
     isWeb && deckWidth && deckHeight
@@ -1160,88 +1156,73 @@ export default function SwipeScreen({ navigation }: any) {
     }
   }, [mode, scrollProfilesCache.length]);
 
-  useEffect(() => {
-    scrollIdxRef.current = scrollIndex;
-  }, [scrollIndex]);
-
-  useEffect(() => {
-    scrollCacheRef.current = scrollProfilesCache;
-  }, [scrollProfilesCache]);
-
   const goToNextProfile = () => {
-    const idx = scrollIdxRef.current;
-    if (idx < scrollProfilesCache.length - 1) {
+    const feed = scrollProfilesCache;
+    const idx = scrollIndex;
+    if (idx < feed.length - 1) {
       scrollPosition.setValue(0);
       setScrollIndex(idx + 1);
       isScrollingRef.current = false;
     } else {
-      resetScrollRef.current();
+      Animated.spring(scrollPosition, {
+        toValue: 0, friction: 7, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+      }).start(() => { isScrollingRef.current = false; });
     }
   };
 
   const goToPrevProfile = () => {
-    const idx = scrollIdxRef.current;
+    const idx = scrollIndex;
     if (idx > 0) {
       scrollPosition.setValue(0);
       setScrollIndex(idx - 1);
       isScrollingRef.current = false;
     } else {
-      resetScrollRef.current();
+      Animated.spring(scrollPosition, {
+        toValue: 0, friction: 7, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+      }).start(() => { isScrollingRef.current = false; });
     }
   };
 
-  const resetScrollPosition = () => {
-    Animated.spring(scrollPosition, {
-      toValue: 0,
-      friction: 7,
-      useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
-    }).start(() => {
-      isScrollingRef.current = false;
-    });
+  const handleScrollTouchStart = (e: any) => {
+    if (isScrollingRef.current) return;
+    scrollTouchStartY.current = e.nativeEvent.pageY;
+    scrollTouchStartPos.current = (scrollPosition as any).__getValue();
   };
 
-  goToNextRef.current = goToNextProfile;
-  goToPrevRef.current = goToPrevProfile;
-  resetScrollRef.current = resetScrollPosition;
+  const handleScrollTouchMove = (e: any) => {
+    if (isScrollingRef.current) return;
+    const dy = e.nativeEvent.pageY - scrollTouchStartY.current;
+    const limited = dy * 0.6;
+    const idx = scrollIndex;
+    const len = scrollProfilesCache.length;
+    const basePos = scrollTouchStartPos.current;
+    if (len === 0) return;
+    if ((limited > 0 && idx === 0) || (limited < 0 && idx === len - 1)) {
+      scrollPosition.setValue(basePos + limited * 0.25);
+    } else {
+      scrollPosition.setValue(basePos + limited);
+    }
+  };
 
-  const verticalPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponderCapture: (_evt, gs) =>
-        !isScrollingRef.current && Math.abs(gs.dy) > 14 && Math.abs(gs.dy) > Math.abs(gs.dx) * 1.25,
-      onMoveShouldSetPanResponder: (_evt, gs) =>
-        !isScrollingRef.current && Math.abs(gs.dy) > 14 && Math.abs(gs.dy) > Math.abs(gs.dx) * 1.25,
-      onPanResponderMove: (_evt, gs) => {
-        if (isScrollingRef.current) return;
-        const limited = gs.dy * 0.6;
-        const idx = scrollIdxRef.current;
-        const len = scrollCacheRef.current.length;
-        if ((limited > 0 && idx === 0) || (limited < 0 && idx === len - 1)) {
-          scrollPosition.setValue(limited * 0.25);
-        } else {
-          scrollPosition.setValue(limited);
-        }
-      },
-      onPanResponderRelease: (_evt, gs) => {
-        if (isScrollingRef.current) return;
-        const idx = scrollIdxRef.current;
-        const len = scrollCacheRef.current.length;
-        if (gs.dy < -verticalSwipeThreshold && idx < len - 1) {
-          prevScrollDirRef.current = 'up';
-          isScrollingRef.current = true;
-          goToNextRef.current();
-        } else if (gs.dy > verticalSwipeThreshold && idx > 0) {
-          prevScrollDirRef.current = 'down';
-          isScrollingRef.current = true;
-          goToPrevRef.current();
-        } else {
-          resetScrollRef.current();
-        }
-      },
-      onPanResponderTerminate: () => resetScrollRef.current(),
-      onPanResponderTerminationRequest: () => false,
-    })
-  ).current;
+  const handleScrollTouchEnd = (e: any) => {
+    if (isScrollingRef.current) return;
+    const dy = e.nativeEvent.pageY - scrollTouchStartY.current;
+    const idx = scrollIndex;
+    const len = scrollProfilesCache.length;
+    if (dy < -80 && idx < len - 1) {
+      prevScrollDirRef.current = 'up';
+      isScrollingRef.current = true;
+      goToNextProfile();
+    } else if (dy > 80 && idx > 0) {
+      prevScrollDirRef.current = 'down';
+      isScrollingRef.current = true;
+      goToPrevProfile();
+    } else {
+      Animated.spring(scrollPosition, {
+        toValue: scrollTouchStartPos.current, friction: 7, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+      }).start(() => { isScrollingRef.current = false; });
+    }
+  };
 
   const renderScrollProfile = () => {
     const feed = scrollProfilesCache;
@@ -1264,7 +1245,9 @@ export default function SwipeScreen({ navigation }: any) {
       <View style={styles.scrollRoot}>
         <Animated.View
           style={[styles.scrollCard, { transform: [{ translateY: scrollPosition }] }]}
-          {...verticalPanResponder.panHandlers}
+          onTouchStart={handleScrollTouchStart}
+          onTouchMove={handleScrollTouchMove}
+          onTouchEnd={handleScrollTouchEnd}
         >
           <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.scrollCardImg} resizeMode="cover" />
           <View style={styles.scrollCardOverlay} />
