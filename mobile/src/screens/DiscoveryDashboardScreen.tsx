@@ -11,7 +11,7 @@ import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } fro
 import { activeOpportunityScore, displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb } from 'lucide-react-native';
+import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star } from 'lucide-react-native';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { IS_LOW_END_ANDROID, MOBILE_HORIZONTAL_CARD_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
@@ -73,7 +73,7 @@ const writeCachedDashboardPeople = async (uid: string, people: UserProfile[]) =>
   }
 };
 
-export default function DiscoveryDashboardScreen({ navigation }: any) {
+function DiscoveryDashboardScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
   const { theme } = useTheme();
   const isFocused = useIsFocused();
@@ -209,7 +209,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
     return (
       <TouchableOpacity
         onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: score, compatibilityReason: match?.reason || '' })}
-        style={[styles.card, liquidGlass(isDark, false)]}
+        style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}
       >
         <Image
           source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }}
@@ -220,11 +220,11 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
             <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>
               {displayNameFor(item)}
             </Text>
-            {item.isVerified && <VerifiedBadge size={20} />}
+            {item.isVerified && <VerifiedBadge size={18} />}
           </View>
-          <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
-          <Text style={styles.meta} numberOfLines={1}>
-            {(item as any).occupation || 'Builder'} - {(item.city || item.country) ? [item.city, item.country].filter(Boolean).join(', ') : 'Remote'}
+          <Text style={[styles.handle, { color: COLORS.primary }]} numberOfLines={1}>{handleFor(item)}</Text>
+          <Text style={[styles.meta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
+            {(item as any).occupation || 'Builder'} · {(item.city || item.country) ? [item.city, item.country].filter(Boolean).join(', ') : 'Remote'}
           </Text>
           {!!showScore && typeof score === 'number' && (
             <TouchableOpacity
@@ -232,6 +232,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
               style={styles.scorePill}
               activeOpacity={0.85}
             >
+              <Zap size={10} color="#000" />
               <Text style={styles.scoreText}>{score}%</Text>
             </TouchableOpacity>
           )}
@@ -245,7 +246,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
     return (
       <TouchableOpacity
         onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.uid })}
-        style={[styles.opportunityCard, liquidGlass(isDark, false)]}
+        style={[styles.opportunityCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}
         activeOpacity={0.9}
       >
         <View style={styles.opportunityTop}>
@@ -257,9 +258,9 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
             <Text style={[styles.opportunityTitle, { color: textColor(isDark) }]} numberOfLines={1}>
               {details.title}
             </Text>
-            <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
+            <Text style={[styles.handle, { color: COLORS.primary }]} numberOfLines={1}>{handleFor(item)}</Text>
           </View>
-          <View style={styles.livePill}>
+          <View style={[styles.livePill, { backgroundColor: isDark ? 'rgba(74,222,128,0.15)' : 'rgba(74,222,128,0.12)' }]}>
             <Text style={styles.liveText}>ACTIVE</Text>
           </View>
         </View>
@@ -270,33 +271,33 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 
         <View style={styles.opportunityMetaGrid}>
           <View style={styles.opportunityMeta}>
-            <Target size={12} color={COLORS.primary} />
-            <Text style={styles.opportunityMetaText} numberOfLines={1}>{details.roleNeed}</Text>
+            <Target size={11} color={COLORS.primary} />
+            <Text style={[styles.opportunityMetaText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{details.roleNeed}</Text>
           </View>
           <View style={styles.opportunityMeta}>
-            <Briefcase size={12} color={COLORS.primary} />
-            <Text style={styles.opportunityMetaText} numberOfLines={1}>{details.stage}</Text>
+            <Briefcase size={11} color={COLORS.primary} />
+            <Text style={[styles.opportunityMetaText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{details.stage}</Text>
           </View>
           <View style={styles.opportunityMeta}>
-            <MapPin size={12} color="#4ADE80" />
-            <Text style={styles.opportunityMetaText} numberOfLines={1}>{details.location}</Text>
+            <MapPin size={11} color="#4ADE80" />
+            <Text style={[styles.opportunityMetaText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{details.location}</Text>
           </View>
         </View>
 
         <View style={styles.tagsRow}>
-          {details.tags.map((tag, index) => (
-            <View key={`${item.uid}-${tag}-${index}`} style={[styles.tagChip, liquidGlass(isDark, false)]}>
-              <Text style={[styles.tagText, { color: textColor(isDark) }]} numberOfLines={1}>{tag.toUpperCase()}</Text>
+          {details.tags.slice(0, 3).map((tag, index) => (
+            <View key={`${item.uid}-${tag}-${index}`} style={[styles.tagChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+              <Text style={[styles.tagText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{tag.toUpperCase()}</Text>
             </View>
           ))}
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
           <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.opportunityBtn, { backgroundColor: COLORS.primary }]}>
-            <Text style={[styles.opportunityBtnText, { color: '#000' }]}>VIEW PROFILE</Text>
+            <Text style={styles.opportunityBtnText}>VIEW PROFILE</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Search')} style={[styles.opportunityIconBtn, liquidGlass(isDark, false)]}>
-            <Search size={16} color={textColor(isDark)} />
+          <TouchableOpacity onPress={() => navigation.navigate('Search')} style={[styles.opportunityIconBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+            <Search size={15} color={textColor(isDark)} />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -306,18 +307,18 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   const ProjectCard = ({ item }: { item: ProjectRecommendation }) => (
     <TouchableOpacity
       onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.owner.uid, projectId: item.project.id })}
-      style={[styles.projectCard, liquidGlass(isDark, false)]}
+      style={[styles.projectCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}
       activeOpacity={0.9}
     >
       <View style={styles.projectTop}>
         <View style={styles.projectIcon}>
-          <Rocket size={17} color="#000" />
+          <Rocket size={16} color="#000" />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.projectTitle, { color: textColor(isDark) }]} numberOfLines={1}>
             {item.project.title}
           </Text>
-          <Text style={styles.handle} numberOfLines={1}>{handleFor(item.owner)}</Text>
+          <Text style={[styles.handle, { color: COLORS.primary }]} numberOfLines={1}>{handleFor(item.owner)}</Text>
         </View>
         <View style={styles.projectScore}>
           <Text style={styles.projectScoreText}>{item.score}%</Text>
@@ -327,15 +328,15 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         {item.project.description}
       </Text>
       <View style={styles.projectSignalRow}>
-        <Text style={styles.projectSignalLabel}>WHY YOU</Text>
+        <Text style={[styles.projectSignalLabel, { color: isDark ? '#C6B100' : '#8A7900' }]}>WHY YOU</Text>
         <Text style={[styles.projectReason, { color: textColor(isDark) }]} numberOfLines={1}>
           {item.reason}
         </Text>
       </View>
       <View style={styles.tagsRow}>
-        {[item.roleNeed, item.project.status, ...item.matchingSignals].filter(Boolean).slice(0, 4).map((tag, index) => (
-          <View key={`${item.id}-${tag}-${index}`} style={[styles.tagChip, liquidGlass(isDark, false)]}>
-            <Text style={[styles.tagText, { color: textColor(isDark) }]} numberOfLines={1}>{String(tag).toUpperCase()}</Text>
+        {[item.roleNeed, item.project.status, ...item.matchingSignals].filter(Boolean).slice(0, 3).map((tag, index) => (
+          <View key={`${item.id}-${tag}-${index}`} style={[styles.tagChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+            <Text style={[styles.tagText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{String(tag).toUpperCase()}</Text>
           </View>
         ))}
       </View>
@@ -343,17 +344,19 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   );
 
   const Section = ({ title, icon, data, showScore, variant, onViewAll }: any) => (
-    <View style={{ marginTop: 18 }}>
+    <View style={{ marginTop: 24 }}>
       <TouchableOpacity style={styles.sectionHeader} onPress={onViewAll} activeOpacity={onViewAll ? 0.8 : 1}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {icon}
           <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>{title}</Text>
         </View>
-        <ChevronRight size={18} color="#666" />
+        <View style={styles.sectionChevron}>
+          <ChevronRight size={16} color={textColor(isDark, 'muted')} />
+        </View>
       </TouchableOpacity>
       <FlatList
         data={data}
-        keyExtractor={(it) => it.uid}
+        keyExtractor={(it: any) => it.uid || it.id}
         horizontal
         showsHorizontalScrollIndicator={false}
         initialNumToRender={IS_LOW_END_ANDROID ? 3 : 6}
@@ -362,71 +365,73 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         removeClippedSubviews={Platform.OS !== 'web'}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
         ListEmptyComponent={
-          <View style={[styles.emptyCard, liquidGlass(isDark, false)]}>
+          <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}>
             <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No active opportunities yet</Text>
-            <Text style={styles.emptySub}>Use search to find builders by role, stage, or industry.</Text>
+            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>Use search to find builders by role, stage, or industry.</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.emptyBtn}>
               <Text style={styles.emptyBtnText}>OPEN SEARCH</Text>
             </TouchableOpacity>
           </View>
         }
-        renderItem={({ item }) => variant === 'opportunity' ? <OpportunityCard item={item} /> : <Card item={item} showScore={showScore} />}
+        renderItem={({ item }: any) => variant === 'opportunity' ? <OpportunityCard item={item} /> : <Card item={item} showScore={showScore} />}
       />
     </View>
   );
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={[styles.container, appBackground(isDark)]}> 
-      <View style={styles.scene} pointerEvents="none">
-        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
-        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(223,251,63,0.08)' : 'rgba(223,251,63,0.16)' }]} />
-      </View>
+    <SafeAreaView edges={['top', 'bottom']} style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
       {loading && people.length === 0 ? (
         <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
       ) : (
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
-          <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
-            <View style={[styles.hero, liquidGlass(isDark), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightBgSec, borderColor: isDark ? COLORS.darkBorderActive : COLORS.lightBorderActive }]}> 
-              <View style={[styles.heroAccent, { backgroundColor: isDark ? COLORS.primaryGlow : COLORS.secondary }]} />
-              <Text style={[styles.heroKicker, { color: isDark ? COLORS.primary : '#000' }]}>TODAY'S SIGNAL</Text>
-              <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Your builder graph is warming up.</Text>
-              <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
-                Smart matches, live project opportunities, and founders worth meeting are ranked into one calm feed.
-              </Text>
+          <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+            <View style={[styles.heroCard, { backgroundColor: isDark ? COLORS.darkCard : '#FFF' }]}>
+              <View style={styles.heroTop}>
+                <View style={styles.heroIconRow}>
+                  <View style={styles.heroIcon}>
+                    <Zap size={18} color="#000" />
+                  </View>
+                  <View style={styles.heroBadge}>
+                    <Text style={[styles.heroBadgeText, { color: COLORS.primary }]}>TODAY</Text>
+                  </View>
+                </View>
+                <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Your builder graph is warming up.</Text>
+                <Text style={[styles.heroSub, { color: textColor(isDark, 'muted') }]}>
+                  Smart matches, live project opportunities, and founders worth meeting are ranked into one calm feed.
+                </Text>
+              </View>
 
               <View style={styles.heroActions}>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('IdeaDeck')}
-                  style={[styles.heroBtn, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorderActive : COLORS.lightBorderActive }]}
+                  style={[styles.heroBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Lightbulb size={15} color={textColor(isDark)} />
-                    <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>IDEAS</Text>
-                  </View>
+                  <Lightbulb size={14} color={textColor(isDark)} />
+                  <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>IDEAS</Text>
                 </TouchableOpacity>
-              </View>
-
-              <View style={styles.heroInfo}>
-                <Text style={[styles.heroInfoText, { color: textColor(isDark, 'muted') }]}>{aiLoading ? 'UPDATING MATCHES...' : 'AI RECOMMENDATIONS READY'}</Text>
+                <View style={[styles.heroStatus, { backgroundColor: isDark ? 'rgba(251,230,24,0.1)' : 'rgba(251,230,24,0.15)' }]}>
+                  <Star size={12} color={COLORS.primary} />
+                  <Text style={styles.heroStatusText}>{aiLoading ? 'UPDATING...' : 'READY'}</Text>
+                </View>
               </View>
 
               {topOpportunityAlert ? (
                 <TouchableOpacity
                   activeOpacity={0.9}
                   onPress={() => navigation.navigate('ActiveOpportunity', { userId: topOpportunityAlert.profile.uid })}
-                  style={[styles.radarCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightBgSec, borderColor: isDark ? COLORS.darkBorderActive : COLORS.lightBorderActive }]}
+                  style={[styles.radarCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFBEA' }]}
                 >
                   <View style={styles.radarTop}>
-                    <View style={[styles.radarIcon, { backgroundColor: COLORS.secondary }]}> 
-                      <BellRing size={16} color="#05070D" />
+                    <View style={[styles.radarIcon, { backgroundColor: COLORS.primary }]}>
+                      <BellRing size={15} color="#000" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>OPPORTUNITY RADAR</Text>
-                      <Text style={styles.radarSub} numberOfLines={2}>
+                      <Text style={[styles.radarSub, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>
                         {displayNameFor(topOpportunityAlert.profile)} matches your interests: {topOpportunityAlert.reason}
                       </Text>
                     </View>
-                    <View style={[styles.radarScore, { backgroundColor: COLORS.secondary }]}> 
+                    <View style={[styles.radarScore, { backgroundColor: COLORS.primary }]}>
                       <Text style={styles.radarScoreText}>{topOpportunityAlert.score}%</Text>
                     </View>
                   </View>
@@ -435,9 +440,16 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
                   </Text>
                 </TouchableOpacity>
               ) : (
-                <View style={[styles.radarCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorderActive : COLORS.lightBorderActive }]}> 
-                  <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>OPPORTUNITY RADAR</Text>
-                  <Text style={styles.radarSub}>No strong opportunity yet. Add more skills/interests to sharpen alerts.</Text>
+                <View style={[styles.radarCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F9FAFB' }]}>
+                  <View style={styles.radarTop}>
+                    <View style={[styles.radarIcon, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+                      <BellRing size={15} color={textColor(isDark, 'muted')} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>OPPORTUNITY RADAR</Text>
+                      <Text style={[styles.radarSub, { color: textColor(isDark, 'muted') }]}>No strong opportunity yet. Add more skills/interests to sharpen alerts.</Text>
+                    </View>
+                  </View>
                 </View>
               )}
             </View>
@@ -445,18 +457,20 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 
           <Section
             title="Recommended Matches"
-            icon={<Sparkles size={18} color={COLORS.primary} />}
+            icon={<Sparkles size={17} color={COLORS.primary} />}
             data={recommended}
             showScore
             onViewAll={() => navigation.navigate('RecommendedMatches')}
           />
-          <View style={{ marginTop: 18 }}>
+          <View style={{ marginTop: 24 }}>
             <TouchableOpacity style={styles.sectionHeader} onPress={() => navigation.navigate('ActiveOpportunities')} activeOpacity={0.8}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Rocket size={18} color={COLORS.primary} />
+                <Rocket size={17} color={COLORS.primary} />
                 <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>Project Matches</Text>
               </View>
-              <ChevronRight size={18} color="#666" />
+              <View style={styles.sectionChevron}>
+                <ChevronRight size={16} color={textColor(isDark, 'muted')} />
+              </View>
             </TouchableOpacity>
             <FlatList
               data={projectRecommendations}
@@ -469,9 +483,9 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
               removeClippedSubviews={Platform.OS !== 'web'}
               contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
               ListEmptyComponent={
-                <View style={[styles.emptyCard, liquidGlass(isDark, false)]}>
+                <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}>
                   <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No project matches yet</Text>
-                  <Text style={styles.emptySub}>Add skills and interests so LINKUP can match you with ongoing projects.</Text>
+                  <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>Add skills and interests so LINKUP can match you with ongoing projects.</Text>
                 </View>
               }
               renderItem={({ item }) => <ProjectCard item={item} />}
@@ -479,13 +493,13 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           </View>
           <Section
             title="Trending Builders"
-            icon={<TrendingUp size={18} color={COLORS.primary} />}
+            icon={<TrendingUp size={17} color={COLORS.primary} />}
             data={trending}
             onViewAll={() => navigation.navigate('TrendingBuilders')}
           />
           <Section
             title="Active Opportunities"
-            icon={<Users size={18} color="#4ADE80" />}
+            icon={<Users size={17} color="#4ADE80" />}
             data={opportunities}
             variant="opportunity"
             onViewAll={() => navigation.navigate('ActiveOpportunities')}
@@ -497,86 +511,97 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1 },
   scrollArea: { flex: 1 },
-  scene: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
+  heroCard: {
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  scenePane: {
-    position: 'absolute',
-    width: 280,
-    height: 130,
-    borderRadius: 34,
+  heroTop: {
+    gap: 8,
   },
-  scenePaneA: {
-    top: 80,
-    right: -120,
-    transform: [{ rotate: '-18deg' }],
+  heroIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
   },
-  scenePaneB: {
-    top: 260,
-    left: -110,
-    transform: [{ rotate: '16deg' }],
+  heroIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  hero: {
-    borderRadius: 28,
-    padding: 18,
+  heroBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(251,230,24,0.12)',
   },
-  heroKicker: {
-    fontSize: 10,
+  heroBadgeText: {
+    fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1.6,
-    marginBottom: 8,
+    letterSpacing: 1.5,
   },
   heroTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '900',
-    letterSpacing: 0,
-    lineHeight: 29,
+    letterSpacing: -0.3,
+    lineHeight: 28,
   },
   heroSub: {
-    marginTop: 10,
+    marginTop: 4,
     fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  heroAccent: {
-    width: 72,
-    height: 4,
-    borderRadius: 999,
-    marginBottom: 14,
+    fontWeight: '600',
+    lineHeight: 19,
   },
   heroActions: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
     marginTop: 16,
-  },
-  heroInfo: {
-    marginTop: 14,
-  },
-  heroInfoText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(119,119,119,0.1)',
   },
   heroBtn: {
     flex: 1,
-    height: 46,
-    borderRadius: 16,
+    height: 42,
+    borderRadius: 14,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
   },
   heroBtnText: {
     fontSize: 11,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: 1.5,
+  },
+  heroStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  heroStatusText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: COLORS.primary,
+    letterSpacing: 1,
   },
   radarCard: {
-    marginTop: 14,
-    borderRadius: 20,
-    borderWidth: 1,
+    marginTop: 16,
+    borderRadius: 18,
     padding: 14,
   },
   radarTop: {
@@ -587,28 +612,25 @@ const styles = StyleSheet.create({
   radarIcon: {
     width: 34,
     height: 34,
-    borderRadius: 17,
-    backgroundColor: COLORS.primary,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   radarTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.3,
+    letterSpacing: 1.2,
   },
   radarSub: {
-    marginTop: 3,
+    marginTop: 2,
     fontSize: 11,
-    fontWeight: '800',
-    color: '#666',
-    lineHeight: 15,
+    fontWeight: '600',
+    lineHeight: 16,
   },
   radarScore: {
-    height: 30,
-    minWidth: 44,
-    borderRadius: 15,
-    backgroundColor: COLORS.primary,
+    height: 28,
+    minWidth: 42,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
@@ -617,72 +639,81 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     color: '#000',
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
   },
   radarSummary: {
     marginTop: 10,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
     lineHeight: 17,
   },
   sectionHeader: {
     paddingHorizontal: 16,
-    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  sectionChevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: 'rgba(156,163,175,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '900',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   card: {
-    width: 280,
-    borderRadius: 22,
-    borderWidth: 1,
+    width: 290,
+    borderRadius: 20,
     padding: 14,
     flexDirection: 'row',
     gap: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
-  avatar: { width: 52, height: 52, borderRadius: 18 },
-  name: { fontSize: 14, fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic', flexShrink: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  verifiedMiniBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#000',
-  },
-  handle: { marginTop: 2, fontSize: 10,     color: COLORS.primary, fontWeight: '900' },
-  meta: { marginTop: 4, fontSize: 10, color: '#666', fontWeight: '900' },
+  avatar: { width: 50, height: 50, borderRadius: 16 },
+  name: { fontSize: 14, fontWeight: '900', flexShrink: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  handle: { marginTop: 2, fontSize: 10, fontWeight: '800' },
+  meta: { marginTop: 3, fontSize: 10, fontWeight: '600' },
   scorePill: {
     marginTop: 8,
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 10,
     height: 24,
     borderRadius: 12,
     backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  scoreText: { fontSize: 10, fontWeight: '900', color: '#000', letterSpacing: 1 },
+  scoreText: { fontSize: 10, fontWeight: '900', color: '#000', letterSpacing: 0.5 },
   opportunityCard: {
-    width: 330,
-    borderRadius: 24,
-    borderWidth: 1,
+    width: 320,
+    borderRadius: 22,
     padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   projectCard: {
-    width: 330,
-    borderRadius: 24,
-    borderWidth: 1,
+    width: 320,
+    borderRadius: 22,
     padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   projectTop: {
     flexDirection: 'row',
@@ -690,23 +721,22 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   projectIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   projectTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   projectScore: {
-    height: 30,
-    minWidth: 46,
-    borderRadius: 15,
+    height: 28,
+    minWidth: 44,
+    borderRadius: 8,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -716,31 +746,29 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     color: '#000',
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
   },
   projectSummary: {
     marginTop: 12,
     fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 18,
+    fontWeight: '600',
+    lineHeight: 17,
   },
   projectSignalRow: {
     marginTop: 12,
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: 'rgba(251,230,24,0.08)',
     padding: 10,
   },
   projectSignalLabel: {
     fontSize: 8,
     fontWeight: '900',
-    letterSpacing: 1.2,
-    color: '#8A7900',
+    letterSpacing: 1,
   },
   projectReason: {
-    marginTop: 4,
+    marginTop: 3,
     fontSize: 11,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontWeight: '800',
   },
   opportunityTop: {
     flexDirection: 'row',
@@ -748,51 +776,47 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   smallAvatar: {
-    width: 42,
-    height: 42,
+    width: 40,
+    height: 40,
     borderRadius: 14,
   },
   opportunityTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   livePill: {
-    height: 24,
+    height: 22,
     paddingHorizontal: 8,
-    borderRadius: 12,
-    backgroundColor: '#4ADE8020',
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
   liveText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     color: '#16A34A',
   },
   opportunitySummary: {
     marginTop: 12,
     fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 18,
+    fontWeight: '600',
+    lineHeight: 17,
   },
   opportunityMetaGrid: {
-    gap: 8,
+    gap: 6,
     marginTop: 12,
   },
   opportunityMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 7,
   },
   opportunityMetaText: {
     flex: 1,
     fontSize: 10,
-    fontWeight: '900',
-    color: '#666',
-    textTransform: 'uppercase',
+    fontWeight: '700',
   },
   tagsRow: {
     flexDirection: 'row',
@@ -801,58 +825,60 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   tagChip: {
-    maxWidth: 120,
-    borderRadius: 12,
-    borderWidth: 1,
+    maxWidth: 110,
+    borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingVertical: 4,
   },
   tagText: {
     fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.8,
+    fontWeight: '800',
+    letterSpacing: 0.6,
   },
   opportunityBtn: {
     flex: 1,
-    height: 42,
-    borderRadius: 15,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   opportunityIconBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   opportunityBtnText: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
+    color: '#000',
   },
   emptyCard: {
-    width: 300,
-    borderRadius: 22,
-    borderWidth: 1,
+    width: 290,
+    borderRadius: 20,
     padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   emptyTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   emptySub: {
     marginTop: 6,
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
     lineHeight: 16,
-    color: '#666',
   },
   emptyBtn: {
-    height: 40,
-    borderRadius: 14,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -861,7 +887,9 @@ const styles = StyleSheet.create({
   emptyBtnText: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
     color: '#000',
   },
 });
+
+export default DiscoveryDashboardScreen;
