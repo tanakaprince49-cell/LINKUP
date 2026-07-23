@@ -309,7 +309,12 @@ function TabNavigator({ navigation }: any) {
       })}
     >
       <Tab.Screen name="Dashboard" component={DiscoveryDashboardScreen} />
-      <Tab.Screen name="Swipe" component={SwipeScreen} />
+      <Tab.Screen name="Swipe" component={SwipeScreen}
+        options={{
+          headerShown: false,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Inbox" component={MessagesScreen} />
     </Tab.Navigator>

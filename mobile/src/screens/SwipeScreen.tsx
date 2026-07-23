@@ -965,14 +965,16 @@ export default function SwipeScreen({ navigation }: any) {
     const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
     const compatibilityReason = matchRank?.reason || 'Compatibility based on profile signals';
     const renderCardActions = () => (
-      <View style={[styles.actionRow, isWideWeb && styles.webActionRow, isCompactWeb && styles.compactActionRow]}>
-        <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={() => animateSwipeOut('left')}>
-          <X size={24} color="#EF4444" />
+      <View style={[styles.actionRow]}>
+        <TouchableOpacity style={[styles.actionBtnSmall]} onPress={() => animateSwipeOut('left')}>
+          <View style={styles.actionBtnInnerSmall}>
+            <X size={22} color="#FF6B6B" />
+          </View>
+          <Text style={styles.actionLabel}>PASS</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
             styles.contactActionBtn,
-            isCompactWeb && styles.compactContactActionBtn,
             connectionRequest?.status === 'approved' && styles.contactApprovedBtn,
             connectionRequest?.status === 'pending' && styles.contactPendingBtn,
             connectionRequest?.status === 'rejected' && styles.contactRejectedBtn,
@@ -993,11 +995,17 @@ export default function SwipeScreen({ navigation }: any) {
                     : 'CONTACT'}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtnLarge, isCompactWeb && styles.compactActionBtnLarge]} onPress={() => animateSwipeOut('right')}>
-          <Heart size={32} color="#000" fill="#000" />
+        <TouchableOpacity style={[styles.actionBtnLarge]} onPress={() => animateSwipeOut('right')}>
+          <View style={styles.actionBtnInnerLarge}>
+            <Heart size={30} color="#000" fill="#000" />
+          </View>
+          <Text style={[styles.actionLabel, styles.actionLabelLarge]}>LIKE</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={resetDeck}>
-          <RotateCcw size={24} color="#888" />
+        <TouchableOpacity style={[styles.actionBtnSmall]} onPress={resetDeck}>
+          <View style={styles.actionBtnInnerSmall}>
+            <RotateCcw size={20} color="#888" />
+          </View>
+          <Text style={styles.actionLabel}>REWIND</Text>
         </TouchableOpacity>
       </View>
     );
@@ -1164,11 +1172,14 @@ export default function SwipeScreen({ navigation }: any) {
   }
 
   return (
-    <ScreenRoot style={[styles.container, isWeb && styles.webRoot, appBackground(isDark)]}>
-      <View style={styles.scene} pointerEvents="none">
-        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
-        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(251,230,24,0.08)' : 'rgba(251,230,24,0.16)' }]} />
-      </View>
+    <View style={[styles.container, { backgroundColor: '#000' }]}>
+      {!!topProfile && (
+        <View style={StyleSheet.absoluteFill}>
+          <Image source={{ uri: getSwipePhotos(topProfile)[0] || FALLBACK_PHOTO }} style={styles.fullBgImg} blurRadius={50} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
+        </View>
+      )}
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <View style={[styles.webStage, isWideWeb && styles.webStageDesktop, isCompactWeb && styles.webStageMobile]}>
         <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }, isCompactWeb && styles.compactTopBar]}>
           {navigation?.canGoBack() ? (
@@ -1177,12 +1188,9 @@ export default function SwipeScreen({ navigation }: any) {
               style={[
                 styles.topBtn, 
                 isCompactWeb && styles.compactTopBtn,
-                { 
-                  ...liquidGlass(isDark, false)
-                }
               ]}
             >
-              <ChevronLeft size={22} color={textColor(isDark)} />
+              <ChevronLeft size={20} color="#FFF" />
             </TouchableOpacity>
           ) : (
             <View style={[styles.topBtn, styles.topBtnGhost, isCompactWeb && styles.compactTopBtn]} />
@@ -1190,11 +1198,7 @@ export default function SwipeScreen({ navigation }: any) {
           <Text style={[
             styles.topTitle, 
             isCompactWeb && styles.compactTopTitle,
-            {
-              color: textColor(isDark),
-              ...liquidGlass(isDark, false)
-            }
-          ]}>SWIPE MATCH</Text>
+          ]}>SPARK</Text>
           <View style={[styles.topBtn, styles.topBtnGhost, isCompactWeb && styles.compactTopBtn]} />
         </View>
 
@@ -1211,7 +1215,8 @@ export default function SwipeScreen({ navigation }: any) {
         onUnlocked={() => setPaywallFeature('')}
         restoreDisabled
       />
-    </ScreenRoot>
+    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1221,25 +1226,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scene: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
+  safeArea: {
+    flex: 1,
   },
-  scenePane: {
-    position: 'absolute',
-    width: 280,
-    height: 130,
-    borderRadius: 34,
-  },
-  scenePaneA: {
-    top: 90,
-    right: -120,
-    transform: [{ rotate: '-16deg' }],
-  },
-  scenePaneB: {
-    top: 330,
-    left: -120,
-    transform: [{ rotate: '16deg' }],
+  fullBgImg: {
+    width: '100%',
+    height: '100%',
   },
   webRoot: {
     height: '100dvh' as any,
@@ -1263,7 +1255,7 @@ const styles = StyleSheet.create({
   },
   topBar: {
     position: 'absolute',
-    top: 14,
+    top: 0,
     left: 0,
     right: 0,
     zIndex: 80,
@@ -1271,27 +1263,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 6,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   topBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   topBtnGhost: {
     opacity: 0,
   },
   topTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
-    letterSpacing: 3,
-    borderRadius: 999,
-    overflow: 'hidden',
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+    letterSpacing: 4,
+    color: '#FFF',
   },
   compactTopBar: {
     paddingHorizontal: 10,
@@ -1763,54 +1753,68 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   actionRow: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 22,
-    zIndex: 70,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'center',
-    gap: 25,
-    paddingBottom: 0,
-  },
-  webActionRow: {
-    paddingBottom: 0,
-    bottom: 24,
-  },
-  compactActionRow: {
-    gap: 14,
-    paddingBottom: 0,
-    bottom: 18,
+    gap: 20,
+    paddingBottom: 4,
   },
   actionBtnSmall: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    alignItems: 'center',
+    gap: 4,
+  },
+  actionBtnInnerSmall: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-  compactActionBtnSmall: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+  actionLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 1.2,
+  },
+  actionLabelLarge: {
+    color: '#000',
   },
   contactActionBtn: {
-    width: 76,
-    height: 60,
-    borderRadius: 22,
-    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.primaryStrong,
     gap: 3,
-  },
-  compactContactActionBtn: {
-    width: 68,
-    height: 54,
+    width: 64,
+    height: 64,
     borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+  },
+  contactActionText: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    color: '#000',
+  },
+  actionBtnLarge: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  actionBtnInnerLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 10,
   },
   contactApprovedBtn: {
     backgroundColor: COLORS.success,
@@ -1825,29 +1829,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.danger,
     borderColor: '#EF4444',
     opacity: 0.7,
-  },
-  contactActionText: {
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    color: '#000',
-  },
-  actionBtnLarge: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 8,
-  },
-  compactActionBtnLarge: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
   },
   emptyContainer: {
     flex: 1,
