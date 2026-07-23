@@ -1213,7 +1213,6 @@ export default function SwipeScreen({ navigation }: any) {
         description={`Free Android accounts get ${FREE_LIMITS.swipesPer12Hours} builder swipes every ${SWIPE_USAGE_WINDOW_HOURS} hours. LINKUP PLUS unlocks unlimited discovery.`}
         onClose={closePaywallToHome}
         onUnlocked={() => setPaywallFeature('')}
-        restoreDisabled
       />
     </SafeAreaView>
     </View>
@@ -1789,9 +1788,8 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 20,
-    backgroundColor: '#FFF',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: COLORS.primary,
+    borderWidth: 0,
   },
   contactActionText: {
     fontSize: 8,
