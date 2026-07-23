@@ -255,18 +255,18 @@ function TabNavigator({ navigation }: any) {
               <View style={[
                 styles.tabIconInner,
                 focused && {
-                  backgroundColor: isDark ? 'rgba(251,230,24,0.15)' : 'rgba(251,230,24,0.2)',
+                  backgroundColor: isDark ? 'rgba(251,230,24,0.12)' : 'rgba(251,230,24,0.18)',
                   shadowColor: COLORS.primary,
-                  shadowOpacity: 0.25,
-                  shadowRadius: 10,
+                  shadowOpacity: 0.2,
+                  shadowRadius: 8,
                   shadowOffset: { width: 0, height: 0 },
-                  elevation: 4,
+                  elevation: 3,
                 },
               ]}>
                 <SafeIcon
                   name={iconName}
-                  size={22}
-                  color={focused ? COLORS.primary : (isDark ? '#8E8E93' : '#636366')}
+                  size={21}
+                  color={focused ? COLORS.primary : (isDark ? '#6B7280' : '#9CA3AF')}
                   fill={focused ? COLORS.primary : 'transparent'}
                 />
               </View>
@@ -281,30 +281,28 @@ function TabNavigator({ navigation }: any) {
           );
         },
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: isDark ? '#8E8E93' : '#636366',
+        tabBarInactiveTintColor: isDark ? '#6B7280' : '#9CA3AF',
         tabBarShowLabel: true,
         tabBarLabel: tabLabels[route.name] || route.name,
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '900',
-          letterSpacing: 0.5,
-          marginTop: 2,
-          marginBottom: 4,
+          fontSize: 10,
+          fontWeight: '800',
+          letterSpacing: 0.3,
+          marginTop: 1,
         },
         tabBarStyle: {
           backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
           borderTopWidth: 0,
-          borderWidth: 1,
-          borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
-          borderBottomWidth: 0,
-          height: 66 + insets.bottom,
+          borderTopColor: 'transparent',
+          height: 60 + insets.bottom,
           paddingTop: 6,
-          paddingBottom: insets.bottom > 0 ? 4 : 6,
-          elevation: IS_LOW_END_ANDROID ? 0 : 8,
+          paddingBottom: insets.bottom > 0 ? 2 : 4,
+          paddingHorizontal: 4,
+          elevation: IS_LOW_END_ANDROID ? 0 : 10,
           shadowColor: '#000',
-          shadowOpacity: IS_LOW_END_ANDROID ? 0 : 0.12,
-          shadowRadius: IS_LOW_END_ANDROID ? 0 : 8,
-          shadowOffset: { width: 0, height: IS_LOW_END_ANDROID ? 0 : 4 },
+          shadowOpacity: IS_LOW_END_ANDROID ? 0 : 0.08,
+          shadowRadius: IS_LOW_END_ANDROID ? 0 : 12,
+          shadowOffset: { width: 0, height: IS_LOW_END_ANDROID ? 0 : -3 },
         },
         sceneContainerStyle: {
           backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg,
@@ -678,14 +676,14 @@ const styles = StyleSheet.create({
   tabIconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 38,
-    width: 48,
+    height: 36,
+    width: 52,
     position: 'relative',
   },
   tabIconInner: {
-    width: 40,
-    height: 34,
-    borderRadius: 12,
+    width: 36,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
