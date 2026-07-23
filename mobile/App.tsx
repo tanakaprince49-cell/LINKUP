@@ -11,7 +11,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import SwipeScreen from './src/screens/SwipeScreen';
 import IdeaDeckScreen from './src/screens/IdeaDeckScreen';
@@ -194,12 +194,13 @@ function TabNavigator({ navigation }: any) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const isDark = theme === 'dark';
+  const insets = useSafeAreaInsets();
   const [unreadMessages, setUnreadMessages] = React.useState(0);
   const tabLabels: Record<string, string> = {
-    Dashboard: 'Home',
-    Swipe: 'Swipe',
+    Dashboard: 'Explore',
+    Swipe: 'Discover',
     Search: 'Search',
-    Inbox: 'Inbox',
+    Inbox: 'Chat',
   };
 
   React.useEffect(() => {
@@ -228,11 +229,13 @@ function TabNavigator({ navigation }: any) {
       screenOptions={({ route }) => ({
         lazy: true,
         tabBarIcon: ({ focused }) => {
-          let iconName = "Home";
-          if (route.name === 'Dashboard') iconName = "Home";
-          else if (route.name === 'Swipe') iconName = "Zap";
-          else if (route.name === 'Search') iconName = "Search";
-          else if (route.name === 'Inbox') iconName = "Mail";
+          const iconMap: Record<string, { active: string; inactive: string }> = {
+            Dashboard: { active: 'Compass', inactive: 'Compass' },
+            Swipe: { active: 'Zap', inactive: 'Zap' },
+            Search: { active: 'Search', inactive: 'Search' },
+            Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },
+          };
+          const iconName = (focused ? iconMap[route.name]?.active : iconMap[route.name]?.inactive) || 'Circle';
 
           return (
             <View style={styles.tabIconContainer}>
@@ -248,7 +251,7 @@ function TabNavigator({ navigation }: any) {
                 },
               ]}>
                 <SafeIcon
-                  name={focused ? iconName : iconName}
+                  name={iconName}
                   size={22}
                   color={focused ? COLORS.primary : (isDark ? '#8E8E93' : '#636366')}
                   fill={focused ? COLORS.primary : 'transparent'}
@@ -279,15 +282,15 @@ function TabNavigator({ navigation }: any) {
           position: 'absolute',
           left: 16,
           right: 16,
-          bottom: 22,
-          height: 66,
+          bottom: insets.bottom + 14,
+          height: 66 + insets.bottom,
           borderRadius: 20,
           backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
           borderTopWidth: 0,
           borderWidth: 1,
           borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
           paddingTop: 6,
-          paddingBottom: 0,
+          paddingBottom: insets.bottom > 0 ? 4 : 0,
           justifyContent: 'center',
           elevation: IS_LOW_END_ANDROID ? 0 : 12,
           shadowColor: '#000',
@@ -302,9 +305,9 @@ function TabNavigator({ navigation }: any) {
         header: (props) => {
           const titles: Record<string, string> = {
             Dashboard: 'LINKUP',
-            Swipe: 'SWIPE MATCH',
-            Search: 'AI SEARCH',
-            Inbox: 'CHATS',
+            Swipe: 'DISCOVER',
+            Search: 'SEARCH',
+            Inbox: 'MESSAGES',
           };
           return <AppHeader navigation={props.navigation} title={titles[props.route.name] || 'LINKUP'} />;
         },

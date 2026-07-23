@@ -162,6 +162,109 @@ const getSwipePhotos = (profile: UserProfile): string[] => {
   return safePhotos.length ? safePhotos : [FALLBACK_PHOTO];
 };
 
+const ExpandedProfilePanel = React.memo(function ExpandedProfilePanel({
+  profile,
+  isDark,
+  displayName,
+  ageText,
+  roleText,
+  locationText,
+  bio,
+  compatibility,
+  compatibilityReason,
+  skills,
+  lookingFor,
+  industries,
+  onClose,
+}: {
+  profile: any;
+  isDark: boolean;
+  displayName: string;
+  ageText: string;
+  roleText: string;
+  locationText: string;
+  bio: string;
+  compatibility: number;
+  compatibilityReason: string;
+  skills: string[];
+  lookingFor: string[];
+  industries: string[];
+  onClose: () => void;
+}) {
+  return (
+    <ScrollView
+      style={[styles.bottomMeta, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+      contentContainerStyle={styles.bottomMetaContent}
+      showsVerticalScrollIndicator
+      nestedScrollEnabled
+      bounces
+      scrollEventThrottle={16}
+    >
+      <View style={[styles.detailsHeader, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard }]}>
+        <View style={{ flex: 1, paddingRight: 12 }}>
+          <Text style={[styles.detailsTitle, { color: textColor(isDark) }]}>BUILDER DETAILS</Text>
+          <Text style={[styles.detailsSubtitle, { color: textColor(isDark, 'secondary') }]}>Clear profile signals for this match</Text>
+        </View>
+        <TouchableOpacity onPress={onClose} style={styles.closeInfoBtn}>
+          <Text style={styles.closeInfoText}>HIDE</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={[styles.expandedProfileHeader, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+        <View style={styles.expandedNameRow}>
+          <Text style={[styles.expandedName, { color: textColor(isDark) }]} numberOfLines={2}>
+            {displayName}{ageText}
+          </Text>
+          {!!profile.isVerified && <VerifiedBadge size={24} />}
+        </View>
+        <Text style={[styles.expandedMetaText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{roleText}</Text>
+        <Text style={[styles.expandedMetaText, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>{locationText}</Text>
+      </View>
+
+      <View style={[styles.bioCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+        <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>BIO</Text>
+        <Text style={[styles.bioText, { color: textColor(isDark) }]}>{bio || 'No bio yet.'}</Text>
+      </View>
+
+      <View style={styles.tagGrid}>
+        {skills?.slice(0, 8).map((skill, idx) => (
+          <View key={`${profile?.uid}-${skill}-${idx}`} style={[styles.skillTag, liquidGlass(isDark, false), { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(251,230,24,0.16)', borderColor: isDark ? COLORS.darkBorder : COLORS.primary }]}>
+            <Text style={[styles.skillTagText, { color: textColor(isDark) }]}>{String(skill).toUpperCase()}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.detailGrid}>
+        <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+          <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>MATCH FIT</Text>
+          <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{compatibility}% - {compatibilityReason}</Text>
+        </View>
+        <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+          <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>LOOKING FOR</Text>
+          <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{lookingFor.slice(0, 4).join(' - ') || 'Networking'}</Text>
+        </View>
+        <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+          <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>STAGE</Text>
+          <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{(profile as any).startupStage || 'Exploring'}</Text>
+        </View>
+        <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+          <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>INDUSTRY</Text>
+          <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{industries.slice(0, 4).join(' - ') || 'Open'}</Text>
+        </View>
+        <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+          <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>AVAILABILITY</Text>
+          <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{(profile as any).availability || 'Open'}</Text>
+        </View>
+      </View>
+
+      <View style={styles.scrollIndicator}>
+        <ChevronDown size={14} color={COLORS.primary} />
+        <Text style={[styles.scrollText, { color: textColor(isDark, 'secondary') }]}>SCROLL FOR DETAILS</Text>
+      </View>
+    </ScrollView>
+  );
+});
+
 export default function SwipeScreen({ navigation }: any) {
   const { user, profile: myProfile } = useAuth();
   const { theme } = useTheme();
@@ -778,12 +881,12 @@ export default function SwipeScreen({ navigation }: any) {
     setProfiles(allProfilesRef.current);
   };
 
-  const openInfoPanel = () => {
+  const openInfoPanel = React.useCallback(() => {
     if (isAnimatingRef.current || !topProfile) return;
     swipePosition.stopAnimation();
     swipePosition.setValue({ x: 0, y: 0 });
     setInfoExpanded(true);
-  };
+  }, [topProfile]);
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
@@ -1011,75 +1114,21 @@ export default function SwipeScreen({ navigation }: any) {
           </View>
 
           {infoExpanded && (
-            <ScrollView
-              style={[styles.bottomMeta, liquidGlass(isDark, false), isCompactWeb && styles.compactBottomMeta, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
-              contentContainerStyle={[styles.bottomMetaContent, isCompactWeb && styles.compactBottomMetaContent]}
-              showsVerticalScrollIndicator
-              nestedScrollEnabled
-              bounces
-              scrollEventThrottle={16}
-            >
-              <View style={[styles.detailsHeader, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard }] }>
-                <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={[styles.detailsTitle, { color: textColor(isDark) }]}>BUILDER DETAILS</Text>
-                  <Text style={[styles.detailsSubtitle, { color: textColor(isDark, 'secondary') }]}>Clear profile signals for this match</Text>
-                </View>
-                <TouchableOpacity onPress={() => setInfoExpanded(false)} style={styles.closeInfoBtn}>
-                  <Text style={styles.closeInfoText}>HIDE</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={[styles.expandedProfileHeader, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
-                <View style={styles.expandedNameRow}>
-                  <Text style={[styles.expandedName, { color: textColor(isDark) }]} numberOfLines={2}>
-                    {displayNameFor(topProfile)}{ageText}
-                  </Text>
-                  {!!topProfile.isVerified && <VerifiedBadge size={24} />}
-                </View>
-                <Text style={[styles.expandedMetaText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{roleText}</Text>
-                <Text style={[styles.expandedMetaText, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>{locationText}</Text>
-              </View>
-            <View style={[styles.bioCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
-              <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>BIO</Text>
-              <Text style={[styles.bioText, { color: textColor(isDark) }]}>{bio}</Text>
-            </View>
-
-            <View style={styles.tagGrid}>
-              {topProfile.skills?.slice(0, 8).map((skill, idx) => (
-                <View key={`${topProfile.uid}-${skill}-${idx}`} style={[styles.skillTag, liquidGlass(isDark, false), { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(251,230,24,0.16)', borderColor: isDark ? COLORS.darkBorder : COLORS.primary }] }>
-                  <Text style={[styles.skillTagText, { color: textColor(isDark) }]}>{String(skill).toUpperCase()}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.detailGrid}>
-              <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
-                <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>MATCH FIT</Text>
-                <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{compatibility}% - {compatibilityReason}</Text>
-              </View>
-              <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
-                <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>LOOKING FOR</Text>
-                <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{lookingFor.slice(0, 4).join(' - ') || 'Networking'}</Text>
-              </View>
-              <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
-                <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>STAGE</Text>
-                <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{(topProfile as any).startupStage || 'Exploring'}</Text>
-              </View>
-              <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
-                <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>INDUSTRY</Text>
-                <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{industries.slice(0, 4).join(' - ') || 'Open'}</Text>
-              </View>
-              <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }] }>
-                <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>AVAILABILITY</Text>
-                <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{(topProfile as any).availability || 'Open'}</Text>
-              </View>
-            </View>
-
-            <View style={styles.scrollIndicator}>
-              <ChevronDown size={14} color={COLORS.primary} />
-              <Text style={[styles.scrollText, { color: textColor(isDark, 'secondary') }]}>SCROLL FOR DETAILS</Text>
-            </View>
-            </ScrollView>
+            <ExpandedProfilePanel
+              profile={topProfile}
+              isDark={isDark}
+              displayName={displayNameFor(topProfile)}
+              ageText={ageText}
+              roleText={roleText}
+              locationText={locationText}
+              bio={bio}
+              compatibility={compatibility}
+              compatibilityReason={compatibilityReason}
+              skills={topProfile.skills || []}
+              lookingFor={(topProfile as any).lookingFor || []}
+              industries={(topProfile as any).industries || []}
+              onClose={() => setInfoExpanded(false)}
+            />
           )}
         </View>
         {!infoExpanded && renderCardActions()}
