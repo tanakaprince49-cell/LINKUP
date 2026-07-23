@@ -11,6 +11,7 @@ import {
   Easing,
   PanResponder,
   ScrollView,
+  FlatList,
   InteractionManager,
   Platform,
   useWindowDimensions,
@@ -1181,116 +1182,114 @@ export default function SwipeScreen({ navigation }: any) {
   };
 
   const renderScrollProfile = () => {
-    if (!topProfile) return renderEmpty();
-    const photos = getSwipePhotos(topProfile);
-    const ageText = Number(topProfile.age) > 0 ? `, ${topProfile.age}` : '';
-    const locationText = [topProfile.city, topProfile.country].filter(Boolean).join(', ') || 'Remote';
-    const roleText = [
-      (topProfile as any).occupation || 'Builder',
-      (topProfile as any).company ? `@ ${(topProfile as any).company}` : null,
-    ].filter(Boolean).join(' ');
-    const lookingFor = Array.isArray((topProfile as any).lookingFor) ? (topProfile as any).lookingFor : [];
-    const industries = Array.isArray((topProfile as any).industries) ? (topProfile as any).industries : [];
-    const bio = topProfile.bio || 'No bio yet. Open their profile to learn more.';
-    const existingScore = scoreByIdRef.current.get(topProfile.uid);
-    const matchRank = existingScore != null ? { score: existingScore, reason: '' } : (myProfile ? localCommonalityRank(myProfile, [topProfile], 1)[0] : null);
-    const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
-    const compatibilityReason = matchRank?.reason || 'Compatibility based on profile signals';
-    const skills = Array.isArray(topProfile.skills) ? topProfile.skills.slice(0, 8) : [];
+    const feedProfiles = profiles.filter(Boolean).slice(0, 12);
+    if (feedProfiles.length === 0) return renderEmpty();
+    const cardH = (Dimensions.get('window').height * 0.65);
+
+    const renderFeedCard = ({ item }: { item: UserProfile }) => {
+      const photos = getSwipePhotos(item);
+      const ageText = Number(item.age) > 0 ? `, ${item.age}` : '';
+      const locationText = [item.city, item.country].filter(Boolean).join(', ') || 'Remote';
+      const roleText = [
+        (item as any).occupation || 'Builder',
+        (item as any).company ? `@ ${(item as any).company}` : null,
+      ].filter(Boolean).join(' ');
+      const existingScore = scoreByIdRef.current.get(item.uid);
+      const matchRank = existingScore != null ? { score: existingScore, reason: '' } : (myProfile ? localCommonalityRank(myProfile, [item], 1)[0] : null);
+      const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
+      const skills = Array.isArray(item.skills) ? item.skills.slice(0, 6) : [];
+      const isTop = item.uid === topProfile?.uid;
+
+      return (
+        <View style={[styles.feedCard, { height: cardH }]}>
+          <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.feedCardImg} resizeMode="cover" />
+          <View style={styles.feedCardOverlay} />
+          <View style={styles.feedCardInfo}>
+            <View style={styles.feedCardTopRow}>
+              <View style={[styles.feedCompatibilityPill, { backgroundColor: COLORS.primary }]}>
+                <Zap size={10} color="#000" fill="#000" />
+                <Text style={styles.feedCompatibilityText}>{compatibility}%</Text>
+              </View>
+            </View>
+            <View style={styles.feedCardMeta}>
+              <View style={styles.feedNameRow}>
+                <Text style={styles.feedName}>{displayNameFor(item)}{ageText}</Text>
+                {item.isVerified && <VerifiedBadge size={18} />}
+              </View>
+              <Text style={styles.feedRole} numberOfLines={1}>{roleText}</Text>
+              <Text style={styles.feedLocation} numberOfLines={1}>{locationText}</Text>
+              {skills.length > 0 && (
+                <View style={styles.feedSkillsRow}>
+                  {skills.map((s: string, i: number) => (
+                    <View key={i} style={styles.feedSkillTag}>
+                      <Text style={styles.feedSkillText}>{s}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+            <View style={styles.feedActions}>
+              <TouchableOpacity
+                style={[styles.feedActionBtn, { backgroundColor: 'rgba(0,0,0,0.5)', borderColor: 'rgba(255,255,255,0.2)' }]}
+                onPress={() => {
+                  if (isTop) animateSwipeOut('left');
+                  else setProfiles((prev) => prev.filter((p) => p.uid !== item.uid));
+                }}
+              >
+                <X size={18} color="#FF6B6B" />
+                <Text style={styles.feedActionLabel}>PASS</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.feedActionBtn, styles.feedContactBtn]}
+                disabled={contactBusy || isSyntheticProfile(item)}
+                onPress={() => {
+                  if (!isTop) {
+                    setProfiles((prev) => {
+                      const idx = prev.findIndex((p) => p.uid === item.uid);
+                      if (idx > 0) {
+                        const reordered = [...prev];
+                        const [profile] = reordered.splice(idx, 1);
+                        reordered.unshift(profile);
+                        return reordered;
+                      }
+                      return prev;
+                    });
+                  }
+                  setTimeout(() => handleContactRequest(), 100);
+                }}
+              >
+                <MessageSquare size={14} color="#000" />
+                <Text style={[styles.feedActionLabel, { color: '#000' }]}>
+                  {connectionRequest?.status === 'approved' && isTop ? 'CHAT' : connectionRequest?.status === 'pending' && isTop ? 'SENT' : 'CONTACT'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.feedActionBtn, { backgroundColor: '#FF3B5C' }]}
+                onPress={() => {
+                  if (isTop) animateSwipeOut('right');
+                  else setProfiles((prev) => prev.filter((p) => p.uid !== item.uid));
+                }}
+              >
+                <Heart size={18} color="#000" fill="#000" />
+                <Text style={styles.feedActionLabel}>LIKE</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      );
+    };
 
     return (
-      <View style={styles.scrollProfileRoot}>
-        <ScrollView style={styles.scrollProfileScroll} contentContainerStyle={styles.scrollProfileContent} showsVerticalScrollIndicator={false}>
-          <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.scrollProfileImg} resizeMode="cover" />
-          <View style={styles.scrollProfileOverlay} />
-          <View style={[styles.scrollProfileInfo, { backgroundColor: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)' }]}>
-            <View style={styles.scrollProfileTop}>
-              <Text style={[styles.scrollProfileName, { color: textColor(isDark) }]}>
-                {displayNameFor(topProfile)}{ageText}
-              </Text>
-              {topProfile.isVerified && <VerifiedBadge size={22} />}
-            </View>
-            <Text style={[styles.scrollProfileRole, { color: textColor(isDark, 'secondary') }]}>{roleText}</Text>
-            <Text style={[styles.scrollProfileLocation, { color: textColor(isDark, 'muted') }]}>{locationText}</Text>
-
-            <View style={styles.scrollProfileCompatRow}>
-              <Zap size={14} color={COLORS.primary} fill={COLORS.primary} />
-              <Text style={[styles.scrollProfileCompatText, { color: COLORS.primary }]}>
-                {compatibility}% Match · {compatibilityReason}
-              </Text>
-            </View>
-
-            <Text style={[styles.scrollProfileSectionLabel, { color: textColor(isDark) }]}>BIO</Text>
-            <Text style={[styles.scrollProfileBio, { color: textColor(isDark, 'secondary') }]}>{bio}</Text>
-
-            {skills.length > 0 && (
-              <>
-                <Text style={[styles.scrollProfileSectionLabel, { color: textColor(isDark) }]}>SKILLS</Text>
-                <View style={styles.scrollProfileTags}>
-                  {skills.map((s: string, i: number) => (
-                    <View key={i} style={[styles.scrollProfileTag, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}>
-                      <Text style={[styles.scrollProfileTagText, { color: textColor(isDark) }]}>{s}</Text>
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-
-            {industries.length > 0 && (
-              <>
-                <Text style={[styles.scrollProfileSectionLabel, { color: textColor(isDark) }]}>INDUSTRIES</Text>
-                <View style={styles.scrollProfileTags}>
-                  {industries.map((s: string, i: number) => (
-                    <View key={i} style={[styles.scrollProfileTag, { backgroundColor: COLORS.primary + '20' }]}>
-                      <Text style={[styles.scrollProfileTagText, { color: COLORS.primary }]}>{s}</Text>
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-
-            {lookingFor.length > 0 && (
-              <>
-                <Text style={[styles.scrollProfileSectionLabel, { color: textColor(isDark) }]}>LOOKING FOR</Text>
-                <View style={styles.scrollProfileTags}>
-                  {lookingFor.map((s: string, i: number) => (
-                    <View key={i} style={[styles.scrollProfileTag, { backgroundColor: '#22C55E' + '20' }]}>
-                      <Text style={[styles.scrollProfileTagText, { color: '#22C55E' }]}>{s}</Text>
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-
-            <View style={{ height: 100 }} />
-          </View>
-        </ScrollView>
-
-        <View style={[styles.scrollProfileActions, { backgroundColor: isDark ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.95)' }]}>
-          <TouchableOpacity style={[styles.scrollActionBtn, styles.scrollPassBtn]} onPress={() => animateSwipeOut('left')}>
-            <X size={20} color="#FF6B6B" />
-            <Text style={styles.scrollActionLabel}>PASS</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.scrollContactBtn]}
-            disabled={contactBusy || !topProfile || isSyntheticProfile(topProfile)}
-            onPress={handleContactRequest}
-          >
-            <MessageSquare size={16} color="#000" />
-            <Text style={styles.scrollContactText}>
-              {contactBusy ? '...' : connectionRequest?.status === 'approved' ? 'CHAT' : connectionRequest?.status === 'pending' ? 'SENT' : connectionRequest?.status === 'rejected' ? 'NO' : 'CONTACT'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.scrollActionBtn, styles.scrollLikeBtn]} onPress={() => animateSwipeOut('right')}>
-            <Heart size={22} color="#000" fill="#000" />
-            <Text style={[styles.scrollActionLabel, { color: '#000' }]}>LIKE</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.scrollActionBtn, styles.scrollRewindBtn]} onPress={rewindLast}>
-            <RotateCcw size={18} color="#000" />
-            <Text style={[styles.scrollActionLabel, { color: '#000' }]}>REWIND</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <FlatList
+        data={feedProfiles}
+        renderItem={renderFeedCard}
+        keyExtractor={(item) => item.uid}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={cardH + 12}
+        decelerationRate="fast"
+        contentContainerStyle={{ paddingVertical: 6, gap: 12 }}
+        style={{ flex: 1 }}
+      />
     );
   };
 
@@ -2183,136 +2182,109 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '900',
   },
-  scrollProfileRoot: {
-    flex: 1,
-    borderRadius: 20,
+  feedCard: {
+    borderRadius: 24,
     overflow: 'hidden',
+    marginHorizontal: 8,
   },
-  scrollProfileScroll: {
-    flex: 1,
-  },
-  scrollProfileContent: {
-    flexGrow: 1,
-  },
-  scrollProfileImg: {
-    width: '100%',
-    height: 300,
-  },
-  scrollProfileOverlay: {
+  feedCardImg: {
     ...StyleSheet.absoluteFillObject,
-    height: 300,
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
-  scrollProfileInfo: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    marginTop: -24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 20,
-    gap: 12,
+  feedCardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
-  scrollProfileTop: {
+  feedCardInfo: {
+    flex: 1,
+    justifyContent: 'space-between',
+    padding: 18,
+  },
+  feedCardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  feedCompatibilityPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
   },
-  scrollProfileName: {
-    fontSize: 24,
+  feedCompatibilityText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#000',
+  },
+  feedCardMeta: {
+    gap: 4,
+  },
+  feedNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  feedName: {
+    fontSize: 22,
     fontWeight: '900',
     fontStyle: 'italic',
     letterSpacing: -0.5,
+    color: '#FFF',
   },
-  scrollProfileRole: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  scrollProfileLocation: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  scrollProfileCompatRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  scrollProfileCompatText: {
-    fontSize: 12,
-    fontWeight: '800',
-    flex: 1,
-  },
-  scrollProfileSectionLabel: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-    marginTop: 4,
-  },
-  scrollProfileBio: {
+  feedRole: {
     fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 20,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.85)',
   },
-  scrollProfileTags: {
+  feedLocation: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  feedSkillsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 5,
+    marginTop: 6,
   },
-  scrollProfileTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
+  feedSkillTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  scrollProfileTagText: {
-    fontSize: 11,
-    fontWeight: '800',
+  feedSkillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFF',
   },
-  scrollProfileActions: {
+  feedActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 12,
+  },
+  feedActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
-  },
-  scrollActionBtn: {
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 14,
-  },
-  scrollPassBtn: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'transparent',
   },
-  scrollLikeBtn: {
-    backgroundColor: '#FF3B5C',
-  },
-  scrollRewindBtn: {
-    backgroundColor: COLORS.primary,
-  },
-  scrollContactBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-    width: 56,
-    height: 48,
-    borderRadius: 14,
+  feedContactBtn: {
     backgroundColor: '#FFF',
+    borderColor: '#FFF',
   },
-  scrollContactText: {
-    fontSize: 7,
+  feedActionLabel: {
+    fontSize: 9,
     fontWeight: '900',
+    color: '#FFF',
     letterSpacing: 0.6,
-    color: '#000',
-  },
-  scrollActionLabel: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: 'rgba(255,255,255,0.6)',
-    letterSpacing: 0.8,
   },
 });
