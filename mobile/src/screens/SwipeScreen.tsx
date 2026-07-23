@@ -891,7 +891,7 @@ export default function SwipeScreen({ navigation }: any) {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtnLarge, isCompactWeb && styles.compactActionBtnLarge]} onPress={() => animateSwipeOut('right')}>
-          <Heart size={32} color="#FFF" fill="#FFF" />
+          <Heart size={32} color="#000" fill="#000" />
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtnSmall, isCompactWeb && styles.compactActionBtnSmall]} onPress={resetDeck}>
           <RotateCcw size={24} color="#888" />

@@ -903,7 +903,7 @@ export default function SearchScreen({ navigation, route }: any) {
               <Text style={[styles.smallBtnText, { color: isDark ? '#FFF' : '#000' }]}>CLEAR</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setFilterOpen(false)} style={[styles.smallBtn, { backgroundColor: '#FBE618' }]}>
-              <Text style={[styles.smallBtnText, { color: '#FFF' }]}>DONE</Text>
+              <Text style={[styles.smallBtnText, { color: '#000' }]}>DONE</Text>
             </TouchableOpacity>
           </View>
           </View>

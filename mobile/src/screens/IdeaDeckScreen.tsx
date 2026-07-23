@@ -620,7 +620,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
               <X size={30} color="#FF4D4D" />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => animateSwipe('right')} style={[styles.actionBtn, styles.likeBtn]} disabled={busy}>
-              {busy ? <ActivityIndicator color="#FFF" /> : <Heart size={36} color="#FFF" fill="#FFF" />}
+              {busy ? <ActivityIndicator color="#000" /> : <Heart size={36} color="#000" fill="#000" />}
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setIdeas((current) => (current.length > 1 ? [...current.slice(1), current[0]] : current))} style={styles.actionBtn}>
               <RefreshCw size={30} color="#A1A1AA" />
@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sourcePill: { borderRadius: 999, backgroundColor: '#FBE618', paddingHorizontal: 12, paddingVertical: 7 },
-  sourceText: { color: '#FFF', fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  sourceText: { color: '#000', fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
   ideaTitle: { marginTop: 36, fontSize: 34, lineHeight: 40, fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase' },
   ideaDescription: { marginTop: 16, fontSize: 16, lineHeight: 24, fontWeight: '800' },
   signalGrid: { flexDirection: 'row', gap: 10, marginTop: 22 },
