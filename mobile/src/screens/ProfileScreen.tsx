@@ -844,10 +844,10 @@ export default function ProfileScreen({ navigation, route }: any) {
       teamSizePreference: (profile as any).teamSizePreference || '',
       remoteOnly: !!(profile as any).remoteOnly,
       willingToRelocate: !!(profile as any).willingToRelocate,
-      isStealthMode: profile.isStealthMode || false,
-      hideOnlineStatus: !!(profile as any).hideOnlineStatus,
-      turboConnect: !!(profile as any).turboConnect,
-      hasExit: profile.hasExit || false,
+      isStealthMode: profile?.isStealthMode || false,
+      hideOnlineStatus: !!(profile as any)?.hideOnlineStatus,
+      turboConnect: !!(profile as any)?.turboConnect,
+      hasExit: profile?.hasExit || false,
       photos: Array.isArray((profile as any).photos) ? (profile as any).photos.slice(0, 3) : [],
       projects: existingProjects.length
         ? existingProjects
@@ -2350,16 +2350,16 @@ export default function ProfileScreen({ navigation, route }: any) {
                 )}
               </View>
               <Text style={styles.handleText}>
-                @{cleanUsername((profile as any).username || displayNameFor(profile) || 'builder')}
+                @{cleanUsername((profile as any)?.username || displayNameFor(profile) || 'builder')}
               </Text>
               <View style={styles.profileRoleBadge}>
-                <Text style={styles.profileRoleBadgeText}>{roleInfoFor((profile as any).occupation).badge}</Text>
+                <Text style={styles.profileRoleBadgeText}>{roleInfoFor((profile as any)?.occupation).badge}</Text>
               </View>
               <Text style={styles.roleTextLine} numberOfLines={1}>
-                {[(profile as any).occupation, (profile as any).company ? `@ ${(profile as any).company}` : null].filter(Boolean).join(' ') || 'Builder'}
+                {[(profile as any)?.occupation, (profile as any)?.company ? `@ ${(profile as any)?.company}` : null].filter(Boolean).join(' ') || 'Builder'}
               </Text>
               <Text style={styles.locationText}>
-                {[profile.city, profile.country].filter(Boolean).join(', ') || 'Remote'}
+                {[profile?.city, profile?.country].filter(Boolean).join(', ') || 'Remote'}
               </Text>
 
               {!isViewingOther && !!profileLink && (
@@ -2651,7 +2651,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             <TouchableOpacity 
               style={[styles.vibeCard, liquidGlass(isDark, false)]}
               onPress={() => {
-                if (profile.vibeMedia) {
+                if (profile?.vibeMedia) {
                   Linking.openURL(profile.vibeMedia).catch(err => Alert.alert("Invalid Link", "Could not open vibe intro link."));
                 } else {
                   Alert.alert("No Vibe", "This user hasn't set a vibe intro yet.");
@@ -2660,7 +2660,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             >
               <SafeIcon name="Mic" size={20} color={COLORS.primary} />
               <Text style={[styles.vibeText, { color: textColor(isDark, 'muted') }]}>
-                {profile.vibeMedia ? "PLAY VIBE INTRO" : "NO VIBE INTRO SET"}
+                {profile?.vibeMedia ? "PLAY VIBE INTRO" : "NO VIBE INTRO SET"}
               </Text>
             </TouchableOpacity>
           )}

@@ -66,12 +66,12 @@ const includesAny = (haystack: string, needles: string[]) => {
 const cleanUsername = (value: string) => value.replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
 
 const profileHandle = (profile: Partial<UserProfile>) => {
-  const raw = (profile as any).username || profile.displayName || 'builder';
+  const raw = (profile as any)?.username || profile?.displayName || 'builder';
   return `@${cleanUsername(String(raw)) || 'builder'}`;
 };
 
 const projectSearchText = (profile: Partial<UserProfile>) => {
-  const projects = Array.isArray(profile.projects) ? profile.projects : [];
+  const projects = Array.isArray(profile?.projects) ? profile.projects : [];
   return projects
     .map((project: any) => [project?.title, project?.description, project?.status].filter(Boolean).join(' '))
     .join(' ');
