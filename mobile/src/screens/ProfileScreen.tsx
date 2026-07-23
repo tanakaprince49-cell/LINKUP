@@ -3088,7 +3088,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       <PaywallModal
         visible={!!paywallFeature}
         feature={paywallFeature || PRO_FEATURES.turboConnect}
-        description={`Free Android accounts can save ${FREE_LIMITS.savedProfiles} profiles, add ${FREE_LIMITS.projects} projects, add ${FREE_LIMITS.startupIdeas} ideas, and run ${FREE_LIMITS.dailyStartupAnalyzer} startup analyzer per day. LINKUP PLUS unlocks the rest.`}
+        description={`Free accounts can save ${FREE_LIMITS.savedProfiles} profiles, add ${FREE_LIMITS.projects} projects, add ${FREE_LIMITS.startupIdeas} ideas, and run ${FREE_LIMITS.dailyStartupAnalyzer} startup analyzer per day. LINKUP PLUS unlocks the rest.`}
         onClose={() => setPaywallFeature('')}
       />
     </SafeAreaView>

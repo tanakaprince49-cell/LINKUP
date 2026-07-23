@@ -645,7 +645,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
       <PaywallModal
         visible={!!paywallFeature}
         feature={paywallFeature || PRO_FEATURES.ideaSwipeLimit}
-        description={`Free Android accounts get ${FREE_LIMITS.dailyIdeaSwipes} idea swipes per day and ${FREE_LIMITS.startupIdeas} posted ideas. LINKUP PLUS unlocks unlimited ideas.`}
+        description={`Free accounts get ${FREE_LIMITS.dailyIdeaSwipes} idea swipes per day and ${FREE_LIMITS.startupIdeas} posted ideas. LINKUP PLUS unlocks unlimited ideas.`}
         onClose={() => setPaywallFeature('')}
       />
     </SafeAreaView>

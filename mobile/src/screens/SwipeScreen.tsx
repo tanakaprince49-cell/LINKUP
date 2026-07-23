@@ -1421,7 +1421,7 @@ export default function SwipeScreen({ navigation }: any) {
       <PaywallModal
         visible={!!paywallFeature}
         feature={paywallFeature || PRO_FEATURES.swipeLimit}
-        description={`Free Android accounts get ${FREE_LIMITS.swipesPer12Hours} builder swipes every ${SWIPE_USAGE_WINDOW_HOURS} hours. LINKUP PLUS unlocks unlimited discovery.`}
+        description={`Free accounts get ${FREE_LIMITS.swipesPer12Hours} builder swipes every ${SWIPE_USAGE_WINDOW_HOURS} hours. LINKUP PLUS unlocks unlimited discovery.`}
         onClose={closePaywallToHome}
         onUnlocked={() => setPaywallFeature('')}
       />
