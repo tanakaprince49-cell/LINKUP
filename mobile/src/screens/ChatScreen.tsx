@@ -12,7 +12,7 @@ import { generateWarmIntro } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { profileLinkFor, publicProfileLink } from '../lib/profileLinks';
 import VerifiedBadge from '../components/VerifiedBadge';
-import { COLORS, appBackground, liquidGlass } from '../theme/theme';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { imageAssetToDataUri } from '../lib/imageUploadLimits';
 import PaywallModal from '../components/PaywallModal';
 import { isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
@@ -823,12 +823,12 @@ export default function ChatScreen({ route, navigation }: any) {
       onPress={onPress}
       style={[styles.menuItem, { opacity: busyAction ? 0.6 : 1 }]}
     >
-      <View style={[styles.menuIcon, { backgroundColor: danger ? '#EF444420' : (isDark ? '#16161A' : '#F3F4F6') }]}>
+      <View style={[styles.menuIcon, danger ? { backgroundColor: '#EF444420' } : liquidGlass(isDark, false)]}>
         {icon}
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.menuTitle, { color: danger ? '#EF4444' : (isDark ? '#FFF' : '#000') }]}>{title}</Text>
-        {!!subtitle && <Text style={[styles.menuSub, { color: isDark ? '#AAA' : '#666' }]}>{subtitle}</Text>}
+        <Text style={[styles.menuTitle, { color: danger ? '#EF4444' : textColor(isDark) }]}>{title}</Text>
+        {!!subtitle && <Text style={[styles.menuSub, { color: textColor(isDark, 'secondary') }]}>{subtitle}</Text>}
       </View>
     </TouchableOpacity>
   );
@@ -900,7 +900,7 @@ export default function ChatScreen({ route, navigation }: any) {
   const otherIsTyping = !!(otherUserId && matchMeta?.typingBy?.[otherUserId]);
   const otherIsOnline = isPresenceOnline(otherUser);
   const headerStatus = otherIsTyping ? 'TYPING...' : (otherIsOnline ? 'ONLINE' : formatLastSeen(otherUser?.lastActiveAt));
-  const headerStatusColor = otherIsTyping ? '#FBE618' : (otherIsOnline ? '#4ADE80' : '#888');
+  const headerStatusColor = otherIsTyping ? COLORS.primary : (otherIsOnline ? COLORS.success : textColor(isDark, 'muted'));
   const headerAvatarUri = conversationAvatarUri(otherUser?.profilePic);
   const headerInitial = String(otherUser?.displayName || 'L').trim().charAt(0).toUpperCase() || 'L';
   const canOpenOtherProfile = !!otherUserId && otherUserId !== 'undefined';
@@ -917,12 +917,12 @@ export default function ChatScreen({ route, navigation }: any) {
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
       <View style={styles.scene} pointerEvents="none">
         <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
-        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(223,251,63,0.08)' : 'rgba(223,251,63,0.16)' }]} />
+        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: COLORS.primaryGlow }]} />
       </View>
       <View style={[styles.header, liquidGlass(isDark, false), { borderBottomColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, justifyContent: 'space-between' }]}> 
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <ChevronLeft size={24} color={isDark ? '#FFF' : '#000'} />
+            <ChevronLeft size={24} color={textColor(isDark)} />
           </TouchableOpacity>
           {otherUser ? (
             <TouchableOpacity 
@@ -938,7 +938,7 @@ export default function ChatScreen({ route, navigation }: any) {
               )}
               <View>
                 <View style={styles.chatNameRow}>
-                  <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{otherUser.displayName || 'Builder'}</Text>
+                  <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>{otherUser.displayName || 'Builder'}</Text>
                   {!!otherUser.isVerified && <VerifiedBadge size={20} />}
                 </View>
                 <Text style={[styles.status, { color: headerStatusColor }]}>
@@ -954,7 +954,7 @@ export default function ChatScreen({ route, navigation }: any) {
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={[styles.avatar, { backgroundColor: isDark ? '#16161A' : '#EEE' }]} />
               <View>
-                <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]}>CHAT</Text>
+                <Text style={[styles.name, { color: textColor(isDark) }]}>CHAT</Text>
                 <Text style={styles.status}>Loading...</Text>
                 <View style={styles.securityLine}>
                   <Shield size={10} color="#22C55E" />
@@ -966,14 +966,14 @@ export default function ChatScreen({ route, navigation }: any) {
         </View>
 
         <TouchableOpacity onPress={openOptionsMenu} style={{ padding: 8, alignItems: 'center', justifyContent: 'center' }}>
-          <MoreVertical size={22} color={isDark ? '#FFF' : '#000'} />
+          <MoreVertical size={22} color={textColor(isDark)} />
         </TouchableOpacity>
       </View>
 
       {isConfidential && (
-        <View style={[styles.confidentialBanner, { backgroundColor: isDark ? '#16161A' : '#FFFBEA', borderColor: '#FBE61855' }]}>
-          <Shield size={14} color="#FBE618" />
-          <Text style={[styles.confidentialText, { color: isDark ? '#FBE618' : '#92400E' }]}>
+        <View style={[styles.confidentialBanner, liquidGlass(isDark, false), { borderColor: 'rgba(251,230,24,0.33)' }]}>
+          <Shield size={14} color={COLORS.primary} />
+          <Text style={[styles.confidentialText, { color: isDark ? COLORS.primary : '#92400E' }]}>
             CONFIDENTIAL BUSINESS CHAT
           </Text>
         </View>
@@ -1001,24 +1001,24 @@ export default function ChatScreen({ route, navigation }: any) {
 
         <View style={[styles.inputContainer, liquidGlass(isDark, false), { borderTopColor: 'transparent' }]}>
           {otherIsTyping && (
-            <View style={[styles.typingPill, { backgroundColor: isDark ? '#111115' : '#EEF2FF', borderColor: isDark ? '#222226' : '#DBEAFE' }]}>
-              <Text style={[styles.typingText, { color: isDark ? '#FBE618' : '#FBE618' }]}>
+            <View style={[styles.typingPill, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+              <Text style={[styles.typingText, { color: textColor(isDark) }]}>
                 {(otherUser?.displayName || 'Builder').split(' ')[0]} is typing...
               </Text>
             </View>
           )}
           {!!replyTo && (
-            <View style={[styles.replyBar, { backgroundColor: isDark ? '#111115' : '#F3F4F6', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+            <View style={[styles.replyBar, liquidGlass(isDark)]}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.replyBarTitle, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                <Text style={[styles.replyBarTitle, { color: textColor(isDark) }]} numberOfLines={1}>
                   Replying to {replyTo.senderId === user?.uid ? 'your message' : (otherUser?.displayName || 'message')}
                 </Text>
-                <Text style={[styles.replyBarText, { color: isDark ? '#AAA' : '#666' }]} numberOfLines={1}>
+                <Text style={[styles.replyBarText, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
                   {replyTo.text}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setReplyTo(null)} style={styles.replyClose}>
-                <X size={16} color={isDark ? '#CCC' : '#111'} />
+                <X size={16} color={textColor(isDark, 'secondary')} />
               </TouchableOpacity>
             </View>
           )}
@@ -1034,13 +1034,13 @@ export default function ChatScreen({ route, navigation }: any) {
               setInputText((intro || '').trim());
             }}
           >
-            <Zap size={20} color="#FBE618" fill="#FBE618" />
+            <Zap size={20} color={COLORS.primary} fill={COLORS.primary} />
           </TouchableOpacity>
           <TouchableOpacity style={[styles.toolBtn, liquidGlass(isDark, false), mediaBusy && styles.toolBtnDisabled, { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]} onPress={openMediaPicker} disabled={mediaBusy}>
             {mediaBusy ? <ActivityIndicator size="small" color="#666" /> : <Camera size={20} color="#666" />}
           </TouchableOpacity>
           <TextInput
-            style={[styles.input, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
+            style={[styles.input, { color: textColor(isDark) }, liquidGlass(isDark, false)]}
             placeholder="Type a message..."
             placeholderTextColor="#666"
             value={inputText}
@@ -1053,7 +1053,7 @@ export default function ChatScreen({ route, navigation }: any) {
             multiline
           />
           <TouchableOpacity 
-            style={[styles.sendBtn, { opacity: inputText.trim() ? 1 : 0.5, backgroundColor: '#FBE618' }]} 
+            style={[styles.sendBtn, { opacity: inputText.trim() ? 1 : 0.5, backgroundColor: COLORS.primary }]} 
             onPress={handleSend}
             disabled={!inputText.trim()}
           >
@@ -1064,18 +1064,18 @@ export default function ChatScreen({ route, navigation }: any) {
 
       <Modal transparent visible={optionsOpen} animationType="fade" onRequestClose={closeOptionsMenu}>
         <Pressable style={styles.modalOverlay} onPress={closeOptionsMenu} />
-        <View style={[styles.menuSheet, { backgroundColor: isDark ? '#0F0F12' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+        <View style={[styles.menuSheet, liquidGlass(isDark)]}>
           <View style={styles.menuHeaderRow}>
-            <Text style={[styles.menuHeader, { color: isDark ? '#FFF' : '#000' }]}>CHAT OPTIONS</Text>
+            <Text style={[styles.menuHeader, { color: textColor(isDark) }]}>CHAT OPTIONS</Text>
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              {isPinned && <Pin size={14} color="#FBE618" />}
-              {isImportant && <Star size={14} color="#FBE618" fill="#FBE618" />}
+              {isPinned && <Pin size={14} color={COLORS.primary} />}
+              {isImportant && <Star size={14} color={COLORS.primary} fill={COLORS.primary} />}
             </View>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 520 }}>
             <MenuItem
-              icon={<ContactRound size={18} color={isDark ? '#FFF' : '#000'} />}
+              icon={<ContactRound size={18} color={textColor(isDark)} />}
               title="View Profile"
               subtitle="Open full business profile"
               onPress={() => {
@@ -1085,7 +1085,7 @@ export default function ChatScreen({ route, navigation }: any) {
             />
 
             <MenuItem
-              icon={<BellOff size={18} color={isDark ? '#FFF' : '#000'} />}
+              icon={<BellOff size={18} color={textColor(isDark)} />}
               title="Mute Notifications"
               subtitle={mutedUntilLabel || 'Choose duration'}
               onPress={() => {
@@ -1095,56 +1095,56 @@ export default function ChatScreen({ route, navigation }: any) {
             />
 
             <MenuItem
-              icon={<Pin size={18} color={isDark ? '#FFF' : '#000'} />}
+              icon={<Pin size={18} color={textColor(isDark)} />}
               title={isPinned ? 'Unpin Conversation' : 'Pin Conversation'}
               subtitle="Keep this chat at the top"
               onPress={() => toggleArrayField('pinnedBy')}
             />
 
             <MenuItem
-              icon={<Archive size={18} color={isDark ? '#FFF' : '#000'} />}
+              icon={<Archive size={18} color={textColor(isDark)} />}
               title={isArchived ? 'Unarchive Chat' : 'Archive Chat'}
               subtitle={isArchived ? 'Show in inbox again' : 'Hide from inbox without deleting'}
               onPress={() => toggleArrayField('archivedBy')}
             />
 
             <MenuItem
-              icon={<Star size={18} color={isDark ? '#FFF' : '#000'} fill={isImportant ? '#FBE618' : 'transparent'} />}
+              icon={<Star size={18} color={textColor(isDark)} fill={isImportant ? COLORS.primary : 'transparent'} />}
               title={isImportant ? 'Unmark Important' : 'Mark as Important'}
               subtitle="Highlight serious conversations"
               onPress={() => toggleArrayField('importantBy')}
             />
 
             <MenuItem
-              icon={<Users size={18} color={isDark ? '#FFF' : '#000'} />}
+              icon={<Users size={18} color={textColor(isDark)} />}
               title="Invite to Team"
               subtitle="Send a collaboration invite"
               onPress={inviteToTeam}
             />
 
             <MenuItem
-              icon={<Calendar size={18} color={isDark ? '#FFF' : '#000'} />}
+              icon={<Calendar size={18} color={textColor(isDark)} />}
               title="Schedule Meeting"
               subtitle="Zoom / Google Meet / Calendly"
               onPress={scheduleMeeting}
             />
 
             <MenuItem
-              icon={<ContactRound size={18} color={isDark ? '#FFF' : '#000'} />}
+              icon={<ContactRound size={18} color={textColor(isDark)} />}
               title="Share Contact Card"
               subtitle="Share your LINKUP identity"
               onPress={shareContactCard}
             />
 
             <MenuItem
-              icon={<Shield size={18} color={isConfidential ? '#FBE618' : (isDark ? '#FFF' : '#000')} />}
+              icon={<Shield size={18} color={isConfidential ? COLORS.primary : textColor(isDark)} />}
               title={isConfidential ? 'Disable Confidential Mode' : 'Confidential Mode'}
               subtitle={isConfidential ? 'Conversation marked confidential' : 'Mark this business chat confidential'}
               onPress={() => toggleArrayField('confidentialBy')}
             />
 
             <MenuItem
-              icon={<FileText size={18} color={isDark ? '#FFF' : '#000'} />}
+              icon={<FileText size={18} color={textColor(isDark)} />}
               title="Export Conversation"
               subtitle="Share as text transcript"
               onPress={exportConversation}
@@ -1176,13 +1176,13 @@ export default function ChatScreen({ route, navigation }: any) {
 
       <Modal transparent visible={mutePickerOpen} animationType="fade" onRequestClose={closeMutePicker}>
         <Pressable style={styles.modalOverlay} onPress={closeMutePicker} />
-        <View style={[styles.menuSheet, { backgroundColor: isDark ? '#0F0F12' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-          <Text style={[styles.menuHeader, { color: isDark ? '#FFF' : '#000' }]}>MUTE</Text>
-          <MenuItem icon={<BellOff size={18} color={isDark ? '#FFF' : '#000'} />} title="1 hour" onPress={() => setMute(1)} />
-          <MenuItem icon={<BellOff size={18} color={isDark ? '#FFF' : '#000'} />} title="8 hours" onPress={() => setMute(8)} />
-          <MenuItem icon={<BellOff size={18} color={isDark ? '#FFF' : '#000'} />} title="24 hours" onPress={() => setMute(24)} />
-          <MenuItem icon={<BellOff size={18} color={isDark ? '#FFF' : '#000'} />} title="Forever" onPress={() => setMute('forever')} />
-          <MenuItem icon={<BellOff size={18} color={isDark ? '#FFF' : '#000'} />} title="Unmute" onPress={() => setMute('off')} />
+        <View style={[styles.menuSheet, liquidGlass(isDark)]}>
+          <Text style={[styles.menuHeader, { color: textColor(isDark) }]}>MUTE</Text>
+          <MenuItem icon={<BellOff size={18} color={textColor(isDark)} />} title="1 hour" onPress={() => setMute(1)} />
+          <MenuItem icon={<BellOff size={18} color={textColor(isDark)} />} title="8 hours" onPress={() => setMute(8)} />
+          <MenuItem icon={<BellOff size={18} color={textColor(isDark)} />} title="24 hours" onPress={() => setMute(24)} />
+          <MenuItem icon={<BellOff size={18} color={textColor(isDark)} />} title="Forever" onPress={() => setMute('forever')} />
+          <MenuItem icon={<BellOff size={18} color={textColor(isDark)} />} title="Unmute" onPress={() => setMute('off')} />
         </View>
       </Modal>
       <PaywallModal
@@ -1240,7 +1240,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#FBE618',
+    borderColor: COLORS.primary,
   },
   avatarFallbackText: {
     color: '#000',
@@ -1264,7 +1264,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -1355,7 +1355,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   myBubble: {
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     borderBottomRightRadius: 4,
   },
   theirBubble: {
@@ -1462,7 +1462,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

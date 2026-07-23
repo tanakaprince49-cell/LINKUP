@@ -11,6 +11,7 @@ import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
 import { isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
 import { compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 type AnalyticsMode = 'views' | 'clicks' | 'saves' | 'response';
 
@@ -388,14 +389,14 @@ export default function ViewersScreen({ navigation, route }: any) {
     const RowIcon = item.analyticsMode === 'response' ? MessageSquare : UserPlus;
     return (
       <TouchableOpacity
-        style={[styles.viewerCard, { backgroundColor: isDark ? '#111115' : '#F8F8F8' }]}
+        style={[styles.viewerCard, liquidGlass(isDark, false)]}
         onPress={() => openRow(item)}
         activeOpacity={0.84}
       >
         <Image source={{ uri: safeProfileImageUri(item.profilePic) || FALLBACK_AVATAR }} style={styles.avatar} />
         <View style={styles.info}>
           <View style={styles.nameRow}>
-            <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+            <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>
               {item.displayName || '@builder'}
             </Text>
             {!!item.isVerified && <VerifiedBadge size={20} />}
@@ -403,14 +404,14 @@ export default function ViewersScreen({ navigation, route }: any) {
           <Text style={styles.bio} numberOfLines={1}>{item.eventLabel || item.bio || 'Building the future'}</Text>
           <Text style={styles.timeText}>{formatTimeAgo(item.eventTime)}</Text>
         </View>
-        <RowIcon size={20} color="#FBE618" />
+        <RowIcon size={20} color={COLORS.primary} />
       </TouchableOpacity>
     );
   };
 
   if (analyticsLocked) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
         <PaywallModal
           visible
           feature={PRO_FEATURES.profileViewers}
@@ -422,13 +423,13 @@ export default function ViewersScreen({ navigation, route }: any) {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.8}>
-          <ChevronLeft size={24} color={isDark ? '#FFF' : '#000'} />
+          <ChevronLeft size={24} color={textColor(isDark)} />
         </TouchableOpacity>
         <View style={styles.headerText}>
-          <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]}>{meta.title}</Text>
+          <Text style={[styles.title, { color: textColor(isDark) }]}>{meta.title}</Text>
           <Text style={styles.subtitle}>
             {responseRate === null ? meta.subtitle : `${responseRate}% response rate across active threads`}
           </Text>
@@ -446,7 +447,7 @@ export default function ViewersScreen({ navigation, route }: any) {
           return (
             <TouchableOpacity
               key={tabMode}
-              style={[styles.tab, active && styles.tabActive, { borderColor: active ? '#000' : (isDark ? '#27272D' : '#E5E7EB') }]}
+              style={[styles.tab, active && styles.tabActive, { borderColor: active ? '#000' : (isDark ? COLORS.darkBorder : COLORS.lightBorder) }]}
               onPress={() => setMode(tabMode)}
               activeOpacity={0.82}
             >
@@ -458,7 +459,7 @@ export default function ViewersScreen({ navigation, route }: any) {
       </View>
 
       {loading ? (
-        <ActivityIndicator color="#FBE618" style={{ marginTop: 50 }} />
+        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} />
       ) : (
         <FlatList
           data={rows}
@@ -467,8 +468,8 @@ export default function ViewersScreen({ navigation, route }: any) {
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <HeaderIcon size={48} color={isDark ? '#333' : '#222'} />
-              <Text style={[styles.emptyText, { color: isDark ? '#FFF' : '#222' }]}>{meta.empty}</Text>
+              <HeaderIcon size={48} color={textColor(isDark, 'secondary')} />
+              <Text style={[styles.emptyText, { color: textColor(isDark) }]}>{meta.empty}</Text>
               <Text style={styles.emptySub}>{meta.emptySub}</Text>
             </View>
           }
@@ -512,7 +513,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 8,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     borderWidth: 1,
     borderColor: '#000',
     alignItems: 'center',
@@ -534,7 +535,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tabActive: {
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
   },
   tabText: {
     fontSize: 9,
@@ -557,7 +558,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 18,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
   },
   info: {
     flex: 1,
@@ -580,7 +581,7 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 10,
-    color: '#FBE618',
+    color: COLORS.primary,
     fontWeight: '900',
     marginTop: 4,
     letterSpacing: 0.8,

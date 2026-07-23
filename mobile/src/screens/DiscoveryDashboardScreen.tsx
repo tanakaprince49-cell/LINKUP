@@ -209,7 +209,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         />
         <View style={{ flex: 1 }}>
           <View style={styles.nameRow}>
-            <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+            <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>
               {displayNameFor(item)}
             </Text>
             {item.isVerified && <VerifiedBadge size={20} />}
@@ -246,7 +246,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
             style={styles.smallAvatar}
           />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.opportunityTitle, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+            <Text style={[styles.opportunityTitle, { color: textColor(isDark) }]} numberOfLines={1}>
               {details.title}
             </Text>
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
@@ -256,17 +256,17 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           </View>
         </View>
 
-        <Text style={[styles.opportunitySummary, { color: isDark ? '#CCC' : '#333' }]} numberOfLines={3}>
+        <Text style={[styles.opportunitySummary, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
           {details.summary}
         </Text>
 
         <View style={styles.opportunityMetaGrid}>
           <View style={styles.opportunityMeta}>
-            <Target size={12} color="#FBE618" />
+            <Target size={12} color={COLORS.primary} />
             <Text style={styles.opportunityMetaText} numberOfLines={1}>{details.roleNeed}</Text>
           </View>
           <View style={styles.opportunityMeta}>
-            <Briefcase size={12} color="#FBE618" />
+            <Briefcase size={12} color={COLORS.primary} />
             <Text style={styles.opportunityMetaText} numberOfLines={1}>{details.stage}</Text>
           </View>
           <View style={styles.opportunityMeta}>
@@ -278,17 +278,17 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         <View style={styles.tagsRow}>
           {details.tags.map((tag, index) => (
             <View key={`${item.uid}-${tag}-${index}`} style={[styles.tagChip, liquidGlass(isDark, false)]}>
-              <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{tag.toUpperCase()}</Text>
+              <Text style={[styles.tagText, { color: textColor(isDark) }]} numberOfLines={1}>{tag.toUpperCase()}</Text>
             </View>
           ))}
         </View>
 
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.opportunityBtn, { backgroundColor: '#FBE618' }]}>
+          <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.opportunityBtn, { backgroundColor: COLORS.primary }]}>
             <Text style={[styles.opportunityBtnText, { color: '#000' }]}>VIEW PROFILE</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Search')} style={[styles.opportunityIconBtn, liquidGlass(isDark, false)]}>
-            <Search size={16} color={isDark ? '#FFF' : '#000'} />
+            <Search size={16} color={textColor(isDark)} />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -306,7 +306,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           <Rocket size={17} color="#000" />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.projectTitle, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+          <Text style={[styles.projectTitle, { color: textColor(isDark) }]} numberOfLines={1}>
             {item.project.title}
           </Text>
           <Text style={styles.handle} numberOfLines={1}>{handleFor(item.owner)}</Text>
@@ -315,19 +315,19 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           <Text style={styles.projectScoreText}>{item.score}%</Text>
         </View>
       </View>
-      <Text style={[styles.projectSummary, { color: isDark ? '#CCC' : '#333' }]} numberOfLines={3}>
+      <Text style={[styles.projectSummary, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
         {item.project.description}
       </Text>
       <View style={styles.projectSignalRow}>
         <Text style={styles.projectSignalLabel}>WHY YOU</Text>
-        <Text style={[styles.projectReason, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+        <Text style={[styles.projectReason, { color: textColor(isDark) }]} numberOfLines={1}>
           {item.reason}
         </Text>
       </View>
       <View style={styles.tagsRow}>
         {[item.roleNeed, item.project.status, ...item.matchingSignals].filter(Boolean).slice(0, 4).map((tag, index) => (
           <View key={`${item.id}-${tag}-${index}`} style={[styles.tagChip, liquidGlass(isDark, false)]}>
-            <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{String(tag).toUpperCase()}</Text>
+            <Text style={[styles.tagText, { color: textColor(isDark) }]} numberOfLines={1}>{String(tag).toUpperCase()}</Text>
           </View>
         ))}
       </View>
@@ -339,7 +339,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
       <TouchableOpacity style={styles.sectionHeader} onPress={onViewAll} activeOpacity={onViewAll ? 0.8 : 1}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {icon}
-          <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#000' }]}>{title}</Text>
+          <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>{title}</Text>
         </View>
         <ChevronRight size={18} color="#666" />
       </TouchableOpacity>
@@ -355,7 +355,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
         ListEmptyComponent={
           <View style={[styles.emptyCard, liquidGlass(isDark, false)]}>
-            <Text style={[styles.emptyTitle, { color: isDark ? '#FFF' : '#000' }]}>No active opportunities yet</Text>
+            <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No active opportunities yet</Text>
             <Text style={styles.emptySub}>Use search to find builders by role, stage, or industry.</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.emptyBtn}>
               <Text style={styles.emptyBtnText}>OPEN SEARCH</Text>
@@ -368,13 +368,13 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   );
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={[styles.container, appBackground(isDark), { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}> 
+    <SafeAreaView edges={['top', 'bottom']} style={[styles.container, appBackground(isDark)]}> 
       <View style={styles.scene} pointerEvents="none">
         <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
         <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(223,251,63,0.08)' : 'rgba(223,251,63,0.16)' }]} />
       </View>
       {loading && people.length === 0 ? (
-        <ActivityIndicator color="#FBE618" style={{ marginTop: 40 }} />
+        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
       ) : (
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
           <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
@@ -437,7 +437,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 
           <Section
             title="Recommended Matches"
-            icon={<Sparkles size={18} color="#FBE618" />}
+            icon={<Sparkles size={18} color={COLORS.primary} />}
             data={recommended}
             showScore
             onViewAll={() => navigation.navigate('RecommendedMatches')}
@@ -445,7 +445,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           <View style={{ marginTop: 18 }}>
             <TouchableOpacity style={styles.sectionHeader} onPress={() => navigation.navigate('ActiveOpportunities')} activeOpacity={0.8}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Rocket size={18} color="#FBE618" />
+                <Rocket size={18} color={COLORS.primary} />
                 <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>Project Matches</Text>
               </View>
               <ChevronRight size={18} color="#666" />
@@ -471,7 +471,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           </View>
           <Section
             title="Trending Builders"
-            icon={<TrendingUp size={18} color="#FBE618" />}
+            icon={<TrendingUp size={18} color={COLORS.primary} />}
             data={trending}
             onViewAll={() => navigation.navigate('TrendingBuilders')}
           />
@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
     height: 30,
     minWidth: 44,
     borderRadius: 15,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
@@ -645,13 +645,13 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#000',
   },
-  handle: { marginTop: 2, fontSize: 10, color: '#FBE618', fontWeight: '900' },
+  handle: { marginTop: 2, fontSize: 10,     color: COLORS.primary, fontWeight: '900' },
   meta: { marginTop: 4, fontSize: 10, color: '#666', fontWeight: '900' },
   scorePill: {
     marginTop: 8,
@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -685,7 +685,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 15,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -699,7 +699,7 @@ const styles = StyleSheet.create({
     height: 30,
     minWidth: 46,
     borderRadius: 15,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
@@ -719,7 +719,7 @@ const styles = StyleSheet.create({
   projectSignalRow: {
     marginTop: 12,
     borderRadius: 14,
-    backgroundColor: '#FBE61814',
+    backgroundColor: 'rgba(251,230,24,0.08)',
     padding: 10,
   },
   projectSignalLabel: {
@@ -845,7 +845,7 @@ const styles = StyleSheet.create({
   emptyBtn: {
     height: 40,
     borderRadius: 14,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 12,

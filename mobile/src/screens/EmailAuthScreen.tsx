@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
@@ -43,17 +44,17 @@ export default function EmailAuthScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#050508' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.8}>
-          <ChevronLeft size={22} color={isDark ? '#FFF' : '#000'} />
+          <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>EMAIL LOGIN</Text>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>EMAIL LOGIN</Text>
         <View style={{ width: 44 }} />
       </View>
 
       <View style={styles.content}>
-        <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]}>Welcome back</Text>
+        <Text style={[styles.title, { color: textColor(isDark) }]}>Welcome back</Text>
         <Text style={styles.sub}>Sign in, or create an account with email.</Text>
 
         <TextInput
@@ -63,15 +64,12 @@ export default function EmailAuthScreen({ navigation }: any) {
           keyboardType="email-address"
           placeholder="Email"
           placeholderTextColor="#666"
-          style={[styles.input, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#111115' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+          style={[styles.input, liquidGlass(isDark), { color: textColor(isDark), borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
         />
         <View
           style={[
             styles.passwordWrap,
-            {
-              backgroundColor: isDark ? '#111115' : '#F8F8F8',
-              borderColor: isDark ? '#222226' : '#EEEEEE',
-            },
+            liquidGlass(isDark),
           ]}
         >
           <TextInput
@@ -80,7 +78,7 @@ export default function EmailAuthScreen({ navigation }: any) {
             secureTextEntry={!showPassword}
             placeholder="Password"
             placeholderTextColor="#666"
-            style={[styles.passwordInput, { color: isDark ? '#FFF' : '#000' }]}
+            style={[styles.passwordInput, { color: textColor(isDark) }]}
           />
           <TouchableOpacity
             onPress={() => setShowPassword((current) => !current)}
@@ -88,11 +86,11 @@ export default function EmailAuthScreen({ navigation }: any) {
             style={styles.passwordToggle}
           >
             {showPassword ? (
-              <EyeOff size={18} color={isDark ? '#FFF' : '#111'} />
+              <EyeOff size={18} color={textColor(isDark)} />
             ) : (
-              <Eye size={18} color={isDark ? '#FFF' : '#111'} />
+              <Eye size={18} color={textColor(isDark)} />
             )}
-            <Text style={[styles.passwordToggleText, { color: isDark ? '#FFF' : '#111' }]}>
+            <Text style={[styles.passwordToggleText, { color: textColor(isDark) }]}>
               {showPassword ? 'HIDE' : 'SHOW'}
             </Text>
           </TouchableOpacity>
@@ -112,15 +110,15 @@ export default function EmailAuthScreen({ navigation }: any) {
             onPress={doSignIn}
             disabled={busy}
             activeOpacity={0.85}
-            style={[styles.btn, { backgroundColor: isDark ? '#16161A' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EAEAEA' }]}
+            style={[styles.btn, liquidGlass(isDark, false)]}
           >
-            {busy ? <ActivityIndicator color={isDark ? '#FFF' : '#000'} /> : <Text style={[styles.btnText, { color: isDark ? '#FFF' : '#000' }]}>SIGN IN</Text>}
+            {busy ? <ActivityIndicator color={textColor(isDark)} /> : <Text style={[styles.btnText, { color: textColor(isDark) }]}>SIGN IN</Text>}
           </TouchableOpacity>
           <TouchableOpacity
             onPress={doSignUp}
             disabled={busy}
             activeOpacity={0.85}
-            style={[styles.btn, { backgroundColor: '#FBE618', borderColor: '#FBE618' }]}
+            style={[styles.btn, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
           >
             {busy ? <ActivityIndicator color="#000" /> : <Text style={[styles.btnText, { color: '#000' }]}>CREATE</Text>}
           </TouchableOpacity>
@@ -145,9 +143,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FBE61810',
+    backgroundColor: 'rgba(251,230,24,0.06)',
     borderWidth: 1,
-    borderColor: '#FBE61830',
+    borderColor: 'rgba(251,230,24,0.19)',
   },
   headerTitle: { fontSize: 12, fontWeight: '900', letterSpacing: 2 },
   content: { paddingHorizontal: 24, paddingTop: 30 },
@@ -194,7 +192,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   forgotText: {
-    color: '#FBE618',
+    color: COLORS.primary,
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 1.2,

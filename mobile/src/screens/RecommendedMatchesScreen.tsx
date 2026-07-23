@@ -13,6 +13,7 @@ import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { consumeDailyUsage, FREE_LIMITS, getDailyUsage } from '../lib/paywall';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 type MatchScore = {
   score: number;
@@ -189,7 +190,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       : [...asList((item as any).lookingFor), ...asList(item.skills), ...asList((item as any).industries)].slice(0, 5);
 
     return (
-      <View style={[styles.card, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+      <View style={[styles.card, liquidGlass(isDark)]}>
         <View style={styles.cardTop}>
           <TouchableOpacity
             style={styles.scorePill}
@@ -212,7 +213,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           />
           <View style={{ flex: 1 }}>
             <View style={styles.nameRow}>
-              <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+              <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>
                 {item.displayName || 'Builder'}
               </Text>
               {item.isVerified && <VerifiedBadge size={22} />}
@@ -224,22 +225,22 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           </View>
         </TouchableOpacity>
 
-        <View style={[styles.reasonBox, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-          <Zap size={14} color="#FBE618" />
-          <Text style={[styles.reasonText, { color: isDark ? '#DDD' : '#333' }]} numberOfLines={3}>
+        <View style={[styles.reasonBox, liquidGlass(isDark, false)]}>
+          <Zap size={14} color={COLORS.primary} />
+          <Text style={[styles.reasonText, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
             {match.reason}
           </Text>
         </View>
 
         <View style={styles.infoRow}>
           <View style={styles.infoItem}>
-            <Target size={12} color="#FBE618" />
+            <Target size={12} color={COLORS.primary} />
             <Text style={styles.infoText} numberOfLines={1}>
               {asList((item as any).lookingFor).slice(0, 2).join(', ') || 'Networking'}
             </Text>
           </View>
           <View style={styles.infoItem}>
-            <Search size={12} color="#FBE618" />
+            <Search size={12} color={COLORS.primary} />
             <Text style={styles.infoText} numberOfLines={1}>
               {(item as any).startupStage || 'Exploring'}
             </Text>
@@ -250,29 +251,29 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           {tags.length ? tags.map((tag, index) => (
             <View
               key={`${item.uid}-${tag}-${index}`}
-              style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+              style={[styles.tagChip, liquidGlass(isDark, false)]}
             >
-              <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+              <Text style={[styles.tagText, { color: textColor(isDark) }]} numberOfLines={1}>
                 {String(tag).toUpperCase()}
               </Text>
             </View>
           )) : (
-            <View style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-              <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]}>PROMISING MATCH</Text>
+            <View style={[styles.tagChip, liquidGlass(isDark, false)]}>
+              <Text style={[styles.tagText, { color: textColor(isDark) }]}>PROMISING MATCH</Text>
             </View>
           )}
         </View>
 
         <View style={styles.actionsRow}>
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+            style={[styles.actionBtn, liquidGlass(isDark, false)]}
             onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: match.score, compatibilityReason: match.reason })}
           >
-            <User size={16} color={isDark ? '#FFF' : '#000'} />
-            <Text style={[styles.actionText, { color: isDark ? '#FFF' : '#000' }]}>PROFILE</Text>
+            <User size={16} color={textColor(isDark)} />
+            <Text style={[styles.actionText, { color: textColor(isDark) }]}>PROFILE</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: '#FBE618', borderColor: '#FBE618' }]}
+            style={[styles.actionBtn, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
             onPress={() => openChat(item)}
             disabled={busyUserId === item.uid}
           >
@@ -285,19 +286,19 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
-          <ChevronLeft size={22} color={isDark ? '#FFF' : '#000'} />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, liquidGlass(isDark, false)]}>
+          <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>RECOMMENDED MATCHES</Text>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>RECOMMENDED MATCHES</Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      <View style={[styles.heroCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+      <View style={[styles.heroCard, liquidGlass(isDark)]}>
         <View style={styles.heroRow}>
-          <Sparkles size={20} color="#FBE618" />
-          <Text style={[styles.heroTitle, { color: isDark ? '#FFF' : '#000' }]}>Recommended people for you</Text>
+          <Sparkles size={20} color={COLORS.primary} />
+          <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Recommended people for you</Text>
         </View>
         <Text style={styles.heroSub}>
           Ranked by shared skills, industries, goals, work style, and compatibility so you can find useful people faster.
@@ -311,7 +312,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       </View>
 
       {loading && people.length === 0 ? (
-        <ActivityIndicator color="#FBE618" style={{ marginTop: 48 }} />
+        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 48 }} />
       ) : (
         <FlatList
           data={recommended}
@@ -324,8 +325,8 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           windowSize={6}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <View style={[styles.emptyCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-              <Text style={[styles.emptyTitle, { color: isDark ? '#FFF' : '#000' }]}>No recommendations yet</Text>
+            <View style={[styles.emptyCard, liquidGlass(isDark)]}>
+              <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No recommendations yet</Text>
               <Text style={styles.emptySub}>Complete your profile or use search filters while LINKUP learns your matching signals.</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.emptyBtn}>
                 <Search size={16} color="#000" />
@@ -409,7 +410,7 @@ const styles = StyleSheet.create({
   scorePill: {
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
@@ -447,7 +448,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -457,7 +458,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 10,
     fontWeight: '900',
-    color: '#FBE618',
+    color: COLORS.primary,
   },
   meta: {
     marginTop: 4,
@@ -556,7 +557,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
     height: 44,
     borderRadius: 16,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',

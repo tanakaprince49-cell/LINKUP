@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Bell, X } from 'lucide-react-native';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { useTheme } from '../contexts/ThemeContext';
 
 type LinkupAlertPayload = {
@@ -97,7 +98,7 @@ export default function LinkupAlertProvider({ children }: { children: React.Reac
               styles.card,
               {
                 backgroundColor: isDark ? '#111114' : '#FFFFFF',
-                borderColor: '#FBE618',
+                borderColor: COLORS.primary,
               },
             ]}
             onPress={(event) => event.stopPropagation()}
@@ -191,7 +192,7 @@ const styles = StyleSheet.create({
   },
   brandBand: {
     minHeight: 72,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     borderBottomWidth: 2,
     borderBottomColor: '#000',
     paddingHorizontal: 18,
@@ -283,7 +284,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   primaryButton: {
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     borderColor: '#000',
   },
   cancelButton: {

@@ -10,6 +10,7 @@ import { activeOpportunityScore, handleFor, isDiscoverableProfile, opportunityDe
 import { getBestProjectRecommendations, scoreProjectFit } from '../lib/projectRecommendations';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 export default function ActiveOpportunitiesScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
@@ -72,7 +73,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.uid, projectId: recommendedProject?.project.id })}
-        style={[styles.card, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+        style={[styles.card, liquidGlass(isDark)]}
       >
         <View style={styles.cardTop}>
           <Image
@@ -81,7 +82,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
           />
           <View style={{ flex: 1 }}>
             <View style={styles.titleRow}>
-              <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+              <Text style={[styles.title, { color: textColor(isDark) }]} numberOfLines={1}>
                 {details.title}
               </Text>
               {!!item.isVerified && <VerifiedBadge size={20} />}
@@ -93,17 +94,17 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
           </View>
         </View>
 
-        <Text style={[styles.summary, { color: isDark ? '#CCC' : '#333' }]} numberOfLines={3}>
+        <Text style={[styles.summary, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
           {details.summary}
         </Text>
 
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
-            <Target size={12} color="#FBE618" />
+            <Target size={12} color={COLORS.primary} />
             <Text style={styles.metaText} numberOfLines={1}>{details.roleNeed}</Text>
           </View>
           <View style={styles.metaItem}>
-            <Briefcase size={12} color="#FBE618" />
+            <Briefcase size={12} color={COLORS.primary} />
             <Text style={styles.metaText} numberOfLines={1}>{details.stage}</Text>
           </View>
           <View style={styles.metaItem}>
@@ -114,8 +115,8 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
 
         <View style={styles.tagsRow}>
           {details.tags.slice(0, 4).map((tag, index) => (
-            <View key={`${item.uid}-${tag}-${index}`} style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-              <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]}>{String(tag).toUpperCase()}</Text>
+            <View key={`${item.uid}-${tag}-${index}`} style={[styles.tagChip, liquidGlass(isDark, false)]}>
+              <Text style={[styles.tagText, { color: textColor(isDark) }]}>{String(tag).toUpperCase()}</Text>
             </View>
           ))}
         </View>
@@ -124,19 +125,19 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
-          <ChevronLeft size={22} color={isDark ? '#FFF' : '#000'} />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, liquidGlass(isDark, false)]}>
+          <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>ACTIVE OPPORTUNITIES</Text>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>ACTIVE OPPORTUNITIES</Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      <View style={[styles.heroCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+      <View style={[styles.heroCard, liquidGlass(isDark)]}>
         <View style={styles.heroRow}>
           <Users size={20} color="#4ADE80" />
-          <Text style={[styles.heroTitle, { color: isDark ? '#FFF' : '#000' }]}>Builders ready for action</Text>
+          <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Builders ready for action</Text>
         </View>
         <Text style={styles.heroSub}>
           Open opportunities from founders and builders actively looking for teammates, collaborators, and momentum.
@@ -144,7 +145,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
       </View>
 
       {loading && builders.length === 0 ? (
-        <ActivityIndicator color="#FBE618" style={{ marginTop: 48 }} />
+        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 48 }} />
       ) : (
         <FlatList
           data={opportunities}
@@ -157,8 +158,8 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
           windowSize={6}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <View style={[styles.emptyCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-              <Text style={[styles.emptyTitle, { color: isDark ? '#FFF' : '#000' }]}>No active opportunities yet</Text>
+            <View style={[styles.emptyCard, liquidGlass(isDark)]}>
+              <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No active opportunities yet</Text>
               <Text style={styles.emptySub}>Try search to find builders by role, stage, or industry.</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.emptyBtn}>
                 <Search size={16} color="#000" />
@@ -252,7 +253,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -261,7 +262,7 @@ const styles = StyleSheet.create({
   handle: {
     marginTop: 2,
     fontSize: 10,
-    color: '#FBE618',
+    color: COLORS.primary,
     fontWeight: '900',
   },
   livePill: {
@@ -339,7 +340,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
     height: 44,
     borderRadius: 16,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',

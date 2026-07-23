@@ -56,6 +56,7 @@ import {
   isAndroidProLocked,
   PRO_FEATURES,
 } from '../lib/paywall';
+import { MAX_FIRESTORE_IMAGE_CHARS } from '../lib/imageUploadLimits';
 import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
 
 const { width } = Dimensions.get('window');
@@ -297,12 +298,12 @@ const PreferenceSwitch = ({
   isDark: boolean;
 }) => (
   <View style={[styles.switchWrap, disabled ? { opacity: 0.55 } : null]}>
-    <Text style={[styles.switchState, { color: value ? '#FBE618' : '#777' }]}>{value ? 'ON' : 'OFF'}</Text>
+    <Text style={[styles.switchState, { color: value ? COLORS.primary : '#777' }]}>{value ? 'ON' : 'OFF'}</Text>
     <Switch
       value={value}
       onValueChange={onValueChange}
       disabled={!!disabled}
-      trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#FBE618' }}
+      trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: COLORS.primary }}
       ios_backgroundColor={isDark ? '#2A2A30' : '#D1D5DB'}
       thumbColor="#FFF"
     />
@@ -780,11 +781,11 @@ export default function ProfileScreen({ navigation, route }: any) {
       <SafeAreaView style={[styles.container, appBackground(isDark)]}>
         <View style={styles.unavailableWrap}>
           <TouchableOpacity onPress={goBackOrHome} style={[styles.backPill, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]}>
-            <SafeIcon name="ChevronLeft" size={18} color={isDark ? '#FFF' : '#000'} />
-            <Text style={[styles.backPillText, { color: isDark ? '#FFF' : '#000' }]}>BACK</Text>
+            <SafeIcon name="ChevronLeft" size={18} color={textColor(isDark)} />
+            <Text style={[styles.backPillText, { color: textColor(isDark) }]}>BACK</Text>
           </TouchableOpacity>
           <SafeIcon name="ShieldAlert" size={42} color={COLORS.primary} />
-          <Text style={[styles.unavailableTitle, { color: isDark ? '#FFF' : '#000' }]}>PROFILE UNAVAILABLE</Text>
+          <Text style={[styles.unavailableTitle, { color: textColor(isDark) }]}>PROFILE UNAVAILABLE</Text>
           <Text style={styles.unavailableText}>{viewedError}</Text>
         </View>
       </SafeAreaView>
@@ -1700,8 +1701,8 @@ export default function ProfileScreen({ navigation, route }: any) {
     setPreference('turboConnect', value);
   };
   const editFieldStyle = {
-    backgroundColor: isDark ? '#16161A' : '#F8F8F8',
-    borderColor: isDark ? '#222226' : '#E5E7EB',
+    backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
+    borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
   };
   const heroProfilePic =
     safeProfileImageUri(isEditing ? editData?.profilePic : profile.profilePic, MOBILE_LIST_IMAGE_LIMIT) ||
@@ -1759,7 +1760,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               key={`${field}-${option}`}
               style={[
                 styles.statusOptionChip,
-                { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#2A2A30' : '#E5E7EB' },
+                liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
                 selected && styles.statusOptionChipActive,
               ]}
               onPress={() => setEditField(field, option)}
@@ -1783,7 +1784,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               key={`${field}-${option}`}
               style={[
                 styles.statusOptionChip,
-                { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#2A2A30' : '#E5E7EB' },
+                liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
                 selected && styles.statusOptionChipActive,
               ]}
               onPress={() => toggleEditListValue(field, option)}
@@ -1828,9 +1829,9 @@ export default function ProfileScreen({ navigation, route }: any) {
         {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity onPress={goBackOrHome} style={styles.iconButton}>
-            <SafeIcon name="ChevronLeft" size={20} color={isDark ? '#FFF' : '#000'} />
+            <SafeIcon name="ChevronLeft" size={20} color={textColor(isDark)} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>
+          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>
             {isViewingOther ? 'PROFILE' : 'MY PROFILE'}
           </Text>
           <View style={styles.headerActions}>
@@ -1843,7 +1844,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               {refreshing ? (
                 <ActivityIndicator size="small" color={COLORS.primary} />
               ) : (
-                <SafeIcon name="RefreshCw" size={18} color={isDark ? '#CCC' : '#444'} />
+                <SafeIcon name="RefreshCw" size={18} color={textColor(isDark, 'secondary')} />
               )}
             </TouchableOpacity>
             {!isViewingOther ? (
@@ -1859,7 +1860,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                     <Text style={styles.saveProfileText}>SAVE</Text>
                   </View>
                 ) : (
-                  <SafeIcon name="PenLine" size={20} color={isDark ? '#CCC' : '#444'} />
+                  <SafeIcon name="PenLine" size={20} color={textColor(isDark, 'secondary')} />
                 )}
               </TouchableOpacity>
             ) : null}
@@ -1873,8 +1874,8 @@ export default function ProfileScreen({ navigation, route }: any) {
               {shouldRenderProfileImages ? (
                 <Image source={{ uri: heroProfilePic }} style={styles.avatar} />
               ) : (
-                <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: isDark ? '#16161A' : '#FFFCE7' }]}>
-                  <Text style={[styles.avatarInitial, { color: isDark ? '#FFF' : '#000' }]}>{profileInitial}</Text>
+                <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: isDark ? COLORS.darkBgSec : '#FFFCE7' }]}>
+                  <Text style={[styles.avatarInitial, { color: textColor(isDark) }]}>{profileInitial}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -1887,7 +1888,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
           {!isViewingOther && (isEditing || profileDetailsReady) && (
             <View style={{ marginTop: 18 }}>
-              <Text style={[styles.sectionHeader, { color: isDark ? '#FFF' : '#000' }]}>PHOTOS</Text>
+              <Text style={[styles.sectionHeader, { color: textColor(isDark) }]}>PHOTOS</Text>
               <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 10 }}>
                 {[0, 1, 2].map((idx) => {
                   const photos = (isEditing ? (editData?.photos || []) : ((profile as any).photos || [])) as string[];
@@ -1897,7 +1898,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                       key={idx}
                       activeOpacity={0.85}
                       onPress={() => (isEditing ? pickGalleryPhoto(idx) : startEditing())}
-                      style={[styles.photoSlot, { borderColor: isDark ? '#222226' : '#EEEEEE', backgroundColor: isDark ? '#111115' : '#F8F8F8' }]}
+                      style={[styles.photoSlot, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
                     >
                       {uri && shouldRenderProfileImages ? (
                         <>
@@ -1916,7 +1917,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                           )}
                         </>
                       ) : (
-                        <SafeIcon name="Plus" size={18} color={isDark ? '#CCC' : '#444'} />
+                        <SafeIcon name="Plus" size={18} color={textColor(isDark, 'secondary')} />
                       )}
                     </TouchableOpacity>
                   );
@@ -1931,14 +1932,14 @@ export default function ProfileScreen({ navigation, route }: any) {
           {isEditing ? (
             <View style={styles.editForm}>
               <TextInput 
-                style={[styles.nameInput, styles.editTextBox, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.nameInput, styles.editTextBox, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.displayName)}
                 onChangeText={(t: string) => setEditData({...editData, displayName: t})}
                 placeholder="Full Name"
                 placeholderTextColor="#666"
               />
               <TextInput
-                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={editData?.username ? `@${toTextValue(editData.username)}` : ''}
                 onChangeText={(t: string) => setEditData({ ...editData, username: cleanUsername(t) })}
                 placeholder="@username"
@@ -1946,7 +1947,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 autoCapitalize="none"
               />
               <TextInput
-                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.occupation)}
                 onChangeText={(t: string) => setEditField('occupation', t)}
                 placeholder="Occupation (e.g. Founder, ML Engineer)"
@@ -1954,7 +1955,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               />
               {renderChoiceGroup('ROLE / PROFESSION', 'occupation', ROLE_OPTIONS)}
               <TextInput
-                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.company)}
                 onChangeText={(t: string) => setEditField('company', t)}
                 placeholder="Company / Startup (optional)"
@@ -1968,14 +1969,14 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholderTextColor="#666"
               />
               <TextInput
-                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.country)}
                 onChangeText={(t: string) => setEditField('country', t)}
                 placeholder="Country"
                 placeholderTextColor="#666"
               />
               <TextInput
-                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.age)}
                 onChangeText={(t: string) => setEditField('age', t.replace(/[^0-9]/g, '').slice(0, 3))}
                 placeholder="Age"
@@ -1983,7 +1984,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 keyboardType="number-pad"
               />
               <TextInput
-                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.availability)}
                 onChangeText={(t: string) => setEditField('availability', t)}
                 placeholder="Availability (e.g. Open, Weekends)"
@@ -1992,7 +1993,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               {renderChoiceGroup('AVAILABILITY', 'availability', AVAILABILITY_OPTIONS)}
               <TextInput
                 multiline
-                style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.bioInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.bio)}
                 onChangeText={(t: string) => setEditField('bio', t)}
                 placeholder="Bio: who are you, what are you building, and what help do you want?"
@@ -2000,7 +2001,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               />
               <TextInput
                 multiline
-                style={[styles.skillsInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.skillsInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.skills)}
                 onChangeText={(t: string) => setEditField('skills', t)}
                 placeholder="Skills & stack (comma, semicolon, or line separated): React, Automation, Sales..."
@@ -2009,16 +2010,16 @@ export default function ProfileScreen({ navigation, route }: any) {
               {renderMultiChoiceGroup('QUICK ADD SKILLS', 'skills', SKILL_SUGGESTIONS)}
               <TextInput
                 multiline
-                style={[styles.skillsInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.skillsInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.interests)}
                 onChangeText={(t: string) => setEditField('interests', t)}
                 placeholder="Interests (comma-separated): AI, marketplaces, student founders..."
                 placeholderTextColor="#666"
               />
-              <View style={[styles.statusEditorCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+              <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <Text style={styles.projectEditLabel}>STARTUP STATUS</Text>
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                   value={toTextValue(editData?.startupStage)}
                   onChangeText={(t: string) => setEditField('startupStage', t)}
                   placeholder="Startup Status (Idea Stage, Building MVP, Revenue...)"
@@ -2032,7 +2033,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                         key={status}
                         style={[
                           styles.statusOptionChip,
-                          { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#2A2A30' : '#E5E7EB' },
+                          liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
                           isSelected && styles.statusOptionChipActive,
                         ]}
                         onPress={() => setEditField('startupStage', status)}
@@ -2048,7 +2049,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 </Text>
               </View>
               <TextInput
-                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.fundingStage)}
                 onChangeText={(t: string) => setEditField('fundingStage', t)}
                 placeholder="Funding (Bootstrapped, Raised, Pre-revenue...)"
@@ -2056,7 +2057,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               />
               {renderChoiceGroup('FUNDING STAGE', 'fundingStage', FUNDING_OPTIONS)}
               <TextInput
-                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.lookingFor)}
                 onChangeText={(t: string) => setEditField('lookingFor', t)}
                 placeholder="Looking For (comma-separated)"
@@ -2064,18 +2065,18 @@ export default function ProfileScreen({ navigation, route }: any) {
               />
               {renderMultiChoiceGroup('LOOKING FOR', 'lookingFor', LOOKING_FOR_SUGGESTIONS)}
               <TextInput
-                style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.industries)}
                 onChangeText={(t: string) => setEditField('industries', t)}
                 placeholder="Industries (comma-separated)"
                 placeholderTextColor="#666"
               />
               {renderMultiChoiceGroup('INDUSTRIES', 'industries', INDUSTRY_SUGGESTIONS)}
-              <View style={[styles.statusEditorCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+              <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <Text style={styles.projectEditLabel}>MATCHING DETAILS</Text>
                 <TextInput
                   multiline
-                  style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                  style={[styles.bioInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                   value={toTextValue(editData?.goals)}
                   onChangeText={(t: string) => setEditField('goals', t)}
                   placeholder="Primary goal right now"
@@ -2089,7 +2090,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 {renderChoiceGroup('EDUCATION / BACKGROUND', 'education', EDUCATION_OPTIONS)}
                 {renderChoiceGroup('AMBITION', 'ambition', AMBITION_OPTIONS)}
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                   value={toTextValue(editData?.personalityType)}
                   onChangeText={(t: string) => setEditField('personalityType', t)}
                   placeholder="Personality / work signal (e.g. fast builder, analytical, creative)"
@@ -2097,21 +2098,21 @@ export default function ProfileScreen({ navigation, route }: any) {
                 />
                 <TextInput
                   multiline
-                  style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                  style={[styles.bioInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                   value={toTextValue(editData?.roleSignals)}
                   onChangeText={(t: string) => setEditField('roleSignals', t)}
                   placeholder="Role signals (comma-separated): technical founder, growth, operations..."
                   placeholderTextColor="#666"
                 />
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                   value={toTextValue(editData?.languages)}
                   onChangeText={(t: string) => setEditField('languages', t)}
                   placeholder="Languages (comma-separated)"
                   placeholderTextColor="#666"
                 />
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                   value={toTextValue(editData?.timezone)}
                   onChangeText={(t: string) => setEditField('timezone', t)}
                   placeholder="Timezone (e.g. GMT+2, EST, CAT)"
@@ -2125,7 +2126,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Switch
                     value={!!editData?.remoteOnly}
                     onValueChange={(v) => setEditField('remoteOnly', v)}
-                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#FBE618' }}
+                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: COLORS.primary }}
                     thumbColor="#FFF"
                   />
                 </View>
@@ -2137,43 +2138,43 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Switch
                     value={!!editData?.willingToRelocate}
                     onValueChange={(v) => setEditField('willingToRelocate', v)}
-                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: '#FBE618' }}
+                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: COLORS.primary }}
                     thumbColor="#FFF"
                   />
                 </View>
               </View>
-              <View style={[styles.projectEditCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+              <View style={[styles.projectEditCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <Text style={styles.projectEditLabel}>RESUME SIGNALS</Text>
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                   value={toTextValue(editData?.resume?.shippedProducts)}
                   onChangeText={(t: string) => setEditField('resume', { ...(editData?.resume || {}), shippedProducts: t })}
                   placeholder="Shipped products (comma-separated)"
                   placeholderTextColor="#666"
                 />
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                   value={toTextValue(editData?.resume?.sideProjects)}
                   onChangeText={(t: string) => setEditField('resume', { ...(editData?.resume || {}), sideProjects: t })}
                   placeholder="Side projects (comma-separated)"
                   placeholderTextColor="#666"
                 />
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                   value={toTextValue(editData?.resume?.startupAttempts)}
                   onChangeText={(t: string) => setEditField('resume', { ...(editData?.resume || {}), startupAttempts: t })}
                   placeholder="Startup attempts (comma-separated)"
                   placeholderTextColor="#666"
                 />
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                   value={toTextValue(editData?.resume?.hackathonWins)}
                   onChangeText={(t: string) => setEditField('resume', { ...(editData?.resume || {}), hackathonWins: t })}
                   placeholder="Hackathon wins / awards (comma-separated)"
                   placeholderTextColor="#666"
                 />
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                   value={toTextValue(editData?.resume?.buildStreaks)}
                   onChangeText={(t: string) => setEditField('resume', { ...(editData?.resume || {}), buildStreaks: t.replace(/[^0-9]/g, '').slice(0, 4) })}
                   placeholder="Build streak days"
@@ -2184,10 +2185,10 @@ export default function ProfileScreen({ navigation, route }: any) {
                   These signals improve matching without needing formal verification.
                 </Text>
               </View>
-              <View style={[styles.statusEditorCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+              <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <Text style={styles.projectEditLabel}>LINKS</Text>
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                   value={toTextValue(editData?.socialLinks?.portfolio)}
                   onChangeText={(t: string) => setSocialLinkField('portfolio', t)}
                   placeholder="Portfolio / website"
@@ -2195,7 +2196,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   autoCapitalize="none"
                 />
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                   value={toTextValue(editData?.socialLinks?.linkedin)}
                   onChangeText={(t: string) => setSocialLinkField('linkedin', t)}
                   placeholder="LinkedIn URL"
@@ -2203,7 +2204,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   autoCapitalize="none"
                 />
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                   value={toTextValue(editData?.socialLinks?.github)}
                   onChangeText={(t: string) => setSocialLinkField('github', t)}
                   placeholder="GitHub URL"
@@ -2211,7 +2212,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   autoCapitalize="none"
                 />
                 <TextInput
-                  style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+                  style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                   value={toTextValue(editData?.socialLinks?.twitter)}
                   onChangeText={(t: string) => setSocialLinkField('twitter', t)}
                   placeholder="X / Twitter URL"
@@ -2219,7 +2220,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   autoCapitalize="none"
                 />
               </View>
-              <View style={[styles.projectEditCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+              <View style={[styles.projectEditCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <View style={styles.projectEditHeader}>
                   <Text style={styles.projectEditLabel}>ONGOING PROJECTS</Text>
                   <TouchableOpacity style={styles.projectAddButton} onPress={addEditedProject} activeOpacity={0.85}>
@@ -2228,7 +2229,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   </TouchableOpacity>
                 </View>
                 {editedProjects.map((project: any, index: number) => (
-                  <View key={project?.id || `project-${index}`} style={[styles.projectDraftCard, { borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
+                  <View key={project?.id || `project-${index}`} style={[styles.projectDraftCard, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                     <View style={styles.projectDraftHeader}>
                       <Text style={styles.projectDraftLabel}>PROJECT {index + 1}</Text>
                       {editedProjects.length > 1 && (
@@ -2238,7 +2239,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                       )}
                     </View>
                     <TextInput
-                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                       value={toTextValue(project?.title)}
                       onChangeText={(t: string) => updateEditedProject(index, { title: t })}
                       placeholder="Project title (e.g. founder marketplace)"
@@ -2246,21 +2247,21 @@ export default function ProfileScreen({ navigation, route }: any) {
                     />
                     <TextInput
                       multiline
-                      style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      style={[styles.bioInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                       value={toTextValue(project?.description)}
                       onChangeText={(t: string) => updateEditedProject(index, { description: t })}
                       placeholder="What are you building, and who should LINKUP recommend it to?"
                       placeholderTextColor="#666"
                     />
                     <TextInput
-                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                       value={toTextValue(project?.status)}
                       onChangeText={(t: string) => updateEditedProject(index, { status: t })}
                       placeholder="Stage: idea, mvp, live"
                       placeholderTextColor="#666"
                     />
                     <TextInput
-                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                       value={toTextValue(project?.link)}
                       onChangeText={(t: string) => updateEditedProject(index, { link: t })}
                       placeholder="Project link (optional)"
@@ -2273,7 +2274,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   LINKUP recommends each project to people with matching skills, interests, roles, and goals.
                 </Text>
               </View>
-              <View style={[styles.projectEditCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}>
+              <View style={[styles.projectEditCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <View style={styles.projectEditHeader}>
                   <Text style={styles.projectEditLabel}>IDEAS</Text>
                   <TouchableOpacity style={styles.projectAddButton} onPress={addEditedIdea} activeOpacity={0.85}>
@@ -2282,7 +2283,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   </TouchableOpacity>
                 </View>
                 {editedIdeas.map((idea: any, index: number) => (
-                  <View key={idea?.id || `idea-${index}`} style={[styles.projectDraftCard, { borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
+                  <View key={idea?.id || `idea-${index}`} style={[styles.projectDraftCard, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                     <View style={styles.projectDraftHeader}>
                       <Text style={styles.projectDraftLabel}>IDEA {index + 1}</Text>
                       {editedIdeas.length > 1 && (
@@ -2292,7 +2293,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                       )}
                     </View>
                     <TextInput
-                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                       value={toTextValue(idea?.title)}
                       onChangeText={(t: string) => updateEditedIdea(index, { title: t })}
                       placeholder="Idea title (e.g. marketplace for student founders)"
@@ -2300,28 +2301,28 @@ export default function ProfileScreen({ navigation, route }: any) {
                     />
                     <TextInput
                       multiline
-                      style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      style={[styles.bioInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                       value={toTextValue(idea?.description)}
                       onChangeText={(t: string) => updateEditedIdea(index, { description: t })}
                       placeholder="What is the idea, who is it for, and why should someone build it with you?"
                       placeholderTextColor="#666"
                     />
                     <TextInput
-                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                       value={toTextValue(idea?.stage)}
                       onChangeText={(t: string) => updateEditedIdea(index, { stage: t })}
                       placeholder="Stage: Idea Stage, Research, MVP..."
                       placeholderTextColor="#666"
                     />
                     <TextInput
-                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                       value={Array.isArray(idea?.lookingFor) ? idea.lookingFor.join(', ') : toTextValue(idea?.lookingFor)}
                       onChangeText={(t: string) => updateEditedIdea(index, { lookingFor: parseProfileList(t) })}
                       placeholder="Looking for: CTO, designer, marketer..."
                       placeholderTextColor="#666"
                     />
                     <TextInput
-                      style={[styles.metaInput, editFieldStyle, { color: isDark ? '#FFF' : '#000', marginTop: 10 }]}
+                      style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                       value={Array.isArray(idea?.tags) ? idea.tags.join(', ') : toTextValue(idea?.tags)}
                       onChangeText={(t: string) => updateEditedIdea(index, { tags: parseProfileList(t) })}
                       placeholder="Tags: fintech, SaaS, mobile, social..."
@@ -2338,7 +2339,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             <>
               <View style={styles.nameRowCentered}>
                 <Text
-                  style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}
+                  style={[styles.nameText, { color: textColor(isDark) }]}
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
@@ -2362,14 +2363,14 @@ export default function ProfileScreen({ navigation, route }: any) {
               </Text>
 
               {!isViewingOther && !!profileLink && (
-                <View style={[styles.profileLinkCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+                <View style={[styles.profileLinkCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                   <View style={styles.profileLinkHeader}>
-                    <SafeIcon name="Link" size={18} color="#FBE618" />
+                    <SafeIcon name="Link" size={18} color={COLORS.primary} />
                     <View style={styles.profileLinkCopy}>
                     <Text style={styles.profileLinkLabel}>YOUR LINKUP LINK</Text>
                     <Text
                       selectable
-                      style={[styles.profileLinkText, { color: isDark ? '#FFF' : '#000' }]}
+                      style={[styles.profileLinkText, { color: textColor(isDark) }]}
                       numberOfLines={2}
                       ellipsizeMode="middle"
                     >
@@ -2421,10 +2422,10 @@ export default function ProfileScreen({ navigation, route }: any) {
         {!profileDetailsReady && !isEditing ? null : (
           <>
         {showHighVoiceNotice && (
-          <View style={[styles.highVoiceCard, { backgroundColor: isDark ? '#16161A' : '#FFFDF0', borderColor: COLORS.primary }]}>
+          <View style={[styles.highVoiceCard, { backgroundColor: isDark ? COLORS.darkBgSec : '#FFFDF0', borderColor: COLORS.primary }]}>
             <VerifiedBadge size={46} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.highVoiceTitle, { color: isDark ? '#FFF' : '#000' }]}>LINKUP HIGH VOICE PROGRAM</Text>
+              <Text style={[styles.highVoiceTitle, { color: textColor(isDark) }]}>LINKUP HIGH VOICE PROGRAM</Text>
               <Text style={styles.highVoiceText}>
                 This verified builder has been marked by LINKUP as a trusted, high-signal voice in the network.
               </Text>
@@ -2436,8 +2437,8 @@ export default function ProfileScreen({ navigation, route }: any) {
           <>
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>ABOUT</Text>
-              <View style={[styles.profileStoryCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
-                <Text style={[styles.bioText, { color: isDark ? '#DDD' : '#333' }]}>
+              <View style={[styles.profileStoryCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+                <Text style={[styles.bioText, { color: textColor(isDark, 'secondary') }]}>
                   {profileBio || (isViewingOther
                     ? 'This builder has not added a bio yet.'
                     : 'Add your bio in Edit Profile so builders instantly understand who you are and what you need.')}
@@ -2454,20 +2455,20 @@ export default function ProfileScreen({ navigation, route }: any) {
                     {organizedSkills.map((skill: string, index: number) => (
                       <TouchableOpacity
                         key={`${skill}-${index}`}
-                        style={[styles.skillPill, { backgroundColor: isDark ? '#101014' : '#FFFFFF', borderColor: isDark ? '#2A2A30' : '#E5E7EB' }]}
+                        style={[styles.skillPill, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
                         onPress={() => searchSkill(skill)}
                         activeOpacity={0.82}
                       >
                         <View style={styles.skillDot} />
-                        <Text style={[styles.skillPillText, { color: isDark ? '#FFF' : '#111' }]}>{skill.toUpperCase()}</Text>
+                        <Text style={[styles.skillPillText, { color: textColor(isDark) }]}>{skill.toUpperCase()}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
                   {renderStartEditButton('ADD / EDIT SKILLS')}
                 </>
               ) : (
-                <View style={[styles.emptyProfileCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
-                  <Text style={[styles.emptyProfileText, { color: isDark ? '#AAA' : '#555' }]}>
+                <View style={[styles.emptyProfileCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+                  <Text style={[styles.emptyProfileText, { color: textColor(isDark, 'muted') }]}>
                     {isViewingOther ? 'No skills listed yet.' : 'Add your skills and stack so LINKUP can match you with the right builders.'}
                   </Text>
                   {renderStartEditButton('ADD SKILLS')}
@@ -2481,10 +2482,10 @@ export default function ProfileScreen({ navigation, route }: any) {
                 visibleProjects.map((project: any, index: number) => (
                   <View
                     key={project?.id || `${profile.uid}-project-${index}`}
-                    style={[styles.projectCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+                    style={[styles.projectCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
                   >
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
-                      <Text style={[styles.projectTitle, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                      <Text style={[styles.projectTitle, { color: textColor(isDark) }]} numberOfLines={1}>
                         {project?.title || 'Untitled project'}
                       </Text>
                       <View style={styles.projectStagePill}>
@@ -2497,8 +2498,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                   </View>
                 ))
               ) : (
-                <View style={[styles.emptyProfileCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
-                  <Text style={[styles.emptyProfileText, { color: isDark ? '#AAA' : '#555' }]}>
+                <View style={[styles.emptyProfileCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+                  <Text style={[styles.emptyProfileText, { color: textColor(isDark, 'muted') }]}>
                     {isViewingOther ? 'This builder has not added what they are building yet.' : 'Add your current project in Edit Profile so people can discover what you are building.'}
                   </Text>
                   {renderStartEditButton('ADD PROJECT')}
@@ -2512,10 +2513,10 @@ export default function ProfileScreen({ navigation, route }: any) {
                 visibleStartupIdeas.map((idea: any, index: number) => (
                   <View
                     key={idea?.id || `${profile.uid}-idea-${index}`}
-                    style={[styles.projectCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+                    style={[styles.projectCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
                   >
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
-                      <Text style={[styles.projectTitle, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                      <Text style={[styles.projectTitle, { color: textColor(isDark) }]} numberOfLines={1}>
                         {idea?.title || 'Untitled idea'}
                       </Text>
                       <View style={styles.projectStagePill}>
@@ -2537,8 +2538,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                   </View>
                 ))
               ) : (
-                <View style={[styles.emptyProfileCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#24242A' : '#ECECEC' }]}>
-                  <Text style={[styles.emptyProfileText, { color: isDark ? '#AAA' : '#555' }]}>
+                <View style={[styles.emptyProfileCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+                  <Text style={[styles.emptyProfileText, { color: textColor(isDark, 'muted') }]}>
                     {isViewingOther ? 'This builder has not posted ideas yet.' : 'Add ideas in Edit Profile so builders can swipe into what you want to build.'}
                   </Text>
                   {renderStartEditButton('ADD IDEA')}
@@ -2552,17 +2553,17 @@ export default function ProfileScreen({ navigation, route }: any) {
         {isViewingOther && compatibility !== null && (
           <View style={[styles.section, { marginTop: -8 }]}>
             <Text style={styles.sectionLabel}>COMPATIBILITY</Text>
-            <View style={[styles.compatCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+            <View style={[styles.compatCard, liquidGlass(isDark, false)]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <View>
-                  <Text style={[styles.compatPct, { color: isDark ? '#FFF' : '#000' }]}>{compatibility}%</Text>
+                  <Text style={[styles.compatPct, { color: textColor(isDark) }]}>{compatibility}%</Text>
                   <Text style={styles.compatSub}>Compatibility</Text>
                 </View>
                 <View style={styles.compatTagPill}>
                   <Text style={styles.compatTagText}>{(profile as any).workStyle || 'Execution-focused'}</Text>
                 </View>
               </View>
-              <Text style={[styles.compatHint, { color: isDark ? '#AAA' : '#444' }]}>
+              <Text style={[styles.compatHint, { color: textColor(isDark, 'muted') }]}>
                 {compatibilityReason || `Best match for: ${[(profile as any).occupation || 'Builders', industries[0] ? `${industries[0]} teams` : null, (profile as any).commitmentLevel ? `${(profile as any).commitmentLevel} builders` : null].filter(Boolean).slice(0, 3).join(' - ')}`}
               </Text>
             </View>
@@ -2587,21 +2588,21 @@ export default function ProfileScreen({ navigation, route }: any) {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>STARTUP STATUS</Text>
           <View style={styles.statusGrid}>
-            <View style={[styles.statusTile, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+            <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
               <Text style={styles.statusLabel}>STAGE</Text>
-              <Text style={[styles.statusValue, { color: isDark ? '#FFF' : '#000' }]}>{(profile as any).startupStage || '-'}</Text>
+              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).startupStage || '-'}</Text>
             </View>
-            <View style={[styles.statusTile, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+            <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
               <Text style={styles.statusLabel}>FUNDING</Text>
-              <Text style={[styles.statusValue, { color: isDark ? '#FFF' : '#000' }]}>{(profile as any).fundingStage || '-'}</Text>
+              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).fundingStage || '-'}</Text>
             </View>
-            <View style={[styles.statusTile, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+            <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
               <Text style={styles.statusLabel}>AVAILABILITY</Text>
-              <Text style={[styles.statusValue, { color: isDark ? '#FFF' : '#000' }]}>{(profile as any).availability || 'Open'}</Text>
+              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).availability || 'Open'}</Text>
             </View>
-            <View style={[styles.statusTile, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+            <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
               <Text style={styles.statusLabel}>INTENT</Text>
-              <Text style={[styles.statusValue, { color: isDark ? '#FFF' : '#000' }]}>{(profile as any).networkingIntent || 'Builder'}</Text>
+              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).networkingIntent || 'Builder'}</Text>
             </View>
           </View>
         </View>
@@ -2623,8 +2624,8 @@ export default function ProfileScreen({ navigation, route }: any) {
         {/* MATCH INSIGHTS */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>MATCH INSIGHTS</Text>
-          <View style={[styles.insightCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
-            <Text style={[styles.insightText, { color: isDark ? '#DDD' : '#333' }]}>
+          <View style={[styles.insightCard, liquidGlass(isDark, false)]}>
+            <Text style={[styles.insightText, { color: textColor(isDark, 'secondary') }]}>
               {(profile as any).aiMatchInsights || 'Generate a profile insight for this builder.'}
             </Text>
             {!isViewingOther && (
@@ -2640,7 +2641,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           <Text style={styles.sectionLabel}>VIBE-CHECK (INTRO)</Text>
           {isEditing ? (
             <TextInput
-              style={[styles.bioInput, editFieldStyle, { color: isDark ? '#FFF' : '#000' }]}
+              style={[styles.bioInput, editFieldStyle, { color: textColor(isDark) }]}
               value={toTextValue(editData?.vibeMedia)}
               onChangeText={(t: string) => setEditData({...editData, vibeMedia: t})}
               placeholder="Paste a link to your 15s audio/video intro..."
@@ -2648,7 +2649,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             />
           ) : (
             <TouchableOpacity 
-              style={[styles.vibeCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
+              style={[styles.vibeCard, liquidGlass(isDark, false)]}
               onPress={() => {
                 if (profile.vibeMedia) {
                   Linking.openURL(profile.vibeMedia).catch(err => Alert.alert("Invalid Link", "Could not open vibe intro link."));
@@ -2658,7 +2659,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               }}
             >
               <SafeIcon name="Mic" size={20} color={COLORS.primary} />
-              <Text style={[styles.vibeText, { color: isDark ? '#AAA' : '#444' }]}>
+              <Text style={[styles.vibeText, { color: textColor(isDark, 'muted') }]}>
                 {profile.vibeMedia ? "PLAY VIBE INTRO" : "NO VIBE INTRO SET"}
               </Text>
             </TouchableOpacity>
@@ -2672,15 +2673,13 @@ export default function ProfileScreen({ navigation, route }: any) {
             <View
               style={[
                 styles.analyticsPanel,
-                {
-                  backgroundColor: isDark ? '#16161A' : '#FFFFFF',
-                  borderColor: isDark ? '#2A2A30' : COLORS.primary,
-                },
+                liquidGlass(isDark, false),
+                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
               ]}
             >
               <View style={styles.analyticsHeader}>
                 <View>
-                  <Text style={[styles.analyticsTitle, { color: isDark ? '#FFF' : '#000' }]}>Founder dashboard</Text>
+                  <Text style={[styles.analyticsTitle, { color: textColor(isDark) }]}>Founder dashboard</Text>
                   <Text style={styles.analyticsHelp}>Views, clicks, saves, and response rate</Text>
                 </View>
                 <View style={styles.analyticsBadge}>
@@ -2700,12 +2699,12 @@ export default function ProfileScreen({ navigation, route }: any) {
                     key={String(metric.label)}
                     activeOpacity={0.82}
                     onPress={() => proLocked && metric.mode !== 'views' ? openPaywall(PRO_FEATURES.profileViewers) : navigation.navigate('Viewers', { mode: metric.mode })}
-                    style={[styles.analyticsTile, { backgroundColor: isDark ? '#0F0F12' : '#FFFBEA' }]}
+                    style={[styles.analyticsTile, { backgroundColor: isDark ? COLORS.darkBgSec : '#FFFBEA' }]}
                   >
                     <View style={styles.analyticsIconBubble}>
                       <SafeIcon name={String(metric.icon)} size={15} color="#000" />
                     </View>
-                    <Text style={[styles.analyticsValue, { color: isDark ? '#FFF' : '#000' }]}>
+                    <Text style={[styles.analyticsValue, { color: textColor(isDark) }]}>
                       {proLocked && metric.mode !== 'views' ? 'PLUS' : metric.value}
                     </Text>
                     <Text style={styles.analyticsMetric}>{String(metric.label).toUpperCase()}</Text>
@@ -2725,16 +2724,16 @@ export default function ProfileScreen({ navigation, route }: any) {
             <Text style={styles.sectionLabel}>STARTUP ANALYZER</Text>
             {!startupAnalyzerExpanded ? (
               <TouchableOpacity
-                style={[styles.lazyPanelButton, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#24242A' : '#ECECEC' }]}
+                style={[styles.lazyPanelButton, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
                 onPress={() => setStartupAnalyzerExpanded(true)}
                 activeOpacity={0.86}
               >
                 <SafeIcon name="Gauge" size={18} color={COLORS.primary} />
-                <Text style={[styles.lazyPanelText, { color: isDark ? '#FFF' : '#000' }]}>OPEN STARTUP ANALYZER</Text>
+                <Text style={[styles.lazyPanelText, { color: textColor(isDark) }]}>OPEN STARTUP ANALYZER</Text>
               </TouchableOpacity>
             ) : (
-              <View style={[styles.analyzerCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-              <Text style={[styles.analyzerTitle, { color: isDark ? '#FFF' : '#000' }]}>Test your startup idea</Text>
+              <View style={[styles.analyzerCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+              <Text style={[styles.analyzerTitle, { color: textColor(isDark) }]}>Test your startup idea</Text>
               <Text style={styles.analyzerHelp}>
                 Get a fast score for market, competition, monetization, risks, and your next validation move.
               </Text>
@@ -2744,7 +2743,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 onChangeText={setStartupIdeaText}
                 placeholder="Example: A smart assistant that helps student founders find technical cofounders in Africa..."
                 placeholderTextColor="#666"
-                style={[styles.analyzerInput, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#0F0F12' : '#FFFFFF', borderColor: isDark ? '#222226' : '#E5E7EB' }]}
+                style={[styles.analyzerInput, { color: textColor(isDark), backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
               />
               <TouchableOpacity
                 disabled={startupAnalyzing}
@@ -2759,7 +2758,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <View style={styles.analysisScoreRow}>
                     <Text style={styles.analysisScore}>{startupAnalysis.score ?? '--'}</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.analysisVerdict, { color: isDark ? '#FFF' : '#000' }]}>
+                      <Text style={[styles.analysisVerdict, { color: textColor(isDark) }]}>
                         {startupAnalysis.verdict || 'Startup snapshot'}
                       </Text>
                       <Text style={styles.analysisSmall}>Overall score / 100</Text>
@@ -2780,7 +2779,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   ].filter(([, value]) => !!value).map(([label, value]) => (
                     <View key={label} style={styles.analysisItem}>
                       <Text style={styles.analysisLabel}>{label.toUpperCase()}</Text>
-                      <Text style={[styles.analysisText, { color: isDark ? '#DDD' : '#333' }]}>{String(value)}</Text>
+                      <Text style={[styles.analysisText, { color: textColor(isDark, 'secondary') }]}>{String(value)}</Text>
                     </View>
                   ))}
                 </View>
@@ -2795,20 +2794,20 @@ export default function ProfileScreen({ navigation, route }: any) {
           <Text style={styles.sectionLabel}>SETTINGS & PREFERENCES</Text>
           {!settingsExpanded ? (
             <TouchableOpacity
-              style={[styles.lazyPanelButton, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#24242A' : '#ECECEC' }]}
+              style={[styles.lazyPanelButton, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
               onPress={() => setSettingsExpanded(true)}
               activeOpacity={0.86}
             >
-              <SafeIcon name="Settings" size={18} color="#FBE618" />
-              <Text style={[styles.lazyPanelText, { color: isDark ? '#FFF' : '#000' }]}>OPEN SETTINGS</Text>
+              <SafeIcon name="Settings" size={18} color={COLORS.primary} />
+              <Text style={[styles.lazyPanelText, { color: textColor(isDark) }]}>OPEN SETTINGS</Text>
             </TouchableOpacity>
           ) : (
             <>
-          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+          <View style={[styles.prefRow, liquidGlass(isDark, false)]}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name="Ghost" size={18} color="#666" />
               <View style={styles.prefCopy}>
-                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Stealth Mode</Text>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Stealth Mode</Text>
                 <Text style={styles.prefHelp}>Hides your profile from discovery/search while keeping your account active.</Text>
               </View>
             </View>
@@ -2820,11 +2819,11 @@ export default function ProfileScreen({ navigation, route }: any) {
             />
           </View>
 
-          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
+          <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
-              <SafeIcon name="Globe2" size={18} color="#FBE618" />
+              <SafeIcon name="Globe2" size={18} color={COLORS.primary} />
               <View style={styles.prefCopy}>
-                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Public Discovery</Text>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Public Discovery</Text>
                 <Text style={styles.prefHelp}>When on, your profile can appear in swipe, search, and active opportunity discovery.</Text>
               </View>
             </View>
@@ -2836,11 +2835,11 @@ export default function ProfileScreen({ navigation, route }: any) {
             />
           </View>
 
-          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
+          <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name="Rocket" size={18} color={COLORS.primary} />
               <View style={styles.prefCopy}>
-                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Turbo Connect</Text>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Turbo Connect</Text>
                 <Text style={styles.prefHelp}>Boosts your profile priority in discovery and search ranking when public discovery is on.</Text>
               </View>
             </View>
@@ -2852,22 +2851,22 @@ export default function ProfileScreen({ navigation, route }: any) {
             />
           </View>
 
-          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
+          <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name={isDark ? "Moon" : "Sun"} size={18} color="#666" />
               <View style={styles.prefCopy}>
-                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Dark Mode</Text>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Dark Mode</Text>
                 <Text style={styles.prefHelp}>Switches LINKUP between clean light mode and premium dark mode.</Text>
               </View>
             </View>
             <PreferenceSwitch value={isDark} isDark={isDark} onValueChange={setDarkModePreference} />
           </View>
 
-          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
+          <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name="EyeOff" size={18} color="#22C55E" />
               <View style={styles.prefCopy}>
-                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Hide Online Status</Text>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Hide Online Status</Text>
                 <Text style={styles.prefHelp}>When on, people will see you as offline/hidden even while you are using LINKUP.</Text>
               </View>
             </View>
@@ -2879,11 +2878,11 @@ export default function ProfileScreen({ navigation, route }: any) {
             />
           </View>
 
-          <View style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]}>
+          <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name="BellRing" size={18} color={COLORS.primary} />
               <View style={styles.prefCopy}>
-                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Notifications</Text>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Notifications</Text>
                 <Text style={styles.prefHelp}>Messages, matches, profile views, and active opportunity alerts.</Text>
               </View>
             </View>
@@ -2914,11 +2913,11 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
           </View>
 
-          <View style={[styles.subscriptionCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+          <View style={[styles.subscriptionCard, liquidGlass(isDark, false)]}>
             <View style={styles.accountSecurityHeader}>
               <SafeIcon name={isProPlanActive ? 'Crown' : 'BadgeDollarSign'} size={19} color={COLORS.primary} fill={isProPlanActive ? COLORS.primary : 'transparent'} />
               <View style={styles.prefCopy}>
-                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>LINKUP PLUS Plan</Text>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>LINKUP PLUS Plan</Text>
                 <Text style={styles.prefHelp}>
                   {isProPlanActive
                     ? 'Manage billing or cancel PLUS from here.'
@@ -2927,8 +2926,8 @@ export default function ProfileScreen({ navigation, route }: any) {
               </View>
             </View>
 
-            <View style={[styles.subscriptionStatusPill, { backgroundColor: isProPlanActive ? COLORS.primary : (isDark ? '#0F0F12' : '#FFFFFF') }]}>
-              <Text style={[styles.subscriptionStatusText, { color: isProPlanActive ? '#000' : (isDark ? '#FFF' : '#000') }]}>
+            <View style={[styles.subscriptionStatusPill, { backgroundColor: isProPlanActive ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec) }]}>
+              <Text style={[styles.subscriptionStatusText, { color: isProPlanActive ? '#000' : (textColor(isDark)) }]}>
                 {isProPlanActive ? 'PLUS ACTIVE' : 'FREE PLAN'}
               </Text>
             </View>
@@ -2972,20 +2971,20 @@ export default function ProfileScreen({ navigation, route }: any) {
             )}
           </View>
 
-          <View style={[styles.accountSecurityCard, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+          <View style={[styles.accountSecurityCard, liquidGlass(isDark, false)]}>
             <View style={styles.accountSecurityHeader}>
-              <SafeIcon name="MailCheck" size={19} color="#FBE618" />
+              <SafeIcon name="MailCheck" size={19} color={COLORS.primary} />
               <View style={styles.prefCopy}>
-                <Text style={[styles.prefLabel, { color: isDark ? '#FFF' : '#000' }]}>Email Security</Text>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Email Security</Text>
                 <Text style={styles.prefHelp}>
                   Verification, password reset, email change, and MFA notifications for this account.
                 </Text>
               </View>
             </View>
 
-            <View style={[styles.emailStatusPill, { backgroundColor: isDark ? '#0F0F12' : '#FFFFFF' }]}>
+            <View style={[styles.emailStatusPill, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec }]}>
               <Text style={styles.emailStatusLabel}>CURRENT EMAIL</Text>
-              <Text style={[styles.emailStatusValue, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+              <Text style={[styles.emailStatusValue, { color: textColor(isDark) }]} numberOfLines={1}>
                 {user?.email || 'No email linked'}
               </Text>
               <Text style={[styles.emailVerifiedText, { color: user?.emailVerified ? '#22C55E' : '#F59E0B' }]}>
@@ -3029,9 +3028,9 @@ export default function ProfileScreen({ navigation, route }: any) {
               style={[
                 styles.emailChangeInput,
                 {
-                  color: isDark ? '#FFF' : '#000',
-                  backgroundColor: isDark ? '#0F0F12' : '#FFFFFF',
-                  borderColor: isDark ? '#26262C' : '#E5E7EB',
+                  color: textColor(isDark),
+                  backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
+                  borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
                 },
               ]}
             />
@@ -3050,14 +3049,14 @@ export default function ProfileScreen({ navigation, route }: any) {
             <TouchableOpacity
               disabled={!!accountActionBusy}
               onPress={() => runAccountAction('mfa-notice', showMfaEnrollmentNotice)}
-              style={[styles.mfaNoticeBtn, { borderColor: isDark ? '#26262C' : '#E5E7EB' }]}
+              style={[styles.mfaNoticeBtn, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
             >
               <SafeIcon name="ShieldCheck" size={16} color="#22C55E" />
-              <Text style={[styles.mfaNoticeText, { color: isDark ? '#FFF' : '#000' }]}>MULTI-FACTOR ENROLLMENT NOTICE</Text>
+              <Text style={[styles.mfaNoticeText, { color: textColor(isDark) }]}>MULTI-FACTOR ENROLLMENT NOTICE</Text>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]} onPress={handleLogout}>
+          <TouchableOpacity style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]} onPress={handleLogout}>
             <View style={styles.prefLabelContainer}>
               <SafeIcon name="LogOut" size={18} color="#EF4444" />
               <View style={styles.prefCopy}>
@@ -3067,7 +3066,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.prefRow, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', marginTop: 12 }]} onPress={handleDeleteAccount}>
+          <TouchableOpacity style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]} onPress={handleDeleteAccount}>
             <View style={styles.prefLabelContainer}>
                 <SafeIcon name="Trash2" size={18} color="#FF4444" />
               <View style={styles.prefCopy}>
@@ -4001,7 +4000,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     minHeight: 46,
     borderRadius: 16,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
@@ -4143,7 +4142,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 1.5,
-    color: '#FBE618',
+    color: COLORS.primary,
   },
   analysisText: {
     marginTop: 4,
@@ -4197,13 +4196,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FBE61814',
+    backgroundColor: 'rgba(251,230,24,0.08)',
   },
   profileLinkAction: {
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
-    color: '#FBE618',
+    color: COLORS.primary,
   },
   projectEditCard: {
     width: '100%',
@@ -4224,7 +4223,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 1.5,
-    color: '#FBE618',
+    color: COLORS.primary,
   },
   projectAddButton: {
     flexDirection: 'row',

@@ -9,6 +9,7 @@ import { uploadMedia } from '../lib/storage';
 import { isDiscoverableProfile } from '../lib/discovery';
 import * as ImagePicker from 'expo-image-picker';
 import { X, Camera, Video, Send, Image as ImageIcon } from 'lucide-react-native';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -125,18 +126,18 @@ export default function CreatePostScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, appBackground(isDark)]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton}>
-            <X size={20} color={isDark ? '#FFF' : '#000'} />
+            <X size={20} color={textColor(isDark)} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>POST</Text>
+          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>POST</Text>
           <TouchableOpacity 
             onPress={handlePost} 
             disabled={!content.trim() || isPosting}
-            style={[styles.shipButton, { backgroundColor: '#FBE618', opacity: content.trim() ? 1 : 0.5 }]}
+            style={[styles.shipButton, { backgroundColor: COLORS.primary, opacity: content.trim() ? 1 : 0.5 }]}
           >
             {isPosting ? <ActivityIndicator size="small" color="#000" /> : <Text style={styles.shipText}>POST</Text>}
           </TouchableOpacity>
@@ -150,7 +151,7 @@ export default function CreatePostScreen({ navigation }: any) {
               multiline
               placeholder="WHAT'S ON YOUR MIND?"
               placeholderTextColor="#666"
-              style={[styles.input, { color: isDark ? '#FFF' : '#000' }]}
+              style={[styles.input, { color: textColor(isDark) }]}
               value={content}
               onChangeText={handleTextChange}
             />
@@ -181,13 +182,13 @@ export default function CreatePostScreen({ navigation }: any) {
           )}
         </ScrollView>
 
-        <View style={[styles.toolbar, { borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
+        <View style={[styles.toolbar, { borderTopColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
           <TouchableOpacity style={styles.toolBtn} onPress={() => pickMedia('image')}>
-            <ImageIcon size={22} color="#FBE618" />
+            <ImageIcon size={22} color={COLORS.primary} />
             <Text style={styles.toolText}>PHOTO</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.toolBtn} onPress={() => pickMedia('video')}>
-            <Video size={22} color="#FBE618" />
+            <Video size={22} color={COLORS.primary} />
             <Text style={styles.toolText}>VIDEO</Text>
           </TouchableOpacity>
         </View>
@@ -214,11 +215,11 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 14,
-    backgroundColor: '#FBE61815',
+    backgroundColor: 'rgba(251,230,24,0.09)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#FBE61830',
+    borderColor: 'rgba(251,230,24,0.19)',
   },
   shipButton: {
     paddingHorizontal: 20,
@@ -264,13 +265,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#FBE61810',
+    backgroundColor: 'rgba(251,230,24,0.06)',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
   },
   toolText: {
-    color: '#FBE618',
+    color: COLORS.primary,
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,

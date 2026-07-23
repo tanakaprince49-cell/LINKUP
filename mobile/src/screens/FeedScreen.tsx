@@ -40,6 +40,7 @@ import * as Icons from 'lucide-react-native';
 import { generateFeedback } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import VerifiedBadge from '../components/VerifiedBadge';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
@@ -186,8 +187,8 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
           <View key={reply.id} style={[styles.commentItem, { marginBottom: 4 }]}>
             <Image source={{ uri: reply.userPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={[styles.commentAvatar, { width: 28, height: 28 }]} />
             <View style={styles.commentBody}>
-              <Text style={[styles.commentUser, { color: isDark ? '#FFF' : '#000', fontSize: 11 }]}>{reply.userName}</Text>
-              <Text style={[styles.commentText, { color: isDark ? '#AAA' : '#444', fontSize: 12 }]}>{reply.content}</Text>
+              <Text style={[styles.commentUser, { color: textColor(isDark), fontSize: 11 }]}>{reply.userName}</Text>
+              <Text style={[styles.commentText, { color: textColor(isDark, 'secondary'), fontSize: 12 }]}>{reply.content}</Text>
             </View>
           </View>
         ))}
@@ -198,9 +199,9 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.modalOverlay}>
-        <SafeAreaView style={[styles.modalContent, { backgroundColor: isDark ? '#0A0A0C' : '#FFF' }]}>
+        <SafeAreaView style={[styles.modalContent, appBackground(isDark)]}>
           <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: isDark ? '#FFF' : '#000' }]}>COMMENTS</Text>
+            <Text style={[styles.modalTitle, { color: textColor(isDark) }]}>COMMENTS</Text>
             <TouchableOpacity
               onPress={() => {
                 blurActiveElementOnWeb();
@@ -208,7 +209,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
               }}
               style={styles.closeBtn}
             >
-              <SafeIcon name="X" size={24} color={isDark ? '#FFF' : '#000'} />
+              <SafeIcon name="X" size={24} color={textColor(isDark)} />
             </TouchableOpacity>
           </View>
 
@@ -222,14 +223,14 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
                     <Image source={{ uri: item.userPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.commentAvatar} />
                     <View style={styles.commentBody}>
                       <View style={styles.commentHeader}>
-                        <Text style={[styles.commentUser, { color: isDark ? '#FFF' : '#000' }]}>{item.userName}</Text>
+                        <Text style={[styles.commentUser, { color: textColor(isDark) }]}>{item.userName}</Text>
                         {item.userId === user?.uid && (
                           <TouchableOpacity onPress={() => handleDeleteComment(item.id)}>
                             <SafeIcon name="Trash2" size={14} color="#FF4444" />
                           </TouchableOpacity>
                         )}
                       </View>
-                      <Text style={[styles.commentText, { color: isDark ? '#AAA' : '#444' }]}>{item.content}</Text>
+                      <Text style={[styles.commentText, { color: textColor(isDark, 'secondary') }]}>{item.content}</Text>
                       <View style={{ flexDirection: 'row', gap: 16, marginTop: 6 }}>
                         <TouchableOpacity 
                           style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
@@ -258,15 +259,15 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             {replyingTo && (
               <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 8, gap: 8 }}>
-                <Text style={{ fontSize: 12, color: '#888' }}>Replying to <Text style={{ fontWeight: '700', color: isDark ? '#FFF' : '#000' }}>{replyingTo.userName}</Text></Text>
+                <Text style={{ fontSize: 12, color: '#888' }}>Replying to <Text style={{ fontWeight: '700', color: textColor(isDark) }}>{replyingTo.userName}</Text></Text>
                 <TouchableOpacity onPress={() => setReplyingTo(null)}>
                   <SafeIcon name="X" size={14} color="#888" />
                 </TouchableOpacity>
               </View>
             )}
-            <View style={[styles.commentInputRow, { borderTopColor: isDark ? '#1A1A1F' : '#EEE' }]}>
+            <View style={[styles.commentInputRow, { borderTopColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
               <TextInput
-                style={[styles.commentInput, { color: isDark ? '#FFF' : '#000', backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}
+                style={[styles.commentInput, liquidGlass(isDark, false), { color: textColor(isDark) }]}
                 placeholder={replyingTo ? `Reply to ${replyingTo.userName}...` : "Write a comment..."}
                 placeholderTextColor="#666"
                 value={newComment}
@@ -366,9 +367,8 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
   return (
     <Animated.View style={[
       styles.card, 
-      { 
-        backgroundColor: isDark ? '#111115' : '#FFFFFF', 
-        borderColor: isDark ? '#222226' : '#EEEEEE',
+      liquidGlass(isDark),
+      {
         opacity: fadeAnim,
         transform: [{ translateY: slideAnim }]
       }
@@ -414,7 +414,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
           <Image source={{ uri: post.authorPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.authorAvatarImg} />
           <View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={[styles.authorName, { color: isDark ? '#FFF' : '#000' }]}>{post.authorName}</Text>
+            <Text style={[styles.authorName, { color: textColor(isDark) }]}>{post.authorName}</Text>
             {!!(post as any).authorVerified && (
               <VerifiedBadge size={18} />
             )}
@@ -436,7 +436,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
         </View>
       </View>
 
-      <Text style={[styles.postContent, { color: isDark ? '#DDD' : '#333' }]}>
+      <Text style={[styles.postContent, { color: textColor(isDark, 'secondary') }]}>
         {post.content}
       </Text>
 
@@ -511,13 +511,13 @@ export default function FeedScreen({ navigation }: any) {
   }, []);
 
   if (loading) return (
-    <View style={{ flex: 1, backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
-      <ActivityIndicator color="#FBE618" />
+    <View style={{ flex: 1, backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg, alignItems: 'center', justifyContent: 'center' }}>
+      <ActivityIndicator color={COLORS.primary} />
     </View>
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, appBackground(isDark)]}>
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
@@ -730,7 +730,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 15,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -593,7 +593,7 @@ export default function SearchScreen({ navigation, route }: any) {
           <TextInput
             placeholder="SEARCH BUILDERS..."
             placeholderTextColor="#666"
-            style={[styles.searchInput, { color: isDark ? '#FFF' : '#000' }]}
+            style={[styles.searchInput, { color: textColor(isDark) }]}
             value={queryText}
             onChangeText={setQueryText}
           />
@@ -620,7 +620,7 @@ export default function SearchScreen({ navigation, route }: any) {
             placeholderTextColor="#666"
             value={aiQuery}
             onChangeText={setAiQuery}
-            style={[styles.aiInput, { color: isDark ? '#FFF' : '#000' }]}
+            style={[styles.aiInput, { color: textColor(isDark) }]}
             returnKeyType="search"
             onSubmitEditing={applyAiQuery}
           />
@@ -655,15 +655,15 @@ export default function SearchScreen({ navigation, route }: any) {
 
       {savedAlerts.length > 0 && (
         <View style={styles.savedAlertsWrap}>
-          <Text style={[styles.savedAlertsTitle, { color: isDark ? '#FFF' : '#000' }]}>SAVED SEARCH ALERTS</Text>
+          <Text style={[styles.savedAlertsTitle, { color: textColor(isDark) }]}>SAVED SEARCH ALERTS</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedAlertsScroller}>
             {savedAlerts.map((alert) => (
               <TouchableOpacity
                 key={alert.id}
                 onPress={() => applySavedAlert(alert)}
-                style={[styles.savedAlertPill, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+                style={[styles.savedAlertPill, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
               >
-                <Text style={[styles.savedAlertLabel, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                <Text style={[styles.savedAlertLabel, { color: textColor(isDark) }]} numberOfLines={1}>
                   {String(alert.label || 'Builder search').toUpperCase()}
                 </Text>
                 <Text style={styles.savedAlertMeta}>{displayed.length} possible matches</Text>
@@ -674,9 +674,9 @@ export default function SearchScreen({ navigation, route }: any) {
       )}
 
       {filterOpen && (
-        <View style={[styles.filtersCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+        <View style={[styles.filtersCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
           <View style={styles.filtersScrollContent}>
-          <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>FILTERS</Text>
+          <Text style={[styles.filtersTitle, { color: textColor(isDark) }]}>FILTERS</Text>
 
           <View style={styles.filterRow}>
             <TextInput
@@ -684,14 +684,14 @@ export default function SearchScreen({ navigation, route }: any) {
               placeholderTextColor="#666"
               value={location}
               onChangeText={setLocation}
-              style={[styles.filterInput, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', color: isDark ? '#FFF' : '#000' }]}
+              style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
             />
             <TextInput
               placeholder="Timezone"
               placeholderTextColor="#666"
               value={timezone}
               onChangeText={setTimezone}
-              style={[styles.filterInput, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', color: isDark ? '#FFF' : '#000' }]}
+              style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
             />
           </View>
 
@@ -701,14 +701,14 @@ export default function SearchScreen({ navigation, route }: any) {
               placeholderTextColor="#666"
               value={skills}
               onChangeText={setSkills}
-              style={[styles.filterInput, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', color: isDark ? '#FFF' : '#000' }]}
+              style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
             />
             <TextInput
               placeholder="Industry"
               placeholderTextColor="#666"
               value={industry}
               onChangeText={setIndustry}
-              style={[styles.filterInput, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', color: isDark ? '#FFF' : '#000' }]}
+              style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
             />
           </View>
 
@@ -718,19 +718,19 @@ export default function SearchScreen({ navigation, route }: any) {
               placeholderTextColor="#666"
               value={experience}
               onChangeText={setExperience}
-              style={[styles.filterInput, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', color: isDark ? '#FFF' : '#000' }]}
+              style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
             />
             <TextInput
               placeholder="Availability (e.g. evenings)"
               placeholderTextColor="#666"
               value={availability}
               onChangeText={setAvailability}
-              style={[styles.filterInput, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', color: isDark ? '#FFF' : '#000' }]}
+              style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
             />
           </View>
 
           <View style={styles.filterSection}>
-            <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>LOOKING FOR...</Text>
+            <Text style={[styles.filtersTitle, { color: textColor(isDark) }]}>LOOKING FOR...</Text>
             <View style={styles.wrapPills}>
               {LOOKING_FOR_FILTERS.map((option) => {
                 const active = lookingForRole === option;
@@ -741,12 +741,12 @@ export default function SearchScreen({ navigation, route }: any) {
                     style={[
                       styles.choicePill,
                       {
-                        backgroundColor: active ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
-                        borderColor: active ? '#FBE618' : (isDark ? '#222226' : '#EEEEEE'),
+                        backgroundColor: active ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec),
+                        borderColor: active ? COLORS.primary : (isDark ? COLORS.darkBorder : COLORS.lightBorder),
                       },
                     ]}
                   >
-                    <Text style={[styles.choicePillText, { color: active ? '#000' : (isDark ? '#FFF' : '#000') }]}>{option.toUpperCase()}</Text>
+                    <Text style={[styles.choicePillText, { color: active ? '#000' : (textColor(isDark)) }]}>{option.toUpperCase()}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -754,7 +754,7 @@ export default function SearchScreen({ navigation, route }: any) {
           </View>
 
           <View style={styles.filterSection}>
-            <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>STARTUP STAGE</Text>
+            <Text style={[styles.filtersTitle, { color: textColor(isDark) }]}>STARTUP STAGE</Text>
             <View style={styles.wrapPills}>
               {STAGE_FILTERS.map((option) => {
                 const active = stageFilter === option;
@@ -765,12 +765,12 @@ export default function SearchScreen({ navigation, route }: any) {
                     style={[
                       styles.choicePill,
                       {
-                        backgroundColor: active ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
-                        borderColor: active ? '#FBE618' : (isDark ? '#222226' : '#EEEEEE'),
+                        backgroundColor: active ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec),
+                        borderColor: active ? COLORS.primary : (isDark ? COLORS.darkBorder : COLORS.lightBorder),
                       },
                     ]}
                   >
-                    <Text style={[styles.choicePillText, { color: active ? '#000' : (isDark ? '#FFF' : '#000') }]}>{option.toUpperCase()}</Text>
+                    <Text style={[styles.choicePillText, { color: active ? '#000' : (textColor(isDark)) }]}>{option.toUpperCase()}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -778,7 +778,7 @@ export default function SearchScreen({ navigation, route }: any) {
           </View>
 
           <View style={styles.filterSection}>
-            <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>INDUSTRY QUICK PICKS</Text>
+            <Text style={[styles.filtersTitle, { color: textColor(isDark) }]}>INDUSTRY QUICK PICKS</Text>
             <View style={styles.wrapPills}>
               {INDUSTRY_FILTERS.map((option) => {
                 const active = normalize(industry) === normalize(option);
@@ -789,12 +789,12 @@ export default function SearchScreen({ navigation, route }: any) {
                     style={[
                       styles.choicePill,
                       {
-                        backgroundColor: active ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
-                        borderColor: active ? '#FBE618' : (isDark ? '#222226' : '#EEEEEE'),
+                        backgroundColor: active ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec),
+                        borderColor: active ? COLORS.primary : (isDark ? COLORS.darkBorder : COLORS.lightBorder),
                       },
                     ]}
                   >
-                    <Text style={[styles.choicePillText, { color: active ? '#000' : (isDark ? '#FFF' : '#000') }]}>{option.toUpperCase()}</Text>
+                    <Text style={[styles.choicePillText, { color: active ? '#000' : (textColor(isDark)) }]}>{option.toUpperCase()}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -802,27 +802,27 @@ export default function SearchScreen({ navigation, route }: any) {
           </View>
 
           <TouchableOpacity
-            style={[styles.togglePill, { backgroundColor: lookingForCofounder ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'), borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+            style={[styles.togglePill, { backgroundColor: lookingForCofounder ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec), borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
             onPress={() => setLookingForCofounder((v) => !v)}
           >
-            <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: lookingForCofounder ? '#000' : (isDark ? '#FFF' : '#000') }}>
+            <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: lookingForCofounder ? '#000' : (textColor(isDark)) }}>
               LOOKING FOR COFOUNDER
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.togglePill, { backgroundColor: verifiedOnly ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'), borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+            style={[styles.togglePill, { backgroundColor: verifiedOnly ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec), borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
             onPress={() => setVerifiedOnly((v) => !v)}
           >
-            <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: verifiedOnly ? '#000' : (isDark ? '#FFF' : '#000') }}>
+            <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: verifiedOnly ? '#000' : (textColor(isDark)) }}>
               VERIFIED ONLY
             </Text>
           </TouchableOpacity>
 
           <View style={{ marginTop: 4 }}>
-            <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>COMPATIBILITY {minCompatibility}%+</Text>
+            <Text style={[styles.filtersTitle, { color: textColor(isDark) }]}>COMPATIBILITY {minCompatibility}%+</Text>
             <View style={styles.sliderRow}>
-              <View style={[styles.sliderTrack, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+              <View style={[styles.sliderTrack, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec }]}>
                 <View style={[styles.sliderFill, { width: `${minCompatibility}%` }]} />
                 <View
                   style={[styles.sliderKnob, { left: (minCompatibility / 100) * sliderWidth }]}
@@ -842,12 +842,12 @@ export default function SearchScreen({ navigation, route }: any) {
                     style={[
                       styles.smallPill,
                       {
-                        backgroundColor: minCompatibility === value ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
-                        borderColor: isDark ? '#222226' : '#EEEEEE',
+                        backgroundColor: minCompatibility === value ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec),
+                        borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
                       },
                     ]}
                   >
-                    <Text style={{ fontSize: 9, fontWeight: '900', letterSpacing: 1, color: minCompatibility === value ? '#000' : (isDark ? '#FFF' : '#000') }}>
+                    <Text style={{ fontSize: 9, fontWeight: '900', letterSpacing: 1, color: minCompatibility === value ? '#000' : (textColor(isDark)) }}>
                       {value}%
                     </Text>
                   </TouchableOpacity>
@@ -857,21 +857,21 @@ export default function SearchScreen({ navigation, route }: any) {
           </View>
 
           <View style={{ marginTop: 4 }}>
-            <Text style={[styles.filtersTitle, { color: isDark ? '#FFF' : '#000' }]}>RECENTLY ACTIVE</Text>
+            <Text style={[styles.filtersTitle, { color: textColor(isDark) }]}>RECENTLY ACTIVE</Text>
             <View style={styles.pillsRow}>
               {(['any', 'today', 'week'] as const).map((k) => (
                 <TouchableOpacity
                   key={k}
                   onPress={() => setActiveWithin(k)}
-                  style={[
-                    styles.smallPill,
-                    {
-                      backgroundColor: activeWithin === k ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
-                      borderColor: isDark ? '#222226' : '#EEEEEE',
-                    },
-                  ]}
+                    style={[
+                      styles.smallPill,
+                      {
+                        backgroundColor: activeWithin === k ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec),
+                        borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
+                      },
+                    ]}
                 >
-                  <Text style={{ fontSize: 9, fontWeight: '900', letterSpacing: 1, color: activeWithin === k ? '#000' : (isDark ? '#FFF' : '#000') }}>
+                  <Text style={{ fontSize: 9, fontWeight: '900', letterSpacing: 1, color: activeWithin === k ? '#000' : (textColor(isDark)) }}>
                     {k === 'any' ? 'ANY' : k === 'today' ? 'TODAY' : 'THIS WEEK'}
                   </Text>
                 </TouchableOpacity>
@@ -886,23 +886,23 @@ export default function SearchScreen({ navigation, route }: any) {
               style={[
                 styles.togglePill,
                 {
-                  backgroundColor: aiRankMode ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
-                  borderColor: isDark ? '#222226' : '#EEEEEE',
+                  backgroundColor: aiRankMode ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec),
+                  borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
                   opacity: aiRankLoading || filtered.length === 0 ? 0.6 : 1,
                 },
               ]}
             >
-              <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: aiRankMode ? '#000' : (isDark ? '#FFF' : '#000') }}>
+              <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: aiRankMode ? '#000' : (textColor(isDark)) }}>
                 {aiRankLoading ? 'RANKING...' : aiRankMode ? 'RANKING: ON' : 'RANK RESULTS'}
               </Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.filterActions}>
-            <TouchableOpacity onPress={clearFilters} style={[styles.smallBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-              <Text style={[styles.smallBtnText, { color: isDark ? '#FFF' : '#000' }]}>CLEAR</Text>
+            <TouchableOpacity onPress={clearFilters} style={[styles.smallBtn, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+              <Text style={[styles.smallBtnText, { color: textColor(isDark) }]}>CLEAR</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setFilterOpen(false)} style={[styles.smallBtn, { backgroundColor: '#FBE618' }]}>
+            <TouchableOpacity onPress={() => setFilterOpen(false)} style={[styles.smallBtn, { backgroundColor: COLORS.primary }]}>
               <Text style={[styles.smallBtnText, { color: '#000' }]}>DONE</Text>
             </TouchableOpacity>
           </View>
@@ -911,7 +911,7 @@ export default function SearchScreen({ navigation, route }: any) {
       )}
 
       {loading && allProfiles.length === 0 ? (
-        <ActivityIndicator color="#FBE618" style={{ marginTop: 30 }} />
+        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 30 }} />
       ) : (
         <View style={styles.resultsList}>
           {visibleResults.map((item) => (
@@ -934,7 +934,7 @@ export default function SearchScreen({ navigation, route }: any) {
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                    <Text style={[styles.resultName, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+                    <Text style={[styles.resultName, { color: textColor(isDark) }]} numberOfLines={1}>
                       {item.displayName || 'Builder'}
                     </Text>
                     {!!(item as any).isVerified && <VerifiedBadge size={20} />}
@@ -982,7 +982,7 @@ export default function SearchScreen({ navigation, route }: any) {
             </TouchableOpacity>
           ))}
           {displayed.length > visibleResults.length && (
-            <View style={[styles.resultsLimitCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+            <View style={[styles.resultsLimitCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
               <Text style={styles.resultsLimitText}>
                 Showing top {visibleResults.length} of {displayed.length}. Search or filter to narrow it down.
               </Text>
@@ -1083,7 +1083,7 @@ const styles = StyleSheet.create({
     width: 104,
     height: 44,
     borderRadius: 16,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1172,7 +1172,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 34,
     borderRadius: 14,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1314,7 +1314,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -1328,7 +1328,7 @@ const styles = StyleSheet.create({
   },
   resultHandle: {
     fontSize: 10,
-    color: '#FBE618',
+    color: COLORS.primary,
     fontWeight: '900',
     marginTop: 2,
   },
@@ -1336,7 +1336,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: 5,
     borderRadius: 999,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 9,
     paddingVertical: 4,
   },
@@ -1375,7 +1375,7 @@ const styles = StyleSheet.create({
     height: 24,
     paddingHorizontal: 10,
     borderRadius: 12,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1402,7 +1402,7 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
   },
   sliderKnob: {
     position: 'absolute',
@@ -1411,7 +1411,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     backgroundColor: '#FFFFFF',
     borderWidth: 3,
-    borderColor: '#FBE618',
+    borderColor: COLORS.primary,
     top: -7,
   },
   pillsRow: {

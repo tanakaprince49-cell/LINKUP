@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, setDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import * as ImagePicker from 'expo-image-picker';
 import { imageAssetToDataUri } from '../lib/imageUploadLimits';
@@ -715,7 +716,7 @@ function buildCircles(input: {
 
 const StepTitle = ({ title, subtitle, isDark }: { title: string; subtitle: string; isDark: boolean }) => (
   <View style={{ marginBottom: 18 }}>
-    <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]}>{title}</Text>
+    <Text style={[styles.title, { color: textColor(isDark) }]}>{title}</Text>
     <Text style={[styles.subtitle, { color: '#666' }]}>{subtitle}</Text>
   </View>
 );
@@ -740,10 +741,8 @@ const PhotoSlot = ({
         onPress={onPress}
         style={[
           styles.profilePhotoPicker,
-          {
-            backgroundColor: isDark ? '#16161A' : '#FFFBEA',
-            borderColor: '#FBE618',
-          },
+          liquidGlass(isDark, false),
+          { borderColor: COLORS.primary },
         ]}
       >
         {uri ? (
@@ -753,12 +752,12 @@ const PhotoSlot = ({
             <View style={styles.profilePhotoPlusCircle}>
               <Text style={styles.profilePhotoPlusText}>+</Text>
             </View>
-            <Text style={[styles.profilePhotoEmptyText, { color: isDark ? '#FFF' : '#000' }]}>ADD PROFILE PHOTO</Text>
+            <Text style={[styles.profilePhotoEmptyText, { color: textColor(isDark) }]}>ADD PROFILE PHOTO</Text>
             <Text style={styles.profilePhotoHint}>Tap to open gallery</Text>
           </View>
         )}
-        <View style={[styles.profilePhotoPickerLabel, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
-          <Text style={{ fontSize: 9, fontWeight: '900', letterSpacing: 1, color: isDark ? '#FFF' : '#000' }} numberOfLines={1}>
+        <View style={[styles.profilePhotoPickerLabel, appBackground(isDark)]}>
+          <Text style={{ fontSize: 9, fontWeight: '900', letterSpacing: 1, color: textColor(isDark) }} numberOfLines={1}>
             {label.toUpperCase()}
           </Text>
         </View>
@@ -772,10 +771,8 @@ const PhotoSlot = ({
       onPress={onPress}
       style={[
         styles.photoSlot,
-        {
-          backgroundColor: isDark ? '#16161A' : '#F8F8F8',
-          borderColor: isDark ? '#222226' : '#EEEEEE',
-        },
+        liquidGlass(isDark, false),
+        { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
       ]}
     >
       {uri ? (
@@ -785,11 +782,11 @@ const PhotoSlot = ({
           <View style={styles.photoPlusCircle}>
             <Text style={styles.photoPlusText}>+</Text>
           </View>
-          <Text style={[styles.photoEmptyText, { color: isDark ? '#FFF' : '#000' }]}>TAP TO ADD</Text>
+          <Text style={[styles.photoEmptyText, { color: textColor(isDark) }]}>TAP TO ADD</Text>
         </View>
       )}
-      <View style={[styles.photoSlotLabel, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
-        <Text style={{ fontSize: 9, fontWeight: '900', letterSpacing: 1, color: isDark ? '#FFF' : '#000' }} numberOfLines={1}>
+      <View style={[styles.photoSlotLabel, appBackground(isDark)]}>
+        <Text style={{ fontSize: 9, fontWeight: '900', letterSpacing: 1, color: textColor(isDark) }} numberOfLines={1}>
           {label.toUpperCase()}
         </Text>
       </View>
@@ -827,10 +824,9 @@ const ChoiceGrid = ({
             onPress={() => toggle(c.id)}
             style={[
               styles.choice,
-              {
-                backgroundColor: on ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
-                borderColor: isDark ? '#222226' : '#EEEEEE',
-              },
+              on && { backgroundColor: COLORS.primary },
+              !on && liquidGlass(isDark, false),
+              { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
             ]}
           >
             <Text
@@ -838,7 +834,7 @@ const ChoiceGrid = ({
                 fontSize: 12,
                 fontWeight: '900',
                 letterSpacing: 1,
-                color: on ? '#000' : (isDark ? '#FFF' : '#000'),
+                color: on ? '#000' : textColor(isDark),
               }}
               numberOfLines={1}
             >
@@ -870,11 +866,8 @@ const SkillsInput = ({
       placeholderTextColor="#666"
       style={[
         styles.textInput,
-        {
-          backgroundColor: isDark ? '#16161A' : '#F8F8F8',
-          borderColor: isDark ? '#222226' : '#EEEEEE',
-          color: isDark ? '#FFF' : '#000',
-        },
+        liquidGlass(isDark, false),
+        { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
       ]}
       autoCapitalize="words"
     />
@@ -1013,10 +1006,11 @@ export default function OnboardingScreen({ navigation }: any) {
                 key={q.id}
                 style={[
                   styles.card,
-                  { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' },
+                  liquidGlass(isDark),
+                  { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
                 ]}
               >
-                <Text style={[styles.cardTitle, { color: isDark ? '#FFF' : '#000' }]}>{q.title}</Text>
+                <Text style={[styles.cardTitle, { color: textColor(isDark) }]}>{q.title}</Text>
                 <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
                   {[q.a, q.b].map((opt) => {
                     const on = v === opt.id;
@@ -1026,11 +1020,10 @@ export default function OnboardingScreen({ navigation }: any) {
                         onPress={() => setPersonalityAnswers((p) => ({ ...p, [q.id]: opt.id }))}
                         style={[
                           styles.choice,
-                          {
-                            flex: 1,
-                            backgroundColor: on ? '#FBE618' : (isDark ? '#16161A' : '#F8F8F8'),
-                            borderColor: isDark ? '#222226' : '#EEEEEE',
-                          },
+                          { flex: 1 },
+                          on && { backgroundColor: COLORS.primary },
+                          !on && liquidGlass(isDark, false),
+                          { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
                         ]}
                       >
                         <Text
@@ -1038,7 +1031,7 @@ export default function OnboardingScreen({ navigation }: any) {
                             fontSize: 11,
                             fontWeight: '900',
                             letterSpacing: 1,
-                            color: on ? '#000' : (isDark ? '#FFF' : '#000'),
+                            color: on ? '#000' : textColor(isDark),
                           }}
                         >
                           {opt.label.toUpperCase()}
@@ -1429,13 +1422,14 @@ export default function OnboardingScreen({ navigation }: any) {
           <View
             style={[
               styles.card,
-              { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' },
+              liquidGlass(isDark),
+              { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
             ]}
           >
-            <Text style={[styles.cardTitle, { color: isDark ? '#FFF' : '#000', fontSize: 14 }]}>
+            <Text style={[styles.cardTitle, { color: textColor(isDark), fontSize: 14 }]}>
               Better answers = better matches
             </Text>
-            <Text style={[styles.introText, { color: isDark ? '#CFCFCF' : '#555' }]}>
+            <Text style={[styles.introText, { color: textColor(isDark, 'secondary') }]}>
               Be honest about your goals, skills, work style, and availability. The smart matching system uses this profile to understand who can actually help you build.
             </Text>
             <View style={styles.introBullets}>
@@ -1446,11 +1440,11 @@ export default function OnboardingScreen({ navigation }: any) {
               ].map((item) => (
                 <View key={item} style={styles.introBulletRow}>
                   <View style={styles.introDot} />
-                  <Text style={[styles.introBulletText, { color: isDark ? '#EDEDED' : '#222' }]}>{item}</Text>
+                  <Text style={[styles.introBulletText, { color: textColor(isDark) }]}>{item}</Text>
                 </View>
               ))}
             </View>
-            <Text style={[styles.introFooter, { color: isDark ? '#FBE618' : '#8A7900' }]}>
+            <Text style={[styles.introFooter, { color: isDark ? COLORS.primary : '#8A7900' }]}>
               This takes one minute. It makes LINKUP feel smart instead of random.
             </Text>
           </View>
@@ -1470,11 +1464,8 @@ export default function OnboardingScreen({ navigation }: any) {
               placeholderTextColor="#666"
               style={[
                 styles.textInput,
-                {
-                  backgroundColor: isDark ? '#16161A' : '#F8F8F8',
-                  borderColor: isDark ? '#222226' : '#EEEEEE',
-                  color: isDark ? '#FFF' : '#000',
-                },
+                liquidGlass(isDark, false),
+                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
               ]}
               autoCapitalize="words"
               returnKeyType="done"
@@ -1499,11 +1490,8 @@ export default function OnboardingScreen({ navigation }: any) {
               placeholderTextColor="#666"
               style={[
                 styles.bioInput,
-                {
-                  backgroundColor: isDark ? '#16161A' : '#F8F8F8',
-                  borderColor: isDark ? '#222226' : '#EEEEEE',
-                  color: isDark ? '#FFF' : '#000',
-                },
+                liquidGlass(isDark, false),
+                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
               ]}
               multiline
             />
@@ -1528,11 +1516,8 @@ export default function OnboardingScreen({ navigation }: any) {
               keyboardType="number-pad"
               style={[
                 styles.textInput,
-                {
-                  backgroundColor: isDark ? '#16161A' : '#F8F8F8',
-                  borderColor: isDark ? '#222226' : '#EEEEEE',
-                  color: isDark ? '#FFF' : '#000',
-                },
+                liquidGlass(isDark, false),
+                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
               ]}
             />
             <TextInput
@@ -1542,11 +1527,8 @@ export default function OnboardingScreen({ navigation }: any) {
               placeholderTextColor="#666"
               style={[
                 styles.textInput,
-                {
-                  backgroundColor: isDark ? '#16161A' : '#F8F8F8',
-                  borderColor: isDark ? '#222226' : '#EEEEEE',
-                  color: isDark ? '#FFF' : '#000',
-                },
+                liquidGlass(isDark, false),
+                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
               ]}
               autoCapitalize="words"
             />
@@ -1557,11 +1539,8 @@ export default function OnboardingScreen({ navigation }: any) {
               placeholderTextColor="#666"
               style={[
                 styles.textInput,
-                {
-                  backgroundColor: isDark ? '#16161A' : '#F8F8F8',
-                  borderColor: isDark ? '#222226' : '#EEEEEE',
-                  color: isDark ? '#FFF' : '#000',
-                },
+                liquidGlass(isDark, false),
+                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
               ]}
               autoCapitalize="words"
             />
@@ -1691,10 +1670,10 @@ export default function OnboardingScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, appBackground(isDark)]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={[styles.stepCount, { color: isDark ? '#AAA' : '#666' }]}>ONBOARDING</Text>
+          <Text style={[styles.stepCount, { color: textColor(isDark, 'secondary') }]}>ONBOARDING</Text>
           <TouchableOpacity
             onPress={async () => {
               try {
@@ -1703,18 +1682,19 @@ export default function OnboardingScreen({ navigation }: any) {
             }}
             style={[
               styles.logoutBtn,
-              { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' },
+              liquidGlass(isDark, false),
+              { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
             ]}
             activeOpacity={0.85}
           >
-            <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 2, color: isDark ? '#FFF' : '#000' }}>LOG OUT</Text>
+            <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 2, color: textColor(isDark) }}>LOG OUT</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.stepCount, { color: isDark ? '#AAA' : '#666' }]}>
+        <Text style={[styles.stepCount, { color: textColor(isDark, 'secondary') }]}>
           STEP {step + 1} / {steps.length}
         </Text>
-        <View style={[styles.track, { backgroundColor: isDark ? '#1A1A1F' : '#EEEEEE' }]}>
+        <View style={[styles.track, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec }]}>
           <View style={[styles.fill, { width: `${Math.round(((step + 1) / steps.length) * 100)}%` }]} />
         </View>
 
@@ -1731,22 +1711,18 @@ export default function OnboardingScreen({ navigation }: any) {
             onPress={() => setStep((s) => Math.max(0, s - 1))}
             style={[
               styles.btn,
-              {
-                backgroundColor: isDark ? '#16161A' : '#F8F8F8',
-                borderColor: isDark ? '#222226' : '#EEEEEE',
-                flex: 1,
-                opacity: step === 0 || saving ? 0.5 : 1,
-              },
+              liquidGlass(isDark, false),
+              { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, flex: 1, opacity: step === 0 || saving ? 0.5 : 1 },
             ]}
           >
-            <Text style={[styles.btnText, { color: isDark ? '#FFF' : '#000' }]}>BACK</Text>
+            <Text style={[styles.btnText, { color: textColor(isDark) }]}>BACK</Text>
           </TouchableOpacity>
 
           {step < steps.length - 1 ? (
             <TouchableOpacity
               disabled={!current.canNext || saving}
               onPress={() => setStep((s) => Math.min(steps.length - 1, s + 1))}
-              style={[styles.btn, { backgroundColor: '#FBE618', flex: 1, opacity: !current.canNext || saving ? 0.5 : 1 }]}
+              style={[styles.btn, { backgroundColor: COLORS.primary, flex: 1, opacity: !current.canNext || saving ? 0.5 : 1 }]}
             >
               <Text style={[styles.btnText, { color: '#000' }]}>NEXT</Text>
             </TouchableOpacity>
@@ -1754,7 +1730,7 @@ export default function OnboardingScreen({ navigation }: any) {
             <TouchableOpacity
               disabled={!current.canNext || saving}
               onPress={finish}
-              style={[styles.btn, { backgroundColor: '#FBE618', flex: 1, opacity: !current.canNext || saving ? 0.5 : 1 }]}
+              style={[styles.btn, { backgroundColor: COLORS.primary, flex: 1, opacity: !current.canNext || saving ? 0.5 : 1 }]}
             >
               {saving ? <ActivityIndicator color="#000" /> : <Text style={[styles.btnText, { color: '#000' }]}>FINISH</Text>}
             </TouchableOpacity>
@@ -1772,7 +1748,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingTop: 22 },
   stepCount: { fontSize: 10, fontWeight: '900', letterSpacing: 2 },
   track: { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 10 },
-  fill: { height: 4, backgroundColor: '#FBE618' },
+  fill: { height: 4, backgroundColor: COLORS.primary },
   title: { fontSize: 24, fontWeight: '900', letterSpacing: 1, color: '#000' },
   subtitle: { marginTop: 6, fontSize: 12, fontWeight: '700', color: '#666', lineHeight: 18 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -1819,7 +1795,7 @@ const styles = StyleSheet.create({
   },
   selectedSkillPill: {
     borderRadius: 999,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
@@ -1851,7 +1827,7 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 29,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -1896,7 +1872,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     flexGrow: 0,
     flexShrink: 0,
-    shadowColor: '#FBE618',
+    shadowColor: COLORS.primary,
     shadowOpacity: 0.35,
     shadowRadius: 22,
     shadowOffset: { width: 0, height: 10 },
@@ -1920,7 +1896,7 @@ const styles = StyleSheet.create({
     width: 66,
     height: 66,
     borderRadius: 33,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -1983,7 +1959,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     marginTop: 5,
   },
   introBulletText: {

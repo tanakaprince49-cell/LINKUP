@@ -2,8 +2,9 @@ import { Platform } from 'react-native';
 
 export const COLORS = {
   // Brand
-  primary: '#DFFB3F',      // LINKUP Electric Lime
-  primaryGlow: 'rgba(223, 251, 63, 0.18)',
+  primary: '#FBE618',      // LINKUP Signal Yellow
+  primaryGlow: 'rgba(251, 230, 24, 0.18)',
+  primaryStrong: '#E8D000', // Darker yellow for borders/accents
   secondary: '#00C2FF',    // Liquid Cyan
   tertiary: '#7C3AED',     // Violet Accent
   success: '#28E7A8',      // Mint Green
@@ -16,7 +17,7 @@ export const COLORS = {
   darkCard: 'rgba(16, 21, 34, 0.68)',
   darkGlassStrong: 'rgba(20, 28, 44, 0.82)',
   darkBorder: 'rgba(255, 255, 255, 0.14)',
-  darkBorderActive: 'rgba(223, 251, 63, 0.48)',
+  darkBorderActive: 'rgba(251, 230, 24, 0.48)',
   darkTextPrimary: '#FFFFFF',
   darkTextSecondary: '#B7C0D8',
   darkTextMuted: '#718096',
@@ -27,7 +28,7 @@ export const COLORS = {
   lightCard: 'rgba(255, 255, 255, 0.74)',
   lightGlassStrong: 'rgba(255, 255, 255, 0.9)',
   lightBorder: 'rgba(15, 23, 42, 0.1)',
-  lightBorderActive: 'rgba(0, 194, 255, 0.38)',
+  lightBorderActive: 'rgba(251, 230, 24, 0.38)',
   lightTextPrimary: '#0B1220',
   lightTextSecondary: '#42526B',
   lightTextMuted: '#8492A6',

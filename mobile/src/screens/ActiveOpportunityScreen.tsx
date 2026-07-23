@@ -10,6 +10,7 @@ import { UserProfile } from '../types';
 import { earnedScore, handleFor, opportunityDetails } from '../lib/discovery';
 import { ensureDirectMatch } from '../lib/chat';
 import VerifiedBadge from '../components/VerifiedBadge';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 export default function ActiveOpportunityScreen({ route, navigation }: any) {
   const userId = route?.params?.userId;
@@ -73,45 +74,45 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
 
   if (loading) {
     return (
-      <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
-        <ActivityIndicator color="#FBE618" style={{ marginTop: 80 }} />
+      <SafeAreaView edges={['top']} style={[styles.container, appBackground(isDark)]}>
+        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 80 }} />
       </SafeAreaView>
     );
   }
 
   if (!profile) {
     return (
-      <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+      <SafeAreaView edges={['top']} style={[styles.container, appBackground(isDark)]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <ChevronLeft size={24} color={isDark ? '#FFF' : '#000'} />
+            <ChevronLeft size={24} color={textColor(isDark)} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>OPPORTUNITY</Text>
+          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>OPPORTUNITY</Text>
         </View>
         <View style={styles.emptyState}>
-          <Text style={[styles.emptyText, { color: isDark ? '#FFF' : '#000' }]}>Opportunity not found.</Text>
+          <Text style={[styles.emptyText, { color: textColor(isDark) }]}>Opportunity not found.</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView edges={['top']} style={[styles.container, appBackground(isDark)]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
-          <ChevronLeft size={24} color={isDark ? '#FFF' : '#000'} />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, liquidGlass(isDark, false)]}>
+          <ChevronLeft size={24} color={textColor(isDark)} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>ACTIVE OPPORTUNITY</Text>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>ACTIVE OPPORTUNITY</Text>
         <View style={styles.backButton} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={[styles.heroCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+        <View style={[styles.heroCard, liquidGlass(isDark)]}>
           <View style={styles.heroTop}>
             <Image source={{ uri: profile.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.avatar} />
             <View style={{ flex: 1 }}>
               <View style={styles.nameRow}>
-                <Text style={[styles.name, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{profile.displayName || 'Builder'}</Text>
+                <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>{profile.displayName || 'Builder'}</Text>
                 {!!profile.isVerified && <VerifiedBadge size={22} />}
               </View>
               <Text style={styles.handle}>{handleFor(profile)}</Text>
@@ -121,12 +122,12 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
             </View>
           </View>
 
-          <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]}>{details.title}</Text>
-          <Text style={[styles.summary, { color: isDark ? '#CCC' : '#333' }]}>{details.summary}</Text>
+          <Text style={[styles.title, { color: textColor(isDark) }]}>{details.title}</Text>
+          <Text style={[styles.summary, { color: textColor(isDark, 'secondary') }]}>{details.summary}</Text>
 
           <View style={styles.grid}>
-            <InfoTile icon={<Target size={16} color="#FBE618" />} label="Looking For" value={details.roleNeed} isDark={isDark} />
-            <InfoTile icon={<Briefcase size={16} color="#FBE618" />} label="Stage" value={details.stage} isDark={isDark} />
+            <InfoTile icon={<Target size={16} color={COLORS.primary} />} label="Looking For" value={details.roleNeed} isDark={isDark} />
+            <InfoTile icon={<Briefcase size={16} color={COLORS.primary} />} label="Stage" value={details.stage} isDark={isDark} />
             <InfoTile icon={<Clock size={16} color="#4ADE80" />} label="Availability" value={details.availability} isDark={isDark} />
             <InfoTile icon={<MapPin size={16} color="#EF4444" />} label="Location" value={details.location} isDark={isDark} />
           </View>
@@ -134,18 +135,18 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
           {!!details.tags.length && (
             <View style={styles.tagsRow}>
               {details.tags.map((tag, index) => (
-                <View key={`${tag}-${index}`} style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-                  <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]}>{tag.toUpperCase()}</Text>
+                <View key={`${tag}-${index}`} style={[styles.tagChip, liquidGlass(isDark, false)]}>
+                  <Text style={[styles.tagText, { color: textColor(isDark) }]}>{tag.toUpperCase()}</Text>
                 </View>
               ))}
             </View>
           )}
         </View>
 
-        <View style={[styles.insightCard, { backgroundColor: isDark ? '#111115' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-          <Sparkles size={18} color="#FBE618" />
+        <View style={[styles.insightCard, liquidGlass(isDark)]}>
+          <Sparkles size={18} color={COLORS.primary} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.insightTitle, { color: isDark ? '#FFF' : '#000' }]}>Why this matters</Text>
+            <Text style={[styles.insightTitle, { color: textColor(isDark) }]}>Why this matters</Text>
             <Text style={styles.insightText}>
               This builder is actively signaling intent. Reach out if your skills, network, or capital can help them move faster.
             </Text>
@@ -153,11 +154,11 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
         </View>
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: profile.uid })} style={[styles.actionBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderWidth: 1, borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-            <User size={18} color={isDark ? '#FFF' : '#000'} />
-            <Text style={[styles.actionText, { color: isDark ? '#FFF' : '#000' }]}>PROFILE</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: profile.uid })} style={[styles.actionBtn, liquidGlass(isDark, false), { borderWidth: 1 }]}>
+            <User size={18} color={textColor(isDark)} />
+            <Text style={[styles.actionText, { color: textColor(isDark) }]}>PROFILE</Text>
           </TouchableOpacity>
-          <TouchableOpacity disabled={openingChat} onPress={openChat} style={[styles.actionBtn, { backgroundColor: '#FBE618', opacity: openingChat ? 0.6 : 1 }]}>
+          <TouchableOpacity disabled={openingChat} onPress={openChat} style={[styles.actionBtn, { backgroundColor: COLORS.primary, opacity: openingChat ? 0.6 : 1 }]}>
             {openingChat ? <ActivityIndicator size="small" color="#000" /> : <MessageSquare size={18} color="#000" />}
             <Text style={[styles.actionText, { color: '#000' }]}>MESSAGE</Text>
           </TouchableOpacity>
@@ -168,10 +169,10 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
 }
 
 const InfoTile = ({ icon, label, value, isDark }: any) => (
-  <View style={[styles.infoTile, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+  <View style={[styles.infoTile, liquidGlass(isDark, false)]}>
     {icon}
     <Text style={styles.infoLabel}>{label.toUpperCase()}</Text>
-    <Text style={[styles.infoValue, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={2}>{value}</Text>
+    <Text style={[styles.infoValue, { color: textColor(isDark) }]} numberOfLines={2}>{value}</Text>
   </View>
 );
 
@@ -203,14 +204,14 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#000',
   },
-  handle: { marginTop: 2, fontSize: 11, fontWeight: '900', color: '#FBE618' },
-  scorePill: { width: 48, height: 48, borderRadius: 18, backgroundColor: '#FBE618', alignItems: 'center', justifyContent: 'center' },
+  handle: { marginTop: 2, fontSize: 11, fontWeight: '900', color: COLORS.primary },
+  scorePill: { width: 48, height: 48, borderRadius: 18, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   scoreText: { fontSize: 16, fontWeight: '900', color: '#000' },
   title: { marginTop: 18, fontSize: 24, lineHeight: 29, fontWeight: '900', letterSpacing: 0.5 },
   summary: { marginTop: 10, fontSize: 14, lineHeight: 21, fontWeight: '700' },

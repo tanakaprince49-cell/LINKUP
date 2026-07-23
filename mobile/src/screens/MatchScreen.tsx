@@ -11,6 +11,7 @@ import { MessageSquare, User, Zap, Sparkles, ChevronRight, Briefcase } from 'luc
 import { ensureDirectMatch } from '../lib/chat';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -59,7 +60,7 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
   if (!otherUser) return null;
 
   return (
-    <View style={[styles.matchCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+    <View style={[styles.matchCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
       <View style={styles.cardMain}>
         <View style={styles.avatarContainer}>
           <Image source={{ uri: conversationAvatarUri(otherUser.profilePic) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.avatar} />
@@ -68,7 +69,7 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
         
         <View style={styles.infoContainer}>
           <View style={styles.nameRow}>
-            <Text style={[styles.nameText, { color: isDark ? '#FFF' : '#000' }]}>{otherUser.displayName}</Text>
+            <Text style={[styles.nameText, { color: textColor(isDark) }]}>{otherUser.displayName}</Text>
             {!!otherUser.isVerified && <VerifiedBadge size={20} />}
             <View style={styles.roleBadge}>
               <Text style={styles.roleText}>{otherUser.ambition?.toUpperCase() || 'FOUNDER'}</Text>
@@ -77,7 +78,7 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
           <Text style={styles.lastMsg} numberOfLines={1}>{match.lastMessage || `You connected! Start the conversation.`}</Text>
           
           <View style={styles.aiReasonBox}>
-            <Sparkles size={10} color="#FBE618" />
+            <Sparkles size={10} color={COLORS.primary} />
             <Text style={styles.aiReasonText}>SYNERGY: {otherUser.skills?.[0] || 'Innovation'} + {otherUser.skills?.[1] || 'Growth'}</Text>
           </View>
         </View>
@@ -85,7 +86,8 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
         <TouchableOpacity
           style={[
             styles.msgBtn,
-            { backgroundColor: isDark ? '#16161A' : '#FBE61815', borderColor: isDark ? '#222226' : '#FBE61830' },
+            liquidGlass(isDark, false),
+            { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
           ]}
           onPress={async () => {
             if (!user?.uid || !otherUser?.uid) return;
@@ -98,7 +100,7 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
             }
           }}
         >
-          <MessageSquare size={20} color={isDark ? '#FBE618' : '#FBE618'} fill="transparent" />
+          <MessageSquare size={20} color={COLORS.primary} fill="transparent" />
         </TouchableOpacity>
       </View>
     </View>
@@ -133,7 +135,7 @@ export default function MatchScreen({ navigation }: any) {
   }, [isFocused, user?.uid]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, appBackground(isDark)]}>
       <FlatList
         data={matches}
         keyExtractor={(item) => item.id}
@@ -145,7 +147,7 @@ export default function MatchScreen({ navigation }: any) {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          loading ? <ActivityIndicator color="#FBE618" style={{ marginTop: 50 }} /> : (
+          loading ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} /> : (
             <View style={styles.emptyState}>
               <Zap size={48} color="#222" />
               <Text style={styles.emptyText}>NO ACTIVE CONNECTIONS</Text>
@@ -186,7 +188,7 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 22,
     borderWidth: 2,
-    borderColor: '#FBE61840',
+    borderColor: 'rgba(251,230,24,0.25)',
   },
   statusDot: {
     position: 'absolute',
@@ -219,7 +221,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -229,11 +231,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: '#FBE61815',
+    backgroundColor: 'rgba(251,230,24,0.09)',
   },
   roleText: {
     fontSize: 8,
-    color: '#FBE618',
+    color: COLORS.primary,
     fontWeight: '900',
   },
   lastMsg: {
@@ -250,7 +252,7 @@ const styles = StyleSheet.create({
   aiReasonText: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#FBE618',
+    color: COLORS.primary,
     letterSpacing: 0.5,
   },
   msgBtn: {

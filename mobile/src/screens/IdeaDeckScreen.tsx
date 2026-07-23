@@ -33,6 +33,7 @@ import PaywallModal from '../components/PaywallModal';
 import { consumeDailyUsage, FREE_LIMITS, isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const SWIPE_DISTANCE = 140;
@@ -393,13 +394,13 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const renderIdeaCard = (idea: IdeaDeckItem, isPreview = false) => (
     <Animated.View
       key={idea.id}
-      style={[
+        style={[
         styles.card,
+        liquidGlass(isDark),
         {
           width: cardWidth,
           minHeight: cardHeight,
-          backgroundColor: isDark ? '#101014' : '#FFFFFF',
-          borderColor: isDark ? '#25252A' : '#E5E7EB',
+          borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
         },
         isPreview
           ? { transform: [{ scale: nextScale }], opacity: 0.58 }
@@ -428,17 +429,17 @@ export default function IdeaDeckScreen({ navigation }: any) {
         </View>
       </View>
 
-      <Text style={[styles.ideaTitle, { color: isDark ? '#FFF' : '#000' }]}>{idea.title}</Text>
-      <Text style={[styles.ideaDescription, { color: isDark ? '#D4D4D8' : '#333' }]}>{idea.description}</Text>
+      <Text style={[styles.ideaTitle, { color: textColor(isDark) }]}>{idea.title}</Text>
+      <Text style={[styles.ideaDescription, { color: textColor(isDark, 'secondary') }]}>{idea.description}</Text>
 
       <View style={styles.signalGrid}>
-        <View style={[styles.signalCard, { backgroundColor: isDark ? '#17171C' : '#F8FAFC' }]}>
+        <View style={[styles.signalCard, liquidGlass(isDark)]}>
           <Text style={styles.signalLabel}>STAGE</Text>
-          <Text style={[styles.signalValue, { color: isDark ? '#FFF' : '#000' }]}>{idea.stage || 'Idea Stage'}</Text>
+          <Text style={[styles.signalValue, { color: textColor(isDark) }]}>{idea.stage || 'Idea Stage'}</Text>
         </View>
-        <View style={[styles.signalCard, { backgroundColor: isDark ? '#17171C' : '#F8FAFC' }]}>
+        <View style={[styles.signalCard, liquidGlass(isDark)]}>
           <Text style={styles.signalLabel}>LOOKING FOR</Text>
-          <Text style={[styles.signalValue, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={2}>
+          <Text style={[styles.signalValue, { color: textColor(isDark) }]} numberOfLines={2}>
             {(idea.lookingFor || []).slice(0, 3).join(', ') || 'Builders'}
           </Text>
         </View>
@@ -459,11 +460,11 @@ export default function IdeaDeckScreen({ navigation }: any) {
         </TouchableOpacity>
       )}
 
-      <View style={[styles.ownerCard, { backgroundColor: isDark ? '#17171C' : '#F8F8F8' }]}>
+      <View style={[styles.ownerCard, liquidGlass(isDark, false)]}>
         <Image source={{ uri: idea.ownerPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.ownerPic} />
         <View style={{ flex: 1 }}>
           <View style={styles.ownerNameRow}>
-            <Text style={[styles.ownerName, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>
+            <Text style={[styles.ownerName, { color: textColor(isDark) }]} numberOfLines={1}>
               {idea.ownerName}
             </Text>
             {idea.ownerVerified ? <VerifiedBadge size={18} /> : null}
@@ -488,14 +489,14 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const renderIdeaComposer = () => (
     <Modal visible={composerOpen} transparent animationType="fade" onRequestClose={() => setComposerOpen(false)}>
       <View style={styles.modalBackdrop}>
-        <View style={[styles.composeSheet, { backgroundColor: isDark ? '#101014' : '#FFFFFF' }]}>
+        <View style={[styles.composeSheet, liquidGlass(isDark)]}>
           <View style={styles.composeHeader}>
             <View>
-              <Text style={[styles.composeTitle, { color: isDark ? '#FFF' : '#000' }]}>POST AN IDEA</Text>
+              <Text style={[styles.composeTitle, { color: textColor(isDark) }]}>POST AN IDEA</Text>
               <Text style={styles.composeSub}>Builders can swipe right if they want in.</Text>
             </View>
             <TouchableOpacity onPress={() => setComposerOpen(false)} style={styles.composeCloseBtn}>
-              <X size={22} color={isDark ? '#FFF' : '#000'} />
+              <X size={22} color={textColor(isDark)} />
             </TouchableOpacity>
           </View>
 
@@ -506,7 +507,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
               placeholder="Idea title"
               placeholderTextColor="#777"
               maxLength={90}
-              style={[styles.composeInput, { color: isDark ? '#FFF' : '#000', borderColor: isDark ? '#27272A' : '#E5E7EB' }]}
+              style={[styles.composeInput, { color: textColor(isDark), borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
             />
             <TextInput
               value={ideaDescription}
@@ -519,23 +520,23 @@ export default function IdeaDeckScreen({ navigation }: any) {
               style={[
                 styles.composeInput,
                 styles.composeTextArea,
-                { color: isDark ? '#FFF' : '#000', borderColor: isDark ? '#27272A' : '#E5E7EB' },
+                { color: textColor(isDark), borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
               ]}
             />
 
-            <Text style={[styles.composeLabel, { color: isDark ? '#FFF' : '#000' }]}>STAGE</Text>
+            <Text style={[styles.composeLabel, { color: textColor(isDark) }]}>STAGE</Text>
             <View style={styles.composeChipRow}>
               {IDEA_STAGE_OPTIONS.map((stage) => renderChip(stage, ideaStage === stage, () => setIdeaStage(stage)))}
             </View>
 
-            <Text style={[styles.composeLabel, { color: isDark ? '#FFF' : '#000' }]}>LOOKING FOR</Text>
+            <Text style={[styles.composeLabel, { color: textColor(isDark) }]}>LOOKING FOR</Text>
             <View style={styles.composeChipRow}>
               {IDEA_LOOKING_FOR_OPTIONS.map((item) =>
                 renderChip(item, ideaLookingFor.includes(item), () => setIdeaLookingFor((current) => toggleValue(current, item)))
               )}
             </View>
 
-            <Text style={[styles.composeLabel, { color: isDark ? '#FFF' : '#000' }]}>FIELD</Text>
+            <Text style={[styles.composeLabel, { color: textColor(isDark) }]}>FIELD</Text>
             <View style={styles.composeChipRow}>
               {IDEA_FIELD_OPTIONS.map((field) =>
                 renderChip(field, ideaFields.includes(field), () => setIdeaFields((current) => toggleValue(current, field)))
@@ -554,16 +555,16 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const renderInviteComposer = () => (
     <Modal visible={!!inviteIdea} transparent animationType="fade" onRequestClose={() => setInviteIdea(null)}>
       <View style={styles.modalBackdrop}>
-        <View style={[styles.composeSheet, styles.inviteSheet, { backgroundColor: isDark ? '#101014' : '#FFFFFF' }]}>
+        <View style={[styles.composeSheet, styles.inviteSheet, liquidGlass(isDark)]}>
           <View style={styles.composeHeader}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.composeTitle, { color: isDark ? '#FFF' : '#000' }]}>REQUEST TO CONNECT</Text>
+              <Text style={[styles.composeTitle, { color: textColor(isDark) }]}>REQUEST TO CONNECT</Text>
               <Text style={styles.composeSub} numberOfLines={2}>
                 {inviteIdea ? `About: ${inviteIdea.title}` : 'Send a short invite.'}
               </Text>
             </View>
             <TouchableOpacity onPress={() => setInviteIdea(null)} style={styles.composeCloseBtn}>
-              <X size={22} color={isDark ? '#FFF' : '#000'} />
+              <X size={22} color={textColor(isDark)} />
             </TouchableOpacity>
           </View>
 
@@ -579,7 +580,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
             style={[
               styles.composeInput,
               styles.inviteTextArea,
-              { color: isDark ? '#FFF' : '#000', borderColor: isDark ? '#27272A' : '#E5E7EB' },
+              { color: textColor(isDark), borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
             ]}
           />
           <Text style={styles.inviteHint}>The idea owner can approve or reject this request before chat opens.</Text>
@@ -593,13 +594,13 @@ export default function IdeaDeckScreen({ navigation }: any) {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, appBackground(isDark)]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.headerBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
-          <ChevronLeft size={22} color={isDark ? '#FFF' : '#000'} />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.headerBtn, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec }]}>
+          <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
-          <Text style={[styles.headerTitle, { color: isDark ? '#FFF' : '#000' }]}>IDEAS</Text>
+          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>IDEAS</Text>
           <Text style={styles.headerSub}>Swipe ideas. Match on intent.</Text>
         </View>
         <TouchableOpacity onPress={() => setComposerOpen(true)} style={[styles.headerBtn, styles.plusBtn]}>
@@ -609,7 +610,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
 
       {loading && ideas.length === 0 ? (
         <View style={styles.center}>
-          <ActivityIndicator color="#FBE618" />
+          <ActivityIndicator color={COLORS.primary} />
         </View>
       ) : topIdea ? (
         <View style={styles.deckWrap}>
@@ -629,8 +630,8 @@ export default function IdeaDeckScreen({ navigation }: any) {
         </View>
       ) : (
         <View style={styles.emptyWrap}>
-          <Zap size={48} color="#FBE618" fill="#FBE618" />
-          <Text style={[styles.emptyTitle, { color: isDark ? '#FFF' : '#000' }]}>NO IDEAS YET</Text>
+          <Zap size={48} color={COLORS.primary} fill={COLORS.primary} />
+          <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>NO IDEAS YET</Text>
           <Text style={styles.emptyText}>Post an idea here so builders can swipe into it.</Text>
           <TouchableOpacity onPress={() => setComposerOpen(true)} style={styles.emptyButton}>
             <Plus size={16} color="#000" />
@@ -667,7 +668,7 @@ function ConfettiBurst({ active, width }: { active: boolean; width: number }) {
 
   if (!active) return null;
 
-  const colors = ['#FBE618', '#0A84FF', '#22C55E', '#FF4D4D', '#A855F7'];
+  const colors = [COLORS.primary, '#0A84FF', '#22C55E', '#FF4D4D', '#A855F7'];
   const safeWidth = Math.max(width || 360, 320);
 
   return (
@@ -725,7 +726,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  plusBtn: { backgroundColor: '#FBE618' },
+  plusBtn: { backgroundColor: COLORS.primary },
   headerBtnGhost: { width: 44, height: 44 },
   headerTitle: { fontSize: 16, fontWeight: '900', letterSpacing: 4 },
   headerSub: { marginTop: 4, color: '#666', fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
@@ -751,18 +752,18 @@ const styles = StyleSheet.create({
     width: 190,
     height: 190,
     borderRadius: 95,
-    backgroundColor: '#FBE61830',
+    backgroundColor: 'rgba(251,230,24,0.19)',
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   ideaIcon: {
     width: 54,
     height: 54,
     borderRadius: 20,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sourcePill: { borderRadius: 999, backgroundColor: '#FBE618', paddingHorizontal: 12, paddingVertical: 7 },
+  sourcePill: { borderRadius: 999, backgroundColor: COLORS.primary, paddingHorizontal: 12, paddingVertical: 7 },
   sourceText: { color: '#000', fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
   ideaTitle: { marginTop: 36, fontSize: 34, lineHeight: 40, fontWeight: '900', fontStyle: 'italic', textTransform: 'uppercase' },
   ideaDescription: { marginTop: 16, fontSize: 16, lineHeight: 24, fontWeight: '800' },
@@ -771,16 +772,16 @@ const styles = StyleSheet.create({
   signalLabel: { fontSize: 8, fontWeight: '900', letterSpacing: 1.4, color: '#777' },
   signalValue: { marginTop: 6, fontSize: 12, fontWeight: '900' },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 20 },
-  tagPill: { borderRadius: 999, backgroundColor: '#FBE61818', borderWidth: 1, borderColor: '#FBE61844', paddingHorizontal: 10, paddingVertical: 7 },
+  tagPill: { borderRadius: 999, backgroundColor: 'rgba(251,230,24,0.10)', borderWidth: 1, borderColor: 'rgba(251,230,24,0.27)', paddingHorizontal: 10, paddingVertical: 7 },
   tagText: { fontSize: 9, fontWeight: '900', color: '#8A7900', letterSpacing: 0.9 },
-  ideaInviteBtn: { marginTop: 18, height: 50, borderRadius: 18, backgroundColor: '#FBE618', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  ideaInviteBtn: { marginTop: 18, height: 50, borderRadius: 18, backgroundColor: COLORS.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   ideaInviteText: { color: '#000', fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
   ownerCard: { marginTop: 'auto', borderRadius: 22, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
   ownerPic: { width: 48, height: 48, borderRadius: 18 },
   ownerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   ownerName: { fontSize: 13, fontWeight: '900', textTransform: 'uppercase', flexShrink: 1 },
   ownerMeta: { marginTop: 3, fontSize: 10, fontWeight: '800', color: '#777' },
-  ideaOwnerBadge: { height: 38, borderRadius: 14, backgroundColor: '#FBE618', paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+  ideaOwnerBadge: { height: 38, borderRadius: 14, backgroundColor: COLORS.primary, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
   ideaOwnerBadgeText: { fontSize: 9, fontWeight: '900', letterSpacing: 1, color: '#000' },
   swipeBadge: { position: 'absolute', top: 24, zIndex: 4, borderWidth: 4, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.32)' },
   likeBadge: { right: 22, borderColor: '#22C55E' },
@@ -789,11 +790,11 @@ const styles = StyleSheet.create({
   skipBadgeText: { color: '#FF4D4D', fontSize: 28, fontWeight: '900' },
   actionRow: { position: 'absolute', bottom: 24, left: 0, right: 0, zIndex: 5, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 24 },
   actionBtn: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#111217', alignItems: 'center', justifyContent: 'center' },
-  likeBtn: { width: 84, height: 84, borderRadius: 42, backgroundColor: '#FBE618', shadowColor: '#FBE618', shadowOpacity: 0.24, shadowRadius: 18, elevation: 8 },
+  likeBtn: { width: 84, height: 84, borderRadius: 42, backgroundColor: COLORS.primary,     shadowColor: COLORS.primary, shadowOpacity: 0.24, shadowRadius: 18, elevation: 8 },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
   emptyTitle: { marginTop: 14, fontSize: 24, fontWeight: '900', fontStyle: 'italic' },
   emptyText: { marginTop: 8, maxWidth: 340, textAlign: 'center', color: '#666', fontSize: 13, lineHeight: 20, fontWeight: '800' },
-  emptyButton: { marginTop: 18, height: 52, borderRadius: 18, backgroundColor: '#FBE618', paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  emptyButton: { marginTop: 18, height: 52, borderRadius: 18, backgroundColor: COLORS.primary, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', gap: 8 },
   emptyButtonText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.5, color: '#000' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.58)', alignItems: 'center', justifyContent: 'center', padding: 18 },
   composeSheet: { width: '100%', maxWidth: 560, maxHeight: '88%', borderRadius: 30, padding: 18 },
@@ -810,10 +811,10 @@ const styles = StyleSheet.create({
   composeLabel: { marginTop: 8, marginBottom: 10, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
   composeChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   composeChip: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: '#FFF' },
-  composeChipActive: { borderColor: '#FBE618', backgroundColor: '#FBE618' },
+  composeChipActive: {     borderColor: COLORS.primary, backgroundColor: COLORS.primary },
   composeChipText: { color: '#555', fontSize: 11, fontWeight: '900' },
   composeChipTextActive: { color: '#000' },
-  postIdeaBtn: { height: 56, borderRadius: 18, backgroundColor: '#FBE618', alignItems: 'center', justifyContent: 'center' },
+  postIdeaBtn: { height: 56, borderRadius: 18, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   postIdeaBtnDisabled: { opacity: 0.55 },
   postIdeaText: { color: '#000', fontSize: 13, fontWeight: '900', letterSpacing: 1.8 },
   confettiLayer: { ...StyleSheet.absoluteFillObject, zIndex: 50 },

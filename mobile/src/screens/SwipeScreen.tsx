@@ -787,11 +787,11 @@ export default function SwipeScreen({ navigation }: any) {
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Target size={48} color={dailyLimitReachedRef.current ? '#888' : '#FBE618'} />
-      <Text style={[styles.emptyText, { color: isDark ? '#FFF' : '#000' }]}>
+      <Target size={48} color={dailyLimitReachedRef.current ? textColor(isDark, 'muted') : COLORS.primary} />
+      <Text style={[styles.emptyText, { color: textColor(isDark) }]}>
         {dailyLimitReachedRef.current ? 'DAILY MATCHES EXHAUSTED' : 'NO MORE PROFILES'}
       </Text>
-      <Text style={[styles.emptySubtext, { color: isDark ? '#888' : '#666' }]}>
+      <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
         {dailyLimitReachedRef.current ? 'Come back tomorrow for 2 new matches.' : 'Check back later for new builders.'}
       </Text>
       <TouchableOpacity style={styles.resetBtn} onPress={resetDeck}>
@@ -819,9 +819,9 @@ export default function SwipeScreen({ navigation }: any) {
           styles.card,
           styles.deckCardLayer,
           styles.previewCard,
+          liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            backgroundColor: isDark ? '#111115' : '#F8F8F8',
             opacity: nextCardOpacity,
             transform: [{ translateY: nextCardTranslateY }, { scale: nextCardScale }],
           },
@@ -905,9 +905,9 @@ export default function SwipeScreen({ navigation }: any) {
         style={[
           styles.card,
           styles.deckCardLayer,
+          liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            backgroundColor: isDark ? '#111115' : '#F8F8F8',
             opacity: topCardOpacity,
             transform: [
               { translateX: swipePosition.x },
@@ -985,14 +985,14 @@ export default function SwipeScreen({ navigation }: any) {
               )}
             </View>
             <View style={styles.metaLine}>
-              <Briefcase size={13} color="#FBE618" />
+              <Briefcase size={13} color={COLORS.primary} />
               <Text style={styles.metaLineText} numberOfLines={1}>{roleText}</Text>
             </View>
             <View style={styles.roleBadge}>
               <Text style={styles.roleBadgeText}>{roleInfoFor((topProfile as any).occupation).badge}</Text>
             </View>
             <View style={styles.metaLine}>
-              <MapPin size={13} color="#FBE618" />
+              <MapPin size={13} color={COLORS.primary} />
               <Text style={styles.metaLineText} numberOfLines={1}>{locationText}</Text>
             </View>
             <View style={styles.aiReasonPill}>
@@ -1046,7 +1046,7 @@ export default function SwipeScreen({ navigation }: any) {
 
             <View style={styles.tagGrid}>
               {topProfile.skills?.slice(0, 8).map((skill, idx) => (
-                <View key={`${topProfile.uid}-${skill}-${idx}`} style={[styles.skillTag, liquidGlass(isDark, false), { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(251,230,24,0.16)', borderColor: isDark ? COLORS.darkBorder : '#FBE618' }] }>
+                <View key={`${topProfile.uid}-${skill}-${idx}`} style={[styles.skillTag, liquidGlass(isDark, false), { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(251,230,24,0.16)', borderColor: isDark ? COLORS.darkBorder : COLORS.primary }] }>
                   <Text style={[styles.skillTagText, { color: textColor(isDark) }]}>{String(skill).toUpperCase()}</Text>
                 </View>
               ))}
@@ -1076,7 +1076,7 @@ export default function SwipeScreen({ navigation }: any) {
             </View>
 
             <View style={styles.scrollIndicator}>
-              <ChevronDown size={14} color="#FBE618" />
+              <ChevronDown size={14} color={COLORS.primary} />
               <Text style={[styles.scrollText, { color: textColor(isDark, 'secondary') }]}>SCROLL FOR DETAILS</Text>
             </View>
             </ScrollView>
@@ -1091,9 +1091,9 @@ export default function SwipeScreen({ navigation }: any) {
     return (
       <ScreenRoot style={[styles.container, isWeb && styles.webRoot, appBackground(isDark)]}>
         <View style={styles.authGate}>
-          <Zap size={44} color="#FBE618" fill="#FBE618" />
-          <Text style={[styles.authGateTitle, { color: isDark ? '#FFF' : '#000' }]}>JOIN LINKUP FIRST</Text>
-          <Text style={styles.authGateCopy}>Sign in to unlock smart matchmaking, builder search, and swipe discovery.</Text>
+          <Zap size={44} color={COLORS.primary} fill={COLORS.primary} />
+          <Text style={[styles.authGateTitle, { color: textColor(isDark) }]}>JOIN LINKUP FIRST</Text>
+          <Text style={[styles.authGateCopy, { color: textColor(isDark, 'secondary') }]}>Sign in to unlock smart matchmaking, builder search, and swipe discovery.</Text>
           <TouchableOpacity
             style={styles.authGateButton}
             onPress={() => navigation?.reset?.({ index: 0, routes: [{ name: 'Landing' }] }) || navigation?.navigate?.('Landing')}
@@ -1118,7 +1118,7 @@ export default function SwipeScreen({ navigation }: any) {
     <ScreenRoot style={[styles.container, isWeb && styles.webRoot, appBackground(isDark)]}>
       <View style={styles.scene} pointerEvents="none">
         <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
-        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(223,251,63,0.08)' : 'rgba(223,251,63,0.16)' }]} />
+        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(251,230,24,0.08)' : 'rgba(251,230,24,0.16)' }]} />
       </View>
       <View style={[styles.webStage, isWideWeb && styles.webStageDesktop, isCompactWeb && styles.webStageMobile]}>
         <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }, isCompactWeb && styles.compactTopBar]}>
@@ -1239,7 +1239,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 3,
-    color: '#000',
     borderRadius: 999,
     overflow: 'hidden',
     paddingHorizontal: 18,
@@ -1332,7 +1331,7 @@ const styles = StyleSheet.create({
   previewEyebrow: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#FBE618',
+    color: COLORS.primary,
     letterSpacing: 1.4,
   },
   previewName: {
@@ -1382,13 +1381,13 @@ const styles = StyleSheet.create({
   aiBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
     gap: 5,
     alignSelf: 'flex-start',
-    shadowColor: '#FBE618',
+    shadowColor: COLORS.primary,
     shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 4,
@@ -1414,7 +1413,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.2)',
   },
   photoThumbWrapActive: {
-    borderColor: '#FBE618',
+    borderColor: COLORS.primary,
   },
   photoThumbImg: {
     width: '100%',
@@ -1437,7 +1436,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
     minHeight: 44,
     borderRadius: 16,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1461,12 +1460,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     maxHeight: '78%',
-    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     zIndex: 90,
     borderWidth: 2,
-    borderColor: '#FBE618',
+    borderColor: COLORS.primary,
     shadowColor: '#000',
     shadowOpacity: 0.22,
     shadowRadius: 24,
@@ -1497,24 +1495,22 @@ const styles = StyleSheet.create({
   detailsTitle: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#000',
     letterSpacing: 1.6,
   },
   detailsSubtitle: {
     marginTop: 4,
     fontSize: 11,
     fontWeight: '800',
-    color: '#343434',
     lineHeight: 15,
   },
   closeInfoBtn: {
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 9,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.primary,
   },
   closeInfoText: {
-    color: '#FBE618',
+    color: '#000',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
@@ -1529,7 +1525,6 @@ const styles = StyleSheet.create({
     fontSize: 25,
     lineHeight: 30,
     fontWeight: '900',
-    color: '#000',
     fontStyle: 'italic',
     textTransform: 'uppercase',
     flexShrink: 1,
@@ -1544,7 +1539,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '800',
-    color: '#202020',
   },
   nameRow: {
     flexDirection: 'row',
@@ -1555,7 +1549,7 @@ const styles = StyleSheet.create({
   exitBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4ADE80',
+    backgroundColor: COLORS.success,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
@@ -1570,7 +1564,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -1604,7 +1598,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: 10,
     borderRadius: 999,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
@@ -1630,7 +1624,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
   },
   aiReasonText: {
     flex: 1,
@@ -1647,7 +1641,6 @@ const styles = StyleSheet.create({
   },
   bioText: {
     fontSize: 15,
-    color: '#111827',
     marginTop: 9,
     fontWeight: '700',
     lineHeight: 23,
@@ -1660,17 +1653,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   skillTag: {
-    backgroundColor: 'rgba(251,230,24,0.16)',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#FBE618',
   },
   skillTagText: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#000',
   },
   detailGrid: {
     gap: 10,
@@ -1685,12 +1675,10 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 1.4,
-    color: '#000',
   },
   detailValue: {
     marginTop: 8,
     fontSize: 14,
-    color: '#111827',
     fontWeight: '800',
     lineHeight: 20,
   },
@@ -1700,7 +1688,6 @@ const styles = StyleSheet.create({
   },
   scrollText: {
     fontSize: 8,
-    color: '#555',
     fontWeight: '900',
     marginTop: 4,
   },
@@ -1751,11 +1738,9 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#16161A',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#222226',
   },
   compactActionBtnSmall: {
     width: 54,
@@ -1766,11 +1751,11 @@ const styles = StyleSheet.create({
     width: 76,
     height: 60,
     borderRadius: 22,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#D9C800',
+    borderColor: COLORS.primaryStrong,
     gap: 3,
   },
   compactContactActionBtn: {
@@ -1779,17 +1764,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   contactApprovedBtn: {
-    backgroundColor: '#22C55E',
+    backgroundColor: COLORS.success,
     borderColor: '#16A34A',
   },
   contactPendingBtn: {
-    backgroundColor: '#FACC15',
+    backgroundColor: COLORS.warning,
     borderColor: '#EAB308',
     opacity: 0.86,
   },
   contactRejectedBtn: {
-    backgroundColor: '#FCA5A5',
+    backgroundColor: COLORS.danger,
     borderColor: '#EF4444',
+    opacity: 0.7,
   },
   contactActionText: {
     fontSize: 8,
@@ -1801,10 +1787,10 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FBE618',
+    shadowColor: COLORS.primary,
     shadowOpacity: 0.3,
     shadowRadius: 15,
     elevation: 8,
@@ -1839,7 +1825,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     lineHeight: 20,
-    color: '#666',
     textAlign: 'center',
   },
   authGateButton: {
@@ -1847,7 +1832,7 @@ const styles = StyleSheet.create({
     height: 52,
     paddingHorizontal: 28,
     borderRadius: 18,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1869,7 +1854,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   resetBtn: {
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 20,

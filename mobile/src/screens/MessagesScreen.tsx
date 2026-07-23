@@ -164,8 +164,8 @@ const ConversationItem = React.memo(({ match, navigation }: { match: Match, navi
             {!!otherUser.isVerified && <VerifiedBadge size={20} />}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {isPinned && <Pin size={12} color="#FBE618" />}
-            {isImportant && <Star size={12} color="#FBE618" fill="#FBE618" />}
+            {isPinned && <Pin size={12} color={COLORS.primary} />}
+            {isImportant && <Star size={12} color={COLORS.primary} fill={COLORS.primary} />}
             <Text style={styles.chatTime}>{formatTimeAgo(match.lastMessageTime)}</Text>
           </View>
         </View>
@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#FBE618',
+    borderColor: COLORS.primary,
   },
   avatarFallbackText: {
     color: '#000',
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     borderWidth: 2,
     borderColor: '#111',
   },
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,

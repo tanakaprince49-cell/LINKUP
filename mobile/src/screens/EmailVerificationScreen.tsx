@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MailCheck, RefreshCw, ShieldCheck } from 'lucide-react-native';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -36,12 +37,12 @@ export default function EmailVerificationScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#050508' : '#FFFFFF' }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
       <View style={styles.card}>
         <View style={styles.iconWrap}>
           <MailCheck size={38} color="#000" />
         </View>
-        <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]}>VERIFY YOUR EMAIL</Text>
+        <Text style={[styles.title, { color: textColor(isDark) }]}>VERIFY YOUR EMAIL</Text>
         <Text style={styles.subtitle}>
           We sent a Firebase verification link to {user?.email || 'your email'}. Verify it before entering LINKUP.
         </Text>
@@ -61,10 +62,10 @@ export default function EmailVerificationScreen() {
           disabled={sending}
           onPress={resendVerification}
           activeOpacity={0.85}
-          style={[styles.secondaryBtn, { borderColor: isDark ? '#24242A' : '#E5E7EB', opacity: sending ? 0.65 : 1 }]}
+            style={[styles.secondaryBtn, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, opacity: sending ? 0.65 : 1 }]}
         >
-          {sending ? <ActivityIndicator color={isDark ? '#FFF' : '#000'} /> : <RefreshCw size={16} color={isDark ? '#FFF' : '#000'} />}
-          <Text style={[styles.secondaryText, { color: isDark ? '#FFF' : '#000' }]}>RESEND VERIFICATION EMAIL</Text>
+          {sending ? <ActivityIndicator color={textColor(isDark)} /> : <RefreshCw size={16} color={textColor(isDark)} />}
+          <Text style={[styles.secondaryText, { color: textColor(isDark) }]}>RESEND VERIFICATION EMAIL</Text>
         </TouchableOpacity>
 
         <TouchableOpacity onPress={logout} activeOpacity={0.8} style={styles.logoutBtn}>
@@ -88,7 +89,7 @@ const styles = StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 28,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
@@ -110,7 +111,7 @@ const styles = StyleSheet.create({
   },
   spamNote: {
     marginTop: 12,
-    color: '#FBE618',
+    color: COLORS.primary,
     fontSize: 12,
     fontWeight: '900',
     textAlign: 'center',
@@ -119,7 +120,7 @@ const styles = StyleSheet.create({
     marginTop: 28,
     height: 58,
     borderRadius: 20,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     alignSelf: 'stretch',
     flexDirection: 'row',
     alignItems: 'center',

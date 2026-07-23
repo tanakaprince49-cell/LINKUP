@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Download, X } from 'lucide-react-native';
+import { COLORS } from '../theme/theme';
 
 const DISMISSED_KEY = 'linkup:pwa-install-dismissed';
 
@@ -77,7 +78,7 @@ const styles = StyleSheet.create({
   installButton: {
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FBE618',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
