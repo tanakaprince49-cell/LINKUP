@@ -540,10 +540,7 @@ export default function SwipeScreen({ navigation }: any) {
           return;
         }
 
-        const cap = dailyLimitReachedRef.current ? 0 : Math.min(FREE_LIMITS.dailyRecommendations, orderedUsers.length);
-        const dailyCapped = orderedUsers.slice(0, cap);
-
-        allProfilesRef.current = dailyCapped;
+        allProfilesRef.current = orderedUsers;
         writeCachedDiscovery(user.uid, orderedUsers.filter((profile) => !isSyntheticProfile(profile))).catch(() => {});
         const remainingUsers = unswipedProfiles(orderedUsers);
         if (hasUserSwipedRef.current) {
@@ -670,12 +667,11 @@ export default function SwipeScreen({ navigation }: any) {
     void getDailyUsage(user.uid, 'dailyRecommendations').then((used) => {
       const remaining = Math.max(0, FREE_LIMITS.dailyRecommendations - used);
       setDailyRemaining(remaining);
-      if (remaining <= 0) dailyLimitReachedRef.current = true;
     });
   }, [user?.uid]);
 
   useEffect(() => {
-    if (profiles.length > 3 || allLoadedRef.current || loadingMoreRef.current || !user?.uid || dailyLimitReachedRef.current) return;
+    if (profiles.length > 3 || allLoadedRef.current || loadingMoreRef.current || !user?.uid) return;
     let cancelled = false;
     loadingMoreRef.current = true;
     void (async () => {
@@ -685,13 +681,8 @@ export default function SwipeScreen({ navigation }: any) {
           if (moreProfiles.length === 0) allLoadedRef.current = true;
           return;
         }
-        const cap = dailyLimitReachedRef.current ? 0 : Math.max(0, FREE_LIMITS.dailyRecommendations - profiles.length);
-        if (cap <= 0) {
-          allLoadedRef.current = true;
-          return;
-        }
         const existingIds = new Set(allProfilesRef.current.map((p) => p.uid));
-        const newProfiles = moreProfiles.filter((p) => !existingIds.has(p.uid) && !swipedSessionIdsRef.current.has(p.uid)).slice(0, cap);
+        const newProfiles = moreProfiles.filter((p) => !existingIds.has(p.uid) && !swipedSessionIdsRef.current.has(p.uid));
         if (newProfiles.length === 0) {
           allLoadedRef.current = true;
           return;
@@ -828,17 +819,6 @@ export default function SwipeScreen({ navigation }: any) {
     lastSwipedProfileRef.current = item;
     if (user?.uid) {
       void writeSwipeProgress(user.uid, Array.from(swipedSessionIdsRef.current));
-    }
-
-    if (direction === 'right' && user?.uid) {
-      void (async () => {
-        const usage = await consumeDailyUsage(user.uid, 'dailyRecommendations', FREE_LIMITS.dailyRecommendations);
-        setDailyRemaining(Math.max(0, usage.remaining));
-        if (!usage.allowed) {
-          dailyLimitReachedRef.current = true;
-          setProfiles([]);
-        }
-      })();
     }
 
     setActivePhotoIndex(0);
