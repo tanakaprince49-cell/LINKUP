@@ -1082,7 +1082,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         ownerName: displayNameFor(myProfile),
         ownerPic: safeProfileImageUri(myProfile.profilePic),
         profileName: displayNameFor(profile),
-        profilePic: profile.profilePic || '',
+        profilePic: profile?.profilePic || '',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -1705,7 +1705,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
   };
   const heroProfilePic =
-    safeProfileImageUri(isEditing ? editData?.profilePic : profile.profilePic, MOBILE_LIST_IMAGE_LIMIT) ||
+    safeProfileImageUri(isEditing ? editData?.profilePic : profile?.profilePic, MOBILE_LIST_IMAGE_LIMIT) ||
     'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400';
   const shouldRenderProfileImages = profileImagesReady || isEditing;
   const profileInitial = (displayNameFor(profile).trim()[0] || 'L').toUpperCase();

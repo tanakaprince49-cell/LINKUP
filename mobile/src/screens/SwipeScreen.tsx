@@ -1055,10 +1055,10 @@ export default function SwipeScreen({ navigation }: any) {
           <Text style={[styles.actionLabel, styles.actionLabelLarge]}>LIKE</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtnSmall]} onPress={rewindLast}>
-          <View style={styles.actionBtnInnerSmall}>
-            <RotateCcw size={20} color="#FFF" />
+          <View style={[styles.actionBtnInnerSmall, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}>
+            <RotateCcw size={20} color="#000" />
           </View>
-          <Text style={styles.actionLabel}>REWIND</Text>
+          <Text style={[styles.actionLabel, { color: '#000' }]}>REWIND</Text>
         </TouchableOpacity>
       </View>
     );
@@ -1880,6 +1880,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   actionRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 22,
+    zIndex: 70,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'center',
