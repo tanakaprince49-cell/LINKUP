@@ -103,7 +103,7 @@ export default function PaywallModal({
   const [selectedPlan, setSelectedPlan] = React.useState<PlusPlan['id']>('monthly');
   const isPro = hasLinkupPro(profile);
   const selectedPrice = PRICING_PLANS.find((plan) => plan.id === selectedPlan) || PRICING_PLANS[0];
-  const perksMaxHeight = Math.max(280, Math.min(420, Math.round(height * 0.38)));
+  // No maxHeight needed — whole sheet scrolls
   const {
     connected,
     subscriptions,
@@ -365,117 +365,119 @@ export default function PaywallModal({
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
       <View style={[styles.sheet, liquidGlass(isDark), { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg, borderColor: isDark ? COLORS.darkBorderActive : COLORS.lightBorderActive }]}> 
-        <View style={[styles.hero, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard }]}> 
-          <View style={styles.headerRow}>
-            <View style={styles.brandRow}>
-              <Image source={LOGO} style={[styles.logo, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]} resizeMode="contain" />
-              <View>
-                <Text style={[styles.brandName, { color: textColor(isDark) }]}>LINKUP</Text>
-                <Text style={[styles.brandPlan, { color: textColor(isDark, 'secondary') }]}>PLUS PLAN</Text>
-              </View>
-            </View>
-            <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]} activeOpacity={0.8}>
-              <X size={18} color={textColor(isDark)} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={[styles.popularBadge, { backgroundColor: isDark ? 'rgba(223, 251, 63, 0.14)' : COLORS.primaryGlow }]}> 
-            <Crown size={13} color={COLORS.primary} />
-            <Text style={[styles.popularText, { color: COLORS.lightTextPrimary }]}>FOR FOUNDERS, CREATORS & TEAMS</Text>
-          </View>
-
-          <Text style={[styles.title, { color: textColor(isDark) }]}>Build your startup faster</Text>
-          <Text style={[styles.copy, { color: textColor(isDark, 'secondary') }]}>
-            {description || 'Free members can explore a limited number of builders every 12 hours. LINKUP PLUS unlocks unlimited discovery, smarter AI recommendations, and premium tools to help you find the right co-founder, developer, designer, or investor faster.'}
-          </Text>
-          <View style={[styles.featurePill, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}> 
-            <Text style={[styles.feature, { color: textColor(isDark) }]}>{feature}</Text>
-          </View>
-
-          <View style={styles.pricingGrid}>
-            {PRICING_PLANS.map((plan) => {
-              const selected = selectedPlan === plan.id;
-              const storePrice = getPlanPrice(plan);
-              return (
-                <TouchableOpacity
-                  key={plan.id}
-                  onPress={() => setSelectedPlan(plan.id)}
-                  activeOpacity={0.86}
-                  style={[
-                    styles.priceCard,
-                    selected && styles.priceCardSelected,
-                    {
-                      backgroundColor: selected ? (isDark ? 'rgba(223, 251, 63, 0.16)' : COLORS.primaryGlow) : isDark ? COLORS.darkCard : COLORS.lightCard,
-                      borderColor: selected ? COLORS.primary : isDark ? COLORS.darkBorder : COLORS.lightBorder,
-                    },
-                  ]}
-                >
-                  <View style={styles.priceTopRow}>
-                    <Text style={[styles.priceLabel, selected && styles.priceLabelSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.label}</Text>
-                    {'badge' in plan && plan.badge ? (
-                      <Text style={[styles.priceBadge, { backgroundColor: COLORS.primary, color: COLORS.lightTextPrimary }]}>{plan.badge}</Text>
-                    ) : null}
-                  </View>
-                  <View style={styles.priceRow}>
-                    {'originalPrice' in plan && plan.originalPrice ? (
-                      <Text style={[styles.originalPrice, { color: textColor(isDark, 'muted') }]}>{plan.originalPrice}</Text>
-                    ) : null}
-                    <Text style={[styles.priceValue, selected && styles.priceValueSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark) }]}>{storePrice}</Text>
-                    <Text style={[styles.priceCadence, selected && styles.priceCadenceSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.cadence}</Text>
-                  </View>
-                  <Text style={[styles.priceHelper, selected && styles.priceHelperSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.helper}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
         <ScrollView
-          style={[styles.perksScroll, { maxHeight: perksMaxHeight, backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
-          contentContainerStyle={styles.perksContent}
+          style={styles.scrollBody}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.perksHeader}>
-            <Text style={[styles.perksTitle, { color: textColor(isDark) }]}>Everything included in LINKUP PLUS</Text>
-            <Text style={[styles.perksCount, { backgroundColor: COLORS.primary, color: COLORS.lightTextPrimary }]}>{PRO_PERKS.length} PLUS PERKS</Text>
-          </View>
-          {PRO_PERKS.map((perk) => (
-            <View key={perk} style={styles.perkRow}>
-              <CheckCircle2 size={15} color={COLORS.primary} />
-              <Text style={[styles.perkText, { color: textColor(isDark, 'secondary') }]}>{perk}</Text>
+          <View style={[styles.hero, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard }]}> 
+            <View style={styles.headerRow}>
+              <View style={styles.brandRow}>
+                <Image source={LOGO} style={[styles.logo, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]} resizeMode="contain" />
+                <View>
+                  <Text style={[styles.brandName, { color: textColor(isDark) }]}>LINKUP</Text>
+                  <Text style={[styles.brandPlan, { color: textColor(isDark, 'secondary') }]}>PLUS PLAN</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={onClose} style={[styles.closeBtn, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]} activeOpacity={0.8}>
+                <X size={18} color={textColor(isDark)} />
+              </TouchableOpacity>
             </View>
-          ))}
-        </ScrollView>
 
-        <TouchableOpacity
-          style={[styles.planBtn, { backgroundColor: COLORS.primary }]}
-          activeOpacity={0.86}
-          onPress={handleUpgrade}
-          disabled={isPurchasing || isUnlocking}
-        >
-          <Text style={[styles.planText, { color: COLORS.lightTextPrimary }]}>
-            {isPurchasing || isUnlocking
-              ? 'OPENING GOOGLE PLAY...'
-              : isPro
-                ? 'PLUS ACTIVE'
-                : 'Build Faster with PLUS'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={handleRestore}
-          style={[styles.restoreBtn, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }, (restoreDisabled || isRestoring) && styles.restoreBtnDisabled]}
-          activeOpacity={0.8}
-          disabled={restoreDisabled || isRestoring}
-          accessibilityState={{ disabled: restoreDisabled || isRestoring }}
-        >
-          <Lock size={13} color={restoreDisabled || isRestoring ? COLORS.lightTextMuted : COLORS.secondary} />
-          <Text style={[styles.restoreText, (restoreDisabled || isRestoring) && styles.restoreTextDisabled]}>
-            {isRestoring ? 'RESTORING...' : 'RESTORE PURCHASES'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={onClose} style={[styles.laterBtn, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]} activeOpacity={0.8}>
-          <Text style={[styles.laterText, { color: textColor(isDark, 'secondary') }]}>NOT NOW</Text>
-        </TouchableOpacity>
+            <View style={[styles.popularBadge, { backgroundColor: isDark ? 'rgba(223, 251, 63, 0.14)' : COLORS.primaryGlow }]}> 
+              <Crown size={13} color={COLORS.primary} />
+              <Text style={[styles.popularText, { color: COLORS.lightTextPrimary }]}>FOR FOUNDERS, CREATORS & TEAMS</Text>
+            </View>
+
+            <Text style={[styles.title, { color: textColor(isDark) }]}>Build your startup faster</Text>
+            <Text style={[styles.copy, { color: textColor(isDark, 'secondary') }]}>
+              {description || 'Free members can explore a limited number of builders every 12 hours. LINKUP PLUS unlocks unlimited discovery, smarter AI recommendations, and premium tools to help you find the right co-founder, developer, designer, or investor faster.'}
+            </Text>
+            <View style={[styles.featurePill, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}> 
+              <Text style={[styles.feature, { color: textColor(isDark) }]}>{feature}</Text>
+            </View>
+
+            <View style={styles.pricingGrid}>
+              {PRICING_PLANS.map((plan) => {
+                const selected = selectedPlan === plan.id;
+                const storePrice = getPlanPrice(plan);
+                return (
+                  <TouchableOpacity
+                    key={plan.id}
+                    onPress={() => setSelectedPlan(plan.id)}
+                    activeOpacity={0.86}
+                    style={[
+                      styles.priceCard,
+                      selected && styles.priceCardSelected,
+                      {
+                        backgroundColor: selected ? (isDark ? 'rgba(223, 251, 63, 0.16)' : COLORS.primaryGlow) : isDark ? COLORS.darkCard : COLORS.lightCard,
+                        borderColor: selected ? COLORS.primary : isDark ? COLORS.darkBorder : COLORS.lightBorder,
+                      },
+                    ]}
+                  >
+                    <View style={styles.priceTopRow}>
+                      <Text style={[styles.priceLabel, selected && styles.priceLabelSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.label}</Text>
+                      {'badge' in plan && plan.badge ? (
+                        <Text style={[styles.priceBadge, { backgroundColor: COLORS.primary, color: COLORS.lightTextPrimary }]}>{plan.badge}</Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.priceRow}>
+                      {'originalPrice' in plan && plan.originalPrice ? (
+                        <Text style={[styles.originalPrice, { color: textColor(isDark, 'muted') }]}>{plan.originalPrice}</Text>
+                      ) : null}
+                      <Text style={[styles.priceValue, selected && styles.priceValueSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark) }]}>{storePrice}</Text>
+                      <Text style={[styles.priceCadence, selected && styles.priceCadenceSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.cadence}</Text>
+                    </View>
+                    <Text style={[styles.priceHelper, selected && styles.priceHelperSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.helper}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={[styles.perksSection, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+            <View style={styles.perksHeader}>
+              <Text style={[styles.perksTitle, { color: textColor(isDark) }]}>Everything included in LINKUP PLUS</Text>
+              <Text style={[styles.perksCount, { backgroundColor: COLORS.primary, color: COLORS.lightTextPrimary }]}>{PRO_PERKS.length} PLUS PERKS</Text>
+            </View>
+            {PRO_PERKS.map((perk) => (
+              <View key={perk} style={styles.perkRow}>
+                <CheckCircle2 size={18} color={COLORS.primary} />
+                <Text style={[styles.perkText, { color: textColor(isDark, 'secondary') }]}>{perk}</Text>
+              </View>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.planBtn, { backgroundColor: COLORS.primary }]}
+            activeOpacity={0.86}
+            onPress={handleUpgrade}
+            disabled={isPurchasing || isUnlocking}
+          >
+            <Text style={[styles.planText, { color: COLORS.lightTextPrimary }]}>
+              {isPurchasing || isUnlocking
+                ? 'OPENING GOOGLE PLAY...'
+                : isPro
+                  ? 'PLUS ACTIVE'
+                  : 'Build Faster with PLUS'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleRestore}
+            style={[styles.restoreBtn, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }, (restoreDisabled || isRestoring) && styles.restoreBtnDisabled]}
+            activeOpacity={0.8}
+            disabled={restoreDisabled || isRestoring}
+            accessibilityState={{ disabled: restoreDisabled || isRestoring }}
+          >
+            <Lock size={13} color={restoreDisabled || isRestoring ? COLORS.lightTextMuted : COLORS.secondary} />
+            <Text style={[styles.restoreText, (restoreDisabled || isRestoring) && styles.restoreTextDisabled]}>
+              {isRestoring ? 'RESTORING...' : 'RESTORE PURCHASES'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose} style={[styles.laterBtn, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]} activeOpacity={0.8}>
+            <Text style={[styles.laterText, { color: textColor(isDark, 'secondary') }]}>NOT NOW</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -501,7 +503,8 @@ const styles = StyleSheet.create({
     elevation: 18,
   },
   hero: {
-    padding: 20,
+    padding: 18,
+    paddingBottom: 12,
   },
   headerRow: {
     flexDirection: 'row',
@@ -667,15 +670,18 @@ const styles = StyleSheet.create({
   },
   priceHelperSelected: {
   },
-  perksScroll: {
+  scrollBody: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 16,
+  },
+  perksSection: {
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: COLORS.lightBorder,
-  },
-  perksContent: {
-    padding: 16,
-    paddingBottom: 14,
-    gap: 8,
+    marginTop: 0,
+    padding: 18,
+    gap: 12,
   },
   perksHeader: {
     flexDirection: 'row',
@@ -684,27 +690,28 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   perksTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '900',
+    flexShrink: 1,
   },
   perksCount: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
     borderRadius: 999,
     overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   perkRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 9,
-    minHeight: 29,
+    gap: 11,
+    minHeight: 36,
   },
   perkText: {
     flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 21,
     fontWeight: '700',
   },
   planBtn: {
