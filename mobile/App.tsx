@@ -32,8 +32,12 @@ import ActiveOpportunitiesScreen from './src/screens/ActiveOpportunitiesScreen';
 import TrendingBuildersScreen from './src/screens/TrendingBuildersScreen';
 import RecommendedMatchesScreen from './src/screens/RecommendedMatchesScreen';
 import GamificationHubScreen from './src/screens/GamificationHubScreen';
+import FounderFlipScreen from './src/screens/FounderFlipScreen';
+import PitchPerfectScreen from './src/screens/PitchPerfectScreen';
+import NetworkQuizScreen from './src/screens/NetworkQuizScreen';
 import { GamificationProvider } from './src/contexts/GamificationContext';
 import { setupNativeNotificationRuntimeAsync, subscribeToNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
+import { scheduleDailyReminder } from './src/lib/dailyReminder';
 import { subscribeToUnreadMessagesCount } from './src/lib/chat';
 import OpportunityRadar from './src/components/OpportunityRadar';
 import WebAnalytics from './src/components/WebAnalytics';
@@ -94,6 +98,9 @@ const linking: any = {
       ActiveOpportunities: 'opportunities',
       TrendingBuilders: 'trending-builders',
       RecommendedMatches: 'recommended-matches',
+      FounderFlip: 'FounderFlip',
+      PitchPerfect: 'PitchPerfect',
+      NetworkQuiz: 'NetworkQuiz',
     },
   },
 };
@@ -201,7 +208,7 @@ function TabNavigator({ navigation }: any) {
   const tabLabels: Record<string, string> = {
     Dashboard: 'Explore',
     Swipe: 'Discover',
-    Hub: 'Hub',
+    Hub: 'Play',
     Search: 'Search',
     Inbox: 'Chat',
   };
@@ -235,7 +242,7 @@ function TabNavigator({ navigation }: any) {
           const iconMap: Record<string, { active: string; inactive: string }> = {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
             Swipe: { active: 'Zap', inactive: 'Zap' },
-            Hub: { active: 'Sparkles', inactive: 'Sparkles' },
+            Hub: { active: 'Gamepad2', inactive: 'Gamepad2' },
             Search: { active: 'Search', inactive: 'Search' },
             Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },
           };
@@ -305,7 +312,7 @@ function TabNavigator({ navigation }: any) {
           const titles: Record<string, string> = {
             Dashboard: 'LINKUP',
             Swipe: 'DISCOVER',
-            Hub: 'HUB',
+            Hub: 'PLAY',
             Search: 'SEARCH',
             Inbox: 'MESSAGES',
           };
@@ -365,6 +372,19 @@ function AppContent() {
       const userId = targetUrl.replace('/opportunity/', '').trim();
       if (userId) {
         navigationRef.navigate('ActiveOpportunity', { userId });
+        return;
+      }
+    }
+
+    if (data?.type === 'game_challenge') {
+      const gameMap: Record<string, string> = {
+        founderflip: 'FounderFlip',
+        pitchperfect: 'PitchPerfect',
+        networkquiz: 'NetworkQuiz',
+      };
+      const screen = gameMap[String(data?.gameType || '')];
+      if (screen) {
+        navigationRef.navigate(screen);
         return;
       }
     }
@@ -449,6 +469,11 @@ function AppContent() {
   }, [user?.uid, isOnboarded]);
 
   React.useEffect(() => {
+    if (!user?.uid) return;
+    scheduleDailyReminder();
+  }, [user?.uid]);
+
+  React.useEffect(() => {
     if (Platform.OS !== 'web' || user?.uid) return;
     const location = (globalThis as any)?.location;
     const history = (globalThis as any)?.history;
@@ -527,6 +552,9 @@ function AppContent() {
             <Stack.Screen name="ActiveOpportunities" component={ActiveOpportunitiesScreen} />
             <Stack.Screen name="TrendingBuilders" component={TrendingBuildersScreen} />
             <Stack.Screen name="RecommendedMatches" component={RecommendedMatchesScreen} />
+            <Stack.Screen name="FounderFlip" component={FounderFlipScreen} />
+            <Stack.Screen name="PitchPerfect" component={PitchPerfectScreen} />
+            <Stack.Screen name="NetworkQuiz" component={NetworkQuizScreen} />
           </>
         ) : null}
       </Stack.Navigator>

@@ -1,20 +1,53 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGamification } from '../contexts/GamificationContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
-import { Flame, Zap, Trophy, Target, Calendar, TrendingUp, CheckCircle2, Lock, ChevronRight, Sparkles } from 'lucide-react-native';
-import { Achievement, DailyMission } from '../types';
+import { COLORS, appBackground, textColor } from '../theme/theme';
+import { subscribeToChallenges, GameChallenge, respondToChallenge, GameType } from '../lib/gameChallenges';
+import {
+  Flame, Zap, Trophy, Target, TrendingUp,
+  CheckCircle2, Lock, Layers, Lightbulb, Brain, ChevronRight, Swords,
+} from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_GAP = 12;
-const SIDE_PAD = 16;
 
-const GamificationHubScreen: React.FC = () => {
+interface GameEntry {
+  key: string;
+  title: string;
+  subtitle: string;
+  emoji: string;
+  bgColor: string;
+  screen: string;
+}
+
+const GAMES: GameEntry[] = [
+  { key: 'flip', title: 'Founder Flip', subtitle: 'Match the pairs', emoji: '🃏', bgColor: '#7C3AED', screen: 'FounderFlip' },
+  { key: 'pitch', title: 'Pitch Perfect', subtitle: 'Generate startup ideas', emoji: '💡', bgColor: '#059669', screen: 'PitchPerfect' },
+  { key: 'quiz', title: 'Network Quiz', subtitle: 'Test your founder IQ', emoji: '🧠', bgColor: '#2563EB', screen: 'NetworkQuiz' },
+];
+
+const PLAY_ICONS: Record<string, { active: string; inactive: string }> = {
+  flip: { active: 'Layers', inactive: 'Layers' },
+  pitch: { active: 'Lightbulb', inactive: 'Lightbulb' },
+  quiz: { active: 'Brain', inactive: 'Brain' },
+};
+
+const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const { sparkPoints, streakCount, longestStreak, missions, achievements, weeklyStats, trackAction } = useGamification();
+  const { user } = useAuth();
+  const { sparkPoints, streakCount, longestStreak, missions, achievements, weeklyStats } = useGamification();
+  const [challenges, setChallenges] = useState<GameChallenge[]>([]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = subscribeToChallenges(user.uid, setChallenges);
+    return unsub;
+  }, [user?.uid]);
 
   const weekProgress = Math.min(
     100,
@@ -24,44 +57,108 @@ const GamificationHubScreen: React.FC = () => {
   const unlockedAchievements = achievements.filter((a) => (a.progress ?? 0) >= a.target);
   const lockedAchievements = achievements.filter((a) => (a.progress ?? 0) < a.target);
 
+  const handleChallengeResponse = async (id: string, status: 'accepted' | 'declined') => {
+    await respondToChallenge(id, status);
+    setChallenges((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const openGame = (game: GameEntry) => {
+    navigation.navigate(game.screen);
+  };
+
+  const gameLabel = (type: GameType) => {
+    const map: Record<GameType, string> = {
+      founderflip: 'Founder Flip',
+      pitchperfect: 'Pitch Perfect',
+      networkquiz: 'Network Quiz',
+    };
+    return map[type] || type;
+  };
+
   return (
     <SafeAreaView style={[styles.root, appBackground(isDark)]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: textColor(isDark) }]}>Hub</Text>
+          <View>
+            <Text style={[styles.title, { color: textColor(isDark) }]}>PLAY</Text>
+            <Text style={[styles.subtitle, { color: textColor(isDark, 'muted') }]}>Mini-games & challenges</Text>
+          </View>
           <TouchableOpacity style={[styles.sparkPill, { backgroundColor: COLORS.primary }]}>
             <Zap size={14} color="#000" fill="#000" />
             <Text style={styles.sparkCount}>{sparkPoints}</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.streakBanner, liquidGlass(isDark, false)]}>
-          <View style={[styles.streakIconWrap, { backgroundColor: streakCount > 0 ? 'rgba(251,230,24,0.15)' : 'rgba(255,255,255,0.05)' }]}>
-            <Flame size={32} color={streakCount > 0 ? COLORS.primary : textColor(isDark, 'muted')} />
-          </View>
-          <View style={styles.streakInfo}>
-            <Text style={[styles.streakCountText, { color: streakCount > 0 ? COLORS.primary : textColor(isDark, 'muted') }]}>
-              {streakCount > 0 ? `Day ${streakCount}` : 'Start your streak!'}
-            </Text>
-            <Text style={[styles.streakSubtext, { color: textColor(isDark, 'secondary') }]}>
-              {streakCount > 0 ? `${streakCount}-day streak · Best: ${longestStreak}` : 'Open the app daily to build your streak'}
-            </Text>
-          </View>
-          {streakCount > 0 && (
-            <View style={styles.streakBadge}>
-              <Text style={styles.streakBadgeText}>🔥</Text>
-            </View>
-          )}
+        <View style={[styles.streakStrip, { backgroundColor: streakCount > 0 ? 'rgba(251,230,24,0.1)' : 'transparent', borderColor: streakCount > 0 ? 'rgba(251,230,24,0.2)' : 'transparent' }]}>
+          <Flame size={18} color={streakCount > 0 ? COLORS.primary : textColor(isDark, 'muted')} fill={streakCount > 0 ? COLORS.primary : 'transparent'} />
+          <Text style={[styles.streakText, { color: streakCount > 0 ? COLORS.primary : textColor(isDark, 'muted') }]}>
+            {streakCount > 0 ? `Day ${streakCount} 🔥 Best: ${longestStreak}` : 'Start your streak!'}
+          </Text>
         </View>
+
+        <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>GAMES</Text>
+
+        <View style={styles.gamesGrid}>
+          {GAMES.map((game) => (
+            <TouchableOpacity
+              key={game.key}
+              style={[styles.gameCard, { backgroundColor: game.bgColor }]}
+              onPress={() => openGame(game)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.gameEmoji}>{game.emoji}</Text>
+              <Text style={styles.gameTitle}>{game.title}</Text>
+              <Text style={styles.gameSubtitle}>{game.subtitle}</Text>
+              <View style={styles.gamePlayRow}>
+                <Swords size={12} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.gamePlayText}>Play</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {challenges.length > 0 && (
+          <>
+            <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>CHALLENGES</Text>
+            {challenges.map((c) => (
+              <View key={c.id} style={[styles.challengeCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+                <View style={styles.challengeTop}>
+                  <View style={styles.challengeInfo}>
+                    <Text style={[styles.challengeTitle, { color: textColor(isDark) }]}>
+                      {c.senderName}
+                    </Text>
+                    <Text style={[styles.challengeBody, { color: textColor(isDark, 'secondary') }]}>
+                      challenged you to {gameLabel(c.gameType)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.challengeActions}>
+                  <TouchableOpacity
+                    style={[styles.challengeBtn, styles.challengeAccept]}
+                    onPress={() => handleChallengeResponse(c.id, 'accepted')}
+                  >
+                    <Text style={styles.challengeAcceptText}>Accept</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.challengeBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
+                    onPress={() => handleChallengeResponse(c.id, 'declined')}
+                  >
+                    <Text style={[styles.challengeDeclineText, { color: textColor(isDark, 'muted') }]}>Pass</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
 
         {unlockedAchievements.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>ACHIEVEMENTS UNLOCKED</Text>
+            <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>UNLOCKED</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgeRow}>
               {unlockedAchievements.map((a) => (
-                <View key={a.id} style={[styles.badgeCard, { borderColor: COLORS.primary }]}>
+                <View key={a.id} style={[styles.badgeCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
                   <Text style={styles.badgeIcon}>{a.icon}</Text>
-                  <Text style={styles.badgeLabel}>{a.label}</Text>
+                  <Text style={[styles.badgeLabel, { color: textColor(isDark) }]}>{a.label}</Text>
                 </View>
               ))}
             </ScrollView>
@@ -69,11 +166,28 @@ const GamificationHubScreen: React.FC = () => {
         )}
 
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>DAILY MISSIONS</Text>
-          <View style={[styles.missionsCard, liquidGlass(isDark, false)]}>
-            {missions.map((mission) => (
-              <MissionRow key={mission.id} mission={mission} isDark={isDark} />
-            ))}
+          <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>MISSIONS</Text>
+          <View style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
+            {missions.map((mission) => {
+              const pct = Math.min(1, mission.progress / mission.target);
+              return (
+                <View key={mission.id} style={[styles.missionRow, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+                  <View style={[styles.missionIcon, { backgroundColor: mission.completed ? 'rgba(40,231,168,0.15)' : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+                    {mission.completed ? <CheckCircle2 size={16} color={COLORS.success} /> : <Target size={14} color={textColor(isDark, 'muted')} />}
+                  </View>
+                  <View style={styles.missionContent}>
+                    <Text style={[styles.missionLabel, { color: textColor(isDark), textDecorationLine: mission.completed ? 'line-through' : 'none' }]}>{mission.label}</Text>
+                    <View style={[styles.missionBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
+                      <View style={[styles.missionBarFill, { width: `${pct * 100}%`, backgroundColor: mission.completed ? COLORS.success : COLORS.primary }]} />
+                    </View>
+                  </View>
+                  <View style={[styles.missionPts, { backgroundColor: mission.completed ? 'rgba(40,231,168,0.12)' : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+                    <Zap size={9} color={mission.completed ? COLORS.success : textColor(isDark, 'muted')} />
+                    <Text style={[styles.missionPtsText, { color: mission.completed ? COLORS.success : textColor(isDark, 'muted') }]}>+{mission.points}</Text>
+                  </View>
+                </View>
+              );
+            })}
             {missions.length === 0 && (
               <Text style={[styles.emptyText, { color: textColor(isDark, 'muted') }]}>Come back tomorrow for new missions</Text>
             )}
@@ -81,33 +195,58 @@ const GamificationHubScreen: React.FC = () => {
         </View>
 
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>ACHIEVEMENTS</Text>
-          <View style={[styles.achievementsCard, liquidGlass(isDark, false)]}>
-            {lockedAchievements.map((a) => (
-              <AchievementRow key={a.id} achievement={a} isDark={isDark} />
-            ))}
+          <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>ACHIEVEMENTS</Text>
+          <View style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
+            {lockedAchievements.slice(0, 5).map((a) => {
+              const pct = Math.min(1, (a.progress ?? 0) / a.target);
+              return (
+                <View key={a.id} style={[styles.achieveRow, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+                  <Text style={styles.achieveIcon}>{a.icon}</Text>
+                  <View style={styles.achieveContent}>
+                    <Text style={[styles.achieveLabel, { color: textColor(isDark) }]}>{a.label}</Text>
+                    <View style={[styles.achieveBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
+                      <View style={[styles.achieveBarFill, { width: `${pct * 100}%`, backgroundColor: pct >= 1 ? COLORS.success : COLORS.primary }]} />
+                    </View>
+                    <Text style={[styles.achieveProgress, { color: textColor(isDark, 'muted') }]}>
+                      {Math.min(a.progress ?? 0, a.target)}/{a.target}
+                    </Text>
+                  </View>
+                  {pct >= 1 ? <CheckCircle2 size={18} color={COLORS.success} /> : <Lock size={14} color={textColor(isDark, 'muted')} />}
+                </View>
+              );
+            })}
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>THIS WEEK</Text>
-          <View style={[styles.weeklyCard, liquidGlass(isDark, false)]}>
-            <View style={styles.weeklyHeader}>
-              <TrendingUp size={16} color={COLORS.primary} />
-              <Text style={[styles.weeklyTitle, { color: textColor(isDark) }]}>Weekly Activity</Text>
+          <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>WEEKLY</Text>
+          <View style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
+            <View style={styles.weeklyRow}>
+              <TrendingUp size={14} color={COLORS.primary} />
+              <Text style={[styles.weeklyLabel, { color: textColor(isDark) }]}>Activity</Text>
             </View>
             <View style={styles.weeklyGrid}>
-              <WeeklyStat label="Swipes" value={weeklyStats.swipes} isDark={isDark} />
-              <WeeklyStat label="Likes" value={weeklyStats.likes} isDark={isDark} />
-              <WeeklyStat label="Connections" value={weeklyStats.connections} isDark={isDark} />
-              <WeeklyStat label="Messages" value={weeklyStats.messages} isDark={isDark} />
+              <View style={styles.weeklyStat}>
+                <Text style={[styles.weeklyNum, { color: textColor(isDark) }]}>{weeklyStats.swipes}</Text>
+                <Text style={[styles.weeklyStatLabel, { color: textColor(isDark, 'muted') }]}>Swipes</Text>
+              </View>
+              <View style={styles.weeklyStat}>
+                <Text style={[styles.weeklyNum, { color: textColor(isDark) }]}>{weeklyStats.likes}</Text>
+                <Text style={[styles.weeklyStatLabel, { color: textColor(isDark, 'muted') }]}>Likes</Text>
+              </View>
+              <View style={styles.weeklyStat}>
+                <Text style={[styles.weeklyNum, { color: textColor(isDark) }]}>{weeklyStats.connections}</Text>
+                <Text style={[styles.weeklyStatLabel, { color: textColor(isDark, 'muted') }]}>Connects</Text>
+              </View>
+              <View style={styles.weeklyStat}>
+                <Text style={[styles.weeklyNum, { color: textColor(isDark) }]}>{weeklyStats.messages}</Text>
+                <Text style={[styles.weeklyStatLabel, { color: textColor(isDark, 'muted') }]}>Messages</Text>
+              </View>
             </View>
             <View style={[styles.weeklyBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
               <View style={[styles.weeklyBarFill, { width: `${Math.min(weekProgress, 100)}%`, backgroundColor: COLORS.primary }]} />
             </View>
-            <Text style={[styles.weeklyFooter, { color: textColor(isDark, 'secondary') }]}>
-              {Math.round(weekProgress)}% of weekly goal
-            </Text>
+            <Text style={[styles.weeklyPct, { color: textColor(isDark, 'muted') }]}>{Math.round(weekProgress)}% of weekly goal</Text>
           </View>
         </View>
 
@@ -117,184 +256,142 @@ const GamificationHubScreen: React.FC = () => {
   );
 };
 
-const MissionRow: React.FC<{ mission: DailyMission; isDark: boolean }> = ({ mission, isDark }) => {
-  const pct = Math.min(1, mission.progress / mission.target);
-  return (
-    <View style={[styles.missionRow, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
-      <View style={[styles.missionIconWrap, { backgroundColor: mission.completed ? 'rgba(40,231,168,0.15)' : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-        {mission.completed ? (
-          <CheckCircle2 size={18} color={COLORS.success} />
-        ) : (
-          <Target size={16} color={textColor(isDark, 'secondary')} />
-        )}
-      </View>
-      <View style={styles.missionContent}>
-        <Text style={[styles.missionLabel, { color: textColor(isDark), textDecorationLine: mission.completed ? 'line-through' : 'none' }]}>
-          {mission.label}
-        </Text>
-        <View style={[styles.missionBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
-          <View style={[styles.missionBarFill, { width: `${pct * 100}%`, backgroundColor: mission.completed ? COLORS.success : COLORS.primary }]} />
-        </View>
-        <Text style={[styles.missionProgress, { color: textColor(isDark, 'muted') }]}>
-          {mission.progress}/{mission.target}
-        </Text>
-      </View>
-      <View style={[styles.missionPoints, { backgroundColor: mission.completed ? 'rgba(40,231,168,0.12)' : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-        <Zap size={10} color={mission.completed ? COLORS.success : textColor(isDark, 'muted')} />
-        <Text style={[styles.missionPointsText, { color: mission.completed ? COLORS.success : textColor(isDark, 'muted') }]}>
-          +{mission.points}
-        </Text>
-      </View>
-    </View>
-  );
-};
-
-const AchievementRow: React.FC<{ achievement: Achievement; isDark: boolean }> = ({ achievement, isDark }) => {
-  const pct = Math.min(1, (achievement.progress ?? 0) / achievement.target);
-  return (
-    <View style={[styles.achievementRow, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
-      <Text style={styles.achievementIcon}>{achievement.icon}</Text>
-      <View style={styles.achievementContent}>
-        <Text style={[styles.achievementLabel, { color: textColor(isDark) }]}>{achievement.label}</Text>
-        <Text style={[styles.achievementDesc, { color: textColor(isDark, 'secondary') }]}>{achievement.description}</Text>
-        <View style={[styles.achievementBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
-          <View style={[styles.achievementBarFill, { width: `${pct * 100}%`, backgroundColor: pct >= 1 ? COLORS.success : COLORS.primary }]} />
-        </View>
-        <Text style={[styles.achievementProgress, { color: textColor(isDark, 'muted') }]}>
-          {Math.min(achievement.progress ?? 0, achievement.target)}/{achievement.target}
-        </Text>
-      </View>
-      {pct >= 1 ? (
-        <CheckCircle2 size={20} color={COLORS.success} />
-      ) : (
-        <Lock size={16} color={textColor(isDark, 'muted')} />
-      )}
-    </View>
-  );
-};
-
-const WeeklyStat: React.FC<{ label: string; value: number; isDark: boolean }> = ({ label, value, isDark }) => (
-  <View style={styles.weeklyStat}>
-    <Text style={[styles.weeklyStatValue, { color: textColor(isDark) }]}>{value}</Text>
-    <Text style={[styles.weeklyStatLabel, { color: textColor(isDark, 'muted') }]}>{label}</Text>
-  </View>
-);
-
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  scroll: { paddingHorizontal: SIDE_PAD, paddingTop: 8 },
+  scroll: { paddingHorizontal: 16, paddingTop: 8 },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 12,
   },
-  title: { fontSize: 28, fontWeight: '900', fontStyle: 'italic', letterSpacing: -0.5 },
+  title: { fontSize: 30, fontWeight: '900', fontStyle: 'italic', letterSpacing: -1 },
+  subtitle: { fontSize: 11, fontWeight: '700', marginTop: 2, letterSpacing: 0.3 },
   sparkPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 999,
   },
-  sparkCount: { fontSize: 14, fontWeight: '900', color: '#000' },
-  streakBanner: {
+  sparkCount: { fontSize: 13, fontWeight: '900', color: '#000' },
+  streakStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  streakText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
+  sectionLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 12 },
+  gamesGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 24,
+  },
+  gameCard: {
+    flex: 1,
     borderRadius: 20,
-    gap: 14,
-    marginBottom: 20,
+    padding: 14,
+    gap: 6,
+    minHeight: 140,
   },
-  streakIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+  gameEmoji: { fontSize: 24 },
+  gameTitle: { fontSize: 13, fontWeight: '900', color: '#FFF', letterSpacing: -0.3 },
+  gameSubtitle: { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.7)', lineHeight: 12 },
+  gamePlayRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
+    marginTop: 'auto',
   },
-  streakInfo: { flex: 1 },
-  streakCountText: { fontSize: 20, fontWeight: '900', fontStyle: 'italic' },
-  streakSubtext: { fontSize: 12, marginTop: 2, fontWeight: '600' },
-  streakBadge: {
-    width: 36,
-    height: 36,
+  gamePlayText: { fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.5 },
+  challengeCard: {
     borderRadius: 18,
-    backgroundColor: 'rgba(251,230,24,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 16,
+    marginBottom: 10,
+    gap: 12,
   },
-  streakBadgeText: { fontSize: 18 },
+  challengeTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  challengeInfo: { flex: 1 },
+  challengeTitle: { fontSize: 15, fontWeight: '900' },
+  challengeBody: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+  challengeActions: { flexDirection: 'row', gap: 8 },
+  challengeBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  challengeAccept: { backgroundColor: COLORS.primary },
+  challengeAcceptText: { fontSize: 12, fontWeight: '900', color: '#000' },
+  challengeDeclineText: { fontSize: 12, fontWeight: '800' },
   section: { marginBottom: 20 },
-  sectionTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 10 },
   badgeRow: { gap: 10, paddingRight: 20 },
   badgeCard: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(251,230,24,0.06)',
+    gap: 4,
   },
-  badgeIcon: { fontSize: 28 },
-  badgeLabel: { fontSize: 11, fontWeight: '800', color: '#FFF' },
-  missionsCard: { borderRadius: 20, overflow: 'hidden' },
+  badgeIcon: { fontSize: 24 },
+  badgeLabel: { fontSize: 10, fontWeight: '800' },
+  card: { borderRadius: 18, overflow: 'hidden' },
   missionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    gap: 12,
+    padding: 12,
+    gap: 10,
     borderBottomWidth: 1,
   },
-  missionIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+  missionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  missionContent: { flex: 1, gap: 4 },
-  missionLabel: { fontSize: 13, fontWeight: '700' },
-  missionBar: { height: 4, borderRadius: 2, overflow: 'hidden' },
+  missionContent: { flex: 1, gap: 3 },
+  missionLabel: { fontSize: 12, fontWeight: '700' },
+  missionBar: { height: 3, borderRadius: 2, overflow: 'hidden' },
   missionBarFill: { height: '100%', borderRadius: 2 },
-  missionProgress: { fontSize: 10, fontWeight: '600' },
-  missionPoints: {
+  missionPts: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  missionPointsText: { fontSize: 10, fontWeight: '900' },
-  achievementsCard: { borderRadius: 20, overflow: 'hidden' },
-  achievementRow: {
+  missionPtsText: { fontSize: 9, fontWeight: '900' },
+  emptyText: { fontSize: 12, fontWeight: '600', padding: 16, textAlign: 'center' },
+  achieveRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    gap: 12,
+    padding: 12,
+    gap: 10,
     borderBottomWidth: 1,
   },
-  achievementIcon: { fontSize: 28, width: 36, textAlign: 'center' },
-  achievementContent: { flex: 1, gap: 3 },
-  achievementLabel: { fontSize: 13, fontWeight: '800' },
-  achievementDesc: { fontSize: 11, fontWeight: '600' },
-  achievementBar: { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 2 },
-  achievementBarFill: { height: '100%', borderRadius: 2 },
-  achievementProgress: { fontSize: 10, fontWeight: '600', marginTop: 1 },
-  weeklyCard: { borderRadius: 20, padding: 16, gap: 14 },
-  weeklyHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  weeklyTitle: { fontSize: 15, fontWeight: '800' },
-  weeklyGrid: { flexDirection: 'row', justifyContent: 'space-between' },
+  achieveIcon: { fontSize: 24, width: 32, textAlign: 'center' },
+  achieveContent: { flex: 1, gap: 2 },
+  achieveLabel: { fontSize: 12, fontWeight: '800' },
+  achieveBar: { height: 3, borderRadius: 2, overflow: 'hidden' },
+  achieveBarFill: { height: '100%', borderRadius: 2 },
+  achieveProgress: { fontSize: 9, fontWeight: '600' },
+  weeklyRow: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 14, paddingBottom: 0 },
+  weeklyLabel: { fontSize: 14, fontWeight: '800' },
+  weeklyGrid: { flexDirection: 'row', justifyContent: 'space-around', padding: 14, paddingBottom: 0 },
   weeklyStat: { alignItems: 'center', gap: 2 },
-  weeklyStatValue: { fontSize: 22, fontWeight: '900' },
-  weeklyStatLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  weeklyBar: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  weeklyNum: { fontSize: 20, fontWeight: '900' },
+  weeklyStatLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
+  weeklyBar: { height: 5, borderRadius: 3, marginHorizontal: 14, marginTop: 10, overflow: 'hidden' },
   weeklyBarFill: { height: '100%', borderRadius: 3 },
-  weeklyFooter: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
-  emptyText: { fontSize: 13, fontWeight: '600', padding: 20, textAlign: 'center' },
+  weeklyPct: { fontSize: 10, fontWeight: '600', textAlign: 'center', padding: 10, paddingBottom: 14 },
 });
 
 export default GamificationHubScreen;

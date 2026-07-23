@@ -96,11 +96,21 @@ function notificationBody(data: any) {
   if (data?.type === 'connection_approved') return `${data.fromName || 'Someone'} approved your contact request.`;
   if (data?.type === 'connection_rejected') return `${data.fromName || 'Someone'} responded to your contact request.`;
   if (data?.type === 'view') return `${data.fromName || 'Someone'} viewed your profile.`;
+  if (data?.type === 'game_challenge') return (data?.body || data?.title || `${data.fromName || 'Someone'} challenged you!`);
   return content || 'Open LINKUP for the latest update.';
 }
 
 function notificationTargetUrl(data: any) {
   if (data?.matchId) return `/chat/${data.matchId}`;
+  if (data?.type === 'game_challenge') {
+    const gameMap: Record<string, string> = {
+      founderflip: 'FounderFlip',
+      pitchperfect: 'PitchPerfect',
+      networkquiz: 'NetworkQuiz',
+    };
+    const screen = gameMap[String(data?.gameType || '')];
+    if (screen) return `/${screen}`;
+  }
   if (
     data?.fromId &&
     (String(data?.content || '').startsWith('Opportunity') ||
@@ -136,6 +146,7 @@ export async function playInAppNotificationSound(type?: string) {
       connection_approved: [620, 880, 1180],
       connection_rejected: [420, 540],
       view: [520, 700],
+      game_challenge: [880, 1180, 1480],
       system: [640, 860],
       comment: [680, 900],
     };
