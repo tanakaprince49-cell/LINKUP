@@ -28,6 +28,7 @@ import { ensureDirectMatch } from '../lib/chat';
 import { ConnectionRequest, requestConnection, subscribeToConnectionRequest } from '../lib/connectionRequests';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useGamification } from '../contexts/GamificationContext';
 import { UserProfile } from '../types';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { roleInfoFor } from '../lib/roles';
@@ -268,6 +269,7 @@ const ExpandedProfilePanel = React.memo(function ExpandedProfilePanel({
 export default function SwipeScreen({ navigation }: any) {
   const { user, profile: myProfile } = useAuth();
   const { theme } = useTheme();
+  const { trackAction } = useGamification();
   const isFocused = useIsFocused();
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const isDark = theme === 'dark';
@@ -761,6 +763,7 @@ export default function SwipeScreen({ navigation }: any) {
         senderPic: safeProfileImageUri(myProfile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT),
       });
       setConnectionRequest(request);
+      trackAction('connect');
       Alert.alert('Request sent', `${displayNameFor(target)} can approve or reject it.`);
     } catch (error) {
       console.warn('Contact request failed:', error);
@@ -801,6 +804,8 @@ export default function SwipeScreen({ navigation }: any) {
     if (direction === 'right') {
       void handleLike(item);
     }
+
+    trackAction(direction === 'right' ? 'like' : 'swipe');
   };
 
   const resetSwipePosition = () => {

@@ -31,6 +31,8 @@ import ActiveOpportunityScreen from './src/screens/ActiveOpportunityScreen';
 import ActiveOpportunitiesScreen from './src/screens/ActiveOpportunitiesScreen';
 import TrendingBuildersScreen from './src/screens/TrendingBuildersScreen';
 import RecommendedMatchesScreen from './src/screens/RecommendedMatchesScreen';
+import GamificationHubScreen from './src/screens/GamificationHubScreen';
+import { GamificationProvider } from './src/contexts/GamificationContext';
 import { setupNativeNotificationRuntimeAsync, subscribeToNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
 import { subscribeToUnreadMessagesCount } from './src/lib/chat';
 import OpportunityRadar from './src/components/OpportunityRadar';
@@ -199,6 +201,7 @@ function TabNavigator({ navigation }: any) {
   const tabLabels: Record<string, string> = {
     Dashboard: 'Explore',
     Swipe: 'Discover',
+    Hub: 'Hub',
     Search: 'Search',
     Inbox: 'Chat',
   };
@@ -232,6 +235,7 @@ function TabNavigator({ navigation }: any) {
           const iconMap: Record<string, { active: string; inactive: string }> = {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
             Swipe: { active: 'Zap', inactive: 'Zap' },
+            Hub: { active: 'Sparkles', inactive: 'Sparkles' },
             Search: { active: 'Search', inactive: 'Search' },
             Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },
           };
@@ -301,6 +305,7 @@ function TabNavigator({ navigation }: any) {
           const titles: Record<string, string> = {
             Dashboard: 'LINKUP',
             Swipe: 'DISCOVER',
+            Hub: 'HUB',
             Search: 'SEARCH',
             Inbox: 'MESSAGES',
           };
@@ -315,6 +320,7 @@ function TabNavigator({ navigation }: any) {
           tabBarStyle: { display: 'none' },
         }}
       />
+      <Tab.Screen name="Hub" component={GamificationHubScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Inbox" component={MessagesScreen} />
     </Tab.Navigator>
@@ -543,7 +549,9 @@ export default function App() {
         <ThemeProvider>
           <LinkupAlertProvider>
             <AuthProvider>
-              <AppContent />
+              <GamificationProvider>
+                <AppContent />
+              </GamificationProvider>
             </AuthProvider>
           </LinkupAlertProvider>
         </ThemeProvider>

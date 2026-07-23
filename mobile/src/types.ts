@@ -206,3 +206,48 @@ export interface Block {
   blockedUserId: string;
   timestamp: Timestamp | FieldValue;
 }
+
+export type MissionType = 'swipe' | 'like' | 'connect' | 'view_profile' | 'message' | 'daily_login';
+
+export interface DailyMission {
+  id: string;
+  type: MissionType;
+  label: string;
+  target: number;
+  progress: number;
+  completed: boolean;
+  points: number;
+}
+
+export interface Achievement {
+  id: string;
+  label: string;
+  description: string;
+  icon: string;
+  unlockedAt?: string;
+  progress: number;
+  target: number;
+}
+
+export interface WeeklyStats {
+  weekStart: string;
+  swipes: number;
+  likes: number;
+  connections: number;
+  messages: number;
+  profileViews: number;
+  pointsEarned: number;
+}
+
+export interface GamificationState {
+  streakCount: number;
+  longestStreak: number;
+  lastActiveDate: string;
+  sparkPoints: number;
+  totalEarned: number;
+  missions: DailyMission[];
+  missionsDate: string;
+  achievements: Achievement[];
+  weeklyStats: WeeklyStats;
+  lastWeeklyReportDate: string;
+}
