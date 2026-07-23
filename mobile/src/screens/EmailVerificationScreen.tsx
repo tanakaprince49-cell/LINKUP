@@ -45,7 +45,7 @@ export default function EmailVerificationScreen() {
         <Text style={styles.subtitle}>
           We sent a Firebase verification link to {user?.email || 'your email'}. Verify it before entering LINKUP.
         </Text>
-        <Text style={styles.spamNote}>Can’t find it? Check your spam or junk folder.</Text>
+        <Text style={styles.spamNote}>Can't find it? Check your spam or junk folder.</Text>
 
         <TouchableOpacity
           disabled={checking}

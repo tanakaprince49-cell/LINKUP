@@ -9,6 +9,25 @@ import ReportModal from '../components/ReportModal';
 import BlockModal from '../components/BlockModal';
 import { DEMO_PROFILES } from '../constants/demoData';
 
+const loadPartnerProfile = async (partnerId: string): Promise<UserProfile | null> => {
+  const demoPartner = DEMO_PROFILES.find(p => p.uid === partnerId);
+  if (demoPartner) {
+    return demoPartner;
+  }
+
+  const publicSnap = await getDoc(doc(db, 'publicProfiles', partnerId)).catch(() => null);
+  if (publicSnap?.exists()) {
+    return { uid: publicSnap.id, ...(publicSnap.data() as UserProfile) };
+  }
+
+  const userSnap = await getDoc(doc(db, 'users', partnerId)).catch(() => null);
+  if (userSnap?.exists()) {
+    return { uid: userSnap.id, ...(userSnap.data() as UserProfile) };
+  }
+
+  return null;
+};
+
 const ChatWindow = ({ match, onClose }: { match: Match, onClose: () => void }) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -26,16 +45,9 @@ const ChatWindow = ({ match, onClose }: { match: Match, onClose: () => void }) =
 
     // Fetch partner info
     const fetchPartner = async () => {
-      // Check demo profiles
-      const demoPartner = DEMO_PROFILES.find(p => p.uid === partnerId);
-      if (demoPartner) {
-        setPartner(demoPartner);
-        return;
-      }
-
       try {
-        const snap = await getDoc(doc(db, 'users', partnerId));
-        if (snap.exists()) setPartner(snap.data() as UserProfile);
+        const nextPartner = await loadPartnerProfile(partnerId);
+        if (nextPartner) setPartner(nextPartner);
       } catch (err) {
         console.error("Error fetching partner:", err);
       }
@@ -224,16 +236,9 @@ const ConversationRow = ({ match, onClick }: { match: Match, onClick: () => void
   useEffect(() => {
     if (!partnerId) return;
     const fetchPartner = async () => {
-      // Check demo profiles
-      const demoPartner = DEMO_PROFILES.find(p => p.uid === partnerId);
-      if (demoPartner) {
-        setPartner(demoPartner);
-        return;
-      }
-
       try {
-        const snap = await getDoc(doc(db, 'users', partnerId));
-        if (snap.exists()) setPartner(snap.data() as UserProfile);
+        const nextPartner = await loadPartnerProfile(partnerId);
+        if (nextPartner) setPartner(nextPartner);
       } catch (err) {
         console.error("Error fetching partner:", err);
       }

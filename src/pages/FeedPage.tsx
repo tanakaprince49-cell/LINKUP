@@ -121,7 +121,7 @@ const PostCard = ({ post, onDelete }: { post: Post, onDelete?: (id: string) => v
             </h3>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-[9px] font-bold text-black/30 dark:text-white/30 uppercase tracking-widest leading-none">
-                {author?.city} • {new Date(localPost.timestamp?.toDate ? localPost.timestamp.toDate() : localPost.timestamp).toLocaleDateString()}
+                {author?.city} - {new Date(localPost.timestamp?.toDate ? localPost.timestamp.toDate() : localPost.timestamp).toLocaleDateString()}
               </span>
               <div className="w-0.5 h-0.5 rounded-full bg-white/20" />
               <div className="flex items-center gap-1">

@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LINKUP Account and Data Deletion</title>
+    <meta
+      name="description"
+      content="Request deletion of your LINKUP account and associated app data."
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --yellow: #fbe618;
+        --black: #090909;
+        --muted: #606060;
+        --line: #e8e8e8;
+        --soft: #fff8b8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #ffffff;
+        color: var(--black);
+      }
+
+      main {
+        width: min(880px, 100%);
+        margin: 0 auto;
+        padding: 40px 22px 56px;
+      }
+
+      .logo {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--black);
+        font-weight: 900;
+        letter-spacing: 2px;
+        text-decoration: none;
+      }
+
+      .mark {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: var(--yellow);
+        border: 2px solid var(--black);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+      }
+
+      .hero {
+        margin-top: 42px;
+        border: 2px solid var(--black);
+        border-radius: 24px;
+        padding: clamp(24px, 6vw, 48px);
+        background: linear-gradient(135deg, #ffffff 0%, #ffffff 58%, var(--soft) 100%);
+        box-shadow: 8px 8px 0 var(--yellow);
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 720px;
+        font-size: clamp(34px, 8vw, 64px);
+        line-height: 0.94;
+        letter-spacing: 0;
+        font-style: italic;
+        text-transform: uppercase;
+      }
+
+      .lead {
+        margin: 18px 0 0;
+        max-width: 680px;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.55;
+        font-weight: 700;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 28px;
+      }
+
+      .button {
+        display: inline-flex;
+        min-height: 48px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 0 20px;
+        border: 2px solid var(--black);
+        background: var(--yellow);
+        color: var(--black);
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 900;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+
+      .button.secondary {
+        background: #ffffff;
+      }
+
+      .section {
+        margin-top: 30px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 22px;
+      }
+
+      h2 {
+        margin: 0 0 14px;
+        font-size: 18px;
+        font-weight: 900;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+
+      p,
+      li {
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.62;
+        font-weight: 700;
+      }
+
+      ul,
+      ol {
+        margin: 0;
+        padding-left: 22px;
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      code {
+        color: var(--black);
+        background: var(--soft);
+        border-radius: 8px;
+        padding: 2px 6px;
+        font-weight: 900;
+      }
+
+      footer {
+        margin-top: 32px;
+        color: #777;
+        font-size: 12px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="logo" href="/">
+        <span class="mark">L</span>
+        <span>LINKUP</span>
+      </a>
+
+      <section class="hero">
+        <h1>Account and data deletion request</h1>
+        <p class="lead">
+          LINKUP users can request deletion of their account and associated app data at any
+          time. Use this page if you cannot access the in-app delete account option.
+        </p>
+        <div class="actions">
+          <a
+            class="button"
+            href="mailto:linkupp49@gmail.com?subject=LINKUP%20account%20and%20data%20deletion%20request&body=Please%20delete%20my%20LINKUP%20account%20and%20associated%20data.%0A%0ALINKUP%20account%20email%3A%20%0ALINKUP%20user%20ID%20if%20known%3A%20%0AReason%20optional%3A%20"
+          >
+            Email deletion request
+          </a>
+          <a class="button secondary" href="mailto:linkupp49@gmail.com">
+            Contact support
+          </a>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>How to request deletion</h2>
+        <ol>
+          <li>Email <code>linkupp49@gmail.com</code> from the same email address used for your LINKUP account.</li>
+          <li>Use the subject <code>LINKUP account and data deletion request</code>.</li>
+          <li>Include your LINKUP account email and, if you know it, your LINKUP user ID.</li>
+          <li>We will verify ownership before deleting account data.</li>
+        </ol>
+      </section>
+
+      <section class="section">
+        <h2>What gets deleted</h2>
+        <ul>
+          <li>Your LINKUP profile and public profile listing.</li>
+          <li>Profile photos, gallery photos, saved profiles, profile analytics, notifications, and app preferences.</li>
+          <li>Conversation records, matches, opportunity activity, and other user-generated app data associated with your account where deletion is technically possible.</li>
+          <li>Your Firebase Authentication account, when ownership is verified and no security re-authentication step is required from you.</li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2>Timing and retained data</h2>
+        <p>
+          We aim to complete verified deletion requests within 30 days. Some limited records may
+          be retained if required for legal, security, fraud prevention, billing, or dispute
+          purposes, then deleted or anonymized when no longer needed.
+        </p>
+        <p>
+          You can also delete your account inside the app by opening your profile, opening
+          settings, and choosing <code>Delete Account Permanently</code>.
+        </p>
+      </section>
+
+      <footer>
+        Last updated: June 3, 2026
+      </footer>
+    </main>
+  </body>
+</html>

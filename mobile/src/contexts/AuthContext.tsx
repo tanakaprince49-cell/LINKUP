@@ -23,17 +23,26 @@ import {
 import { deleteDoc, deleteField, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { UserProfile } from '../types';
+import { publicProfileLink } from '../lib/profileLinks';
+import { buildLocalProEntitlement, hasLinkupPro, readLocalProEntitlement, saveLocalProEntitlement } from '../lib/paywall';
+import { compactProfileForCache } from '../lib/profilePerformance';
+import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
 
 const GOOGLE_WEB_CLIENT_ID =
   '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com';
 
 let warnedPresenceRules = false;
 const onboardingStorageKey = (uid: string) => `linkup:onboarded:${uid}`;
-const profileCacheKey = (uid: string) => `linkup:profile:${uid}`;
+const profileCacheKey = (uid: string) => `linkup:profile:v2:${uid}`;
+const MAX_PROFILE_CACHE_CHARS = Platform.OS === 'android' ? 450_000 : 900_000;
 
 const readCachedProfile = async (uid: string) => {
   try {
     const raw = await AsyncStorage.getItem(profileCacheKey(uid));
+    if (raw && raw.length > MAX_PROFILE_CACHE_CHARS) {
+      AsyncStorage.removeItem(profileCacheKey(uid)).catch(() => {});
+      return null;
+    }
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -42,10 +51,55 @@ const readCachedProfile = async (uid: string) => {
 
 const writeCachedProfile = async (uid: string, profileData: any) => {
   try {
-    await AsyncStorage.setItem(profileCacheKey(uid), JSON.stringify(profileData || {}));
+    await AsyncStorage.setItem(profileCacheKey(uid), JSON.stringify(compactProfileForCache(profileData || {})));
   } catch {
     // Cache is only for instant UI hydration.
   }
+};
+
+const compactHydratedProfile = async (uid: string, profileData: any) =>
+  compactProfileForCache(await withLocalProEntitlement(uid, profileData)) as UserProfile;
+
+const withLocalProEntitlement = async (uid: string, profileData: any) => {
+  const localPro = await readLocalProEntitlement(uid);
+  if (!localPro && !hasLinkupPro(profileData)) return profileData;
+
+  const unlockedAt =
+    String(localPro?.proUnlockedAt || '') ||
+    String(profileData?.proUnlockedAt?.toDate?.()?.toISOString?.() || '') ||
+    String(profileData?.proUnlockedAt || '') ||
+    new Date().toISOString();
+  const existingSettings =
+    profileData?.settings && typeof profileData.settings === 'object'
+      ? profileData.settings
+      : {};
+  const fullProPatch = {
+    ...buildLocalProEntitlement(unlockedAt),
+    settings: {
+      ...existingSettings,
+      publicDiscovery:
+        typeof existingSettings.publicDiscovery === 'boolean'
+          ? existingSettings.publicDiscovery
+          : profileData?.isVisible !== false,
+      stealthMode:
+        typeof existingSettings.stealthMode === 'boolean'
+          ? existingSettings.stealthMode
+          : !!profileData?.isStealthMode,
+      turboConnect: true,
+      hideOnlineStatus:
+        typeof existingSettings.hideOnlineStatus === 'boolean'
+          ? existingSettings.hideOnlineStatus
+          : !!profileData?.hideOnlineStatus,
+      darkMode: !!existingSettings.darkMode,
+    },
+  };
+  const mergedProfile = {
+    ...(profileData || {}),
+    ...(localPro || {}),
+    ...fullProPatch,
+  };
+  saveLocalProEntitlement(uid, fullProPatch).catch(() => {});
+  return mergedProfile;
 };
 
 const defaultProfileSettings = (profileData: any = {}) => ({
@@ -188,7 +242,7 @@ const buildLocalUserProfile = (authUser: User, onboarded: boolean): any => {
     uid: authUser.uid,
     displayName: authName,
     username: cleanUsernameFromAuth(authUser),
-    profileLink: `linkup://profile/${authUser.uid}`,
+    profileLink: publicProfileLink(authUser.uid),
     bio: '',
     profilePic: '',
     photos: [],
@@ -235,6 +289,10 @@ const buildLocalUserProfile = (authUser: User, onboarded: boolean): any => {
     hideOnlineStatus: false,
     settings: defaultProfileSettings({ isVisible: true }),
     isBot: false,
+    isPro: false,
+    plan: 'free',
+    subscriptionPlan: 'free',
+    subscriptionStatus: 'inactive',
     isVerified: false,
     verificationProgram: '',
     lastActiveAt: serverTimestamp(),
@@ -264,6 +322,7 @@ interface AuthContextType {
   isOnboarded: boolean;
   authError: string | null;
   clearAuthError: () => void;
+  updateLocalProfile: (profilePatch: Record<string, unknown>) => void;
   signInWithGoogle: () => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -326,17 +385,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setCompletedOnboardingUid(null);
         }
 
-        setProfile({
+        const nextProfile = await compactHydratedProfile(authUser.uid, {
           ...buildLocalUserProfile(authUser, inferredOnboarded),
           ...rawProfile,
           uid: authUser.uid,
           onboarded: inferredOnboarded,
-        } as UserProfile);
-        writeCachedProfile(authUser.uid, {
-          ...rawProfile,
-          uid: authUser.uid,
-          onboarded: inferredOnboarded,
-        }).catch(() => {});
+        });
+        setProfile(nextProfile);
+        writeCachedProfile(authUser.uid, nextProfile).catch(() => {});
+        syncOwnPublicProfileIndex(authUser.uid, nextProfile).catch(() => {});
         setAuthVersion((value) => value + 1);
         setLoading(false);
         return;
@@ -344,7 +401,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       await AsyncStorage.removeItem(onboardingStorageKey(authUser.uid)).catch(() => {});
       setCompletedOnboardingUid(null);
-      setProfile(buildLocalUserProfile(authUser, false) as UserProfile);
+      setProfile(await compactHydratedProfile(authUser.uid, buildLocalUserProfile(authUser, false)));
+      syncOwnPublicProfileIndex(authUser.uid, buildLocalUserProfile(authUser, false)).catch(() => {});
       setAuthVersion((value) => value + 1);
       setLoading(false);
     } catch (error) {
@@ -354,7 +412,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setCompletedOnboardingUid(null);
       }
-      setProfile(buildLocalUserProfile(authUser, storedOnboarded) as UserProfile);
+      setProfile(await compactHydratedProfile(authUser.uid, buildLocalUserProfile(authUser, storedOnboarded)));
+      syncOwnPublicProfileIndex(authUser.uid, buildLocalUserProfile(authUser, storedOnboarded)).catch(() => {});
       setAuthVersion((value) => value + 1);
       setLoading(false);
       console.warn('Signed-in profile sync unavailable:', error);
@@ -427,15 +486,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (cachedOnboardedBeforeSnapshot) {
         setCompletedOnboardingUid(authenticatedUser.uid);
-        setProfile({
+        setProfile(await compactHydratedProfile(authenticatedUser.uid, {
           ...buildLocalUserProfile(authenticatedUser, cachedOnboardedBeforeSnapshot),
           ...(cachedProfileBeforeSnapshot || {}),
           uid: authenticatedUser.uid,
           onboarded: cachedOnboardedBeforeSnapshot,
-        } as UserProfile);
+        }));
         setLoading(false);
       } else {
-        setProfile(buildLocalUserProfile(authenticatedUser, false) as UserProfile);
+        setProfile(await compactHydratedProfile(authenticatedUser.uid, buildLocalUserProfile(authenticatedUser, false)));
         setLoading(false);
       }
 
@@ -447,18 +506,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (docSnap.exists()) {
             const rawProfile = docSnap.data() as any;
             const inferredOnboarded = Boolean(rawProfile.onboarded || hasCompletedProfileSignals(rawProfile) || storedOnboarded);
-            const data = {
+            const data = await withLocalProEntitlement(authenticatedUser.uid, {
               ...buildLocalUserProfile(authenticatedUser, inferredOnboarded),
               ...(rawProfile as UserProfile),
               uid: authenticatedUser.uid,
               onboarded: inferredOnboarded,
-            } as UserProfile;
+            }) as UserProfile;
             if (rawProfile.pushTokens) {
               updateDoc(userDocRef, { pushTokens: deleteField() }).catch(() => {});
             }
             const defaultsPatch = missingProfileDefaultsPatch(rawProfile);
             if (Object.keys(defaultsPatch).length) {
               setDoc(userDocRef, defaultsPatch, { merge: true }).catch(() => {});
+            }
+            if (hasLinkupPro(data) && rawProfile.isVerified !== true) {
+              const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+              setDoc(
+                userDocRef,
+                {
+                  uid: authenticatedUser.uid,
+                  displayName: data.displayName || authenticatedUser.displayName || authenticatedUser.email?.split('@')[0] || 'LINKUP Builder',
+                  profileLink: data.profileLink || publicProfileLink(authenticatedUser.uid),
+                  isPro: true,
+                  plan: 'plus',
+                  subscriptionPlan: 'plus',
+                  subscriptionStatus: 'active',
+                  isVerified: true,
+                  verificationProgram: 'LINKUP PLUS',
+                  verifiedBy: 'LINKUP PLUS',
+                  verifiedAt: serverTimestamp(),
+                  turboConnect: true,
+                  settings: {
+                    ...settings,
+                    publicDiscovery:
+                      typeof settings.publicDiscovery === 'boolean'
+                        ? settings.publicDiscovery
+                        : data.isVisible !== false,
+                    stealthMode:
+                      typeof settings.stealthMode === 'boolean'
+                        ? settings.stealthMode
+                        : !!data.isStealthMode,
+                    turboConnect: true,
+                    hideOnlineStatus:
+                      typeof settings.hideOnlineStatus === 'boolean'
+                        ? settings.hideOnlineStatus
+                        : !!data.hideOnlineStatus,
+                    darkMode: !!settings.darkMode,
+                  },
+                  proUnlockedAt: serverTimestamp(),
+                  subscriptionUpdatedAt: serverTimestamp(),
+                },
+                { merge: true }
+              ).catch((error) => console.warn('LINKUP PLUS verification sync skipped:', error));
             }
             if (inferredOnboarded) {
               setCompletedOnboardingUid(authenticatedUser.uid);
@@ -470,17 +569,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (inferredOnboarded && !rawProfile.onboarded) {
               updateDoc(userDocRef, { onboarded: true }).catch(() => {});
             }
-            setProfile(data);
+            setProfile(compactProfileForCache(data) as UserProfile);
             writeCachedProfile(authenticatedUser.uid, data).catch(() => {});
+            syncOwnPublicProfileIndex(authenticatedUser.uid, data).catch(() => {});
             setLoading(false);
             return;
           }
 
-          const newProfile = buildLocalUserProfile(authenticatedUser, false);
+          const newProfile = await withLocalProEntitlement(authenticatedUser.uid, buildLocalUserProfile(authenticatedUser, false));
           setCompletedOnboardingUid(null);
           AsyncStorage.removeItem(onboardingStorageKey(authenticatedUser.uid)).catch(() => {});
 
-          setProfile(newProfile as UserProfile);
+          setProfile(compactProfileForCache(newProfile) as UserProfile);
+          syncOwnPublicProfileIndex(authenticatedUser.uid, newProfile).catch(() => {});
           setLoading(false);
         },
         (error) => {
@@ -489,10 +590,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .then((storedOnboarded) => {
               if (storedOnboarded) {
                 setCompletedOnboardingUid(authenticatedUser.uid);
-                setProfile(buildLocalUserProfile(authenticatedUser, true) as UserProfile);
+                withLocalProEntitlement(authenticatedUser.uid, buildLocalUserProfile(authenticatedUser, true))
+                  .then((nextProfile) => setProfile(compactProfileForCache(nextProfile) as UserProfile));
               } else {
                 setCompletedOnboardingUid(null);
-                setProfile(buildLocalUserProfile(authenticatedUser, false) as UserProfile);
+                withLocalProEntitlement(authenticatedUser.uid, buildLocalUserProfile(authenticatedUser, false))
+                  .then((nextProfile) => setProfile(compactProfileForCache(nextProfile) as UserProfile));
               }
             })
             .finally(() => {
@@ -651,7 +754,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Email sign-up error:', e);
       const code = String(e?.code || '');
       if (code.includes('operation-not-allowed')) {
-        Alert.alert('Email/Password Disabled', 'Enable Email/Password provider in Firebase Console → Authentication → Sign-in method.');
+        Alert.alert('Email/Password Disabled', 'Enable Email/Password provider in Firebase Console -> Authentication -> Sign-in method.');
         return;
       }
       if (code.includes('email-already-in-use')) {
@@ -792,10 +895,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     await AsyncStorage.setItem(onboardingStorageKey(uid), 'true');
     setCompletedOnboardingUid(uid);
-    const nextProfile = Object.assign({}, profile || {}, profilePatch, { uid, onboarded: true }) as unknown as UserProfile;
+    const nextProfile = compactProfileForCache(Object.assign({}, profile || {}, profilePatch, { uid, onboarded: true })) as UserProfile;
     setProfile(nextProfile);
     writeCachedProfile(uid, nextProfile).catch(() => {});
+    syncOwnPublicProfileIndex(uid, nextProfile).catch(() => {});
     setAuthVersion((value) => value + 1);
+  };
+
+  const updateLocalProfile = (profilePatch: Record<string, unknown>) => {
+    const uid = auth.currentUser?.uid || user?.uid || profile?.uid;
+    if (!uid) return;
+    setProfile((current) => {
+      const baseProfile = current || profile || { uid, displayName: auth.currentUser?.displayName || user?.displayName || 'LINKUP Builder', onboarded: true };
+      const nextProfile = compactProfileForCache(Object.assign({}, baseProfile, profilePatch, { uid })) as UserProfile;
+      writeCachedProfile(uid, nextProfile).catch(() => {});
+      syncOwnPublicProfileIndex(uid, nextProfile).catch(() => {});
+      return nextProfile;
+    });
   };
 
   const requestEmailChange = async (newEmail: string) => {
@@ -872,9 +988,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         authVersion,
         isOnboarded,
-        authError,
-        clearAuthError: () => setAuthError(null),
-        signInWithGoogle,
+      authError,
+      clearAuthError: () => setAuthError(null),
+      updateLocalProfile,
+      signInWithGoogle,
         signUpWithEmail,
         signInWithEmail,
         resetPassword,

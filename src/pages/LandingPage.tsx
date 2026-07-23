@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import { Rocket, Users, Zap, Shield, Loader2, AlertCircle } from 'lucide-react';
+import { Rocket, Users, Zap, Shield, Loader2, AlertCircle, Brain } from 'lucide-react';
 
 export default function LandingPage() {
   const { signIn } = useAuth();
@@ -23,7 +23,7 @@ export default function LandingPage() {
   console.log("LandingPage Render");
 
   return (
-    <div className="relative flex h-screen w-full flex-col items-center justify-center overflow-hidden bg-white dark:bg-[#050508] px-6 text-center font-sans border-t-2 border-accent-yellow/5 transition-colors">
+    <div className="relative flex h-screen w-full flex-col items-center justify-center overflow-hidden theme-bg px-6 text-center font-sans border-t-2 border-accent-yellow/5 transition-colors">
       {/* Immersive Background */}
       <div className="absolute inset-0 z-0">
         <div className="bg-glow -top-[200px] -left-[100px] opacity-30" style={{ background: 'radial-gradient(circle, #FBE618 0%, transparent 70%)' }} />
@@ -68,19 +68,13 @@ export default function LandingPage() {
              { icon: Brain, title: "AI MATCHMAKING", desc: "Proprietary synergy analysis." },
              { icon: Zap, title: "FAST CONNECTIONS", desc: "Skip the noise, build faster." }
            ].map((item, i) => (
-             <div key={i} className="space-y-3 p-6 rounded-3xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
+             <div key={i} className="liquid-card space-y-3 p-6 rounded-[32px] border-white/10">
                 <item.icon size={20} className="mx-auto text-accent-yellow" />
                 <h3 className="text-[10px] font-black uppercase tracking-widest text-black dark:text-white">{item.title}</h3>
-                <p className="text-[10px] font-bold text-black/30 dark:text-white/30 uppercase tracking-widest">{item.desc}</p>
-             </div>
-           ))}
-        </div>
-
-        <div className="flex flex-col items-center gap-8 pt-4">
-          <button
+                <p className="text-[10px] font-bold text-black/40 dark:text-white/40 uppercase tracking-widest">{item.desc}</p>
             onClick={handleSignIn}
             disabled={isLoggingIn}
-            className="group relative flex items-center gap-4 rounded-3xl bg-accent-yellow px-16 py-6 text-xs font-black uppercase tracking-[0.3em] text-black transition-all hover:scale-105 active:scale-95 shadow-glow disabled:opacity-50"
+            className="brand-button group relative flex items-center gap-4 px-14 py-5 disabled:opacity-50"
           >
             {isLoggingIn ? <Loader2 className="animate-spin" size={20} /> : "Initialize Identity"}
             {!isLoggingIn && <ChevronRight className="transition-transform group-hover:translate-x-1" size={20} />}

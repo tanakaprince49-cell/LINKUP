@@ -1,3 +1,6 @@
 {
-    "WhiteSource Advise.Diff.BaseBranch": "main"
+    "WhiteSource Advise.Diff.BaseBranch": "main",
+    "chat.tools.terminal.autoApprove": {
+        "npm start": true
+    }
 }

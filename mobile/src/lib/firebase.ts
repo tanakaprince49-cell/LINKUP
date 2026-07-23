@@ -32,7 +32,8 @@ const createAuth = () => {
 
 export const auth = createAuth();
 export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
+  experimentalAutoDetectLongPolling: true,
+  ignoreUndefinedProperties: true,
 });
 export const functions = getFunctions(app);
 

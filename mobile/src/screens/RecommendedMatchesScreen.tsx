@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert } from 'react-native';
-import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { ChevronLeft, MessageSquare, Search, Sparkles, Target, User, Zap } from 'lucide-react-native';
-import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
@@ -11,6 +10,9 @@ import { handleFor, isDiscoverableProfile } from '../lib/discovery';
 import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
 import { ensureDirectMatch } from '../lib/chat';
 import VerifiedBadge from '../components/VerifiedBadge';
+import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
+import { consumeDailyUsage, FREE_LIMITS, getDailyUsage } from '../lib/paywall';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type MatchScore = {
   score: number;
@@ -34,16 +36,45 @@ const sharedSignalsFor = (me: UserProfile | null | undefined, person: UserProfil
 export default function RecommendedMatchesScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
   const { theme } = useTheme();
+  const isFocused = useIsFocused();
   const isDark = theme === 'dark';
   const [people, setPeople] = useState<UserProfile[]>([]);
   const [scores, setScores] = useState<Record<string, MatchScore>>({});
   const [loading, setLoading] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const [dailyRecommendationsUsed, setDailyRecommendationsUsed] = useState(0);
+  const [lastRecommendationDate, setLastRecommendationDate] = useState<string | null>(null);
+  const [lastRankedProfileIds, setLastRankedProfileIds] = useState<string[]>([]);
 
   const localScores = useMemo(() => {
     return rankedCandidatesToMap(localCommonalityRank(me, people, Math.max(people.length, 30)));
   }, [me, people]);
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const loadDailyUsage = async () => {
+      const used = await getDailyUsage(user.uid, 'dailyRecommendations');
+      setDailyRecommendationsUsed(used);
+      const lastDate = await AsyncStorage.getItem(`linkup:last-recommendation-date:${user.uid}`);
+      setLastRecommendationDate(lastDate);
+
+      // Show notification if it's a new day with fresh recommendations
+      const lastNotifiedDate = await AsyncStorage.getItem(`linkup:last-notified-date:${user.uid}`);
+      if (lastDate !== today && lastNotifiedDate !== today) {
+        Alert.alert(
+          'New Daily Recommendations!',
+          `You have ${FREE_LIMITS.dailyRecommendations} fresh recommendations waiting for you today!`,
+          [{ text: 'OK', onPress: () => AsyncStorage.setItem(`linkup:last-notified-date:${user.uid}`, today) }]
+        );
+      }
+    };
+
+    loadDailyUsage();
+  }, [user?.uid, today]);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -51,81 +82,95 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       setLoading(false);
       return;
     }
+    if (!isFocused) return;
 
-    const usersQuery = query(
-      collection(db, 'users'),
-      where('isVisible', '==', true),
-      where('isStealthMode', '==', false),
-      limit(80)
-    );
-
-    const unsubscribe = onSnapshot(
-      usersQuery,
-      (snapshot) => {
-        const list = snapshot.docs
-          .map((docSnap) => ({ uid: docSnap.id, ...(docSnap.data() as any) } as UserProfile))
-          .filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        setPeople(list);
+    const unsubscribe = subscribeToDiscoveryProfiles({
+      userId: user.uid,
+      onData: (profiles) => {
+        const list = profiles.filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
+        setPeople((current) => (list.length > 0 || current.length === 0 ? list : current));
         setLoading(false);
       },
-      (error) => {
+      onError: (error) => {
         console.error('Recommended matches error:', error);
         setLoading(false);
-      }
-    );
+      },
+    });
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [isFocused, user?.uid]);
 
   useEffect(() => {
-    if (!user?.uid || !people.length) {
+    if (!user?.uid || !isFocused || !people.length) {
       setScores({});
+      setAiLoading(false);
+      return;
+    }
+
+    const currentProfileIds = people.map(p => p.uid).sort().join(',');
+    if (currentProfileIds === lastRankedProfileIds.join(',')) {
       return;
     }
 
     let cancelled = false;
-    const localRanked = localCommonalityRank(me, people, 30);
-    setScores(rankedCandidatesToMap(localRanked));
+    let debounceTimer: NodeJS.Timeout;
 
-    (async () => {
+    const runRanking = async () => {
       setAiLoading(true);
       try {
-        let ranked = await rankCandidatesHybrid(me, people.slice(0, 40), 30);
-        if (!ranked.length) ranked = localRanked;
+        const ranked = await rankCandidatesHybrid(me, people.slice(0, 40), 30);
         if (cancelled) return;
-
         setScores(rankedCandidatesToMap(ranked));
+        setLastRankedProfileIds(people.map(p => p.uid));
       } catch (error) {
         if (cancelled) return;
+        const localRanked = localCommonalityRank(me, people, 30);
         setScores(rankedCandidatesToMap(localRanked));
+        setLastRankedProfileIds(people.map(p => p.uid));
       } finally {
         if (!cancelled) setAiLoading(false);
       }
-    })();
+    };
+
+    debounceTimer = setTimeout(() => {
+      runRanking();
+    }, 1000);
 
     return () => {
       cancelled = true;
+      clearTimeout(debounceTimer);
     };
-  }, [user?.uid, me?.uid, people]);
+  }, [isFocused, user?.uid, me?.uid, people.length, lastRankedProfileIds]);
 
   const recommended = useMemo(() => {
+    const limit = lastRecommendationDate === today ? Math.max(0, FREE_LIMITS.dailyRecommendations - dailyRecommendationsUsed) : FREE_LIMITS.dailyRecommendations;
     return people
       .map((person) => {
         const score = scores[person.uid]?.score ?? localScores[person.uid]?.score ?? 1;
         const boost = (person as any).turboConnect ? 8 : 0;
-        return { person, weight: score + boost };
+        return { person, score, weight: score + boost };
       })
       .filter((entry) => entry.weight > 0)
       .sort((left, right) => right.weight - left.weight)
-      .slice(0, 40)
+      .slice(0, limit)
       .map((entry) => entry.person);
-  }, [people, scores, localScores]);
+  }, [people, scores, localScores, dailyRecommendationsUsed, lastRecommendationDate, today]);
 
   const openChat = async (profile: UserProfile) => {
     if (!user?.uid || !profile?.uid) return;
+
+    const usage = await consumeDailyUsage(user.uid, 'dailyRecommendations', FREE_LIMITS.dailyRecommendations);
+    if (!usage.allowed && lastRecommendationDate === today) {
+      Alert.alert('Daily limit reached', `You've used your ${FREE_LIMITS.dailyRecommendations} daily recommendations. Come back tomorrow for more!`);
+      return;
+    }
+
     setBusyUserId(profile.uid);
     try {
       const matchId = await ensureDirectMatch(user.uid, profile.uid);
+      await AsyncStorage.setItem(`linkup:last-recommendation-date:${user.uid}`, today);
+      setLastRecommendationDate(today);
+      setDailyRecommendationsUsed(usage.used + 1);
       navigation.navigate('Chat', { matchId, otherUser: profile });
     } catch (error) {
       console.error('Recommended match chat error:', error);
@@ -146,9 +191,6 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
     return (
       <View style={[styles.card, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
         <View style={styles.cardTop}>
-          <View style={styles.rankPill}>
-            <Text style={styles.rankText}>MATCH #{index + 1}</Text>
-          </View>
           <TouchableOpacity
             style={styles.scorePill}
             onPress={() => Alert.alert('Compatibility', `${match.score}%\n\n${match.reason}`)}
@@ -177,7 +219,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
             </View>
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
             <Text style={styles.meta} numberOfLines={2}>
-              {(item.occupation || 'Builder')} • {location}
+              {(item.occupation || 'Builder')} - {location}
             </Text>
           </View>
         </TouchableOpacity>
@@ -260,10 +302,15 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         <Text style={styles.heroSub}>
           Ranked by shared skills, industries, goals, work style, and compatibility so you can find useful people faster.
         </Text>
-        <Text style={styles.aiStatus}>{aiLoading ? 'RANKING…' : 'MATCHES READY'}</Text>
+        <Text style={styles.heroSub}>
+          {lastRecommendationDate === today
+            ? `${dailyRecommendationsUsed}/${FREE_LIMITS.dailyRecommendations} daily recommendations used`
+            : `${FREE_LIMITS.dailyRecommendations} daily recommendations available`}
+        </Text>
+        <Text style={styles.aiStatus}>{aiLoading ? 'RANKING...' : 'MATCHES READY'}</Text>
       </View>
 
-      {loading ? (
+      {loading && people.length === 0 ? (
         <ActivityIndicator color="#FBE618" style={{ marginTop: 48 }} />
       ) : (
         <FlatList
@@ -271,6 +318,10 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           keyExtractor={(item) => item.uid}
           renderItem={renderItem}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={80}
+          windowSize={6}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={[styles.emptyCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
@@ -354,20 +405,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 12,
-  },
-  rankPill: {
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#2563EB20',
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rankText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-    color: '#2563EB',
   },
   scorePill: {
     height: 30,

@@ -1,32 +1,73 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
+import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { db } from '../lib/firebase';
 import { UserProfile } from '../types';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
-import { displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
+import { activeOpportunityScore, displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
 import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb } from 'lucide-react-native';
 import VerifiedBadge from '../components/VerifiedBadge';
+import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
+import { IS_LOW_END_ANDROID, MOBILE_HORIZONTAL_CARD_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 
-const dashboardCacheKey = (uid: string) => `linkup:dashboard:${uid}`;
+const dashboardCacheKey = (uid: string) => `linkup:dashboard:v3:${uid}`;
+const DASHBOARD_CACHE_LIMIT = IS_LOW_END_ANDROID ? 24 : 60;
+const compactCachedImage = (value: unknown) => {
+  return safeProfileImageUri(value, MOBILE_LIST_IMAGE_LIMIT);
+};
+const compactCachedProject = (project: any, index: number) => ({
+  id: String(project?.id || `project_${index}`),
+  title: String(project?.title || '').slice(0, 120),
+  description: String(project?.description || '').slice(0, 240),
+  status: String(project?.status || '').slice(0, 80),
+  lookingFor: Array.isArray(project?.lookingFor) ? project.lookingFor.slice(0, 6) : [],
+  tags: Array.isArray(project?.tags) ? project.tags.slice(0, 6) : [],
+});
+const compactDashboardProfile = (profile: UserProfile) => ({
+  uid: profile.uid,
+  displayName: displayNameFor(profile),
+  username: (profile as any).username || '',
+  bio: profile.bio || '',
+  profilePic: compactCachedImage(profile.profilePic),
+  occupation: (profile as any).occupation || '',
+  company: (profile as any).company || '',
+  city: profile.city || '',
+  country: profile.country || '',
+  age: Number(profile.age || 0),
+  skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 12) : [],
+  industries: Array.isArray((profile as any).industries) ? (profile as any).industries.slice(0, 12) : [],
+  lookingFor: Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor.slice(0, 12) : [],
+  startupStage: (profile as any).startupStage || '',
+  availability: (profile as any).availability || '',
+  reputationScore: earnedScore(profile),
+  turboConnect: !!(profile as any).turboConnect,
+  isVisible: profile.isVisible !== false,
+  isStealthMode: !!profile.isStealthMode,
+  isVerified: !!profile.isVerified,
+  isBot: !!(profile as any).isBot,
+  onboarded: !!(profile as any).onboarded,
+  projects: Array.isArray((profile as any).projects)
+    ? (profile as any).projects.slice(0, 3).map(compactCachedProject)
+    : [],
+});
 const readCachedDashboardPeople = async (uid: string): Promise<UserProfile[]> => {
   try {
     const raw = await AsyncStorage.getItem(dashboardCacheKey(uid));
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((profile) => profile?.uid && isDiscoverableProfile(profile)).slice(0, 60) : [];
+    return Array.isArray(parsed) ? parsed.filter((profile) => profile?.uid && isDiscoverableProfile(profile)).slice(0, DASHBOARD_CACHE_LIMIT) : [];
   } catch {
     return [];
   }
 };
 const writeCachedDashboardPeople = async (uid: string, people: UserProfile[]) => {
   try {
-    await AsyncStorage.setItem(dashboardCacheKey(uid), JSON.stringify(people.slice(0, 60)));
+    await AsyncStorage.setItem(dashboardCacheKey(uid), JSON.stringify(people.slice(0, DASHBOARD_CACHE_LIMIT).map(compactDashboardProfile)));
   } catch {
     // Cache only makes the dashboard feel instant.
   }
@@ -35,6 +76,7 @@ const writeCachedDashboardPeople = async (uid: string, people: UserProfile[]) =>
 export default function DiscoveryDashboardScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
   const { theme } = useTheme();
+  const isFocused = useIsFocused();
   const isDark = theme === 'dark';
   const remoteRankTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -44,11 +86,12 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   const [aiLoading, setAiLoading] = useState(false);
   const [opportunityRadar, setOpportunityRadar] = useState<OpportunityAlert[]>([]);
   const localRank = useMemo(() => {
-    return rankedCandidatesToMap(localCommonalityRank(me, people, Math.max(people.length, 15)));
+    const rankPool = IS_LOW_END_ANDROID ? people.slice(0, 10) : people;
+    return rankedCandidatesToMap(localCommonalityRank(me, rankPool, Math.max(rankPool.length, 10)));
   }, [me, people]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isFocused) return;
     let isMounted = true;
     readCachedDashboardPeople(user.uid).then((cachedPeople) => {
       if (!isMounted) return;
@@ -57,35 +100,27 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         setLoading(false);
       }
     });
-    const q = query(
-      collection(db, 'users'),
-      where('isVisible', '==', true),
-      where('isStealthMode', '==', false),
-      limit(60)
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const list = snap.docs
-          .map((d) => d.data() as UserProfile)
-          .filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        setPeople(list);
-        writeCachedDashboardPeople(user.uid, list).catch(() => {});
+    const unsub = subscribeToDiscoveryProfiles({
+      userId: user.uid,
+      onData: (profiles) => {
+        const list = profiles.filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
+        setPeople((current) => (list.length > 0 || current.length === 0 ? list : current));
+        if (list.length > 0) writeCachedDashboardPeople(user.uid, list).catch(() => {});
         setLoading(false);
       },
-      (err) => {
+      onError: (err) => {
         console.error('dashboard users error', err);
         setLoading(false);
-      }
-    );
+      },
+    });
     return () => {
       isMounted = false;
       unsub();
     };
-  }, [user?.uid]);
+  }, [isFocused, user?.uid]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isFocused) return;
     if (people.length === 0) return;
     let cancelled = false;
     const localRanked = localCommonalityRank(me, people, 15);
@@ -93,6 +128,14 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 
     if (remoteRankTimerRef.current) {
       clearTimeout(remoteRankTimerRef.current);
+      remoteRankTimerRef.current = null;
+    }
+
+    if (Platform.OS !== 'web') {
+      setAiLoading(false);
+      return () => {
+        cancelled = true;
+      };
     }
 
     remoteRankTimerRef.current = setTimeout(() => void (async () => {
@@ -119,41 +162,35 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         remoteRankTimerRef.current = null;
       }
     };
-  }, [user?.uid, me?.uid, people]);
+  }, [isFocused, user?.uid, me?.uid, people]);
 
   const recommended = useMemo(() => {
     const list = people.map((p) => ({ p, s: (aiRank[p.uid]?.score ?? localRank[p.uid]?.score ?? 1) + ((p as any).turboConnect ? 8 : 0) }));
     list.sort((a, b) => b.s - a.s);
-    return list.filter((x) => x.s >= 0).slice(0, 12).map((x) => x.p);
+    return list.filter((x) => x.s >= 0).slice(0, MOBILE_HORIZONTAL_CARD_LIMIT).map((x) => x.p);
   }, [people, aiRank, localRank]);
 
   const trending = useMemo(() => {
     const list = [...people];
     list.sort((a: any, b: any) => (earnedScore(b) + (b.turboConnect ? 8 : 0)) - (earnedScore(a) + (a.turboConnect ? 8 : 0)));
-    return list.slice(0, 12);
+    return list.slice(0, MOBILE_HORIZONTAL_CARD_LIMIT);
   }, [people]);
 
   const opportunities = useMemo(() => {
-    const list = people.map((p: any) => {
-      const lf = Array.isArray(p.lookingFor) ? p.lookingFor.map((x: any) => String(x).toLowerCase()) : [];
-      const wantsTeam = lf.some((x: string) => ['hiring', 'startup team', 'cofounder', 'investment', 'mentorship'].includes(x));
-      const hasProjects = Array.isArray(p.projects) && p.projects.length > 0;
-      const avail = String((p as any).availability || '').toLowerCase();
-      const available = avail.includes('open') || avail.includes('available');
-      const weight = (wantsTeam ? 40 : 0) + (hasProjects ? 35 : 0) + (available ? 20 : 0) + ((p as any).turboConnect ? 12 : 0) + earnedScore(p) * 0.1;
-      return { profile: p, weight };
-    }).filter((x) => x.weight > 0);
+    const list = people
+      .map((p: any) => ({ profile: p, weight: activeOpportunityScore(p) }))
+      .filter((x) => x.weight > 0);
     list.sort((a, b) => b.weight - a.weight);
-    return list.slice(0, 12).map((x) => x.profile);
+    return list.slice(0, MOBILE_HORIZONTAL_CARD_LIMIT).map((x) => x.profile);
   }, [people]);
 
   const projectRecommendations = useMemo(
-    () => getBestProjectRecommendations(me, people, 8),
+    () => getBestProjectRecommendations(me, IS_LOW_END_ANDROID ? people.slice(0, 10) : people, IS_LOW_END_ANDROID ? 4 : 8),
     [me, people]
   );
 
   useEffect(() => {
-    setOpportunityRadar(getBestOpportunityAlerts(me, people, 3));
+    setOpportunityRadar(getBestOpportunityAlerts(me, IS_LOW_END_ANDROID ? people.slice(0, 10) : people, IS_LOW_END_ANDROID ? 1 : 3));
   }, [me, people]);
 
   const topOpportunityAlert = opportunityRadar[0];
@@ -164,10 +201,10 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
     return (
       <TouchableOpacity
         onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: score, compatibilityReason: match?.reason })}
-        style={[styles.card, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+        style={[styles.card, liquidGlass(isDark, false)]}
       >
         <Image
-          source={{ uri: item.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }}
+          source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }}
           style={styles.avatar}
         />
         <View style={{ flex: 1 }}>
@@ -179,7 +216,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           </View>
           <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
           <Text style={styles.meta} numberOfLines={1}>
-            {(item as any).occupation || 'Builder'} • {(item.city || item.country) ? [item.city, item.country].filter(Boolean).join(', ') : 'Remote'}
+            {(item as any).occupation || 'Builder'} - {(item.city || item.country) ? [item.city, item.country].filter(Boolean).join(', ') : 'Remote'}
           </Text>
           {!!showScore && typeof score === 'number' && (
             <TouchableOpacity
@@ -200,12 +237,12 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
     return (
       <TouchableOpacity
         onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.uid })}
-        style={[styles.opportunityCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+        style={[styles.opportunityCard, liquidGlass(isDark, false)]}
         activeOpacity={0.9}
       >
         <View style={styles.opportunityTop}>
           <Image
-            source={{ uri: item.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }}
+            source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }}
             style={styles.smallAvatar}
           />
           <View style={{ flex: 1 }}>
@@ -240,7 +277,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 
         <View style={styles.tagsRow}>
           {details.tags.map((tag, index) => (
-            <View key={`${item.uid}-${tag}-${index}`} style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+            <View key={`${item.uid}-${tag}-${index}`} style={[styles.tagChip, liquidGlass(isDark, false)]}>
               <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{tag.toUpperCase()}</Text>
             </View>
           ))}
@@ -250,7 +287,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
           <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.opportunityBtn, { backgroundColor: '#FBE618' }]}>
             <Text style={[styles.opportunityBtnText, { color: '#000' }]}>VIEW PROFILE</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Search')} style={[styles.opportunityIconBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8' }]}>
+          <TouchableOpacity onPress={() => navigation.navigate('Search')} style={[styles.opportunityIconBtn, liquidGlass(isDark, false)]}>
             <Search size={16} color={isDark ? '#FFF' : '#000'} />
           </TouchableOpacity>
         </View>
@@ -261,7 +298,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   const ProjectCard = ({ item }: { item: ProjectRecommendation }) => (
     <TouchableOpacity
       onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.owner.uid, projectId: item.project.id })}
-      style={[styles.projectCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}
+      style={[styles.projectCard, liquidGlass(isDark, false)]}
       activeOpacity={0.9}
     >
       <View style={styles.projectTop}>
@@ -289,7 +326,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
       </View>
       <View style={styles.tagsRow}>
         {[item.roleNeed, item.project.status, ...item.matchingSignals].filter(Boolean).slice(0, 4).map((tag, index) => (
-          <View key={`${item.id}-${tag}-${index}`} style={[styles.tagChip, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+          <View key={`${item.id}-${tag}-${index}`} style={[styles.tagChip, liquidGlass(isDark, false)]}>
             <Text style={[styles.tagText, { color: isDark ? '#FFF' : '#000' }]} numberOfLines={1}>{String(tag).toUpperCase()}</Text>
           </View>
         ))}
@@ -311,9 +348,13 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
         keyExtractor={(it) => it.uid}
         horizontal
         showsHorizontalScrollIndicator={false}
+        initialNumToRender={IS_LOW_END_ANDROID ? 3 : 6}
+        maxToRenderPerBatch={IS_LOW_END_ANDROID ? 3 : 6}
+        windowSize={IS_LOW_END_ANDROID ? 3 : 5}
+        removeClippedSubviews={Platform.OS !== 'web'}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
         ListEmptyComponent={
-          <View style={[styles.emptyCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
+          <View style={[styles.emptyCard, liquidGlass(isDark, false)]}>
             <Text style={[styles.emptyTitle, { color: isDark ? '#FFF' : '#000' }]}>No active opportunities yet</Text>
             <Text style={styles.emptySub}>Use search to find builders by role, stage, or industry.</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.emptyBtn}>
@@ -327,69 +368,67 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
+    <SafeAreaView edges={['top', 'bottom']} style={[styles.container, appBackground(isDark), { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}> 
+      <View style={styles.scene} pointerEvents="none">
+        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
+        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(223,251,63,0.08)' : 'rgba(223,251,63,0.16)' }]} />
+      </View>
       {loading && people.length === 0 ? (
         <ActivityIndicator color="#FBE618" style={{ marginTop: 40 }} />
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
+        <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
           <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
-            <View style={[styles.hero, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-              <Text style={[styles.heroTitle, { color: isDark ? '#FFF' : '#000' }]}>DISCOVERY DASHBOARD</Text>
-              <Text style={styles.heroSub}>
-                Recommended matches, trending builders, and active opportunities.
+            <View style={[styles.hero, liquidGlass(isDark), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightBgSec, borderColor: isDark ? COLORS.darkBorderActive : COLORS.lightBorderActive }]}> 
+              <View style={[styles.heroAccent, { backgroundColor: isDark ? COLORS.primaryGlow : COLORS.secondary }]} />
+              <Text style={[styles.heroKicker, { color: isDark ? COLORS.primary : '#000' }]}>TODAY'S SIGNAL</Text>
+              <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Your builder graph is warming up.</Text>
+              <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
+                Smart matches, live project opportunities, and founders worth meeting are ranked into one calm feed.
               </Text>
 
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate('SwipeDeck')}
-                  style={[styles.heroBtn, { backgroundColor: '#FBE618' }]}
-                >
-                  <Text style={[styles.heroBtnText, { color: '#000' }]}>OPEN SWIPE</Text>
-                </TouchableOpacity>
+              <View style={styles.heroActions}>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('IdeaDeck')}
-                  style={[styles.heroBtn, { backgroundColor: isDark ? '#16161A' : '#F8F8F8', borderColor: isDark ? '#222226' : '#EEEEEE', borderWidth: 1 }]}
+                  style={[styles.heroBtn, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorderActive : COLORS.lightBorderActive }]}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Lightbulb size={15} color={isDark ? '#FFF' : '#000'} />
-                    <Text style={[styles.heroBtnText, { color: isDark ? '#FFF' : '#000' }]}>IDEAS</Text>
+                    <Lightbulb size={15} color={textColor(isDark)} />
+                    <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>IDEAS</Text>
                   </View>
                 </TouchableOpacity>
               </View>
 
-              <View style={{ marginTop: 10 }}>
-                <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 2, color: '#666' }}>
-                  {aiLoading ? 'UPDATING MATCHES…' : 'PEOPLE READY'}
-                </Text>
+              <View style={styles.heroInfo}>
+                <Text style={[styles.heroInfoText, { color: textColor(isDark, 'muted') }]}>{aiLoading ? 'UPDATING MATCHES...' : 'AI RECOMMENDATIONS READY'}</Text>
               </View>
 
               {topOpportunityAlert ? (
                 <TouchableOpacity
                   activeOpacity={0.9}
                   onPress={() => navigation.navigate('ActiveOpportunity', { userId: topOpportunityAlert.profile.uid })}
-                  style={[styles.radarCard, { backgroundColor: isDark ? '#16161A' : '#FFFCE6', borderColor: '#FBE61855' }]}
+                  style={[styles.radarCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightBgSec, borderColor: isDark ? COLORS.darkBorderActive : COLORS.lightBorderActive }]}
                 >
                   <View style={styles.radarTop}>
-                    <View style={styles.radarIcon}>
-                      <BellRing size={16} color="#000" />
+                    <View style={[styles.radarIcon, { backgroundColor: COLORS.secondary }]}> 
+                      <BellRing size={16} color="#05070D" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.radarTitle, { color: isDark ? '#FFF' : '#000' }]}>OPPORTUNITY RADAR</Text>
+                      <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>OPPORTUNITY RADAR</Text>
                       <Text style={styles.radarSub} numberOfLines={2}>
                         {displayNameFor(topOpportunityAlert.profile)} matches your interests: {topOpportunityAlert.reason}
                       </Text>
                     </View>
-                    <View style={styles.radarScore}>
+                    <View style={[styles.radarScore, { backgroundColor: COLORS.secondary }]}> 
                       <Text style={styles.radarScoreText}>{topOpportunityAlert.score}%</Text>
                     </View>
                   </View>
-                  <Text style={[styles.radarSummary, { color: isDark ? '#DDD' : '#222' }]} numberOfLines={2}>
+                  <Text style={[styles.radarSummary, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
                     {topOpportunityAlert.summary}
                   </Text>
                 </TouchableOpacity>
               ) : (
-                <View style={[styles.radarCard, { backgroundColor: isDark ? '#16161A' : '#F8FAFC', borderColor: isDark ? '#222226' : '#E2E8F0' }]}>
-                  <Text style={[styles.radarTitle, { color: isDark ? '#FFF' : '#000' }]}>OPPORTUNITY RADAR</Text>
+                <View style={[styles.radarCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorderActive : COLORS.lightBorderActive }]}> 
+                  <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>OPPORTUNITY RADAR</Text>
                   <Text style={styles.radarSub}>No strong opportunity yet. Add more skills/interests to sharpen alerts.</Text>
                 </View>
               )}
@@ -407,7 +446,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
             <TouchableOpacity style={styles.sectionHeader} onPress={() => navigation.navigate('ActiveOpportunities')} activeOpacity={0.8}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Rocket size={18} color="#FBE618" />
-                <Text style={[styles.sectionTitle, { color: isDark ? '#FFF' : '#000' }]}>Project Matches</Text>
+                <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>Project Matches</Text>
               </View>
               <ChevronRight size={18} color="#666" />
             </TouchableOpacity>
@@ -416,10 +455,14 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
               keyExtractor={(item) => item.id}
               horizontal
               showsHorizontalScrollIndicator={false}
+              initialNumToRender={IS_LOW_END_ANDROID ? 3 : 6}
+              maxToRenderPerBatch={IS_LOW_END_ANDROID ? 3 : 6}
+              windowSize={IS_LOW_END_ANDROID ? 3 : 5}
+              removeClippedSubviews={Platform.OS !== 'web'}
               contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
               ListEmptyComponent={
-                <View style={[styles.emptyCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
-                  <Text style={[styles.emptyTitle, { color: isDark ? '#FFF' : '#000' }]}>No project matches yet</Text>
+                <View style={[styles.emptyCard, liquidGlass(isDark, false)]}>
+                  <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No project matches yet</Text>
                   <Text style={styles.emptySub}>Add skills and interests so LINKUP can match you with ongoing projects.</Text>
                 </View>
               }
@@ -446,23 +489,69 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: 'transparent' },
+  scrollArea: { flex: 1 },
+  scene: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  scenePane: {
+    position: 'absolute',
+    width: 280,
+    height: 130,
+    borderRadius: 34,
+  },
+  scenePaneA: {
+    top: 80,
+    right: -120,
+    transform: [{ rotate: '-18deg' }],
+  },
+  scenePaneB: {
+    top: 260,
+    left: -110,
+    transform: [{ rotate: '16deg' }],
+  },
   hero: {
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 16,
+    borderRadius: 28,
+    padding: 18,
+  },
+  heroKicker: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.6,
+    marginBottom: 8,
   },
   heroTitle: {
-    fontSize: 14,
+    fontSize: 24,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: 0,
+    lineHeight: 29,
   },
   heroSub: {
-    marginTop: 6,
-    fontSize: 12,
+    marginTop: 10,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#666',
-    lineHeight: 18,
+    lineHeight: 20,
+  },
+  heroAccent: {
+    width: 72,
+    height: 4,
+    borderRadius: 999,
+    marginBottom: 14,
+  },
+  heroActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  heroInfo: {
+    marginTop: 14,
+  },
+  heroInfoText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
   heroBtn: {
     flex: 1,

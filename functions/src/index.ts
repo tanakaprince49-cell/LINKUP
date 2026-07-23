@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { onCall, HttpsError, onRequest } from 'firebase-functions/v2/https';
+import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { beforeUserCreated } from 'firebase-functions/v2/identity';
 import { logger } from 'firebase-functions';
 import { defineSecret } from 'firebase-functions/params';
 import crypto from 'node:crypto';
@@ -166,14 +167,15 @@ function sortedPairId(a: string, b: string) {
 }
 
 function notificationTitle(data: LinkupNotification) {
-  if (data.type === 'message') return `New message from ${data.fromName || 'LINKUP'}`;
-  if (data.type === 'match') return 'New LINKUP match';
-  if (data.type === 'like') return 'New profile like';
-  if (data.type === 'view') return 'New profile view';
-  if (data.type === 'comment') return 'New comment';
-  if (String(data.content || '').startsWith('AI Project Match')) return 'AI Project Match found';
-  if (String(data.content || '').startsWith('AI Opportunity')) return 'AI Opportunity found';
-  return 'LINKUP notification';
+  return 'LINKUP';
+}
+
+function notificationBody(data: LinkupNotification) {
+  const content = String(data.content || '').trim();
+  if (data.type === 'message') return `${data.fromName || 'Someone'} ${content || 'sent you a message.'}`;
+  if (data.type === 'like') return `${data.fromName || 'Someone'} ${content || 'liked your profile.'}`;
+  if (data.type === 'view') return `${data.fromName || 'Someone'} viewed your profile.`;
+  return content || 'Open LINKUP for the latest update.';
 }
 
 function notificationUrl(data: LinkupNotification) {
@@ -198,6 +200,132 @@ function isExpoPushToken(token: unknown): token is string {
     token.endsWith(']')
   );
 }
+
+function clip(value: unknown, max = 240) {
+  return String(value ?? '').trim().slice(0, max);
+}
+
+function compactList(value: unknown, maxItems = 16, maxChars = 80) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => clip(entry, maxChars)).filter(Boolean).slice(0, maxItems);
+}
+
+function safePublicImage(value: unknown) {
+  const uri = clip(value, 900000);
+  if (!uri) return '';
+  return uri.startsWith('data:') && uri.length > 120000 ? '' : uri.slice(0, 150000);
+}
+
+function compactPublicProject(project: any, index: number) {
+  return {
+    id: clip(project?.id || `project_${index}`, 100),
+    title: clip(project?.title, 120),
+    description: clip(project?.description, 300),
+    status: clip(project?.status, 80),
+    lookingFor: compactList(project?.lookingFor, 6, 80),
+    tags: compactList(project?.tags, 6, 80),
+  };
+}
+
+function compactPublicIdea(idea: any, index: number) {
+  return {
+    id: clip(idea?.id || `idea_${index}`, 100),
+    title: clip(idea?.title, 120),
+    description: clip(idea?.description, 300),
+    stage: clip(idea?.stage, 80),
+    lookingFor: compactList(idea?.lookingFor, 6, 80),
+    tags: compactList(idea?.tags, 6, 80),
+  };
+}
+
+function displayNameForIndex(data: any) {
+  const direct = clip(data?.displayName || data?.fullName || data?.name, 100);
+  if (direct && direct !== 'New Builder') return direct;
+  const emailName = clip(String(data?.email || '').split('@')[0], 100);
+  return emailName || 'LINKUP Builder';
+}
+
+function buildPublicProfileIndex(userId: string, data: any) {
+  if (!data || data.deleted || data.isStealthMode === true || data.isVisible === false || data.onboarded === false) {
+    return null;
+  }
+
+  return {
+    uid: userId,
+    displayName: displayNameForIndex(data),
+    username: clip(data.username, 40),
+    bio: clip(data.bio, 700),
+    profilePic: safePublicImage(data.profilePic),
+    occupation: clip(data.occupation, 100),
+    company: clip(data.company, 120),
+    country: clip(data.country, 80),
+    city: clip(data.city, 80),
+    age: Number(data.age || 0) || 0,
+    skills: compactList(data.skills, 20, 80),
+    interests: compactList(data.interests, 20, 80),
+    industries: compactList(data.industries, 16, 80),
+    lookingFor: compactList(data.lookingFor, 16, 80),
+    goals: clip(data.goals, 420),
+    experience: clip(data.experience, 80),
+    personalityType: clip(data.personalityType, 80),
+    commitmentLevel: clip(data.commitmentLevel, 80),
+    startupStage: clip(data.startupStage, 80),
+    fundingStage: clip(data.fundingStage, 80),
+    availability: clip(data.availability, 80),
+    timezone: clip(data.timezone, 80),
+    languages: compactList(data.languages, 12, 80),
+    workStyle: clip(data.workStyle, 80),
+    education: clip(data.education, 80),
+    networkingIntent: clip(data.networkingIntent, 120),
+    ambition: clip(data.ambition, 120),
+    remoteOnly: !!data.remoteOnly,
+    willingToRelocate: !!data.willingToRelocate,
+    teamSizePreference: clip(data.teamSizePreference, 80),
+    projects: Array.isArray(data.projects) ? data.projects.slice(0, 5).map(compactPublicProject) : [],
+    startupIdeas: Array.isArray(data.startupIdeas) ? data.startupIdeas.slice(0, 8).map(compactPublicIdea) : [],
+    profileViews: Number(data.profileViews || 0) || 0,
+    profileClicks: Number(data.profileClicks || data.clicks || 0) || 0,
+    profileSaves: Number(data.profileSaves || data.saves || 0) || 0,
+    responseRate: Number(data.responseRate || data.reputationMetrics?.responseRate || 0) || 0,
+    isVisible: true,
+    isStealthMode: false,
+    turboConnect: !!data.turboConnect,
+    hideOnlineStatus: !!data.hideOnlineStatus,
+    isVerified: !!data.isVerified,
+    verificationProgram: clip(data.verificationProgram, 80),
+    isPro: !!data.isPro,
+    plan: clip(data.plan, 40),
+    subscriptionPlan: clip(data.subscriptionPlan, 40),
+    subscriptionStatus: clip(data.subscriptionStatus, 40),
+    onboarded: data.onboarded !== false,
+    deleted: false,
+    lastActiveAt: data.lastActiveAt || null,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+export const syncPublicProfileIndex = onDocumentWritten(
+  { region: 'us-central1', document: 'users/{userId}' },
+  async (event) => {
+    const userId = String(event.params.userId || '');
+    if (!userId) return;
+
+    const publicRef = admin.firestore().collection('publicProfiles').doc(userId);
+    const after = event.data?.after;
+    if (!after?.exists) {
+      await publicRef.delete().catch(() => {});
+      return;
+    }
+
+    const index = buildPublicProfileIndex(userId, after.data());
+    if (!index) {
+      await publicRef.delete().catch(() => {});
+      return;
+    }
+
+    await publicRef.set(index, { merge: true });
+  }
+);
 
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -229,7 +357,7 @@ export const sendPushForNotification = onDocumentCreated(
     }
 
     const title = notificationTitle(notification);
-    const body = String(notification.content || 'Open LINKUP for the latest update.').slice(0, 180);
+    const body = notificationBody(notification).slice(0, 180);
     const url = notificationUrl(notification);
     const messages = tokens.map((to) => ({
       to,
@@ -329,7 +457,7 @@ async function geminiScorePair(me: CompactProfile, them: CompactProfile): Promis
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 120 },
+      generationConfig: { temperature: 0.0, maxOutputTokens: 120 },
     }),
   });
 
@@ -447,12 +575,14 @@ export const aiAssist = onCall({ region: 'us-central1', secrets: [GEMINI_API_KEY
       'Profile JSON: ' + clippedJson(payload.profile, 2500),
     ].join('\n');
   } else if (task === 'warmIntro') {
-    maxOutputTokens = 220;
-    temperature = 0.45;
+    maxOutputTokens = 260;
+    temperature = 0.55;
     prompt = [
-      'You are a professional co-founder matchmaker.',
-      'Write a warm, enthusiastic opening message that feels human and specific.',
-      'Write 4-6 sentences. End with 1 clear question.',
+      'You write excellent first messages for serious founders and builders.',
+      'Draft a message from Me to Other.',
+      'Make it specific to both profiles: mention 1-2 concrete overlaps, complementary skills, projects, industries, goals, or work style.',
+      'Sound confident, warm, and natural. No generic networking fluff. No markdown. No subject line.',
+      'Write 3-5 short sentences. End with one clear collaboration question.',
       'Me=' + clippedJson(payload.me, 1800),
       'Other=' + clippedJson(payload.other, 1800),
     ].join('\n');
@@ -598,4 +728,330 @@ export const rankCandidates = onCall({ region: 'us-central1', secrets: [GEMINI_A
     ranked,
     meta: { shortlistSize: ranked.length },
   };
+});
+
+// ─── Auth Triggers ─────────────────────────────────────────────
+
+export const authOnSignUp = beforeUserCreated(async (event) => {
+  const user = event.data;
+  if (!user?.uid || !user?.email) return;
+
+  const db = admin.firestore();
+  const now = admin.firestore.FieldValue.serverTimestamp();
+
+  await db.collection('users').doc(user.uid).set({
+    uid: user.uid,
+    email: user.email,
+    displayName: user.displayName || user.email.split('@')[0],
+    profilePic: user.photoURL || '',
+    createdAt: now,
+    lastActiveAt: now,
+    onboarded: false,
+    isVisible: true,
+    isStealthMode: false,
+    turboConnect: false,
+    hideOnlineStatus: false,
+    isVerified: false,
+    isPro: false,
+    roleAnswers: {},
+    personalityAnswers: {},
+    skills: [],
+    industries: [],
+    lookingFor: [],
+  }, { merge: true });
+
+  await db.collection('userPrivate').doc(user.uid).set({
+    email: user.email,
+    pushTokens: [],
+    createdAt: now,
+  }, { merge: true });
+
+  logger.info('User initialized for', user.uid);
+});
+
+export const cleanupDeletedUser = onDocumentWritten(
+  { region: 'us-central1', document: 'users/{userId}' },
+  async (event) => {
+    const userId = String(event.params.userId || '');
+    if (!userId) return;
+
+    const after = event.data?.after;
+    if (after?.exists && after.get('deleted') !== true) return;
+
+    const db = admin.firestore();
+    const batch = db.batch();
+    batch.delete(db.collection('userPrivate').doc(userId));
+    batch.delete(db.collection('publicProfiles').doc(userId));
+
+    const swipesFrom = await db.collection('swipes').where('fromId', '==', userId).get();
+    swipesFrom.forEach((d) => batch.delete(d.ref));
+    const swipesTo = await db.collection('swipes').where('toId', '==', userId).get();
+    swipesTo.forEach((d) => batch.delete(d.ref));
+
+    await batch.commit();
+    logger.info('Cleanup complete for deleted user:', userId);
+  }
+);
+
+// ─── Messaging Functions ───────────────────────────────────────
+
+export const sendMessage = onCall({ region: 'us-central1' }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in.');
+
+  const data = request.data as any;
+  const matchId = String(data?.matchId || '').trim();
+  const text = String(data?.text || '').trim().slice(0, 2000);
+
+  if (!matchId || !text) {
+    throw new HttpsError('invalid-argument', 'matchId and text are required.');
+  }
+
+  const db = admin.firestore();
+
+  const matchSnap = await db.collection('matches').doc(matchId).get();
+  if (!matchSnap.exists) {
+    throw new HttpsError('not-found', 'Match not found.');
+  }
+  const match = matchSnap.data() || {};
+  if (match.u1 !== uid && match.u2 !== uid) {
+    throw new HttpsError('permission-denied', 'Not a participant in this match.');
+  }
+
+  const msgRef = await db.collection('messages').add({
+    matchId,
+    senderId: uid,
+    text,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    readBy: [uid],
+  });
+
+  const otherId = match.u1 === uid ? match.u2 : match.u1;
+  await db.collection('matches').doc(matchId).set({
+    lastMessage: text.slice(0, 120),
+    lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastSenderId: uid,
+  }, { merge: true });
+
+  await db.collection('notifications').add({
+    userId: otherId,
+    fromId: uid,
+    type: 'message',
+    content: text.slice(0, 180),
+    matchId,
+  });
+
+  return { id: msgRef.id };
+});
+
+export const markMessagesRead = onCall({ region: 'us-central1' }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in.');
+
+  const data = request.data as any;
+  const matchId = String(data?.matchId || '').trim();
+  if (!matchId) throw new HttpsError('invalid-argument', 'matchId required.');
+
+  const db = admin.firestore();
+  const messagesSnap = await db.collection('messages')
+    .where('matchId', '==', matchId)
+    .where('senderId', '!=', uid)
+    .get();
+
+  const batch = db.batch();
+  messagesSnap.docs.forEach((docSnap) => {
+    const readBy = docSnap.data()?.readBy || [];
+    if (!readBy.includes(uid)) {
+      batch.update(docSnap.ref, {
+        readBy: admin.firestore.FieldValue.arrayUnion(uid),
+      });
+    }
+  });
+
+  if (batch.commit) await batch.commit();
+  return { marked: messagesSnap.size };
+});
+
+// ─── Search Functions ──────────────────────────────────────────
+
+export const searchUsers = onCall({ region: 'us-central1' }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in.');
+
+  const data = request.data as any;
+  const queryText = String(data?.query || '').trim().toLowerCase().slice(0, 100);
+  const skillFilter = (data?.skills as string[])?.filter(Boolean).slice(0, 10) || [];
+  const industryFilter = (data?.industries as string[])?.filter(Boolean).slice(0, 10) || [];
+  const locationFilter = String(data?.location || '').trim().slice(0, 80);
+  const maxResults = Math.min(Math.max(Number(data?.maxResults) || 20, 1), 50);
+
+  const db = admin.firestore();
+  let usersQuery: admin.firestore.Query = db.collection('publicProfiles').where('isVisible', '==', true);
+
+  if (skillFilter.length > 0) {
+    usersQuery = usersQuery.where('skills', 'array-contains-any', skillFilter.slice(0, 10));
+  } else if (industryFilter.length > 0) {
+    usersQuery = usersQuery.where('industries', 'array-contains-any', industryFilter.slice(0, 10));
+  }
+
+  const snap = await usersQuery.limit(maxResults * 2).get();
+  let results = snap.docs.map((d) => ({ uid: d.id, ...d.data() })) as any[];
+
+  if (queryText) {
+    results = results.filter((p) => {
+      const name = String(p.displayName || '').toLowerCase();
+      const bio = String(p.bio || '').toLowerCase();
+      const occupation = String(p.occupation || '').toLowerCase();
+      const company = String(p.company || '').toLowerCase();
+      const city = String(p.city || '').toLowerCase();
+      return name.includes(queryText) || bio.includes(queryText) || occupation.includes(queryText) || company.includes(queryText) || city.includes(queryText);
+    });
+  }
+
+  if (locationFilter) {
+    results = results.filter((p) => {
+      const city = String(p.city || '').toLowerCase();
+      const country = String(p.country || '').toLowerCase();
+      return city.includes(locationFilter) || country.includes(locationFilter);
+    });
+  }
+
+  return { results: results.slice(0, maxResults), total: results.length };
+});
+
+// ─── Admin Functions ───────────────────────────────────────────
+
+const ADMIN_EMAILS = new Set<string>([
+  // Add admin emails here
+]);
+
+async function assertAdmin(uid: string): Promise<void> {
+  const db = admin.firestore();
+  const userSnap = await db.collection('users').doc(uid).get();
+  const email = String(userSnap.get('email') || '').toLowerCase();
+  const isAdmin = ADMIN_EMAILS.has(email) || userSnap.get('role') === 'admin';
+  if (!isAdmin) throw new HttpsError('permission-denied', 'Admin access required.');
+}
+
+export const adminAction = onCall({ region: 'us-central1', secrets: [GEMINI_API_KEY] }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in.');
+  await assertAdmin(uid);
+
+  const data = request.data as any;
+  const action = String(data?.action || '').trim();
+  const targetUid = String(data?.targetUid || '').trim();
+
+  const db = admin.firestore();
+
+  if (action === 'ban') {
+    if (!targetUid) throw new HttpsError('invalid-argument', 'targetUid required.');
+    await db.collection('users').doc(targetUid).set({
+      banned: true,
+      bannedAt: admin.firestore.FieldValue.serverTimestamp(),
+      bannedBy: uid,
+      banReason: String(data?.reason || '').trim().slice(0, 500),
+      isVisible: false,
+      isStealthMode: true,
+    }, { merge: true });
+    await db.collection('publicProfiles').doc(targetUid).delete().catch(() => {});
+    return { success: true, action: 'banned', targetUid };
+  }
+
+  if (action === 'unban') {
+    if (!targetUid) throw new HttpsError('invalid-argument', 'targetUid required.');
+    await db.collection('users').doc(targetUid).set({
+      banned: false,
+      bannedAt: admin.firestore.FieldValue.delete(),
+      bannedBy: admin.firestore.FieldValue.delete(),
+      banReason: admin.firestore.FieldValue.delete(),
+    }, { merge: true });
+    return { success: true, action: 'unbanned', targetUid };
+  }
+
+  if (action === 'deleteUserData') {
+    if (!targetUid) throw new HttpsError('invalid-argument', 'targetUid required.');
+    const batch = db.batch();
+    batch.delete(db.collection('users').doc(targetUid));
+    batch.delete(db.collection('userPrivate').doc(targetUid));
+    batch.delete(db.collection('publicProfiles').doc(targetUid));
+    const swipesSnap = await db.collection('swipes').where('fromId', '==', targetUid).get();
+    swipesSnap.forEach((d) => batch.delete(d.ref));
+    const swipesToSnap = await db.collection('swipes').where('toId', '==', targetUid).get();
+    swipesToSnap.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    return { success: true, action: 'dataDeleted', targetUid };
+  }
+
+  if (action === 'stats') {
+    const usersSnap = await db.collection('users').count().get();
+    const publicSnap = await db.collection('publicProfiles').count().get();
+    const matchesSnap = await db.collection('matches').count().get();
+    const messagesSnap = await db.collection('messages').count().get();
+    const swipesSnap = await db.collection('swipes').count().get();
+    return {
+      success: true,
+      stats: {
+        totalUsers: usersSnap.data()?.count || 0,
+        publicProfiles: publicSnap.data()?.count || 0,
+        matches: matchesSnap.data()?.count || 0,
+        messages: messagesSnap.data()?.count || 0,
+        swipes: swipesSnap.data()?.count || 0,
+      },
+    };
+  }
+
+  if (action === 'setRole') {
+    if (!targetUid) throw new HttpsError('invalid-argument', 'targetUid required.');
+    const role = String(data?.role || '').trim();
+    if (!['admin', 'moderator', 'user'].includes(role)) {
+      throw new HttpsError('invalid-argument', `Invalid role: ${role}`);
+    }
+    await db.collection('users').doc(targetUid).set({ role }, { merge: true });
+    return { success: true, action: 'roleSet', targetUid, role };
+  }
+
+  throw new HttpsError('invalid-argument', `Unknown action: ${action}`);
+});
+
+// ─── Webhook Endpoints ─────────────────────────────────────────
+
+export const webhookReceive = onRequest({ region: 'us-central1', cors: true }, async (req, res) => {
+  const secret = String(req.query?.secret || req.headers['x-webhook-secret'] || '').trim();
+  const expectedSecret = process.env.WEBHOOK_SECRET || '';
+  if (expectedSecret && secret !== expectedSecret) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const event = String(req.body?.event || req.body?.type || '').trim();
+  const payload = req.body?.payload || req.body?.data || {};
+
+  if (!event) {
+    res.status(400).json({ error: 'Missing event type' });
+    return;
+  }
+
+  const db = admin.firestore();
+  await db.collection('webhookLogs').add({
+    event,
+    payload: JSON.stringify(payload).slice(0, 5000),
+    headers: JSON.stringify(req.headers).slice(0, 2000),
+    receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  if (event === 'waitlist.signup') {
+    const email = String(payload?.email || '').trim();
+    const name = String(payload?.name || '').trim().slice(0, 100);
+    if (email) {
+      await db.collection('waitlist').add({
+        email,
+        name,
+        source: String(payload?.source || 'webhook').slice(0, 100),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  res.json({ received: true, event });
 });

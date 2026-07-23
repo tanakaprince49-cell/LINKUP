@@ -1,6 +1,7 @@
 import { addDoc, collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { directMatchId, ensureDirectMatch } from './chat';
+import { safeProfileImageUri } from './profilePerformance';
 
 export type ConnectionRequestStatus = 'pending' | 'approved' | 'rejected';
 
@@ -23,8 +24,7 @@ export function connectionRequestId(senderId: string, recipientId: string) {
 }
 
 const safeContactImage = (value?: string) => {
-  if (!value) return '';
-  return value.length <= 5000 ? value : '';
+  return safeProfileImageUri(value || '', 900_000);
 };
 
 export function subscribeToConnectionRequest(

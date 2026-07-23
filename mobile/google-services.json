@@ -15,6 +15,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "70946124449-9fkogibansijkib564gq1rilr6lavf46.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tana.linkup",
+            "certificate_hash": "dbf8dc83b41d33771547065784dae9a90f04a8af"
+          }
+        },
+        {
+          "client_id": "70946124449-of65t4a84qtq8llu58rf3g0g7lbgn534.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tana.linkup",
+            "certificate_hash": "eb4f6c65cf768a423d2f91d920a6b0cafa1c2a12"
+          }
+        },
+        {
           "client_id": "70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com",
           "client_type": 3
         }

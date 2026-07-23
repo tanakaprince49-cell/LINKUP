@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Linking, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ArrowRight, Lock, Star, Users } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
+import BrandMark from '../components/BrandMark';
 import { useTheme } from '../contexts/ThemeContext';
-import { Rocket, Shield, Lock, Globe } from 'lucide-react-native';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 const { width, height } = Dimensions.get('window');
 
@@ -14,7 +16,7 @@ export default function LandingScreen({ navigation }: any) {
   const [googleBusy, setGoogleBusy] = useState(false);
 
   const openLink = (url: string) => {
-    Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
+    Linking.openURL(url).catch((err) => console.error("Couldn't load page", err));
   };
 
   const handleGoogleSignIn = async () => {
@@ -27,57 +29,69 @@ export default function LandingScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#050508' : '#FFFFFF' }]}>
-      <View style={styles.glowContainer}>
-        <View style={[styles.glow, { backgroundColor: '#FBE618', opacity: isDark ? 0.1 : 0.05, top: -height * 0.1, left: -width * 0.2 }]} />
-        <View style={[styles.glow, { backgroundColor: '#FBE618', opacity: isDark ? 0.05 : 0.02, bottom: -height * 0.1, right: -width * 0.2 }]} />
+    <SafeAreaView style={[styles.container, appBackground(isDark)]}>
+      <View style={styles.scene} pointerEvents="none">
+        <View style={[styles.lightPlane, styles.lightPlaneOne, { backgroundColor: isDark ? 'rgba(0, 194, 255, 0.14)' : 'rgba(0, 194, 255, 0.16)' }]} />
+        <View style={[styles.lightPlane, styles.lightPlaneTwo, { backgroundColor: isDark ? 'rgba(223, 251, 63, 0.12)' : 'rgba(223, 251, 63, 0.2)' }]} />
+        <View style={[styles.lightPlane, styles.lightPlaneThree, { backgroundColor: isDark ? 'rgba(124, 58, 237, 0.16)' : 'rgba(124, 58, 237, 0.12)' }]} />
       </View>
 
       <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.logoBadge}>
-            <Image source={require('../../assets/logo.png.png')} style={styles.logoImage} />
+            <BrandMark size={28} />
           </View>
-          <Text style={[styles.logoText, { color: isDark ? '#FFF' : '#000' }]}>
-            LINK<Text style={{ color: '#FBE618' }}>UP</Text>
-          </Text>
         </View>
 
-        {/* HERO AREA */}
         <View style={styles.hero}>
-          <Text style={[styles.heroTitle, { color: isDark ? '#FFF' : '#000' }]}>
-            THE FOUNDER{"\n"}
-            <Text style={{ color: '#FBE618' }}>REALM_</Text>
+          <View style={[styles.kickerPill, liquidGlass(isDark, false)]}>
+            <Star size={14} color={COLORS.primary} />
+            <Text style={[styles.kickerText, { color: textColor(isDark, 'secondary') }]}>PRIVATE BUILDER NETWORK</Text>
+          </View>
+          <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>
+            Meet the people who move your idea forward.
           </Text>
-          <Text style={[styles.heroSub, { color: isDark ? '#888' : '#666' }]}>
-            An exclusive network for high-signal builders, technical founders, and visionary operators.
+          <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
+            LINKUP pairs founders, technical talent, creators, and operators through signal-rich matching instead of noisy scrolling.
           </Text>
+          <View style={styles.signalRow}>
+            <View style={[styles.signalCard, liquidGlass(isDark, false)]}>
+              <Star size={18} color={COLORS.secondary} />
+              <Text style={[styles.signalValue, { color: textColor(isDark) }]}>AI FIT</Text>
+              <Text style={[styles.signalLabel, { color: textColor(isDark, 'muted') }]}>Compatibility</Text>
+            </View>
+            <View style={[styles.signalCard, liquidGlass(isDark, false)]}>
+              <Users size={18} color={COLORS.primary} />
+              <Text style={[styles.signalValue, { color: textColor(isDark) }]}>LIVE</Text>
+              <Text style={[styles.signalLabel, { color: textColor(isDark, 'muted') }]}>Opportunities</Text>
+            </View>
+          </View>
         </View>
 
-        {/* ACTION AREA */}
-        <View style={styles.actions}>
-          <TouchableOpacity 
+        <View style={[styles.actionPanel, liquidGlass(isDark)]}>
+          <TouchableOpacity
             style={[styles.googleButton, googleBusy && styles.disabledButton]}
             onPress={handleGoogleSignIn}
             disabled={googleBusy}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
             {googleBusy ? (
-              <ActivityIndicator color="#000" />
+              <ActivityIndicator color="#07111F" />
             ) : (
               <>
                 <View style={styles.googleIconContainer}>
-                  <View style={[styles.googleG, { borderTopColor: '#4285F4', borderLeftColor: '#EA4335', borderBottomColor: '#FBBC05', borderRightColor: '#34A853' }]} />
+                  <View style={styles.googleG} />
                 </View>
                 <Text style={styles.googleButtonText}>SIGN IN WITH GOOGLE</Text>
+                <ArrowRight size={18} color="#07111F" />
               </>
             )}
           </TouchableOpacity>
 
           {authError ? (
-            <View style={[styles.authErrorBox, { backgroundColor: isDark ? '#201313' : '#FFF5F5', borderColor: '#EF4444' }]}>
+            <View style={[styles.authErrorBox, { backgroundColor: isDark ? 'rgba(255, 77, 109, 0.12)' : '#FFF1F4', borderColor: COLORS.danger }]}>
               <Text style={styles.authErrorTitle}>GOOGLE AUTH ERROR</Text>
-              <Text selectable style={[styles.authErrorText, { color: isDark ? '#FFD6D6' : '#7F1D1D' }]}>{authError}</Text>
+              <Text selectable style={[styles.authErrorText, { color: isDark ? '#FFD5DE' : '#7F1D2D' }]}>{authError}</Text>
               <TouchableOpacity onPress={clearAuthError} activeOpacity={0.8} style={styles.dismissErrorBtn}>
                 <Text style={styles.dismissErrorText}>DISMISS</Text>
               </TouchableOpacity>
@@ -85,27 +99,27 @@ export default function LandingScreen({ navigation }: any) {
           ) : null}
 
           <TouchableOpacity
-            style={[styles.secondaryButton, { backgroundColor: isDark ? '#121216' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EAEAEA' }]}
+            style={[styles.secondaryButton, liquidGlass(isDark, false)]}
             onPress={() => navigation.navigate('EmailAuth')}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
-            <Text style={[styles.secondaryButtonText, { color: isDark ? '#FFF' : '#000' }]}>CONTINUE WITH EMAIL</Text>
+            <Text style={[styles.secondaryButtonText, { color: textColor(isDark) }]}>CONTINUE WITH EMAIL</Text>
           </TouchableOpacity>
 
           <View style={styles.privacyNotice}>
-            <Lock size={12} color="#666" />
-            <Text style={styles.privacyText}>ENCRYPTED & PRIVACY COMPLIANT</Text>
+            <Lock size={12} color={textColor(isDark, 'muted')} />
+            <Text style={[styles.privacyText, { color: textColor(isDark, 'muted') }]}>ENCRYPTED AND PRIVACY COMPLIANT</Text>
           </View>
+        </View>
 
-          <View style={styles.footer}>
-            <Text style={styles.legalText}>
-              By joining, you agree to our{"\n"}
-              <Text style={styles.legalLink} onPress={() => openLink('https://docs.google.com/document/d/1SPu2VZchQfmWQT0gr2QuvmHbiuLpBZX-aFpmVd-ph2E/edit?usp=sharing')}>TERMS OF SERVICE</Text>
-              <Text style={styles.legalText}> & </Text>
-              <Text style={styles.legalLink} onPress={() => openLink('https://docs.google.com/document/d/1FUTyaNfaBXzYGUiqbfhrKX73H6S6S809kpI00chyWRM/edit?usp=sharing')}>PRIVACY POLICY</Text>
-            </Text>
-            <Text style={styles.complianceText}>© 2026 LINKUP. DATA PROTECTED UNDER GDPR & CCPA.</Text>
-          </View>
+        <View style={styles.footer}>
+          <Text style={[styles.legalText, { color: textColor(isDark, 'muted') }]}>
+            By joining, you agree to our{'\n'}
+            <Text style={styles.legalLink} onPress={() => openLink('https://docs.google.com/document/d/1SPu2VZchQfmWQT0gr2QuvmHbiuLpBZX-aFpmVd-ph2E/edit?usp=sharing')}>TERMS OF SERVICE</Text>
+            <Text style={{ color: textColor(isDark, 'muted') }}> & </Text>
+            <Text style={styles.legalLink} onPress={() => openLink('https://docs.google.com/document/d/1FUTyaNfaBXzYGUiqbfhrKX73H6S6S809kpI00chyWRM/edit?usp=sharing')}>PRIVACY POLICY</Text>
+          </Text>
+          <Text style={[styles.complianceText, { color: textColor(isDark, 'muted') }]}>(C) 2026 LINKUP. DATA PROTECTED UNDER GDPR & CCPA.</Text>
         </View>
       </View>
     </SafeAreaView>
@@ -116,179 +130,237 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  glowContainer: {
+  scene: {
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
   },
-  glow: {
+  lightPlane: {
     position: 'absolute',
-    width: width * 1.2,
-    height: width * 1.2,
-    borderRadius: width * 0.6,
+    width: width * 0.9,
+    height: height * 0.22,
+    borderRadius: 36,
+  },
+  lightPlaneOne: {
+    top: height * 0.08,
+    right: -width * 0.34,
+    transform: [{ rotate: '-18deg' }],
+  },
+  lightPlaneTwo: {
+    top: height * 0.28,
+    left: -width * 0.28,
+    transform: [{ rotate: '14deg' }],
+  },
+  lightPlaneThree: {
+    bottom: height * 0.1,
+    right: -width * 0.22,
+    transform: [{ rotate: '10deg' }],
   },
   content: {
     flex: 1,
-    paddingHorizontal: 32,
+    paddingHorizontal: 24,
     justifyContent: 'space-between',
-    paddingVertical: 60,
+    paddingVertical: 36,
+    width: '100%',
+    maxWidth: 760,
+    alignSelf: 'center',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginTop: 8,
   },
   logoBadge: {
-    width: 60,
-    height: 60,
-    backgroundColor: '#FBE618',
-    borderRadius: 22,
+    width: 50,
+    height: 50,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ rotate: '-5deg' }],
-    overflow: 'hidden',
-  },
-  logoImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+    backgroundColor: COLORS.primary,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.38,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
   },
   logoText: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '900',
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   hero: {
-    marginTop: -40,
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  kickerPill: {
+    alignSelf: 'flex-start',
+    minHeight: 34,
+    borderRadius: 17,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  kickerText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
   },
   heroTitle: {
-    fontSize: 52,
+    marginTop: 16,
+    fontSize: 42,
     fontWeight: '900',
-    letterSpacing: -2,
-    lineHeight: 56,
-    fontStyle: 'italic',
+    letterSpacing: 0,
+    lineHeight: 46,
   },
   heroSub: {
-    fontSize: 16,
-    lineHeight: 26,
-    marginTop: 20,
-    fontWeight: '500',
+    fontSize: 15,
+    lineHeight: 24,
+    marginTop: 16,
+    fontWeight: '600',
   },
-  actions: {
-    gap: 24,
+  signalRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 22,
+  },
+  signalCard: {
+    flex: 1,
+    borderRadius: 22,
+    padding: 14,
+    minHeight: 94,
+    justifyContent: 'space-between',
+  },
+  signalValue: {
+    marginTop: 10,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  signalLabel: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  actionPanel: {
+    borderRadius: 28,
+    padding: 22,
+    gap: 16,
   },
   googleButton: {
-    backgroundColor: '#FBE618',
-    height: 64,
-    borderRadius: 22,
+    backgroundColor: COLORS.primary,
+    minHeight: 58,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
-    shadowColor: '#FBE618',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 8,
+    gap: 10,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    elevation: 6,
   },
   disabledButton: {
     opacity: 0.7,
   },
   googleIconContainer: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
     backgroundColor: '#FFF',
-    borderRadius: 14,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   googleG: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 3,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2.5,
+    borderTopColor: '#4285F4',
+    borderLeftColor: '#EA4335',
+    borderBottomColor: '#FBBC05',
+    borderRightColor: '#34A853',
   },
   googleButtonText: {
-    color: '#000',
-    fontSize: 13,
+    color: '#07111F',
+    fontSize: 12,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: 0.8,
   },
   authErrorBox: {
     borderWidth: 1,
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 16,
+    padding: 12,
     gap: 8,
   },
   authErrorTitle: {
-    color: '#EF4444',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-  },
-  authErrorText: {
-    fontSize: 11,
-    lineHeight: 17,
-    fontWeight: '700',
-  },
-  dismissErrorBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  dismissErrorText: {
-    color: '#FFF',
+    color: COLORS.danger,
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
   },
+  authErrorText: {
+    fontSize: 10,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  dismissErrorBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.danger,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  dismissErrorText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
   secondaryButton: {
-    height: 58,
-    borderRadius: 22,
+    minHeight: 54,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
   },
   secondaryButtonText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: 1,
   },
   privacyNotice: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    opacity: 0.6,
+    marginTop: 2,
   },
   privacyText: {
     fontSize: 9,
-    fontWeight: '900',
-    color: '#666',
-    letterSpacing: 1,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   footer: {
     marginTop: 10,
-    gap: 12,
+    gap: 8,
   },
   legalText: {
     textAlign: 'center',
-    fontSize: 10,
-    color: '#888',
+    fontSize: 9,
     fontWeight: '700',
-    lineHeight: 18,
+    lineHeight: 16,
   },
   legalLink: {
-    color: '#FBE618',
+    color: COLORS.primary,
     fontWeight: '900',
     textDecorationLine: 'underline',
   },
   complianceText: {
     textAlign: 'center',
     fontSize: 8,
-    color: '#555',
     fontWeight: '800',
     letterSpacing: 0.5,
-  }
+  },
 });

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 export const GEMINI_MODEL = 'gemini-2.5-flash-lite';
+export const OPENROUTER_MODEL = process.env.EXPO_PUBLIC_OPENROUTER_MODEL || 'deepseek/deepseek-chat';
 
 type GeminiRequestOptions = {
   temperature?: number;
@@ -41,6 +42,20 @@ export function getGeminiApiKey() {
   return String(envKey || runtimeKey).trim();
 }
 
+export function getOpenRouterApiKey() {
+  const envKey = process.env.EXPO_PUBLIC_OPENROUTER_API_KEY || '';
+  const runtimeKey =
+    Platform.OS === 'web'
+      ? String((globalThis as any).__LINKUP_OPENROUTER_API_KEY || (globalThis as any).LINKUP_OPENROUTER_API_KEY || '')
+      : '';
+
+  return String(envKey || runtimeKey).trim();
+}
+
+export function hasDirectAIKey() {
+  return !!(getGeminiApiKey() || getOpenRouterApiKey());
+}
+
 export function getLastAIDiagnostic() {
   return lastAIDiagnostic;
 }
@@ -53,50 +68,52 @@ function setLastAIDiagnostic(diagnostic: AIDiagnostic) {
 function compactTechnical(value: unknown) {
   return String(value || '')
     .replace(getGeminiApiKey(), '[redacted-key]')
+    .replace(getOpenRouterApiKey(), '[redacted-key]')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 260);
 }
 
 export function describeAIError(error: unknown) {
-  const key = getGeminiApiKey();
   const status = Number((error as any)?.status || 0) || undefined;
   const rawMessage = compactTechnical((error as any)?.technical || (error as any)?.message || error);
   const lower = rawMessage.toLowerCase();
 
   if (lower.includes('cors') || lower.includes('failed to fetch') || lower.includes('network') || lower.includes('preflight')) {
-    return `Network/CORS problem reaching the smart backend. The web app will use the same-origin Vercel smart route when deployed. Details: ${rawMessage}`;
+    return 'The smart server is unreachable right now. Showing the best local result instead.';
   }
   if (lower.includes('cloudfunctions.net') || lower.includes('not-found') || lower.includes('404')) {
-    return `Firebase Cloud Function is unavailable or not deployed. The web app should use /api/aiAssist and /api/rankCandidates on Vercel instead. Details: ${rawMessage}`;
+    return 'The smart server is not available right now. Showing the best local result instead.';
   }
   if (
     lower.includes('vercel ai api missing') ||
     lower.includes('missing gemini_api_key') ||
-    lower.includes('missing google_api_key')
+    lower.includes('missing google_api_key') ||
+    lower.includes('missing expo_public_openrouter_api_key') ||
+    lower.includes('missing openrouter')
   ) {
-    return 'Vercel Gemini key is missing. Add GEMINI_API_KEY in Vercel Environment Variables, then create a new production deployment.';
+    return 'Smart features are not fully configured yet. Showing the best local result instead.';
   }
 
-  if (!key) {
-    return 'Gemini API key is missing in this build. Add EXPO_PUBLIC_GEMINI_API_KEY in Vercel Environment Variables and mobile/.env, then redeploy/restart Expo.';
+  if (!getGeminiApiKey() && !getOpenRouterApiKey()) {
+    return 'Smart features are not fully configured yet. Showing the best local result instead.';
   }
 
-  if (status === 400) return `Gemini rejected the request. Check the model/prompt format. Details: ${rawMessage}`;
+  if (status === 400) return 'The smart server could not process that request. Showing the best local result instead.';
   if (status === 401 || status === 403) {
-    return `Gemini API key/auth problem. Check that the key is valid, Generative Language API is enabled, and API restrictions allow this app domain. Details: ${rawMessage}`;
+    return 'Smart features are temporarily unavailable. Showing the best local result instead.';
   }
-  if (status === 404) return `Gemini model is not available for this key/API version. Current model: ${GEMINI_MODEL}. Details: ${rawMessage}`;
+  if (status === 404) return 'The smart server is not available right now. Showing the best local result instead.';
   if (status === 429 || lower.includes('quota') || lower.includes('rate limit')) {
-    return `Gemini quota/rate limit hit. Wait a minute or raise quota in Google Studio. Details: ${rawMessage}`;
+    return 'The smart server is busy right now. Showing the best local result instead.';
   }
   if (status === 503 || lower.includes('high demand') || lower.includes('unavailable')) {
-    return `Gemini is temporarily overloaded. Try again shortly. Details: ${rawMessage}`;
+    return 'The smart server is busy right now. Showing the best local result instead.';
   }
   if (lower.includes('max_tokens') || lower.includes('finishreason') || lower.includes('empty content')) {
-    return `Gemini responded but stopped before returning text because the output token limit was too low. The app has increased the token budget; redeploy and try again. Details: ${rawMessage}`;
+    return 'The smart server returned an incomplete response. Showing the best local result instead.';
   }
-  return rawMessage || 'Unknown Gemini error. Open the browser console for the technical details.';
+  return 'The smart server is busy right now. Showing the best local result instead.';
 }
 
 export function recordAIError(error: unknown, title = 'Smart feature problem found') {
@@ -113,7 +130,22 @@ export function recordAIError(error: unknown, title = 'Smart feature problem fou
 }
 
 export async function requestGeminiText(prompt: string, options: GeminiRequestOptions = {}) {
-  const key = getGeminiApiKey();
+  const geminiKey = getGeminiApiKey();
+  if (geminiKey) {
+    try {
+      return await requestGoogleGeminiText(prompt, options, geminiKey);
+    } catch (error) {
+      if (!getOpenRouterApiKey()) {
+        throw error;
+      }
+      return requestOpenRouterText(prompt, options);
+    }
+  }
+
+  return requestOpenRouterText(prompt, options);
+}
+
+async function requestGoogleGeminiText(prompt: string, options: GeminiRequestOptions = {}, key = getGeminiApiKey()) {
   if (!key) {
     throw new GeminiRequestError('Missing EXPO_PUBLIC_GEMINI_API_KEY');
   }
@@ -165,13 +197,76 @@ export async function requestGeminiText(prompt: string, options: GeminiRequestOp
   const text = firstCandidate?.content?.parts?.map((part: any) => part?.text || '').join('').trim();
   if (!text) {
     const finishReason = firstCandidate?.finishReason ? ` Finish reason: ${firstCandidate.finishReason}.` : '';
-    throw new GeminiRequestError(`Gemini returned empty content.${finishReason}`, undefined, raw);
+    throw new GeminiRequestError(`Smart server returned empty content.${finishReason}`, undefined, raw);
   }
 
   setLastAIDiagnostic({
     ok: true,
     title: 'Smart features online',
-    message: `Gemini is responding with ${GEMINI_MODEL}.`,
+    message: 'Smart features are online.',
+    timestamp: Date.now(),
+  });
+
+  return text;
+}
+
+async function requestOpenRouterText(prompt: string, options: GeminiRequestOptions = {}) {
+  const key = getOpenRouterApiKey();
+  if (!key) {
+    throw new GeminiRequestError('Missing EXPO_PUBLIC_GEMINI_API_KEY or EXPO_PUBLIC_OPENROUTER_API_KEY');
+  }
+
+  let response: any;
+  try {
+    response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        'X-Title': 'LINKUP',
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: typeof options.temperature === 'number' ? options.temperature : 0.25,
+        max_tokens: Math.max(128, Number(options.maxOutputTokens || 256)),
+      }),
+    });
+  } catch (error) {
+    throw new GeminiRequestError('Failed to fetch OpenRouter response', undefined, (error as any)?.message || String(error));
+  }
+
+  const raw = await response.text();
+  let data: any = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    throw new GeminiRequestError(
+      data?.error?.message || `OpenRouter request failed: ${response.status}`,
+      response.status,
+      raw
+    );
+  }
+
+  const text = data?.choices?.[0]?.message?.content?.trim();
+  if (!text) {
+    const finishReason = data?.choices?.[0]?.finish_reason ? ` Finish reason: ${data.choices[0].finish_reason}.` : '';
+    throw new GeminiRequestError(`OpenRouter returned empty content.${finishReason}`, undefined, raw);
+  }
+
+  setLastAIDiagnostic({
+    ok: true,
+    title: 'Smart features online',
+    message: 'Smart features are online.',
     timestamp: Date.now(),
   });
 
@@ -187,7 +282,7 @@ export async function testGeminiConnection() {
     return setLastAIDiagnostic({
       ok: true,
       title: 'Smart features online',
-      message: `Gemini API key is working. Model: ${GEMINI_MODEL}.`,
+      message: 'Smart features are online.',
       timestamp: Date.now(),
     });
   } catch (error) {

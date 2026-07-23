@@ -1,7 +1,7 @@
 import { httpsCallable } from 'firebase/functions';
 import { Platform } from 'react-native';
 import { functions } from './firebase';
-import { describeAIError, getGeminiApiKey, recordAIError, requestGeminiText } from './aiDiagnostics';
+import { describeAIError, hasDirectAIKey, recordAIError, requestGeminiText } from './aiDiagnostics';
 
 type GeminiFilterResult = {
   query?: string;
@@ -67,13 +67,19 @@ const parseSearchFilterText = (text: string, input: string): GeminiFilterResult 
   return result;
 };
 
+const directAIEnabled = () =>
+  String(process.env.EXPO_PUBLIC_ENABLE_DIRECT_AI || 'true').toLowerCase() !== 'false';
+
+const serverAIEnabled = () =>
+  String(process.env.EXPO_PUBLIC_ENABLE_SERVER_AI || '').toLowerCase() === 'true';
+
 async function directGeminiText(prompt: string, maxOutputTokens = 220) {
-  if (!getGeminiApiKey()) return null;
+  if (!directAIEnabled() || !hasDirectAIKey()) return null;
   return requestGeminiText(prompt, { temperature: 0.2, maxOutputTokens });
 }
 
 async function vercelAiText(task: string, payload: Record<string, unknown>) {
-  if (Platform.OS !== 'web' || typeof fetch !== 'function') return null;
+  if (!serverAIEnabled() || Platform.OS !== 'web' || typeof fetch !== 'function') return null;
   const response = await fetch('/api/aiAssist', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -81,7 +87,7 @@ async function vercelAiText(task: string, payload: Record<string, unknown>) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.technical || data?.error || `Vercel Gemini failed: ${response.status}`);
+    throw new Error(data?.technical || data?.error || `Smart server failed: ${response.status}`);
   }
   return typeof data?.text === 'string' && data.text.trim() ? data.text.trim() : null;
 }
@@ -105,8 +111,10 @@ const localSearchFilters = (input: string): GeminiFilterResult => {
 async function aiText(task: string, payload: Record<string, unknown>) {
   let directError: unknown = null;
   let serverError: unknown = null;
+  let attemptedAI = false;
   try {
     if (task === 'searchFilters') {
+      attemptedAI = directAIEnabled() && hasDirectAIKey();
       const direct = await directGeminiText(
         [
           'Convert this LINKUP people search into simple filters.',
@@ -128,6 +136,7 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     }
 
     if (task === 'profileInsights') {
+      attemptedAI = directAIEnabled() && hasDirectAIKey();
       const direct = await directGeminiText(
         [
           'You generate short, punchy "Match Insights" for a founder profile in the LINKUP app.',
@@ -141,27 +150,28 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     }
   } catch (error) {
     directError = error;
-    recordAIError(error, 'Direct Gemini unavailable');
+    recordAIError(error, 'Smart feature unavailable');
   }
 
   try {
+    attemptedAI = attemptedAI || serverAIEnabled();
     const server = await vercelAiText(task, payload);
     if (server) return server;
   } catch (error) {
     serverError = error;
-    recordAIError(error, 'Vercel Gemini fallback unavailable');
-    if (Platform.OS === 'web') {
-      throw new Error(describeAIError(directError || serverError));
-    }
+    recordAIError(error, 'Smart server fallback unavailable');
   }
 
-  try {
-    const callable = httpsCallable(functions, 'aiAssist');
-    const res = await callable({ task, payload });
-    const text = (res.data as any)?.text;
-    if (typeof text === 'string' && text.trim()) return text.trim();
-  } catch (error) {
-    recordAIError(error, 'Cloud Functions Gemini fallback unavailable');
+  if (serverAIEnabled()) {
+    try {
+      attemptedAI = true;
+      const callable = httpsCallable(functions, 'aiAssist');
+      const res = await callable({ task, payload });
+      const text = (res.data as any)?.text;
+      if (typeof text === 'string' && text.trim()) return text.trim();
+    } catch (error) {
+      recordAIError(error, 'Smart server fallback unavailable');
+    }
   }
 
   if (directError) {
@@ -171,12 +181,13 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     throw new Error(describeAIError(serverError));
   }
 
-  throw new Error('Gemini returned empty content.');
+  return attemptedAI ? Promise.reject(new Error('Smart server returned empty content.')) : null;
 }
 
 export async function geminiToSearchFilters(input: string): Promise<GeminiFilterResult> {
   try {
     const text = await aiText('searchFilters', { input });
+    if (!text) return localSearchFilters(input);
     const jsonText = extractJsonObject(text) ?? text;
     if (jsonText.trim().startsWith('{')) {
       try {
@@ -194,19 +205,19 @@ export async function geminiToSearchFilters(input: string): Promise<GeminiFilter
       skills: parsed.skills?.length ? parsed.skills : local.skills,
     };
   } catch (error) {
-    recordAIError(error, 'Search fallback active');
     return localSearchFilters(input);
   }
 }
 
 export async function geminiProfileInsights(profile: any): Promise<string> {
   try {
-    return await aiText('profileInsights', { profile });
+    const text = await aiText('profileInsights', { profile });
+    if (text) return text;
   } catch (error) {
-    recordAIError(error, 'Profile insight fallback active');
+    // Local profile insights keep the UI useful when smart features are off or unavailable.
+  }
     const role = profile?.occupation || 'builder';
     const skills = Array.isArray(profile?.skills) ? profile.skills.slice(0, 2).join(' + ') : 'execution';
     const lookingFor = Array.isArray(profile?.lookingFor) ? profile.lookingFor[0] : 'high-signal collaborators';
     return `Best matched with ${lookingFor || 'collaborators'} who need ${skills || role} strength.`;
-  }
 }

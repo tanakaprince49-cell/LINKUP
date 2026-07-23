@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, Dimensions, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FieldPath, collection, query, onSnapshot, where, doc, getDoc } from 'firebase/firestore';
+import { useIsFocused } from '@react-navigation/native';
+import { FieldPath, collection, query, onSnapshot, where, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -9,25 +10,51 @@ import { Match, UserProfile } from '../types';
 import { MessageSquare, User, Zap, Sparkles, ChevronRight, Briefcase } from 'lucide-react-native';
 import { ensureDirectMatch } from '../lib/chat';
 import VerifiedBadge from '../components/VerifiedBadge';
+import { conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
 
 const { width } = Dimensions.get('window');
 
-const MatchItem = ({ match, navigation }: { match: Match, navigation: any }) => {
+const matchUserIds = (match: Match) =>
+  Array.isArray(match.userIds) && match.userIds.length > 0
+    ? match.userIds
+    : Object.keys((match as any).participants || {}).filter((uid) => (match as any).participants?.[uid]);
+
+const otherParticipantId = (match: Match, currentUid?: string) =>
+  matchUserIds(match).find((id) => id && id !== currentUid) || '';
+
+const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation: any }) => {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
+  const [otherUser, setOtherUser] = useState<UserProfile | null>(() => ({
+    uid: '',
+    displayName: 'Builder',
+    profilePic: '',
+  } as UserProfile));
+  const otherId = otherParticipantId(match, user?.uid);
 
   useEffect(() => {
-    const otherId = match.userIds.find(id => id !== user?.uid);
-    if (!otherId) return;
+    if (!otherId) {
+      setOtherUser(null);
+      return;
+    }
 
-    const fetchOtherUser = async () => {
-      const snap = await getDoc(doc(db, 'users', otherId));
-      if (snap.exists()) setOtherUser(snap.data() as UserProfile);
+    let cancelled = false;
+    const profileMap = (match as any).participantProfiles || (match as any).profiles || {};
+    const fallback = normalizeConversationProfile(otherId, profileMap?.[otherId] || {});
+    setOtherUser((current) => normalizeConversationProfile(otherId, current || {}, fallback));
+    loadConversationProfile(otherId, fallback)
+      .then((profile) => {
+        if (!cancelled) setOtherUser((current) => ({ ...(current || {}), ...profile }));
+      })
+      .catch((error) => {
+        if (!cancelled) console.warn('Connection profile unavailable:', error);
+      });
+
+    return () => {
+      cancelled = true;
     };
-    fetchOtherUser();
-  }, [match.userIds, user?.uid]);
+  }, [otherId, match]);
 
   if (!otherUser) return null;
 
@@ -35,7 +62,7 @@ const MatchItem = ({ match, navigation }: { match: Match, navigation: any }) => 
     <View style={[styles.matchCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>
       <View style={styles.cardMain}>
         <View style={styles.avatarContainer}>
-          <Image source={{ uri: otherUser.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.avatar} />
+          <Image source={{ uri: conversationAvatarUri(otherUser.profilePic) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.avatar} />
           <View style={styles.statusDot} />
         </View>
         
@@ -76,18 +103,20 @@ const MatchItem = ({ match, navigation }: { match: Match, navigation: any }) => 
       </View>
     </View>
   );
-};
+});
 
 export default function MatchScreen({ navigation }: any) {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const isFocused = useIsFocused();
   const isDark = theme === 'dark';
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'matches'), where(new FieldPath('participants', user.uid), '==', true));
+    if (!isFocused) return;
+    const q = query(collection(db, 'matches'), where(new FieldPath('participants', user.uid), '==', true), limit(80));
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -101,7 +130,7 @@ export default function MatchScreen({ navigation }: any) {
       }
     );
     return () => unsub();
-  }, [user]);
+  }, [isFocused, user?.uid]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0A0A0C' : '#FFFFFF' }]}>
@@ -109,6 +138,10 @@ export default function MatchScreen({ navigation }: any) {
         data={matches}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <MatchItem match={item} navigation={navigation} />}
+        initialNumToRender={12}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={80}
+        windowSize={6}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={

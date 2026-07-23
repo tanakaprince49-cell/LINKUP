@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { collection, limit, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { isDiscoverableProfile } from '../lib/discovery';
 import { maybeCreateOpportunityAlerts } from '../lib/opportunityAlerts';
 import { maybeCreateProjectRecommendationAlerts } from '../lib/projectRecommendations';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfile } from '../types';
+import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 
 export default function OpportunityRadar() {
   const { user, profile, isOnboarded } = useAuth();
@@ -17,26 +16,17 @@ export default function OpportunityRadar() {
       return;
     }
 
-    const usersQuery = query(
-      collection(db, 'users'),
-      where('isVisible', '==', true),
-      where('isStealthMode', '==', false),
-      limit(40)
-    );
-
-    const unsubscribe = onSnapshot(
-      usersQuery,
-      (snapshot) => {
-        const rows = snapshot.docs
-          .map((docSnap) => docSnap.data() as UserProfile)
-          .filter((person: any) => person.uid !== user.uid && isDiscoverableProfile(person));
+    const unsubscribe = subscribeToDiscoveryProfiles({
+      userId: user.uid,
+      onData: (profiles) => {
+        const rows = profiles.filter((person: any) => person.uid !== user.uid && isDiscoverableProfile(person));
         setPeople(rows);
       },
-      (error) => {
+      onError: (error) => {
         console.warn('Opportunity radar unavailable:', error);
         setPeople([]);
-      }
-    );
+      },
+    });
 
     return () => unsubscribe();
   }, [isOnboarded, user?.uid]);

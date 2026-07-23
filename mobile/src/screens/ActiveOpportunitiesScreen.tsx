@@ -1,19 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
-import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 import { ChevronLeft, Briefcase, MapPin, Search, Target, Users } from 'lucide-react-native';
-import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
+import { activeOpportunityScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { getBestProjectRecommendations, scoreProjectFit } from '../lib/projectRecommendations';
 import VerifiedBadge from '../components/VerifiedBadge';
+import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 
 export default function ActiveOpportunitiesScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
   const { theme } = useTheme();
+  const isFocused = useIsFocused();
   const isDark = theme === 'dark';
   const [builders, setBuilders] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,48 +25,32 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
       setLoading(false);
       return;
     }
+    if (!isFocused) return;
 
-    const q = query(
-      collection(db, 'users'),
-      where('isVisible', '==', true),
-      where('isStealthMode', '==', false),
-      limit(80)
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const list = snap.docs
-          .map((docSnap) => ({ uid: docSnap.id, ...(docSnap.data() as any) } as UserProfile))
-          .filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        setBuilders(list);
+    const unsub = subscribeToDiscoveryProfiles({
+      userId: user.uid,
+      onData: (profiles) => {
+        const list = profiles.filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
+        setBuilders((current) => (list.length > 0 || current.length === 0 ? list : current));
         setLoading(false);
       },
-      (error) => {
+      onError: (error) => {
         console.error('Active opportunities error:', error);
         setLoading(false);
-      }
-    );
+      },
+    });
 
     return () => unsub();
-  }, [user?.uid]);
+  }, [isFocused, user?.uid]);
 
   const opportunities = useMemo(() => {
     const scored = builders
-      .map((profile: any) => {
-        const lookingFor = Array.isArray(profile.lookingFor) ? profile.lookingFor.map((item: any) => String(item).toLowerCase()) : [];
-        const needsHelp = lookingFor.some((item: string) =>
-          ['cofounder', 'technical cofounder', 'hiring', 'startup team', 'investment', 'mentorship', 'partnerships'].includes(item)
-        );
-        const hasProject = Array.isArray(profile.projects) && profile.projects.length > 0;
-        const available = String(profile.availability || '').toLowerCase();
-        const availabilityBoost = available.includes('open') || available.includes('available') ? 18 : 0;
-        const weight = (needsHelp ? 42 : 0) + (hasProject ? 30 : 0) + availabilityBoost + (profile.turboConnect ? 10 : 0) + earnedScore(profile) * 0.15;
-        return { profile, weight };
-      })
+      .map((profile: any) => ({ profile, weight: activeOpportunityScore(profile) }))
       .filter((item) => item.weight > 0)
       .sort((left, right) => right.weight - left.weight);
 
-    const recommendedOwners = getBestProjectRecommendations(me, builders, 40).map((item) => item.owner.uid);
+    const activeBuilders = scored.map((item) => item.profile);
+    const recommendedOwners = getBestProjectRecommendations(me, activeBuilders, 40).map((item) => item.owner.uid);
     return scored
       .sort((left, right) => {
         const leftBoost = recommendedOwners.indexOf(left.profile.uid);
@@ -158,7 +143,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
         </Text>
       </View>
 
-      {loading ? (
+      {loading && builders.length === 0 ? (
         <ActivityIndicator color="#FBE618" style={{ marginTop: 48 }} />
       ) : (
         <FlatList
@@ -166,6 +151,10 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
           keyExtractor={(item) => item.uid}
           renderItem={renderItem}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={80}
+          windowSize={6}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={[styles.emptyCard, { backgroundColor: isDark ? '#111115' : '#FFFFFF', borderColor: isDark ? '#222226' : '#EEEEEE' }]}>

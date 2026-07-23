@@ -1,16 +1,34 @@
-import { FieldPath, collection, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { FieldPath, collection, doc, getDoc, limit, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { db } from './firebase';
+import { buildConversationProfileSnapshot, loadConversationProfile } from './conversationProfiles';
 
 export function directMatchId(userId: string, otherUserId: string) {
   return [userId, otherUserId].sort().join('_');
 }
 
-export async function ensureDirectMatch(userId: string, otherUserId: string) {
+type EnsureDirectMatchOptions = {
+  currentUserProfile?: any;
+  otherUserProfile?: any;
+};
+
+export async function ensureDirectMatch(userId: string, otherUserId: string, options: EnsureDirectMatchOptions = {}) {
   const matchId = directMatchId(userId, otherUserId);
   const matchRef = doc(db, 'matches', matchId);
   const participants = {
     [userId]: true,
     [otherUserId]: true,
+  };
+  const [currentProfile, otherProfile] = await Promise.all([
+    loadConversationProfile(userId, options.currentUserProfile || { uid: userId }).catch(() =>
+      buildConversationProfileSnapshot(userId, options.currentUserProfile || {})
+    ),
+    loadConversationProfile(otherUserId, options.otherUserProfile || { uid: otherUserId }).catch(() =>
+      buildConversationProfileSnapshot(otherUserId, options.otherUserProfile || {})
+    ),
+  ]);
+  const participantProfiles = {
+    [userId]: buildConversationProfileSnapshot(userId, currentProfile),
+    [otherUserId]: buildConversationProfileSnapshot(otherUserId, otherProfile),
   };
 
   try {
@@ -19,6 +37,7 @@ export async function ensureDirectMatch(userId: string, otherUserId: string) {
       {
         userIds: [userId, otherUserId],
         participants,
+        participantProfiles,
         timestamp: serverTimestamp(),
       },
       { merge: true }
@@ -42,7 +61,8 @@ export function subscribeToUnreadMessagesCount(
 
   const matchesQuery = query(
     collection(db, 'matches'),
-    where(new FieldPath('participants', userId), '==', true)
+    where(new FieldPath('participants', userId), '==', true),
+    limit(80)
   );
 
   return onSnapshot(

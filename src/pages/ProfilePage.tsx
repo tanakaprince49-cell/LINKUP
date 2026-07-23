@@ -1,29 +1,76 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
-import { User, X, Camera, MapPin, Globe, Briefcase, Award, Settings, LogOut, Trash2, ShieldCheck, Zap, Plus, Moon, Sun } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore';
+import { User, X, Camera, MapPin, Globe, Briefcase, Award, Settings, LogOut, Trash2, ShieldCheck, Plus, Moon, Sun } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+
+const safeDisplayNameForSave = (value: unknown) => {
+  const name = String(value || '').trim();
+  return name && name !== 'New Builder' ? name.slice(0, 100) : 'LINKUP Builder';
+};
+
+const cleanUsername = (value: unknown) =>
+  String(value || '')
+    .replace(/^@+/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .slice(0, 20);
 
 export default function ProfilePage({ onClose }: { onClose: () => void }) {
   const { profile, logOut } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
+  const [localProfile, setLocalProfile] = useState(profile);
   const [editedProfile, setEditedProfile] = useState(profile);
+  const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'info' | 'settings'>('info');
   const { theme, toggleTheme } = useTheme();
 
+  useEffect(() => {
+    if (!profile) return;
+    setLocalProfile(profile);
+    setEditedProfile(profile);
+  }, [profile]);
+
   const handleSave = async () => {
-    if (!profile || !editedProfile) return;
+    if (!localProfile || !editedProfile || isSaving) return;
+    const displayName = safeDisplayNameForSave(editedProfile.displayName || localProfile.displayName);
+    const username = cleanUsername((editedProfile as any).username || displayName) || `builder${localProfile.uid.slice(0, 5)}`;
+    const nextProfile = {
+      ...localProfile,
+      ...editedProfile,
+      uid: localProfile.uid,
+      displayName,
+      username,
+      bio: String(editedProfile.bio || '').slice(0, 2000),
+    };
+
+    setIsSaving(true);
     try {
-      await updateDoc(doc(db, 'users', profile.uid), { ...editedProfile });
+      await setDoc(
+        doc(db, 'users', localProfile.uid),
+        {
+          uid: localProfile.uid,
+          displayName,
+          username,
+          bio: nextProfile.bio,
+        },
+        { merge: true }
+      );
+      setLocalProfile(nextProfile);
+      setEditedProfile(nextProfile);
       setIsEditing(false);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `users/${profile.uid}`);
+      handleFirestoreError(err, OperationType.UPDATE, `users/${localProfile.uid}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  if (!profile) return null;
+  const visibleProfile = localProfile || profile;
+
+  if (!visibleProfile) return null;
 
   return (
     <motion.div
@@ -69,8 +116,8 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
             <div className="relative">
               {/* Cover Photo */}
               <div className="relative h-48 md:h-64 w-full bg-slate-900 overflow-hidden">
-                {profile.coverPhoto ? (
-                  <img src={profile.coverPhoto} className="w-full h-full object-cover opacity-60" />
+                {visibleProfile.coverPhoto ? (
+                  <img src={visibleProfile.coverPhoto} className="w-full h-full object-cover opacity-60" />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-zinc-900 to-black relative">
                     <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #FBE618 1px, transparent 1px)', backgroundSize: '16px 16px' }} />
@@ -87,8 +134,8 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
               <div className="px-6 -mt-10 md:-mt-12 flex flex-col md:flex-row md:items-end gap-6">
                 <div className="relative">
                   <div className="h-24 w-24 md:h-32 md:w-32 rounded-[2rem] border-[4px] border-[#050508] bg-slate-800 overflow-hidden shadow-2xl relative z-20">
-                    {profile.profilePic ? (
-                      <img src={profile.profilePic} className="w-full h-full object-cover" />
+                    {visibleProfile.profilePic ? (
+                      <img src={visibleProfile.profilePic} className="w-full h-full object-cover" />
                     ) : (
                       <User size={48} className="m-auto h-full w-full p-6 text-white/20" />
                     )}
@@ -103,14 +150,8 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
                 <div className="flex-1 mb-2">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                      <h2 className="text-4xl md:text-5xl font-black font-display tracking-tight text-white italic uppercase">{profile.displayName}</h2>
-                      <p className="text-sm font-bold text-accent-yellow/80 uppercase tracking-widest mt-1">Founding Member • {profile.city || 'Global'}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="px-4 py-2 glass-pill rounded-xl flex items-center gap-2 border-white/10">
-                        <ShieldCheck size={14} className="text-accent-yellow" />
-                        <span className="text-[10px] font-black uppercase text-white/60">{profile.reputationScore} Points</span>
-                      </div>
+                      <h2 className="text-4xl md:text-5xl font-black font-display tracking-tight text-white italic uppercase">{visibleProfile.displayName}</h2>
+                      <p className="text-sm font-bold text-accent-yellow/80 uppercase tracking-widest mt-1">Founding Member - {visibleProfile.city || 'Global'}</p>
                     </div>
                   </div>
                 </div>
@@ -125,9 +166,9 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
                   <div className="space-y-3">
                     <div className="flex items-center gap-3 text-xs font-medium text-white/60">
                       <MapPin size={14} className="text-accent-yellow" />
-                      <span>{profile.city}, {profile.country}</span>
+                      <span>{visibleProfile.city}, {visibleProfile.country}</span>
                     </div>
-                    {(isEditing ? editedProfile?.portfolioLinks : profile.portfolioLinks)?.map((link, i) => (
+                    {(isEditing ? editedProfile?.portfolioLinks : visibleProfile.portfolioLinks)?.map((link, i) => (
                       <a key={i} href={link} target="_blank" rel="noreferrer" className="flex items-center gap-3 text-xs font-medium text-accent-yellow hover:underline">
                         <Globe size={14} />
                         <span className="truncate">{link}</span>
@@ -139,7 +180,7 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
                 <section className="liquid-card p-6 border-white/5 space-y-4">
                   <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-white/30">Stack</h4>
                   <div className="flex flex-wrap gap-2">
-                    {(isEditing ? editedProfile?.skills : profile.skills)?.map((skill, i) => (
+                    {(isEditing ? editedProfile?.skills : visibleProfile.skills)?.map((skill, i) => (
                       <span key={i} className="rounded-lg bg-white/5 px-3 py-1.5 text-[10px] font-bold text-white/80 border border-white/10">
                         {skill}
                       </span>
@@ -159,7 +200,7 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
                       className="w-full rounded-2xl bg-white/5 border border-white/10 p-4 text-sm font-medium outline-none h-32 focus:border-accent-yellow/50"
                     />
                   ) : (
-                    <p className="text-lg font-medium leading-relaxed text-white/80 italic">"{profile.bio || 'Building the future.'}"</p>
+                    <p className="text-lg font-medium leading-relaxed text-white/80 italic">"{visibleProfile.bio || 'Building the future.'}"</p>
                   )}
                 </section>
 
@@ -167,7 +208,7 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
                 <section className="space-y-4">
                   <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-white/30 ml-4">Venture Concepts</h4>
                   <div className="grid grid-cols-1 gap-4">
-                    {(isEditing ? editedProfile?.startupIdeas : profile.startupIdeas)?.map((idea, i) => (
+                    {(isEditing ? editedProfile?.startupIdeas : visibleProfile.startupIdeas)?.map((idea, i) => (
                       <div key={i} className="liquid-card p-6 border-white/5 group hover:border-white/10 transition-all">
                         <div className="flex items-center justify-between mb-3">
                           <p className="text-lg font-black uppercase tracking-tighter italic">{idea.title}</p>
@@ -191,7 +232,7 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
                     <div className="space-y-4">
                       <p className="text-[10px] font-black uppercase tracking-widest text-white/20">Milestones</p>
                       <div className="space-y-3">
-                        {(isEditing ? editedProfile?.resume?.shippedProducts : profile.resume?.shippedProducts)?.map((p, i) => (
+                        {(isEditing ? editedProfile?.resume?.shippedProducts : visibleProfile.resume?.shippedProducts)?.map((p, i) => (
                           <div key={i} className="text-xs font-bold text-white/80 flex items-start gap-3">
                             <div className="mt-1 h-3 w-3 rounded-full border-2 border-accent-yellow shrink-0" />
                             <span>{p}</span>
@@ -206,7 +247,7 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
                           <Zap size={24} className="text-accent-yellow" />
                         </div>
                         <div>
-                          <span className="text-4xl font-black text-white tracking-tighter">{(isEditing ? editedProfile?.resume?.buildStreaks : profile.resume?.buildStreaks) || 0}</span>
+                          <span className="text-4xl font-black text-white tracking-tighter">{(isEditing ? editedProfile?.resume?.buildStreaks : visibleProfile.resume?.buildStreaks) || 0}</span>
                           <span className="text-[10px] font-bold text-white/20 ml-2 uppercase tracking-widest">Day Streak</span>
                         </div>
                       </div>
@@ -217,13 +258,13 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
                 <div className="pt-4">
                   {isEditing ? (
                     <div className="flex gap-4">
-                      <button onClick={handleSave} className="flex-1 brand-button">Publish Updates</button>
-                      <button onClick={() => setIsEditing(false)} className="px-8 rounded-2xl bg-white/5 border border-white/10 font-bold uppercase text-[10px] tracking-widest active:scale-95 text-white/40">Discard</button>
+                      <button onClick={handleSave} disabled={isSaving} className="flex-1 brand-button disabled:opacity-60">{isSaving ? 'Publishing...' : 'Publish Updates'}</button>
+                      <button onClick={() => { setEditedProfile(visibleProfile); setIsEditing(false); }} className="px-8 rounded-2xl bg-white/5 border border-white/10 font-bold uppercase text-[10px] tracking-widest active:scale-95 text-white/40">Discard</button>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       <button 
-                        onClick={() => setIsEditing(true)}
+                        onClick={() => { setEditedProfile(visibleProfile); setIsEditing(true); }}
                         className="w-full brand-button"
                       >
                         EDIT FOUNDER PROFILE
@@ -306,7 +347,7 @@ export default function ProfilePage({ onClose }: { onClose: () => void }) {
                       <p className="text-[10px] text-white/40 font-medium tracking-tight">End session securely</p>
                     </div>
                   </div>
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center border border-white/5 text-white/20 group-hover:text-white transition-colors">→</div>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center border border-white/5 text-white/20 group-hover:text-white transition-colors">-&gt;</div>
                 </button>
                 <button className="w-full flex items-center gap-4 p-8 rounded-[2.5rem] bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-all text-left">
                   <div className="h-12 w-12 flex items-center justify-center rounded-2xl bg-red-500/10 text-red-500">

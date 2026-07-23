@@ -2,7 +2,7 @@ import { httpsCallable } from 'firebase/functions';
 import { Platform } from 'react-native';
 import { functions } from './firebase';
 import { UserProfile } from '../types';
-import { describeAIError, getGeminiApiKey, recordAIError, requestGeminiText } from './aiDiagnostics';
+import { describeAIError, hasDirectAIKey, recordAIError, requestGeminiText } from './aiDiagnostics';
 
 export type RankedCandidate = {
   uid: string;
@@ -36,6 +36,17 @@ export const compatibilityForPair = (
   );
 };
 
+const isCallableMissing = (error: unknown) => {
+  const raw = String((error as any)?.code || (error as any)?.message || error || '').toLowerCase();
+  return raw.includes('not-found') || raw.includes('404');
+};
+
+const directGeminiRankingEnabled = () =>
+  String(process.env.EXPO_PUBLIC_ENABLE_DIRECT_GEMINI_RANKING || 'true').toLowerCase() !== 'false';
+
+const serverAIRankingEnabled = () =>
+  String(process.env.EXPO_PUBLIC_ENABLE_SERVER_AI || '').toLowerCase() === 'true';
+
 export async function rankCandidatesWithAI(candidateIds: string[], maxCandidates = 20): Promise<RankedCandidate[]> {
   try {
     const callable = httpsCallable(functions, 'rankCandidates');
@@ -51,6 +62,9 @@ export async function rankCandidatesWithAI(candidateIds: string[], maxCandidates
       }))
       .filter((r: RankedCandidate) => r.uid && Number.isFinite(r.score) && r.reason);
   } catch (error) {
+    if (isCallableMissing(error)) {
+      return [];
+    }
     recordAIError(error, 'Cloud Functions ranking unavailable');
     return [];
   }
@@ -71,7 +85,7 @@ const compactProfile = (profile: Partial<UserProfile> | null | undefined) => ({
 });
 
 async function serverGeminiRank(me: UserProfile | null | undefined, candidates: UserProfile[], maxCandidates: number): Promise<RankedCandidate[]> {
-  if (Platform.OS !== 'web' || typeof fetch !== 'function' || !me || candidates.length === 0) return [];
+  if (!serverAIRankingEnabled() || Platform.OS !== 'web' || typeof fetch !== 'function' || !me || candidates.length === 0) return [];
 
   const compactCandidates = candidates.slice(0, Math.min(maxCandidates, 20)).map(compactProfile);
   const response = await fetch('/api/rankCandidates', {
@@ -86,7 +100,7 @@ async function serverGeminiRank(me: UserProfile | null | undefined, candidates: 
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.technical || data?.error || `Vercel ranking failed: ${response.status}`);
+    throw new Error(data?.technical || data?.error || `Smart ranking failed: ${response.status}`);
   }
 
   const ranked = data?.ranked;
@@ -169,7 +183,7 @@ const parseRankedJsonQuietly = (text: string, candidates: UserProfile[], maxCand
 };
 
 async function directGeminiRank(me: UserProfile | null | undefined, candidates: UserProfile[], maxCandidates: number): Promise<RankedCandidate[]> {
-  if (!getGeminiApiKey() || !me || candidates.length === 0) return [];
+  if (!directGeminiRankingEnabled() || !hasDirectAIKey() || !me || candidates.length === 0) return [];
 
   const localTop = localCommonalityRank(me, candidates, Math.min(maxCandidates, 20));
   const localOrder = new Map(localTop.map((rank, index) => [rank.uid, index]));
@@ -189,7 +203,7 @@ async function directGeminiRank(me: UserProfile | null | undefined, candidates: 
   ].join('\n');
 
   const text = await requestGeminiText(prompt, {
-    temperature: 0.2,
+    temperature: 0.0,
     maxOutputTokens: 700,
     responseMimeType: 'application/json',
   });
@@ -205,28 +219,28 @@ export async function rankCandidatesHybrid(
 ): Promise<RankedCandidate[]> {
   const candidateIds = candidates.map((candidate) => candidate.uid).filter(Boolean).slice(0, Math.max(maxCandidates, 20));
 
+  // Always start with local ranking for consistency
+  const localRanked = localCommonalityRank(me, candidates, maxCandidates);
+
   try {
     const geminiRanked = await directGeminiRank(me, candidates, maxCandidates);
     if (geminiRanked.length) return geminiRanked;
   } catch (error) {
-    console.warn('Direct Gemini ranking unavailable:', describeAIError(error));
-    recordAIError(error, 'Direct Gemini ranking unavailable');
+    console.warn('Smart ranking unavailable:', describeAIError(error));
+    recordAIError(error, 'Smart ranking unavailable');
   }
 
   try {
     const serverRanked = await serverGeminiRank(me, candidates, maxCandidates);
     if (serverRanked.length) return serverRanked;
   } catch (error) {
-    recordAIError(error, 'Vercel ranking unavailable');
-    if (Platform.OS === 'web') {
-      return localCommonalityRank(me, candidates, maxCandidates);
-    }
+    recordAIError(error, 'Smart ranking unavailable');
   }
 
   const functionRanked = await rankCandidatesWithAI(candidateIds, maxCandidates);
   if (functionRanked.length) return functionRanked;
 
-  return localCommonalityRank(me, candidates, maxCandidates);
+  return localRanked;
 }
 
 const normalizeText = (value: unknown) => String(value ?? '').trim().toLowerCase();

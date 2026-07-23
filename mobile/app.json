@@ -5,7 +5,7 @@
     "scheme": "linkup",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png.png",
+    "icon": "./assets/logo-square.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash-icon.png.png",
@@ -19,22 +19,46 @@
       "package": "com.tana.linkup",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png.png",
+        "foregroundImage": "./assets/logo-square.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ]
     },
     "web": {
-      "favicon": "./assets/logo.png.png"
+      "favicon": "./assets/logo-square.png"
     },
     "extra": {
       "eas": {
-        "projectId": "36e0b7a6-a304-41f3-9e39-ee8db82ca7fa"
+        "projectId": "62db6e6e-e4be-44ff-a0c1-9437f43ba980"
       }
     },
     "plugins": [
-      "@react-native-google-signin/google-signin"
-    ]
+      "./plugins/withAdiRegistration",
+      [
+        "expo-notifications",
+        {
+          "color": "#FBE618",
+          "defaultChannel": "default"
+        }
+      ],
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow LINKUP to send photos and videos in chat.",
+          "cameraPermission": "Allow LINKUP to take photos and videos for chat.",
+          "microphonePermission": "Allow LINKUP to record audio when sending chat videos."
+        }
+      ],
+      "expo-iap"
+    ],
+    "owner": "talala"
   }
 }

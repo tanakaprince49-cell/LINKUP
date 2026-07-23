@@ -1,5 +1,5 @@
 import * as Device from 'expo-device';
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import {
   doc,
   setDoc,
@@ -14,12 +14,13 @@ import {
   limit,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { MOBILE_NOTIFICATION_QUERY_LIMIT } from './profilePerformance';
 
 let notificationHandlerReady = false;
 let lastInAppSoundAt = 0;
 let webAudioContext: any = null;
 const WEB_NOTIFICATIONS_STORAGE_KEY = 'linkup:web-notifications-enabled';
-const NOTIFICATION_QUERY_LIMIT = 75;
+const NOTIFICATION_QUERY_LIMIT = MOBILE_NOTIFICATION_QUERY_LIMIT;
 
 function getExpoConstants() {
   try {
@@ -65,7 +66,7 @@ async function ensureNativeNotificationRuntime() {
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
-      name: 'LINKUP alerts',
+      name: 'LINKUP',
       description: 'Matches, messages, profile views, and opportunity alerts.',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
@@ -78,18 +79,24 @@ async function ensureNativeNotificationRuntime() {
   return Notifications;
 }
 
+export async function setupNativeNotificationRuntimeAsync() {
+  return !!(await ensureNativeNotificationRuntime());
+}
+
 function notificationTitle(data: any) {
-  if (data?.type === 'message') return `New message from ${data.fromName || 'LINKUP'}`;
-  if (data?.type === 'match') return 'New LINKUP match';
-  if (data?.type === 'like') return 'New profile like';
-  if (data?.type === 'connection_request') return 'New contact request';
-  if (data?.type === 'connection_approved') return 'Contact request approved';
-  if (data?.type === 'connection_rejected') return 'Contact request rejected';
-  if (data?.type === 'view') return 'New profile view';
-  if (data?.type === 'comment') return 'New comment';
-  if (String(data?.content || '').startsWith('Project Match')) return 'Project Match found';
-  if (String(data?.content || '').startsWith('Opportunity')) return 'Opportunity found';
-  return 'LINKUP notification';
+  return 'LINKUP';
+}
+
+function notificationBody(data: any) {
+  const content = String(data?.content || '').trim();
+  if (data?.type === 'message') return `${data.fromName || 'Someone'} ${content || 'sent you a message.'}`;
+  if (data?.type === 'match') return content || 'You have a new match.';
+  if (data?.type === 'like') return `${data.fromName || 'Someone'} ${content || 'liked your profile.'}`;
+  if (data?.type === 'connection_request') return `${data.fromName || 'Someone'} sent a contact request.`;
+  if (data?.type === 'connection_approved') return `${data.fromName || 'Someone'} approved your contact request.`;
+  if (data?.type === 'connection_rejected') return `${data.fromName || 'Someone'} responded to your contact request.`;
+  if (data?.type === 'view') return `${data.fromName || 'Someone'} viewed your profile.`;
+  return content || 'Open LINKUP for the latest update.';
 }
 
 function notificationTargetUrl(data: any) {
@@ -161,6 +168,43 @@ async function ensureNotificationPermission(Notifications: any) {
   if (existingStatus === 'granted') return true;
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
+}
+
+export async function getAppNotificationStatusAsync() {
+  if (Platform.OS === 'web') {
+    if (typeof window === 'undefined' || !('Notification' in window)) return 'unavailable';
+    return window.Notification.permission;
+  }
+
+  const Notifications = await ensureNativeNotificationRuntime();
+  if (!Notifications) return 'unavailable';
+
+  const permissions = await Notifications.getPermissionsAsync();
+  return permissions?.status || 'undetermined';
+}
+
+export async function enableAppNotificationsAsync(userId: string) {
+  if (Platform.OS === 'web') {
+    const permission = await registerForWebNotificationsAsync(userId);
+    return permission || 'unavailable';
+  }
+
+  const Notifications = await ensureNativeNotificationRuntime();
+  if (!Notifications) return 'unavailable';
+
+  const granted = await ensureNotificationPermission(Notifications);
+  if (!granted) return 'denied';
+
+  await registerForPushNotificationsAsync(userId);
+  return 'granted';
+}
+
+export async function openAppNotificationSettingsAsync() {
+  try {
+    await Linking.openSettings();
+  } catch (error) {
+    console.warn('Could not open app settings:', error);
+  }
 }
 
 export async function registerForPushNotificationsAsync(userId: string) {
@@ -275,7 +319,7 @@ export function subscribeToNotificationToasts(userId: string) {
         seenIds.add(notificationId);
 
         const title = notificationTitle(data);
-        const body = String(data.content || 'Open LINKUP for the latest update.');
+        const body = notificationBody(data);
         const targetUrl = notificationTargetUrl(data);
 
         if (Platform.OS === 'web') {

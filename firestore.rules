@@ -37,12 +37,14 @@ service cloud.firestore {
         );
     }
 
-    function isPublicProfile(data) {
-      return data.isVisible == true && data.isStealthMode == false;
-    }
-
     function isReadableProfile(data) {
       return !data.keys().hasAny(['deleted']) || data.deleted == false;
+    }
+
+    function isPublicProfile(data) {
+      return isReadableProfile(data) &&
+        (!data.keys().hasAny(['isVisible']) || data.isVisible != false) &&
+        (!data.keys().hasAny(['isStealthMode']) || data.isStealthMode == false);
     }
 
     match /{document=**} {
@@ -53,6 +55,13 @@ service cloud.firestore {
     // Users / public builder profiles
     // ------------------------------------------------------------
     match /users/{userId} {
+      function hasDirectMatchWithSignedInUser() {
+        return isSignedIn() && (
+          exists(/databases/$(database)/documents/matches/$(request.auth.uid + "_" + userId)) ||
+          exists(/databases/$(database)/documents/matches/$(userId + "_" + request.auth.uid))
+        );
+      }
+
       function isValidUser(data) {
         return data.uid == userId &&
           data.displayName is string &&
@@ -71,12 +80,83 @@ service cloud.firestore {
           (data[field] is list && data[field].size() <= maxSize);
       }
 
+      function validOptionalMap(data, field, maxSize) {
+        return !data.keys().hasAny([field]) ||
+          (data[field] is map && data[field].keys().size() <= maxSize);
+      }
+
       function validOptionalBool(data, field) {
         return !data.keys().hasAny([field]) || data[field] is bool;
       }
 
       function validOptionalTimestamp(data, field) {
         return !data.keys().hasAny([field]) || data[field] is timestamp;
+      }
+
+      function validOptionalScore(data, field) {
+        return !data.keys().hasAny([field]) ||
+          ((data[field] is int || data[field] is float) && data[field] >= 0 && data[field] <= 100);
+      }
+
+      function validOptionalPoints(data, field) {
+        return !data.keys().hasAny([field]) ||
+          ((data[field] is int || data[field] is float) && data[field] >= 0 && data[field] <= 1000000);
+      }
+
+      function validOptionalReputationMetrics(data) {
+        return !data.keys().hasAny(['reputationMetrics']) ||
+          (data.reputationMetrics is map &&
+            data.reputationMetrics.keys().size() <= 20 &&
+            validOptionalScore(data.reputationMetrics, 'reliability') &&
+            validOptionalScore(data.reputationMetrics, 'responseRate') &&
+            validOptionalScore(data.reputationMetrics, 'collaboration') &&
+            validOptionalScore(data.reputationMetrics, 'consistency') &&
+            validOptionalScore(data.reputationMetrics, 'completion'));
+      }
+
+      function validChangedString(field, maxSize) {
+        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
+          (incoming()[field] is string && incoming()[field].size() <= maxSize);
+      }
+
+      function validChangedList(field, maxSize) {
+        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
+          (incoming()[field] is list && incoming()[field].size() <= maxSize);
+      }
+
+      function validChangedMap(field, maxSize) {
+        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
+          (incoming()[field] is map && incoming()[field].keys().size() <= maxSize);
+      }
+
+      function validChangedBool(field) {
+        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
+          incoming()[field] is bool;
+      }
+
+      function validChangedScore(field) {
+        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
+          ((incoming()[field] is int || incoming()[field] is float) && incoming()[field] >= 0 && incoming()[field] <= 100);
+      }
+
+      function validChangedPoints(field) {
+        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
+          ((incoming()[field] is int || incoming()[field] is float) && incoming()[field] >= 0 && incoming()[field] <= 1000000);
+      }
+
+      function validChangedTimestamp(field) {
+        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
+          incoming()[field] is timestamp;
+      }
+
+      function validChangedReputationMetrics() {
+        return !incoming().diff(existing()).affectedKeys().hasAny(['reputationMetrics']) ||
+          validOptionalReputationMetrics(incoming());
+      }
+
+      function validChangedSettings() {
+        return !incoming().diff(existing()).affectedKeys().hasAny(['settings']) ||
+          validOptionalSettings(incoming());
       }
 
       function validOptionalSettings(data) {
@@ -104,6 +184,19 @@ service cloud.firestore {
           validOptionalString(data, 'bio', 2000) &&
           validOptionalString(data, 'country', 80) &&
           validOptionalString(data, 'city', 80) &&
+          validOptionalString(data, 'goals', 500) &&
+          validOptionalString(data, 'experience', 80) &&
+          validOptionalString(data, 'personalityType', 80) &&
+          validOptionalString(data, 'commitmentLevel', 80) &&
+          validOptionalString(data, 'startupStage', 80) &&
+          validOptionalString(data, 'fundingStage', 80) &&
+          validOptionalString(data, 'availability', 80) &&
+          validOptionalString(data, 'timezone', 80) &&
+          validOptionalString(data, 'workStyle', 80) &&
+          validOptionalString(data, 'networkingIntent', 120) &&
+          validOptionalString(data, 'education', 80) &&
+          validOptionalString(data, 'teamSizePreference', 80) &&
+          validOptionalString(data, 'ambition', 120) &&
           validOptionalString(data, 'profilePic', 900000) &&
           validOptionalString(data, 'coverPhoto', 900000) &&
           validOptionalString(data, 'vibeMedia', 900000) &&
@@ -117,14 +210,32 @@ service cloud.firestore {
           validOptionalList(data, 'projects', 20) &&
           validOptionalList(data, 'startupIdeas', 20) &&
           validOptionalList(data, 'circles', 20) &&
+          validOptionalMap(data, 'personalityAnswers', 30) &&
+          validOptionalMap(data, 'roleAnswers', 30) &&
+          validOptionalMap(data, 'resume', 10) &&
+          validOptionalMap(data, 'socialLinks', 10) &&
           validOptionalBool(data, 'isVisible') &&
           validOptionalBool(data, 'isStealthMode') &&
           validOptionalBool(data, 'turboConnect') &&
           validOptionalBool(data, 'hideOnlineStatus') &&
+          validOptionalBool(data, 'remoteOnly') &&
+          validOptionalBool(data, 'willingToRelocate') &&
+          validOptionalBool(data, 'hasExit') &&
+          validOptionalBool(data, 'isPro') &&
+          validOptionalString(data, 'plan', 40) &&
+          validOptionalString(data, 'subscriptionPlan', 40) &&
+          validOptionalString(data, 'subscriptionStatus', 40) &&
           validOptionalBool(data, 'isVerified') &&
           validOptionalString(data, 'verificationProgram', 80) &&
           validOptionalString(data, 'verifiedBy', 128) &&
           validOptionalTimestamp(data, 'verifiedAt') &&
+          validOptionalTimestamp(data, 'proUnlockedAt') &&
+          validOptionalTimestamp(data, 'subscriptionUpdatedAt') &&
+          validOptionalTimestamp(data, 'lastActiveAt') &&
+          validOptionalPoints(data, 'reputationScore') &&
+          validOptionalScore(data, 'founderScore') &&
+          validOptionalPoints(data, 'streakCount') &&
+          validOptionalReputationMetrics(data) &&
           validOptionalSettings(data) &&
           (!data.keys().hasAny(['age']) ||
             (data.age is int && (data.age == 0 || (data.age >= 13 && data.age <= 120))));
@@ -152,11 +263,24 @@ service cloud.firestore {
           'socialLinks', 'education', 'remoteOnly', 'willingToRelocate',
           'teamSizePreference', 'ambition',
           'isVisible', 'isStealthMode', 'turboConnect', 'hideOnlineStatus',
+          'isPro', 'plan', 'subscriptionPlan', 'subscriptionStatus',
+          'proUnlockedAt', 'subscriptionUpdatedAt',
           'settings',
           'isVerified', 'verificationProgram', 'verifiedBy',
           'onboarded', 'createdAt',
+          'lastActiveAt',
+          'reputationScore', 'streakCount', 'founderScore', 'reputationMetrics',
           'circles', 'aiMatchInsights'
         ]);
+      }
+
+      function validOwnProfileWrite(data) {
+        return (!data.keys().hasAny(['uid']) || data.uid == userId) &&
+          (!data.keys().hasAny(['displayName']) ||
+            (data.displayName is string &&
+              data.displayName.size() > 0 &&
+              data.displayName != 'New Builder' &&
+              data.displayName.size() <= 100));
       }
 
       function safeProfileUpdateKeys() {
@@ -176,23 +300,193 @@ service cloud.firestore {
           'education', 'remoteOnly', 'willingToRelocate', 'teamSizePreference',
           'ambition',
           'isVisible', 'isStealthMode', 'turboConnect', 'hideOnlineStatus',
+          'isPro', 'plan', 'subscriptionPlan', 'subscriptionStatus',
+          'proUnlockedAt', 'subscriptionUpdatedAt',
           'settings',
           'isVerified', 'verificationProgram', 'verifiedBy',
           'onboarded',
+          'lastActiveAt',
+          'reputationScore', 'streakCount', 'founderScore', 'reputationMetrics',
           'aiMatchInsights',
           'circles'
         ]);
       }
 
       function verificationFieldsSafe() {
-        return
-          (!incoming().diff(existing()).affectedKeys().hasAny(['isVerified']) ||
-            (!existing().keys().hasAny(['isVerified']) && incoming().isVerified == false)) &&
-          (!incoming().diff(existing()).affectedKeys().hasAny(['verificationProgram']) ||
-            (!existing().keys().hasAny(['verificationProgram']) && incoming().verificationProgram == '')) &&
-          (!incoming().diff(existing()).affectedKeys().hasAny(['verifiedBy']) ||
-            (!existing().keys().hasAny(['verifiedBy']) && incoming().verifiedBy == '')) &&
-          !incoming().diff(existing()).affectedKeys().hasAny(['verifiedAt']);
+        return (!incoming().keys().hasAny(['isVerified']) || incoming().isVerified == false) &&
+          (!incoming().keys().hasAny(['verificationProgram']) || incoming().verificationProgram == '') &&
+          (!incoming().keys().hasAny(['verifiedBy']) || incoming().verifiedBy == '') &&
+          !incoming().keys().hasAny(['verifiedAt']);
+      }
+
+      function validProUnlockData(data) {
+        return data.uid == userId &&
+          data.displayName is string &&
+          data.displayName.size() > 0 &&
+          data.displayName != 'New Builder' &&
+          data.displayName.size() <= 100 &&
+          data.isPro == true &&
+          data.plan in ['pro', 'plus'] &&
+          data.subscriptionPlan in ['pro', 'plus'] &&
+          data.subscriptionStatus == 'active' &&
+          validOptionalString(data, 'profileLink', 180) &&
+          (!data.keys().hasAny(['isVerified']) || data.isVerified == true) &&
+          (!data.keys().hasAny(['verificationProgram']) || data.verificationProgram in ['LINKUP Pro', 'LINKUP PLUS']) &&
+          (!data.keys().hasAny(['verifiedBy']) || data.verifiedBy in ['LINKUP Pro', 'LINKUP PLUS']) &&
+          validOptionalTimestamp(data, 'verifiedAt') &&
+          (!data.keys().hasAny(['turboConnect']) || data.turboConnect == true) &&
+          validOptionalSettings(data) &&
+          (!data.keys().hasAny(['settings']) ||
+            (!data.settings.keys().hasAny(['turboConnect']) || data.settings.turboConnect == true)) &&
+          validOptionalTimestamp(data, 'proUnlockedAt') &&
+          validOptionalTimestamp(data, 'subscriptionUpdatedAt');
+      }
+
+      function safeProUnlockCreateKeys() {
+        return incoming().keys().hasOnly([
+          'uid',
+          'displayName',
+          'profileLink',
+          'isPro',
+          'plan',
+          'subscriptionPlan',
+          'subscriptionStatus',
+          'isVerified',
+          'verificationProgram',
+          'verifiedBy',
+          'verifiedAt',
+          'turboConnect',
+          'settings',
+          'proUnlockedAt',
+          'subscriptionUpdatedAt'
+        ]);
+      }
+
+      function safeProUnlockUpdateKeys() {
+        return incoming().diff(existing()).affectedKeys().hasOnly([
+          'uid',
+          'displayName',
+          'profileLink',
+          'isPro',
+          'plan',
+          'subscriptionPlan',
+          'subscriptionStatus',
+          'isVerified',
+          'verificationProgram',
+          'verifiedBy',
+          'verifiedAt',
+          'turboConnect',
+          'settings',
+          'proUnlockedAt',
+          'subscriptionUpdatedAt'
+        ]);
+      }
+
+      function validProCancelData(data) {
+        return data.uid == userId &&
+          data.displayName is string &&
+          data.displayName.size() > 0 &&
+          data.displayName != 'New Builder' &&
+          data.displayName.size() <= 100 &&
+          data.isPro == false &&
+          data.plan == 'free' &&
+          data.subscriptionPlan == 'free' &&
+          data.subscriptionStatus in ['canceled', 'cancelled', 'inactive', 'expired'] &&
+          validOptionalString(data, 'profileLink', 180) &&
+          data.isVerified == false &&
+          (!data.keys().hasAny(['verificationProgram']) || data.verificationProgram == '') &&
+          (!data.keys().hasAny(['verifiedBy']) || data.verifiedBy == '') &&
+          !data.keys().hasAny(['verifiedAt']) &&
+          (!data.keys().hasAny(['turboConnect']) || data.turboConnect == false) &&
+          validOptionalSettings(data) &&
+          (!data.keys().hasAny(['settings']) ||
+            (!data.settings.keys().hasAny(['turboConnect']) || data.settings.turboConnect == false)) &&
+          validOptionalTimestamp(data, 'subscriptionCanceledAt') &&
+          validOptionalTimestamp(data, 'subscriptionUpdatedAt');
+      }
+
+      function safeProCancelUpdateKeys() {
+        return incoming().diff(existing()).affectedKeys().hasOnly([
+          'uid',
+          'displayName',
+          'profileLink',
+          'isPro',
+          'plan',
+          'subscriptionPlan',
+          'subscriptionStatus',
+          'subscriptionCanceledAt',
+          'subscriptionUpdatedAt',
+          'isVerified',
+          'verificationProgram',
+          'verifiedBy',
+          'verifiedAt',
+          'turboConnect',
+          'settings'
+        ]);
+      }
+
+      function validProfileUpdateShape() {
+        return validChangedString('username', 30) &&
+          validChangedString('profileLink', 180) &&
+          validChangedString('occupation', 80) &&
+          validChangedString('company', 120) &&
+          validChangedString('bio', 2000) &&
+          validChangedString('country', 80) &&
+          validChangedString('city', 80) &&
+          validChangedString('goals', 500) &&
+          validChangedString('experience', 80) &&
+          validChangedString('personalityType', 80) &&
+          validChangedString('commitmentLevel', 80) &&
+          validChangedString('startupStage', 80) &&
+          validChangedString('fundingStage', 80) &&
+          validChangedString('availability', 80) &&
+          validChangedString('timezone', 80) &&
+          validChangedString('workStyle', 80) &&
+          validChangedString('networkingIntent', 120) &&
+          validChangedString('education', 80) &&
+          validChangedString('teamSizePreference', 80) &&
+          validChangedString('ambition', 120) &&
+          validChangedString('profilePic', 900000) &&
+          validChangedString('coverPhoto', 900000) &&
+          validChangedString('vibeMedia', 900000) &&
+          validChangedString('verificationProgram', 80) &&
+          validChangedString('verifiedBy', 128) &&
+          validChangedList('photos', 3) &&
+          validChangedList('skills', 50) &&
+          validChangedList('interests', 50) &&
+          validChangedList('industries', 40) &&
+          validChangedList('lookingFor', 30) &&
+          validChangedList('languages', 20) &&
+          validChangedList('badges', 50) &&
+          validChangedList('projects', 20) &&
+          validChangedList('startupIdeas', 20) &&
+          validChangedList('circles', 20) &&
+          validChangedMap('personalityAnswers', 30) &&
+          validChangedMap('roleAnswers', 30) &&
+          validChangedMap('resume', 10) &&
+          validChangedMap('socialLinks', 10) &&
+          validChangedBool('isVisible') &&
+          validChangedBool('isStealthMode') &&
+          validChangedBool('turboConnect') &&
+          validChangedBool('hideOnlineStatus') &&
+          validChangedBool('remoteOnly') &&
+          validChangedBool('willingToRelocate') &&
+          validChangedBool('hasExit') &&
+          validChangedBool('isPro') &&
+          validChangedString('plan', 40) &&
+          validChangedString('subscriptionPlan', 40) &&
+          validChangedString('subscriptionStatus', 40) &&
+          validChangedBool('isVerified') &&
+          validChangedTimestamp('lastActiveAt') &&
+          validChangedTimestamp('proUnlockedAt') &&
+          validChangedTimestamp('subscriptionUpdatedAt') &&
+          validChangedPoints('reputationScore') &&
+          validChangedPoints('streakCount') &&
+          validChangedScore('founderScore') &&
+          validChangedReputationMetrics() &&
+          validChangedSettings() &&
+          (!incoming().diff(existing()).affectedKeys().hasAny(['age']) ||
+            (incoming().age is int && (incoming().age == 0 || (incoming().age >= 13 && incoming().age <= 120))));
       }
 
       function safePushTokenCleanup() {
@@ -201,22 +495,122 @@ service cloud.firestore {
           incoming().diff(existing()).affectedKeys().hasOnly(['pushTokens']);
       }
 
-      allow get: if isOwner(userId) || (
+      allow get: if isOwner(userId) || isPublicProfile(existing()) || hasDirectMatchWithSignedInUser() || (
         isSignedIn() &&
         isReadableProfile(existing()) &&
         !exists(/databases/$(database)/documents/blocks/$(userId + "_" + request.auth.uid))
       );
 
-      // Search/discovery can only list public, non-stealth profiles with no public push tokens.
-      allow list: if isSignedIn() && isPublicProfile(existing());
+      // Search/discovery fetches a signed-in profile pool and the app filters stealth/hidden
+      // profiles locally. This keeps older profiles without visibility fields discoverable.
+      allow list: if isSignedIn();
 
-      allow create: if isOwner(userId) && isValidUser(incoming()) && safeProfileCreateKeys() && verificationCreateDefaultsOnly() && validProfileShape(incoming());
+      allow create: if isOwner(userId) && validOwnProfileWrite(incoming());
 
-      allow update: if isSignedIn() && (
-        (isOwner(userId) && isValidUser(incoming()) && safeProfileUpdateKeys() && verificationFieldsSafe() && validProfileShape(incoming())) ||
-        (isOwner(userId) && safePushTokenCleanup())
-      );
+      allow update: if isOwner(userId) && validOwnProfileWrite(incoming());
 
+      allow delete: if isOwner(userId);
+    }
+
+    // Lightweight discovery index. The app reads this instead of the heavy users/{uid}
+    // documents so Android does not download large profile photo/gallery payloads.
+    match /publicProfiles/{userId} {
+      function validPublicString(data, field, maxSize) {
+        return !data.keys().hasAny([field]) ||
+          (data[field] is string && data[field].size() <= maxSize);
+      }
+
+      function validPublicList(data, field, maxSize) {
+        return !data.keys().hasAny([field]) ||
+          (data[field] is list && data[field].size() <= maxSize);
+      }
+
+      function validPublicBool(data, field) {
+        return !data.keys().hasAny([field]) || data[field] is bool;
+      }
+
+      function validPublicNumber(data, field, maxValue) {
+        return !data.keys().hasAny([field]) ||
+          (data[field] is int && data[field] >= 0 && data[field] <= maxValue);
+      }
+
+      function validPublicTimestampish(data, field) {
+        return !data.keys().hasAny([field]) ||
+          data[field] == null ||
+          data[field] is timestamp ||
+          (data[field] is string && data[field].size() <= 80);
+      }
+
+      function validPublicProfile(data) {
+        return data.uid == userId &&
+          data.keys().hasOnly([
+            'uid', 'displayName', 'username', 'bio', 'profilePic',
+            'occupation', 'company', 'country', 'city', 'age',
+            'skills', 'interests', 'industries', 'lookingFor',
+            'goals', 'experience', 'personalityType', 'commitmentLevel',
+            'startupStage', 'fundingStage', 'availability', 'timezone',
+            'languages', 'workStyle', 'education', 'networkingIntent',
+            'ambition', 'remoteOnly', 'willingToRelocate', 'teamSizePreference',
+            'projects', 'startupIdeas',
+            'profileViews', 'profileClicks', 'profileSaves', 'responseRate',
+            'isVisible', 'isStealthMode', 'turboConnect', 'hideOnlineStatus',
+            'isVerified', 'verificationProgram', 'isPro', 'plan',
+            'subscriptionPlan', 'subscriptionStatus',
+            'onboarded', 'deleted', 'lastActiveAt', 'updatedAt'
+          ]) &&
+          validPublicString(data, 'displayName', 100) &&
+          validPublicString(data, 'username', 40) &&
+          validPublicString(data, 'bio', 700) &&
+          validPublicString(data, 'profilePic', 900000) &&
+          validPublicString(data, 'occupation', 100) &&
+          validPublicString(data, 'company', 120) &&
+          validPublicString(data, 'country', 80) &&
+          validPublicString(data, 'city', 80) &&
+          validPublicString(data, 'goals', 420) &&
+          validPublicString(data, 'experience', 80) &&
+          validPublicString(data, 'personalityType', 80) &&
+          validPublicString(data, 'commitmentLevel', 80) &&
+          validPublicString(data, 'startupStage', 80) &&
+          validPublicString(data, 'fundingStage', 80) &&
+          validPublicString(data, 'availability', 80) &&
+          validPublicString(data, 'timezone', 80) &&
+          validPublicString(data, 'workStyle', 80) &&
+          validPublicString(data, 'education', 80) &&
+          validPublicString(data, 'networkingIntent', 120) &&
+          validPublicString(data, 'ambition', 120) &&
+          validPublicString(data, 'teamSizePreference', 80) &&
+          validPublicString(data, 'verificationProgram', 80) &&
+          validPublicString(data, 'plan', 40) &&
+          validPublicString(data, 'subscriptionPlan', 40) &&
+          validPublicString(data, 'subscriptionStatus', 40) &&
+          validPublicString(data, 'updatedAt', 80) &&
+          validPublicList(data, 'skills', 20) &&
+          validPublicList(data, 'interests', 20) &&
+          validPublicList(data, 'industries', 16) &&
+          validPublicList(data, 'lookingFor', 16) &&
+          validPublicList(data, 'languages', 12) &&
+          validPublicList(data, 'projects', 5) &&
+          validPublicList(data, 'startupIdeas', 8) &&
+          validPublicBool(data, 'remoteOnly') &&
+          validPublicBool(data, 'willingToRelocate') &&
+          validPublicBool(data, 'isVisible') &&
+          validPublicBool(data, 'isStealthMode') &&
+          validPublicBool(data, 'turboConnect') &&
+          validPublicBool(data, 'hideOnlineStatus') &&
+          validPublicBool(data, 'isVerified') &&
+          validPublicBool(data, 'isPro') &&
+          validPublicBool(data, 'onboarded') &&
+          validPublicBool(data, 'deleted') &&
+          validPublicNumber(data, 'age', 120) &&
+          validPublicNumber(data, 'profileViews', 1000000) &&
+          validPublicNumber(data, 'profileClicks', 1000000) &&
+          validPublicNumber(data, 'profileSaves', 1000000) &&
+          validPublicNumber(data, 'responseRate', 100) &&
+          validPublicTimestampish(data, 'lastActiveAt');
+      }
+
+      allow get, list: if isSignedIn();
+      allow create, update: if isOwner(userId) && validPublicProfile(incoming());
       allow delete: if isOwner(userId);
     }
 
@@ -366,7 +760,7 @@ service cloud.firestore {
           data.senderName.size() > 0 &&
           data.senderName.size() <= 120 &&
           data.senderPic is string &&
-          data.senderPic.size() <= 5000 &&
+          data.senderPic.size() <= 900000 &&
           (!data.keys().hasAny(['message']) || (data.message is string && data.message.size() <= 600)) &&
           (!data.keys().hasAny(['contextType']) || data.contextType == 'idea') &&
           (!data.keys().hasAny(['ideaId']) || (data.ideaId is string && data.ideaId.size() <= 120)) &&
@@ -433,6 +827,32 @@ service cloud.firestore {
           data.participants[data.userIds[1]] == true;
       }
 
+      function validConversationProfile(profile, uid) {
+        return profile is map &&
+          profile.keys().hasOnly([
+            'uid', 'displayName', 'profilePic',
+            'isVerified', 'hideOnlineStatus'
+          ]) &&
+          profile.uid == uid &&
+          profile.displayName is string &&
+          profile.displayName.size() > 0 &&
+          profile.displayName.size() <= 100 &&
+          profile.profilePic is string &&
+          profile.profilePic.size() <= 900000 &&
+          (!profile.keys().hasAny(['isVerified']) || profile.isVerified is bool) &&
+          (!profile.keys().hasAny(['hideOnlineStatus']) || profile.hideOnlineStatus is bool);
+      }
+
+      function validParticipantProfiles(data) {
+        return !data.keys().hasAny(['participantProfiles']) ||
+          (
+            data.participantProfiles is map &&
+            data.participantProfiles.keys().hasOnly(data.userIds) &&
+            validConversationProfile(data.participantProfiles[data.userIds[0]], data.userIds[0]) &&
+            validConversationProfile(data.participantProfiles[data.userIds[1]], data.userIds[1])
+          );
+      }
+
       function participantsValidOrMissing(data) {
         return !data.keys().hasAny(['participants']) || validParticipants(data);
       }
@@ -445,6 +865,7 @@ service cloud.firestore {
         return data.keys().hasOnly([
           'userIds', 'timestamp',
           'participants',
+          'participantProfiles',
           'lastMessage', 'lastMessageTime',
           'pinnedBy', 'archivedBy', 'importantBy', 'mutedUntilBy',
           'deletedBy', 'confidentialBy',
@@ -452,6 +873,7 @@ service cloud.firestore {
         ]) &&
         validMatchUsers(data.userIds) &&
         validParticipants(data) &&
+        validParticipantProfiles(data) &&
         !isPairBlocked(data.userIds);
       }
 
@@ -473,11 +895,15 @@ service cloud.firestore {
           (!data.keys().hasAny(['typingBy']) ||
             (data.typingBy is map && data.typingBy.keys().hasOnly(data.userIds))) &&
           (!data.keys().hasAny(['lastMessage']) ||
-            (data.lastMessage is string && data.lastMessage.size() <= 4000));
+            (data.lastMessage is string && data.lastMessage.size() <= 4000)) &&
+          validParticipantProfiles(data);
       }
 
       function validMatchUpdate() {
-        return incoming().userIds == existing().userIds &&
+        return (
+            (existing().keys().hasAny(['userIds']) && incoming().userIds == existing().userIds) ||
+            (!existing().keys().hasAny(['userIds']) && validMatchUsers(incoming().userIds))
+          ) &&
           participantsValidOrMissing(incoming()) &&
           validMatchMutableData(incoming()) &&
           (!incoming().diff(existing()).affectedKeys().hasAny(['timestamp']) ||
@@ -485,7 +911,9 @@ service cloud.firestore {
           (!incoming().diff(existing()).affectedKeys().hasAny(['lastMessageTime']) ||
             incoming().lastMessageTime == request.time) &&
           incoming().diff(existing()).affectedKeys().hasOnly([
+            'userIds',
             'timestamp', 'participants',
+            'participantProfiles',
             'lastMessage', 'lastMessageTime',
             'pinnedBy', 'archivedBy', 'importantBy', 'mutedUntilBy',
             'deletedBy', 'confidentialBy',
@@ -496,7 +924,7 @@ service cloud.firestore {
       allow get: if isParticipant(existing().userIds) || isParticipantMap(existing().participants);
       allow list: if isParticipantMap(existing().participants);
       allow create: if isSignedIn() && validMatchCreate(incoming());
-      allow update: if isParticipant(existing().userIds) && validMatchUpdate();
+      allow update: if (isParticipant(existing().userIds) || isParticipantMap(existing().participants)) && validMatchUpdate();
       allow delete: if false;
 
       match /messages/{messageId} {
@@ -508,13 +936,31 @@ service cloud.firestore {
         function validMessage(data) {
           return data.keys().hasOnly([
             'senderId', 'content', 'timestamp', 'type',
+            'mediaUrl', 'mediaName', 'mediaType', 'mediaSize',
             'replyToMessageId', 'replyToSenderId', 'replyToText'
           ]) &&
           data.senderId == request.auth.uid &&
           data.content is string &&
           data.content.size() > 0 &&
           data.content.size() <= 4000 &&
-          data.type in ['text'] &&
+          data.type in ['text', 'image', 'video'] &&
+          (
+            data.type == 'text' ||
+            (
+              data.mediaUrl is string &&
+              data.mediaUrl.size() <= 900000 &&
+              data.mediaName is string &&
+              data.mediaName.size() <= 180 &&
+              data.mediaType is string &&
+              data.mediaType.size() <= 80 &&
+              data.mediaSize is int &&
+              data.mediaSize >= 0 &&
+              (
+                (data.type == 'image' && data.mediaType.matches('^image/') && data.mediaSize <= 10485760) ||
+                (data.type == 'video' && data.mediaType.matches('^video/') && data.mediaSize <= 78643200)
+              )
+            )
+          ) &&
           data.timestamp == request.time;
         }
 
@@ -574,20 +1020,30 @@ service cloud.firestore {
         return isSignedIn() && data.ownerId == request.auth.uid;
       }
 
+      function isRequesterSavedProfilePath() {
+        return isSignedIn() &&
+          saveId.matches('^' + request.auth.uid + '_[a-zA-Z0-9_\\-]+$');
+      }
+
       function validSavedProfile(data) {
         return data.keys().hasOnly([
-          'ownerId', 'profileId', 'profileName', 'profilePic',
+          'ownerId', 'profileId', 'ownerName', 'ownerPic', 'profileName', 'profilePic',
           'createdAt', 'updatedAt'
         ]) &&
         data.ownerId == request.auth.uid &&
         isValidId(data.profileId) &&
         data.profileId != request.auth.uid &&
         saveId == request.auth.uid + "_" + data.profileId &&
+        (!data.keys().hasAny(['ownerName']) || (data.ownerName is string && data.ownerName.size() <= 100)) &&
+        (!data.keys().hasAny(['ownerPic']) || (data.ownerPic is string && data.ownerPic.size() <= 900000)) &&
         (!data.keys().hasAny(['profileName']) || (data.profileName is string && data.profileName.size() <= 100)) &&
         (!data.keys().hasAny(['profilePic']) || (data.profilePic is string && data.profilePic.size() <= 900000));
       }
 
-      allow get, list: if isSavedProfileOwner(existing());
+      allow get: if isRequesterSavedProfilePath() || isSavedProfileOwner(existing());
+      allow list: if isSavedProfileOwner(existing()) || (
+        isSignedIn() && existing().profileId == request.auth.uid
+      );
       allow create: if isSignedIn() && validSavedProfile(incoming()) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time;
@@ -603,6 +1059,14 @@ service cloud.firestore {
     // Profile analytics / viewers
     // ------------------------------------------------------------
     match /profileViews/{viewId} {
+      function isRequesterProfileViewPath() {
+        return isSignedIn() &&
+          (
+            viewId.matches('^[a-zA-Z0-9_\\-]+_' + request.auth.uid + '$') ||
+            viewId.matches('^' + request.auth.uid + '_[a-zA-Z0-9_\\-]+$')
+          );
+      }
+
       function validProfileViewCreate(data) {
         return data.keys().hasOnly([
           'profileId', 'viewerId', 'viewerName', 'viewerPic',
@@ -627,11 +1091,64 @@ service cloud.firestore {
           incoming().lastViewedAt == request.time;
       }
 
-      allow get: if isSignedIn() &&
-        (existing().profileId == request.auth.uid || existing().viewerId == request.auth.uid);
+      allow get: if isRequesterProfileViewPath() || (
+        isSignedIn() &&
+        (existing().profileId == request.auth.uid || existing().viewerId == request.auth.uid)
+      );
       allow list: if isSignedIn() && existing().profileId == request.auth.uid;
       allow create: if isSignedIn() && validProfileViewCreate(incoming());
       allow update: if isSignedIn() && validProfileViewUpdate();
+      allow delete: if false;
+    }
+
+    match /profileClicks/{clickId} {
+      function isRequesterProfileClickPath() {
+        return isSignedIn() &&
+          (
+            clickId.matches('^[a-zA-Z0-9_\\-]+_' + request.auth.uid + '_[a-zA-Z0-9_\\-]+$') ||
+            clickId.matches('^' + request.auth.uid + '_[a-zA-Z0-9_\\-]+_[a-zA-Z0-9_\\-]+$')
+          );
+      }
+
+      function validProfileClickCreate(data) {
+        return data.keys().hasOnly([
+          'profileId', 'viewerId', 'viewerName', 'viewerPic', 'action',
+          'createdAt', 'lastClickedAt'
+        ]) &&
+        data.profileId is string &&
+        isValidId(data.profileId) &&
+        data.viewerId == request.auth.uid &&
+        data.profileId != request.auth.uid &&
+        data.action is string &&
+        data.action.size() > 0 &&
+        data.action.size() <= 24 &&
+        (!data.keys().hasAny(['viewerName']) || (data.viewerName is string && data.viewerName.size() <= 100)) &&
+        (!data.keys().hasAny(['viewerPic']) || (data.viewerPic is string && data.viewerPic.size() <= 900000)) &&
+        clickId == data.profileId + "_" + request.auth.uid + "_" + data.action &&
+        data.createdAt == request.time &&
+        data.lastClickedAt == request.time;
+      }
+
+      function validProfileClickUpdate() {
+        return existing().viewerId == request.auth.uid &&
+          incoming().profileId == existing().profileId &&
+          incoming().viewerId == existing().viewerId &&
+          incoming().action == existing().action &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['viewerName', 'viewerPic', 'lastClickedAt']) &&
+          (!incoming().diff(existing()).affectedKeys().hasAny(['viewerName']) ||
+            (incoming().viewerName is string && incoming().viewerName.size() <= 100)) &&
+          (!incoming().diff(existing()).affectedKeys().hasAny(['viewerPic']) ||
+            (incoming().viewerPic is string && incoming().viewerPic.size() <= 900000)) &&
+          incoming().lastClickedAt == request.time;
+      }
+
+      allow get: if isRequesterProfileClickPath() || (
+        isSignedIn() &&
+        (existing().profileId == request.auth.uid || existing().viewerId == request.auth.uid)
+      );
+      allow list: if isSignedIn() && existing().profileId == request.auth.uid;
+      allow create: if isSignedIn() && validProfileClickCreate(incoming());
+      allow update: if isSignedIn() && validProfileClickUpdate();
       allow delete: if false;
     }
   }
