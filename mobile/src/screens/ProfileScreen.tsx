@@ -2345,7 +2345,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 >
                   {displayNameFor(profile)}
                 </Text>
-                {profile.isVerified && (
+                {profile?.isVerified && (
                   <VerifiedBadge size={30} style={styles.inlineVerifiedBadge} />
                 )}
               </View>
