@@ -43,16 +43,10 @@ export const GLASS_SHADOW = {
 };
 
 export const liquidGlass = (isDark: boolean, elevated = true) => ({
-  backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard,
+  backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
   borderWidth: 1,
   borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
   ...(elevated ? GLASS_SHADOW : {}),
-  ...(Platform.OS === 'web'
-    ? ({
-        backdropFilter: 'blur(28px) saturate(190%)',
-        WebkitBackdropFilter: 'blur(28px) saturate(190%)',
-      } as any)
-    : null),
 });
 
 export const appBackground = (isDark: boolean) => ({
