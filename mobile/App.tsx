@@ -282,7 +282,7 @@ function TabNavigator({ navigation }: any) {
           position: 'absolute',
           left: 16,
           right: 16,
-          bottom: insets.bottom + 8,
+          bottom: insets.bottom + 4,
           height: 66 + insets.bottom,
           borderRadius: 20,
           backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
