@@ -357,7 +357,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   // If a userId param is passed and it's not the current user, fetch that profile
   const rawTargetUserId = route?.params?.userId;
   const routedCompatibilityScore = Number(route?.params?.compatibilityScore);
-  const routedCompatibilityReason = String(route?.params?.compatibilityReason || '').trim();
+  const routedCompatibilityReason = (typeof route?.params?.compatibilityReason === 'string' ? route.params.compatibilityReason : '').trim();
   const targetUserId =
     typeof rawTargetUserId === 'string' && rawTargetUserId.trim() && rawTargetUserId !== 'undefined'
       ? rawTargetUserId.trim()

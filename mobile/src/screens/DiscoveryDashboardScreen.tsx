@@ -196,11 +196,13 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   const topOpportunityAlert = opportunityRadar[0];
 
   const Card = ({ item, showScore }: { item: UserProfile; showScore?: boolean }) => {
-    const match = aiRank[item.uid] || localRank[item.uid];
-    const score = match?.score;
+    const localMatch = localRank[item.uid];
+    const aiMatch = aiRank[item.uid];
+    const match = localMatch || aiMatch;
+    const score = match?.score ?? null;
     return (
       <TouchableOpacity
-        onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: score, compatibilityReason: match?.reason })}
+        onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: score, compatibilityReason: match?.reason || '' })}
         style={[styles.card, liquidGlass(isDark, false)]}
       >
         <Image

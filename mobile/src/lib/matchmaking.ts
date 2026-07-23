@@ -195,8 +195,10 @@ async function directGeminiRank(me: UserProfile | null | undefined, candidates: 
   const prompt = [
     'You are LINKUP matchmaking for startup builders.',
     'Rank candidates for the current user by useful collaboration potential, complementary skills, shared industries/goals, work style, commitment, and startup intent.',
+    'SCORES MUST BE REALISTIC: 10-40 for weak/single-dimension overlap, 41-70 for good multi-dimensional fit, 71-100 only for exceptional multi-dimensional alignment across 3+ areas.',
+    'DO NOT inflate scores. A person sharing only 1 skill gets 15-25, not 90.',
     'Return STRICT JSON array only, no markdown, no prose.',
-    'Schema: [{"uid":"candidate-id","score":88,"reason":"short reason under 14 words"}]',
+    'Schema: [{"uid":"candidate-id","score":45,"reason":"2 shared skills, complementary roles"}]',
     `Return at most ${Math.min(maxCandidates, 20)} candidates.`,
     `Current user: ${JSON.stringify(compactProfile(me))}`,
     `Candidates: ${JSON.stringify(compactCandidates)}`,
@@ -303,32 +305,40 @@ export function localCommonalityRank(me: UserProfile | null | undefined, people:
     const complementaryRole = myRole && role && complementaryRoles[myRole]?.includes(role) ? 1 : 0;
     const sameRole = myRole && role && myRole === role ? 1 : 0;
 
+    const overlapDimensions = [sharedSkills, sharedIndustries, sharedGoals, sharedPersonality, sameWorkStyle, sameCommitment, complementaryRole].filter(Boolean).length;
+
     const rawScore =
-      sharedSkills * 12 +
-      sharedIndustries * 8 +
-      sharedGoals * 10 +
-      sharedRoleSignals * 6 +
-      sharedPersonality * 5 +
-      sameWorkStyle * 6 +
-      sameCommitment * 4 +
-      sameStage * 3 +
-      complementaryRole * 8 +
-      sameRole * 3;
-    const score = Math.max(1, Math.min(100, Math.round(rawScore)));
+      sharedSkills * 14 +
+      sharedIndustries * 9 +
+      sharedGoals * 12 +
+      sharedRoleSignals * 7 +
+      sharedPersonality * 6 +
+      sameWorkStyle * 8 +
+      sameCommitment * 5 +
+      sameStage * 4 +
+      complementaryRole * 10 +
+      sameRole * 4;
+
+    let score = Math.max(1, Math.min(100, Math.round(rawScore)));
+
+    if (overlapDimensions < 2 && score > 20) {
+      score = Math.min(score, 20);
+    }
 
     const reasonParts: string[] = [];
     if (sharedSkills) reasonParts.push(`${sharedSkills} shared skill${sharedSkills === 1 ? '' : 's'}`);
     if (sharedIndustries) reasonParts.push(`${sharedIndustries} shared interest${sharedIndustries === 1 ? '' : 's'}`);
     if (sharedGoals) reasonParts.push(`${sharedGoals} shared goal${sharedGoals === 1 ? '' : 's'}`);
-    if (sharedRoleSignals) reasonParts.push(`${sharedRoleSignals} role-fit signal${sharedRoleSignals === 1 ? '' : 's'}`);
+    if (sharedRoleSignals) reasonParts.push(`${sharedRoleSignals} matching signal${sharedRoleSignals === 1 ? '' : 's'}`);
     if (sharedPersonality) reasonParts.push(`${sharedPersonality} personality match${sharedPersonality === 1 ? '' : 'es'}`);
     if (sameWorkStyle) reasonParts.push('same work style');
     if (sameCommitment) reasonParts.push('same commitment level');
-    if (complementaryRole) reasonParts.push('complementary roles');
+    if (complementaryRole) reasonParts.push('complementary role match');
+    if (sameStage && !reasonParts.length) reasonParts.push('similar startup stage');
 
     return {
       score,
-      reason: reasonParts.slice(0, 3).join(' / ') || 'Promising builder match',
+      reason: reasonParts.slice(0, 3).join(' · ') || 'Promising builder match',
     };
   };
 
