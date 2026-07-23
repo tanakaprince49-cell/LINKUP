@@ -325,6 +325,8 @@ export default function SwipeScreen({ navigation }: any) {
   const goToPrevRef = useRef<() => void>(() => {});
   const resetScrollRef = useRef<() => void>(() => {});
   const prevScrollDirRef = useRef<'up' | 'down'>('up');
+  const scrollIdxRef = useRef(0);
+  const scrollCacheRef = useRef<UserProfile[]>([]);
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedItem?: UserProfile) => void>(() => {});
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const resetSwipePositionRef = useRef<() => void>(() => {});
@@ -1156,37 +1158,33 @@ export default function SwipeScreen({ navigation }: any) {
     if (mode === 'scroll' && scrollIndex >= scrollProfilesCache.length) {
       setScrollIndex(Math.max(0, scrollProfilesCache.length - 1));
     }
-  }, [mode, scrollIndex, scrollProfilesCache.length]);
+  }, [mode, scrollProfilesCache.length]);
+
+  useEffect(() => {
+    scrollIdxRef.current = scrollIndex;
+  }, [scrollIndex]);
+
+  useEffect(() => {
+    scrollCacheRef.current = scrollProfilesCache;
+  }, [scrollProfilesCache]);
 
   const goToNextProfile = () => {
-    if (scrollIndex < scrollProfilesCache.length - 1) {
-      const nextIdx = scrollIndex + 1;
-      Animated.timing(scrollPosition, {
-        toValue: -Dimensions.get('window').height,
-        duration: 250,
-        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
-      }).start(() => {
-        scrollPosition.setValue(0);
-        setScrollIndex(nextIdx);
-        isScrollingRef.current = false;
-      });
+    const idx = scrollIdxRef.current;
+    if (idx < scrollProfilesCache.length - 1) {
+      scrollPosition.setValue(0);
+      setScrollIndex(idx + 1);
+      isScrollingRef.current = false;
     } else {
       resetScrollRef.current();
     }
   };
 
   const goToPrevProfile = () => {
-    if (scrollIndex > 0) {
-      const prevIdx = scrollIndex - 1;
-      Animated.timing(scrollPosition, {
-        toValue: Dimensions.get('window').height,
-        duration: 250,
-        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
-      }).start(() => {
-        scrollPosition.setValue(0);
-        setScrollIndex(prevIdx);
-        isScrollingRef.current = false;
-      });
+    const idx = scrollIdxRef.current;
+    if (idx > 0) {
+      scrollPosition.setValue(0);
+      setScrollIndex(idx - 1);
+      isScrollingRef.current = false;
     } else {
       resetScrollRef.current();
     }
@@ -1216,7 +1214,9 @@ export default function SwipeScreen({ navigation }: any) {
       onPanResponderMove: (_evt, gs) => {
         if (isScrollingRef.current) return;
         const limited = gs.dy * 0.6;
-        if ((limited > 0 && scrollIndex === 0) || (limited < 0 && scrollIndex === scrollProfilesCache.length - 1)) {
+        const idx = scrollIdxRef.current;
+        const len = scrollCacheRef.current.length;
+        if ((limited > 0 && idx === 0) || (limited < 0 && idx === len - 1)) {
           scrollPosition.setValue(limited * 0.25);
         } else {
           scrollPosition.setValue(limited);
@@ -1224,11 +1224,13 @@ export default function SwipeScreen({ navigation }: any) {
       },
       onPanResponderRelease: (_evt, gs) => {
         if (isScrollingRef.current) return;
-        if (gs.dy < -verticalSwipeThreshold && scrollIndex < scrollProfilesCache.length - 1) {
+        const idx = scrollIdxRef.current;
+        const len = scrollCacheRef.current.length;
+        if (gs.dy < -verticalSwipeThreshold && idx < len - 1) {
           prevScrollDirRef.current = 'up';
           isScrollingRef.current = true;
           goToNextRef.current();
-        } else if (gs.dy > verticalSwipeThreshold && scrollIndex > 0) {
+        } else if (gs.dy > verticalSwipeThreshold && idx > 0) {
           prevScrollDirRef.current = 'down';
           isScrollingRef.current = true;
           goToPrevRef.current();
