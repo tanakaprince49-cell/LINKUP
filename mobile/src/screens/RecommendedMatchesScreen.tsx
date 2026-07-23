@@ -52,7 +52,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
     return rankedCandidatesToMap(localCommonalityRank(me, people, Math.max(people.length, 30)));
   }, [me, people]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -63,7 +63,6 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       const lastDate = await AsyncStorage.getItem(`linkup:last-recommendation-date:${user.uid}`);
       setLastRecommendationDate(lastDate);
 
-      // Show notification if it's a new day with fresh recommendations
       const lastNotifiedDate = await AsyncStorage.getItem(`linkup:last-notified-date:${user.uid}`);
       if (lastDate !== today && lastNotifiedDate !== today) {
         Alert.alert(
@@ -75,7 +74,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
     };
 
     loadDailyUsage();
-  }, [user?.uid, today]);
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!user?.uid) {

@@ -341,6 +341,14 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const profileRef = React.useRef<UserProfile | null>(null);
+  const setProfileStable = React.useCallback((next: UserProfile | null) => {
+    if (next === profileRef.current) return;
+    const prev = profileRef.current;
+    if (prev && next && JSON.stringify(prev) === JSON.stringify(next)) return;
+    profileRef.current = next;
+    setProfile(next);
+  }, []);
   const [loading, setLoading] = useState(true);
   const [authVersion, setAuthVersion] = useState(0);
   const [completedOnboardingUid, setCompletedOnboardingUid] = useState<string | null>(null);
@@ -569,7 +577,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (inferredOnboarded && !rawProfile.onboarded) {
               updateDoc(userDocRef, { onboarded: true }).catch(() => {});
             }
-            setProfile(compactProfileForCache(data) as UserProfile);
+            setProfileStable(compactProfileForCache(data) as UserProfile);
             writeCachedProfile(authenticatedUser.uid, data).catch(() => {});
             syncOwnPublicProfileIndex(authenticatedUser.uid, data).catch(() => {});
             setLoading(false);
@@ -580,7 +588,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setCompletedOnboardingUid(null);
           AsyncStorage.removeItem(onboardingStorageKey(authenticatedUser.uid)).catch(() => {});
 
-          setProfile(compactProfileForCache(newProfile) as UserProfile);
+          setProfileStable(compactProfileForCache(newProfile) as UserProfile);
           syncOwnPublicProfileIndex(authenticatedUser.uid, newProfile).catch(() => {});
           setLoading(false);
         },
@@ -591,11 +599,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (storedOnboarded) {
                 setCompletedOnboardingUid(authenticatedUser.uid);
                 withLocalProEntitlement(authenticatedUser.uid, buildLocalUserProfile(authenticatedUser, true))
-                  .then((nextProfile) => setProfile(compactProfileForCache(nextProfile) as UserProfile));
+                  .then((nextProfile) => setProfileStable(compactProfileForCache(nextProfile) as UserProfile));
               } else {
                 setCompletedOnboardingUid(null);
                 withLocalProEntitlement(authenticatedUser.uid, buildLocalUserProfile(authenticatedUser, false))
-                  .then((nextProfile) => setProfile(compactProfileForCache(nextProfile) as UserProfile));
+                  .then((nextProfile) => setProfileStable(compactProfileForCache(nextProfile) as UserProfile));
               }
             })
             .finally(() => {

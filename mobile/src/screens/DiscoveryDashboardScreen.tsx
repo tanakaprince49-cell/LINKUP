@@ -79,6 +79,7 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   const isFocused = useIsFocused();
   const isDark = theme === 'dark';
   const remoteRankTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const peopleRankKeyRef = useRef<string>('');
 
   const [loading, setLoading] = useState(false);
   const [people, setPeople] = useState<UserProfile[]>([]);
@@ -104,7 +105,11 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
       userId: user.uid,
       onData: (profiles) => {
         const list = profiles.filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        setPeople((current) => (list.length > 0 || current.length === 0 ? list : current));
+        setPeople((current) => {
+          if (list.length === 0 && current.length > 0) return current;
+          if (current.length === list.length && current.every((p, i) => p.uid === list[i]?.uid)) return current;
+          return list;
+        });
         if (list.length > 0) writeCachedDashboardPeople(user.uid, list).catch(() => {});
         setLoading(false);
       },
@@ -122,6 +127,9 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
   useEffect(() => {
     if (!user || !isFocused) return;
     if (people.length === 0) return;
+    const peopleKey = people.map((p) => p.uid).sort().join('|');
+    if (peopleKey === peopleRankKeyRef.current) return;
+    peopleRankKeyRef.current = peopleKey;
     let cancelled = false;
     const localRanked = localCommonalityRank(me, people, 15);
     setAiRank(rankedCandidatesToMap(localRanked));
@@ -142,13 +150,11 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
       try {
         setAiLoading(true);
         let ranked = await rankCandidatesHybrid(me, people.slice(0, 40), 15);
-        // Fallback: always provide recommendations even when Functions/ranking isn't available.
         if (!ranked.length) ranked = localRanked;
         if (cancelled) return;
         setAiRank(rankedCandidatesToMap(ranked));
       } catch (e: any) {
         if (!cancelled) {
-          console.warn('dashboard ranking unavailable', e?.message || String(e));
           setAiRank(rankedCandidatesToMap(localRanked));
         }
       } finally {

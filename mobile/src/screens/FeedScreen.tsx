@@ -311,7 +311,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
         viewedBy: arrayUnion(user.uid)
       });
     }
-  }, [user]);
+  }, [user?.uid]);
 
   const handleLike = async () => {
     if (!user) return;
