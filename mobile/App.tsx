@@ -146,29 +146,31 @@ const AppHeader = ({ navigation, title }: any) => {
   return (
     <SafeAreaView edges={['top']} style={[styles.headerContainer, {
       backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
-      borderBottomColor: COLORS.primary,
-      borderBottomWidth: 2,
     }]}>
       <View style={styles.headerContent}>
-        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>
+        <View style={styles.headerBrand}>
           {title === 'LINKUP' ? (
-            <>LIN<Text style={{ color: COLORS.primary }}>KUP</Text></>
+            <>
+              <Text style={[styles.headerLogoText, { color: textColor(isDark) }]}>LINK</Text>
+              <View style={styles.headerLogoAccent}>
+                <Text style={styles.headerLogoAccentText}>UP</Text>
+              </View>
+            </>
           ) : (
-            <Text style={{ letterSpacing: 1 }}>{title}</Text>
+            <Text style={[styles.headerTabTitle, { color: textColor(isDark) }]}>{title}</Text>
           )}
-        </Text>
+        </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={[styles.headerIconBtn, {
-              backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard,
-              borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
             }]}
             onPress={() => {
               const parentNav = navigation.getParent?.() || navigation;
               parentNav.navigate('Alerts');
             }}
           >
-            <SafeIcon name="Bell" size={18} color={isDark ? '#E5E7EB' : '#4B5563'} />
+            <SafeIcon name="Bell" size={17} color={isDark ? '#E5E7EB' : '#4B5563'} />
             {unreadNotifications > 0 && (
               <View style={styles.headerBadgeBubble}>
                 <Text style={styles.headerBadgeText} numberOfLines={1}>
@@ -179,8 +181,7 @@ const AppHeader = ({ navigation, title }: any) => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.headerIconBtn, {
-              backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard,
-              borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
             }]}
             onPressIn={preloadProfileScreen}
             onPress={() => {
@@ -190,11 +191,12 @@ const AppHeader = ({ navigation, title }: any) => {
             {profilePhoto ? (
               <Image source={{ uri: profilePhoto }} style={styles.headerAvatar} />
             ) : (
-              <SafeIcon name="User" size={18} color={isDark ? '#E5E7EB' : '#4B5563'} />
+              <SafeIcon name="User" size={17} color={isDark ? '#E5E7EB' : '#4B5563'} />
             )}
           </TouchableOpacity>
         </View>
       </View>
+      <View style={[styles.headerAccentLine, { backgroundColor: COLORS.primary }]} />
     </SafeAreaView>
   );
 };
@@ -590,26 +592,51 @@ export default function App() {
 
 const styles = StyleSheet.create({
   headerContainer: {
-    borderBottomWidth: 2,
-    borderBottomColor: COLORS.primary,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   headerContent: {
-    height: 52,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
-  headerTitle: {
+  headerBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  headerLogoText: {
     fontSize: 22,
     fontWeight: '900',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+  headerLogoAccent: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  headerLogoAccentText: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    color: '#000',
+  },
+  headerTabTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  headerAccentLine: {
+    height: 3,
+    width: 60,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
   },
   headerActions: {
     flexDirection: 'row',
@@ -617,33 +644,30 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
     position: 'relative',
     overflow: 'visible',
   },
   headerAvatar: {
     width: '100%',
     height: '100%',
-    borderRadius: 12,
+    borderRadius: 10,
   },
   headerBadgeBubble: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 18,
-    height: 18,
+    top: -3,
+    right: -3,
+    minWidth: 17,
+    height: 17,
     paddingHorizontal: 4,
     borderRadius: 9,
     backgroundColor: COLORS.danger,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
     zIndex: 20,
   },
   headerBadgeText: {
