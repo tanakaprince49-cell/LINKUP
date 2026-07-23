@@ -315,6 +315,7 @@ export default function SwipeScreen({ navigation }: any) {
   const allProfilesRef = useRef<UserProfile[]>([]);
   const scoreByIdRef = useRef<Map<string, number>>(new Map());
   const dailyLimitReachedRef = useRef(false);
+  const lastSwipedProfileRef = useRef<UserProfile | null>(null);
   const [dailyRemaining, setDailyRemaining] = useState<number>(FREE_LIMITS.dailyRecommendations);
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedItem?: UserProfile) => void>(() => {});
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
@@ -815,6 +816,7 @@ export default function SwipeScreen({ navigation }: any) {
 
     hasUserSwipedRef.current = true;
     swipedSessionIdsRef.current.add(item.uid);
+    lastSwipedProfileRef.current = item;
     if (user?.uid) {
       void writeSwipeProgress(user.uid, Array.from(swipedSessionIdsRef.current));
     }
@@ -903,6 +905,17 @@ export default function SwipeScreen({ navigation }: any) {
   completeSwipeRef.current = completeSwipe;
   animateSwipeOutRef.current = animateSwipeOut;
   resetSwipePositionRef.current = resetSwipePosition;
+
+  const rewindLast = () => {
+    const last = lastSwipedProfileRef.current;
+    if (!last || isAnimatingRef.current) return;
+    lastSwipedProfileRef.current = null;
+    swipePosition.setValue({ x: 0, y: 0 });
+    isAnimatingRef.current = false;
+    setInfoExpanded(false);
+    swipedSessionIdsRef.current.delete(last.uid);
+    setProfiles((current) => [last, ...current]);
+  };
 
   const resetDeck = () => {
     if (proLocked) {
@@ -1042,7 +1055,7 @@ export default function SwipeScreen({ navigation }: any) {
           </View>
           <Text style={[styles.actionLabel, styles.actionLabelLarge]}>LIKE</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtnSmall]} onPress={resetDeck}>
+        <TouchableOpacity style={[styles.actionBtnSmall]} onPress={rewindLast}>
           <View style={styles.actionBtnInnerSmall}>
             <RotateCcw size={20} color="#888" />
           </View>
@@ -1153,7 +1166,7 @@ export default function SwipeScreen({ navigation }: any) {
             </View>
             <TouchableOpacity
               activeOpacity={0.9}
-              style={[styles.moreInfoBtn, isCompactWeb && styles.compactMoreInfoBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }]}
+              style={[styles.moreInfoBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)', borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)' }]}
               onPressIn={openInfoPanel}
               onPress={openInfoPanel}
             >
