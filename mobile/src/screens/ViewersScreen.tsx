@@ -40,34 +40,34 @@ const isPermissionDenied = (error: any) => String(error?.code || '').includes('p
 const MODE_META: Record<AnalyticsMode, any> = {
   views: {
     label: 'Views',
-    title: 'WHO VIEWED YOU',
-    subtitle: 'Live profile viewers',
-    empty: 'NO RECENT VIEWERS',
+    title: 'Profile Views',
+    subtitle: 'Everyone who viewed your profile',
+    empty: 'No viewers yet',
     emptySub: 'Profile views will appear here in real time.',
     Icon: Eye,
   },
   clicks: {
     label: 'Clicks',
-    title: 'PROFILE CLICKS',
-    subtitle: 'Builders tapping your profile actions',
-    empty: 'NO RECENT CLICKS',
-    emptySub: 'Profile taps, message taps, and save taps will appear here.',
+    title: 'Profile Clicks',
+    subtitle: 'Builders who tapped your actions',
+    empty: 'No clicks yet',
+    emptySub: 'Profile taps, message taps, and save taps show up here.',
     Icon: MousePointerClick,
   },
   saves: {
     label: 'Saves',
-    title: 'PROFILE SAVES',
-    subtitle: 'Builders who saved you',
-    empty: 'NO RECENT SAVES',
-    emptySub: 'When someone saves your profile, they show up here.',
+    title: 'Profile Saves',
+    subtitle: 'Builders who saved your profile',
+    empty: 'No saves yet',
+    emptySub: 'When someone saves your profile, they appear here.',
     Icon: Bookmark,
   },
   response: {
     label: 'Response',
-    title: 'RESPONSE RATE',
-    subtitle: 'Message threads counted live',
-    empty: 'NO ACTIVE THREADS',
-    emptySub: 'Your response analytics appear once conversations start.',
+    title: 'Response Rate',
+    subtitle: 'Your conversation response activity',
+    empty: 'No active threads',
+    emptySub: 'Response analytics appear once conversations start.',
     Icon: Gauge,
   },
 };
@@ -166,7 +166,7 @@ const profileFromEvent = (row: AnalyticsEventRow, mode: AnalyticsMode): ViewerPr
   matchId: row.matchId,
 } as unknown as ViewerProfile);
 
-export default function ViewersScreen({ navigation, route }: any) {
+function ViewersScreen({ navigation, route }: any) {
   const { profile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -389,22 +389,28 @@ export default function ViewersScreen({ navigation, route }: any) {
     const RowIcon = item.analyticsMode === 'response' ? MessageSquare : UserPlus;
     return (
       <TouchableOpacity
-        style={[styles.viewerCard, liquidGlass(isDark, false)]}
+        style={[styles.viewerCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}
         onPress={() => openRow(item)}
         activeOpacity={0.84}
       >
-        <Image source={{ uri: safeProfileImageUri(item.profilePic) || FALLBACK_AVATAR }} style={styles.avatar} />
-        <View style={styles.info}>
-          <View style={styles.nameRow}>
-            <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>
-              {item.displayName || '@builder'}
+        <View style={styles.viewerCardLeft}>
+          <Image source={{ uri: safeProfileImageUri(item.profilePic) || FALLBACK_AVATAR }} style={styles.avatar} />
+          <View style={styles.viewerCardMeta}>
+            <View style={styles.nameRow}>
+              <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>
+                {item.displayName || '@builder'}
+              </Text>
+              {!!item.isVerified && <VerifiedBadge size={16} />}
+            </View>
+            <Text style={[styles.viewerEvent, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
+              {item.eventLabel || item.bio || 'Building the future'}
             </Text>
-            {!!item.isVerified && <VerifiedBadge size={20} />}
+            <Text style={styles.viewerTime}>{formatTimeAgo(item.eventTime)}</Text>
           </View>
-          <Text style={styles.bio} numberOfLines={1}>{item.eventLabel || item.bio || 'Building the future'}</Text>
-          <Text style={styles.timeText}>{formatTimeAgo(item.eventTime)}</Text>
         </View>
-        <RowIcon size={20} color={COLORS.primary} />
+        <View style={styles.viewerCardAction}>
+          <RowIcon size={18} color={COLORS.primary} />
+        </View>
       </TouchableOpacity>
     );
   };
@@ -426,16 +432,18 @@ export default function ViewersScreen({ navigation, route }: any) {
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.8}>
-          <ChevronLeft size={24} color={textColor(isDark)} />
+          <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
-        <View style={styles.headerText}>
-          <Text style={[styles.title, { color: textColor(isDark) }]}>{meta.title}</Text>
-          <Text style={styles.subtitle}>
-            {responseRate === null ? meta.subtitle : `${responseRate}% response rate across active threads`}
-          </Text>
-        </View>
-        <View style={styles.headerBadge}>
-          <HeaderIcon size={17} color="#000" />
+        <View style={styles.headerCenter}>
+          <View style={styles.headerIconWrap}>
+            <HeaderIcon size={14} color="#000" />
+          </View>
+          <View style={styles.headerTextWrap}>
+            <Text style={[styles.title, { color: textColor(isDark) }]}>{meta.title}</Text>
+            <Text style={[styles.subtitle, { color: textColor(isDark, 'muted') }]}>
+              {responseRate === null ? meta.subtitle : `${responseRate}% response rate`}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -447,30 +455,38 @@ export default function ViewersScreen({ navigation, route }: any) {
           return (
             <TouchableOpacity
               key={tabMode}
-              style={[styles.tab, active && styles.tabActive, { borderColor: active ? '#000' : (isDark ? COLORS.darkBorder : COLORS.lightBorder) }]}
+              style={[
+                styles.tab,
+                active && styles.tabActive,
+              ]}
               onPress={() => setMode(tabMode)}
               activeOpacity={0.82}
             >
-              <TabIcon size={14} color={active ? '#000' : '#777'} />
-              <Text style={[styles.tabText, { color: active ? '#000' : '#777' }]}>{tab.label}</Text>
+              <TabIcon size={13} color={active ? '#000' : (isDark ? '#6B7280' : '#9CA3AF')} />
+              <Text style={[styles.tabText, { color: active ? '#000' : (isDark ? '#6B7280' : '#9CA3AF') }]}>{tab.label}</Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
       {loading ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} />
+        <View style={styles.loaderWrap}>
+          <ActivityIndicator color={COLORS.primary} size="small" />
+        </View>
       ) : (
         <FlatList
           data={rows}
           renderItem={renderViewer}
           keyExtractor={(item, index) => `${item.analyticsMode || mode}-${item.uid}-${timeValue(item.eventTime)}-${index}`}
           contentContainerStyle={styles.list}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <HeaderIcon size={48} color={textColor(isDark, 'secondary')} />
+              <View style={styles.emptyIconWrap}>
+                <HeaderIcon size={36} color={COLORS.primary} />
+              </View>
               <Text style={[styles.emptyText, { color: textColor(isDark) }]}>{meta.empty}</Text>
-              <Text style={styles.emptySub}>{meta.emptySub}</Text>
+              <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>{meta.emptySub}</Text>
             </View>
           }
         />
@@ -486,124 +502,165 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 12,
-    gap: 14,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    gap: 10,
   },
   backBtn: {
     padding: 4,
   },
-  headerText: {
+  headerCenter: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
-  title: {
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 11,
-    lineHeight: 15,
-    color: '#777',
-    fontWeight: '800',
-  },
-  headerBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
+  headerIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     backgroundColor: COLORS.primary,
-    borderWidth: 1,
-    borderColor: '#000',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerTextWrap: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  subtitle: {
+    marginTop: 1,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
   tabs: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 12,
     gap: 8,
   },
   tab: {
     flex: 1,
-    minHeight: 40,
-    borderRadius: 8,
-    borderWidth: 1,
+    height: 36,
+    borderRadius: 10,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 5,
+    backgroundColor: 'rgba(156,163,175,0.1)',
   },
   tabActive: {
     backgroundColor: COLORS.primary,
   },
   tabText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+  },
+  loaderWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   list: {
-    padding: 20,
-    paddingTop: 6,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 20,
+  },
+  separator: {
+    height: 10,
   },
   viewerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-    gap: 16,
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  viewerCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: COLORS.primary,
   },
-  info: {
+  viewerCardMeta: {
     flex: 1,
   },
   name: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
-    textTransform: 'uppercase',
     flexShrink: 1,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 6,
   },
-  bio: {
-    fontSize: 12,
-    color: '#666',
+  viewerEvent: {
+    fontSize: 11,
+    fontWeight: '600',
     marginTop: 2,
   },
-  timeText: {
+  viewerTime: {
     fontSize: 10,
+    fontWeight: '800',
     color: COLORS.primary,
-    fontWeight: '900',
-    marginTop: 4,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    marginTop: 3,
+    letterSpacing: 0.5,
+  },
+  viewerCardAction: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: 'rgba(251,230,24,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
   empty: {
     alignItems: 'center',
-    marginTop: 100,
-    gap: 16,
-    paddingHorizontal: 20,
+    marginTop: 80,
+    gap: 12,
+    paddingHorizontal: 32,
+  },
+  emptyIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: 'rgba(251,230,24,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '900',
-    letterSpacing: 1.4,
+    letterSpacing: 0.3,
     textAlign: 'center',
   },
   emptySub: {
-    fontSize: 11,
-    lineHeight: 16,
-    color: '#666',
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
     textAlign: 'center',
+    maxWidth: 260,
   },
 });
+
+export default ViewersScreen;

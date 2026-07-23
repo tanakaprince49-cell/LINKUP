@@ -2669,7 +2669,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         {/* ANALYTICS */}
         {!isViewingOther && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>PROFILE ANALYTICS</Text>
+            <Text style={styles.sectionLabel}>ANALYTICS</Text>
             <View
               style={[
                 styles.analyticsPanel,
@@ -2678,12 +2678,16 @@ export default function ProfileScreen({ navigation, route }: any) {
               ]}
             >
               <View style={styles.analyticsHeader}>
-                <View>
-                  <Text style={[styles.analyticsTitle, { color: textColor(isDark) }]}>Founder dashboard</Text>
-                  <Text style={styles.analyticsHelp}>Views, clicks, saves, and response rate</Text>
+                <View style={styles.analyticsHeaderLeft}>
+                  <View style={styles.analyticsHeaderIcon}>
+                    <SafeIcon name="Gauge" size={14} color="#000" />
+                  </View>
+                  <View>
+                    <Text style={[styles.analyticsTitle, { color: textColor(isDark) }]}>Founder Dashboard</Text>
+                    <Text style={[styles.analyticsHelp, { color: textColor(isDark, 'muted') }]}>Views · Clicks · Saves · Response</Text>
+                  </View>
                 </View>
-                <View style={styles.analyticsBadge}>
-                  <SafeIcon name={proLocked ? 'Eye' : 'Crown'} size={13} color="#000" fill="#000" />
+                <View style={[styles.analyticsBadge, { backgroundColor: proLocked ? '#6B7280' : COLORS.primary }]}>
                   <Text style={styles.analyticsBadgeText}>{proLocked ? 'FREE' : 'LIVE'}</Text>
                 </View>
               </View>
@@ -2699,22 +2703,31 @@ export default function ProfileScreen({ navigation, route }: any) {
                     key={String(metric.label)}
                     activeOpacity={0.82}
                     onPress={() => proLocked && metric.mode !== 'views' ? openPaywall(PRO_FEATURES.profileViewers) : navigation.navigate('Viewers', { mode: metric.mode })}
-                    style={[styles.analyticsTile, { backgroundColor: isDark ? COLORS.darkBgSec : '#FFFBEA' }]}
+                    style={[styles.analyticsTile, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}
                   >
-                    <View style={styles.analyticsIconBubble}>
-                      <SafeIcon name={String(metric.icon)} size={15} color="#000" />
+                    <View style={styles.analyticsTileTop}>
+                      <View style={[styles.analyticsIconBubble, { backgroundColor: COLORS.primary }]}>
+                        <SafeIcon name={String(metric.icon)} size={13} color="#000" />
+                      </View>
+                      {proLocked && metric.mode !== 'views' && (
+                        <View style={styles.analyticsLockedChip}>
+                          <Text style={styles.analyticsLockedChipText}>PLUS</Text>
+                        </View>
+                      )}
                     </View>
                     <Text style={[styles.analyticsValue, { color: textColor(isDark) }]}>
-                      {proLocked && metric.mode !== 'views' ? 'PLUS' : metric.value}
+                      {proLocked && metric.mode !== 'views' ? '—' : metric.value}
                     </Text>
-                    <Text style={styles.analyticsMetric}>{String(metric.label).toUpperCase()}</Text>
+                    <Text style={[styles.analyticsMetric, { color: textColor(isDark, 'muted') }]}>{String(metric.label).toUpperCase()}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <Text style={styles.analyticsFooter}>
-                {proLocked ? 'Who viewed your profile is free. LINKUP PLUS unlocks the deeper analytics.' : 'Tap any metric to open its live analytics window.'}
-              </Text>
+              <View style={styles.analyticsFooterWrap}>
+                <Text style={[styles.analyticsFooter, { color: textColor(isDark, 'muted') }]}>
+                  {proLocked ? 'Who viewed your profile is free. LINKUP PLUS unlocks deeper analytics.' : 'Tap any metric to open its live analytics window.'}
+                </Text>
+              </View>
             </View>
           </View>
         )}
@@ -3781,16 +3794,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   analyticsPanel: {
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 1,
-    padding: 16,
+    padding: 18,
     shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
   analyticsHeader: {
     flexDirection: 'row',
@@ -3798,81 +3809,108 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  analyticsTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  analyticsHelp: {
-    marginTop: 4,
-    color: '#777',
-    fontSize: 10,
-    fontWeight: '800',
-    lineHeight: 15,
-  },
-  analyticsBadge: {
-    height: 32,
-    borderRadius: 999,
-    backgroundColor: COLORS.primary,
-    borderWidth: 1,
-    borderColor: '#000',
+  analyticsHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
+    gap: 10,
+  },
+  analyticsHeaderIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  analyticsTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  analyticsHelp: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  analyticsBadge: {
+    height: 26,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
   },
   analyticsBadgeText: {
     color: '#000',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   analyticsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginTop: 14,
+    marginTop: 16,
   },
   analyticsTile: {
-    width: (width - 24 * 2 - 16 * 2 - 10) / 2,
-    minHeight: 104,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    padding: 13,
+    width: (width - 24 * 2 - 18 * 2 - 10) / 2,
+    minHeight: 96,
+    borderRadius: 16,
+    padding: 14,
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  analyticsTileTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   analyticsIconBubble: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: COLORS.primary,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#000',
+  },
+  analyticsLockedChip: {
+    backgroundColor: 'rgba(107,114,128,0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  analyticsLockedChipText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#6B7280',
+    letterSpacing: 0.5,
   },
   analyticsValue: {
-    marginTop: 8,
-    fontSize: 24,
+    marginTop: 10,
+    fontSize: 26,
     fontWeight: '900',
-    letterSpacing: 0,
+    letterSpacing: -0.5,
   },
   analyticsMetric: {
-    marginTop: 3,
+    marginTop: 2,
     fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    color: '#777',
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  analyticsFooterWrap: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(119,119,119,0.15)',
   },
   analyticsFooter: {
-    marginTop: 12,
-    color: '#777',
     fontSize: 10,
     lineHeight: 15,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   accountSecurityCard: {
     marginTop: 12,
