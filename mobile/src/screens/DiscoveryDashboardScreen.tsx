@@ -369,6 +369,10 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={[styles.container, appBackground(isDark)]}> 
+      <View style={styles.scene} pointerEvents="none">
+        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
+        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(223,251,63,0.08)' : 'rgba(223,251,63,0.16)' }]} />
+      </View>
       {loading && people.length === 0 ? (
         <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
       ) : (
@@ -487,6 +491,26 @@ export default function DiscoveryDashboardScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   scrollArea: { flex: 1 },
+  scene: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  scenePane: {
+    position: 'absolute',
+    width: 280,
+    height: 130,
+    borderRadius: 34,
+  },
+  scenePaneA: {
+    top: 80,
+    right: -120,
+    transform: [{ rotate: '-18deg' }],
+  },
+  scenePaneB: {
+    top: 260,
+    left: -110,
+    transform: [{ rotate: '16deg' }],
+  },
   hero: {
     borderRadius: 28,
     padding: 18,
