@@ -177,6 +177,11 @@ const ExpandedProfilePanel = React.memo(function ExpandedProfilePanel({
   lookingFor,
   industries,
   onClose,
+  onContact,
+  onLike,
+  onPass,
+  contactBusy,
+  connectionRequest,
 }: {
   profile: any;
   isDark: boolean;
@@ -191,78 +196,93 @@ const ExpandedProfilePanel = React.memo(function ExpandedProfilePanel({
   lookingFor: string[];
   industries: string[];
   onClose: () => void;
+  onContact: () => void;
+  onLike: () => void;
+  onPass: () => void;
+  contactBusy: boolean;
+  connectionRequest: ConnectionRequest | null;
 }) {
   return (
-    <ScrollView
-      style={[styles.bottomMeta, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
-      contentContainerStyle={styles.bottomMetaContent}
-      showsVerticalScrollIndicator
-      nestedScrollEnabled
-      bounces
-      scrollEventThrottle={16}
-    >
-      <View style={[styles.detailsHeader, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard }]}>
-        <View style={{ flex: 1, paddingRight: 12 }}>
-          <Text style={[styles.detailsTitle, { color: textColor(isDark) }]}>BUILDER DETAILS</Text>
-          <Text style={[styles.detailsSubtitle, { color: textColor(isDark, 'secondary') }]}>Clear profile signals for this match</Text>
-        </View>
-        <TouchableOpacity onPress={onClose} style={styles.closeInfoBtn}>
-          <Text style={styles.closeInfoText}>HIDE</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={[styles.expandedProfileHeader, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-        <View style={styles.expandedNameRow}>
-          <Text style={[styles.expandedName, { color: textColor(isDark) }]} numberOfLines={2}>
-            {displayName}{ageText}
-          </Text>
-          {!!profile.isVerified && <VerifiedBadge size={24} />}
-        </View>
-        <Text style={[styles.expandedMetaText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{roleText}</Text>
-        <Text style={[styles.expandedMetaText, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>{locationText}</Text>
-      </View>
-
-      <View style={[styles.bioCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-        <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>BIO</Text>
-        <Text style={[styles.bioText, { color: textColor(isDark) }]}>{bio || 'No bio yet.'}</Text>
-      </View>
-
-      <View style={styles.tagGrid}>
-        {skills?.slice(0, 8).map((skill, idx) => (
-          <View key={`${profile?.uid}-${skill}-${idx}`} style={[styles.skillTag, liquidGlass(isDark, false), { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(251,230,24,0.16)', borderColor: isDark ? COLORS.darkBorder : COLORS.primary }]}>
-            <Text style={[styles.skillTagText, { color: textColor(isDark) }]}>{String(skill).toUpperCase()}</Text>
+    <View style={StyleSheet.absoluteFill}>
+      <TouchableOpacity style={styles.expandedBackdrop} activeOpacity={1} onPress={onClose} />
+      <View style={[styles.expandedSheet, { backgroundColor: isDark ? '#0B1020' : '#FFF' }]}>
+        <View style={styles.expandedHandle} />
+        <ScrollView contentContainerStyle={styles.expandedScroll} showsVerticalScrollIndicator={false}>
+          <View style={styles.expandedHeader}>
+            <Text style={[styles.expandedName, { color: isDark ? '#FFF' : '#000' }]}>{displayName}{ageText}</Text>
+            {!!profile.isVerified && <VerifiedBadge size={20} />}
           </View>
-        ))}
-      </View>
+          <Text style={[styles.expandedRole, { color: isDark ? '#B7C0D8' : '#42526B' }]}>{roleText}</Text>
+          <Text style={[styles.expandedLocation, { color: isDark ? '#718096' : '#8492A6' }]}>{locationText}</Text>
 
-      <View style={styles.detailGrid}>
-        <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-          <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>MATCH FIT</Text>
-          <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{compatibility}% - {compatibilityReason}</Text>
-        </View>
-        <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-          <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>LOOKING FOR</Text>
-          <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{lookingFor.slice(0, 4).join(' - ') || 'Networking'}</Text>
-        </View>
-        <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-          <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>STAGE</Text>
-          <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{(profile as any).startupStage || 'Exploring'}</Text>
-        </View>
-        <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-          <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>INDUSTRY</Text>
-          <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{industries.slice(0, 4).join(' - ') || 'Open'}</Text>
-        </View>
-        <View style={[styles.detailCard, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-          <Text style={[styles.detailLabel, { color: textColor(isDark, 'secondary') }]}>AVAILABILITY</Text>
-          <Text style={[styles.detailValue, { color: textColor(isDark) }]}>{(profile as any).availability || 'Open'}</Text>
-        </View>
-      </View>
+          <View style={styles.expandedMatchRow}>
+            <Zap size={14} color={COLORS.primary} fill={COLORS.primary} />
+            <Text style={[styles.expandedMatchText, { color: COLORS.primary }]}>
+              {compatibility}% fit — {compatibilityReason}
+            </Text>
+          </View>
 
-      <View style={styles.scrollIndicator}>
-        <ChevronDown size={14} color={COLORS.primary} />
-        <Text style={[styles.scrollText, { color: textColor(isDark, 'secondary') }]}>SCROLL FOR DETAILS</Text>
+          <View style={[styles.expandedDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]} />
+
+          <Text style={[styles.expandedSectionLabel, { color: isDark ? '#B7C0D8' : '#42526B' }]}>Bio</Text>
+          <Text style={[styles.expandedBio, { color: isDark ? '#FFF' : '#000' }]}>{bio || 'No bio yet.'}</Text>
+
+          {skills.length > 0 && (
+            <>
+              <Text style={[styles.expandedSectionLabel, { color: isDark ? '#B7C0D8' : '#42526B' }]}>Skills</Text>
+              <View style={styles.expandedTagRow}>
+                {skills.slice(0, 8).map((s, i) => (
+                  <View key={i} style={[styles.expandedTag, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+                    <Text style={[styles.expandedTagText, { color: isDark ? '#FFF' : '#000' }]}>{s}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
+          {industries.length > 0 && (
+            <>
+              <Text style={[styles.expandedSectionLabel, { color: isDark ? '#B7C0D8' : '#42526B' }]}>Industries</Text>
+              <View style={styles.expandedTagRow}>
+                {industries.slice(0, 4).map((s, i) => (
+                  <View key={i} style={[styles.expandedTag, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+                    <Text style={[styles.expandedTagText, { color: isDark ? '#FFF' : '#000' }]}>{s}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
+          {lookingFor.length > 0 && (
+            <>
+              <Text style={[styles.expandedSectionLabel, { color: isDark ? '#B7C0D8' : '#42526B' }]}>Looking For</Text>
+              <Text style={[styles.expandedLookingFor, { color: isDark ? '#FFF' : '#000' }]}>{lookingFor.join(' · ')}</Text>
+            </>
+          )}
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+
+        <View style={[styles.expandedActions, { backgroundColor: isDark ? '#0B1020' : '#FFF', borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+          <TouchableOpacity style={styles.expandedPassBtn} onPress={onPass}>
+            <X size={24} color="#FF6B6B" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.expandedContactBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)' }]}
+            onPress={onContact}
+            disabled={contactBusy}
+          >
+            <MessageSquare size={18} color={isDark ? '#FFF' : '#000'} />
+            <Text style={[styles.expandedContactText, { color: isDark ? '#FFF' : '#000' }]}>
+              {contactBusy ? '...' : connectionRequest?.status === 'approved' ? 'CHAT' : connectionRequest?.status === 'pending' ? 'SENT' : 'CONTACT'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.expandedLikeBtn} onPress={onLike}>
+            <Heart size={26} color="#000" fill="#000" />
+          </TouchableOpacity>
+        </View>
       </View>
-    </ScrollView>
+    </View>
   );
 });
 
@@ -335,6 +355,22 @@ export default function SwipeScreen({ navigation }: any) {
     setPaywallFeature('');
     navigation?.navigate?.('Main', { screen: 'Swipe' });
   };
+
+  const topProfileAgeText = topProfile && Number(topProfile.age) > 0 ? `, ${topProfile.age}` : '';
+  const topProfileLocation = topProfile ? [topProfile.city, topProfile.country].filter(Boolean).join(', ') || 'Remote' : '';
+  const topProfileRole = topProfile ? [
+    (topProfile as any).occupation || 'Builder',
+    (topProfile as any).company ? `@ ${(topProfile as any).company}` : null,
+  ].filter(Boolean).join(' ') : '';
+  const topProfileBio = topProfile?.bio || 'No bio yet.';
+  const topProfileScore = topProfile ? (scoreByIdRef.current.get(topProfile.uid) ?? null) : null;
+  const topProfileRank = topProfileScore != null
+    ? { score: topProfileScore, reason: '' }
+    : myProfile && topProfile
+      ? localCommonalityRank(myProfile, [topProfile], 1)[0]
+      : null;
+  const topCompatibility = Math.max(1, Math.min(100, Math.round(topProfileRank?.score || 50)));
+  const topCompatibilityReason = topProfileRank?.reason || '';
 
   const cardRotate = swipePosition.x.interpolate({
     inputRange: [-motionWidth, 0, motionWidth],
@@ -1117,32 +1153,14 @@ export default function SwipeScreen({ navigation }: any) {
             </View>
             <TouchableOpacity
               activeOpacity={0.9}
-              style={[styles.moreInfoBtn, isCompactWeb && styles.compactMoreInfoBtn, liquidGlass(isDark, false), { backgroundColor: COLORS.primary, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+              style={[styles.moreInfoBtn, isCompactWeb && styles.compactMoreInfoBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }]}
               onPressIn={openInfoPanel}
               onPress={openInfoPanel}
             >
-              <Text style={styles.moreInfoText}>MORE INFO ABOUT THIS PERSON</Text>
-              <ChevronDown size={15} color="#000" />
+              <Text style={[styles.moreInfoText, { color: isDark ? '#FFF' : '#000' }]}>MORE INFO</Text>
+              <ChevronDown size={14} color={isDark ? '#FFF' : '#000'} />
             </TouchableOpacity>
           </View>
-
-          {infoExpanded && (
-            <ExpandedProfilePanel
-              profile={topProfile}
-              isDark={isDark}
-              displayName={displayNameFor(topProfile)}
-              ageText={ageText}
-              roleText={roleText}
-              locationText={locationText}
-              bio={bio}
-              compatibility={compatibility}
-              compatibilityReason={compatibilityReason}
-              skills={topProfile.skills || []}
-              lookingFor={(topProfile as any).lookingFor || []}
-              industries={(topProfile as any).industries || []}
-              onClose={() => setInfoExpanded(false)}
-            />
-          )}
         </View>
         {!infoExpanded && renderCardActions()}
       </Animated.View>
@@ -1219,6 +1237,28 @@ export default function SwipeScreen({ navigation }: any) {
         onClose={closePaywallToHome}
         onUnlocked={() => setPaywallFeature('')}
       />
+      {infoExpanded && topProfile && (
+        <ExpandedProfilePanel
+          profile={topProfile}
+          isDark={isDark}
+          displayName={displayNameFor(topProfile)}
+          ageText={topProfileAgeText}
+          roleText={topProfileRole}
+          locationText={topProfileLocation}
+          bio={topProfileBio}
+          compatibility={topCompatibility}
+          compatibilityReason={topCompatibilityReason}
+          skills={topProfile.skills || []}
+          lookingFor={(topProfile as any).lookingFor || []}
+          industries={(topProfile as any).industries || []}
+          onClose={() => setInfoExpanded(false)}
+          onContact={handleContactRequest}
+          onLike={() => animateSwipeOut('right')}
+          onPass={() => animateSwipeOut('left')}
+          contactBusy={contactBusy}
+          connectionRequest={connectionRequest}
+        />
+      )}
     </SafeAreaView>
     </View>
   );
@@ -1492,96 +1532,166 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   moreInfoText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
-    color: '#000',
     letterSpacing: 0.8,
   },
-  bottomMeta: {
+  expandedBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 100,
+  },
+  expandedSheet: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    maxHeight: '78%',
+    maxHeight: '85%',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    zIndex: 90,
-    borderWidth: 2,
-    borderColor: COLORS.primary,
+    zIndex: 101,
+    paddingTop: 12,
+    paddingHorizontal: 20,
     shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 24,
+    shadowOpacity: 0.3,
+    shadowRadius: 30,
     shadowOffset: { width: 0, height: -10 },
-    elevation: 16,
+    elevation: 20,
   },
-  compactBottomMeta: {
-    maxHeight: '74%',
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+  expandedHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(150,150,150,0.3)',
+    alignSelf: 'center',
+    marginBottom: 16,
   },
-  bottomMetaContent: {
-    padding: 22,
-    paddingBottom: 42,
+  expandedScroll: {
+    paddingBottom: 120,
   },
-  compactBottomMetaContent: {
-    padding: 16,
-    paddingBottom: 30,
-  },
-  detailsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-    borderRadius: 20,
-    padding: 14,
-  },
-  detailsTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 1.6,
-  },
-  detailsSubtitle: {
-    marginTop: 4,
-    fontSize: 11,
-    fontWeight: '800',
-    lineHeight: 15,
-  },
-  closeInfoBtn: {
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    backgroundColor: COLORS.primary,
-  },
-  closeInfoText: {
-    color: '#000',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  expandedProfileHeader: {
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  expandedName: {
-    fontSize: 25,
-    lineHeight: 30,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    textTransform: 'uppercase',
-    flexShrink: 1,
-  },
-  expandedNameRow: {
+  expandedHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
-  expandedMetaText: {
-    marginTop: 7,
-    fontSize: 13,
-    lineHeight: 18,
+  expandedName: {
+    fontSize: 24,
+    fontWeight: '900',
+    fontStyle: 'italic',
+  },
+  expandedRole: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  expandedLocation: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  expandedMatchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    backgroundColor: 'rgba(251,230,24,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  expandedMatchText: {
+    fontSize: 12,
     fontWeight: '800',
+    flexShrink: 1,
+  },
+  expandedDivider: {
+    height: 1,
+    marginVertical: 16,
+  },
+  expandedSectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  expandedBio: {
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  expandedTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  expandedTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  expandedTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  expandedLookingFor: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  expandedActions: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
+    paddingVertical: 16,
+    paddingBottom: 32,
+    borderTopWidth: 1,
+  },
+  expandedPassBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  expandedContactBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+    height: 52,
+    borderRadius: 26,
+  },
+  expandedContactText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  expandedLikeBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF3B5C',
+    shadowColor: '#FF3B5C',
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
   },
   nameRow: {
     flexDirection: 'row',
@@ -1793,8 +1903,9 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 20,
-    backgroundColor: COLORS.primary,
-    borderWidth: 0,
+    backgroundColor: '#FFF',
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.06)',
   },
   contactActionText: {
     fontSize: 8,
