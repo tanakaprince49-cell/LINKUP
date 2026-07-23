@@ -106,12 +106,6 @@ const SafeIcon = ({ name, size = 20, color = COLORS.primary, fill = "transparent
   return <IconComponent size={size} color={color} fill={fill} />;
 };
 
-const ProTitleCrown = () => (
-  <View style={styles.proTitleCrown}>
-    <SafeIcon name="Crown" size={15} color="#000" fill="#000" />
-  </View>
-);
-
 // Global Header Component
 const AppHeader = ({ navigation, title }: any) => {
   const { theme } = useTheme();
@@ -141,23 +135,24 @@ const AppHeader = ({ navigation, title }: any) => {
   }, [user?.uid]);
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.headerContainer, { 
-      ...liquidGlass(isDark, false),
-      borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.08)'
+    <SafeAreaView edges={['top']} style={[styles.headerContainer, {
+      backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
+      borderBottomColor: COLORS.primary,
+      borderBottomWidth: 2,
     }]}>
       <View style={styles.headerContent}>
-        <View style={styles.headerTitleRow}>
-          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>
-            {title === 'LINKUP' ? (
-              <>LIN<Text style={{ color: COLORS.primary }}>KUP</Text></>
-            ) : title}
-          </Text>
-          {isPro ? <ProTitleCrown /> : null}
-        </View>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>
+          {title === 'LINKUP' ? (
+            <>LIN<Text style={{ color: COLORS.primary }}>KUP</Text></>
+          ) : (
+            <Text style={{ letterSpacing: 1 }}>{title}</Text>
+          )}
+        </Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity 
-            style={[styles.headerIconBtn, { 
-              ...liquidGlass(isDark, false)
+          <TouchableOpacity
+            style={[styles.headerIconBtn, {
+              backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard,
+              borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
             }]}
             onPress={() => {
               const parentNav = navigation.getParent?.() || navigation;
@@ -173,9 +168,10 @@ const AppHeader = ({ navigation, title }: any) => {
               </View>
             )}
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.headerIconBtn, { 
-              ...liquidGlass(isDark, false)
+          <TouchableOpacity
+            style={[styles.headerIconBtn, {
+              backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard,
+              borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
             }]}
             onPressIn={preloadProfileScreen}
             onPress={() => {
@@ -231,7 +227,7 @@ function TabNavigator({ navigation }: any) {
       detachInactiveScreens={Platform.OS !== 'web'}
       screenOptions={({ route }) => ({
         lazy: true,
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused }) => {
           let iconName = "Home";
           if (route.name === 'Dashboard') iconName = "Home";
           else if (route.name === 'Swipe') iconName = "Zap";
@@ -240,12 +236,24 @@ function TabNavigator({ navigation }: any) {
 
           return (
             <View style={styles.tabIconContainer}>
-              <SafeIcon 
-                name={iconName}
-                size={22} 
-                color={focused ? COLORS.primary : (isDark ? '#8E8E93' : '#636366')} 
-                fill={focused ? COLORS.primaryGlow : 'transparent'}
-              />
+              <View style={[
+                styles.tabIconInner,
+                focused && {
+                  backgroundColor: isDark ? 'rgba(251,230,24,0.15)' : 'rgba(251,230,24,0.2)',
+                  shadowColor: COLORS.primary,
+                  shadowOpacity: 0.25,
+                  shadowRadius: 10,
+                  shadowOffset: { width: 0, height: 0 },
+                  elevation: 4,
+                },
+              ]}>
+                <SafeIcon
+                  name={focused ? iconName : iconName}
+                  size={22}
+                  color={focused ? COLORS.primary : (isDark ? '#8E8E93' : '#636366')}
+                  fill={focused ? COLORS.primary : 'transparent'}
+                />
+              </View>
               {route.name === 'Inbox' && unreadMessages > 0 && (
                 <View style={styles.badgeBubble}>
                   <Text style={styles.badgeText} numberOfLines={1}>
@@ -253,7 +261,6 @@ function TabNavigator({ navigation }: any) {
                   </Text>
                 </View>
               )}
-              {focused && <View style={styles.focusedDot} />}
             </View>
           );
         },
@@ -262,27 +269,31 @@ function TabNavigator({ navigation }: any) {
         tabBarShowLabel: true,
         tabBarLabel: tabLabels[route.name] || route.name,
         tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '800',
+          fontSize: 11,
+          fontWeight: '900',
+          letterSpacing: 0.5,
           marginTop: 2,
+          marginBottom: 4,
         },
         tabBarStyle: {
+          position: 'absolute',
+          left: 16,
+          right: 16,
+          bottom: 22,
+          height: 66,
+          borderRadius: 20,
           backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
-          borderTopWidth: 1,
-          borderTopColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
-          height: 92,
-          paddingTop: 12,
-          paddingBottom: 8,
-          justifyContent: 'flex-start',
-          position: 'relative',
-          borderRadius: 0,
-          marginHorizontal: 0,
-          marginBottom: 0,
-          elevation: IS_LOW_END_ANDROID ? 0 : 10,
+          borderTopWidth: 0,
+          borderWidth: 1,
+          borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
+          paddingTop: 6,
+          paddingBottom: 0,
+          justifyContent: 'center',
+          elevation: IS_LOW_END_ANDROID ? 0 : 12,
           shadowColor: '#000',
-          shadowOpacity: IS_LOW_END_ANDROID ? 0 : 0.12,
-          shadowRadius: IS_LOW_END_ANDROID ? 0 : 10,
-          shadowOffset: { width: 0, height: IS_LOW_END_ANDROID ? 0 : 4 },
+          shadowOpacity: IS_LOW_END_ANDROID ? 0 : 0.2,
+          shadowRadius: IS_LOW_END_ANDROID ? 0 : 16,
+          shadowOffset: { width: 0, height: IS_LOW_END_ANDROID ? 0 : 6 },
         },
         sceneContainerStyle: {
           backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg,
@@ -540,69 +551,46 @@ export default function App() {
 
 const styles = StyleSheet.create({
   headerContainer: {
-    borderBottomWidth: 1,
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.primary,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   headerContent: {
-    height: 48,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '900',
-    fontStyle: 'italic',
     letterSpacing: 2,
     textTransform: 'uppercase',
-  },
-  headerTitleRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    flexShrink: 1,
-    minWidth: 0,
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
-  proTitleCrown: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.primary,
-    borderWidth: 1.5,
-    borderColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
+    gap: 8,
   },
   headerIconBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
     position: 'relative',
     overflow: 'visible',
   },
   headerAvatar: {
     width: '100%',
     height: '100%',
-    borderRadius: 14,
+    borderRadius: 12,
   },
   headerBadgeBubble: {
     position: 'absolute',
@@ -627,27 +615,21 @@ const styles = StyleSheet.create({
   tabIconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 34,
-    width: 42,
-    transform: [{ translateY: -6 }],
+    height: 38,
+    width: 48,
     position: 'relative',
   },
-  focusedDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.primary,
-    position: 'absolute',
-    bottom: -3,
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 0 },
+  tabIconInner: {
+    width: 40,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   badgeBubble: {
     position: 'absolute',
-    top: -6,
-    right: -8,
+    top: -4,
+    right: -4,
     minWidth: 18,
     height: 18,
     paddingHorizontal: 4,
