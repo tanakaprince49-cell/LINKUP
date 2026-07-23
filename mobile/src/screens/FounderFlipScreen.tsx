@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
 import { RotateCcw, Share2 } from 'lucide-react-native';
+import GameChallengeModal from '../components/GameChallengeModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_SIZE = (SCREEN_WIDTH - 80) / 4;
@@ -35,6 +36,7 @@ const FounderFlipScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [matchedPairs, setMatchedPairs] = useState(0);
   const [moves, setMoves] = useState(0);
   const [gameOver, setGameOver] = useState(false);
+  const [challengeVisible, setChallengeVisible] = useState(false);
   const lockRef = useRef(false);
 
   const initGame = useCallback(() => {
@@ -103,13 +105,13 @@ const FounderFlipScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     }
   }, [cards, flippedIndices]);
 
-  const challengeFriend = () => {
-    Alert.alert('Challenge a Friend', 'Share this game with a connection to see who can match faster!');
-    navigation.navigate('Messages');
-  };
+  const challengeFriend = useCallback(() => {
+    setChallengeVisible(true);
+  }, []);
 
   return (
-    <SafeAreaView style={[styles.root, appBackground(isDark)]} edges={['top']}>
+    <View style={{ flex: 1 }}>
+      <SafeAreaView style={[styles.root, appBackground(isDark)]} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={[styles.backText, { color: textColor(isDark) }]}>← Back</Text>
@@ -168,13 +170,20 @@ const FounderFlipScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         </View>
       )}
 
-      {!gameOver && (
-        <TouchableOpacity style={styles.challengeBtn} onPress={challengeFriend}>
-          <Share2 size={14} color="#000" />
-          <Text style={styles.challengeText}>Challenge a Connection</Text>
-        </TouchableOpacity>
-      )}
-    </SafeAreaView>
+        {!gameOver && (
+          <TouchableOpacity style={styles.challengeBtn} onPress={challengeFriend}>
+            <Share2 size={14} color="#000" />
+            <Text style={styles.challengeText}>Challenge a Connection</Text>
+          </TouchableOpacity>
+        )}
+      </SafeAreaView>
+      <GameChallengeModal
+        visible={challengeVisible}
+        gameType="founderflip"
+        gameLabel="Founder Flip"
+        onClose={() => setChallengeVisible(false)}
+      />
+    </View>
   );
 };
 

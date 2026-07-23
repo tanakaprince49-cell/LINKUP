@@ -5,7 +5,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
-import { RefreshCw, Brain, Share2 } from 'lucide-react-native';
+import { RefreshCw, Brain, Share2, Swords } from 'lucide-react-native';
+import GameChallengeModal from '../components/GameChallengeModal';
 
 const QUESTIONS = [
   {
@@ -94,6 +95,7 @@ const NetworkQuizScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [selected, setSelected] = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [challengeVisible, setChallengeVisible] = useState(false);
 
   const shuffleAndStart = useCallback(() => {
     const shuffled = [...QUESTIONS].sort(() => Math.random() - 0.5).slice(0, 10);
@@ -135,7 +137,8 @@ const NetworkQuizScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   }, [score, questions]);
 
   return (
-    <SafeAreaView style={[styles.root, appBackground(isDark)]} edges={['top']}>
+    <View style={{ flex: 1 }}>
+      <SafeAreaView style={[styles.root, appBackground(isDark)]} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={[styles.backText, { color: textColor(isDark) }]}>← Back</Text>
@@ -223,10 +226,21 @@ const NetworkQuizScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               <Share2 size={16} color="#000" />
               <Text style={[styles.finishedBtnText, { color: '#000' }]}>Share</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={[styles.finishedBtn]} onPress={() => setChallengeVisible(true)}>
+              <Swords size={16} color="#000" />
+              <Text style={styles.finishedBtnText}>Challenge</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
-    </SafeAreaView>
+      </SafeAreaView>
+      <GameChallengeModal
+        visible={challengeVisible}
+        gameType="networkquiz"
+        gameLabel="Network Quiz"
+        onClose={() => setChallengeVisible(false)}
+      />
+    </View>
   );
 };
 

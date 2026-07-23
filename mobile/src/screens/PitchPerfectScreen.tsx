@@ -6,7 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
-import { RefreshCw, Heart, Share2, Zap, Star } from 'lucide-react-native';
+import { RefreshCw, Heart, Share2, Zap, Star, Swords } from 'lucide-react-native';
+import GameChallengeModal from '../components/GameChallengeModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -45,6 +46,7 @@ const PitchPerfectScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [pitch, setPitch] = useState<Pitch | null>(null);
   const [saved, setSaved] = useState<string[]>([]);
   const [faves, setFaves] = useState<string[]>([]);
+  const [challengeVisible, setChallengeVisible] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const generatePitch = useCallback(() => {
@@ -148,6 +150,13 @@ const PitchPerfectScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           <Share2 size={18} color="#000" />
           <Text style={[styles.actionLabel, { color: '#000' }]}>Share</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: COLORS.primary }]}
+          onPress={() => setChallengeVisible(true)}
+        >
+          <Swords size={18} color="#000" />
+          <Text style={[styles.actionLabel, { color: '#000' }]}>Challenge</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.statsRow}>
@@ -162,6 +171,12 @@ const PitchPerfectScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           </Text>
         </View>
       </View>
+      <GameChallengeModal
+        visible={challengeVisible}
+        gameType="pitchperfect"
+        gameLabel="Pitch Perfect"
+        onClose={() => setChallengeVisible(false)}
+      />
     </SafeAreaView>
   );
 };

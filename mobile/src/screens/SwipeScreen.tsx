@@ -1349,16 +1349,20 @@ export default function SwipeScreen({ navigation }: any) {
             styles.topTitle, 
             isCompactWeb && styles.compactTopTitle,
           ]}>SPARK</Text>
-          <TouchableOpacity
-            style={[styles.modeToggle, { backgroundColor: mode === 'swipe' ? COLORS.primary : 'rgba(255,255,255,0.12)' }]}
-            onPress={() => setMode((m) => m === 'swipe' ? 'scroll' : 'swipe')}
-          >
-            <View style={[styles.modeToggleKnob, mode === 'scroll' && styles.modeToggleKnobRight]}>
-              <Text style={[styles.modeToggleIcon, mode === 'scroll' && styles.modeToggleIconRight]}>
-                {mode === 'swipe' ? '↔' : '↕'}
-              </Text>
-            </View>
-          </TouchableOpacity>
+          <View style={styles.modeToggle}>
+            <TouchableOpacity
+              style={[styles.modeToggleOption, mode === 'swipe' && { backgroundColor: COLORS.primary }]}
+              onPress={() => setMode('swipe')}
+            >
+              <Text style={[styles.modeToggleText, mode === 'swipe' && styles.modeToggleTextActive]}>↔</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeToggleOption, mode === 'scroll' && { backgroundColor: COLORS.primary }]}
+              onPress={() => setMode('scroll')}
+            >
+              <Text style={[styles.modeToggleText, mode === 'scroll' && styles.modeToggleTextActive]}>↕</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={[styles.stackArea, webDeckStyle, isCompactWeb && styles.compactStackArea]}>
@@ -2158,30 +2162,26 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   modeToggle: {
-    width: 56,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    paddingHorizontal: 3,
+    flexDirection: 'row',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    padding: 2,
   },
-  modeToggleKnob: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#000',
+  modeToggleOption: {
+    width: 28,
+    height: 24,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modeToggleKnobRight: {
-    alignSelf: 'flex-end',
+  modeToggleText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.5)',
   },
-  modeToggleIcon: {
-    fontSize: 12,
-    color: COLORS.primary,
+  modeToggleTextActive: {
+    color: '#000',
     fontWeight: '900',
-  },
-  modeToggleIconRight: {
-    color: '#FFF',
   },
   scrollProfileRoot: {
     flex: 1,
