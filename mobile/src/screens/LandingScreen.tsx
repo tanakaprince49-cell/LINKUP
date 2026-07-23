@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowRight, Lock, Star, Users } from 'lucide-react-native';
+import { ArrowRight, Lock, Star, Users, Zap, Sparkles } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import BrandMark from '../components/BrandMark';
 import { useTheme } from '../contexts/ThemeContext';
@@ -35,87 +35,102 @@ export default function LandingScreen({ navigation }: any) {
         <View style={[styles.lightPlane, styles.lightPlaneTwo, { backgroundColor: isDark ? 'rgba(223, 251, 63, 0.12)' : 'rgba(223, 251, 63, 0.2)' }]} />
         <View style={[styles.lightPlane, styles.lightPlaneThree, { backgroundColor: isDark ? 'rgba(124, 58, 237, 0.16)' : 'rgba(124, 58, 237, 0.12)' }]} />
       </View>
+
       <View style={styles.content}>
         <View style={styles.header}>
-          <View style={styles.logoBadge}>
+          <View style={[styles.logoBadge, liquidGlass(isDark, false)]}>
             <BrandMark size={28} />
+          </View>
+          <View style={styles.headerTagline}>
+            <Text style={[styles.headerTaglineText, { color: textColor(isDark, 'muted') }]}>LINKUP</Text>
           </View>
         </View>
 
-        <View style={styles.hero}>
+        <View style={styles.heroSection}>
           <View style={[styles.kickerPill, liquidGlass(isDark, false)]}>
-            <Star size={14} color={COLORS.primary} />
-            <Text style={[styles.kickerText, { color: textColor(isDark, 'secondary') }]}>PRIVATE BUILDER NETWORK</Text>
+            <Sparkles size={13} color={COLORS.primary} />
+            <Text style={[styles.kickerText, { color: COLORS.primary }]}>PRIVATE BUILDER NETWORK</Text>
           </View>
+
           <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>
-            Meet the people who move your idea forward.
+            Meet the people{'\n'}who move your{'\n'}<Text style={styles.heroHighlight}>idea forward.</Text>
           </Text>
+
           <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
             LINKUP pairs founders, technical talent, creators, and operators through signal-rich matching instead of noisy scrolling.
           </Text>
-          <View style={styles.signalRow}>
-            <View style={[styles.signalCard, liquidGlass(isDark, false)]}>
-              <Star size={18} color={COLORS.secondary} />
-              <Text style={[styles.signalValue, { color: textColor(isDark) }]}>AI FIT</Text>
-              <Text style={[styles.signalLabel, { color: textColor(isDark, 'muted') }]}>Compatibility</Text>
+
+          <View style={styles.statsRow}>
+            <View style={[styles.statCard, liquidGlass(isDark, false)]}>
+              <View style={[styles.statIconWrap, { backgroundColor: COLORS.primary + '20' }]}>
+                <Star size={16} color={COLORS.primary} />
+              </View>
+              <View style={{ gap: 2 }}>
+                <Text style={[styles.statValue, { color: textColor(isDark) }]}>AI FIT</Text>
+                <Text style={[styles.statLabel, { color: textColor(isDark, 'muted') }]}>Smart Compatibility</Text>
+              </View>
             </View>
-            <View style={[styles.signalCard, liquidGlass(isDark, false)]}>
-              <Users size={18} color={COLORS.primary} />
-              <Text style={[styles.signalValue, { color: textColor(isDark) }]}>LIVE</Text>
-              <Text style={[styles.signalLabel, { color: textColor(isDark, 'muted') }]}>Opportunities</Text>
+            <View style={[styles.statCard, liquidGlass(isDark, false)]}>
+              <View style={[styles.statIconWrap, { backgroundColor: COLORS.secondary + '20' }]}>
+                <Users size={16} color={COLORS.secondary} />
+              </View>
+              <View style={{ gap: 2 }}>
+                <Text style={[styles.statValue, { color: textColor(isDark) }]}>LIVE</Text>
+                <Text style={[styles.statLabel, { color: textColor(isDark, 'muted') }]}>Active Builders</Text>
+              </View>
             </View>
           </View>
         </View>
 
         <View style={[styles.actionPanel, liquidGlass(isDark)]}>
           <TouchableOpacity
-            style={[styles.googleButton, googleBusy && styles.disabledButton]}
+            style={[styles.primaryBtn, googleBusy && styles.disabledBtn]}
             onPress={handleGoogleSignIn}
             disabled={googleBusy}
             activeOpacity={0.85}
           >
             {googleBusy ? (
-              <ActivityIndicator color="#07111F" />
+              <ActivityIndicator color="#000" />
             ) : (
               <>
                 <View style={styles.googleIconContainer}>
                   <View style={styles.googleG} />
                 </View>
-                <Text style={styles.googleButtonText}>SIGN IN WITH GOOGLE</Text>
-                <ArrowRight size={18} color="#07111F" />
+                <Text style={styles.primaryBtnText}>CONTINUE WITH GOOGLE</Text>
+                <ArrowRight size={16} color="#000" />
               </>
             )}
           </TouchableOpacity>
 
           {authError ? (
-            <View style={[styles.authErrorBox, { backgroundColor: isDark ? 'rgba(255, 77, 109, 0.12)' : '#FFF1F4', borderColor: COLORS.danger }]}>
-              <Text style={styles.authErrorTitle}>GOOGLE AUTH ERROR</Text>
-              <Text selectable style={[styles.authErrorText, { color: isDark ? '#FFD5DE' : '#7F1D2D' }]}>{authError}</Text>
-              <TouchableOpacity onPress={clearAuthError} activeOpacity={0.8} style={styles.dismissErrorBtn}>
-                <Text style={styles.dismissErrorText}>DISMISS</Text>
+            <View style={[styles.errorBox, { backgroundColor: isDark ? 'rgba(255, 77, 109, 0.12)' : '#FFF1F4', borderColor: COLORS.danger }]}>
+              <Text style={styles.errorTitle}>AUTH ERROR</Text>
+              <Text selectable style={[styles.errorText, { color: isDark ? '#FFD5DE' : '#7F1D2D' }]}>{authError}</Text>
+              <TouchableOpacity onPress={clearAuthError} activeOpacity={0.8} style={[styles.dismissBtn, { backgroundColor: COLORS.danger + '20' }]}>
+                <Text style={[styles.dismissText, { color: COLORS.danger }]}>DISMISS</Text>
               </TouchableOpacity>
             </View>
           ) : null}
 
           <TouchableOpacity
-            style={[styles.secondaryButton, liquidGlass(isDark, false)]}
+            style={[styles.secondaryBtn, liquidGlass(isDark, false)]}
             onPress={() => navigation.navigate('EmailAuth')}
             activeOpacity={0.85}
           >
-            <Text style={[styles.secondaryButtonText, { color: textColor(isDark) }]}>CONTINUE WITH EMAIL</Text>
+            <Text style={[styles.secondaryBtnText, { color: textColor(isDark) }]}>SIGN IN WITH EMAIL</Text>
           </TouchableOpacity>
 
           <View style={styles.privacyNotice}>
-            <Lock size={12} color={textColor(isDark, 'muted')} />
-            <Text style={[styles.privacyText, { color: textColor(isDark, 'muted') }]}>ENCRYPTED AND PRIVACY COMPLIANT</Text>
+            <Lock size={11} color={textColor(isDark, 'muted')} />
+            <Text style={[styles.privacyText, { color: textColor(isDark, 'muted') }]}>ENCRYPTED & PRIVACY COMPLIANT</Text>
           </View>
         </View>
 
         <View style={styles.footer}>
           <Text style={[styles.legalText, { color: textColor(isDark, 'muted') }]}>
-            By joining, you agree to our{'\n'}
-            <Text style={styles.legalLink} onPress={() => openLink('https://docs.google.com/document/d/1SPu2VZchQfmWQT0gr2QuvmHbiuLpBZX-aFpmVd-ph2E/edit?usp=sharing')}>TERMS OF SERVICE</Text>
-            <Text style={{ color: textColor(isDark, 'muted') }}> & </Text>
+            By joining, you agree to our{' '}
+            <Text style={styles.legalLink} onPress={() => openLink('https://docs.google.com/document/d/1SPu2VZchQfmWQT0gr2QuvmHbiuLpBZX-aFpmVd-ph2E/edit?usp=sharing')}>TERMS</Text>
+            {' '}&{' '}
             <Text style={styles.legalLink} onPress={() => openLink('https://docs.google.com/document/d/1FUTyaNfaBXzYGUiqbfhrKX73H6S6S809kpI00chyWRM/edit?usp=sharing')}>PRIVACY POLICY</Text>
           </Text>
           <Text style={[styles.complianceText, { color: textColor(isDark, 'muted') }]}>(C) 2026 LINKUP. DATA PROTECTED UNDER GDPR & CCPA.</Text>
@@ -126,39 +141,17 @@ export default function LandingScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scene: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  lightPlane: {
-    position: 'absolute',
-    width: width * 0.9,
-    height: height * 0.22,
-    borderRadius: 36,
-  },
-  lightPlaneOne: {
-    top: height * 0.08,
-    right: -width * 0.34,
-    transform: [{ rotate: '-18deg' }],
-  },
-  lightPlaneTwo: {
-    top: height * 0.28,
-    left: -width * 0.28,
-    transform: [{ rotate: '14deg' }],
-  },
-  lightPlaneThree: {
-    bottom: height * 0.1,
-    right: -width * 0.22,
-    transform: [{ rotate: '10deg' }],
-  },
+  container: { flex: 1 },
+  scene: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  lightPlane: { position: 'absolute', width: width * 0.9, height: height * 0.22, borderRadius: 36 },
+  lightPlaneOne: { top: height * 0.08, right: -width * 0.34, transform: [{ rotate: '-18deg' }] },
+  lightPlaneTwo: { top: height * 0.28, left: -width * 0.28, transform: [{ rotate: '14deg' }] },
+  lightPlaneThree: { bottom: height * 0.1, right: -width * 0.22, transform: [{ rotate: '10deg' }] },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     justifyContent: 'space-between',
-    paddingVertical: 36,
+    paddingVertical: 32,
     width: '100%',
     maxWidth: 760,
     alignSelf: 'center',
@@ -166,200 +159,130 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginTop: 8,
+    gap: 14,
   },
   logoBadge: {
-    width: 50,
-    height: 50,
-    borderRadius: 18,
+    width: 46,
+    height: 46,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.primary,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.38,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 0 },
   },
-  logoText: {
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 0,
-  },
-  hero: {
-    marginTop: 20,
-    marginBottom: 20,
-  },
+  headerTagline: { flex: 1 },
+  headerTaglineText: { fontSize: 9, fontWeight: '900', letterSpacing: 3 },
+  heroSection: { marginTop: 12, marginBottom: 12 },
   kickerPill: {
     alignSelf: 'flex-start',
-    minHeight: 34,
-    borderRadius: 17,
-    paddingHorizontal: 12,
+    minHeight: 30,
+    borderRadius: 999,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
-  kickerText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-  },
+  kickerText: { fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
   heroTitle: {
-    marginTop: 16,
-    fontSize: 42,
+    marginTop: 18,
+    fontSize: 38,
     fontWeight: '900',
-    letterSpacing: 0,
-    lineHeight: 46,
+    letterSpacing: -0.5,
+    lineHeight: 44,
+  },
+  heroHighlight: {
+    color: COLORS.primary,
+    fontStyle: 'italic',
+    textDecorationLine: 'underline',
+    textDecorationColor: COLORS.primary + '40',
   },
   heroSub: {
-    fontSize: 15,
-    lineHeight: 24,
-    marginTop: 16,
+    fontSize: 14,
+    lineHeight: 22,
+    marginTop: 14,
     fontWeight: '600',
   },
-  signalRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 22,
-  },
-  signalCard: {
+  statsRow: { flexDirection: 'row', gap: 10, marginTop: 22 },
+  statCard: {
     flex: 1,
-    borderRadius: 22,
-    padding: 14,
-    minHeight: 94,
-    justifyContent: 'space-between',
-  },
-  signalValue: {
-    marginTop: 10,
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  signalLabel: {
-    marginTop: 3,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  actionPanel: {
-    borderRadius: 28,
-    padding: 22,
-    gap: 16,
-  },
-  googleButton: {
-    backgroundColor: COLORS.primary,
-    minHeight: 58,
     borderRadius: 20,
+    padding: 14,
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statValue: { fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
+  statLabel: { fontSize: 10, fontWeight: '800' },
+  actionPanel: { borderRadius: 26, padding: 20, gap: 14 },
+  primaryBtn: {
+    backgroundColor: COLORS.primary,
+    minHeight: 56,
+    borderRadius: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
     shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
     elevation: 6,
   },
-  disabledButton: {
-    opacity: 0.7,
-  },
+  disabledBtn: { opacity: 0.65 },
   googleIconContainer: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
   googleG: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 11,
+    height: 11,
+    borderRadius: 5.5,
     borderWidth: 2.5,
     borderTopColor: '#4285F4',
     borderLeftColor: '#EA4335',
     borderBottomColor: '#FBBC05',
     borderRightColor: '#34A853',
   },
-  googleButtonText: {
-    color: '#07111F',
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-  },
-  authErrorBox: {
+  primaryBtnText: { color: '#000', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
+  errorBox: {
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 12,
-    gap: 8,
+    gap: 6,
   },
-  authErrorTitle: {
-    color: COLORS.danger,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  authErrorText: {
-    fontSize: 10,
-    lineHeight: 16,
-    fontWeight: '700',
-  },
-  dismissErrorBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: COLORS.danger,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  dismissErrorText: {
-    color: '#FFF',
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-  secondaryButton: {
-    minHeight: 54,
-    borderRadius: 20,
+  errorTitle: { color: COLORS.danger, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  errorText: { fontSize: 10, lineHeight: 16, fontWeight: '700' },
+  dismissBtn: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  dismissText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+  secondaryBtn: {
+    minHeight: 50,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
   },
-  secondaryButtonText: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
+  secondaryBtnText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
   privacyNotice: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     marginTop: 2,
   },
-  privacyText: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  footer: {
-    marginTop: 10,
-    gap: 8,
-  },
-  legalText: {
-    textAlign: 'center',
-    fontSize: 9,
-    fontWeight: '700',
-    lineHeight: 16,
-  },
-  legalLink: {
-    color: COLORS.primary,
-    fontWeight: '900',
-    textDecorationLine: 'underline',
-  },
-  complianceText: {
-    textAlign: 'center',
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
+  privacyText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  footer: { marginTop: 8, gap: 6 },
+  legalText: { textAlign: 'center', fontSize: 9, fontWeight: '700', lineHeight: 16 },
+  legalLink: { color: COLORS.primary, fontWeight: '900', textDecorationLine: 'underline' },
+  complianceText: { textAlign: 'center', fontSize: 8, fontWeight: '800', letterSpacing: 0.5 },
 });
