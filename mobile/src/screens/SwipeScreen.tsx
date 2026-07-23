@@ -895,7 +895,7 @@ export default function SwipeScreen({ navigation }: any) {
         {dailyLimitReachedRef.current ? 'DAILY MATCHES EXHAUSTED' : 'NO MORE PROFILES'}
       </Text>
       <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
-        {dailyLimitReachedRef.current ? 'Come back tomorrow for 2 new matches.' : 'Check back later for new builders.'}
+        {dailyLimitReachedRef.current ? `Come back in ${SWIPE_USAGE_WINDOW_HOURS}h for ${FREE_LIMITS.swipesPer12Hours} fresh swipes.` : 'Check back later for new builders.'}
       </Text>
       <TouchableOpacity style={styles.resetBtn} onPress={resetDeck}>
         <Text style={styles.resetText}>

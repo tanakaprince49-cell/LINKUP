@@ -25,7 +25,7 @@ export const FREE_LIMITS = {
   savedProfiles: 5,
   projects: 2,
   startupIdeas: 2,
-  dailyRecommendations: 2,
+  dailyRecommendations: 20,
 } as const;
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
