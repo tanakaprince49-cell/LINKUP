@@ -202,12 +202,13 @@ const ExpandedProfilePanel = React.memo(function ExpandedProfilePanel({
   contactBusy: boolean;
   connectionRequest: ConnectionRequest | null;
 }) {
+  const sheetBg = isDark ? '#0B1020' : '#FFF';
   return (
     <View style={StyleSheet.absoluteFill}>
       <TouchableOpacity style={styles.expandedBackdrop} activeOpacity={1} onPress={onClose} />
-      <View style={[styles.expandedSheet, { backgroundColor: isDark ? '#0B1020' : '#FFF' }]}>
+      <View style={[styles.expandedSheet, { backgroundColor: sheetBg }]}>
         <View style={styles.expandedHandle} />
-        <ScrollView contentContainerStyle={styles.expandedScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.expandedScrollArea} contentContainerStyle={styles.expandedScrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.expandedHeader}>
             <Text style={[styles.expandedName, { color: isDark ? '#FFF' : '#000' }]}>{displayName}{ageText}</Text>
             {!!profile.isVerified && <VerifiedBadge size={20} />}
@@ -215,7 +216,7 @@ const ExpandedProfilePanel = React.memo(function ExpandedProfilePanel({
           <Text style={[styles.expandedRole, { color: isDark ? '#B7C0D8' : '#42526B' }]}>{roleText}</Text>
           <Text style={[styles.expandedLocation, { color: isDark ? '#718096' : '#8492A6' }]}>{locationText}</Text>
 
-          <View style={styles.expandedMatchRow}>
+          <View style={[styles.expandedMatchRow, { backgroundColor: isDark ? 'rgba(251,230,24,0.12)' : 'rgba(251,230,24,0.15)' }]}>
             <Zap size={14} color={COLORS.primary} fill={COLORS.primary} />
             <Text style={[styles.expandedMatchText, { color: COLORS.primary }]}>
               {compatibility}% fit — {compatibilityReason}
@@ -259,11 +260,9 @@ const ExpandedProfilePanel = React.memo(function ExpandedProfilePanel({
               <Text style={[styles.expandedLookingFor, { color: isDark ? '#FFF' : '#000' }]}>{lookingFor.join(' · ')}</Text>
             </>
           )}
-
-          <View style={{ height: 100 }} />
         </ScrollView>
 
-        <View style={[styles.expandedActions, { backgroundColor: isDark ? '#0B1020' : '#FFF', borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+        <View style={[styles.expandedActionsBar, { backgroundColor: sheetBg, borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
           <TouchableOpacity style={styles.expandedPassBtn} onPress={onPass}>
             <X size={24} color="#FF6B6B" />
           </TouchableOpacity>
@@ -1057,7 +1056,7 @@ export default function SwipeScreen({ navigation }: any) {
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtnSmall]} onPress={rewindLast}>
           <View style={styles.actionBtnInnerSmall}>
-            <RotateCcw size={20} color="#888" />
+            <RotateCcw size={20} color="#FFF" />
           </View>
           <Text style={styles.actionLabel}>REWIND</Text>
         </TouchableOpacity>
@@ -1166,12 +1165,12 @@ export default function SwipeScreen({ navigation }: any) {
             </View>
             <TouchableOpacity
               activeOpacity={0.9}
-              style={[styles.moreInfoBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)', borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.1)' }]}
+              style={[styles.moreInfoBtn, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
               onPressIn={openInfoPanel}
               onPress={openInfoPanel}
             >
-              <Text style={[styles.moreInfoText, { color: isDark ? '#FFF' : '#000' }]}>MORE INFO</Text>
-              <ChevronDown size={14} color={isDark ? '#FFF' : '#000'} />
+              <Text style={styles.moreInfoText}>MORE INFO</Text>
+              <ChevronDown size={14} color="#000" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1559,7 +1558,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    maxHeight: '85%',
+    top: '15%',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     zIndex: 101,
@@ -1579,8 +1578,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 16,
   },
-  expandedScroll: {
-    paddingBottom: 120,
+  expandedScrollArea: {
+    flex: 1,
+  },
+  expandedScrollContent: {
+    paddingBottom: 20,
   },
   expandedHeader: {
     flexDirection: 'row',
@@ -1657,11 +1659,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 8,
   },
-  expandedActions: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+  expandedActionsBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1669,6 +1667,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingBottom: 32,
     borderTopWidth: 1,
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
   },
   expandedPassBtn: {
     width: 52,
@@ -1896,9 +1896,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   actionLabel: {
     fontSize: 9,
