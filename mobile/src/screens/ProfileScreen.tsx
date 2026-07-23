@@ -322,7 +322,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     showMfaEnrollmentNotice,
     updateLocalProfile,
   } = useAuth();
-  const { theme, setThemeMode } = useTheme();
+  const { theme } = useTheme();
   const isFocused = useIsFocused();
   const isDark = theme === 'dark';
   const [isEditing, setIsEditing] = useState(false);
@@ -1323,21 +1323,6 @@ export default function ProfileScreen({ navigation, route }: any) {
       setLocalPreferences((prev) => ({ ...prev, [field]: previous }));
     }
     setSavingPreference(null);
-  };
-
-  const setDarkModePreference = async (value: boolean) => {
-    await setThemeMode(value ? 'dark' : 'light');
-    if (!profile?.uid || isViewingOther) return;
-    await updatePreference({
-      settings: {
-        ...firestoreSettings,
-        publicDiscovery: localPreferences.isVisible,
-        stealthMode: localPreferences.isStealthMode,
-        turboConnect: localPreferences.turboConnect,
-        hideOnlineStatus: localPreferences.hideOnlineStatus,
-        darkMode: value,
-      },
-    });
   };
 
   const refreshNotificationStatus = async () => {
@@ -2862,17 +2847,6 @@ export default function ProfileScreen({ navigation, route }: any) {
               disabled={savingPreference === 'turboConnect'}
               onValueChange={handleTurboConnectChange}
             />
-          </View>
-
-          <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
-            <View style={styles.prefLabelContainer}>
-              <SafeIcon name={isDark ? "Moon" : "Sun"} size={18} color="#666" />
-              <View style={styles.prefCopy}>
-                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Dark Mode</Text>
-                <Text style={styles.prefHelp}>Switches LINKUP between clean light mode and premium dark mode.</Text>
-              </View>
-            </View>
-            <PreferenceSwitch value={isDark} isDark={isDark} onValueChange={setDarkModePreference} />
           </View>
 
           <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
