@@ -145,7 +145,7 @@ type SubscribeOptions = {
   onError?: (error: unknown) => void;
 };
 
-const loadFromPublicProfiles = async (userId: string) => {
+export const loadFromPublicProfiles = async (userId: string) => {
   const snap = await getDocs(query(collection(db, 'publicProfiles'), limit(120)));
   if (!snap || snap.empty) return null;
   const rows = snap.docs.map((d: any) =>
@@ -154,7 +154,7 @@ const loadFromPublicProfiles = async (userId: string) => {
   return rows.filter((p: any) => p.uid !== userId && isDiscoverableProfile(p));
 };
 
-const loadFromUsers = async (userId: string, pageSize = 60) => {
+export const loadFromUsers = async (userId: string, pageSize = 60) => {
   for (const size of [pageSize, 30, 15]) {
     try {
       const snap = await getDocs(query(collection(db, 'users'), limit(size)));

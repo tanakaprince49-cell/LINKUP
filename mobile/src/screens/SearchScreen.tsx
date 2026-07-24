@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc, collection, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -28,8 +28,8 @@ import { isDiscoverableProfile } from '../lib/discovery';
 import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
 import PaywallModal from '../components/PaywallModal';
 import { isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
-import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
-import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, MOBILE_SEARCH_RENDER_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
+import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, MOBILE_SEARCH_RENDER_LIMIT, safeProfileImageUri, compactProfileForList } from '../lib/profilePerformance';
+import { loadFromPublicProfiles, loadFromUsers } from '../lib/discoveryProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 const normalize = (v: string) => v.trim().toLowerCase();
@@ -209,20 +209,34 @@ export default function SearchScreen({ navigation, route }: any) {
 
   useEffect(() => {
     if (!user || !isFocused) return;
-    setLoading(allProfiles.length === 0);
-    const unsub = subscribeToDiscoveryProfiles({
-      userId: user.uid,
-      onData: (data) => {
-        const nextProfiles = data.filter((p: any) => p.uid !== user.uid && isDiscoverableProfile(p));
-        setAllProfiles((current) => (nextProfiles.length > 0 || current.length === 0 ? nextProfiles : current));
-        setLoading(false);
-      },
-      onError: (err) => {
-        console.error('Search users error:', err);
-        setLoading(false);
-      },
-    });
-    return () => unsub();
+    let cancelled = false;
+    setLoading(true);
+
+    const load = async () => {
+      try {
+        const [publicProfiles, userProfiles] = await Promise.all([
+          loadFromPublicProfiles(user.uid),
+          loadFromUsers(user.uid, 60),
+        ]);
+        if (cancelled) return;
+
+        const seen = new Set<string>();
+        const merged: UserProfile[] = [];
+        const add = (p: UserProfile) => {
+          if (p?.uid && !seen.has(p.uid)) { seen.add(p.uid); merged.push(p); }
+        };
+        (publicProfiles || []).forEach(add);
+        (userProfiles || []).forEach(add);
+
+        if (merged.length > 0) setAllProfiles(merged);
+      } catch (error) {
+        console.error('SearchScreen load error:', error);
+      }
+      if (!cancelled) setLoading(false);
+    };
+
+    load();
+    return () => { cancelled = true; };
   }, [isFocused, user?.uid]);
 
   useEffect(() => {
@@ -922,6 +936,7 @@ export default function SearchScreen({ navigation, route }: any) {
                 const score = aiRankMap[item.uid]?.score ?? computeCompatibility(item);
                 navigation.navigate('Profile', {
                   userId: item.uid,
+                  profileData: item,
                   compatibilityScore: score,
                   compatibilityReason: buildMatchReason(me, item, aiRankMap, queryText),
                 });
