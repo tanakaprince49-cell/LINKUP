@@ -3,9 +3,9 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
-import { RotateCcw, Swords, CheckCircle2 } from 'lucide-react-native';
+import { RotateCcw, Swords, CheckCircle2, Loader } from 'lucide-react-native';
 import GameChallengeModal from '../components/GameChallengeModal';
-import { submitChallengeScore, subscribeToChallenge, GameChallenge } from '../lib/gameChallenges';
+import { submitChallengeScore, subscribeToChallenge, GameChallenge, setPlayerJoined } from '../lib/gameChallenges';
 import { useAuth } from '../contexts/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -43,7 +43,50 @@ const FounderFlipScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
   const incomingChallengeId = route?.params?.challengeId as string | undefined;
   const [challengeId, setChallengeId] = useState<string | null>(incomingChallengeId || null);
   const [challengeResult, setChallengeResult] = useState<GameChallenge | null>(null);
+  const waitingRef = useRef(!!incomingChallengeId);
+  const [waitingForOpponent, setWaitingForOpponent] = useState(!!incomingChallengeId);
+  const [countdown, setCountdown] = useState(0);
   const lockRef = useRef(false);
+
+  // Challenge sync: set joined + wait for opponent
+  useEffect(() => {
+    if (!challengeId || !user?.uid) return;
+    let cancelled = false;
+
+    void setPlayerJoined(challengeId, user.uid);
+
+    const unsub = subscribeToChallenge(challengeId, (c) => {
+      if (cancelled || !c) return;
+      if (c.status === 'completed') {
+        setChallengeResult(c);
+        return;
+      }
+      if (c.senderJoined && c.recipientJoined && waitingRef.current) {
+        waitingRef.current = false;
+        setWaitingForOpponent(false);
+        // 3-2-1 countdown
+        setCountdown(3);
+        const interval = setInterval(() => {
+          setCountdown((prev) => {
+            if (prev <= 1) { clearInterval(interval); return 0; }
+            return prev - 1;
+          });
+        }, 1000);
+      }
+    });
+
+    return () => { cancelled = true; unsub(); };
+  }, [challengeId, user?.uid]);
+
+  // Timeout: allow playing solo after 15s
+  useEffect(() => {
+    if (!waitingForOpponent) return;
+    const timer = setTimeout(() => {
+      waitingRef.current = false;
+      setWaitingForOpponent(false);
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [waitingForOpponent]);
 
   const initGame = useCallback(() => {
     const doubled = [...CARD_PAIRS, ...CARD_PAIRS].map((c, i) => ({
@@ -112,16 +155,6 @@ const FounderFlipScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
   }, [cards, flippedIndices]);
 
   useEffect(() => {
-    if (!challengeId) return;
-    const unsub = subscribeToChallenge(challengeId, (c) => {
-      if (c && (c.senderScore != null || c.recipientScore != null)) {
-        setChallengeResult(c);
-      }
-    });
-    return unsub;
-  }, [challengeId]);
-
-  useEffect(() => {
     if (!gameOver || !challengeId || !user?.uid) return;
     submitChallengeScore(challengeId, user.uid, moves).catch(() => {});
   }, [gameOver, challengeId, user?.uid, moves]);
@@ -137,6 +170,20 @@ const FounderFlipScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
         <View style={styles.headerRight} />
       </View>
 
+      {waitingForOpponent ? (
+        <View style={styles.waitingWrap}>
+          {countdown > 0 ? (
+            <Text style={[styles.countdownText, { color: COLORS.primary }]}>{countdown}</Text>
+          ) : (
+            <>
+              <Loader size={36} color={COLORS.primary} />
+              <Text style={[styles.waitingText, { color: textColor(isDark) }]}>Waiting for opponent...</Text>
+              <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share the challenge so your friend joins</Text>
+            </>
+          )}
+        </View>
+      ) : (
+        <>
       <View style={styles.stats}>
         <View style={[styles.statBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
           <Text style={[styles.statNum, { color: COLORS.primary }]}>{moves}</Text>
@@ -169,8 +216,10 @@ const FounderFlipScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
           </TouchableOpacity>
         ))}
       </View>
+      </>
+      )}
 
-      {gameOver && challengeResult && (challengeResult.senderScore != null || challengeResult.recipientScore != null) && (
+      {(gameOver || (challengeResult?.status === 'completed')) && challengeResult && (challengeResult.senderScore != null || challengeResult.recipientScore != null) && (
         <View style={[styles.gameOverBanner, { backgroundColor: '#22C55E' }]}>
           <Text style={styles.gameOverTitle}>Challenge Complete!</Text>
           {challengeResult.senderScore != null && challengeResult.recipientScore != null ? (
@@ -202,7 +251,7 @@ const FounderFlipScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
         </View>
       )}
 
-      {gameOver && !(challengeResult && (challengeResult.senderScore != null || challengeResult.recipientScore != null)) && (
+      {!waitingForOpponent && gameOver && !(challengeResult?.status === 'completed') && (
         <View style={styles.gameOverBanner}>
           <Text style={styles.gameOverTitle}>🎉 You matched all pairs!</Text>
           <Text style={styles.gameOverMoves}>{moves} moves</Text>
@@ -298,6 +347,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.1)',
   },
   gameOverBtnText: { fontSize: 12, fontWeight: '900', color: '#000' },
+  waitingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
+  waitingText: { fontSize: 18, fontWeight: '900', marginTop: 16, textAlign: 'center' },
+  waitingSub: { fontSize: 12, fontWeight: '600', marginTop: 8, textAlign: 'center' },
+  countdownText: { fontSize: 72, fontWeight: '900' },
 });
 
 export default FounderFlipScreen;

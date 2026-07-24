@@ -1073,6 +1073,7 @@ service cloud.firestore {
           'id', 'senderId', 'recipientId', 'gameType',
           'senderName', 'senderPic', 'message',
           'senderScore', 'senderPlayedAt',
+          'senderJoined', 'recipientJoined',
           'status', 'createdAt'
         ]) &&
         incoming().senderId == request.auth.uid &&
@@ -1097,6 +1098,7 @@ service cloud.firestore {
             'senderScore', 'senderPlayedAt',
             'recipientScore', 'recipientPlayedAt',
             'completedAt', 'status',
+            'senderJoined', 'recipientJoined',
           ]) &&
           (!incoming().keys().hasAny(['senderScore']) || incoming().senderScore is number) &&
           (!incoming().keys().hasAny(['senderPlayedAt']) || incoming().senderPlayedAt is number) &&

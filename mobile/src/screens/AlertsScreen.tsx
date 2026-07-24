@@ -10,6 +10,7 @@ import { AppNotification } from '../types';
 import { markUnreadNotificationsRead } from '../lib/notifications';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { respondToConnectionRequest } from '../lib/connectionRequests';
+import { challengeId as makeChallengeId } from '../lib/gameChallenges';
 import { MOBILE_LIST_IMAGE_LIMIT, MOBILE_NOTIFICATION_QUERY_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { Bell, Eye, Heart, MessageSquare, Zap, Star, Swords } from 'lucide-react-native';
 
@@ -133,7 +134,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           return;
         }
 
-        if (notification.type === 'game_challenge' && (notification as any).gameType) {
+        if (notification.type === 'game_challenge' && (notification as any).gameType && notification.fromId && user?.uid) {
           const screenMap: Record<string, string> = {
             founderflip: 'FounderFlip',
             pitchperfect: 'PitchPerfect',
@@ -141,7 +142,8 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           };
           const screen = screenMap[(notification as any).gameType];
           if (screen) {
-            navigation.navigate(screen);
+            const cid = makeChallengeId(notification.fromId, user.uid);
+            navigation.navigate(screen, { challengeId: cid });
             return;
           }
         }

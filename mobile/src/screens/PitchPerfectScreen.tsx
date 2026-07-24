@@ -6,9 +6,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
-import { RefreshCw, Heart, Share2, Zap, Lightbulb, Trophy, Swords, CheckCircle2 } from 'lucide-react-native';
+import { RefreshCw, Heart, Share2, Zap, Lightbulb, Trophy, Swords, CheckCircle2, Loader } from 'lucide-react-native';
 import GameChallengeModal from '../components/GameChallengeModal';
-import { submitChallengeScore, subscribeToChallenge, GameChallenge } from '../lib/gameChallenges';
+import { submitChallengeScore, subscribeToChallenge, GameChallenge, setPlayerJoined } from '../lib/gameChallenges';
 import { useAuth } from '../contexts/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -52,8 +52,44 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
   const incomingChallengeId = route?.params?.challengeId as string | undefined;
   const [challengeId, setChallengeId] = useState<string | null>(incomingChallengeId || null);
   const [challengeResult, setChallengeResult] = useState<GameChallenge | null>(null);
+  const waitingRef = useRef(!!incomingChallengeId);
+  const [waitingForOpponent, setWaitingForOpponent] = useState(!!incomingChallengeId);
+  const [countdown, setCountdown] = useState(0);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Challenge sync: set joined + wait for opponent
+  useEffect(() => {
+    if (!challengeId || !user?.uid) return;
+    let cancelled = false;
+    void setPlayerJoined(challengeId, user.uid);
+    const unsub = subscribeToChallenge(challengeId, (c) => {
+      if (cancelled || !c) return;
+      if (c.status === 'completed' || (c.senderScore != null && c.recipientScore != null)) {
+        setChallengeResult(c);
+        return;
+      }
+      if (c.senderJoined && c.recipientJoined && waitingRef.current) {
+        waitingRef.current = false;
+        setWaitingForOpponent(false);
+        setCountdown(3);
+        const interval = setInterval(() => {
+          setCountdown((prev) => {
+            if (prev <= 1) { clearInterval(interval); return 0; }
+            return prev - 1;
+          });
+        }, 1000);
+      }
+    });
+    return () => { cancelled = true; unsub(); };
+  }, [challengeId, user?.uid]);
+
+  // Timeout: play solo after 15s
+  useEffect(() => {
+    if (!waitingForOpponent) return;
+    const timer = setTimeout(() => { waitingRef.current = false; setWaitingForOpponent(false); }, 15000);
+    return () => clearTimeout(timer);
+  }, [waitingForOpponent]);
 
   const generatePitch = useCallback(() => {
     const p1 = PREFIXES[Math.floor(Math.random() * PREFIXES.length)];
@@ -95,16 +131,6 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
   }, [pitch]);
 
   useEffect(() => {
-    if (!challengeId) return;
-    const unsub = subscribeToChallenge(challengeId, (c) => {
-      if (c && (c.senderScore != null || c.recipientScore != null)) {
-        setChallengeResult(c);
-      }
-    });
-    return unsub;
-  }, [challengeId]);
-
-  useEffect(() => {
     if (!challengeId || !user?.uid || generatedCount === 0) return;
     submitChallengeScore(challengeId, user.uid, generatedCount).catch(() => {});
   }, [challengeId, user?.uid, generatedCount]);
@@ -123,6 +149,21 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
           <RefreshCw size={18} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
+
+      {waitingForOpponent ? (
+        <View style={styles.waitingWrap}>
+          {countdown > 0 ? (
+            <Text style={[styles.countdownText, { color: COLORS.primary }]}>{countdown}</Text>
+          ) : (
+            <>
+              <Loader size={36} color={COLORS.primary} />
+              <Text style={[styles.waitingText, { color: textColor(isDark) }]}>Waiting for opponent...</Text>
+              <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share the challenge so your friend joins</Text>
+            </>
+          )}
+        </View>
+      ) : (
+      <>
 
       {challengeResult && (
         <View style={{ marginHorizontal: 24, marginBottom: 12, padding: 16, borderRadius: 16, backgroundColor: '#22C55E' }}>
@@ -242,6 +283,8 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
             </View>
           )}
         </ScrollView>
+      )}
+      </>
       )}
       <GameChallengeModal
         visible={challengeVisible}
@@ -402,6 +445,10 @@ const styles = StyleSheet.create({
   },
   faveIndex: { fontSize: 12, fontWeight: '700', width: 28 },
   faveName: { fontSize: 13, fontWeight: '800', flex: 1 },
+  waitingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
+  waitingText: { fontSize: 18, fontWeight: '900', marginTop: 16, textAlign: 'center' },
+  waitingSub: { fontSize: 12, fontWeight: '600', marginTop: 8, textAlign: 'center' },
+  countdownText: { fontSize: 72, fontWeight: '900' },
 });
 
 export default PitchPerfectScreen;

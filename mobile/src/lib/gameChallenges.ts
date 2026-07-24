@@ -22,6 +22,8 @@ export interface GameChallenge {
   senderPlayedAt?: number;
   recipientPlayedAt?: number;
   completedAt?: number;
+  senderJoined?: boolean;
+  recipientJoined?: boolean;
 }
 
 export function challengeId(userId: string, connectionId: string): string {
@@ -96,12 +98,32 @@ export function subscribeToChallenges(
 export async function respondToChallenge(
   challengeId: string,
   status: 'accepted' | 'declined',
+  responderName?: string,
+  challengerUserId?: string,
 ): Promise<void> {
   const ref = doc(db, 'gameChallenges', challengeId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const data = snap.data() as GameChallenge;
   await updateDoc(ref, {
     status,
     respondedAt: Date.now(),
   });
+
+  if (status === 'accepted' && data.senderId) {
+    const notifRef = doc(collection(db, 'notifications'));
+    await setDoc(notifRef, {
+      userId: data.senderId,
+      fromId: data.recipientId,
+      fromName: responderName || data.senderName || 'Someone',
+      type: 'game_challenge' as const,
+      content: `accepted your ${data.gameType} challenge!`,
+      isRead: false,
+      timestamp: Timestamp.now(),
+      gameType: data.gameType,
+    });
+  }
 }
 
 export async function submitChallengeScore(
@@ -144,6 +166,18 @@ export function subscribeToChallenge(
     onChange(snap.exists() ? (snap.data() as GameChallenge) : null);
   });
   return unsub;
+}
+
+export async function setPlayerJoined(
+  challengeId: string,
+  userId: string,
+): Promise<void> {
+  const ref = doc(db, 'gameChallenges', challengeId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const data = snap.data() as GameChallenge;
+  const field = data.senderId === userId ? 'senderJoined' : 'recipientJoined';
+  await updateDoc(ref, { [field]: true });
 }
 
 export async function getChallengeByUsers(

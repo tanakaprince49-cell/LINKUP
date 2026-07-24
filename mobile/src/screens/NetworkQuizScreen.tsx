@@ -1,13 +1,13 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Dimensions, Alert, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
-import { RefreshCw, Brain, Share2, Swords, CheckCircle2 } from 'lucide-react-native';
+import { RefreshCw, Brain, Share2, Swords, CheckCircle2, Loader } from 'lucide-react-native';
 import GameChallengeModal from '../components/GameChallengeModal';
-import { submitChallengeScore, subscribeToChallenge, GameChallenge } from '../lib/gameChallenges';
+import { submitChallengeScore, subscribeToChallenge, GameChallenge, setPlayerJoined } from '../lib/gameChallenges';
 import { useAuth } from '../contexts/AuthContext';
 
 const QUESTIONS = [
@@ -133,6 +133,42 @@ const NetworkQuizScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
   const incomingChallengeId = route?.params?.challengeId as string | undefined;
   const [challengeId, setChallengeId] = useState<string | null>(incomingChallengeId || null);
   const [challengeResult, setChallengeResult] = useState<GameChallenge | null>(null);
+  const waitingRef = useRef(!!incomingChallengeId);
+  const [waitingForOpponent, setWaitingForOpponent] = useState(!!incomingChallengeId);
+  const [countdown, setCountdown] = useState(0);
+
+  // Challenge sync: set joined + wait for opponent
+  useEffect(() => {
+    if (!challengeId || !user?.uid) return;
+    let cancelled = false;
+    void setPlayerJoined(challengeId, user.uid);
+    const unsub = subscribeToChallenge(challengeId, (c) => {
+      if (cancelled || !c) return;
+      if (c.status === 'completed' || (c.senderScore != null && c.recipientScore != null)) {
+        setChallengeResult(c);
+        return;
+      }
+      if (c.senderJoined && c.recipientJoined && waitingRef.current) {
+        waitingRef.current = false;
+        setWaitingForOpponent(false);
+        setCountdown(3);
+        const interval = setInterval(() => {
+          setCountdown((prev) => {
+            if (prev <= 1) { clearInterval(interval); return 0; }
+            return prev - 1;
+          });
+        }, 1000);
+      }
+    });
+    return () => { cancelled = true; unsub(); };
+  }, [challengeId, user?.uid]);
+
+  // Timeout: play solo after 15s
+  useEffect(() => {
+    if (!waitingForOpponent) return;
+    const timer = setTimeout(() => { waitingRef.current = false; setWaitingForOpponent(false); }, 15000);
+    return () => clearTimeout(timer);
+  }, [waitingForOpponent]);
 
   const shuffleAndStart = useCallback(() => {
     const shuffled = [...QUESTIONS].sort(() => Math.random() - 0.5).slice(0, 10);
@@ -174,16 +210,6 @@ const NetworkQuizScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
   }, [score, questions]);
 
   useEffect(() => {
-    if (!challengeId) return;
-    const unsub = subscribeToChallenge(challengeId, (c) => {
-      if (c && (c.senderScore != null || c.recipientScore != null)) {
-        setChallengeResult(c);
-      }
-    });
-    return unsub;
-  }, [challengeId]);
-
-  useEffect(() => {
     if (!finished || !challengeId || !user?.uid) return;
     submitChallengeScore(challengeId, user.uid, score).catch(() => {});
   }, [finished, challengeId, user?.uid, score]);
@@ -199,7 +225,19 @@ const NetworkQuizScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
         <View style={styles.headerRight} />
       </View>
 
-      {!finished && questions.length > 0 && (
+      {waitingForOpponent ? (
+        <View style={styles.waitingWrap}>
+          {countdown > 0 ? (
+            <Text style={[styles.countdownText, { color: COLORS.primary }]}>{countdown}</Text>
+          ) : (
+            <>
+              <Loader size={36} color={COLORS.primary} />
+              <Text style={[styles.waitingText, { color: textColor(isDark) }]}>Waiting for opponent...</Text>
+              <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share the challenge so your friend joins</Text>
+            </>
+          )}
+        </View>
+      ) : !finished && questions.length > 0 ? (
         <>
           <View style={styles.progressRow}>
             <Brain size={14} color={COLORS.primary} />
@@ -258,7 +296,7 @@ const NetworkQuizScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
             </TouchableOpacity>
           )}
         </>
-      )}
+      ) : null}
 
       {finished && challengeResult && (challengeResult.senderScore != null || challengeResult.recipientScore != null) && (
         <View style={styles.finishedContainer}>
@@ -417,6 +455,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   finishedBtnText: { fontSize: 12, fontWeight: '900', color: '#000' },
+  waitingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
+  waitingText: { fontSize: 18, fontWeight: '900', marginTop: 16, textAlign: 'center' },
+  waitingSub: { fontSize: 12, fontWeight: '600', marginTop: 8, textAlign: 'center' },
+  countdownText: { fontSize: 72, fontWeight: '900' },
 });
 
 export default NetworkQuizScreen;
