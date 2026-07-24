@@ -8,7 +8,7 @@ import { sendGameChallenge, GameType } from '../lib/gameChallenges';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, textColor } from '../theme/theme';
-import { X, Zap, MessageSquare } from 'lucide-react-native';
+import { X, Zap, MessageSquare, CheckCircle2 } from 'lucide-react-native';
 import { displayNameFor } from '../lib/discovery';
 
 interface MatchData {
@@ -22,15 +22,26 @@ interface GameChallengeModalProps {
   gameLabel: string;
   onClose: () => void;
   onSent?: () => void;
+  currentScore?: number;
 }
 
-const GameChallengeModal: React.FC<GameChallengeModalProps> = ({ visible, gameType, gameLabel, onClose, onSent }) => {
+const GameChallengeModal: React.FC<GameChallengeModalProps> = ({ visible, gameType, gameLabel, onClose, onSent, currentScore }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const { user } = useAuth();
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) {
+      setSentTo(null);
+      setSending(null);
+      setError(null);
+    }
+  }, [visible]);
 
   useEffect(() => {
     if (!visible || !user?.uid) return;
@@ -59,6 +70,7 @@ const GameChallengeModal: React.FC<GameChallengeModalProps> = ({ visible, gameTy
   const handleChallenge = useCallback(async (connection: any) => {
     if (!user?.uid || sending) return;
     setSending(connection.otherId);
+    setError(null);
     try {
       await sendGameChallenge({
         senderId: user.uid,
@@ -67,15 +79,17 @@ const GameChallengeModal: React.FC<GameChallengeModalProps> = ({ visible, gameTy
         senderName: user.displayName || 'Someone',
         senderPic: user.photoURL || undefined,
         message: `Challenge you to ${gameLabel}!`,
+        senderScore: currentScore,
       });
+      setSentTo(connection.otherId);
       onSent?.();
-      onClose();
+      setTimeout(() => setSending(null), 500);
     } catch (e) {
-      console.warn('Challenge send failed:', e);
-    } finally {
+      console.error('Challenge send failed:', e);
+      setError('Failed to send challenge. Please try again.');
       setSending(null);
     }
-  }, [user?.uid, sending, gameType, gameLabel, onSent, onClose]);
+  }, [user?.uid, sending, gameType, gameLabel, onSent, onClose, currentScore]);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -88,10 +102,24 @@ const GameChallengeModal: React.FC<GameChallengeModalProps> = ({ visible, gameTy
             </TouchableOpacity>
           </View>
           <Text style={[styles.sheetSub, { color: textColor(isDark, 'secondary') }]}>
-            Pick someone to challenge at {gameLabel}
+            {currentScore != null ? `Score: ${currentScore} — ` : ''}Pick someone to challenge at {gameLabel}
           </Text>
+          {error && (
+            <Text style={[styles.errorText, { color: '#FF3B30' }]}>{error}</Text>
+          )}
 
-          {loading ? (
+          {sentTo ? (
+            <View style={styles.sentContainer}>
+              <CheckCircle2 size={48} color="#22C55E" />
+              <Text style={[styles.sentTitle, { color: textColor(isDark) }]}>Challenge Sent!</Text>
+              <Text style={[styles.sentSub, { color: textColor(isDark, 'muted') }]}>
+                They'll see it in their notifications
+              </Text>
+              <TouchableOpacity style={styles.sentDoneBtn} onPress={onClose}>
+                <Text style={styles.sentDoneText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          ) : loading ? (
             <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
           ) : matches.length === 0 ? (
             <View style={styles.emptyBox}>
@@ -171,6 +199,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 16,
   },
+  errorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
   listContent: {
     paddingBottom: 20,
   },
@@ -226,6 +260,32 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     maxWidth: 240,
+  },
+  sentContainer: {
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 40,
+  },
+  sentTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  sentSub: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  sentDoneBtn: {
+    marginTop: 12,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 40,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  sentDoneText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#000',
   },
 });
 

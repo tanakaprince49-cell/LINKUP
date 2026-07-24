@@ -48,7 +48,7 @@ service cloud.firestore {
     }
 
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isSignedIn();
     }
 
     // ------------------------------------------------------------
@@ -992,7 +992,8 @@ service cloud.firestore {
         data.content.size() <= 500 &&
         data.type in [
           'like', 'match', 'view', 'message', 'comment', 'system',
-          'connection_request', 'connection_approved', 'connection_rejected'
+          'connection_request', 'connection_approved', 'connection_rejected',
+          'game_challenge'
         ] &&
         data.timestamp == request.time &&
         (!data.keys().hasAny(['fromId']) || isValidId(data.fromId)) &&
@@ -1053,6 +1054,58 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time;
       allow delete: if isSavedProfileOwner(existing());
+    }
+
+    // ------------------------------------------------------------
+    // Game challenges
+    // ------------------------------------------------------------
+    match /gameChallenges/{challengeDocId} {
+      function userIsInChallenge(data) {
+        return isSignedIn() && (data.senderId == request.auth.uid || data.recipientId == request.auth.uid);
+      }
+
+      allow get: if isSignedIn() && userIsInChallenge(existing());
+      allow list: if isSignedIn() && (
+        existing().recipientId == request.auth.uid || existing().senderId == request.auth.uid
+      );
+      allow create: if isSignedIn() &&
+        incoming().keys().hasOnly([
+          'id', 'senderId', 'recipientId', 'gameType',
+          'senderName', 'senderPic', 'message',
+          'senderScore', 'senderPlayedAt',
+          'status', 'createdAt'
+        ]) &&
+        incoming().senderId == request.auth.uid &&
+        incoming().recipientId is string &&
+        isValidId(incoming().recipientId) &&
+        incoming().recipientId != request.auth.uid &&
+        incoming().gameType in ['founderflip', 'pitchperfect', 'networkquiz'] &&
+        incoming().status == 'pending' &&
+        incoming().createdAt is number &&
+        challengeDocId == incoming().id &&
+        (!incoming().keys().hasAny(['senderPic']) || (incoming().senderPic is string && incoming().senderPic.size() <= 900000)) &&
+        (!incoming().keys().hasAny(['message']) || (incoming().message is string && incoming().message.size() <= 500));
+      allow update: if isSignedIn() && userIsInChallenge(existing()) && (
+        // Respond (accept/decline) — only when pending
+        (existing().status == 'pending' &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'respondedAt']) &&
+          incoming().status in ['accepted', 'declined'] &&
+          incoming().respondedAt is number) ||
+        // Score submission or completion — only when accepted
+        (existing().status == 'accepted' &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'senderScore', 'senderPlayedAt',
+            'recipientScore', 'recipientPlayedAt',
+            'completedAt', 'status',
+          ]) &&
+          (!incoming().keys().hasAny(['senderScore']) || incoming().senderScore is number) &&
+          (!incoming().keys().hasAny(['senderPlayedAt']) || incoming().senderPlayedAt is number) &&
+          (!incoming().keys().hasAny(['recipientScore']) || incoming().recipientScore is number) &&
+          (!incoming().keys().hasAny(['recipientPlayedAt']) || incoming().recipientPlayedAt is number) &&
+          (!incoming().keys().hasAny(['completedAt']) || incoming().completedAt is number) &&
+          (!incoming().keys().hasAny(['status']) || incoming().status == 'completed'))
+      );
+      allow delete: if false;
     }
 
     // ------------------------------------------------------------

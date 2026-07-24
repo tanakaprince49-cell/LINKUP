@@ -42,7 +42,7 @@ import { subscribeToDiscoveryProfiles, loadMoreDiscoveryProfiles } from '../lib/
 const windowSize = Dimensions.get('window');
 const { width } = windowSize;
 const SWIPE_THRESHOLD = 0.22 * width;
-const DISCOVERY_LIMIT = 12;
+const DISCOVERY_LIMIT = 200;
 const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800';
 const MAX_SWIPE_DATA_URI_CHARS = 900_000;
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
@@ -72,7 +72,7 @@ const readCachedDiscovery = async (uid: string): Promise<UserProfile[]> => {
   try {
     const raw = await AsyncStorage.getItem(discoveryCacheKey(uid));
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((profile) => profile?.uid && profile.uid !== uid && isDiscoverableProfile(profile)).slice(0, DISCOVERY_LIMIT) : [];
+    return Array.isArray(parsed) ? parsed.filter((profile) => profile?.uid && profile.uid !== uid && isDiscoverableProfile(profile)).slice(0, 500) : [];
   } catch {
     return [];
   }
@@ -320,7 +320,7 @@ export default function SwipeScreen({ navigation }: any) {
   const [scrollIndex, setScrollIndex] = useState(0);
   const scrollPosition = useRef(new Animated.Value(0)).current;
   const isScrollingRef = useRef(false);
-  const scrollProfilesCache = useMemo(() => profiles.filter(Boolean).slice(0, 12), [profiles]);
+  const scrollProfilesCache = useMemo(() => profiles.filter(Boolean).slice(0, 100), [profiles]);
   const scrollTouchStartY = useRef(0);
   const scrollTouchStartPos = useRef(0);
   const prevScrollDirRef = useRef<'up' | 'down'>('up');

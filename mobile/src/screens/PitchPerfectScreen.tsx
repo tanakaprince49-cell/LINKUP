@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions,
   Share, ScrollView,
@@ -6,7 +6,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
-import { RefreshCw, Heart, Share2, Zap, Lightbulb, Trophy } from 'lucide-react-native';
+import { RefreshCw, Heart, Share2, Zap, Lightbulb, Trophy, Swords, CheckCircle2 } from 'lucide-react-native';
+import GameChallengeModal from '../components/GameChallengeModal';
+import { submitChallengeScore, subscribeToChallenge, GameChallenge } from '../lib/gameChallenges';
+import { useAuth } from '../contexts/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -38,12 +41,17 @@ interface Pitch {
   description: string;
 }
 
-const PitchPerfectScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ navigation, route }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const { user } = useAuth();
   const [pitch, setPitch] = useState<Pitch | null>(null);
   const [generatedCount, setGeneratedCount] = useState(0);
   const [faves, setFaves] = useState<string[]>([]);
+  const [challengeVisible, setChallengeVisible] = useState(false);
+  const incomingChallengeId = route?.params?.challengeId as string | undefined;
+  const [challengeId, setChallengeId] = useState<string | null>(incomingChallengeId || null);
+  const [challengeResult, setChallengeResult] = useState<GameChallenge | null>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -86,6 +94,21 @@ const PitchPerfectScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     } catch (_) {}
   }, [pitch]);
 
+  useEffect(() => {
+    if (!challengeId) return;
+    const unsub = subscribeToChallenge(challengeId, (c) => {
+      if (c && (c.senderScore != null || c.recipientScore != null)) {
+        setChallengeResult(c);
+      }
+    });
+    return unsub;
+  }, [challengeId]);
+
+  useEffect(() => {
+    if (!challengeId || !user?.uid || generatedCount === 0) return;
+    submitChallengeScore(challengeId, user.uid, generatedCount).catch(() => {});
+  }, [challengeId, user?.uid, generatedCount]);
+
   return (
     <SafeAreaView style={[styles.root, appBackground(isDark)]} edges={['top']}>
       <View style={styles.header}>
@@ -100,6 +123,34 @@ const PitchPerfectScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           <RefreshCw size={18} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
+
+      {challengeResult && (
+        <View style={{ marginHorizontal: 24, marginBottom: 12, padding: 16, borderRadius: 16, backgroundColor: '#22C55E' }}>
+          <Text style={{ fontSize: 16, fontWeight: '900', color: '#000', textAlign: 'center' }}>Challenge Complete!</Text>
+          {challengeResult.senderScore != null && challengeResult.recipientScore != null ? (
+            <>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#000', textAlign: 'center', marginTop: 4 }}>
+                You: {user?.uid === challengeResult.senderId ? challengeResult.senderScore : challengeResult.recipientScore} ideas
+              </Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#000', textAlign: 'center' }}>
+                Opponent: {user?.uid === challengeResult.senderId ? challengeResult.recipientScore : challengeResult.senderScore} ideas
+              </Text>
+              <Text style={{ fontSize: 14, fontWeight: '900', color: '#000', textAlign: 'center', marginTop: 4 }}>
+                {(() => {
+                  const my = user?.uid === challengeResult.senderId ? challengeResult.senderScore : challengeResult.recipientScore;
+                  const their = user?.uid === challengeResult.senderId ? challengeResult.recipientScore : challengeResult.senderScore;
+                  if (my == null || their == null) return '';
+                  if (my > their) return 'You win! 🏆';
+                  if (their > my) return 'Opponent wins!';
+                  return 'It\'s a tie! 🤝';
+                })()}
+              </Text>
+            </>
+          ) : (
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#000', textAlign: 'center', marginTop: 4 }}>Waiting for opponent to play...</Text>
+          )}
+        </View>
+      )}
 
       <View style={styles.statsRow}>
         <View style={[styles.statChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
@@ -168,6 +219,12 @@ const PitchPerfectScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               <Share2 size={16} color="#000" />
               <Text style={[styles.actionLabel, { color: '#000' }]}>Share</Text>
             </TouchableOpacity>
+            {!challengeId && (
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: COLORS.primary }]} onPress={() => setChallengeVisible(true)}>
+                <Swords size={16} color="#000" />
+                <Text style={[styles.actionLabel, { color: '#000' }]}>Challenge</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {faves.length > 0 && (
@@ -186,6 +243,13 @@ const PitchPerfectScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           )}
         </ScrollView>
       )}
+      <GameChallengeModal
+        visible={challengeVisible}
+        gameType="pitchperfect"
+        gameLabel="Pitch Perfect"
+        currentScore={generatedCount}
+        onClose={() => setChallengeVisible(false)}
+      />
     </SafeAreaView>
   );
 };

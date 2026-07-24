@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
 import { subscribeToChallenges, GameChallenge, respondToChallenge, GameType } from '../lib/gameChallenges';
+import GameChallengeModal from '../components/GameChallengeModal';
 import {
   Flame, Zap, Trophy, Target, TrendingUp,
   CheckCircle2, Lock, Layers, Lightbulb, Brain, ChevronRight, Swords,
@@ -42,6 +43,7 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
   const { user } = useAuth();
   const { sparkPoints, streakCount, longestStreak, missions, achievements, weeklyStats } = useGamification();
   const [challenges, setChallenges] = useState<GameChallenge[]>([]);
+  const [challengeGame, setChallengeGame] = useState<GameEntry | null>(null);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -57,7 +59,18 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
   const unlockedAchievements = achievements.filter((a) => (a.progress ?? 0) >= a.target);
   const lockedAchievements = achievements.filter((a) => (a.progress ?? 0) < a.target);
 
-  const handleChallengeResponse = async (id: string, status: 'accepted' | 'declined') => {
+  const handleChallengeResponse = async (id: string, status: 'accepted' | 'declined', gameType?: GameType) => {
+    if (status === 'accepted' && gameType) {
+      const screenMap: Record<GameType, string> = {
+        founderflip: 'FounderFlip',
+        pitchperfect: 'PitchPerfect',
+        networkquiz: 'NetworkQuiz',
+      };
+      const screen = screenMap[gameType];
+      if (screen) {
+        navigation.navigate(screen, { challengeId: id });
+      }
+    }
     await respondToChallenge(id, status);
     setChallenges((prev) => prev.filter((c) => c.id !== id));
   };
@@ -106,7 +119,13 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
               onPress={() => openGame(game)}
               activeOpacity={0.85}
             >
-              <Text style={styles.gameEmoji}>{game.emoji}</Text>
+              <View style={styles.gameCardTop}>
+                <Text style={styles.gameEmoji}>{game.emoji}</Text>
+                <TouchableOpacity onPress={() => setChallengeGame(game)} style={styles.gameChallengeTag}>
+                  <Swords size={10} color="#000" />
+                  <Text style={styles.gameChallengeTagText}>Challenge</Text>
+                </TouchableOpacity>
+              </View>
               <Text style={styles.gameTitle}>{game.title}</Text>
               <Text style={styles.gameSubtitle}>{game.subtitle}</Text>
               <View style={styles.gamePlayRow}>
@@ -135,7 +154,7 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
                 <View style={styles.challengeActions}>
                   <TouchableOpacity
                     style={[styles.challengeBtn, styles.challengeAccept]}
-                    onPress={() => handleChallengeResponse(c.id, 'accepted')}
+                    onPress={() => handleChallengeResponse(c.id, 'accepted', c.gameType)}
                   >
                     <Text style={styles.challengeAcceptText}>Accept</Text>
                   </TouchableOpacity>
@@ -252,6 +271,15 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {challengeGame && (
+        <GameChallengeModal
+          visible={!!challengeGame}
+          gameType={challengeGame.key === 'flip' ? 'founderflip' : challengeGame.key === 'pitch' ? 'pitchperfect' : 'networkquiz'}
+          gameLabel={challengeGame.title}
+          onClose={() => setChallengeGame(null)}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -300,7 +328,22 @@ const styles = StyleSheet.create({
     gap: 6,
     minHeight: 140,
   },
+  gameCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
   gameEmoji: { fontSize: 24 },
+  gameChallengeTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+  },
+  gameChallengeTagText: { fontSize: 9, fontWeight: '900', color: '#000' },
   gameTitle: { fontSize: 13, fontWeight: '900', color: '#FFF', letterSpacing: -0.3 },
   gameSubtitle: { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.7)', lineHeight: 12 },
   gamePlayRow: {

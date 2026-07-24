@@ -1,10 +1,8 @@
-import { Platform } from 'react-native';
-import { collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, startAfter, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, limit, orderBy, query, setDoc, startAfter } from 'firebase/firestore';
 import { db } from './firebase';
 import { displayNameFor, isDiscoverableProfile } from './discovery';
 import {
   IS_LOW_END_ANDROID,
-  MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT,
   MOBILE_LIST_IMAGE_LIMIT,
   MOBILE_SWIPE_DECK_LIMIT,
   compactProfileForList,
@@ -13,9 +11,6 @@ import {
 import { UserProfile } from '../types';
 
 const PUBLIC_DISCOVERY_PAGE_SIZE = Math.max(MOBILE_SWIPE_DECK_LIMIT, IS_LOW_END_ANDROID ? 8 : 12);
-const FALLBACK_DELAY_MS = Platform.OS === 'android' ? 300 : 1200;
-const USE_PUBLIC_PROFILE_INDEX = true;
-const isPermissionDenied = (error: unknown) => String((error as any)?.code || '').includes('permission-denied');
 const lastOwnPublicProfileSignature: Record<string, string> = {};
 
 const text = (value: unknown, max = 240) => String(value ?? '').trim().slice(0, max);
@@ -150,102 +145,56 @@ type SubscribeOptions = {
   onError?: (error: unknown) => void;
 };
 
+const loadFromPublicProfiles = async (userId: string) => {
+  const snap = await getDocs(query(collection(db, 'publicProfiles'), limit(120)));
+  if (!snap || snap.empty) return null;
+  const rows = snap.docs.map((d: any) =>
+    compactProfileForList({ uid: d.id, ...(d.data() as any) })
+  );
+  return rows.filter((p: any) => p.uid !== userId && isDiscoverableProfile(p));
+};
+
+const loadFromUsers = async (userId: string, pageSize = 60) => {
+  const snap = await getDocs(query(collection(db, 'users'), limit(pageSize)));
+  if (!snap || snap.empty) return null;
+  const rows = snap.docs.map((d: any) =>
+    compactProfileForList({ uid: d.id, ...(d.data() as any) })
+  );
+  return rows.filter((p: any) => p.uid !== userId && isDiscoverableProfile(p));
+};
+
 export const subscribeToDiscoveryProfiles = ({ userId, onData, onError }: SubscribeOptions) => {
   let closed = false;
-  let sawPublicProfiles = false;
-  let fallbackMode: 'filtered' | 'broad' | '' = '';
-  let unsubscribePublic: (() => void) | null = null;
-  let unsubscribeUsers: (() => void) | null = null;
 
-  const emit = (rows: UserProfile[], source: 'publicProfiles' | 'users') => {
-    if (closed) return 0;
-    const list = rows
-      .filter((profile: any) => profile.uid !== userId && isDiscoverableProfile(profile))
-      .slice(0, 120);
-    onData(list, source);
-    return list.length;
-  };
-
-  const startFallback = (mode: 'filtered' | 'broad' = 'filtered') => {
-    if (closed || fallbackMode === mode || (fallbackMode === 'broad' && mode === 'filtered')) return;
-    fallbackMode = mode;
-    if (unsubscribeUsers) {
-      unsubscribeUsers();
-      unsubscribeUsers = null;
-    }
-    const usersQuery =
-      mode === 'filtered'
-        ? query(
-            collection(db, 'users'),
-            where('isVisible', '==', true),
-            where('isStealthMode', '==', false),
-            limit(MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT)
-          )
-        : query(collection(db, 'users'), limit(MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT));
-    unsubscribeUsers = onSnapshot(
-      usersQuery,
-      (snapshot) => {
-        const rows = snapshot.docs.map((docSnap) =>
-          compactProfileForList({ uid: docSnap.id, ...(docSnap.data() as any) })
-        );
-        const visibleCount = emit(rows, 'users');
-        if (mode === 'filtered' && visibleCount === 0) {
-          setTimeout(() => startFallback('broad'), 350);
-        }
-      },
-      (error) => {
-        if (mode === 'filtered') {
-          startFallback('broad');
-          return;
-        }
-        if (!closed && !isPermissionDenied(error)) onError?.(error);
-        if (!closed && isPermissionDenied(error)) onData([], 'users');
+  const load = async () => {
+    try {
+      const publicProfiles = await loadFromPublicProfiles(userId);
+      if (closed) return;
+      if (publicProfiles && publicProfiles.length > 0) {
+        console.log('Loaded profiles from publicProfiles:', publicProfiles.length);
+        onData(publicProfiles, 'publicProfiles');
+        return;
       }
-    );
-  };
 
-  const fallbackTimer = setTimeout(() => {
-    if (!sawPublicProfiles) startFallback('filtered');
-  }, FALLBACK_DELAY_MS);
-
-  if (!USE_PUBLIC_PROFILE_INDEX) {
-    clearTimeout(fallbackTimer);
-    startFallback('filtered');
-    return () => {
-      closed = true;
-      unsubscribeUsers?.();
-    };
-  }
-
-  const publicQuery = query(collection(db, 'publicProfiles'), limit(PUBLIC_DISCOVERY_PAGE_SIZE));
-  unsubscribePublic = onSnapshot(
-    publicQuery,
-    (snapshot) => {
-      const rows = snapshot.docs.map((docSnap) =>
-        compactProfileForList({ uid: docSnap.id, ...(docSnap.data() as any) })
-      );
-      const visibleCount = rows.filter((profile: any) => profile.uid !== userId && isDiscoverableProfile(profile)).length;
-      if (visibleCount > 0) {
-        sawPublicProfiles = true;
-        if (unsubscribeUsers) {
-          unsubscribeUsers();
-          unsubscribeUsers = null;
-          fallbackMode = '';
-        }
-        emit(rows, 'publicProfiles');
-      } else if (!fallbackMode) {
-        startFallback('filtered');
+      const userProfiles = await loadFromUsers(userId, 60);
+      if (closed) return;
+      if (userProfiles && userProfiles.length > 0) {
+        console.log('Loaded profiles from users fallback:', userProfiles.length);
+        onData(userProfiles, 'users');
+        return;
       }
-    },
-    (error) => {
-      startFallback('filtered');
-    }
-  );
 
-  return () => {
-    closed = true;
-    clearTimeout(fallbackTimer);
-    unsubscribePublic?.();
-    unsubscribeUsers?.();
+      console.warn('Discovery: no profiles found in publicProfiles or users');
+      onData([], 'users');
+    } catch (error) {
+      if (!closed) {
+        console.error('Discovery load error:', error);
+        onError?.(new Error('Discovery load failed'));
+      }
+    }
   };
+
+  load();
+
+  return () => { closed = true; };
 };

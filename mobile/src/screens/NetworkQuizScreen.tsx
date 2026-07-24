@@ -5,8 +5,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
-import { RefreshCw, Brain, Share2, Swords } from 'lucide-react-native';
+import { RefreshCw, Brain, Share2, Swords, CheckCircle2 } from 'lucide-react-native';
 import GameChallengeModal from '../components/GameChallengeModal';
+import { submitChallengeScore, subscribeToChallenge, GameChallenge } from '../lib/gameChallenges';
+import { useAuth } from '../contexts/AuthContext';
 
 const QUESTIONS = [
   { q: 'Which company acquired Instagram?', options: ['Google', 'Facebook', 'Twitter', 'Snapchat'], answer: 1 },
@@ -117,9 +119,10 @@ const QUESTIONS = [
   { q: 'What is "insurtech"?', options: ['Technology innovation in insurance', 'Insurance for tech', 'Tech insurance policies', 'Insurance regulations'], answer: 0 },
 ];
 
-const NetworkQuizScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+const NetworkQuizScreen: React.FC<{ navigation: any; route?: any }> = ({ navigation, route }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const { user } = useAuth();
   const [questions, setQuestions] = useState<any[]>([]);
   const [current, setCurrent] = useState(0);
   const [score, setScore] = useState(0);
@@ -127,6 +130,9 @@ const NetworkQuizScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [revealed, setRevealed] = useState(false);
   const [finished, setFinished] = useState(false);
   const [challengeVisible, setChallengeVisible] = useState(false);
+  const incomingChallengeId = route?.params?.challengeId as string | undefined;
+  const [challengeId, setChallengeId] = useState<string | null>(incomingChallengeId || null);
+  const [challengeResult, setChallengeResult] = useState<GameChallenge | null>(null);
 
   const shuffleAndStart = useCallback(() => {
     const shuffled = [...QUESTIONS].sort(() => Math.random() - 0.5).slice(0, 10);
@@ -166,6 +172,21 @@ const NetworkQuizScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       });
     } catch (_) {}
   }, [score, questions]);
+
+  useEffect(() => {
+    if (!challengeId) return;
+    const unsub = subscribeToChallenge(challengeId, (c) => {
+      if (c && (c.senderScore != null || c.recipientScore != null)) {
+        setChallengeResult(c);
+      }
+    });
+    return unsub;
+  }, [challengeId]);
+
+  useEffect(() => {
+    if (!finished || !challengeId || !user?.uid) return;
+    submitChallengeScore(challengeId, user.uid, score).catch(() => {});
+  }, [finished, challengeId, user?.uid, score]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -239,7 +260,42 @@ const NetworkQuizScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         </>
       )}
 
-      {finished && (
+      {finished && challengeResult && (challengeResult.senderScore != null || challengeResult.recipientScore != null) && (
+        <View style={styles.finishedContainer}>
+          <Text style={styles.finishedEmoji}>🏆</Text>
+          <Text style={[styles.finishedScore, { color: textColor(isDark) }]}>Challenge Complete!</Text>
+          {challengeResult.senderScore != null && challengeResult.recipientScore != null ? (
+            <>
+              <Text style={[styles.finishedSub, { color: textColor(isDark, 'muted') }]}>
+                You: {user?.uid === challengeResult.senderId ? challengeResult.senderScore : challengeResult.recipientScore}/{questions.length}
+              </Text>
+              <Text style={[styles.finishedSub, { color: textColor(isDark, 'muted') }]}>
+                Opponent: {user?.uid === challengeResult.senderId ? challengeResult.recipientScore : challengeResult.senderScore}/{questions.length}
+              </Text>
+              <Text style={[styles.finishedSub, { color: textColor(isDark), fontWeight: '900', marginTop: 4 }]}>
+                {(() => {
+                  const my = user?.uid === challengeResult.senderId ? challengeResult.senderScore : challengeResult.recipientScore;
+                  const their = user?.uid === challengeResult.senderId ? challengeResult.recipientScore : challengeResult.senderScore;
+                  if (my == null || their == null) return '';
+                  if (my > their) return 'You win! 🏆';
+                  if (their > my) return 'Opponent wins!';
+                  return 'It\'s a tie! 🤝';
+                })()}
+              </Text>
+            </>
+          ) : (
+            <Text style={[styles.finishedSub, { color: textColor(isDark, 'muted') }]}>Waiting for opponent to play...</Text>
+          )}
+          <View style={styles.finishedActions}>
+            <TouchableOpacity style={styles.finishedBtn} onPress={shuffleAndStart}>
+              <RefreshCw size={16} color="#000" />
+              <Text style={styles.finishedBtnText}>Play Again</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {finished && !(challengeResult && (challengeResult.senderScore != null || challengeResult.recipientScore != null)) && (
         <View style={styles.finishedContainer}>
           <Text style={styles.finishedEmoji}>{score >= 8 ? '🏆' : score >= 5 ? '👏' : '💪'}</Text>
           <Text style={[styles.finishedScore, { color: textColor(isDark) }]}>
@@ -257,10 +313,12 @@ const NetworkQuizScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               <Share2 size={16} color="#000" />
               <Text style={[styles.finishedBtnText, { color: '#000' }]}>Share</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.finishedBtn]} onPress={() => setChallengeVisible(true)}>
-              <Swords size={16} color="#000" />
-              <Text style={styles.finishedBtnText}>Challenge</Text>
-            </TouchableOpacity>
+            {!challengeId && (
+              <TouchableOpacity style={[styles.finishedBtn]} onPress={() => setChallengeVisible(true)}>
+                <Swords size={16} color="#000" />
+                <Text style={styles.finishedBtnText}>Challenge</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       )}
@@ -269,6 +327,7 @@ const NetworkQuizScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         visible={challengeVisible}
         gameType="networkquiz"
         gameLabel="Network Quiz"
+        currentScore={score}
         onClose={() => setChallengeVisible(false)}
       />
     </View>

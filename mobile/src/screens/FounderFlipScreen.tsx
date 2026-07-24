@@ -3,7 +3,10 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
-import { RotateCcw } from 'lucide-react-native';
+import { RotateCcw, Swords, CheckCircle2 } from 'lucide-react-native';
+import GameChallengeModal from '../components/GameChallengeModal';
+import { submitChallengeScore, subscribeToChallenge, GameChallenge } from '../lib/gameChallenges';
+import { useAuth } from '../contexts/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_SIZE = (SCREEN_WIDTH - 80) / 4;
@@ -27,14 +30,19 @@ interface CardData {
   matched: boolean;
 }
 
-const FounderFlipScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+const FounderFlipScreen: React.FC<{ navigation: any; route?: any }> = ({ navigation, route }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const { user } = useAuth();
   const [cards, setCards] = useState<CardData[]>([]);
   const [flippedIndices, setFlippedIndices] = useState<number[]>([]);
   const [matchedPairs, setMatchedPairs] = useState(0);
   const [moves, setMoves] = useState(0);
+  const [challengeVisible, setChallengeVisible] = useState(false);
   const [gameOver, setGameOver] = useState(false);
+  const incomingChallengeId = route?.params?.challengeId as string | undefined;
+  const [challengeId, setChallengeId] = useState<string | null>(incomingChallengeId || null);
+  const [challengeResult, setChallengeResult] = useState<GameChallenge | null>(null);
   const lockRef = useRef(false);
 
   const initGame = useCallback(() => {
@@ -103,6 +111,21 @@ const FounderFlipScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     }
   }, [cards, flippedIndices]);
 
+  useEffect(() => {
+    if (!challengeId) return;
+    const unsub = subscribeToChallenge(challengeId, (c) => {
+      if (c && (c.senderScore != null || c.recipientScore != null)) {
+        setChallengeResult(c);
+      }
+    });
+    return unsub;
+  }, [challengeId]);
+
+  useEffect(() => {
+    if (!gameOver || !challengeId || !user?.uid) return;
+    submitChallengeScore(challengeId, user.uid, moves).catch(() => {});
+  }, [gameOver, challengeId, user?.uid, moves]);
+
   return (
     <View style={{ flex: 1 }}>
       <SafeAreaView style={[styles.root, appBackground(isDark)]} edges={['top']}>
@@ -147,7 +170,39 @@ const FounderFlipScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         ))}
       </View>
 
-      {gameOver && (
+      {gameOver && challengeResult && (challengeResult.senderScore != null || challengeResult.recipientScore != null) && (
+        <View style={[styles.gameOverBanner, { backgroundColor: '#22C55E' }]}>
+          <Text style={styles.gameOverTitle}>Challenge Complete!</Text>
+          {challengeResult.senderScore != null && challengeResult.recipientScore != null ? (
+            <>
+              <Text style={styles.gameOverMoves}>
+                You: {user?.uid === challengeResult.senderId ? challengeResult.senderScore : challengeResult.recipientScore} moves
+              </Text>
+              <Text style={styles.gameOverMoves}>
+                Opponent: {user?.uid === challengeResult.senderId ? challengeResult.recipientScore : challengeResult.senderScore} moves
+              </Text>
+              <Text style={[styles.gameOverMoves, { marginTop: 4, fontWeight: '900' }]}>
+                {(() => {
+                  const myScore = user?.uid === challengeResult.senderId ? challengeResult.senderScore : challengeResult.recipientScore;
+                  const theirScore = user?.uid === challengeResult.senderId ? challengeResult.recipientScore : challengeResult.senderScore;
+                  if (myScore == null || theirScore == null) return '';
+                  if (myScore < theirScore) return 'You win! 🏆';
+                  if (theirScore < myScore) return 'Opponent wins!';
+                  return 'It\'s a tie! 🤝';
+                })()}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.gameOverMoves}>Waiting for opponent to play...</Text>
+          )}
+          <TouchableOpacity style={styles.gameOverBtn} onPress={initGame}>
+            <RotateCcw size={16} color="#000" />
+            <Text style={styles.gameOverBtnText}>Play Again</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {gameOver && !(challengeResult && (challengeResult.senderScore != null || challengeResult.recipientScore != null)) && (
         <View style={styles.gameOverBanner}>
           <Text style={styles.gameOverTitle}>🎉 You matched all pairs!</Text>
           <Text style={styles.gameOverMoves}>{moves} moves</Text>
@@ -156,10 +211,23 @@ const FounderFlipScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               <RotateCcw size={16} color="#000" />
               <Text style={styles.gameOverBtnText}>Play Again</Text>
             </TouchableOpacity>
+            {!challengeId && (
+              <TouchableOpacity style={styles.gameOverBtn} onPress={() => setChallengeVisible(true)}>
+                <Swords size={16} color="#000" />
+                <Text style={styles.gameOverBtnText}>Challenge</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       )}
 
+      <GameChallengeModal
+        visible={challengeVisible}
+        gameType="founderflip"
+        gameLabel="Founder Flip"
+        currentScore={moves}
+        onClose={() => setChallengeVisible(false)}
+      />
       </SafeAreaView>
     </View>
   );

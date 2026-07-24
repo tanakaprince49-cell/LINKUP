@@ -175,7 +175,8 @@ export interface AppNotification {
     | 'comment'
     | 'connection_request'
     | 'connection_approved'
-    | 'connection_rejected';
+    | 'connection_rejected'
+    | 'game_challenge';
   content: string;
   timestamp: Timestamp | FieldValue;
   isRead: boolean;
@@ -184,6 +185,7 @@ export interface AppNotification {
   fromPic?: string;
   matchId?: string;
   requestId?: string;
+  gameType?: string;
 }
 
 export interface Story {

@@ -11,7 +11,7 @@ import { markUnreadNotificationsRead } from '../lib/notifications';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { respondToConnectionRequest } from '../lib/connectionRequests';
 import { MOBILE_LIST_IMAGE_LIMIT, MOBILE_NOTIFICATION_QUERY_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
-import { Bell, Eye, Heart, MessageSquare, Sparkles, Zap } from 'lucide-react-native';
+import { Bell, Eye, Heart, MessageSquare, Zap, Star, Swords } from 'lucide-react-native';
 
 const formatTimeAgo = (timestamp: any) => {
   if (!timestamp) return 'Just now';
@@ -55,7 +55,8 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
       case 'connection_rejected': return <MessageSquare size={18} color={COLORS.danger} />;
       case 'comment': return <MessageSquare size={18} color={COLORS.warning} />;
       case 'view': return <Eye size={18} color={COLORS.success} />;
-      case 'system': return <Sparkles size={18} color={COLORS.primary} />;
+      case 'game_challenge': return <Swords size={18} color={COLORS.primary} />;
+      case 'system': return <Bell size={18} color={COLORS.primary} />;
       default: return <Bell size={18} color={COLORS.primary} />;
     }
   };
@@ -130,6 +131,19 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         ) {
           navigation.navigate('ActiveOpportunity', { userId: notification.fromId });
           return;
+        }
+
+        if (notification.type === 'game_challenge' && (notification as any).gameType) {
+          const screenMap: Record<string, string> = {
+            founderflip: 'FounderFlip',
+            pitchperfect: 'PitchPerfect',
+            networkquiz: 'NetworkQuiz',
+          };
+          const screen = screenMap[(notification as any).gameType];
+          if (screen) {
+            navigation.navigate(screen);
+            return;
+          }
         }
 
         if (notification.fromId) {

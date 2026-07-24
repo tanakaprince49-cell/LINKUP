@@ -1,7 +1,7 @@
 import { db } from './firebase';
 import {
   doc, setDoc, getDoc, onSnapshot, collection, query, where,
-  updateDoc, arrayUnion, Timestamp, deleteDoc,
+  updateDoc, Timestamp,
 } from 'firebase/firestore';
 
 export type GameType = 'founderflip' | 'pitchperfect' | 'networkquiz';
@@ -14,9 +14,14 @@ export interface GameChallenge {
   senderName: string;
   senderPic?: string;
   message?: string;
-  status: 'pending' | 'accepted' | 'declined';
+  status: 'pending' | 'accepted' | 'declined' | 'completed';
   createdAt: number;
   respondedAt?: number;
+  senderScore?: number;
+  recipientScore?: number;
+  senderPlayedAt?: number;
+  recipientPlayedAt?: number;
+  completedAt?: number;
 }
 
 export function challengeId(userId: string, connectionId: string): string {
@@ -31,6 +36,7 @@ export async function sendGameChallenge(params: {
   senderName: string;
   senderPic?: string;
   message?: string;
+  senderScore?: number;
 }): Promise<void> {
   const id = challengeId(params.senderId, params.recipientId);
   const ref = doc(db, 'gameChallenges', id);
@@ -50,24 +56,23 @@ export async function sendGameChallenge(params: {
     message: params.message,
     status: 'pending',
     createdAt: Date.now(),
+    senderScore: params.senderScore,
+    senderPlayedAt: params.senderScore != null ? Date.now() : undefined,
   };
 
   await setDoc(ref, challenge);
 
   const notifRef = doc(collection(db, 'notifications'));
   await setDoc(notifRef, {
-    id: notifRef.id,
     userId: params.recipientId,
     fromId: params.senderId,
+    fromName: params.senderName,
+    fromPic: params.senderPic || null,
     type: 'game_challenge',
-    title: `${params.senderName} challenged you!`,
-    body: `Can you beat their ${params.gameType} score?`,
+    content: `challenged you to ${params.gameType}!`,
     isRead: false,
-    createdAt: Timestamp.now(),
-    data: {
-      gameType: params.gameType,
-      challengeId: id,
-    },
+    timestamp: Timestamp.now(),
+    gameType: params.gameType,
   });
 }
 
@@ -97,6 +102,48 @@ export async function respondToChallenge(
     status,
     respondedAt: Date.now(),
   });
+}
+
+export async function submitChallengeScore(
+  challengeId: string,
+  userId: string,
+  score: number,
+): Promise<void> {
+  const ref = doc(db, 'gameChallenges', challengeId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const data = snap.data() as GameChallenge;
+  const isSender = data.senderId === userId;
+  const now = Date.now();
+
+  const update: Record<string, any> = {};
+  if (isSender) {
+    update.senderScore = score;
+    update.senderPlayedAt = now;
+  } else {
+    update.recipientScore = score;
+    update.recipientPlayedAt = now;
+  }
+
+  const senderScore = isSender ? score : data.senderScore;
+  const recipientScore = isSender ? data.recipientScore : score;
+  if (senderScore != null && recipientScore != null) {
+    update.completedAt = now;
+    update.status = 'completed';
+  }
+
+  await updateDoc(ref, update);
+}
+
+export function subscribeToChallenge(
+  challengeId: string,
+  onChange: (challenge: GameChallenge | null) => void,
+): () => void {
+  const unsub = onSnapshot(doc(db, 'gameChallenges', challengeId), (snap) => {
+    onChange(snap.exists() ? (snap.data() as GameChallenge) : null);
+  });
+  return unsub;
 }
 
 export async function getChallengeByUsers(
