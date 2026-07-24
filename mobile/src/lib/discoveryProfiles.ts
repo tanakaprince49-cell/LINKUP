@@ -155,12 +155,20 @@ const loadFromPublicProfiles = async (userId: string) => {
 };
 
 const loadFromUsers = async (userId: string, pageSize = 60) => {
-  const snap = await getDocs(query(collection(db, 'users'), limit(pageSize)));
-  if (!snap || snap.empty) return null;
-  const rows = snap.docs.map((d: any) =>
-    compactProfileForList({ uid: d.id, ...(d.data() as any) })
-  );
-  return rows.filter((p: any) => p.uid !== userId && isDiscoverableProfile(p));
+  for (const size of [pageSize, 30, 15]) {
+    try {
+      const snap = await getDocs(query(collection(db, 'users'), limit(size)));
+      if (!snap || snap.empty) return null;
+      const rows = snap.docs.map((d: any) =>
+        compactProfileForList({ uid: d.id, ...(d.data() as any) })
+      );
+      const visible = rows.filter((p: any) => p.uid !== userId && isDiscoverableProfile(p));
+      if (visible.length > 0) return visible;
+    } catch {
+      if (size === 15) return null;
+    }
+  }
+  return null;
 };
 
 export const subscribeToDiscoveryProfiles = ({ userId, onData, onError }: SubscribeOptions) => {
@@ -168,19 +176,28 @@ export const subscribeToDiscoveryProfiles = ({ userId, onData, onError }: Subscr
 
   const load = async () => {
     try {
-      const publicProfiles = await loadFromPublicProfiles(userId);
+      // Load from both sources concurrently
+      const [publicProfiles, userProfiles] = await Promise.all([
+        loadFromPublicProfiles(userId),
+        loadFromUsers(userId, 60),
+      ]);
       if (closed) return;
-      if (publicProfiles && publicProfiles.length > 0) {
-        console.log('Loaded profiles from publicProfiles:', publicProfiles.length);
-        onData(publicProfiles, 'publicProfiles');
-        return;
-      }
 
-      const userProfiles = await loadFromUsers(userId, 60);
-      if (closed) return;
-      if (userProfiles && userProfiles.length > 0) {
-        console.log('Loaded profiles from users fallback:', userProfiles.length);
-        onData(userProfiles, 'users');
+      // Merge and deduplicate by uid
+      const seen = new Set<string>();
+      const merged: UserProfile[] = [];
+      const add = (profile: UserProfile) => {
+        if (profile?.uid && !seen.has(profile.uid)) {
+          seen.add(profile.uid);
+          merged.push(profile);
+        }
+      };
+      (publicProfiles || []).forEach(add);
+      (userProfiles || []).forEach(add);
+
+      if (merged.length > 0) {
+        console.log('Loaded profiles — publicProfiles:', publicProfiles?.length || 0, 'users:', userProfiles?.length || 0, 'merged:', merged.length);
+        onData(merged, 'users');
         return;
       }
 
