@@ -11,6 +11,7 @@ import {
   Easing,
   PanResponder,
   ScrollView,
+  FlatList,
   InteractionManager,
   Platform,
   useWindowDimensions,
@@ -315,13 +316,7 @@ export default function SwipeScreen({ navigation }: any) {
   const scoreByIdRef = useRef<Map<string, number>>(new Map());
   const lastSwipedProfileRef = useRef<UserProfile | null>(null);
   const [mode, setMode] = useState<'swipe' | 'scroll'>('swipe');
-  const [scrollIndex, setScrollIndex] = useState(0);
-  const scrollPosition = useRef(new Animated.Value(0)).current;
-  const isScrollingRef = useRef(false);
-  const scrollProfilesCache = useMemo(() => profiles.filter(Boolean).slice(0, 100), [profiles]);
-  const scrollTouchStartY = useRef(0);
-  const scrollTouchStartPos = useRef(0);
-  const prevScrollDirRef = useRef<'up' | 'down'>('up');
+  const [contentHeight, setContentHeight] = useState(0);
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedItem?: UserProfile) => void>(() => {});
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const resetSwipePositionRef = useRef<() => void>(() => {});
@@ -1140,198 +1135,111 @@ export default function SwipeScreen({ navigation }: any) {
     );
   };
 
-  useEffect(() => {
-    if (mode === 'scroll' && scrollIndex >= scrollProfilesCache.length) {
-      setScrollIndex(Math.max(0, scrollProfilesCache.length - 1));
-    }
-  }, [mode, scrollProfilesCache.length]);
-
-  const goToNextProfile = () => {
-    const feed = scrollProfilesCache;
-    const idx = scrollIndex;
-    if (idx < feed.length - 1) {
-      const screenH = Dimensions.get('window').height;
-      scrollPosition.setValue(screenH);
-      setScrollIndex(idx + 1);
-      isScrollingRef.current = false;
-      Animated.spring(scrollPosition, {
-        toValue: 0, friction: 8, useNativeDriver: false,
-      }).start();
-    }
-  };
-
-  const goToPrevProfile = () => {
-    const idx = scrollIndex;
-    if (idx > 0) {
-      const screenH = Dimensions.get('window').height;
-      scrollPosition.setValue(-screenH);
-      setScrollIndex(idx - 1);
-      isScrollingRef.current = false;
-      Animated.spring(scrollPosition, {
-        toValue: 0, friction: 8, useNativeDriver: false,
-      }).start();
-    }
-  };
-
-  const handleScrollTouchStart = (e: any) => {
-    if (isScrollingRef.current) return;
-    scrollTouchStartY.current = e.nativeEvent?.pageY ?? (e as any).pageY ?? 0;
-    scrollTouchStartPos.current = (scrollPosition as any).__getValue();
-  };
-
-  const handleScrollTouchMove = (e: any) => {
-    if (isScrollingRef.current) return;
-    const pageY = e.nativeEvent?.pageY ?? (e as any).pageY ?? 0;
-    const dy = pageY - scrollTouchStartY.current;
-    const limited = dy * 0.6;
-    const idx = scrollIndex;
-    const len = scrollProfilesCache.length;
-    const basePos = scrollTouchStartPos.current;
-    if (len === 0) return;
-    if ((limited > 0 && idx === 0) || (limited < 0 && idx === len - 1)) {
-      scrollPosition.setValue(basePos + limited * 0.25);
-    } else {
-      scrollPosition.setValue(basePos + limited);
-    }
-  };
-
-  const handleScrollTouchEnd = (e: any) => {
-    if (isScrollingRef.current) return;
-    const pageY = e.nativeEvent?.pageY ?? (e as any).pageY ?? 0;
-    const dy = pageY - scrollTouchStartY.current;
-    const idx = scrollIndex;
-    const len = scrollProfilesCache.length;
-    if (dy < -80 && idx < len - 1) {
-      prevScrollDirRef.current = 'up';
-      isScrollingRef.current = true;
-      goToNextProfile();
-    } else if (dy > 80 && idx > 0) {
-      prevScrollDirRef.current = 'down';
-      isScrollingRef.current = true;
-      goToPrevProfile();
-    } else {
-      Animated.spring(scrollPosition, {
-        toValue: scrollTouchStartPos.current, friction: 7, useNativeDriver: false,
-      }).start(() => { isScrollingRef.current = false; });
-    }
-  };
-
-  const handleScrollWheel = (e: any) => {
-    if (isScrollingRef.current) return;
-    const delta = e.deltaY || e.detail || 0;
-    if (delta > 40) goToNextProfile();
-    else if (delta < -40) goToPrevProfile();
-  };
+  const feed = useMemo(() => profiles.filter(Boolean).slice(0, 100), [profiles]);
 
   const renderScrollProfile = () => {
-    const feed = scrollProfilesCache;
     if (feed.length === 0) return renderEmpty();
-    const currentProfile = feed[scrollIndex] || feed[0];
-    const photos = getSwipePhotos(currentProfile);
-    const ageText = Number(currentProfile.age) > 0 ? `, ${currentProfile.age}` : '';
-    const locationText = [currentProfile.city, currentProfile.country].filter(Boolean).join(', ') || 'Remote';
-    const roleText = [
-      (currentProfile as any).occupation || 'Builder',
-      (currentProfile as any).company ? `@ ${(currentProfile as any).company}` : null,
-    ].filter(Boolean).join(' ');
-    const existingScore = scoreByIdRef.current.get(currentProfile.uid);
-    const matchRank = existingScore != null ? { score: existingScore, reason: '' } : (myProfile ? localCommonalityRank(myProfile, [currentProfile], 1)[0] : null);
-    const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
-    const skills = Array.isArray(currentProfile.skills) ? currentProfile.skills.slice(0, 6) : [];
-    const hasNext = scrollIndex < feed.length - 1;
 
     return (
-      <View style={styles.scrollRoot}>
-        <Animated.View
-          style={[styles.scrollCard, { transform: [{ translateY: scrollPosition }] }]}
-          {...(isWeb
-            ? { onPointerDown: handleScrollTouchStart, onPointerMove: handleScrollTouchMove, onPointerUp: handleScrollTouchEnd, onWheel: handleScrollWheel }
-            : { onTouchStart: handleScrollTouchStart, onTouchMove: handleScrollTouchMove, onTouchEnd: handleScrollTouchEnd }
-          )}
-        >
-          <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.scrollCardImg} resizeMode="cover" />
-          <View style={styles.scrollCardOverlay} />
-          <View style={styles.scrollCardBody}>
-            <View style={styles.scrollCardTop}>
-              <View style={[styles.scrollCompatPill, { backgroundColor: COLORS.primary }]}>
-                <Zap size={10} color="#000" fill="#000" />
-                <Text style={styles.scrollCompatText}>{compatibility}%</Text>
-              </View>
-            </View>
-            <View style={styles.scrollCardMeta}>
-              <View style={styles.scrollCardNameRow}>
-                <Text style={styles.scrollCardName}>{displayNameFor(currentProfile)}{ageText}</Text>
-                {currentProfile.isVerified && <VerifiedBadge size={18} />}
-              </View>
-              <Text style={styles.scrollCardRole} numberOfLines={1}>{roleText}</Text>
-              <Text style={styles.scrollCardLocation} numberOfLines={1}>{locationText}</Text>
-              {skills.length > 0 && (
-                <View style={styles.scrollSkillsRow}>
-                  {skills.map((s: string, i: number) => (
-                    <View key={i} style={styles.scrollSkillTag}>
-                      <Text style={styles.scrollSkillText}>{s}</Text>
+      <View
+        style={styles.scrollFeed}
+        onLayout={(e) => setContentHeight(e.nativeEvent.layout.height)}
+      >
+        {contentHeight > 0 && (
+          <FlatList
+            data={feed}
+            keyExtractor={(p) => p.uid}
+            renderItem={({ item, index }) => {
+              const photos = getSwipePhotos(item);
+              const ageText = Number(item.age) > 0 ? `, ${item.age}` : '';
+              const locationText = [item.city, item.country].filter(Boolean).join(', ') || 'Remote';
+              const roleText = [
+                (item as any).occupation || 'Builder',
+                (item as any).company ? `@ ${(item as any).company}` : null,
+              ].filter(Boolean).join(' ');
+              const existingScore = scoreByIdRef.current.get(item.uid);
+              const matchRank = existingScore != null ? { score: existingScore, reason: '' } : (myProfile ? localCommonalityRank(myProfile, [item], 1)[0] : null);
+              const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
+              const skills = Array.isArray(item.skills) ? item.skills.slice(0, 6) : [];
+              return (
+                <View style={[styles.scrollFeedCard, { height: contentHeight }]}>
+                  <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.scrollCardImg} resizeMode="cover" />
+                  <View style={styles.scrollCardOverlay} />
+                  <View style={styles.scrollCardBody}>
+                    <View style={styles.scrollCardTop}>
+                      <View style={[styles.scrollCompatPill, { backgroundColor: COLORS.primary }]}>
+                        <Zap size={10} color="#000" fill="#000" />
+                        <Text style={styles.scrollCompatText}>{compatibility}%</Text>
+                      </View>
                     </View>
-                  ))}
+                    <View style={styles.scrollCardMeta}>
+                      <View style={styles.scrollCardNameRow}>
+                        <Text style={styles.scrollCardName}>{displayNameFor(item)}{ageText}</Text>
+                        {item.isVerified && <VerifiedBadge size={18} />}
+                      </View>
+                      <Text style={styles.scrollCardRole} numberOfLines={1}>{roleText}</Text>
+                      <Text style={styles.scrollCardLocation} numberOfLines={1}>{locationText}</Text>
+                      {skills.length > 0 && (
+                        <View style={styles.scrollSkillsRow}>
+                          {skills.map((s, i) => (
+                            <View key={i} style={styles.scrollSkillTag}>
+                              <Text style={styles.scrollSkillText}>{s}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.scrollIndicatorRow}>
+                      <View style={[styles.scrollDot, { backgroundColor: COLORS.primary }]} />
+                      <Text style={styles.scrollDotLabel}>{index + 1} / {feed.length}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.scrollBottomActions}>
+                    <TouchableOpacity
+                      style={[styles.scrollBottomBtn, { backgroundColor: 'rgba(0,0,0,0.5)', borderColor: 'rgba(255,255,255,0.2)' }]}
+                      onPress={() => animateSwipeOutRef.current('left')}
+                    >
+                      <X size={20} color="#FF6B6B" />
+                      <Text style={styles.scrollBottomLabel}>PASS</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.scrollBottomContact]}
+                      disabled={contactBusy || isSyntheticProfile(item)}
+                      onPress={() => {
+                        if (item.uid !== topProfile?.uid) {
+                          const reordered = [...profiles];
+                          const idx = reordered.findIndex((p) => p.uid === item.uid);
+                          if (idx > 0) {
+                            const [p] = reordered.splice(idx, 1);
+                            reordered.unshift(p);
+                            setProfiles(reordered);
+                          }
+                        }
+                        setTimeout(() => handleContactRequest(), 150);
+                      }}
+                    >
+                      <MessageSquare size={16} color="#000" />
+                      <Text style={[styles.scrollBottomLabel, { color: '#000' }]}>
+                        {connectionRequest?.status === 'approved' ? 'CHAT' : connectionRequest?.status === 'pending' ? 'SENT' : 'CONTACT'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.scrollBottomBtn, { backgroundColor: '#FF3B5C' }]}
+                      onPress={() => animateSwipeOutRef.current('right')}
+                    >
+                      <Heart size={20} color="#000" fill="#000" />
+                      <Text style={styles.scrollBottomLabel}>LIKE</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              )}
-            </View>
-            <View style={styles.scrollIndicatorRow}>
-              <View style={[styles.scrollDot, { backgroundColor: COLORS.primary }]} />
-              <Text style={styles.scrollDotLabel}>{scrollIndex + 1} / {feed.length}</Text>
-            </View>
-          </View>
-        </Animated.View>
-
-        <View style={styles.scrollBottomActions}>
-          <TouchableOpacity
-            style={[styles.scrollBottomBtn, { backgroundColor: 'rgba(0,0,0,0.5)', borderColor: 'rgba(255,255,255,0.2)' }]}
-            onPress={() => {
-              isScrollingRef.current = true;
-              animateSwipeOutRef.current('left');
-              setScrollIndex((i) => Math.min(i, feed.length - 2));
+              );
             }}
-          >
-            <X size={20} color="#FF6B6B" />
-            <Text style={styles.scrollBottomLabel}>PASS</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.scrollBottomContact]}
-            disabled={contactBusy || isSyntheticProfile(currentProfile)}
-            onPress={() => {
-              if (currentProfile.uid !== topProfile?.uid) {
-                const reordered = [...profiles];
-                const idx = reordered.findIndex((p) => p.uid === currentProfile.uid);
-                if (idx > 0) {
-                  const [p] = reordered.splice(idx, 1);
-                  reordered.unshift(p);
-                  setProfiles(reordered);
-                }
-              }
-              setTimeout(() => handleContactRequest(), 150);
-            }}
-          >
-            <MessageSquare size={16} color="#000" />
-            <Text style={[styles.scrollBottomLabel, { color: '#000' }]}>
-              {connectionRequest?.status === 'approved' ? 'CHAT' : connectionRequest?.status === 'pending' ? 'SENT' : 'CONTACT'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.scrollBottomBtn, { backgroundColor: '#FF3B5C' }]}
-            onPress={() => {
-              isScrollingRef.current = true;
-              animateSwipeOutRef.current('right');
-              setScrollIndex((i) => Math.min(i, feed.length - 2));
-            }}
-          >
-            <Heart size={20} color="#000" fill="#000" />
-            <Text style={styles.scrollBottomLabel}>LIKE</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.scrollSwipeHint}>
-          <Text style={styles.scrollSwipeHintText}>
-            {hasNext ? '↑ swipe up for next' : 'last profile'}
-          </Text>
-        </View>
+            snapToInterval={contentHeight}
+            decelerationRate="fast"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          />
+        )}
       </View>
     );
   };
@@ -2226,17 +2134,18 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '900',
   },
-  scrollRoot: {
+  scrollFeed: {
     flex: 1,
-    borderRadius: 24,
-    overflow: 'hidden',
     marginHorizontal: 8,
     marginBottom: 8,
-  },
-  scrollCard: {
-    flex: 1,
     borderRadius: 24,
     overflow: 'hidden',
+  },
+  scrollFeedCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#0a0a0a',
   },
   scrollCardImg: {
     ...StyleSheet.absoluteFillObject,
