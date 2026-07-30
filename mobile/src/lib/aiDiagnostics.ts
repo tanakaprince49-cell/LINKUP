@@ -157,11 +157,10 @@ async function requestGoogleGeminiText(prompt: string, options: GeminiRequestOpt
 
   let response: any;
   try {
-    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-goog-api-key': key,
       },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
