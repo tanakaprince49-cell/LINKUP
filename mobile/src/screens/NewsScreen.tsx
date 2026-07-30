@@ -96,9 +96,9 @@ export default function NewsScreen() {
   );
 
   return (
-    <SafeAreaView edges={['bottom']} style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-        <View style={styles.filterRow}>
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
+      <View style={styles.filterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterContent}>
           {CATEGORIES.map((cat) => (
             <TouchableOpacity
               key={cat}
@@ -110,11 +110,11 @@ export default function NewsScreen() {
               </Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity onPress={() => loadNews(true)} style={styles.refreshBtn}>
-            <RefreshCw size={16} color={COLORS.primary} />
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        </ScrollView>
+        <TouchableOpacity onPress={() => loadNews(true)} style={styles.refreshBtn}>
+          <RefreshCw size={16} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
 
       {loading ? (
         <ActivityIndicator color={COLORS.primary} style={{ marginTop: 80 }} />
@@ -141,11 +141,16 @@ export default function NewsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  filterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
   filterScroll: {
     flexGrow: 0,
-    marginVertical: 10,
+    flexShrink: 1,
   },
-  filterRow: {
+  filterContent: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
