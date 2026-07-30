@@ -1,6 +1,7 @@
 import { db } from './firebase';
 import { collection, query, getDocs, limit as firestoreLimit, doc, getDoc } from 'firebase/firestore';
 import { requestGeminiText } from './aiDiagnostics';
+import { Platform } from 'react-native';
 
 const ZEN_MODEL = 'ling-3.0-flash-free';
 
@@ -115,6 +116,20 @@ const callZen = async (messages: OpenRouterMessage[]): Promise<string> => {
     })
     .join('\n\n');
   const prompt = `${SYSTEM_PROMPT}\n\n${conversation}\n\nLinky:`;
+
+  if (Platform.OS === 'web') {
+    try {
+      const resp = await fetch('/api/aiAssist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: 'linkyChat', payload: { prompt } }),
+      });
+      if (resp.ok) {
+        const json = await resp.json();
+        if (json?.text) return json.text;
+      }
+    } catch {}
+  }
 
   const zenKey = process.env.EXPO_PUBLIC_OPENCODE_ZEN_API_KEY;
   if (zenKey) {

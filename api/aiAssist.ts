@@ -82,6 +82,11 @@ const promptsByTask: Record<string, (payload: Record<string, unknown>) => { prom
       `Build update: "${String(payload.postContent || '').slice(0, 1200)}"`,
     ].join('\n'),
   }),
+  linkyChat: (payload) => ({
+    maxOutputTokens: 600,
+    temperature: 0.55,
+    prompt: String(payload.prompt || '').slice(0, 4000),
+  }),
 };
 
 export default async function handler(req: any, res: any) {
