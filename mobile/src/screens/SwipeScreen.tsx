@@ -1174,13 +1174,14 @@ export default function SwipeScreen({ navigation }: any) {
 
   const handleScrollTouchStart = (e: any) => {
     if (isScrollingRef.current) return;
-    scrollTouchStartY.current = e.nativeEvent.pageY;
+    scrollTouchStartY.current = e.nativeEvent?.pageY ?? (e as any).pageY ?? 0;
     scrollTouchStartPos.current = (scrollPosition as any).__getValue();
   };
 
   const handleScrollTouchMove = (e: any) => {
     if (isScrollingRef.current) return;
-    const dy = e.nativeEvent.pageY - scrollTouchStartY.current;
+    const pageY = e.nativeEvent?.pageY ?? (e as any).pageY ?? 0;
+    const dy = pageY - scrollTouchStartY.current;
     const limited = dy * 0.6;
     const idx = scrollIndex;
     const len = scrollProfilesCache.length;
@@ -1195,7 +1196,8 @@ export default function SwipeScreen({ navigation }: any) {
 
   const handleScrollTouchEnd = (e: any) => {
     if (isScrollingRef.current) return;
-    const dy = e.nativeEvent.pageY - scrollTouchStartY.current;
+    const pageY = e.nativeEvent?.pageY ?? (e as any).pageY ?? 0;
+    const dy = pageY - scrollTouchStartY.current;
     const idx = scrollIndex;
     const len = scrollProfilesCache.length;
     if (dy < -80 && idx < len - 1) {
@@ -1211,6 +1213,13 @@ export default function SwipeScreen({ navigation }: any) {
         toValue: scrollTouchStartPos.current, friction: 7, useNativeDriver: false,
       }).start(() => { isScrollingRef.current = false; });
     }
+  };
+
+  const handleScrollWheel = (e: any) => {
+    if (isScrollingRef.current) return;
+    const delta = e.deltaY || e.detail || 0;
+    if (delta > 40) goToNextProfile();
+    else if (delta < -40) goToPrevProfile();
   };
 
   const renderScrollProfile = () => {
@@ -1237,6 +1246,10 @@ export default function SwipeScreen({ navigation }: any) {
           onTouchStart={handleScrollTouchStart}
           onTouchMove={handleScrollTouchMove}
           onTouchEnd={handleScrollTouchEnd}
+          onPointerDown={handleScrollTouchStart}
+          onPointerMove={handleScrollTouchMove}
+          onPointerUp={handleScrollTouchEnd}
+          onWheel={handleScrollWheel}
         >
           <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.scrollCardImg} resizeMode="cover" />
           <View style={styles.scrollCardOverlay} />
