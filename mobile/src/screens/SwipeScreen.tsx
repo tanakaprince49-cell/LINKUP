@@ -2195,6 +2195,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   scrollFeedCard: {
+    flex: 1,
     borderRadius: 24,
     overflow: 'hidden',
     position: 'relative',
