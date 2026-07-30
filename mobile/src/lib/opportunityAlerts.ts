@@ -101,7 +101,7 @@ export function scoreOpportunityFit(me: UserProfile | null | undefined, candidat
     (activeOpportunity ? 18 : 0) +
     (candidate.turboConnect ? 5 : 0);
 
-  if (score < 38 || !activeOpportunity) return null;
+  if (score < 10) return null;
 
   const reasonParts = unique([
     ...exactMatches.slice(0, 2),

@@ -176,33 +176,15 @@ export const subscribeToDiscoveryProfiles = ({ userId, onData, onError }: Subscr
 
   const load = async () => {
     try {
-      // Load from both sources concurrently
-      const [publicProfiles, userProfiles] = await Promise.all([
-        loadFromPublicProfiles(userId),
-        loadFromUsers(userId, 60),
-      ]);
+      const list = await loadFromPublicProfiles(userId);
       if (closed) return;
 
-      // Merge and deduplicate by uid
-      const seen = new Set<string>();
-      const merged: UserProfile[] = [];
-      const add = (profile: UserProfile) => {
-        if (profile?.uid && !seen.has(profile.uid)) {
-          seen.add(profile.uid);
-          merged.push(profile);
-        }
-      };
-      (publicProfiles || []).forEach(add);
-      (userProfiles || []).forEach(add);
-
-      if (merged.length > 0) {
-        console.log('Loaded profiles — publicProfiles:', publicProfiles?.length || 0, 'users:', userProfiles?.length || 0, 'merged:', merged.length);
-        onData(merged, 'users');
+      if (list && list.length > 0) {
+        onData(list, 'publicProfiles');
         return;
       }
 
-      console.warn('Discovery: no profiles found in publicProfiles or users');
-      onData([], 'users');
+      onData([], 'publicProfiles');
     } catch (error) {
       if (!closed) {
         console.error('Discovery load error:', error);

@@ -36,6 +36,17 @@ const onboardingStorageKey = (uid: string) => `linkup:onboarded:${uid}`;
 const profileCacheKey = (uid: string) => `linkup:profile:v2:${uid}`;
 const MAX_PROFILE_CACHE_CHARS = Platform.OS === 'android' ? 450_000 : 900_000;
 
+const persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const scheduleProfilePersist = (uid: string, data: any) => {
+  const existing = persistTimers.get(uid);
+  if (existing) clearTimeout(existing);
+  persistTimers.set(uid, setTimeout(() => {
+    persistTimers.delete(uid);
+    writeCachedProfile(uid, data).catch(() => {});
+    syncOwnPublicProfileIndex(uid, data).catch(() => {});
+  }, 2000));
+};
+
 const readCachedProfile = async (uid: string) => {
   try {
     const raw = await AsyncStorage.getItem(profileCacheKey(uid));
@@ -578,8 +589,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               updateDoc(userDocRef, { onboarded: true }).catch(() => {});
             }
             setProfileStable(compactProfileForCache(data) as UserProfile);
-            writeCachedProfile(authenticatedUser.uid, data).catch(() => {});
-            syncOwnPublicProfileIndex(authenticatedUser.uid, data).catch(() => {});
+            scheduleProfilePersist(authenticatedUser.uid, data);
             setLoading(false);
             return;
           }

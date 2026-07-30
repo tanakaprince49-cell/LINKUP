@@ -35,7 +35,7 @@ import { roleInfoFor } from '../lib/roles';
 import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare } from 'lucide-react-native';
 import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
-import { consumeDailyUsage, consumeWindowUsage, getDailyUsage, FREE_LIMITS, isAndroidProLocked, PRO_FEATURES, SWIPE_USAGE_WINDOW_HOURS } from '../lib/paywall';
+import { PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
 import { subscribeToDiscoveryProfiles, loadMoreDiscoveryProfiles } from '../lib/discoveryProfiles';
 
@@ -313,9 +313,7 @@ export default function SwipeScreen({ navigation }: any) {
   const hasUserSwipedRef = useRef(false);
   const allProfilesRef = useRef<UserProfile[]>([]);
   const scoreByIdRef = useRef<Map<string, number>>(new Map());
-  const dailyLimitReachedRef = useRef(false);
   const lastSwipedProfileRef = useRef<UserProfile | null>(null);
-  const [dailyRemaining, setDailyRemaining] = useState<number>(FREE_LIMITS.dailyRecommendations);
   const [mode, setMode] = useState<'swipe' | 'scroll'>('swipe');
   const [scrollIndex, setScrollIndex] = useState(0);
   const scrollPosition = useRef(new Animated.Value(0)).current;
@@ -357,8 +355,7 @@ export default function SwipeScreen({ navigation }: any) {
           marginHorizontal: 0,
         }
       : null;
-  const proLocked = isAndroidProLocked(myProfile);
-  const openPaywall = (feature: string = PRO_FEATURES.swipeLimit) => setPaywallFeature(feature);
+  const openPaywall = (feature: string = PRO_FEATURES.startupAnalyzer) => setPaywallFeature(feature);
   const closePaywallToHome = () => {
     setPaywallFeature('');
     navigation?.navigate?.('Main', { screen: 'Swipe' });
@@ -661,14 +658,6 @@ export default function SwipeScreen({ navigation }: any) {
   const loadingMoreRef = useRef(false);
 
   useEffect(() => {
-    if (!user?.uid) return;
-    void getDailyUsage(user.uid, 'dailyRecommendations').then((used) => {
-      const remaining = Math.max(0, FREE_LIMITS.dailyRecommendations - used);
-      setDailyRemaining(remaining);
-    });
-  }, [user?.uid]);
-
-  useEffect(() => {
     if (profiles.length > 3 || allLoadedRef.current || loadingMoreRef.current || !user?.uid) return;
     let cancelled = false;
     loadingMoreRef.current = true;
@@ -914,16 +903,16 @@ export default function SwipeScreen({ navigation }: any) {
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Target size={48} color={dailyLimitReachedRef.current ? textColor(isDark, 'muted') : COLORS.primary} />
+      <Target size={48} color={COLORS.primary} />
       <Text style={[styles.emptyText, { color: textColor(isDark) }]}>
-        {dailyLimitReachedRef.current ? 'DAILY MATCHES EXHAUSTED' : 'NO MORE PROFILES'}
+        NO MORE PROFILES
       </Text>
       <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
-        {dailyLimitReachedRef.current ? 'Come back tomorrow for 2 fresh matches.' : 'Check back later for new builders.'}
+        Check back later for new builders.
       </Text>
       <TouchableOpacity style={styles.resetBtn} onPress={resetDeck}>
         <Text style={styles.resetText}>
-          {dailyLimitReachedRef.current ? 'TOMORROW' : 'REFRESH DISCOVERY'}
+          REFRESH DISCOVERY
         </Text>
       </TouchableOpacity>
     </View>
@@ -1420,8 +1409,8 @@ export default function SwipeScreen({ navigation }: any) {
       </View>
       <PaywallModal
         visible={!!paywallFeature}
-        feature={paywallFeature || PRO_FEATURES.swipeLimit}
-        description={`Free accounts get ${FREE_LIMITS.swipesPer12Hours} builder swipes every ${SWIPE_USAGE_WINDOW_HOURS} hours. LINKUP PLUS unlocks unlimited discovery.`}
+        feature={paywallFeature || PRO_FEATURES.startupAnalyzer}
+        description={`Warm intros, verified badges, startup analyzer, and Linky AI are LINKUP PLUS features.`}
         onClose={closePaywallToHome}
         onUnlocked={() => setPaywallFeature('')}
       />

@@ -238,8 +238,26 @@ export const generateWarmIntro = async (me: any, other: any) => {
   } catch (error) {
     // Local fallback keeps warm intros available when smart features are off.
   }
-    const otherName = other?.displayName?.split?.(' ')?.[0] || 'there';
-    const myRole = me?.occupation || 'builder';
-    const otherRole = other?.occupation || 'builder';
-    return `Hey ${otherName}, I saw your profile and liked the way your ${otherRole} background lines up with what I am building as a ${myRole}. Looks like there could be a useful overlap between our skills and goals. Would you be open to exploring whether there is a collaboration fit?`;
+    const otherName = other?.displayName?.split(' ')?.[0] || 'there';
+    const myName = me?.displayName?.split(' ')?.[0] || 'I';
+    const otherRoleDesc = [other?.occupation, other?.company].filter(Boolean).join(' at ');
+    const myRoleDesc = [me?.occupation, me?.company].filter(Boolean).join(' at ');
+    const otherSkills = Array.isArray(other?.skills) ? other.skills.slice(0, 3).join(', ') : '';
+    const mySkills = Array.isArray(me?.skills) ? me.skills.slice(0, 3).join(', ') : '';
+    const otherIndustry = Array.isArray(other?.industries) ? other.industries[0] : '';
+    const myIndustry = Array.isArray(me?.industries) ? me.industries[0] : '';
+    const otherLookingFor = Array.isArray(other?.lookingFor) ? other.lookingFor.slice(0, 2).join(' and ') : '';
+    const parts: string[] = [];
+    if (otherSkills && mySkills) {
+      parts.push(`I see your skills in ${otherSkills} complement my background in ${mySkills}`);
+    } else if (otherRoleDesc && myRoleDesc) {
+      parts.push(`Your experience as ${otherRoleDesc} aligns with my work as ${myRoleDesc}`);
+    }
+    if (otherIndustry && myIndustry) {
+      if (otherIndustry === myIndustry) parts.push(`we both focus on ${otherIndustry}`);
+      else parts.push(`your work in ${otherIndustry} is interesting alongside my focus on ${myIndustry}`);
+    }
+    if (otherLookingFor) parts.push(`I see you are looking for ${otherLookingFor}`);
+    const specific = parts.length ? parts.join('. ') : `your background as ${otherRoleDesc || 'a builder'} caught my eye`;
+    return `Hey ${otherName}, ${specific}. Would you be open to connecting and seeing if there is a collaboration fit?`;
 };

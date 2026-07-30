@@ -8,8 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import VerifiedBadge from '../components/VerifiedBadge';
-import PaywallModal from '../components/PaywallModal';
-import { isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
+
 import { compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
@@ -174,8 +173,6 @@ function ViewersScreen({ navigation, route }: any) {
   const [mode, setMode] = useState<AnalyticsMode>(requestedMode);
   const [rows, setRows] = useState<ViewerProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const proLocked = isAndroidProLocked(profile);
-  const analyticsLocked = proLocked && mode !== 'views';
   const meta = MODE_META[mode];
   const HeaderIcon = meta.Icon;
 
@@ -190,7 +187,7 @@ function ViewersScreen({ navigation, route }: any) {
   }, [mode, rows]);
 
   useEffect(() => {
-    if (analyticsLocked || !profile?.uid) {
+    if (!profile?.uid) {
       setRows([]);
       setLoading(false);
       return;
@@ -375,7 +372,7 @@ function ViewersScreen({ navigation, route }: any) {
       cancelled = true;
       unsubscribe();
     };
-  }, [mode, analyticsLocked, profile?.uid, Array.isArray(profile?.viewedBy) ? profile.viewedBy.join('|') : '']);
+  }, [mode, profile?.uid, Array.isArray(profile?.viewedBy) ? profile.viewedBy.join('|') : '']);
 
   const openRow = (item: ViewerProfile) => {
     if (item.analyticsMode === 'response' && item.matchId) {
@@ -414,19 +411,6 @@ function ViewersScreen({ navigation, route }: any) {
       </TouchableOpacity>
     );
   };
-
-  if (analyticsLocked) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
-        <PaywallModal
-          visible
-          feature={PRO_FEATURES.profileViewers}
-          description="Who viewed your profile is free. LINKUP PLUS unlocks clicks, saves, and response analytics."
-          onClose={() => navigation.goBack()}
-        />
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>

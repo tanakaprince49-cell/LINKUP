@@ -32,16 +32,12 @@ type PaywallModalProps = {
 const LOGO = require('../../assets/logo-square.png');
 
 const PRO_PERKS = [
-  'Discover unlimited founders, developers & investors',
-  'Find exactly who you\'re looking for with powerful AI filters',
-  'See who\'s viewing your profile and optimize it to get more matches',
-  'Unlimited project ideas',
-  'Unlimited startup analyzer',
-  'Unlimited saved profiles',
+  'AI-powered warm intros to start conversations',
+  'Linky AI assistant for smart networking',
+  'Verified blue check badge',
+  'AI startup analyzer',
   'Priority AI matching',
-  'Premium founder badge',
   'Early access to new AI tools',
-  'Faster customer support',
   'Exclusive founder community',
 ];
 

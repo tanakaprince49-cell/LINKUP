@@ -306,7 +306,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 
   const ProjectCard = ({ item }: { item: ProjectRecommendation }) => (
     <TouchableOpacity
-      onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.owner.uid, projectId: item.project.id })}
+      onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.owner.uid, projectId: item.project.id, matchScore: item.score })}
       style={[styles.projectCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}
       activeOpacity={0.9}
     >
@@ -388,9 +388,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             <View style={[styles.heroCard, { backgroundColor: isDark ? COLORS.darkCard : '#FFF' }]}>
               <View style={styles.heroTop}>
                 <View style={styles.heroIconRow}>
-                  <View style={styles.heroIcon}>
-                    <Zap size={18} color="#000" />
-                  </View>
                   <View style={styles.heroBadge}>
                     <Text style={[styles.heroBadgeText, { color: COLORS.primary }]}>TODAY</Text>
                   </View>
@@ -402,6 +399,15 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               </View>
 
               <View style={styles.heroActions}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('Linky')}
+                  style={[styles.heroBtn, { backgroundColor: COLORS.primary }]}
+                >
+                  <View style={{ width: 22, height: 22, borderRadius: 7, backgroundColor: '#22C55E', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 9, fontWeight: '900', color: '#FFF', letterSpacing: 0.5 }}>AI</Text>
+                  </View>
+                  <Text style={[styles.heroBtnText, { color: '#000' }]}>LINKY AI</Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('IdeaDeck')}
                   style={[styles.heroBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
@@ -418,7 +424,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               {topOpportunityAlert ? (
                 <TouchableOpacity
                   activeOpacity={0.9}
-                  onPress={() => navigation.navigate('ActiveOpportunity', { userId: topOpportunityAlert.profile.uid })}
+                  onPress={() => navigation.navigate('ActiveOpportunity', { userId: topOpportunityAlert.profile.uid, matchScore: topOpportunityAlert.score })}
                   style={[styles.radarCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFBEA' }]}
                 >
                   <View style={styles.radarTop}>
@@ -454,6 +460,29 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               )}
             </View>
           </View>
+
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('Linky')}
+            style={[styles.linkyCard, { backgroundColor: isDark ? 'rgba(34,197,94,0.08)' : '#F0FDF4' }]}
+          >
+            <View style={styles.linkyCardLeft}>
+              <View style={styles.linkyCardAvatar}>
+                <Text style={styles.linkyCardAvatarText}>AI</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.nameRow}>
+                  <Text style={[styles.name, { color: textColor(isDark) }]}>Linky AI</Text>
+                  <VerifiedBadge size={18} />
+                </View>
+                <Text style={[styles.handle, { color: COLORS.primary }]}>@linky</Text>
+                <Text style={[styles.meta, { color: textColor(isDark, 'muted') }]}>AI Assistant</Text>
+              </View>
+            </View>
+            <View style={[styles.linkyChip, { backgroundColor: COLORS.primary }]}>
+              <Text style={styles.linkyChipText}>CHAT</Text>
+            </View>
+          </TouchableOpacity>
 
           <Section
             title="Recommended Matches"
@@ -888,6 +917,61 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1.2,
+    color: '#000',
+  },
+  linkyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 24,
+    padding: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.2)',
+    shadowColor: '#22C55E',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  linkyCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  linkyCardAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 20,
+    backgroundColor: '#22C55E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#22C55E',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  linkyCardAvatarText: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#FFF',
+    letterSpacing: 1,
+  },
+  linkyChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  linkyChipText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
     color: '#000',
   },
 });

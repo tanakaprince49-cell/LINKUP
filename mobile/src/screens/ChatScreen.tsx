@@ -119,6 +119,7 @@ const uploadToCloudinary = async (asset: ImagePicker.ImagePickerAsset, mediaKind
 export default function ChatScreen({ route, navigation }: any) {
   const matchId = route?.params?.matchId;
   const otherUserParam = route?.params?.otherUser;
+  const draftMessage = route?.params?.draftMessage;
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -283,6 +284,13 @@ export default function ChatScreen({ route, navigation }: any) {
       console.warn('Could not clear chat unread count:', error);
     });
   }, [matchId, myUid]);
+
+  const draftSentRef = useRef(false);
+  useEffect(() => {
+    if (!matchId || !draftMessage || draftSentRef.current || !user) return;
+    draftSentRef.current = true;
+    sendChatText(draftMessage).catch(() => {});
+  }, [matchId, draftMessage]);
 
   useEffect(() => {
     if (!myUid || !otherUserId) {
@@ -452,12 +460,10 @@ export default function ChatScreen({ route, navigation }: any) {
       if (cloudinaryEnabled()) {
         mediaUrl = await uploadToCloudinary(asset, mediaKind) || '';
       } else {
-        const inlineLimit = proLocked ? MAX_FREE_INLINE_IMAGE_CHARS : MAX_PRO_INLINE_IMAGE_CHARS;
-        const preparedImage = await imageAssetToDataUri(asset, inlineLimit);
+        const preparedImage = await imageAssetToDataUri(asset, MAX_FREE_INLINE_IMAGE_CHARS);
         mediaUrl = preparedImage.dataUri || inlineImageDataUri(asset);
-        if (mediaUrl.length > inlineLimit) {
-          if (proLocked) openPaywall(PRO_FEATURES.largerMedia);
-          else Alert.alert('Photo too large', 'Choose a smaller photo. This no-storage mode supports compact chat photos only.');
+        if (mediaUrl.length > MAX_FREE_INLINE_IMAGE_CHARS) {
+          Alert.alert('Photo too large', 'Choose a smaller photo. This no-storage mode supports compact chat photos only.');
           return;
         }
         if (!mediaUrl) {
@@ -535,7 +541,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
     const pickerOptions: ImagePicker.ImagePickerOptions = {
       mediaTypes: mediaKind === 'video' ? ['videos'] : ['images'],
-      quality: mediaKind === 'image' ? (proLocked ? 0.22 : 0.5) : 1,
+      quality: mediaKind === 'image' ? 0.5 : 1,
       allowsEditing: false,
       base64: mediaKind === 'image' && !cloudinaryEnabled(),
       videoMaxDuration: 60,
@@ -561,9 +567,9 @@ export default function ChatScreen({ route, navigation }: any) {
     Alert.alert('Send media', 'Choose what to send.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Photo Library', onPress: () => pickAndSendMedia('library', 'image') },
-      { text: 'Video Library', onPress: () => proLocked ? openPaywall(PRO_FEATURES.largerMedia) : pickAndSendMedia('library', 'video') },
+      { text: 'Video Library', onPress: () => pickAndSendMedia('library', 'video') },
       { text: 'Take Photo', onPress: () => pickAndSendMedia('camera', 'image') },
-      { text: 'Record Video', onPress: () => proLocked ? openPaywall(PRO_FEATURES.largerMedia) : pickAndSendMedia('camera', 'video') },
+      { text: 'Record Video', onPress: () => pickAndSendMedia('camera', 'video') },
     ]);
   };
 
@@ -597,10 +603,6 @@ export default function ChatScreen({ route, navigation }: any) {
   };
 
   const toggleArrayField = async (field: 'pinnedBy' | 'archivedBy' | 'importantBy' | 'confidentialBy' | 'deletedBy') => {
-    if (field === 'importantBy' && proLocked) {
-      openPaywall(PRO_FEATURES.messagePriority);
-      return;
-    }
     if (!matchId) {
       Alert.alert('Demo chat', 'Pin/Archive/Important works on real chats (a matchId is required).');
       return;
@@ -1188,7 +1190,7 @@ export default function ChatScreen({ route, navigation }: any) {
       <PaywallModal
         visible={!!paywallFeature}
         feature={paywallFeature || PRO_FEATURES.warmIntro}
-        description="AI warm intros, message priority, and larger media sending are LINKUP PLUS features on Android."
+        description="AI warm intros are a LINKUP PLUS feature on Android."
         onClose={() => setPaywallFeature('')}
       />
     </SafeAreaView>

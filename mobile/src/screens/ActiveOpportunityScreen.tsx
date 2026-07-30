@@ -11,16 +11,20 @@ import { earnedScore, handleFor, opportunityDetails } from '../lib/discovery';
 import { ensureDirectMatch } from '../lib/chat';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+import { requestGeminiText } from '../lib/aiDiagnostics';
 
 export default function ActiveOpportunityScreen({ route, navigation }: any) {
   const userId = route?.params?.userId;
   const projectId = route?.params?.projectId;
-  const { user } = useAuth();
+  const matchScore = route?.params?.matchScore;
+  const { user, profile: me } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [openingChat, setOpeningChat] = useState(false);
+  const [aiReason, setAiReason] = useState('');
+  const [aiLoadingReason, setAiLoadingReason] = useState(false);
 
   useEffect(() => {
     if (!userId) {
@@ -46,12 +50,38 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
     };
   }, [userId]);
 
+  useEffect(() => {
+    if (!profile || !me || aiReason) return;
+    setAiLoadingReason(true);
+    const compact = (p: any) => ({
+      name: p.displayName || '', role: p.occupation || '', company: p.company || '',
+      skills: Array.isArray(p.skills) ? p.skills.slice(0, 5) : [],
+      interests: Array.isArray(p.interests) ? p.interests.slice(0, 5) : [],
+      lookingFor: Array.isArray(p.lookingFor) ? p.lookingFor.slice(0, 3) : [],
+      bio: (p.bio || '').slice(0, 200),
+    });
+    const prompt = `You are a matchmaker. Explain in 2-3 sentences why these two founders should connect. Be specific about complementary skills/roles.\n\nA: ${JSON.stringify(compact(me))}\n\nB: ${JSON.stringify(compact(profile))}\n\nWarm, direct explanation. No markdown.`;
+    requestGeminiText(prompt, { temperature: 0.7, maxOutputTokens: 200 })
+      .then((text) => { if (text) setAiReason(text); })
+      .catch(() => {
+        const mySkills = Array.isArray(me.skills) ? me.skills.slice(0, 3).join(', ') : '';
+        const theirSkills = Array.isArray(profile.skills) ? profile.skills.slice(0, 3).join(', ') : '';
+        const myRole = me.occupation || '';
+        const theirRole = profile.occupation || '';
+        const skillOverlap = mySkills && theirSkills ? `Your expertise in ${mySkills} pairs well with their background in ${theirSkills}` : '';
+        const roleAngle = myRole && theirRole && myRole !== theirRole ? `you bring ${myRole} perspective and they bring ${theirRole} experience` : '';
+        const combined = [skillOverlap, roleAngle].filter(Boolean).join(', and ');
+        if (combined) setAiReason(`${combined}. This could be a strong complementary fit worth exploring.`);
+      })
+      .finally(() => setAiLoadingReason(false));
+  }, [profile, me]);
+
   const selectedProject = useMemo(() => {
     const projects = Array.isArray((profile as any)?.projects) ? (profile as any).projects : [];
     return projects.find((project: any) => String(project?.id || '') === String(projectId || '')) || null;
   }, [profile, projectId]);
   const details = useMemo(() => opportunityDetails(profile, selectedProject), [profile, selectedProject]);
-  const score = useMemo(() => earnedScore(profile), [profile]);
+  const score = matchScore ?? (profile ? earnedScore(profile) : 0);
 
   const openChat = async () => {
     if (!user?.uid) {
@@ -147,9 +177,18 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
           <Sparkles size={18} color={COLORS.primary} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.insightTitle, { color: textColor(isDark) }]}>Why this matters</Text>
-            <Text style={styles.insightText}>
-              This builder is actively signaling intent. Reach out if your skills, network, or capital can help them move faster.
-            </Text>
+            {aiLoadingReason ? (
+              <View style={styles.aiLoadingRow}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={[styles.aiLoadingText, { color: textColor(isDark, 'muted') }]}>Analyzing fit...</Text>
+              </View>
+            ) : aiReason ? (
+              <Text style={styles.aiText}>{aiReason}</Text>
+            ) : (
+              <Text style={styles.insightText}>
+                This builder is actively signaling intent. Reach out if your skills, network, or capital can help them move faster.
+              </Text>
+            )}
           </View>
         </View>
 
@@ -229,4 +268,7 @@ const styles = StyleSheet.create({
   actionText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.8 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontSize: 14, fontWeight: '900', letterSpacing: 1 },
+  aiLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  aiLoadingText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
+  aiText: { marginTop: 6, fontSize: 13, lineHeight: 19, fontWeight: '600', color: '#15803D' },
 });

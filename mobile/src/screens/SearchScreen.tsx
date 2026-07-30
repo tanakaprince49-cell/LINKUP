@@ -27,9 +27,9 @@ import VerifiedBadge from '../components/VerifiedBadge';
 import { isDiscoverableProfile } from '../lib/discovery';
 import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
 import PaywallModal from '../components/PaywallModal';
-import { isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
+import { PRO_FEATURES } from '../lib/paywall';
 import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, MOBILE_SEARCH_RENDER_LIMIT, safeProfileImageUri, compactProfileForList } from '../lib/profilePerformance';
-import { loadFromPublicProfiles, loadFromUsers } from '../lib/discoveryProfiles';
+import { loadFromPublicProfiles } from '../lib/discoveryProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 const normalize = (v: string) => v.trim().toLowerCase();
@@ -164,7 +164,6 @@ export default function SearchScreen({ navigation, route }: any) {
   const routedSkill = String(route?.params?.skill || route?.params?.initialSkill || '').trim();
   const routedQuery = String(route?.params?.query || '').trim();
   const routedSearchToken = String(route?.params?.searchToken || '');
-  const proLocked = isAndroidProLocked(me);
   const openPaywall = (feature: string) => setPaywallFeature(feature);
 
   const sliderWidth = 240;
@@ -214,21 +213,9 @@ export default function SearchScreen({ navigation, route }: any) {
 
     const load = async () => {
       try {
-        const [publicProfiles, userProfiles] = await Promise.all([
-          loadFromPublicProfiles(user.uid),
-          loadFromUsers(user.uid, 60),
-        ]);
+        const list = await loadFromPublicProfiles(user.uid);
         if (cancelled) return;
-
-        const seen = new Set<string>();
-        const merged: UserProfile[] = [];
-        const add = (p: UserProfile) => {
-          if (p?.uid && !seen.has(p.uid)) { seen.add(p.uid); merged.push(p); }
-        };
-        (publicProfiles || []).forEach(add);
-        (userProfiles || []).forEach(add);
-
-        if (merged.length > 0) setAllProfiles(merged);
+        if (list && list.length > 0) setAllProfiles(list);
       } catch (error) {
         console.error('SearchScreen load error:', error);
       }
@@ -238,10 +225,6 @@ export default function SearchScreen({ navigation, route }: any) {
     load();
     return () => { cancelled = true; };
   }, [isFocused, user?.uid]);
-
-  useEffect(() => {
-    if (proLocked) setFilterOpen(false);
-  }, [proLocked]);
 
   useEffect(() => {
     if (routedSkill) {
@@ -335,28 +318,28 @@ export default function SearchScreen({ navigation, route }: any) {
         if (!textHit) return false;
       }
 
-      if (!proLocked && location.trim()) {
+      if (location.trim()) {
         const loc = normalize(location);
         if (!includesAny(`${city} ${country}`, [loc])) return false;
       }
 
-      if (!proLocked && skillList.length > 0) {
+      if (skillList.length > 0) {
         const ok = skillList.every((needle) =>
           userSkills.some((s) => includesAny(s, [needle]))
         );
         if (!ok) return false;
       }
 
-      if (!proLocked && experience.trim()) {
+      if (experience.trim()) {
         if (!includesAny(exp, [experience])) return false;
       }
 
-      if (!proLocked && industry.trim()) {
+      if (industry.trim()) {
         const ok = industries.some((s: string) => includesAny(s, [industry]));
         if (!ok) return false;
       }
 
-      if (!proLocked && lookingForRole.trim()) {
+      if (lookingForRole.trim()) {
         const needles = lookingForNeedles(lookingForRole);
         const roleHit =
           lookingArr.some((s: string) => includesAny(s, needles)) ||
@@ -365,23 +348,23 @@ export default function SearchScreen({ navigation, route }: any) {
         if (!roleHit) return false;
       }
 
-      if (!proLocked && stageFilter.trim()) {
+      if (stageFilter.trim()) {
         if (!includesAny(startupStage, stageNeedles(stageFilter))) return false;
       }
 
-      if (!proLocked && availability.trim()) {
+      if (availability.trim()) {
         if (!includesAny(avail, [availability])) return false;
       }
 
-      if (!proLocked && timezone.trim()) {
+      if (timezone.trim()) {
         if (!includesAny(tz, [timezone])) return false;
       }
 
-      if (!proLocked && lookingForCofounder && !looking) return false;
+      if (lookingForCofounder && !looking) return false;
 
-      if (!proLocked && verifiedOnly && !isVerified) return false;
+      if (verifiedOnly && !isVerified) return false;
 
-      if (!proLocked && activeWithin !== 'any') {
+      if (activeWithin !== 'any') {
         const date = lastActiveAt?.toDate ? lastActiveAt.toDate() : (lastActiveAt ? new Date(lastActiveAt) : null);
         if (!date) return false;
         const now = Date.now();
@@ -390,28 +373,24 @@ export default function SearchScreen({ navigation, route }: any) {
         if (diffMs > limitMs) return false;
       }
 
-      if (!proLocked && compatibility < minCompatibility) return false;
+      if (compatibility < minCompatibility) return false;
 
       return true;
     });
-  }, [allProfiles, queryText, location, skills, experience, industry, availability, timezone, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, activeWithin, minCompatibility, computeCompatibility, proLocked]);
+  }, [allProfiles, queryText, location, skills, experience, industry, availability, timezone, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, activeWithin, minCompatibility, computeCompatibility]);
 
   const displayed = useMemo(() => {
     const turboBoost = (p: UserProfile) => ((p as any).turboConnect ? 1 : 0);
-    if (proLocked || !aiRankMode) return [...filtered].sort((a, b) => turboBoost(b) - turboBoost(a));
+    if (!aiRankMode) return [...filtered].sort((a, b) => turboBoost(b) - turboBoost(a));
     const withScores = filtered.map((p) => ({ p, s: aiRankMap[p.uid]?.score ?? -1 }));
     withScores.sort((a, b) => (b.s + turboBoost(b.p) * 8) - (a.s + turboBoost(a.p) * 8));
     return withScores.map((x) => x.p);
-  }, [filtered, aiRankMode, aiRankMap, proLocked]);
+  }, [filtered, aiRankMode, aiRankMap]);
   const resultRenderLimit = Platform.OS === 'web' ? WEB_RESULT_RENDER_LIMIT : NATIVE_RESULT_RENDER_LIMIT;
   const visibleResults = useMemo(() => displayed.slice(0, resultRenderLimit), [displayed, resultRenderLimit]);
 
   const runAiRanking = async () => {
     if (!user) return;
-    if (proLocked) {
-      openPaywall(PRO_FEATURES.compatibilityDetails);
-      return;
-    }
     const candidateIds = filtered.map((p) => p.uid).filter(Boolean).slice(0, 40);
     if (candidateIds.length === 0) return;
 
@@ -468,10 +447,6 @@ export default function SearchScreen({ navigation, route }: any) {
   });
 
   const applySavedAlert = (alert: SavedSearchAlert) => {
-    if (proLocked) {
-      openPaywall(PRO_FEATURES.savedSearchAlerts);
-      return;
-    }
     setQueryText(alert.queryText || '');
     setLocation(alert.location || '');
     setSkills(alert.skills || '');
@@ -491,10 +466,6 @@ export default function SearchScreen({ navigation, route }: any) {
 
   const saveSearchAlert = async () => {
     if (!user?.uid) return;
-    if (proLocked) {
-      openPaywall(PRO_FEATURES.savedSearchAlerts);
-      return;
-    }
     const hasSignal = [
       queryText,
       location,
@@ -552,10 +523,6 @@ export default function SearchScreen({ navigation, route }: any) {
 
   const applyAiQuery = async () => {
     if (!aiQuery.trim()) return;
-    if (proLocked) {
-      openPaywall(PRO_FEATURES.aiSearch);
-      return;
-    }
     setAiLoading(true);
     const previousDiagnosticAt = getLastAIDiagnostic()?.timestamp || 0;
     try {
@@ -620,7 +587,7 @@ export default function SearchScreen({ navigation, route }: any) {
 
         <TouchableOpacity
           style={[styles.filterBtn, liquidGlass(isDark, false)]}
-          onPress={() => proLocked ? openPaywall(PRO_FEATURES.advancedSearch) : setFilterOpen((v) => !v)}
+          onPress={() => setFilterOpen((v) => !v)}
         >
           <SlidersHorizontal size={18} color={COLORS.secondary} />
         </TouchableOpacity>
@@ -954,17 +921,7 @@ export default function SearchScreen({ navigation, route }: any) {
                     </Text>
                     {!!(item as any).isVerified && <VerifiedBadge size={20} />}
                   </View>
-                  <TouchableOpacity
-                    onPress={() => {
-                      const score = aiRankMap[item.uid]?.score ?? computeCompatibility(item);
-                      Alert.alert('Why this match?', `${score}% compatibility\n\n${buildMatchReason(me, item, aiRankMap, queryText)}`);
-                    }}
-                    activeOpacity={0.8}
-                    style={styles.compatPill}
-                  >
-                    <Text style={styles.compatText}>{`${aiRankMap[item.uid]?.score ?? computeCompatibility(item)}%`}</Text>
-                  </TouchableOpacity>
-                </View>
+                  </View>
                 <Text style={styles.resultHandle} numberOfLines={1}>{profileHandle(item)}</Text>
                 <View style={styles.roleBadge}>
                   <Text style={styles.roleBadgeText}>{roleInfoFor((item as any).occupation).badge}</Text>
@@ -1013,8 +970,8 @@ export default function SearchScreen({ navigation, route }: any) {
       )}
       <PaywallModal
         visible={!!paywallFeature}
-        feature={paywallFeature || PRO_FEATURES.advancedSearch}
-        description="Basic Android search stays free. AI search, advanced filters, saved alerts, ranking, and detailed match reasons are LINKUP PLUS features."
+        feature={paywallFeature || PRO_FEATURES.startupAnalyzer}
+        description="Warm intro, verified badge, startup analyzer, and Linky AI are paid. Everything else is free."
         onClose={() => setPaywallFeature('')}
       />
       </ScrollView>
@@ -1385,20 +1342,6 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     color: '#666',
     fontWeight: '800',
-  },
-  compatPill: {
-    height: 24,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  compatText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-    color: '#000',
   },
   sliderRow: {
     alignItems: 'center',

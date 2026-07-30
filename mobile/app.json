@@ -3,13 +3,13 @@
     "name": "LINKUP",
     "slug": "linkup",
     "scheme": "linkup",
-    "version": "1.0.0",
+    "version": "9.0.0",
     "orientation": "portrait",
     "icon": "./assets/logo-square.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash-icon.png.png",
-      "resizeMode": "contain",
+      "resizeMode": "center",
       "backgroundColor": "#ffffff"
     },
     "ios": {

@@ -30,7 +30,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
-import { consumeDailyUsage, FREE_LIMITS, isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
+import { FREE_LIMITS, PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
@@ -72,8 +72,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
 
   const topIdea = ideas[0];
   const nextIdea = ideas[1];
-  const proLocked = isAndroidProLocked(myProfile);
-  const openPaywall = (feature: string = PRO_FEATURES.ideaSwipeLimit) => setPaywallFeature(feature);
+  const openPaywall = (feature: string = PRO_FEATURES.startupAnalyzer) => setPaywallFeature(feature);
   const cardWidth = Math.min(Math.max(width - 28, 320), 720);
   const cardHeight = Math.min(Math.max(height * 0.62, 500), 660);
 
@@ -251,20 +250,6 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const animateSwipe = (direction: 'left' | 'right') => {
     const swipedIdea = ideas[0];
     if (!swipedIdea) return;
-
-    if (proLocked) {
-      consumeDailyUsage(user?.uid || 'anonymous', 'idea-swipes', FREE_LIMITS.dailyIdeaSwipes)
-        .then((usage) => {
-          if (!usage.allowed) {
-            openPaywall(PRO_FEATURES.ideaSwipeLimit);
-            return;
-          }
-          startIdeaSwipeAnimation(direction, swipedIdea);
-        })
-        .catch(() => startIdeaSwipeAnimation(direction, swipedIdea));
-      return;
-    }
-
     startIdeaSwipeAnimation(direction, swipedIdea);
   };
 
@@ -303,10 +288,6 @@ export default function IdeaDeckScreen({ navigation }: any) {
       const currentIdeas = Array.isArray((myProfile as any)?.startupIdeas)
         ? ((myProfile as any).startupIdeas as StartupIdea[]).filter((idea) => String(idea?.title || idea?.description || '').trim())
         : [];
-      if (proLocked && currentIdeas.length >= FREE_LIMITS.startupIdeas) {
-        openPaywall(PRO_FEATURES.moreProjects);
-        return;
-      }
       const nextIdea: StartupIdea = {
         id: safeIdeaId(`${user.uid}_${Date.now()}_${title}`),
         title: title.slice(0, 90),
@@ -315,7 +296,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
         lookingFor: ideaLookingFor,
         tags: ideaFields,
       };
-      const nextIdeas = [nextIdea, ...currentIdeas.filter((idea) => idea.id !== nextIdea.id)].slice(0, proLocked ? FREE_LIMITS.startupIdeas : 20);
+      const nextIdeas = [nextIdea, ...currentIdeas.filter((idea) => idea.id !== nextIdea.id)];
       const existingBadges = Array.isArray((myProfile as any)?.badges) ? ((myProfile as any).badges as string[]) : [];
       const ideaBadges = ['Idea Starter'];
       if (nextIdeas.length >= 3) ideaBadges.push('Idea Builder');
@@ -644,7 +625,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
       <ConfettiBurst active={confettiActive} width={width} />
       <PaywallModal
         visible={!!paywallFeature}
-        feature={paywallFeature || PRO_FEATURES.ideaSwipeLimit}
+        feature={paywallFeature || PRO_FEATURES.startupAnalyzer}
         description={`Free accounts get ${FREE_LIMITS.dailyIdeaSwipes} idea swipes per day and ${FREE_LIMITS.startupIdeas} posted ideas. LINKUP PLUS unlocks unlimited ideas.`}
         onClose={() => setPaywallFeature('')}
       />

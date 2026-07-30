@@ -72,7 +72,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
     return (
       <TouchableOpacity
         activeOpacity={0.9}
-        onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.uid, projectId: recommendedProject?.project.id })}
+        onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.uid, projectId: recommendedProject?.project.id, matchScore: recommendedProject?.score })}
         style={[styles.card, liquidGlass(isDark)]}
       >
         <View style={styles.cardTop}>

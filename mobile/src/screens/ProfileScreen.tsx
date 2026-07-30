@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -39,7 +39,7 @@ import { displayNameFor } from '../lib/discovery';
 import { profileLinkFor } from '../lib/profileLinks';
 import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
 import VerifiedBadge from '../components/VerifiedBadge';
-import type { StartupResume } from '../types';
+import type { StartupResume, UserProfile } from '../types';
 import PaywallModal from '../components/PaywallModal';
 import {
   enableAppNotificationsAsync,
@@ -436,21 +436,33 @@ export default function ProfileScreen({ navigation, route }: any) {
     await setDoc(profileRef, safePatch, { merge: true });
   };
 
+  const profileCacheRef = useRef<Map<string, UserProfile>>(new Map());
+  const pendingProfileFetches = useRef<Map<string, Promise<UserProfile | null>>>(new Map());
   const fetchVisibleProfileDoc = async (uid: string) => {
-    const [publicSnap, userSnap] = await Promise.all([
-      getDoc(doc(db, 'publicProfiles', uid)).catch(() => null),
-      getDoc(doc(db, 'users', uid)).catch(() => null),
-    ]);
+    const cached = profileCacheRef.current.get(uid);
+    if (cached) return cached;
 
-    if (publicSnap?.exists()) {
-      return compactProfileForList({ uid: publicSnap.id, ...(publicSnap.data() as any) });
-    }
+    const pending = pendingProfileFetches.current.get(uid);
+    if (pending) return pending;
 
-    if (userSnap?.exists()) {
-      return compactProfileForList({ uid: userSnap.id, ...(userSnap.data() as any) });
-    }
+    const promise = (async () => {
+      const [publicSnap] = await Promise.all([
+        getDoc(doc(db, 'publicProfiles', uid)).catch(() => null),
+      ]);
 
-    return null;
+      if (publicSnap?.exists()) {
+        const profile = compactProfileForList({ uid: publicSnap.id, ...(publicSnap.data() as any) });
+        profileCacheRef.current.set(uid, profile);
+        return profile;
+      }
+
+      return null;
+    })();
+
+    pendingProfileFetches.current.set(uid, promise);
+    promise.finally(() => pendingProfileFetches.current.delete(uid));
+
+    return promise;
   };
 
   const goBackOrHome = () => {
@@ -582,8 +594,6 @@ export default function ProfileScreen({ navigation, route }: any) {
     );
     setProfileClickCount(fallbackClicks);
     setProfileSaveCount(fallbackSaves);
-    if (proLocked) return;
-
     const interaction = InteractionManager.runAfterInteractions(() => {
       if (cancelled) return;
       const clicksQuery = query(collection(db, 'profileClicks'), where('profileId', '==', myProfile.uid), limit(PROFILE_ANALYTICS_LIMIT));
@@ -625,7 +635,6 @@ export default function ProfileScreen({ navigation, route }: any) {
     (myProfile as any)?.profileSaves,
     (myProfile as any)?.profileAnalytics?.clicks,
     (myProfile as any)?.profileAnalytics?.saves,
-    proLocked,
   ]);
 
   useEffect(() => {
@@ -694,7 +703,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
 
     setProfileResponseRate(fallbackResponseRate);
-    if (!isFocused || proLocked) return;
+    if (!isFocused) return;
 
     let cancelled = false;
     let unsubscribe: undefined | (() => void);
@@ -735,7 +744,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       unsubscribe?.();
       interaction.cancel?.();
     };
-  }, [isFocused, isViewingOther, myProfile?.uid, proLocked, fallbackResponseRate]);
+  }, [isFocused, isViewingOther, myProfile?.uid, fallbackResponseRate]);
 
   useEffect(() => {
     if (!profile?.uid || isViewingOther || savingPreference) return;
@@ -764,9 +773,8 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const compatibilityReason = useMemo(() => {
     if (!isViewingOther || !profile) return '';
-    if (proLocked) return '';
     return routedCompatibilityReason || '';
-  }, [isViewingOther, routedCompatibilityReason, proLocked]);
+  }, [isViewingOther, routedCompatibilityReason]);
 
   const notificationStatusLabel = useMemo(() => {
     if (notificationStatus === 'granted') return 'ON';
@@ -1068,14 +1076,6 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
 
-      if (proLocked) {
-        const savedSnap = await getDocs(query(collection(db, 'savedProfiles'), where('ownerId', '==', myProfile.uid), limit(FREE_LIMITS.savedProfiles + 1)));
-        if (savedSnap.size >= FREE_LIMITS.savedProfiles) {
-          openPaywall(PRO_FEATURES.savedProfiles);
-          return;
-        }
-      }
-
       await setDoc(saveRef, {
         ownerId: myProfile.uid,
         profileId: targetUserId,
@@ -1171,7 +1171,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       const nextPreferences = {
         isVisible: editData.isVisible ?? true,
         isStealthMode: !!editData.isStealthMode,
-        turboConnect: proLocked ? false : !!editData.turboConnect,
+        turboConnect: !!editData.turboConnect,
         hideOnlineStatus: !!editData.hideOnlineStatus,
       };
       const coreProfilePatch = {
@@ -1238,8 +1238,8 @@ export default function ProfileScreen({ navigation, route }: any) {
               .filter(Boolean)
               .slice(0, 3)
           : [],
-        projects: nextProjects.slice(0, proLocked ? FREE_LIMITS.projects : 10),
-        startupIdeas: nextIdeas.slice(0, proLocked ? FREE_LIMITS.startupIdeas : 20),
+        projects: nextProjects.slice(0, 10),
+        startupIdeas: nextIdeas.slice(0, 20),
       };
       const reputationPatch = reputationPatchForProfile({
         ...(profile || {}),
@@ -1596,12 +1596,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     setEditData({ ...editData, projects: current });
   };
   const addEditedProject = () => {
-    const maxProjects = proLocked ? FREE_LIMITS.projects : 10;
-    if (editedProjects.length >= maxProjects) {
-      if (proLocked) {
-        openPaywall(PRO_FEATURES.moreProjects);
-        return;
-      }
+    if (editedProjects.length >= 10) {
       Alert.alert('Project limit', 'You can add up to 10 active projects.');
       return;
     }
@@ -1633,12 +1628,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     setEditData({ ...editData, startupIdeas: current });
   };
   const addEditedIdea = () => {
-    const maxIdeas = proLocked ? FREE_LIMITS.startupIdeas : 20;
-    if (editedIdeas.length >= maxIdeas) {
-      if (proLocked) {
-        openPaywall(PRO_FEATURES.moreProjects);
-        return;
-      }
+    if (editedIdeas.length >= 20) {
       Alert.alert('Idea limit', 'You can add up to 20 ideas.');
       return;
     }
@@ -1666,19 +1656,13 @@ export default function ProfileScreen({ navigation, route }: any) {
     ? !!(editData?.isVisible ?? true)
     : localPreferences.isVisible;
   const isProPlanActive = hasLinkupPro(profile);
-  const turboConnectValue = proLocked
-    ? false
-    : isEditing
-      ? !!(editData?.turboConnect ?? false)
-      : localPreferences.turboConnect;
+  const turboConnectValue = isEditing
+    ? !!(editData?.turboConnect ?? false)
+    : localPreferences.turboConnect;
   const hideOnlineStatusValue = isEditing
     ? !!(editData?.hideOnlineStatus ?? false)
     : localPreferences.hideOnlineStatus;
   const handleTurboConnectChange = (value: boolean) => {
-    if (value && proLocked) {
-      openPaywall(PRO_FEATURES.turboConnect);
-      return;
-    }
     if (isEditing) {
       setEditData({ ...editData, turboConnect: value });
       return;
@@ -2672,8 +2656,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                     <Text style={[styles.analyticsHelp, { color: textColor(isDark, 'muted') }]}>Views · Clicks · Saves · Response</Text>
                   </View>
                 </View>
-                <View style={[styles.analyticsBadge, { backgroundColor: proLocked ? '#6B7280' : COLORS.primary }]}>
-                  <Text style={styles.analyticsBadgeText}>{proLocked ? 'FREE' : 'LIVE'}</Text>
+                <View style={[styles.analyticsBadge, { backgroundColor: COLORS.primary }]}>
+                  <Text style={styles.analyticsBadgeText}>LIVE</Text>
                 </View>
               </View>
 
@@ -2687,21 +2671,17 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <TouchableOpacity
                     key={String(metric.label)}
                     activeOpacity={0.82}
-                    onPress={() => proLocked && metric.mode !== 'views' ? openPaywall(PRO_FEATURES.profileViewers) : navigation.navigate('Viewers', { mode: metric.mode })}
+                    onPress={() => navigation.navigate('Viewers', { mode: metric.mode })}
                     style={[styles.analyticsTile, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}
                   >
                     <View style={styles.analyticsTileTop}>
                       <View style={[styles.analyticsIconBubble, { backgroundColor: COLORS.primary }]}>
                         <SafeIcon name={String(metric.icon)} size={13} color="#000" />
                       </View>
-                      {proLocked && metric.mode !== 'views' && (
-                        <View style={styles.analyticsLockedChip}>
-                          <Text style={styles.analyticsLockedChipText}>PLUS</Text>
-                        </View>
-                      )}
+
                     </View>
                     <Text style={[styles.analyticsValue, { color: textColor(isDark) }]}>
-                      {proLocked && metric.mode !== 'views' ? '—' : metric.value}
+                      {metric.value}
                     </Text>
                     <Text style={[styles.analyticsMetric, { color: textColor(isDark, 'muted') }]}>{String(metric.label).toUpperCase()}</Text>
                   </TouchableOpacity>
@@ -2710,7 +2690,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
               <View style={styles.analyticsFooterWrap}>
                 <Text style={[styles.analyticsFooter, { color: textColor(isDark, 'muted') }]}>
-                  {proLocked ? 'Who viewed your profile is free. LINKUP PLUS unlocks deeper analytics.' : 'Tap any metric to open its live analytics window.'}
+                  Tap any metric to open its live analytics window.
                 </Text>
               </View>
             </View>
@@ -3087,8 +3067,8 @@ export default function ProfileScreen({ navigation, route }: any) {
       </Modal>
       <PaywallModal
         visible={!!paywallFeature}
-        feature={paywallFeature || PRO_FEATURES.turboConnect}
-        description={`Free accounts can save ${FREE_LIMITS.savedProfiles} profiles, add ${FREE_LIMITS.projects} projects, add ${FREE_LIMITS.startupIdeas} ideas, and run ${FREE_LIMITS.dailyStartupAnalyzer} startup analyzer per day. LINKUP PLUS unlocks the rest.`}
+        feature={paywallFeature || PRO_FEATURES.startupAnalyzer}
+        description={`LINKUP PLUS unlocks the startup analyzer, verified badge, warm intros, and Linky AI.`}
         onClose={() => setPaywallFeature('')}
       />
     </SafeAreaView>

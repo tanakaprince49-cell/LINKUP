@@ -35,6 +35,9 @@ import GamificationHubScreen from './src/screens/GamificationHubScreen';
 import FounderFlipScreen from './src/screens/FounderFlipScreen';
 import PitchPerfectScreen from './src/screens/PitchPerfectScreen';
 import NetworkQuizScreen from './src/screens/NetworkQuizScreen';
+import LinkyScreen from './src/screens/LinkyScreen';
+import LinkyProfileScreen from './src/screens/LinkyProfileScreen';
+import NewsScreen from './src/screens/NewsScreen';
 import { GamificationProvider } from './src/contexts/GamificationContext';
 import { setupNativeNotificationRuntimeAsync, subscribeToNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
 import { scheduleDailyReminder } from './src/lib/dailyReminder';
@@ -213,6 +216,7 @@ function TabNavigator({ navigation }: any) {
     Hub: 'Play',
     Search: 'Search',
     Inbox: 'Chat',
+    News: 'News',
   };
 
   React.useEffect(() => {
@@ -247,6 +251,7 @@ function TabNavigator({ navigation }: any) {
             Hub: { active: 'Gamepad2', inactive: 'Gamepad2' },
             Search: { active: 'Search', inactive: 'Search' },
             Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },
+            News: { active: 'Newspaper', inactive: 'Newspaper' },
           };
           const iconName = (focused ? iconMap[route.name]?.active : iconMap[route.name]?.inactive) || 'Circle';
 
@@ -315,6 +320,7 @@ function TabNavigator({ navigation }: any) {
             Hub: 'PLAY',
             Search: 'SEARCH',
             Inbox: 'MESSAGES',
+            News: 'AI NEWS',
           };
           return <AppHeader navigation={props.navigation} title={titles[props.route.name] || 'LINKUP'} />;
         },
@@ -330,6 +336,7 @@ function TabNavigator({ navigation }: any) {
       <Tab.Screen name="Hub" component={GamificationHubScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Inbox" component={MessagesScreen} />
+      <Tab.Screen name="News" component={NewsScreen} />
     </Tab.Navigator>
   );
 }
@@ -555,6 +562,8 @@ function AppContent() {
             <Stack.Screen name="FounderFlip" component={FounderFlipScreen} />
             <Stack.Screen name="PitchPerfect" component={PitchPerfectScreen} />
             <Stack.Screen name="NetworkQuiz" component={NetworkQuizScreen} />
+            <Stack.Screen name="Linky" component={LinkyScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="LinkyProfile" component={LinkyProfileScreen} options={{ animation: 'slide_from_right' }} />
           </>
         ) : null}
       </Stack.Navigator>
