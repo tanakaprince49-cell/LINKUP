@@ -183,7 +183,7 @@ const parseRankedJsonQuietly = (text: string, candidates: UserProfile[], maxCand
 };
 
 async function directGeminiRank(me: UserProfile | null | undefined, candidates: UserProfile[], maxCandidates: number): Promise<RankedCandidate[]> {
-  if (!directGeminiRankingEnabled() || !hasDirectAIKey() || !me || candidates.length === 0) return [];
+  if (Platform.OS === 'web' || !directGeminiRankingEnabled() || !hasDirectAIKey() || !me || candidates.length === 0) return [];
 
   const localTop = localCommonalityRank(me, candidates, Math.min(maxCandidates, 20));
   const localOrder = new Map(localTop.map((rank, index) => [rank.uid, index]));

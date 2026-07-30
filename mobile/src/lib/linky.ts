@@ -129,6 +129,7 @@ const callZen = async (messages: OpenRouterMessage[]): Promise<string> => {
         if (json?.text) return json.text;
       }
     } catch {}
+    throw new Error('All AI providers failed');
   }
 
   const zenKey = process.env.EXPO_PUBLIC_OPENCODE_ZEN_API_KEY;

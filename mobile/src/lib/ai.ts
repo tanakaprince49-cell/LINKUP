@@ -2,6 +2,7 @@ import { httpsCallable } from 'firebase/functions';
 import { Platform } from 'react-native';
 import { functions } from './firebase';
 import { describeAIError, hasDirectAIKey, recordAIError, requestGeminiText } from './aiDiagnostics';
+const IS_WEB = Platform.OS === 'web';
 
 type AiPromptConfig = {
   prompt: string;
@@ -99,7 +100,7 @@ const serverAIEnabled = () =>
   String(process.env.EXPO_PUBLIC_ENABLE_SERVER_AI || '').toLowerCase() === 'true';
 
 async function directGeminiText(task: string, payload: Record<string, unknown>) {
-  if (!directAIEnabled() || !hasDirectAIKey()) return null;
+  if (IS_WEB || !directAIEnabled() || !hasDirectAIKey()) return null;
   const promptConfig = promptsByTask[task]?.(payload);
   if (!promptConfig) return null;
   return requestGeminiText(promptConfig.prompt, {
