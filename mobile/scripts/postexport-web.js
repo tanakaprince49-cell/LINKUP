@@ -51,7 +51,6 @@ const pwaHead = [
   'html, body { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }',
   '#root { width: 100%; min-width: 0; max-width: 100%; overflow-x: hidden; overflow-y: visible; min-height: 100dvh; }',
   'body { margin: 0; touch-action: manipulation; -webkit-text-size-adjust: 100%; }',
-  '* { -webkit-overflow-scrolling: touch; }',
   '[data-testid="scroll-view"], [style*="overflow: hidden"] { overscroll-behavior: contain; }',
   '@media (max-width: 767px), (hover: none) and (pointer: coarse) {',
   '  html, body, #root { min-height: 100dvh; }',
