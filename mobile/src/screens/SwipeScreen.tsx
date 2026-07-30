@@ -1085,12 +1085,14 @@ export default function SwipeScreen({ navigation }: any) {
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
             opacity: topCardOpacity,
-            transform: [
-              { translateX: swipePosition.x },
-              { translateY: swipePosition.y },
-              { rotate: cardRotate },
-              { scale: topCardScale },
-            ],
+            transform: isWeb
+              ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
+              : [
+                  { translateX: swipePosition.x },
+                  { translateY: swipePosition.y },
+                  { rotate: cardRotate },
+                  { scale: topCardScale },
+                ],
           },
         ]}
         {...(infoExpanded ? {} : panResponder.panHandlers)}

@@ -327,11 +327,9 @@ export default function LinkyScreen({ navigation }: any) {
           setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
         }
       }
-    } catch (err) {
-      const em = err instanceof Error ? err.message : String(err || 'Unknown');
-      console.error('Linky error:', em);
+    } catch {
       setMessages((prev) => prev.filter((m) => m.id !== 'load').concat({
-        id: `e-${Date.now()}`, role: 'assistant', content: `Sorry: ${em}`,
+        id: `e-${Date.now()}`, role: 'assistant', content: `I'm offline right now. Please try again in a moment.`,
       }));
     }
     setLoading(false);
