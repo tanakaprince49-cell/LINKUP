@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocs, limit, orderBy, query, setDoc, startAfter } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, startAfter } from 'firebase/firestore';
 import { db } from './firebase';
 import { displayNameFor, isDiscoverableProfile } from './discovery';
 import {
@@ -172,28 +172,25 @@ export const loadFromUsers = async (userId: string, pageSize = 60) => {
 };
 
 export const subscribeToDiscoveryProfiles = ({ userId, onData, onError }: SubscribeOptions) => {
-  let closed = false;
+  const q = query(collection(db, 'publicProfiles'), limit(120));
 
-  const load = async () => {
-    try {
-      const list = await loadFromPublicProfiles(userId);
-      if (closed) return;
-
-      if (list && list.length > 0) {
-        onData(list, 'publicProfiles');
+  const unsub = onSnapshot(
+    q,
+    (snapshot) => {
+      if (!snapshot || snapshot.empty) {
+        onData([], 'publicProfiles');
         return;
       }
-
-      onData([], 'publicProfiles');
-    } catch (error) {
-      if (!closed) {
-        console.error('Discovery load error:', error);
-        onError?.(new Error('Discovery load failed'));
-      }
+      const rows = snapshot.docs
+        .map((d) => compactProfileForList({ uid: d.id, ...(d.data() as any) }))
+        .filter((p: any) => p.uid !== userId && isDiscoverableProfile(p));
+      onData(rows, 'publicProfiles');
+    },
+    (error) => {
+      console.error('Discovery onSnapshot error:', error);
+      onError?.(error);
     }
-  };
+  );
 
-  load();
-
-  return () => { closed = true; };
+  return unsub;
 };

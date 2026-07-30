@@ -632,13 +632,6 @@ export default function SwipeScreen({ navigation }: any) {
       rankingTimerRef.current = null;
     }
 
-    if (Platform.OS !== 'web') {
-      setAiOrderingDone(true);
-      return () => {
-        cancelled = true;
-      };
-    }
-
     const currentProfileIds = profiles
       .filter((profile) => !isSyntheticProfile(profile))
       .slice(0, DISCOVERY_LIMIT)
