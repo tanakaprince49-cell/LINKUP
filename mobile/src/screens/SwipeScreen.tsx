@@ -684,13 +684,14 @@ export default function SwipeScreen({ navigation }: any) {
   }, [profiles.length, user?.uid]);
 
   useEffect(() => {
-    [topProfile, nextProfile].filter(Boolean).forEach((profile) => {
+    const toPrefetch = [topProfile, nextProfile, profiles[2], profiles[3], profiles[4]].filter(Boolean);
+    toPrefetch.forEach((profile) => {
       getSwipePhotos(profile as UserProfile)
         .slice(0, 1)
         .filter((uri) => /^https?:\/\//.test(uri))
         .forEach((uri) => Image.prefetch(uri).catch(() => {}));
     });
-  }, [topProfile?.uid, nextProfile?.uid]);
+  }, [topProfile?.uid, nextProfile?.uid, profiles.length]);
 
   useEffect(() => {
     setInfoExpanded(false);
@@ -1243,13 +1244,10 @@ export default function SwipeScreen({ navigation }: any) {
       <View style={styles.scrollRoot}>
         <Animated.View
           style={[styles.scrollCard, { transform: [{ translateY: scrollPosition }] }]}
-          onTouchStart={handleScrollTouchStart}
-          onTouchMove={handleScrollTouchMove}
-          onTouchEnd={handleScrollTouchEnd}
-          onPointerDown={handleScrollTouchStart}
-          onPointerMove={handleScrollTouchMove}
-          onPointerUp={handleScrollTouchEnd}
-          onWheel={handleScrollWheel}
+          {...(isWeb
+            ? { onPointerDown: handleScrollTouchStart, onPointerMove: handleScrollTouchMove, onPointerUp: handleScrollTouchEnd, onWheel: handleScrollWheel }
+            : { onTouchStart: handleScrollTouchStart, onTouchMove: handleScrollTouchMove, onTouchEnd: handleScrollTouchEnd }
+          )}
         >
           <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.scrollCardImg} resizeMode="cover" />
           <View style={styles.scrollCardOverlay} />
@@ -1550,6 +1548,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
     overflow: 'hidden',
+    backgroundColor: '#0a0a0a',
   },
   webCard: {
     width: '100%',
