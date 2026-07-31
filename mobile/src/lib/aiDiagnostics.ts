@@ -52,8 +52,17 @@ export function getOpenRouterApiKey() {
   return String(envKey || runtimeKey).trim();
 }
 
+export function getZenApiKey() {
+  const envKey = process.env.EXPO_PUBLIC_ZEN_API_KEY || '';
+  const runtimeKey =
+    Platform.OS === 'web'
+      ? String((globalThis as any).__LINKUP_ZEN_API_KEY || (globalThis as any).LINKUP_ZEN_API_KEY || '')
+      : '';
+  return String(envKey || runtimeKey).trim();
+}
+
 export function hasDirectAIKey() {
-  return !!(getGeminiApiKey() || getOpenRouterApiKey());
+  return !!(getGeminiApiKey() || getOpenRouterApiKey() || getZenApiKey());
 }
 
 export function getLastAIDiagnostic() {
@@ -67,8 +76,9 @@ function setLastAIDiagnostic(diagnostic: AIDiagnostic) {
 
 function compactTechnical(value: unknown) {
   return String(value || '')
-    .replace(getGeminiApiKey(), '[redacted-key]')
-    .replace(getOpenRouterApiKey(), '[redacted-key]')
+    .replace(getGeminiApiKey() || 'NO_KEY', '[redacted-key]')
+    .replace(getOpenRouterApiKey() || 'NO_KEY', '[redacted-key]')
+    .replace(getZenApiKey() || 'NO_KEY', '[redacted-key]')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 260);
@@ -130,6 +140,15 @@ export function recordAIError(error: unknown, title = 'Smart feature problem fou
 }
 
 export async function requestGeminiText(prompt: string, options: GeminiRequestOptions = {}) {
+  const zenKey = getZenApiKey();
+  if (zenKey) {
+    try {
+      return await requestOpenAIText(prompt, options, zenKey, 'https://opencode.ai/zen/v1/chat/completions', process.env.EXPO_PUBLIC_ZEN_MODEL || 'opencode/gemini-2.5-flash');
+    } catch (error) {
+      if (!getGeminiApiKey() && !getOpenRouterApiKey()) throw error;
+    }
+  }
+
   const geminiKey = getGeminiApiKey();
   if (geminiKey) {
     try {
@@ -138,11 +157,10 @@ export async function requestGeminiText(prompt: string, options: GeminiRequestOp
       if (!getOpenRouterApiKey()) {
         throw error;
       }
-      return requestOpenRouterText(prompt, options);
     }
   }
 
-  return requestOpenRouterText(prompt, options);
+  return requestOpenAIText(prompt, options, getOpenRouterApiKey(), 'https://openrouter.ai/api/v1/chat/completions', OPENROUTER_MODEL);
 }
 
 async function requestGoogleGeminiText(prompt: string, options: GeminiRequestOptions = {}, key = getGeminiApiKey()) {
@@ -209,15 +227,14 @@ async function requestGoogleGeminiText(prompt: string, options: GeminiRequestOpt
   return text;
 }
 
-async function requestOpenRouterText(prompt: string, options: GeminiRequestOptions = {}) {
-  const key = getOpenRouterApiKey();
+async function requestOpenAIText(prompt: string, options: GeminiRequestOptions, key: string, endpoint: string, model: string) {
   if (!key) {
-    throw new GeminiRequestError('Missing EXPO_PUBLIC_GEMINI_API_KEY or EXPO_PUBLIC_OPENROUTER_API_KEY');
+    throw new GeminiRequestError(`Missing API key for ${endpoint}`);
   }
 
   let response: any;
   try {
-    response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${key}`,
@@ -225,7 +242,7 @@ async function requestOpenRouterText(prompt: string, options: GeminiRequestOptio
         'X-Title': 'LINKUP',
       },
       body: JSON.stringify({
-        model: OPENROUTER_MODEL,
+        model: model,
         messages: [
           {
             role: 'user',
@@ -237,7 +254,7 @@ async function requestOpenRouterText(prompt: string, options: GeminiRequestOptio
       }),
     });
   } catch (error) {
-    throw new GeminiRequestError('Failed to fetch OpenRouter response', undefined, (error as any)?.message || String(error));
+    throw new GeminiRequestError('Failed to fetch AI response', undefined, (error as any)?.message || String(error));
   }
 
   const raw = await response.text();
@@ -250,7 +267,7 @@ async function requestOpenRouterText(prompt: string, options: GeminiRequestOptio
 
   if (!response.ok) {
     throw new GeminiRequestError(
-      data?.error?.message || `OpenRouter request failed: ${response.status}`,
+      data?.error?.message || `AI request failed: ${response.status}`,
       response.status,
       raw
     );
@@ -259,7 +276,7 @@ async function requestOpenRouterText(prompt: string, options: GeminiRequestOptio
   const text = data?.choices?.[0]?.message?.content?.trim();
   if (!text) {
     const finishReason = data?.choices?.[0]?.finish_reason ? ` Finish reason: ${data.choices[0].finish_reason}.` : '';
-    throw new GeminiRequestError(`OpenRouter returned empty content.${finishReason}`, undefined, raw);
+    throw new GeminiRequestError(`AI returned empty content.${finishReason}`, undefined, raw);
   }
 
   setLastAIDiagnostic({
