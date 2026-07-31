@@ -80,9 +80,13 @@ async function directGeminiText(prompt: string, maxOutputTokens = 220) {
 
 async function vercelAiText(task: string, payload: Record<string, unknown>) {
   if (!serverAIEnabled() || Platform.OS !== 'web' || typeof fetch !== 'function') return null;
-  const response = await fetch('/api/aiAssist', {
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const response = await fetch(`${baseUrl}/api/aiAssist`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
     body: JSON.stringify({ task, payload }),
   });
   const data = await response.json().catch(() => ({}));
