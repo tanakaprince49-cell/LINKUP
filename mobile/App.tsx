@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ExpoLinking from 'expo-linking';
 import * as Icons from 'lucide-react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
@@ -503,7 +504,7 @@ function AppContent() {
         key={navigationStateKey}
         screenOptions={{
           headerShown: false,
-          animation: IS_LOW_END_ANDROID ? 'none' : Platform.OS === 'android' ? 'simple_push' : 'fade_from_bottom',
+          animation: Platform.OS === 'web' ? 'none' : IS_LOW_END_ANDROID ? 'none' : Platform.OS === 'android' ? 'simple_push' : 'fade_from_bottom',
         }}
       >
         {!user ? (
@@ -539,7 +540,7 @@ function AppContent() {
             <Stack.Screen
               name="Profile"
               component={ProfileScreen}
-              options={{ animation: Platform.OS === 'android' ? 'none' : 'fade_from_bottom' }}
+              options={{ animation: Platform.OS === 'android' ? 'none' : Platform.OS === 'web' ? 'none' : 'fade_from_bottom' }}
             />
             <Stack.Screen name="Alerts" component={AlertsScreen} />
             <Stack.Screen name="Messages" component={MessagesScreen} />
@@ -571,20 +572,28 @@ function AppContent() {
 }
 
 export default function App() {
+  const RootView = Platform.OS === 'web'
+    ? (({ children }: { children: React.ReactNode }) => <View style={{ flex: 1 }}>{children}</View>)
+    : GestureHandlerRootView;
+
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <ThemeProvider>
-          <LinkupAlertProvider>
-            <AuthProvider>
-              <GamificationProvider>
-                <AppContent />
-              </GamificationProvider>
-            </AuthProvider>
-          </LinkupAlertProvider>
-        </ThemeProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary screenName="App">
+      <RootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <LinkupAlertProvider>
+              <AuthProvider>
+                <GamificationProvider>
+                  <ErrorBoundary screenName="App Content">
+                    <AppContent />
+                  </ErrorBoundary>
+                </GamificationProvider>
+              </AuthProvider>
+            </LinkupAlertProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </RootView>
+    </ErrorBoundary>
   );
 }
 
