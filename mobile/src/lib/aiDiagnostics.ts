@@ -53,7 +53,7 @@ export function getOpenRouterApiKey() {
 }
 
 export function getZenApiKey() {
-  const envKey = process.env.EXPO_PUBLIC_ZEN_API_KEY || '';
+  const envKey = process.env.EXPO_PUBLIC_OPENCODE_ZEN_API_KEY || '';
   const runtimeKey =
     Platform.OS === 'web'
       ? String((globalThis as any).__LINKUP_ZEN_API_KEY || (globalThis as any).LINKUP_ZEN_API_KEY || '')
