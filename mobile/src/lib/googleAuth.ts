@@ -5,31 +5,43 @@ import { auth } from './firebase';
 export const GOOGLE_WEB_CLIENT_ID =
   '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com';
 
-const GOOGLE_ANDROID_CLIENT_ID =
-  '70946124449-9fkogibansijkib564gq1rilr6lavf46.apps.googleusercontent.com';
+type GoogleSignInModule = {
+  GoogleSignin: {
+    configure: (options: Record<string, unknown>) => void;
+    hasPlayServices: (options?: { showPlayServicesUpdateDialog?: boolean }) => Promise<boolean>;
+    hasPreviousSignIn?: () => Promise<boolean>;
+    signOut?: () => Promise<void>;
+    signIn: () => Promise<any>;
+    getTokens?: () => Promise<{ idToken?: string | null }>;
+  };
+};
 
-export function isNativeGoogleModulePresent() {
-  if (Platform.OS === 'web') return false;
+function nativeModuleRegistered() {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { TurboModuleRegistry } = require('react-native');
-    if (typeof TurboModuleRegistry?.get === 'function') {
-      return !!TurboModuleRegistry.get('RNGoogleSignin');
+    if (typeof TurboModuleRegistry?.get === 'function' && TurboModuleRegistry.get('RNGoogleSignin')) {
+      return true;
     }
   } catch {
-    // Fall through to NativeModules.
+    // Fall through.
   }
-  return !!(NativeModules as any)?.RNGoogleSignin;
+  return !!(NativeModules as { RNGoogleSignin?: unknown }).RNGoogleSignin;
 }
 
-export function loadNativeGoogleSignIn() {
-  if (!isNativeGoogleModulePresent()) return null;
+export function isNativeGoogleModulePresent() {
+  if (Platform.OS === 'web') return false;
+  return nativeModuleRegistered();
+}
+
+export function loadNativeGoogleSignIn(): GoogleSignInModule | null {
+  if (Platform.OS === 'web') return null;
+  if (!nativeModuleRegistered()) return null;
   try {
-    // Only require after the native binary actually registered the module.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require('@react-native-google-signin/google-signin') as any;
+    return require('@react-native-google-signin/google-signin') as GoogleSignInModule;
   } catch (error) {
-    console.warn('Native Google Sign-In JS module unavailable:', error);
+    console.warn('Native Google Sign-In JS package failed to load:', error);
     return null;
   }
 }
@@ -37,27 +49,22 @@ export function loadNativeGoogleSignIn() {
 let nativeGoogleConfigured = false;
 
 export function prepareNativeGoogleSignIn() {
-  if (Platform.OS === 'web' || nativeGoogleConfigured) return loadNativeGoogleSignIn();
-  if (!isNativeGoogleModulePresent()) return null;
   const googleModule = loadNativeGoogleSignIn();
   const GoogleSignin = googleModule?.GoogleSignin;
   if (!GoogleSignin?.configure) return googleModule;
-  try {
-    GoogleSignin.configure({
-      webClientId: GOOGLE_WEB_CLIENT_ID,
-      offlineAccess: false,
-      forceCodeForRefreshToken: false,
-      scopes: ['profile', 'email'],
-      profileImageSize: 120,
-    });
-    nativeGoogleConfigured = true;
-  } catch (error) {
-    console.warn('Native Google Sign-In configure skipped:', error);
-  }
+  if (nativeGoogleConfigured) return googleModule;
+  GoogleSignin.configure({
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+    offlineAccess: false,
+    forceCodeForRefreshToken: false,
+    scopes: ['profile', 'email'],
+    profileImageSize: 120,
+  });
+  nativeGoogleConfigured = true;
   return googleModule;
 }
 
-const getGoogleIdTokenFromNative = async (GoogleSignin: any, signInResult: any) => {
+const getGoogleIdTokenFromNative = async (GoogleSignin: GoogleSignInModule['GoogleSignin'], signInResult: any) => {
   const type = String(signInResult?.type || '').toLowerCase();
   if (type === 'cancelled' || type === 'cancel' || signInResult === false) return null;
   const tokenFromSignIn =
@@ -70,71 +77,36 @@ const getGoogleIdTokenFromNative = async (GoogleSignin: any, signInResult: any) 
   return tokens?.idToken || null;
 };
 
-async function signInWithExpoAuthSession() {
-  const AuthSession = await import('expo-auth-session');
-  try {
-    await import('expo-web-browser').then((WebBrowser) => WebBrowser.maybeCompleteAuthSession?.()).catch(() => {});
-  } catch {
-    // optional
+export async function signInToFirebaseWithGoogle() {
+  if (Platform.OS === 'web') {
+    throw new Error('Use the web Google button on the browser app. Native Google Sign-In is for the Android/iOS build.');
   }
 
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: 'linkup',
-    path: 'oauth',
-  });
+  const googleModule = prepareNativeGoogleSignIn();
+  if (!googleModule?.GoogleSignin) {
+    throw new Error(
+      'Native Google Sign-In is not linked. Rebuild the Android app from Android Studio (Run app / expo run:android). Expo Go cannot show the Google account picker.'
+    );
+  }
 
-  const request = new AuthSession.AuthRequest({
-    clientId: Platform.OS === 'android' ? GOOGLE_ANDROID_CLIENT_ID : GOOGLE_WEB_CLIENT_ID,
-    scopes: ['openid', 'profile', 'email'],
-    redirectUri,
-    responseType: AuthSession.ResponseType.IdToken,
-    extraParams: { nonce: String(Date.now()) },
-    usePKCE: false,
-  });
+  const { GoogleSignin } = googleModule;
+  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
-  const result = await request.promptAsync({
-    authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-  });
+  const alreadySignedIn = await GoogleSignin.hasPreviousSignIn?.().catch(() => false);
+  if (alreadySignedIn) {
+    await GoogleSignin.signOut?.().catch(() => {});
+  }
 
-  if (result.type === 'cancel' || result.type === 'dismiss') {
+  const signInResult = await GoogleSignin.signIn();
+  const cancelledType = String(signInResult?.type || '').toLowerCase();
+  if (cancelledType === 'cancelled' || cancelledType === 'cancel') {
     return { cancelled: true as const };
   }
-  if (result.type !== 'success') {
-    throw new Error(result.type === 'error' ? result.error?.message || 'Google sign-in failed' : 'Google sign-in did not complete');
-  }
-  const idToken = (result.params as any)?.id_token || (result as any)?.authentication?.idToken;
-  if (!idToken) {
-    throw new Error('Google did not return an ID token. Add the linkup:/oauth redirect in Google Cloud OAuth client.');
-  }
-  return { idToken };
-}
 
-export async function signInToFirebaseWithGoogle() {
-  if (Platform.OS !== 'web' && isNativeGoogleModulePresent()) {
-    const googleModule = prepareNativeGoogleSignIn();
-    if (googleModule?.GoogleSignin) {
-      const { GoogleSignin } = googleModule;
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const alreadySignedIn = await GoogleSignin.hasPreviousSignIn?.().catch(() => false);
-      if (alreadySignedIn) {
-        await GoogleSignin.signOut?.().catch(() => {});
-      }
-      const signInResult = await GoogleSignin.signIn();
-      const cancelledType = String(signInResult?.type || '').toLowerCase();
-      if (cancelledType === 'cancelled' || cancelledType === 'cancel') {
-        return { cancelled: true as const };
-      }
-      const idToken = await getGoogleIdTokenFromNative(GoogleSignin, signInResult);
-      if (!idToken) return { cancelled: true as const };
-      const credential = GoogleAuthProvider.credential(idToken);
-      const signedIn = await signInWithCredential(auth, credential);
-      return { user: signedIn.user };
-    }
-  }
+  const idToken = await getGoogleIdTokenFromNative(GoogleSignin, signInResult);
+  if (!idToken) return { cancelled: true as const };
 
-  const expoResult = await signInWithExpoAuthSession();
-  if ('cancelled' in expoResult && expoResult.cancelled) return { cancelled: true as const };
-  const credential = GoogleAuthProvider.credential((expoResult as any).idToken);
+  const credential = GoogleAuthProvider.credential(idToken);
   const signedIn = await signInWithCredential(auth, credential);
   return { user: signedIn.user };
 }
