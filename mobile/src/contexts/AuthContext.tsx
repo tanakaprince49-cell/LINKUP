@@ -984,9 +984,3 @@ export const useAuth = () => {
   }
   return context;
 };
-text);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
