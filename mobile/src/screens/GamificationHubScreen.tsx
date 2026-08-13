@@ -40,7 +40,7 @@ const PLAY_ICONS: Record<string, { active: string; inactive: string }> = {
 const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { sparkPoints, streakCount, longestStreak, missions, achievements, weeklyStats } = useGamification();
   const [challenges, setChallenges] = useState<GameChallenge[]>([]);
   const [challengeGame, setChallengeGame] = useState<GameEntry | null>(null);
@@ -108,6 +108,21 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
             {streakCount > 0 ? `Day ${streakCount} 🔥 Best: ${longestStreak}` : 'Start your streak!'}
           </Text>
         </View>
+
+        <View style={styles.loopRow}>
+          <TouchableOpacity onPress={() => navigation.navigate('DailyFive')} style={[styles.loopBtn, { backgroundColor: COLORS.primary }]}>
+            <Text style={styles.loopBtnText}>DAILY 5</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('ShipLog')} style={[styles.loopBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
+            <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>SHIP</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('CityLeague')} style={[styles.loopBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
+            <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>LEAGUE</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={[styles.repLine, { color: textColor(isDark, 'muted') }]}>
+          REP {Number(profile?.reputationScore || 0)} · decays if you go quiet · ship 3 days to verify
+        </Text>
 
         <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>GAMES</Text>
 
@@ -315,6 +330,10 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   streakText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
+  loopRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  loopBtn: { flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  loopBtnText: { fontSize: 11, fontWeight: '900', letterSpacing: 1, color: '#000' },
+  repLine: { fontSize: 11, fontWeight: '700', marginBottom: 18 },
   sectionLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 12 },
   gamesGrid: {
     flexDirection: 'row',

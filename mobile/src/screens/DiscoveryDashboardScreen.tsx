@@ -397,7 +397,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   </View>
                 </View>
                 <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>
-                  {people.length === 0 ? 'The room is still small.' : 'Your builder graph is warming up.'}
+                  {people.length === 0 ? 'The room is still small.' : 'Your Daily 5 is ready.'}
                 </Text>
                 <Text style={[styles.heroSub, { color: textColor(isDark, 'muted') }]}>
                   {people.length === 0
@@ -408,11 +408,11 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 
               <View style={styles.heroActions}>
                 <TouchableOpacity
-                  onPress={() => void shareLinkupInvite()}
+                  onPress={() => navigation.navigate('DailyFive')}
                   style={[styles.heroBtn, { backgroundColor: COLORS.primary }]}
                 >
-                  <Users size={14} color="#000" />
-                  <Text style={[styles.heroBtnText, { color: '#000' }]}>INVITE</Text>
+                  <Zap size={14} color="#000" />
+                  <Text style={[styles.heroBtnText, { color: '#000' }]}>DAILY 5</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('Swipe')}

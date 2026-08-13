@@ -27,9 +27,7 @@ import { publicProfileLink } from '../lib/profileLinks';
 import { buildLocalProEntitlement, hasLinkupPro, readLocalProEntitlement, saveLocalProEntitlement } from '../lib/paywall';
 import { compactProfileForCache } from '../lib/profilePerformance';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
-
-const GOOGLE_WEB_CLIENT_ID =
-  '70946124449-9nbp25ptm4vovihcrcoahafbhtaq0usn.apps.googleusercontent.com';
+import { loadNativeGoogleSignIn, signInToFirebaseWithGoogle } from '../lib/googleAuth';
 
 let warnedPresenceRules = false;
 const onboardingStorageKey = (uid: string) => `linkup:onboarded:${uid}`;
@@ -211,51 +209,6 @@ const hasCompletedProfileSignals = (data: any) => {
         (data?.personalityAnswers && Object.keys(data.personalityAnswers).length > 0)
       )
   );
-};
-
-const loadNativeGoogleSignIn = () => {
-  try {
-    return require('@react-native-google-signin/google-signin') as any;
-  } catch (error) {
-    console.error('Native Google Sign-In module unavailable:', error);
-    return null;
-  }
-};
-
-let nativeGoogleConfigured = false;
-
-export const prepareNativeGoogleSignIn = () => {
-  if (Platform.OS === 'web' || nativeGoogleConfigured) return loadNativeGoogleSignIn();
-  const googleModule = loadNativeGoogleSignIn();
-  const GoogleSignin = googleModule?.GoogleSignin;
-  if (!GoogleSignin?.configure) return googleModule;
-  try {
-    GoogleSignin.configure({
-      webClientId: GOOGLE_WEB_CLIENT_ID,
-      offlineAccess: false,
-      forceCodeForRefreshToken: false,
-      scopes: ['profile', 'email'],
-      profileImageSize: 120,
-    });
-    nativeGoogleConfigured = true;
-  } catch (error) {
-    console.warn('Native Google Sign-In configure skipped:', error);
-  }
-  return googleModule;
-};
-
-const getGoogleIdToken = async (GoogleSignin: any, signInResult: any) => {
-  const type = String(signInResult?.type || '').toLowerCase();
-  if (type === 'cancelled' || type === 'cancel' || signInResult === false) return null;
-  const tokenFromSignIn =
-    signInResult?.data?.idToken ||
-    signInResult?.idToken ||
-    signInResult?.data?.user?.idToken ||
-    signInResult?.user?.idToken;
-  if (tokenFromSignIn) return tokenFromSignIn;
-
-  const tokens = await GoogleSignin.getTokens?.().catch(() => null);
-  return tokens?.idToken || null;
 };
 
 const cleanUsernameFromAuth = (authUser: User) => {
@@ -694,52 +647,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      const googleModule = prepareNativeGoogleSignIn();
-      if (!googleModule?.GoogleSignin) {
-        Alert.alert(
-          'Google Sign-In Unavailable',
-          'Native Google Sign-In is not available in Expo Go. Install the Play Store / EAS build of LINKUP, not Expo Go.'
-        );
-        return;
+      const googleResult = await signInToFirebaseWithGoogle();
+      if ((googleResult as any)?.cancelled) return;
+      if (googleResult.user) {
+        await syncSignedInUserProfile(googleResult.user);
       }
-
-      const { GoogleSignin } = googleModule;
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const alreadySignedIn = await GoogleSignin.hasPreviousSignIn?.().catch(() => false);
-      if (alreadySignedIn) {
-        await GoogleSignin.signOut?.().catch(() => {});
-      }
-      const signInResult = await GoogleSignin.signIn();
-      const cancelledType = String(signInResult?.type || '').toLowerCase();
-      if (cancelledType === 'cancelled' || cancelledType === 'cancel') return;
-      const idToken = await getGoogleIdToken(GoogleSignin, signInResult);
-
-      if (!idToken) {
-        Alert.alert('Authentication Cancelled', 'Google did not return an ID token. Please choose an account and try again.');
-        return;
-      }
-
-      const credential = GoogleAuthProvider.credential(idToken);
-      const signedIn = await signInWithCredential(auth, credential);
-      await syncSignedInUserProfile(signedIn.user);
     } catch (error: any) {
       console.error('Google Auth Error:', error);
       const friendlyError = describeAuthError('Google sign-in failed.', error);
       setAuthError(friendlyError);
       if (Platform.OS !== 'web') {
-        try {
-          const statusCodes = loadNativeGoogleSignIn()?.statusCodes;
-          if (statusCodes && error?.code === statusCodes.SIGN_IN_CANCELLED) return;
-          if (statusCodes && error?.code === statusCodes.IN_PROGRESS) {
-            Alert.alert('Please Wait', 'Sign-in is already in progress.');
-            return;
-          }
-          if (statusCodes && error?.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-            Alert.alert('Error', 'Google Play Services are not available on this device.');
-            return;
-          }
-        } catch {
-          // Native status codes are unavailable outside the native Google module.
+        const codeName = String(error?.code || error?.message || '');
+        if (codeName.includes('SIGN_IN_CANCELLED') || codeName.includes('canceled') || codeName.includes('cancelled')) return;
+        if (codeName.includes('IN_PROGRESS')) {
+          Alert.alert('Please Wait', 'Sign-in is already in progress.');
+          return;
+        }
+        if (codeName.includes('PLAY_SERVICES')) {
+          Alert.alert('Error', 'Google Play Services are not available on this device.');
+          return;
         }
         const code = String(error?.code || error?.message || '');
         if (code.includes('10') || code.toLowerCase().includes('developer_error')) {
@@ -1043,6 +969,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+text);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }

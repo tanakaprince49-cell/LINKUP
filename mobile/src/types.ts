@@ -87,6 +87,9 @@ export interface UserProfile {
   circles?: string[];
   personalityAnswers?: Record<string, string>;
   roleAnswers?: Record<string, string | string[]>;
+  shipLogs?: { id: string; text: string; link?: string; createdAt: string }[];
+  shipCount?: number;
+  lastShippedAt?: string;
 }
 
 export interface StartupResume {

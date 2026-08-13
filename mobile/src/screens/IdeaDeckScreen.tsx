@@ -33,6 +33,7 @@ import PaywallModal from '../components/PaywallModal';
 import { consumeDailyUsage, FREE_LIMITS, isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
+import { getIdeaHabit, markIdeaHabitDone, todayKey } from '../lib/dailyLoop';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';

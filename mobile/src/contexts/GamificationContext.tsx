@@ -8,6 +8,8 @@ import {
   saveGamificationState,
   trackAction as trackActionInState,
 } from '../lib/gamification';
+import { useAuth } from './AuthContext';
+import { syncDecayingRep } from '../lib/dailyLoop';
 
 interface GamificationContextType {
   state: GamificationState;
@@ -26,6 +28,7 @@ interface GamificationContextType {
 const GamificationContext = createContext<GamificationContextType | undefined>(undefined);
 
 export const GamificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, profile } = useAuth();
   const [state, setState] = useState<GamificationState | null>(null);
   const [weeklyReport, setWeeklyReport] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
