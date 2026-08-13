@@ -776,27 +776,15 @@ export default function SwipeScreen({ navigation }: any) {
       );
       const querySnapshot = await getDocs(reciprocalQuery);
 
-      if (!querySnapshot.empty) {
-        const matchId = await ensureDirectMatch(user.uid, target.uid);
-        await addDoc(collection(db, 'notifications'), {
-          userId: target.uid,
-          fromId: user.uid,
-          type: 'match',
-          content: 'You got a new match!',
-          matchId,
-          isRead: false,
-          timestamp: serverTimestamp(),
-        });
-        await addDoc(collection(db, 'notifications'), {
-          userId: user.uid,
-          fromId: target.uid,
-          type: 'match',
-          content: 'You got a new match!',
-          matchId,
-          isRead: false,
-          timestamp: serverTimestamp(),
-        });
-      } else {
+      await requestConnection({
+        senderId: user.uid,
+        recipientId: target.uid,
+        senderName: displayNameFor(myProfile || user),
+        senderPic: safeProfileImageUri(myProfile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT),
+        message: querySnapshot.empty ? 'liked your profile and wants to talk.' : 'liked you back and wants to talk.',
+      }).catch(() => {});
+
+      if (querySnapshot.empty) {
         await addDoc(collection(db, 'notifications'), {
           userId: target.uid,
           fromId: user.uid,
@@ -966,7 +954,7 @@ export default function SwipeScreen({ navigation }: any) {
           : 'You have seen everyone currently discoverable. Invite more builders.'}
       </Text>
       <TouchableOpacity style={styles.resetBtn} onPress={() => void shareLinkupInvite()}>
-        <Text style={styles.resetText}>INVITE 3 BUILDERS</Text>
+        <Text style={styles.resetText}>Invite builders</Text>
       </TouchableOpacity>
       <TouchableOpacity style={[styles.resetBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.primary }]} onPress={resetDeck}>
         <Text style={[styles.resetText, { color: COLORS.primary }]}>REFRESH</Text>

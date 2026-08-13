@@ -18,6 +18,7 @@ import PaywallModal from '../components/PaywallModal';
 import { isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_CHAT_MESSAGE_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
+import { subscribeToConnectionGate, type ConnectionGate } from '../lib/connectionRequests';
 
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
 const MAX_FREE_INLINE_IMAGE_CHARS = 900_000;
@@ -135,6 +136,7 @@ export default function ChatScreen({ route, navigation }: any) {
   const [hasBlockedUser, setHasBlockedUser] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState('');
+  const [connectionGate, setConnectionGate] = useState<ConnectionGate>({ status: 'none' });
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingValueRef = useRef(false);
@@ -382,6 +384,10 @@ export default function ChatScreen({ route, navigation }: any) {
   const sendChatText = async (text: string, replyPayload: Record<string, unknown> = {}, notificationContent = 'sent you a message.') => {
     if (!text.trim() || !user) return;
     if (!matchId) return;
+    if (!canSendMessages) {
+      Alert.alert('Wait for approval', 'You can only message after they approve your connection request.');
+      return;
+    }
     if (hasBlockedUser) {
       Alert.alert('User blocked', 'Unblock this user before sending a message.');
       return;
@@ -1001,6 +1007,17 @@ export default function ChatScreen({ route, navigation }: any) {
           removeClippedSubviews={Platform.OS !== 'web'}
         />
 
+        {!canSendMessages ? (
+          <View style={[styles.inputContainer, { paddingVertical: 16 }]}>
+            <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: textColor(isDark), lineHeight: 20 }}>
+              {connectionGate.status === 'pending_out'
+                ? 'Request sent. You can chat after they approve.'
+                : connectionGate.status === 'pending_in'
+                  ? 'They asked to connect. Approve them in Notifications.'
+                  : 'Send a connection request first. Nobody can message until it’s approved.'}
+            </Text>
+          </View>
+        ) : (
         <View style={[styles.inputContainer, liquidGlass(isDark, false), { borderTopColor: 'transparent' }]}>
           {otherIsTyping && (
             <View style={[styles.typingPill, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
@@ -1062,6 +1079,7 @@ export default function ChatScreen({ route, navigation }: any) {
             <Send size={20} color="#000" />
           </TouchableOpacity>
         </View>
+        )}
       </KeyboardAvoidingView>
 
       <Modal transparent visible={optionsOpen} animationType="fade" onRequestClose={closeOptionsMenu}>

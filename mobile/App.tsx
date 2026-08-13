@@ -53,6 +53,8 @@ import PWAInstallPrompt from './src/components/PWAInstallPrompt';
 import LinkupAlertProvider from './src/components/LinkupAlertProvider';
 import { blurActiveElementOnWeb } from './src/lib/webFocus';
 import { hasLinkupPro } from './src/lib/paywall';
+import { useOnlineStatus } from './src/lib/network';
+import OfflineScreen from './src/components/OfflineScreen';
 import { IS_LOW_END_ANDROID, safeProfileImageUri } from './src/lib/profilePerformance';
 import { preloadProfileScreen, scheduleScreenPreloads } from './src/lib/preloadScreens';
 
@@ -355,6 +357,8 @@ function AppContent() {
   const { user, profile, loading, authVersion, isOnboarded } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const online = useOnlineStatus();
+  const [offlineRetry, setOfflineRetry] = React.useState(0);
   const webPathname =
     Platform.OS === 'web' ? String((globalThis as any)?.location?.pathname || '') : '';
   const isPublicSharedWebPath =
@@ -503,6 +507,10 @@ function AppContent() {
       <ActivityIndicator color={COLORS.primary} />
     </View>
   );
+
+  if (!online) {
+    return <OfflineScreen onRetry={() => setOfflineRetry((n) => n + 1)} />;
+  }
 
   return (
     <NavigationContainer

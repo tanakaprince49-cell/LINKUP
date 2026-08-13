@@ -6,8 +6,10 @@ import { displayNameFor } from './discovery';
 
 const welcomeKey = (uid: string) => `linkup:concierge-welcome:v1:${uid}`;
 
+export const LINKUP_PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.tana.linkup';
+
 export const LINKUP_INVITE_MESSAGE =
-  'I just joined LINKUP to find cofounders and builders. Add your profile and we can match: https://github.com/tanakaprince49-cell/LINKUP';
+  `Come build with me on LINKUP — find cofounders and people who actually ship.\n${LINKUP_PLAY_STORE_URL}`;
 
 export async function shareLinkupInvite() {
   const message = LINKUP_INVITE_MESSAGE;

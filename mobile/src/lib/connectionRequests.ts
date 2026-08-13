@@ -27,6 +27,92 @@ const safeContactImage = (value?: string) => {
   return safeProfileImageUri(value || '', 900_000);
 };
 
+export type ConnectionGateStatus = 'none' | 'pending_out' | 'pending_in' | 'approved' | 'rejected';
+
+export type ConnectionGate = {
+  status: ConnectionGateStatus;
+  requestId?: string;
+};
+
+const gateFromPair = (out?: ConnectionRequest | null, inn?: ConnectionRequest | null): ConnectionGate => {
+  if (out?.status === 'approved' || inn?.status === 'approved') {
+    return { status: 'approved', requestId: out?.id || inn?.id };
+  }
+  if (out?.status === 'pending') return { status: 'pending_out', requestId: out.id };
+  if (inn?.status === 'pending') return { status: 'pending_in', requestId: inn.id };
+  if (out?.status === 'rejected') return { status: 'rejected', requestId: out.id };
+  return { status: 'none' };
+};
+
+export async function resolveConnectionGate(me: string, them: string): Promise<ConnectionGate> {
+  if (!me || !them) return { status: 'none' };
+  const outRef = doc(db, 'connectionRequests', connectionRequestId(me, them));
+  const inRef = doc(db, 'connectionRequests', connectionRequestId(them, me));
+  const [outSnap, inSnap] = await Promise.all([getDoc(outRef).catch(() => null), getDoc(inRef).catch(() => null)]);
+  const out = outSnap?.exists() ? ({ id: outSnap.id, ...(outSnap.data() as any) } as ConnectionRequest) : null;
+  const inn = inSnap?.exists() ? ({ id: inSnap.id, ...(inSnap.data() as any) } as ConnectionRequest) : null;
+  return gateFromPair(out, inn);
+}
+
+export function subscribeToConnectionGate(
+  me: string,
+  them: string,
+  onChange: (gate: ConnectionGate) => void
+) {
+  if (!me || !them) {
+    onChange({ status: 'none' });
+    return () => {};
+  }
+  let out: ConnectionRequest | null = null;
+  let inn: ConnectionRequest | null = null;
+  const emit = () => onChange(gateFromPair(out, inn));
+  const unsubOut = onSnapshot(
+    doc(db, 'connectionRequests', connectionRequestId(me, them)),
+    (snap) => {
+      out = snap.exists() ? ({ id: snap.id, ...(snap.data() as any) } as ConnectionRequest) : null;
+      emit();
+    },
+    () => {
+      out = null;
+      emit();
+    }
+  );
+  const unsubIn = onSnapshot(
+    doc(db, 'connectionRequests', connectionRequestId(them, me)),
+    (snap) => {
+      inn = snap.exists() ? ({ id: snap.id, ...(snap.data() as any) } as ConnectionRequest) : null;
+      emit();
+    },
+    () => {
+      inn = null;
+      emit();
+    }
+  );
+  return () => {
+    unsubOut();
+    unsubIn();
+  };
+}
+
+export async function startTalkOrRequest(input: {
+  senderId: string;
+  recipientId: string;
+  senderName?: string;
+  senderPic?: string;
+  message?: string;
+}) {
+  const gate = await resolveConnectionGate(input.senderId, input.recipientId);
+  if (gate.status === 'approved') {
+    const matchId = await ensureDirectMatch(input.senderId, input.recipientId);
+    return { action: 'chat' as const, matchId, gate };
+  }
+  if (gate.status === 'pending_out') return { action: 'pending' as const, gate };
+  if (gate.status === 'pending_in') return { action: 'incoming' as const, gate };
+  if (gate.status === 'rejected') return { action: 'rejected' as const, gate };
+  await requestConnection(input);
+  return { action: 'sent' as const, gate: { status: 'pending_out' as const } };
+}
+
 export function subscribeToConnectionRequest(
   senderId: string,
   recipientId: string,

@@ -8,11 +8,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppNotification } from '../types';
 import { markUnreadNotificationsRead } from '../lib/notifications';
-import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+import { COLORS, appBackground, hairline, liquidGlass, textColor } from '../theme/theme';
 import { respondToConnectionRequest } from '../lib/connectionRequests';
 import { challengeId as makeChallengeId } from '../lib/gameChallenges';
 import { MOBILE_LIST_IMAGE_LIMIT, MOBILE_NOTIFICATION_QUERY_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
-import { Bell, Eye, Heart, MessageSquare, Zap, Star, Swords } from 'lucide-react-native';
+import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X } from 'lucide-react-native';
+import ScreenHeader from '../components/ScreenHeader';
 
 const formatTimeAgo = (timestamp: any) => {
   if (!timestamp) return 'Just now';
@@ -40,25 +41,30 @@ const timestampToMillis = (timestamp: AppNotification['timestamp']) => {
 
 type NotificationRow = AppNotification;
 
-const NotificationItem = ({ notification, navigation }: { notification: NotificationRow, navigation: any }) => {
+const NotificationItem = ({ notification, navigation }: { notification: NotificationRow; navigation: any }) => {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [resolved, setResolved] = useState<'approved' | 'ignored' | null>(null);
   const isDark = theme === 'dark';
+  const pic = safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT);
+  const isRequest = notification.type === 'connection_request' && notification.requestId && notification.fromId && !resolved;
 
   const getIcon = () => {
     switch (notification.type) {
-      case 'like': return <Heart size={18} color={COLORS.primary} fill={`${COLORS.primary}20`} />;
-      case 'match': return <Zap size={18} color={COLORS.primary} fill={`${COLORS.primary}20`} />;
-      case 'message': return <MessageSquare size={18} color={COLORS.secondary} />;
-      case 'connection_request': return <MessageSquare size={18} color={COLORS.primary} />;
-      case 'connection_approved': return <Zap size={18} color={COLORS.success} fill={`${COLORS.success}20`} />;
-      case 'connection_rejected': return <MessageSquare size={18} color={COLORS.danger} />;
-      case 'comment': return <MessageSquare size={18} color={COLORS.warning} />;
-      case 'view': return <Eye size={18} color={COLORS.success} />;
-      case 'game_challenge': return <Swords size={18} color={COLORS.primary} />;
-      case 'system': return <Bell size={18} color={COLORS.primary} />;
-      default: return <Bell size={18} color={COLORS.primary} />;
+      case 'like':
+        return <Heart size={16} color="#111" fill="#111" />;
+      case 'match':
+      case 'connection_approved':
+        return <Check size={16} color="#111" />;
+      case 'message':
+        return <MessageSquare size={16} color="#111" />;
+      case 'connection_request':
+        return <UserPlus size={16} color="#111" />;
+      case 'view':
+        return <Eye size={16} color="#111" />;
+      default:
+        return <Bell size={16} color="#111" />;
     }
   };
 
@@ -80,51 +86,43 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         responderName: profile?.displayName || user.displayName || 'Someone',
         responderPic: safeProfileImageUri(profile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT),
       });
-
+      setResolved(approved ? 'approved' : 'ignored');
       if (approved && result.matchId) {
         navigation.navigate('Chat', {
           matchId: result.matchId,
           otherUser: {
             uid: notification.fromId,
             displayName: notification.fromName || 'Builder',
-            profilePic: safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT),
+            profilePic: pic,
           },
         });
-      } else {
-        Alert.alert('Request rejected', `${notification.fromName || 'This builder'} will be notified.`);
       }
     } catch (error) {
       console.warn('Connection request response failed:', error);
-      Alert.alert('Action failed', 'Could not answer this request. Check Firebase rules and try again.');
+      Alert.alert('Action failed', 'Could not answer this request. Try again.');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <TouchableOpacity 
-      style={[styles.item, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+    <TouchableOpacity
+      style={[styles.item, liquidGlass(isDark, false), notification.isRead === false && styles.itemUnread]}
+      activeOpacity={0.88}
       onPress={async () => {
         try {
           await markRead();
-        } catch (e) {
-          console.error('Mark notification read error:', e);
-        }
-
+        } catch {}
+        if (isRequest) return;
         if (notification.matchId) {
           navigation.navigate('Chat', {
             matchId: notification.matchId,
             otherUser: notification.fromId
-              ? {
-                  uid: notification.fromId,
-                  displayName: notification.fromName || 'Builder',
-                  profilePic: safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT),
-                }
+              ? { uid: notification.fromId, displayName: notification.fromName || 'Builder', profilePic: pic }
               : undefined,
           });
           return;
         }
-
         if (
           notification.type === 'system' &&
           (notification.content?.startsWith('Opportunity') || notification.content?.startsWith('Project Match')) &&
@@ -133,7 +131,6 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           navigation.navigate('ActiveOpportunity', { userId: notification.fromId });
           return;
         }
-
         if (notification.type === 'game_challenge' && (notification as any).gameType && notification.fromId && user?.uid) {
           const screenMap: Record<string, string> = {
             founderflip: 'FounderFlip',
@@ -142,60 +139,60 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           };
           const screen = screenMap[(notification as any).gameType];
           if (screen) {
-            const cid = makeChallengeId(notification.fromId, user.uid);
-            navigation.navigate(screen, { challengeId: cid });
+            navigation.navigate(screen, { challengeId: makeChallengeId(notification.fromId, user.uid) });
             return;
           }
         }
-
-        if (notification.fromId) {
-          navigation.navigate('Profile', { userId: notification.fromId });
-        }
+        if (notification.fromId) navigation.navigate('Profile', { userId: notification.fromId });
       }}
     >
-      <View style={[styles.iconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.22)', borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}> 
-        {safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT) ? (
-          <Image source={{ uri: safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT) }} style={{ width: 44, height: 44, borderRadius: 16 }} />
-        ) : getIcon()}
-        
-        {safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT) && (
-          <View style={{ position: 'absolute', bottom: -4, right: -4, backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderRadius: 10, padding: 2 }}>
-            {getIcon()}
+      <View style={styles.avatarWrap}>
+        {pic ? (
+          <Image source={{ uri: pic }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatarFallback}>
+            <Text style={styles.avatarLetter}>{(notification.fromName || 'L').slice(0, 1).toUpperCase()}</Text>
           </View>
         )}
+        <View style={styles.iconBadge}>{getIcon()}</View>
       </View>
       <View style={styles.content}>
         <Text style={[styles.contentText, { color: textColor(isDark) }]}>
-          <Text style={{ fontWeight: '900', color: textColor(isDark) }}>{notification.fromName || 'Someone'} </Text>
+          <Text style={{ fontWeight: '800' }}>{notification.fromName || 'Someone'} </Text>
           {notification.content}
         </Text>
-        <Text style={styles.timeText}>{formatTimeAgo(notification.timestamp)}</Text>
-        {notification.type === 'connection_request' && notification.requestId && notification.fromId && (
+        <Text style={[styles.timeText, { color: textColor(isDark, 'muted') }]}>{formatTimeAgo(notification.timestamp)}</Text>
+        {isRequest ? (
           <View style={styles.requestActions}>
             <TouchableOpacity
-              style={[styles.requestActionBtn, styles.rejectBtn]}
+              style={[styles.ignoreBtn, { borderColor: hairline(isDark) }]}
               disabled={busy}
               onPress={(event: any) => {
                 event?.stopPropagation?.();
                 void respondToRequest(false);
               }}
             >
-              <Text style={[styles.requestActionText, styles.rejectText]}>{busy ? '...' : 'REJECT'}</Text>
+              <X size={14} color={textColor(isDark)} />
+              <Text style={[styles.ignoreText, { color: textColor(isDark) }]}>{busy ? '…' : 'Ignore'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.requestActionBtn, styles.approveBtn]}
+              style={styles.approveBtn}
               disabled={busy}
               onPress={(event: any) => {
                 event?.stopPropagation?.();
                 void respondToRequest(true);
               }}
             >
-              <Text style={[styles.requestActionText, styles.approveText]}>{busy ? '...' : 'APPROVE'}</Text>
+              {busy ? <ActivityIndicator color="#111" /> : <Text style={styles.approveText}>Approve</Text>}
             </TouchableOpacity>
           </View>
-        )}
+        ) : resolved ? (
+          <Text style={[styles.resolved, { color: textColor(isDark, 'muted') }]}>
+            {resolved === 'approved' ? 'Approved — you can chat now.' : 'Ignored.'}
+          </Text>
+        ) : null}
       </View>
-      {!notification.isRead && <View style={styles.unreadDot} />}
+      {notification.isRead === false ? <View style={styles.unreadDot} /> : null}
     </TouchableOpacity>
   );
 };
@@ -211,49 +208,47 @@ export default function AlertsScreen({ navigation }: any) {
   useFocusEffect(
     useCallback(() => {
       if (!user?.uid) return;
-      markUnreadNotificationsRead(user.uid).catch((error) => {
-        console.warn('Could not clear notification badge:', error);
-      });
+      markUnreadNotificationsRead(user.uid).catch(() => {});
     }, [user?.uid])
   );
 
   useEffect(() => {
     if (!user || !isFocused) return;
-    const q = query(
-      collection(db, 'notifications'), 
-      where('userId', '==', user.uid),
-      limit(MOBILE_NOTIFICATION_QUERY_LIMIT)
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      const rows = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as NotificationRow));
-      rows.sort((a, b) => timestampToMillis(b.timestamp) - timestampToMillis(a.timestamp));
-      setNotifications(rows.slice(0, 30));
-      setLoading(false);
-    }, (err) => {
-        console.warn("Notifications unavailable:", err);
+    const q = query(collection(db, 'notifications'), where('userId', '==', user.uid), limit(MOBILE_NOTIFICATION_QUERY_LIMIT));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as NotificationRow));
+        rows.sort((a, b) => timestampToMillis(b.timestamp) - timestampToMillis(a.timestamp));
+        setNotifications(rows.slice(0, 40));
         setLoading(false);
-    });
+      },
+      () => setLoading(false)
+    );
     return () => unsub();
   }, [isFocused, user?.uid]);
 
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
+      <ScreenHeader title="Notifications" subtitle="Requests, likes, and chat updates" onBack={() => navigation.goBack()} isDark={isDark} />
       <FlatList
         data={notifications}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <NotificationItem notification={item} navigation={navigation} />}
-        initialNumToRender={12}
-        maxToRenderPerBatch={8}
-        updateCellsBatchingPeriod={80}
-        windowSize={6}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          loading ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} /> : (
+          loading ? (
+            <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} />
+          ) : (
             <View style={styles.emptyContainer}>
-              <Bell size={48} color={textColor(isDark, 'secondary')} />
-              <Text style={[styles.emptyText, { color: textColor(isDark) }]}>No New Notifications</Text>
-              <Text style={[styles.emptySubText, { color: textColor(isDark, 'secondary') }]}>Stay Active to Receive Updates</Text>
+              <View style={styles.emptyIcon}>
+                <Bell size={22} color="#111" />
+              </View>
+              <Text style={[styles.emptyText, { color: textColor(isDark) }]}>Inbox is quiet</Text>
+              <Text style={[styles.emptySubText, { color: textColor(isDark, 'muted') }]}>
+                When someone asks to connect, you can approve or ignore them here.
+              </Text>
             </View>
           )
         }
@@ -263,98 +258,80 @@ export default function AlertsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  listContent: {
-    padding: 24,
-    paddingTop: 10,
-    paddingBottom: 100,
-  },
+  container: { flex: 1 },
+  listContent: { paddingHorizontal: 20, paddingBottom: 40 },
   item: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
+    alignItems: 'flex-start',
+    padding: 14,
+    marginBottom: 10,
   },
-  iconContainer: {
-    width: 44,
-    height: 44,
+  itemUnread: { borderColor: COLORS.primary },
+  avatarWrap: { width: 48, height: 48, marginRight: 12 },
+  avatar: { width: 48, height: 48, borderRadius: 16 },
+  avatarFallback: {
+    width: 48,
+    height: 48,
     borderRadius: 16,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
   },
-  content: {
-    flex: 1,
-  },
-  contentText: {
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  timeText: {
-    fontSize: 9,
-    color: COLORS.primary,
-    marginTop: 4,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  requestActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 10,
-  },
-  requestActionBtn: {
-    flex: 1,
-    minHeight: 34,
-    borderRadius: 14,
+  avatarLetter: { fontSize: 18, fontWeight: '800', color: '#111' },
+  iconBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 22,
+    height: 22,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
   },
+  content: { flex: 1 },
+  contentText: { fontSize: 15, fontWeight: '600', lineHeight: 21 },
+  timeText: { fontSize: 12, fontWeight: '600', marginTop: 4 },
+  requestActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   approveBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
     backgroundColor: COLORS.primary,
-    borderColor: 'transparent',
-  },
-  rejectBtn: {
-    backgroundColor: COLORS.darkCard,
-    borderColor: COLORS.darkBorder,
-  },
-  requestActionText: {
-    color: '#000',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  approveText: {
-    color: '#000',
-  },
-  rejectText: {
-    color: COLORS.darkTextPrimary,
-  },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: COLORS.primary,
-    marginLeft: 10,
-  },
-  emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 100,
   },
-  emptyText: {
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: -0.2,
-    marginTop: 16,
+  approveText: { fontSize: 15, fontWeight: '800', color: '#111' },
+  ignoreBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
-  emptySubText: {
-    fontSize: 10,
-    fontWeight: '900',
-  }
+  ignoreText: { fontSize: 15, fontWeight: '800' },
+  resolved: { marginTop: 8, fontSize: 13, fontWeight: '600' },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
+    marginLeft: 8,
+    marginTop: 8,
+  },
+  emptyContainer: { alignItems: 'center', marginTop: 72, paddingHorizontal: 24 },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  emptyText: { fontSize: 20, fontWeight: '800' },
+  emptySubText: { marginTop: 8, fontSize: 14, fontWeight: '600', textAlign: 'center', lineHeight: 20 },
 });

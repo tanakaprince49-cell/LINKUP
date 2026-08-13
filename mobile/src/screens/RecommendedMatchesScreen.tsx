@@ -6,9 +6,10 @@ import { ChevronLeft, MessageSquare, Search, Sparkles, Target, User, Zap } from 
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { handleFor, isDiscoverableProfile } from '../lib/discovery';
+import { displayNameFor, handleFor, isDiscoverableProfile } from '../lib/discovery';
 import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
-import { ensureDirectMatch } from '../lib/chat';
+import { startTalkOrRequest } from '../lib/connectionRequests';
+import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { consumeDailyUsage, FREE_LIMITS, getDailyUsage } from '../lib/paywall';
@@ -167,11 +168,33 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
 
     setBusyUserId(profile.uid);
     try {
-      const matchId = await ensureDirectMatch(user.uid, profile.uid);
+      const result = await startTalkOrRequest({
+        senderId: user.uid,
+        recipientId: profile.uid,
+        senderName: displayNameFor(me || user),
+        senderPic: safeProfileImageUri((me as any)?.profilePic, MOBILE_LIST_IMAGE_LIMIT),
+      });
       await AsyncStorage.setItem(`linkup:last-recommendation-date:${user.uid}`, today);
       setLastRecommendationDate(today);
       setDailyRecommendationsUsed(usage.used + 1);
-      navigation.navigate('Chat', { matchId, otherUser: profile });
+      if (result.action === 'chat' && result.matchId) {
+        navigation.navigate('Chat', { matchId: result.matchId, otherUser: profile });
+        return;
+      }
+      if (result.action === 'incoming') {
+        Alert.alert('They already asked', 'Approve their request in Notifications to chat.');
+        navigation.navigate('Alerts');
+        return;
+      }
+      if (result.action === 'pending') {
+        Alert.alert('Request pending', 'They still need to approve before you can message.');
+        return;
+      }
+      if (result.action === 'rejected') {
+        Alert.alert('Not available', 'This builder declined your last request.');
+        return;
+      }
+      Alert.alert('Request sent', 'They can approve or ignore. Chat opens only after they approve.');
     } catch (error) {
       console.error('Recommended match chat error:', error);
       Alert.alert('Chat unavailable', 'Could not open this conversation right now.');

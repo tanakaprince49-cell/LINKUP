@@ -29,7 +29,7 @@ import * as Icons from 'lucide-react-native';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, deleteDoc, deleteField, doc, FieldPath, getDoc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { trackProfileClick, trackProfileView } from '../lib/analytics';
-import { ensureDirectMatch } from '../lib/chat';
+import { startTalkOrRequest } from '../lib/connectionRequests';
 import { buildConversationProfileSnapshot } from '../lib/conversationProfiles';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
@@ -1046,11 +1046,30 @@ export default function ProfileScreen({ navigation, route }: any) {
         action: 'message',
       }).catch(() => {});
       const otherUserSnapshot = buildConversationProfileSnapshot(targetUserId, profile);
-      const matchId = await ensureDirectMatch(myProfile.uid, targetUserId, {
-        currentUserProfile: myProfile,
-        otherUserProfile: otherUserSnapshot,
+      const result = await startTalkOrRequest({
+        senderId: myProfile.uid,
+        recipientId: targetUserId,
+        senderName: displayNameFor(myProfile),
+        senderPic: safeProfileImageUri(myProfile.profilePic, MOBILE_LIST_IMAGE_LIMIT),
       });
-      navigation.navigate('Chat', { matchId, otherUser: otherUserSnapshot });
+      if (result.action === 'chat' && result.matchId) {
+        navigation.navigate('Chat', { matchId: result.matchId, otherUser: otherUserSnapshot });
+        return;
+      }
+      if (result.action === 'pending') {
+        Alert.alert('Request pending', 'They have not answered yet. You can chat after they approve.');
+        return;
+      }
+      if (result.action === 'incoming') {
+        Alert.alert('They already asked', 'Approve their request in Notifications to start chatting.');
+        navigation.navigate('Alerts');
+        return;
+      }
+      if (result.action === 'rejected') {
+        Alert.alert('Not available', 'This builder declined your last request.');
+        return;
+      }
+      Alert.alert('Request sent', 'They can approve or ignore it. You cannot message until they approve.');
     } catch (e) {
       console.error('openChat error:', e);
       Alert.alert('Error', 'Could not open chat. Please try again.');
@@ -2367,7 +2386,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                     style={[styles.actionButton, { flex: 1, backgroundColor: COLORS.primary, borderWidth: 1, borderColor: COLORS.primary }]}
                     onPress={openChat}
                   >
-                    <Text style={{ color: '#000', fontWeight: 'bold' }}>Message</Text>
+                    <Text style={{ color: '#000', fontWeight: '800' }}>Request to talk</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.actionButton, {
