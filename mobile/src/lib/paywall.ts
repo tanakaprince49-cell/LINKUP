@@ -6,6 +6,7 @@ export const PRO_FEATURES = {
   warmIntro: 'AI Warm Intro',
   verifiedBadge: 'Verified Blue Check',
   linkyAssistant: 'Linky AI Assistant',
+  turboConnect: 'Turbo Connect',
 } as const;
 
 export const FREE_LIMITS = {

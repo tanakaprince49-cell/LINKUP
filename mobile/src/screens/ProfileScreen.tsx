@@ -322,7 +322,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     showMfaEnrollmentNotice,
     updateLocalProfile,
   } = useAuth();
-  const { theme } = useTheme();
+  const { theme, setThemeMode } = useTheme();
   const isFocused = useIsFocused();
   const isDark = theme === 'dark';
   const [isEditing, setIsEditing] = useState(false);
@@ -2654,64 +2654,43 @@ export default function ProfileScreen({ navigation, route }: any) {
           )}
         </View>
 
-        {/* ANALYTICS */}
         {!isViewingOther && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Analytics</Text>
+            <Text style={styles.sectionLabel}>Founder dashboard</Text>
             <View
               style={[
                 styles.analyticsPanel,
-                liquidGlass(isDark, false),
-                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
+                { backgroundColor: isDark ? COLORS.darkCard : '#FFF', borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
               ]}
             >
-              <View style={styles.analyticsHeader}>
-                <View style={styles.analyticsHeaderLeft}>
-                  <View style={styles.analyticsHeaderIcon}>
-                    <SafeIcon name="Gauge" size={14} color="#000" />
+              <Text style={[styles.analyticsHelp, { color: textColor(isDark, 'muted') }]}>
+                How people find and reply to you
+              </Text>
+              {[
+                { icon: 'Eye', label: 'Profile views', value: visibleProfileViewCount, hint: 'Opens of your profile', mode: 'views' },
+                { icon: 'MousePointerClick', label: 'Clicks', value: visibleProfileClickCount, hint: 'Taps on your actions', mode: 'clicks' },
+                { icon: 'Bookmark', label: 'Saves', value: visibleProfileSaveCount, hint: 'People who bookmarked you', mode: 'saves' },
+                { icon: 'MessageSquare', label: 'Response rate', value: `${visibleResponseRate}%`, hint: 'Chats you’ve answered', mode: 'response' },
+              ].map((metric: any, index: number) => (
+                <TouchableOpacity
+                  key={String(metric.label)}
+                  activeOpacity={0.82}
+                  onPress={() => navigation.navigate('Viewers', { mode: metric.mode })}
+                  style={[
+                    styles.dashRow,
+                    index > 0 && { borderTopColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, borderTopWidth: 1 },
+                  ]}
+                >
+                  <View style={styles.dashIcon}>
+                    <SafeIcon name={String(metric.icon)} size={16} color="#111" />
                   </View>
-                  <View>
-                    <Text style={[styles.analyticsTitle, { color: textColor(isDark) }]}>Founder Dashboard</Text>
-                    <Text style={[styles.analyticsHelp, { color: textColor(isDark, 'muted') }]}>Views · Clicks · Saves · Response</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.dashLabel, { color: textColor(isDark) }]}>{metric.label}</Text>
+                    <Text style={[styles.dashHint, { color: textColor(isDark, 'muted') }]}>{metric.hint}</Text>
                   </View>
-                </View>
-                <View style={[styles.analyticsBadge, { backgroundColor: COLORS.primary }]}>
-                  <Text style={styles.analyticsBadgeText}>Live</Text>
-                </View>
-              </View>
-
-              <View style={styles.analyticsGrid}>
-                {[
-                  { icon: 'Eye', label: 'Views', value: visibleProfileViewCount, mode: 'views' },
-                  { icon: 'MousePointerClick', label: 'Clicks', value: visibleProfileClickCount, mode: 'clicks' },
-                  { icon: 'Bookmark', label: 'Saves', value: visibleProfileSaveCount, mode: 'saves' },
-                  { icon: 'Gauge', label: 'Response', value: `${visibleResponseRate}%`, mode: 'response' },
-                ].map((metric: any) => (
-                  <TouchableOpacity
-                    key={String(metric.label)}
-                    activeOpacity={0.82}
-                    onPress={() => navigation.navigate('Viewers', { mode: metric.mode })}
-                    style={[styles.analyticsTile, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}
-                  >
-                    <View style={styles.analyticsTileTop}>
-                      <View style={[styles.analyticsIconBubble, { backgroundColor: COLORS.primary }]}>
-                        <SafeIcon name={String(metric.icon)} size={13} color="#000" />
-                      </View>
-
-                    </View>
-                    <Text style={[styles.analyticsValue, { color: textColor(isDark) }]}>
-                      {metric.value}
-                    </Text>
-                    <Text style={[styles.analyticsMetric, { color: textColor(isDark, 'muted') }]}>{String(metric.label).toUpperCase()}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <View style={styles.analyticsFooterWrap}>
-                <Text style={[styles.analyticsFooter, { color: textColor(isDark, 'muted') }]}>
-                  Tap any metric to open its live analytics window.
-                </Text>
-              </View>
+                  <Text style={[styles.dashValue, { color: textColor(isDark) }]}>{metric.value}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
         )}
@@ -2821,6 +2800,22 @@ export default function ProfileScreen({ navigation, route }: any) {
               <SafeIcon name="Globe2" size={18} color={COLORS.primary} />
               <View style={styles.prefCopy}>
                 <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Public Discovery</Text>
+                <Text style={styles.prefHelp}>When on, your prount active.</Text>
+              </View>
+            </View>
+            <PreferenceSwitch
+              value={stealthModeValue}
+              isDark={isDark}
+              disabled={savingPreference === 'isStealthMode'}
+              onValueChange={(v) => isEditing ? setEditData({ ...editData, isStealthMode: v }) : setPreference('isStealthMode', v)}
+            />
+          </View>
+
+          <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name="Globe2" size={18} color={COLORS.primary} />
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Public Discovery</Text>
                 <Text style={styles.prefHelp}>When on, your profile can appear in swipe, search, and active opportunity discovery.</Text>
               </View>
             </View>
@@ -2834,18 +2829,58 @@ export default function ProfileScreen({ navigation, route }: any) {
 
           <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
+              <SafeIcon name="Moon" size={18} color={COLORS.primary} />
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Appearance</Text>
+                <Text style={styles.prefHelp}>Light or dark. Applies across LINKUP on this device.</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.themePicker}>
+            {(['light', 'dark'] as const).map((mode) => {
+              const on = theme === mode;
+              return (
+                <TouchableOpacity
+                  key={mode}
+                  onPress={() => void setThemeMode(mode)}
+                  activeOpacity={0.88}
+                  style={[
+                    styles.themeOption,
+                    {
+                      borderColor: on ? COLORS.primary : (isDark ? COLORS.darkBorder : COLORS.lightBorder),
+                      backgroundColor: on ? COLORS.primary : (isDark ? COLORS.darkCard : '#FFF'),
+                    },
+                  ]}
+                >
+                  <SafeIcon name={mode === 'dark' ? 'Moon' : 'Sun'} size={16} color="#111" />
+                  <Text style={styles.themeOptionText}>{mode === 'dark' ? 'Dark' : 'Light'}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
+            <View style={styles.prefLabelContainer}>
               <SafeIcon name="Rocket" size={18} color={COLORS.primary} />
               <View style={styles.prefCopy}>
                 <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Turbo Connect</Text>
-                <Text style={styles.prefHelp}>Boosts your profile priority in discovery and search ranking when public discovery is on.</Text>
+                <Text style={styles.prefHelp}>
+                  LINKUP Plus. Puts you higher in Discover and search when public discovery is on.
+                </Text>
               </View>
             </View>
-            <PreferenceSwitch
-              value={turboConnectValue}
-              isDark={isDark}
-              disabled={savingPreference === 'turboConnect'}
-              onValueChange={handleTurboConnectChange}
-            />
+            {hasLinkupPro(myProfile) ? (
+              <PreferenceSwitch
+                value={turboConnectValue}
+                isDark={isDark}
+                disabled={savingPreference === 'turboConnect'}
+                onValueChange={handleTurboConnectChange}
+              />
+            ) : (
+              <TouchableOpacity onPress={() => openPaywall(PRO_FEATURES.turboConnect)} style={styles.plusChip} activeOpacity={0.88}>
+                <Text style={styles.plusChipText}>Plus</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
@@ -4424,6 +4459,13 @@ const styles = StyleSheet.create({
   unavailableText: {
     maxWidth: 280,
     textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 18,
+    color: '#777',
+  }
+});
+center',
     fontSize: 12,
     fontWeight: '800',
     lineHeight: 18,
