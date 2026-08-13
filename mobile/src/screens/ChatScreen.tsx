@@ -7,7 +7,7 @@ import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, u
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { ChevronLeft, Send, Camera, Zap, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X } from 'lucide-react-native';
+import { ChevronLeft, Send, Camera, Zap, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X, Flag } from 'lucide-react-native';
 import { generateWarmIntro } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { profileLinkFor, publicProfileLink } from '../lib/profileLinks';
@@ -19,6 +19,7 @@ import { isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_CHAT_MESSAGE_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
 import { subscribeToConnectionGate, type ConnectionGate } from '../lib/connectionRequests';
+import { allowSendRate, reportSafetyIssue, scanMessageSafety, theyBlockedMe } from '../lib/messageSafety';
 
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
 const MAX_FREE_INLINE_IMAGE_CHARS = 900_000;
@@ -137,6 +138,8 @@ export default function ChatScreen({ route, navigation }: any) {
   const [mediaBusy, setMediaBusy] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState('');
   const [connectionGate, setConnectionGate] = useState<ConnectionGate>({ status: 'none' });
+  const [blockedByThem, setBlockedByThem] = useState(false);
+  const [revealedUnsafe, setRevealedUnsafe] = useState<Record<string, boolean>>({});
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingValueRef = useRef(false);
@@ -156,6 +159,27 @@ export default function ChatScreen({ route, navigation }: any) {
     },
     [matchMeta?.participants, matchMeta?.userIds, myUid, otherUser?.uid, otherUserParam?.uid]
   );
+  const canSendMessages =
+    !blockedByThem &&
+    !hasBlockedUser &&
+    (connectionGate.status === 'approved' || messages.length > 0);
+
+  useEffect(() => {
+    if (!myUid || !otherUserId) {
+      setConnectionGate({ status: 'none' });
+      return;
+    }
+    return subscribeToConnectionGate(myUid, otherUserId, setConnectionGate);
+  }, [myUid, otherUserId]);
+
+  useEffect(() => {
+    if (!myUid || !otherUserId) {
+      setBlockedByThem(false);
+      return;
+    }
+    theyBlockedMe(myUid, otherUserId).then(setBlockedByThem).catch(() => setBlockedByThem(false));
+  }, [myUid, otherUserId]);
+
   const openOptionsMenu = () => {
     blurActiveElementOnWeb();
     setOptionsOpen(true);
@@ -392,6 +416,28 @@ export default function ChatScreen({ route, navigation }: any) {
       Alert.alert('User blocked', 'Unblock this user before sending a message.');
       return;
     }
+    if (blockedByThem) {
+      Alert.alert('Cannot message', 'This builder has blocked you.');
+      return;
+    }
+    if (!allowSendRate(user.uid)) {
+      Alert.alert('Slow down', 'Too many messages in a short time. Wait a minute.');
+      return;
+    }
+    const scan = scanMessageSafety(text);
+    if (scan.blocked) {
+      Alert.alert('Blocked for safety', scan.warning || 'That message is not allowed.');
+      return;
+    }
+    if (!scan.ok) {
+      const proceed = await new Promise<boolean>((resolve) => {
+        Alert.alert('Check this message', scan.warning, [
+          { text: 'Edit', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Send anyway', onPress: () => resolve(true) },
+        ]);
+      });
+      if (!proceed) return;
+    }
 
     try {
       await addDoc(collection(db, 'matches', matchId, 'messages'), {
@@ -415,7 +461,6 @@ export default function ChatScreen({ route, navigation }: any) {
 
       await updateDoc(doc(db, 'matches', matchId), matchPatch as any);
 
-      // In-app notification for the recipient (unread badge increments).
       if (recipientId && recipientId !== user.uid && !isRecipientMuted(recipientId)) {
         await addDoc(collection(db, 'notifications'), {
           userId: recipientId,
@@ -787,6 +832,30 @@ export default function ChatScreen({ route, navigation }: any) {
     }
   };
 
+  const reportPerson = (reason: string, messageId?: string) => {
+    if (!myUid || !otherUserId) return;
+    reportSafetyIssue({
+      reporterId: myUid,
+      reportedUserId: otherUserId,
+      matchId,
+      messageId,
+      reason,
+    })
+      .then(() => Alert.alert('Report sent', 'Thanks. LINKUP will review this. You can also block them so they cannot write you.'))
+      .catch(() => Alert.alert('Report failed', 'Could not send the report. Try again.'));
+  };
+
+  const openReportUser = () => {
+    closeOptionsMenu();
+    Alert.alert('Report this person', 'Why are you reporting them?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Scam / money ask', onPress: () => reportPerson('scam') },
+      { text: 'Harassment', onPress: () => reportPerson('harassment') },
+      { text: 'Spam', onPress: () => reportPerson('spam') },
+      { text: 'Inappropriate', onPress: () => reportPerson('inappropriate') },
+    ]);
+  };
+
   const deleteMessage = (messageId: string) => {
     if (!matchId || !messageId) return;
     Alert.alert('Delete message', 'Delete this message for everyone?', [
@@ -820,6 +889,12 @@ export default function ChatScreen({ route, navigation }: any) {
     ];
     if (isMe) {
       options.push({ text: 'Delete', style: 'destructive', onPress: () => deleteMessage(String(item.id)) });
+    } else {
+      options.push({
+        text: 'Report message',
+        style: 'destructive',
+        onPress: () => reportPerson('message', String(item.id)),
+      });
     }
     options.push({ text: 'Cancel', style: 'cancel' });
     Alert.alert('Message options', '', options);
@@ -843,6 +918,22 @@ export default function ChatScreen({ route, navigation }: any) {
 
   const renderMessage = ({ item }: { item: any }) => {
     const isMe = item.senderId === user?.uid;
+    const incomingScan = !isMe ? scanMessageSafety(String(item.content || '')) : { ok: true, blocked: false, flags: [] as any };
+    const hideUnsafe = !isMe && !incomingScan.ok && !revealedUnsafe[item.id];
+    if (hideUnsafe) {
+      return (
+        <View style={[styles.messageWrapper, styles.theirMessageWrapper]}>
+          <View style={[styles.messageBubble, styles.theirBubble, liquidGlass(isDark, false)]}>
+            <Text style={[styles.messageText, { color: textColor(isDark, 'secondary') }]}>
+              Hidden for safety. This may be a scam or personal-data ask.
+            </Text>
+            <TouchableOpacity onPress={() => setRevealedUnsafe((c) => ({ ...c, [item.id]: true }))} style={{ marginTop: 8 }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: COLORS.primaryStrong }}>Show message</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
     return (
       <View style={[styles.messageWrapper, isMe ? styles.myMessageWrapper : styles.theirMessageWrapper]}>
         <Pressable
@@ -954,7 +1045,7 @@ export default function ChatScreen({ route, navigation }: any) {
                 </Text>
                 <View style={styles.securityLine}>
                   <Shield size={10} color="#22C55E" />
-                  <Text style={styles.securityText}>End-to-end Encrypted</Text>
+                  <Text style={styles.securityText}>Safety tools on</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -966,7 +1057,7 @@ export default function ChatScreen({ route, navigation }: any) {
                 <Text style={styles.status}>Loading...</Text>
                 <View style={styles.securityLine}>
                   <Shield size={10} color="#22C55E" />
-                  <Text style={styles.securityText}>End-to-end Encrypted</Text>
+                  <Text style={styles.securityText}>Safety tools on</Text>
                 </View>
               </View>
             </View>
@@ -976,6 +1067,13 @@ export default function ChatScreen({ route, navigation }: any) {
         <TouchableOpacity onPress={openOptionsMenu} style={{ padding: 8, alignItems: 'center', justifyContent: 'center' }}>
           <MoreVertical size={22} color={textColor(isDark)} />
         </TouchableOpacity>
+      </View>
+
+      <View style={[styles.confidentialBanner, liquidGlass(isDark, false)]}>
+        <Shield size={14} color={COLORS.primaryStrong} />
+        <Text style={[styles.confidentialText, { color: textColor(isDark, 'secondary') }]}>
+          Stay on LINKUP. Never send money, OTPs, or your ID. Report anything off.
+        </Text>
       </View>
 
       {isConfidential && (
@@ -1168,6 +1266,14 @@ export default function ChatScreen({ route, navigation }: any) {
               title="Export Conversation"
               subtitle="Share as text transcript"
               onPress={exportConversation}
+            />
+
+            <MenuItem
+              icon={<Flag size={18} color="#EF4444" />}
+              title="Report this person"
+              subtitle="Scam, harassment, or spam"
+              danger
+              onPress={openReportUser}
             />
 
             <MenuItem

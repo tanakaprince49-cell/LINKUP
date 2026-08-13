@@ -661,6 +661,25 @@ service cloud.firestore {
     // ------------------------------------------------------------
     // Blocks
     // ------------------------------------------------------------
+    match /reports/{reportId} {
+      allow create: if isSignedIn() &&
+        incoming().keys().hasOnly([
+          'reporterId', 'reportedUserId', 'matchId', 'messageId',
+          'reason', 'details', 'createdAt'
+        ]) &&
+        incoming().reporterId == request.auth.uid &&
+        isValidId(incoming().reportedUserId) &&
+        incoming().reportedUserId != request.auth.uid &&
+        incoming().reason is string &&
+        incoming().reason.size() > 0 &&
+        incoming().reason.size() <= 40 &&
+        incoming().details is string &&
+        incoming().details.size() <= 800 &&
+        incoming().createdAt == request.time;
+      allow get, list: if isSignedIn() && existing().reporterId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     match /blocks/{blockId} {
       function userIsInBlock(data) {
         return data.blockedById == request.auth.uid || data.blockedUserId == request.auth.uid;
