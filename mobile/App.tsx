@@ -25,7 +25,6 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import ViewersScreen from './src/screens/ViewersScreen';
 import EmailAuthScreen from './src/screens/EmailAuthScreen';
-import EmailVerificationScreen from './src/screens/EmailVerificationScreen';
 import LandingScreen from './src/screens/LandingScreen';
 import ActiveOpportunityScreen from './src/screens/ActiveOpportunityScreen';
 import ActiveOpportunitiesScreen from './src/screens/ActiveOpportunitiesScreen';
@@ -38,6 +37,7 @@ import NetworkQuizScreen from './src/screens/NetworkQuizScreen';
 import { GamificationProvider } from './src/contexts/GamificationContext';
 import { setupNativeNotificationRuntimeAsync, subscribeToNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
 import { scheduleDailyReminder } from './src/lib/dailyReminder';
+import { seedConciergeWelcome } from './src/lib/activation';
 import { subscribeToUnreadMessagesCount } from './src/lib/chat';
 import OpportunityRadar from './src/components/OpportunityRadar';
 import WebAnalytics from './src/components/WebAnalytics';
@@ -342,15 +342,11 @@ function AppContent() {
     Platform.OS === 'web' ? String((globalThis as any)?.location?.pathname || '') : '';
   const isPublicSharedWebPath =
     webPathname.startsWith('/profile/') || webPathname.startsWith('/opportunity/');
-  const requiresEmailVerification = Boolean(
-    user?.email &&
-      !user.emailVerified &&
-      user.providerData?.some((provider) => provider.providerId === 'password')
-  );
-  const navigationStateKey = `${user?.uid || 'guest'}-${isOnboarded ? 'onboarded' : 'new'}-${requiresEmailVerification ? 'unverified' : 'verified'}-${authVersion}`;
+  const navigationStateKey = `${user?.uid || 'guest'}-${isOnboarded ? 'onboarded' : 'new'}-${authVersion}`;
 
   React.useEffect(() => {
     if (Platform.OS === 'web') return;
+    prepareNativeGoogleSignIn();
     setupNativeNotificationRuntimeAsync().catch((error) => {
       console.warn('Native notification runtime unavailable:', error);
     });
@@ -520,10 +516,6 @@ function AppContent() {
                 <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
               </>
             ) : null}
-          </>
-        ) : requiresEmailVerification ? (
-          <>
-            <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
           </>
         ) : !isOnboarded ? (
           <>

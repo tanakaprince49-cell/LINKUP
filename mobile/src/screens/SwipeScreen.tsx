@@ -38,6 +38,7 @@ import PaywallModal from '../components/PaywallModal';
 import { consumeDailyUsage, consumeWindowUsage, getDailyUsage, FREE_LIMITS, isAndroidProLocked, PRO_FEATURES, SWIPE_USAGE_WINDOW_HOURS } from '../lib/paywall';
 import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
 import { subscribeToDiscoveryProfiles, loadMoreDiscoveryProfiles } from '../lib/discoveryProfiles';
+import { shareLinkupInvite } from '../lib/activation';
 
 const windowSize = Dimensions.get('window');
 const { width } = windowSize;
@@ -916,14 +917,21 @@ export default function SwipeScreen({ navigation }: any) {
     <View style={styles.emptyContainer}>
       <Target size={48} color={dailyLimitReachedRef.current ? textColor(isDark, 'muted') : COLORS.primary} />
       <Text style={[styles.emptyText, { color: textColor(isDark) }]}>
-        {dailyLimitReachedRef.current ? 'DAILY MATCHES EXHAUSTED' : 'NO MORE PROFILES'}
+        {dailyLimitReachedRef.current ? 'DAILY MATCHES EXHAUSTED' : 'NO BUILDERS TO SWIPE'}
       </Text>
       <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
-        {dailyLimitReachedRef.current ? 'Come back tomorrow for 2 fresh matches.' : 'Check back later for new builders.'}
+        {dailyLimitReachedRef.current
+          ? 'Come back tomorrow for fresh matches.'
+          : allProfilesRef.current.length === 0
+            ? 'The network is still small. Invite people you know, then refresh.'
+            : 'You have seen everyone currently discoverable. Invite more builders.'}
       </Text>
-      <TouchableOpacity style={styles.resetBtn} onPress={resetDeck}>
-        <Text style={styles.resetText}>
-          {dailyLimitReachedRef.current ? 'TOMORROW' : 'REFRESH DISCOVERY'}
+      <TouchableOpacity style={styles.resetBtn} onPress={() => void shareLinkupInvite()}>
+        <Text style={styles.resetText}>INVITE 3 BUILDERS</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.resetBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.primary }]} onPress={resetDeck}>
+        <Text style={[styles.resetText, { color: COLORS.primary }]}>
+          {dailyLimitReachedRef.current ? 'TOMORROW' : 'REFRESH'}
         </Text>
       </TouchableOpacity>
     </View>

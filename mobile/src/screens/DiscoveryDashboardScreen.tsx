@@ -12,6 +12,7 @@ import { activeOpportunityScore, displayNameFor, earnedScore, handleFor, isDisco
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
 import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star } from 'lucide-react-native';
+import { shareLinkupInvite } from '../lib/activation';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { IS_LOW_END_ANDROID, MOBILE_HORIZONTAL_CARD_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
@@ -366,10 +367,10 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
         ListEmptyComponent={
           <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}>
-            <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No active opportunities yet</Text>
-            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>Use search to find builders by role, stage, or industry.</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.emptyBtn}>
-              <Text style={styles.emptyBtnText}>OPEN SEARCH</Text>
+            <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>Nobody here yet</Text>
+            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>This list is empty because the network is still small. Invite 3 builders or search whoever is already on LINKUP.</Text>
+            <TouchableOpacity onPress={() => void shareLinkupInvite()} style={styles.emptyBtn}>
+              <Text style={styles.emptyBtnText}>INVITE BUILDERS</Text>
             </TouchableOpacity>
           </View>
         }
@@ -395,19 +396,30 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                     <Text style={[styles.heroBadgeText, { color: COLORS.primary }]}>TODAY</Text>
                   </View>
                 </View>
-                <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Your builder graph is warming up.</Text>
+                <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>
+                  {people.length === 0 ? 'The room is still small.' : 'Your builder graph is warming up.'}
+                </Text>
                 <Text style={[styles.heroSub, { color: textColor(isDark, 'muted') }]}>
-                  Smart matches, live project opportunities, and founders worth meeting are ranked into one calm feed.
+                  {people.length === 0
+                    ? `${people.length} discoverable builders loaded. Invite people you already trust, or talk to LINKUP concierge in Alerts.`
+                    : 'Smart matches, live project opportunities, and founders worth meeting are ranked into one calm feed.'}
                 </Text>
               </View>
 
               <View style={styles.heroActions}>
                 <TouchableOpacity
-                  onPress={() => navigation.navigate('IdeaDeck')}
+                  onPress={() => void shareLinkupInvite()}
+                  style={[styles.heroBtn, { backgroundColor: COLORS.primary }]}
+                >
+                  <Users size={14} color="#000" />
+                  <Text style={[styles.heroBtnText, { color: '#000' }]}>INVITE</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('Swipe')}
                   style={[styles.heroBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
                 >
-                  <Lightbulb size={14} color={textColor(isDark)} />
-                  <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>IDEAS</Text>
+                  <Zap size={14} color={textColor(isDark)} />
+                  <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>SWIPE</Text>
                 </TouchableOpacity>
                 <View style={[styles.heroStatus, { backgroundColor: isDark ? 'rgba(251,230,24,0.1)' : 'rgba(251,230,24,0.15)' }]}>
                   <Star size={12} color={COLORS.primary} />

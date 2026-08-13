@@ -21,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { imageAssetToDataUri } from '../lib/imageUploadLimits';
 import { publicProfileLink } from '../lib/profileLinks';
 import { LINKUP_ROLE_OPTIONS, roleInfoFor } from '../lib/roles';
+import { seedConciergeWelcome } from '../lib/activation';
 
 type Choice = { id: string; label: string; desc?: string };
 type RoleQuestion = { id: string; title: string; subtitle: string; choices: Choice[]; multi?: boolean };
@@ -1412,45 +1413,10 @@ export default function OnboardingScreen({ navigation }: any) {
     personalityStep,
   ]);
 
+  const lookingForChoices = role === 'Investor' ? investorGoalsChoices : role === 'Founder' || !role ? goalsChoices : builderGoalsChoices;
+
   const steps = useMemo(
     () => [
-      {
-        key: 'intro',
-        title: 'Answer Carefully',
-        subtitle: 'LINKUP uses your answers to recommend cofounders, collaborators, builders, and opportunities.',
-        body: (
-          <View
-            style={[
-              styles.card,
-              liquidGlass(isDark),
-              { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
-            ]}
-          >
-            <Text style={[styles.cardTitle, { color: textColor(isDark), fontSize: 14 }]}>
-              Better answers = better matches
-            </Text>
-            <Text style={[styles.introText, { color: textColor(isDark, 'secondary') }]}>
-              Be honest about your goals, skills, work style, and availability. The smart matching system uses this profile to understand who can actually help you build.
-            </Text>
-            <View style={styles.introBullets}>
-              {[
-                'Choose what describes you today, not what sounds impressive.',
-                'Add real skills and interests so search can find you.',
-                'Answer personality questions correctly for stronger compatibility.',
-              ].map((item) => (
-                <View key={item} style={styles.introBulletRow}>
-                  <View style={styles.introDot} />
-                  <Text style={[styles.introBulletText, { color: textColor(isDark) }]}>{item}</Text>
-                </View>
-              ))}
-            </View>
-            <Text style={[styles.introFooter, { color: isDark ? COLORS.primary : '#8A7900' }]}>
-              This takes one minute. It makes LINKUP feel smart instead of random.
-            </Text>
-          </View>
-        ),
-        canNext: true,
-      },
       {
         key: 'name',
         title: 'Your Name',
@@ -1478,126 +1444,48 @@ export default function OnboardingScreen({ navigation }: any) {
         canNext: displayName.trim().length >= 2,
       },
       {
-        key: 'bio',
-        title: 'Your Bio',
-        subtitle: 'In 1-2 lines, what are you building or good at?',
-        body: (
-          <View>
-            <TextInput
-              value={bio}
-              onChangeText={setBio}
-              placeholder="Example: Execution-focused founder building an automation SaaS. Looking for a technical cofounder."
-              placeholderTextColor="#666"
-              style={[
-                styles.bioInput,
-                liquidGlass(isDark, false),
-                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
-              ]}
-              multiline
-            />
-            <Text style={{ marginTop: 10, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16 }}>
-              This improves matching quality.
-            </Text>
-          </View>
-        ),
-        canNext: bio.trim().length >= 10,
-      },
-      {
-        key: 'basics',
-        title: 'Basics',
-        subtitle: 'A few details to personalize matches.',
-        body: (
-          <View style={{ gap: 12 }}>
-            <TextInput
-              value={ageText}
-              onChangeText={(t) => setAgeText(t.replace(/[^0-9]/g, '').slice(0, 2))}
-              placeholder="Age"
-              placeholderTextColor="#666"
-              keyboardType="number-pad"
-              style={[
-                styles.textInput,
-                liquidGlass(isDark, false),
-                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
-              ]}
-            />
-            <TextInput
-              value={country}
-              onChangeText={setCountry}
-              placeholder="Country"
-              placeholderTextColor="#666"
-              style={[
-                styles.textInput,
-                liquidGlass(isDark, false),
-                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
-              ]}
-              autoCapitalize="words"
-            />
-            <TextInput
-              value={city}
-              onChangeText={setCity}
-              placeholder="City"
-              placeholderTextColor="#666"
-              style={[
-                styles.textInput,
-                liquidGlass(isDark, false),
-                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
-              ]}
-              autoCapitalize="words"
-            />
-          </View>
-        ),
-        canNext: (() => {
-          const ageNum = Number(ageText);
-          return ageNum >= 13 && ageNum <= 99 && country.trim().length >= 2 && city.trim().length >= 2;
-        })(),
-      },
-      {
-        key: 'photos',
-        title: 'Profile Picture',
-        subtitle: 'Add one clear profile picture. Extra swipe photos can be edited later from your profile.',
-        body: (
-          <View style={{ alignItems: 'center' }}>
-            <View style={{ alignItems: 'center' }}>
-              <PhotoSlot
-                label="Profile Photo"
-                uri={profilePicUri || null}
-                onPress={pickPhoto}
-                isDark={isDark}
-                circular
-              />
-            </View>
-            <Text style={{ marginTop: 12, maxWidth: 360, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16, textAlign: 'center' }}>
-              This circular preview matches how your profile photo will look on LINKUP.
-            </Text>
-            <Text style={{ marginTop: 8, maxWidth: 420, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16, textAlign: 'center' }}>
-              Want more swipe photos? Open Profile after onboarding and add them there.
-            </Text>
-          </View>
-        ),
-        canNext: !!profilePicUri,
-      },
-      {
         key: 'identity',
         title: 'Your Identity',
-        subtitle: 'What best describes you?',
+        subtitle: 'What best describes you today?',
         body: (
           <ChoiceGrid value={role} onChange={(v) => setRole(String(v))} choices={identityChoices} isDark={isDark} />
         ),
         canNext: !!role,
       },
-      ...roleSteps,
+      {
+        key: 'goals',
+        title: 'Looking For',
+        subtitle: 'Pick at least one. Skills and extras can wait.',
+        body: (
+          <ChoiceGrid
+            value={lookingFor}
+            onChange={(v) => setLookingFor(v as string[])}
+            choices={lookingForChoices}
+            multi
+            isDark={isDark}
+          />
+        ),
+        canNext: lookingFor.length > 0,
+      },
+      {
+        key: 'photos',
+        title: 'Photo (optional)',
+        subtitle: 'A face photo gets more replies. Skip if you want.',
+        body: (
+          <View style={{ alignItems: 'center' }}>
+            <PhotoSlot
+              label="Profile Photo"
+              uri={profilePicUri || null}
+              onPress={pickPhoto}
+              isDark={isDark}
+              circular
+            />
+          </View>
+        ),
+        canNext: true,
+      },
     ],
-    [
-      displayName,
-      bio,
-      ageText,
-      country,
-      city,
-      profilePicUri,
-      role,
-      isDark,
-      roleSteps,
-    ]
+    [displayName, lookingFor, lookingForChoices, profilePicUri, role, isDark]
   );
 
   const current = steps[step];
@@ -1661,6 +1549,7 @@ export default function OnboardingScreen({ navigation }: any) {
       } as any;
       await setDoc(doc(db, 'users', user.uid), onboardingProfile, { merge: true });
       await markOnboardingComplete(onboardingProfile);
+      void seedConciergeWelcome(user.uid, onboardingProfile);
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
       Alert.alert('Could not finish onboarding', 'Please deploy the latest Firestore rules, then try again.');
@@ -1732,10 +1621,16 @@ export default function OnboardingScreen({ navigation }: any) {
               onPress={finish}
               style={[styles.btn, { backgroundColor: COLORS.primary, flex: 1, opacity: !current.canNext || saving ? 0.5 : 1 }]}
             >
-              {saving ? <ActivityIndicator color="#000" /> : <Text style={[styles.btnText, { color: '#000' }]}>FINISH</Text>}
+              {saving ? <ActivityIndicator color="#000" /> : <Text style={[styles.btnText, { color: '#000' }]}>ENTER LINKUP</Text>}
             </TouchableOpacity>
           )}
         </View>
+
+        {step >= 2 ? (
+          <TouchableOpacity disabled={saving || displayName.trim().length < 2 || !role} onPress={finish} style={{ marginTop: 14, alignItems: 'center' }}>
+            <Text style={{ fontSize: 11, fontWeight: '900', letterSpacing: 1.2, color: '#888' }}>SKIP EXTRA — DO THIS LATER</Text>
+          </TouchableOpacity>
+        ) : null}
 
         <View style={{ height: 90 }} />
       </ScrollView>

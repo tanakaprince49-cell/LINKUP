@@ -222,9 +222,36 @@ const loadNativeGoogleSignIn = () => {
   }
 };
 
+let nativeGoogleConfigured = false;
+
+export const prepareNativeGoogleSignIn = () => {
+  if (Platform.OS === 'web' || nativeGoogleConfigured) return loadNativeGoogleSignIn();
+  const googleModule = loadNativeGoogleSignIn();
+  const GoogleSignin = googleModule?.GoogleSignin;
+  if (!GoogleSignin?.configure) return googleModule;
+  try {
+    GoogleSignin.configure({
+      webClientId: GOOGLE_WEB_CLIENT_ID,
+      offlineAccess: false,
+      forceCodeForRefreshToken: false,
+      scopes: ['profile', 'email'],
+      profileImageSize: 120,
+    });
+    nativeGoogleConfigured = true;
+  } catch (error) {
+    console.warn('Native Google Sign-In configure skipped:', error);
+  }
+  return googleModule;
+};
+
 const getGoogleIdToken = async (GoogleSignin: any, signInResult: any) => {
-  if (signInResult?.type === 'cancelled') return null;
-  const tokenFromSignIn = signInResult?.data?.idToken || signInResult?.idToken;
+  const type = String(signInResult?.type || '').toLowerCase();
+  if (type === 'cancelled' || type === 'cancel' || signInResult === false) return null;
+  const tokenFromSignIn =
+    signInResult?.data?.idToken ||
+    signInResult?.idToken ||
+    signInResult?.data?.user?.idToken ||
+    signInResult?.user?.idToken;
   if (tokenFromSignIn) return tokenFromSignIn;
 
   const tokens = await GoogleSignin.getTokens?.().catch(() => null);
@@ -667,27 +694,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      const googleModule = loadNativeGoogleSignIn();
+      const googleModule = prepareNativeGoogleSignIn();
       if (!googleModule?.GoogleSignin) {
         Alert.alert(
           'Google Sign-In Unavailable',
-          'Native Google Sign-In is not available in Expo Go. Please run a development build / real APK that includes the Google Sign-In native module.'
+          'Native Google Sign-In is not available in Expo Go. Install the Play Store / EAS build of LINKUP, not Expo Go.'
         );
         return;
       }
 
       const { GoogleSignin } = googleModule;
-
-      GoogleSignin.configure({
-        webClientId: GOOGLE_WEB_CLIENT_ID,
-        offlineAccess: false,
-        forceCodeForRefreshToken: false,
-        profileImageSize: 120,
-      });
-
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      await GoogleSignin.signOut?.().catch(() => {});
+      const alreadySignedIn = await GoogleSignin.hasPreviousSignIn?.().catch(() => false);
+      if (alreadySignedIn) {
+        await GoogleSignin.signOut?.().catch(() => {});
+      }
       const signInResult = await GoogleSignin.signIn();
+      const cancelledType = String(signInResult?.type || '').toLowerCase();
+      if (cancelledType === 'cancelled' || cancelledType === 'cancel') return;
       const idToken = await getGoogleIdToken(GoogleSignin, signInResult);
 
       if (!idToken) {

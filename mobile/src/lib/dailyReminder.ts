@@ -1,46 +1,86 @@
 import { Platform } from 'react-native';
+import { collection, getDocs, limit, query, where } from 'firebase/firestore';
+import { db } from './firebase';
 
-let scheduled = false;
-
-const REMINDERS = [
-  { hour: 9, minute: 0, body: 'Good morning! Check who\'s been viewing your profile overnight. 🔍' },
-  { hour: 12, minute: 0, body: 'Your daily matches are ready — see who wants to connect. 🤝' },
-  { hour: 15, minute: 30, body: 'Afternoon networking break. New builders joined LINKUP today. ⚡' },
-  { hour: 18, minute: 0, body: 'Someone\'s waiting to connect — jump back in! 🚀' },
-  { hour: 20, minute: 30, body: 'Evening scroll? Your PLAY streak and messages are waiting. 🌙' },
+const FAKE_REMINDER_IDS = [
+  'daily_reminder_9_0',
+  'daily_reminder_12_0',
+  'daily_reminder_15_30',
+  'daily_reminder_18_0',
+  'daily_reminder_20_30',
 ];
 
-export async function scheduleDailyReminder(): Promise<void> {
-  if (scheduled || Platform.OS === 'web') return;
+const EVENT_REMINDER_ID = 'linkup_real_event_reminder';
+
+async function loadNotifications() {
+  try {
+    return await import('expo-notifications');
+  } catch {
+    return null;
+  }
+}
+
+export async function cancelFakeDailyReminders(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  const Notifications = await loadNotifications();
+  if (!Notifications) return;
+  for (const id of FAKE_REMINDER_IDS) {
+    try {
+      await Notifications.cancelScheduledNotificationAsync(id as any);
+    } catch {
+      // Best effort.
+    }
+  }
+}
+
+/** Only schedule a local ping when the user already has a real unread event. */
+export async function syncEventReminders(userId?: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  await cancelFakeDailyReminders();
+  if (!userId) return;
+
+  const Notifications = await loadNotifications();
+  if (!Notifications) return;
 
   try {
-    const Notifications = await import('expo-notifications');
-
-    for (const reminder of REMINDERS) {
-      const id = `daily_reminder_${reminder.hour}_${reminder.minute}`;
-      await Notifications.cancelScheduledNotificationAsync(id as any);
-    }
-
-    for (const reminder of REMINDERS) {
-      const id = `daily_reminder_${reminder.hour}_${reminder.minute}`;
-      await Notifications.scheduleNotificationAsync({
-        identifier: id,
-        content: {
-          title: 'LINKUP',
-          body: reminder.body,
-          sound: true,
-          priority: Notifications.AndroidNotificationPriority?.HIGH ?? 'high',
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes?.DAILY ?? 'daily',
-          hour: reminder.hour,
-          minute: reminder.minute,
-        } as any,
-      });
-    }
-
-    scheduled = true;
-  } catch (e) {
-    console.warn('Failed to schedule daily reminders:', e);
+    await Notifications.cancelScheduledNotificationAsync(EVENT_REMINDER_ID as any);
+  } catch {
+    // ignore
   }
+
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'notifications'), where('userId', '==', userId), limit(40))
+    );
+    const unread = snap.docs.filter((docSnap) => (docSnap.data() as any)?.isRead === false);
+    if (unread.length === 0) return;
+
+    const first = unread[0].data() as any;
+    const body =
+      first?.type === 'message'
+        ? `${first.fromName || 'Someone'} messaged you.`
+        : first?.type === 'match'
+          ? 'You have a new match waiting.'
+          : first?.type === 'like'
+            ? `${first.fromName || 'Someone'} liked your profile.`
+            : first?.content || 'You have something new on LINKUP.';
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: EVENT_REMINDER_ID,
+      content: {
+        title: 'LINKUP',
+        body,
+        sound: true,
+        priority: Notifications.AndroidNotificationPriority?.HIGH ?? 'high',
+      },
+      trigger: { type: 'timeInterval', seconds: 90 * 60, repeats: false } as any,
+    });
+  } catch (error) {
+    console.warn('Event reminder sync skipped:', error);
+  }
+}
+
+/** Kept for existing imports — no more fake 5x daily pings. */
+export async function scheduleDailyReminder(userId?: string): Promise<void> {
+  await syncEventReminders(userId);
 }

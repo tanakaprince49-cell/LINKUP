@@ -10,6 +10,7 @@ import { MessageSquare, ChevronRight, Pin, Star, Archive, ChevronLeft } from 'lu
 import VerifiedBadge from '../components/VerifiedBadge';
 import { buildConversationProfileSnapshot, conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+import { shareLinkupInvite } from '../lib/activation';
 
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
 
@@ -278,6 +279,19 @@ export default function MessagesScreen({ navigation, route }: any) {
             <View style={styles.emptyContainer}>
               <MessageSquare size={48} color="#222" />
               <Text style={styles.emptyText}>{archivedOnly ? 'NO ARCHIVED CHATS' : 'NO CONVERSATIONS YET'}</Text>
+              {!archivedOnly ? (
+                <>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#777', textAlign: 'center', lineHeight: 18 }}>
+                    Chat stays empty until someone matches you. Swipe, search, or invite 3 builders you already know.
+                  </Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Swipe')} style={{ backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 16 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '900', color: '#000', letterSpacing: 1 }}>OPEN DISCOVER</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => void shareLinkupInvite()}>
+                    <Text style={{ fontSize: 11, fontWeight: '900', color: COLORS.primary, letterSpacing: 1 }}>INVITE BUILDERS</Text>
+                  </TouchableOpacity>
+                </>
+              ) : null}
             </View>
           }
         />
