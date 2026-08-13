@@ -188,6 +188,7 @@ export interface AppNotification {
   fromPic?: string;
   matchId?: string;
   requestId?: string;
+  note?: string;
   gameType?: string;
 }
 

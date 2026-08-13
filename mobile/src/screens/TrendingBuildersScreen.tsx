@@ -7,7 +7,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { earnedScore, handleFor, isDiscoverableProfile } from '../lib/discovery';
-import { startTalkOrRequest } from '../lib/connectionRequests';
+import { resolveConnectionGate, startTalkOrRequest } from '../lib/connectionRequests';
+import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { displayNameFor } from '../lib/discovery';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import VerifiedBadge from '../components/VerifiedBadge';
@@ -35,6 +36,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
   const [builders, setBuilders] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const connectionNote = useConnectionNote();
 
   useEffect(() => {
     if (!user?.uid) {
@@ -73,6 +75,13 @@ export default function TrendingBuildersScreen({ navigation }: any) {
 
   const openChat = async (profile: UserProfile) => {
     if (!user?.uid || !profile?.uid) return;
+    const gate = await resolveConnectionGate(user.uid, profile.uid);
+    let note = '';
+    if (gate.status === 'none') {
+      const drafted = await connectionNote.ask(displayNameFor(profile));
+      if (drafted === null) return;
+      note = drafted;
+    }
     setBusyUserId(profile.uid);
     try {
       const result = await startTalkOrRequest({
@@ -80,6 +89,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
         recipientId: profile.uid,
         senderName: displayNameFor(me || user),
         senderPic: safeProfileImageUri((me as any)?.profilePic, MOBILE_LIST_IMAGE_LIMIT),
+        message: note,
       });
       if (result.action === 'chat' && result.matchId) {
         navigation.navigate('Chat', { matchId: result.matchId, otherUser: profile });

@@ -8,7 +8,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { displayNameFor, handleFor, isDiscoverableProfile } from '../lib/discovery';
 import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
-import { startTalkOrRequest } from '../lib/connectionRequests';
+import { resolveConnectionGate, startTalkOrRequest } from '../lib/connectionRequests';
+import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
@@ -48,6 +49,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
   const [dailyRecommendationsUsed, setDailyRecommendationsUsed] = useState(0);
   const [lastRecommendationDate, setLastRecommendationDate] = useState<string | null>(null);
   const [lastRankedProfileIds, setLastRankedProfileIds] = useState<string[]>([]);
+  const connectionNote = useConnectionNote();
 
   const localScores = useMemo(() => {
     return rankedCandidatesToMap(localCommonalityRank(me, people, Math.max(people.length, 30)));
@@ -160,6 +162,14 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
   const openChat = async (profile: UserProfile) => {
     if (!user?.uid || !profile?.uid) return;
 
+    const gate = await resolveConnectionGate(user.uid, profile.uid);
+    let note = '';
+    if (gate.status === 'none') {
+      const drafted = await connectionNote.ask(displayNameFor(profile));
+      if (drafted === null) return;
+      note = drafted;
+    }
+
     const usage = await consumeDailyUsage(user.uid, 'dailyRecommendations', FREE_LIMITS.dailyRecommendations);
     if (!usage.allowed && lastRecommendationDate === today) {
       Alert.alert('That’s today’s 2', 'Come back tomorrow for 2 new recommended builders.');
@@ -173,6 +183,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         recipientId: profile.uid,
         senderName: displayNameFor(me || user),
         senderPic: safeProfileImageUri((me as any)?.profilePic, MOBILE_LIST_IMAGE_LIMIT),
+        message: note,
       });
       await AsyncStorage.setItem(`linkup:last-recommendation-date:${user.uid}`, today);
       setLastRecommendationDate(today);

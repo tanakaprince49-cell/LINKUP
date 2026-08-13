@@ -198,6 +198,7 @@ export async function requestConnection({
     fromPic: safeSenderPic,
     type: 'connection_request',
     content: notificationContent,
+    ...(safeMessage ? { note: safeMessage } : {}),
     requestId,
     isRead: false,
     timestamp: serverTimestamp(),
@@ -233,11 +234,25 @@ export async function respondToConnectionRequest({
   responderPic?: string;
 }) {
   const requestRef = doc(db, 'connectionRequests', requestId);
+  const existing = await getDoc(requestRef).catch(() => null);
+  const intro = String(existing?.data()?.message || '').trim().slice(0, 600);
   const matchId = approved ? directMatchId(senderId, responderId) : '';
   const safeResponderPic = safeContactImage(responderPic);
 
   if (approved) {
     await ensureDirectMatch(senderId, responderId);
+    if (intro) {
+      await addDoc(collection(db, 'matches', matchId, 'messages'), {
+        senderId,
+        content: intro,
+        type: 'text',
+        timestamp: serverTimestamp(),
+      }).catch(() => {});
+      await updateDoc(doc(db, 'matches', matchId), {
+        lastMessage: intro,
+        lastMessageTime: serverTimestamp(),
+      }).catch(() => {});
+    }
   }
 
   await updateDoc(requestRef, {

@@ -27,6 +27,7 @@ import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 import { trackProfileView } from '../lib/analytics';
 import { ensureDirectMatch } from '../lib/chat';
 import { ConnectionRequest, requestConnection, subscribeToConnectionRequest } from '../lib/connectionRequests';
+import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useGamification } from '../contexts/GamificationContext';
@@ -819,6 +820,9 @@ export default function SwipeScreen({ navigation }: any) {
       return;
     }
 
+    const drafted = await connectionNote.ask(displayNameFor(target));
+    if (drafted === null) return;
+
     setContactBusy(true);
     try {
       const request = await requestConnection({
@@ -826,6 +830,7 @@ export default function SwipeScreen({ navigation }: any) {
         recipientId: target.uid,
         senderName: displayNameFor(myProfile || user),
         senderPic: safeProfileImageUri(myProfile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT),
+        message: drafted,
       });
       setConnectionRequest(request);
       trackAction('connect');
@@ -1319,6 +1324,7 @@ export default function SwipeScreen({ navigation }: any) {
           )}
         </View>
       </View>
+      {connectionNote.modal}
       <PaywallModal
         visible={!!paywallFeature}
         feature={paywallFeature || PRO_FEATURES.startupAnalyzer}

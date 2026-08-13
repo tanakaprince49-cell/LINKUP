@@ -29,7 +29,8 @@ import * as Icons from 'lucide-react-native';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, deleteDoc, deleteField, doc, FieldPath, getDoc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { trackProfileClick, trackProfileView } from '../lib/analytics';
-import { startTalkOrRequest } from '../lib/connectionRequests';
+import { resolveConnectionGate, startTalkOrRequest } from '../lib/connectionRequests';
+import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { buildConversationProfileSnapshot } from '../lib/conversationProfiles';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
@@ -354,6 +355,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [startupAnalyzerExpanded, setStartupAnalyzerExpanded] = useState(false);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState('');
+  const connectionNote = useConnectionNote();
 
   // If a userId param is passed and it's not the current user, fetch that profile
   const rawTargetUserId = route?.params?.userId;
@@ -1038,6 +1040,13 @@ export default function ProfileScreen({ navigation, route }: any) {
       return;
     }
     if (!targetUserId || !profile) return;
+    const gate = await resolveConnectionGate(myProfile.uid, targetUserId);
+    let note = '';
+    if (gate.status === 'none') {
+      const drafted = await connectionNote.ask(displayNameFor(profile));
+      if (drafted === null) return;
+      note = drafted;
+    }
     setIsSaving(true);
     try {
       trackProfileClick({
@@ -1053,6 +1062,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         recipientId: targetUserId,
         senderName: displayNameFor(myProfile),
         senderPic: safeProfileImageUri(myProfile.profilePic, MOBILE_LIST_IMAGE_LIMIT),
+        message: note,
       });
       if (result.action === 'chat' && result.matchId) {
         navigation.navigate('Chat', { matchId: result.matchId, otherUser: otherUserSnapshot });
@@ -3122,6 +3132,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           <Image source={{ uri: fullPhotoUri }} style={styles.fullPhotoImage} resizeMode="contain" />
         </Pressable>
       </Modal>
+      {connectionNote.modal}
       <PaywallModal
         visible={!!paywallFeature}
         feature={paywallFeature || PRO_FEATURES.startupAnalyzer}

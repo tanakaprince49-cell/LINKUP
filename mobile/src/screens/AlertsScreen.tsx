@@ -162,6 +162,11 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           {notification.content}
         </Text>
         <Text style={[styles.timeText, { color: textColor(isDark, 'muted') }]}>{formatTimeAgo(notification.timestamp)}</Text>
+        {notification.note ? (
+          <View style={[styles.noteBox, { backgroundColor: isDark ? 'rgba(251,230,24,0.08)' : '#FFF8C5' }]}>
+            <Text style={[styles.noteText, { color: textColor(isDark) }]}>“{notification.note}”</Text>
+          </View>
+        ) : null}
         {isRequest ? (
           <View style={styles.requestActions}>
             <TouchableOpacity
