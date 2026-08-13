@@ -67,8 +67,8 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       const lastNotifiedDate = await AsyncStorage.getItem(`linkup:last-notified-date:${user.uid}`);
       if (lastDate !== today && lastNotifiedDate !== today) {
         Alert.alert(
-          'New Daily Recommendations!',
-          `You have ${FREE_LIMITS.dailyRecommendations} fresh recommendations waiting for you today!`,
+          'Today’s 2 picks',
+          'Two builders ranked for you today. Treat them like real intros, not a feed.',
           [{ text: 'OK', onPress: () => AsyncStorage.setItem(`linkup:last-notified-date:${user.uid}`, today) }]
         );
       }
@@ -162,7 +162,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
 
     const usage = await consumeDailyUsage(user.uid, 'dailyRecommendations', FREE_LIMITS.dailyRecommendations);
     if (!usage.allowed && lastRecommendationDate === today) {
-      Alert.alert('Daily limit reached', `You've used your ${FREE_LIMITS.dailyRecommendations} daily recommendations. Come back tomorrow for more!`);
+      Alert.alert('That’s today’s 2', 'Come back tomorrow for 2 new recommended builders.');
       return;
     }
 

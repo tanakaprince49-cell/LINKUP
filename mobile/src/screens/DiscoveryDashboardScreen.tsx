@@ -174,7 +174,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
   const recommended = useMemo(() => {
     const list = people.map((p) => ({ p, s: (aiRank[p.uid]?.score ?? localRank[p.uid]?.score ?? 1) + ((p as any).turboConnect ? 8 : 0) }));
     list.sort((a, b) => b.s - a.s);
-    return list.filter((x) => x.s >= 0).slice(0, MOBILE_HORIZONTAL_CARD_LIMIT).map((x) => x.p);
+    return list.filter((x) => x.s >= 0).slice(0, 2).map((x) => x.p);
   }, [people, aiRank, localRank]);
 
   const trending = useMemo(() => {
@@ -202,7 +202,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 
   const topOpportunityAlert = opportunityRadar[0];
 
-  const Card = ({ item, showScore }: { item: UserProfile; showScore?: boolean }) => {
+  const Card = ({ item, showScore, rank }: { item: UserProfile; showScore?: boolean; rank?: number }) => {
     const localMatch = localRank[item.uid];
     const aiMatch = aiRank[item.uid];
     const match = localMatch || aiMatch;
@@ -212,7 +212,12 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: score, compatibilityReason: match?.reason || '' })}
         style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}
       >
-        <Image
+        {typeof rank === 'number' ? (
+          <View style={[styles.rankBadge, rank < 3 && { backgroundColor: COLORS.primary }]}>
+            <Text style={styles.rankBadgeText}>{rank === 0 ? '1ST' : rank === 1 ? '2ND' : rank === 2 ? '3RD' : `#${rank + 1}`}</Text>
+          </View>
+        ) : null}
+        <Image>
           source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }}
           style={styles.avatar}
         />
@@ -344,7 +349,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     </TouchableOpacity>
   );
 
-  const Section = ({ title, icon, data, showScore, variant, onViewAll }: any) => (
+  const Section = ({ title, icon, data, showScore, variant, onViewAll, showRank }: any) => (
     <View style={{ marginTop: 24 }}>
       <TouchableOpacity style={styles.sectionHeader} onPress={onViewAll} activeOpacity={onViewAll ? 0.8 : 1}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -374,7 +379,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
         }
-        renderItem={({ item }: any) => variant === 'opportunity' ? <OpportunityCard item={item} /> : <Card item={item} showScore={showScore} />}
+        renderItem={({ item, index }: any) => variant === 'opportunity' ? <OpportunityCard item={item} /> : <Card item={item} showScore={showScore} rank={showRank ? index : undefined} />}
       />
     </View>
   );
@@ -524,9 +529,10 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             />
           </View>
           <Section
-            title="Trending Builders"
+            title="Builder League"
             icon={<TrendingUp size={17} color={COLORS.primary} />}
             data={trending}
+            showRank
             onViewAll={() => navigation.navigate('TrendingBuilders')}
           />
           <Section
