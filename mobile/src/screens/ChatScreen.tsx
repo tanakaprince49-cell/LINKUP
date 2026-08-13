@@ -21,6 +21,7 @@ import { conversationAvatarUri, loadConversationProfile, normalizeConversationPr
 import { subscribeToConnectionGate, type ConnectionGate } from '../lib/connectionRequests';
 import { allowSendRate, reportSafetyIssue, scanMessageSafety, theyBlockedMe } from '../lib/messageSafety';
 
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '👏', '😮'] as const;
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
 const MAX_FREE_INLINE_IMAGE_CHARS = 900_000;
 const MAX_PRO_INLINE_IMAGE_CHARS = 900_000;
