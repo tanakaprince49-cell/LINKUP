@@ -704,9 +704,9 @@ function buildCircles(input: {
 }
 
 const StepTitle = ({ title, subtitle, isDark }: { title: string; subtitle: string; isDark: boolean }) => (
-  <View style={{ marginBottom: 18 }}>
+  <View style={{ marginBottom: 22 }}>
     <Text style={[styles.title, { color: textColor(isDark) }]}>{title}</Text>
-    <Text style={[styles.subtitle, { color: '#666' }]}>{subtitle}</Text>
+    <Text style={[styles.subtitle, { color: textColor(isDark, 'secondary') }]}>{subtitle}</Text>
   </View>
 );
 
@@ -730,8 +730,7 @@ const PhotoSlot = ({
         onPress={onPress}
         style={[
           styles.profilePhotoPicker,
-          liquidGlass(isDark, false),
-          { borderColor: COLORS.primary },
+          { borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)' },
         ]}
       >
         {uri ? (
@@ -741,15 +740,10 @@ const PhotoSlot = ({
             <View style={styles.profilePhotoPlusCircle}>
               <Text style={styles.profilePhotoPlusText}>+</Text>
             </View>
-            <Text style={[styles.profilePhotoEmptyText, { color: textColor(isDark) }]}>ADD PROFILE PHOTO</Text>
-            <Text style={styles.profilePhotoHint}>Tap to open gallery</Text>
+            <Text style={[styles.profilePhotoEmptyText, { color: textColor(isDark) }]}>Add a photo</Text>
+            <Text style={[styles.profilePhotoHint, { color: textColor(isDark, 'muted') }]}>Optional · tap gallery</Text>
           </View>
         )}
-        <View style={[styles.profilePhotoPickerLabel, appBackground(isDark)]}>
-          <Text style={{ fontSize: 9, fontWeight: '900', letterSpacing: 1, color: textColor(isDark) }} numberOfLines={1}>
-            {label.toUpperCase()}
-          </Text>
-        </View>
       </TouchableOpacity>
     );
   }
@@ -813,21 +807,19 @@ const ChoiceGrid = ({
             onPress={() => toggle(c.id)}
             style={[
               styles.choice,
-              on && { backgroundColor: COLORS.primary },
-              !on && liquidGlass(isDark, false),
-              { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
+              on && { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+              !on && { borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)' },
             ]}
           >
             <Text
               style={{
-                fontSize: 12,
-                fontWeight: '900',
-                letterSpacing: 1,
-                color: on ? '#000' : textColor(isDark),
+                fontSize: 14,
+                fontWeight: '800',
+                color: on ? '#111' : textColor(isDark),
               }}
-              numberOfLines={1}
+              numberOfLines={2}
             >
-              {c.label.toUpperCase()}
+              {c.label}
             </Text>
           </TouchableOpacity>
         );
@@ -1386,34 +1378,33 @@ export default function OnboardingScreen({ navigation }: any) {
     () => [
       {
         key: 'name',
-        title: 'Your Name',
-        subtitle: 'What should people call you?',
+        title: 'What should people call you?',
+        subtitle: 'Use your real name. You can change it later.',
         body: (
           <View>
             <TextInput
               value={displayName}
               onChangeText={setDisplayName}
               placeholder="Full name"
-              placeholderTextColor="#666"
+              placeholderTextColor={textColor(isDark, 'muted')}
               style={[
                 styles.textInput,
-                liquidGlass(isDark, false),
-                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
+                {
+                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
+                  color: textColor(isDark),
+                },
               ]}
               autoCapitalize="words"
               returnKeyType="done"
             />
-            <Text style={{ marginTop: 10, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16 }}>
-              Use your real name for trust. You can change it later.
-            </Text>
           </View>
         ),
         canNext: displayName.trim().length >= 2,
       },
       {
         key: 'identity',
-        title: 'Your Identity',
-        subtitle: 'What best describes you today?',
+        title: 'What best describes you?',
+        subtitle: 'Pick the lane people should match you on.',
         body: (
           <ChoiceGrid value={role} onChange={(v) => setRole(String(v))} choices={identityChoices} isDark={isDark} />
         ),
@@ -1421,8 +1412,8 @@ export default function OnboardingScreen({ navigation }: any) {
       },
       {
         key: 'goals',
-        title: 'Looking For',
-        subtitle: 'Pick at least one. Skills and extras can wait.',
+        title: 'Who are you looking for?',
+        subtitle: 'Pick at least one. You can add more later.',
         body: (
           <ChoiceGrid
             value={lookingFor}
@@ -1436,8 +1427,8 @@ export default function OnboardingScreen({ navigation }: any) {
       },
       {
         key: 'photos',
-        title: 'Photo (optional)',
-        subtitle: 'A face photo gets more replies. Skip if you want.',
+        title: 'Add a face photo?',
+        subtitle: 'Optional. Profiles with a photo get more replies.',
         body: (
           <View style={{ alignItems: 'center' }}>
             <PhotoSlot
@@ -1525,81 +1516,86 @@ export default function OnboardingScreen({ navigation }: any) {
     }
   };
 
+  const fieldBorder = { borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)' };
+
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={[styles.stepCount, { color: textColor(isDark, 'secondary') }]}>ONBOARDING</Text>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={styles.topBar}>
+          <View style={styles.wordmark}>
+            <Text style={[styles.wordLeft, { color: textColor(isDark) }]}>LINK</Text>
+            <View style={styles.wordRight}>
+              <Text style={styles.wordRightText}>UP</Text>
+            </View>
+          </View>
           <TouchableOpacity
             onPress={async () => {
               try {
                 await logout();
               } catch {}
             }}
-            style={[
-              styles.logoutBtn,
-              liquidGlass(isDark, false),
-              { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
-            ]}
+            style={[styles.logoutBtn, fieldBorder]}
             activeOpacity={0.85}
           >
-            <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 2, color: textColor(isDark) }}>LOG OUT</Text>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: textColor(isDark) }}>Log out</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.stepCount, { color: textColor(isDark, 'secondary') }]}>
-          STEP {step + 1} / {steps.length}
+        <Text style={[styles.stepCount, { color: textColor(isDark, 'muted') }]}>
+          Step {step + 1} of {steps.length}
         </Text>
-        <View style={[styles.track, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec }]}>
+        <View style={[styles.track, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(11,18,32,0.08)' }]}>
           <View style={[styles.fill, { width: `${Math.round(((step + 1) / steps.length) * 100)}%` }]} />
         </View>
 
-        <View style={{ marginTop: 18 }}>
+        <View style={{ marginTop: 22 }}>
           <StepTitle title={current.title} subtitle={current.subtitle} isDark={isDark} />
           {current.body}
         </View>
 
-        <View style={{ height: 24 }} />
+        <View style={{ height: 28 }} />
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <TouchableOpacity
-            disabled={step === 0 || saving}
-            onPress={() => setStep((s) => Math.max(0, s - 1))}
-            style={[
-              styles.btn,
-              liquidGlass(isDark, false),
-              { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, flex: 1, opacity: step === 0 || saving ? 0.5 : 1 },
-            ]}
-          >
-            <Text style={[styles.btnText, { color: textColor(isDark) }]}>BACK</Text>
-          </TouchableOpacity>
+          {step > 0 ? (
+            <TouchableOpacity
+              disabled={saving}
+              onPress={() => setStep((s) => Math.max(0, s - 1))}
+              style={[styles.btn, styles.ghostBtn, fieldBorder, { flex: 1, opacity: saving ? 0.5 : 1 }]}
+            >
+              <Text style={[styles.btnText, { color: textColor(isDark) }]}>Back</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {step < steps.length - 1 ? (
             <TouchableOpacity
               disabled={!current.canNext || saving}
               onPress={() => setStep((s) => Math.min(steps.length - 1, s + 1))}
-              style={[styles.btn, { backgroundColor: COLORS.primary, flex: 1, opacity: !current.canNext || saving ? 0.5 : 1 }]}
+              style={[styles.btn, styles.primaryBtn, { flex: 1, opacity: !current.canNext || saving ? 0.5 : 1 }]}
             >
-              <Text style={[styles.btnText, { color: '#000' }]}>NEXT</Text>
+              <Text style={[styles.btnText, { color: '#111' }]}>Continue</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
               disabled={!current.canNext || saving}
               onPress={finish}
-              style={[styles.btn, { backgroundColor: COLORS.primary, flex: 1, opacity: !current.canNext || saving ? 0.5 : 1 }]}
+              style={[styles.btn, styles.primaryBtn, { flex: 1, opacity: !current.canNext || saving ? 0.5 : 1 }]}
             >
-              {saving ? <ActivityIndicator color="#000" /> : <Text style={[styles.btnText, { color: '#000' }]}>ENTER LINKUP</Text>}
+              {saving ? <ActivityIndicator color="#111" /> : <Text style={[styles.btnText, { color: '#111' }]}>Enter LINKUP</Text>}
             </TouchableOpacity>
           )}
         </View>
 
         {step >= 2 ? (
-          <TouchableOpacity disabled={saving || displayName.trim().length < 2 || !role} onPress={finish} style={{ marginTop: 14, alignItems: 'center' }}>
-            <Text style={{ fontSize: 11, fontWeight: '900', letterSpacing: 1.2, color: '#888' }}>SKIP EXTRA — DO THIS LATER</Text>
+          <TouchableOpacity
+            disabled={saving || displayName.trim().length < 2 || !role}
+            onPress={finish}
+            style={{ marginTop: 16, alignItems: 'center' }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '800', color: textColor(isDark, 'muted') }}>Skip extra — do this later</Text>
           </TouchableOpacity>
         ) : null}
 
-        <View style={{ height: 90 }} />
+        <View style={{ height: 48 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -1607,47 +1603,53 @@ export default function OnboardingScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 16, paddingTop: 22 },
-  stepCount: { fontSize: 10, fontWeight: '900', letterSpacing: 2 },
-  track: { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 10 },
-  fill: { height: 4, backgroundColor: COLORS.primary },
-  title: { fontSize: 24, fontWeight: '900', letterSpacing: 1, color: '#000' },
-  subtitle: { marginTop: 6, fontSize: 12, fontWeight: '700', color: '#666', lineHeight: 18 },
+  content: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 24 },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  wordmark: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  wordLeft: { fontSize: 16, fontWeight: '900', letterSpacing: 1.2 },
+  wordRight: { backgroundColor: COLORS.primary, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 5 },
+  wordRightText: { fontSize: 16, fontWeight: '900', letterSpacing: 1.2, color: '#111' },
+  stepCount: { fontSize: 13, fontWeight: '700' },
+  track: { height: 6, borderRadius: 3, overflow: 'hidden', marginTop: 10 },
+  fill: { height: 6, backgroundColor: COLORS.primary, borderRadius: 3 },
+  title: { fontSize: 30, fontWeight: '900', letterSpacing: -0.8, lineHeight: 36 },
+  subtitle: { marginTop: 8, fontSize: 15, fontWeight: '600', lineHeight: 22 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   choice: {
-    minWidth: '48%',
-    height: 54,
-    borderRadius: 18,
+    minWidth: '47%',
+    minHeight: 56,
+    borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   logoutBtn: {
-    height: 34,
-    paddingHorizontal: 12,
+    height: 40,
+    paddingHorizontal: 14,
     borderRadius: 14,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   textInput: {
-    height: 56,
-    borderRadius: 18,
+    minHeight: 56,
+    borderRadius: 16,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    fontSize: 14,
-    fontWeight: '800',
+    paddingHorizontal: 16,
+    fontSize: 16,
+    fontWeight: '600',
   },
   bioInput: {
     minHeight: 110,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 18,
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
   },
   selectedSkillsWrap: {
     flexDirection: 'row',
@@ -1662,15 +1664,14 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   selectedSkillText: {
-    color: '#000',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.8,
+    color: '#111',
+    fontSize: 12,
+    fontWeight: '800',
   },
   photoSlot: {
     flex: 1,
     height: 150,
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
@@ -1686,25 +1687,22 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
   },
   photoPlusCircle: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#000',
   },
   photoPlusText: {
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: '900',
-    color: '#000',
+    fontSize: 28,
+    lineHeight: 30,
+    fontWeight: '800',
+    color: '#111',
   },
   photoEmptyText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.2,
+    fontSize: 13,
+    fontWeight: '800',
   },
   photoSlotLabel: {
     position: 'absolute',
@@ -1714,74 +1712,56 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#00000010',
     alignItems: 'center',
   },
   profilePhotoPicker: {
-    width: 210,
-    height: 210,
-    minWidth: 210,
-    minHeight: 210,
-    maxWidth: 210,
-    maxHeight: 210,
-    borderRadius: 105,
-    borderWidth: 4,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    borderWidth: 1,
     overflow: 'hidden',
     alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-    flexGrow: 0,
-    flexShrink: 0,
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
+    backgroundColor: COLORS.primary,
   },
   profilePhotoPickerImg: {
-    width: 210,
-    height: 210,
-    borderRadius: 105,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
   },
   profilePhotoPickerEmpty: {
-    width: 210,
-    height: 210,
-    borderRadius: 105,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 18,
-    paddingBottom: 24,
+    paddingHorizontal: 16,
   },
   profilePhotoPlusCircle: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    backgroundColor: COLORS.primary,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#111',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#000',
   },
   profilePhotoPlusText: {
-    fontSize: 40,
-    lineHeight: 44,
-    fontWeight: '900',
-    color: '#000',
+    fontSize: 28,
+    lineHeight: 30,
+    fontWeight: '800',
+    color: COLORS.primary,
   },
   profilePhotoEmptyText: {
     marginTop: 12,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.2,
+    fontSize: 15,
+    fontWeight: '800',
     textAlign: 'center',
   },
   profilePhotoHint: {
-    marginTop: 5,
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#777',
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '600',
     textAlign: 'center',
   },
   profilePhotoPickerLabel: {
@@ -1792,21 +1772,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#00000010',
     alignItems: 'center',
   },
   card: {
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 14,
   },
-  cardTitle: { fontSize: 12, fontWeight: '900', letterSpacing: 1 },
+  cardTitle: { fontSize: 15, fontWeight: '800' },
   introText: {
     marginTop: 10,
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 20,
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
   },
   introBullets: {
     marginTop: 16,
@@ -1826,24 +1804,23 @@ const styles = StyleSheet.create({
   },
   introBulletText: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: '800',
-    lineHeight: 18,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
   },
   introFooter: {
     marginTop: 16,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    lineHeight: 17,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   btn: {
-    height: 54,
-    borderRadius: 18,
+    minHeight: 56,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
   },
-  btnText: { fontSize: 12, fontWeight: '900', letterSpacing: 2 },
+  primaryBtn: { backgroundColor: COLORS.primary },
+  ghostBtn: { borderWidth: 1 },
+  btnText: { fontSize: 16, fontWeight: '800' },
 });
