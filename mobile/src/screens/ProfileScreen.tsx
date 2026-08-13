@@ -27,7 +27,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import * as Icons from 'lucide-react-native';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, deleteDoc, deleteField, doc, FieldPath, getDoc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
+import { deleteDoc, deleteField, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { trackProfileClick, trackProfileSave, trackProfileView } from '../lib/analytics';
 import { resolveConnectionGate, startTalkOrRequest } from '../lib/connectionRequests';
 import { useConnectionNote } from '../components/ConnectionNoteModal';
@@ -62,8 +62,7 @@ import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } f
 
 const { width } = Dimensions.get('window');
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
-const PROFILE_ANALYTICS_LIMIT = Platform.OS === 'android' ? 40 : 120;
-const PROFILE_ANALYTICS_LIVE = Platform.OS === 'web';
+
 
 // ULTRA-SAFE ICON RENDERER
 const SafeIcon = ({ name, size = 20, color = COLORS.primary, fill = "transparent", style }: any) => {
@@ -546,36 +545,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       Number((myProfile as any)?.profileViews || (myProfile as any)?.profileAnalytics?.views || 0) || 0
     );
     setProfileViewCount(fallbackCount);
-
-    let cancelled = false;
-    let unsubscribe: undefined | (() => void);
-    const interaction = InteractionManager.runAfterInteractions(() => {
-      if (cancelled) return;
-      const viewsQuery = query(collection(db, 'profileViews'), where('profileId', '==', myProfile.uid), limit(PROFILE_ANALYTICS_LIMIT));
-      const applySnapshot = (snapshot: any) => {
-        if (cancelled) return;
-        const realCount = snapshot.docs.filter((viewDoc: any) => (viewDoc.data() as any).viewerId !== myProfile.uid).length;
-        setProfileViewCount(Math.max(fallbackCount, realCount));
-      };
-      const handleError = (error: any) => {
-        if (cancelled) return;
-        if (!isPermissionDenied(error)) console.warn('Profile view count unavailable:', error);
-        setProfileViewCount(fallbackCount);
-      };
-
-      if (PROFILE_ANALYTICS_LIVE) {
-        unsubscribe = onSnapshot(viewsQuery, applySnapshot, handleError);
-      } else {
-        getDocs(viewsQuery).then(applySnapshot).catch(handleError);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-      interaction.cancel?.();
-    };
-  }, [isFocused, isViewingOther, myProfile?.uid, Array.isArray(myProfile?.viewedBy) ? myProfile.viewedBy.join('|') : '']);
+  }, [isFocused, isViewingOther, myProfile?.uid, (myProfile as any)?.profileViews, Array.isArray(myProfile?.viewedBy) ? myProfile.viewedBy.length : 0]);
 
   useEffect(() => {
     if (isViewingOther || !myProfile?.uid) {
@@ -585,55 +555,17 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
     if (!isFocused) return;
 
-    let cancelled = false;
-    let unsubscribeClicks: undefined | (() => void);
-    let unsubscribeSaves: undefined | (() => void);
     const analytics = ((myProfile as any)?.profileAnalytics && typeof (myProfile as any).profileAnalytics === 'object')
       ? (myProfile as any).profileAnalytics
       : {};
-    const fallbackClicks = Math.max(
+    setProfileClickCount(Math.max(
       0,
       Number((myProfile as any)?.profileClicks || (myProfile as any)?.clicks || analytics.clicks || 0) || 0
-    );
-    const fallbackSaves = Math.max(
+    ));
+    setProfileSaveCount(Math.max(
       0,
       Number((myProfile as any)?.profileSaves || (myProfile as any)?.saves || analytics.saves || 0) || 0
-    );
-    setProfileClickCount(fallbackClicks);
-    setProfileSaveCount(fallbackSaves);
-    const interaction = InteractionManager.runAfterInteractions(() => {
-      if (cancelled) return;
-      const clicksQuery = query(collection(db, 'profileClicks'), where('profileId', '==', myProfile.uid), limit(PROFILE_ANALYTICS_LIMIT));
-      const savesQuery = query(collection(db, 'savedProfiles'), where('profileId', '==', myProfile.uid), limit(PROFILE_ANALYTICS_LIMIT));
-
-      const applyClicks = (snapshot: any) => {
-        if (!cancelled) setProfileClickCount(Math.max(fallbackClicks, snapshot.size));
-      };
-      const applySaves = (snapshot: any) => {
-        if (!cancelled) setProfileSaveCount(Math.max(fallbackSaves, snapshot.size));
-      };
-      const handleClicksError = (error: any) => {
-        if (!cancelled && !isPermissionDenied(error)) console.warn('Profile click analytics unavailable:', error);
-      };
-      const handleSavesError = (error: any) => {
-        if (!cancelled && !isPermissionDenied(error)) console.warn('Profile save analytics unavailable:', error);
-      };
-
-      if (PROFILE_ANALYTICS_LIVE) {
-        unsubscribeClicks = onSnapshot(clicksQuery, applyClicks, handleClicksError);
-        unsubscribeSaves = onSnapshot(savesQuery, applySaves, handleSavesError);
-      } else {
-        getDocs(clicksQuery).then(applyClicks).catch(handleClicksError);
-        getDocs(savesQuery).then(applySaves).catch(handleSavesError);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribeClicks?.();
-      unsubscribeSaves?.();
-      interaction.cancel?.();
-    };
+    ));
   }, [
     isFocused,
     isViewingOther,
@@ -710,47 +642,6 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
 
     setProfileResponseRate(fallbackResponseRate);
-    if (!isFocused) return;
-
-    let cancelled = false;
-    let unsubscribe: undefined | (() => void);
-    const interaction = InteractionManager.runAfterInteractions(() => {
-      if (cancelled) return;
-      const matchesQuery = query(
-        collection(db, 'matches'),
-        where(new FieldPath('participants', myProfile.uid), '==', true),
-        limit(80)
-      );
-
-      const applySnapshot = (snapshot: any) => {
-        if (cancelled) return;
-        const activeThreads = snapshot.docs
-          .map((matchDoc: any) => matchDoc.data() as any)
-          .filter((match: any) => !!(match.lastMessage || match.lastMessageTime || match.updatedAt));
-        if (!activeThreads.length) {
-          setProfileResponseRate(fallbackResponseRate);
-          return;
-        }
-        const handledThreads = activeThreads.filter((match: any) => Number(match.unreadBy?.[myProfile.uid] || 0) <= 0).length;
-        setProfileResponseRate(clampScore((handledThreads / activeThreads.length) * 100));
-      };
-      const handleError = (error: any) => {
-        if (!cancelled && !isPermissionDenied(error)) console.warn('Profile response analytics unavailable:', error);
-        if (!cancelled) setProfileResponseRate(fallbackResponseRate);
-      };
-
-      if (PROFILE_ANALYTICS_LIVE) {
-        unsubscribe = onSnapshot(matchesQuery, applySnapshot, handleError);
-      } else {
-        getDocs(matchesQuery).then(applySnapshot).catch(handleError);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-      interaction.cancel?.();
-    };
   }, [isFocused, isViewingOther, myProfile?.uid, fallbackResponseRate]);
 
   useEffect(() => {
@@ -2523,16 +2414,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                       </View>
                     </View>
                     <Text style={styles.projectDescription}>
-                      {project?.description || 'Ongoing project looking for relevant collaborators.'}
-                    </Text>
-                  </View>
-                ))
-              ) : (
-                <View style={[styles.emptyProfileCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-                  <Text style={[styles.emptyProfileText, { color: textColor(isDark, 'muted') }]}>
-                    {isViewingOther ? 'This builder has not added what they are building yet.' : 'Add your current project in Edit Profile so people can discover what you are building.'}
-                  </Text>
-                  {renderStartEditButton('ADD PROJECT', 'project')}
+                      {proje        {renderStartEditButton('ADD PROJECT', 'project')}
                 </View>
               )}
             </View>
@@ -4512,6 +4394,43 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   unavailableWrap: {
+    flex: 1,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+  },
+  backPill: {
+    position: 'absolute',
+    top: 18,
+    left: 18,
+    height: 42,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  backPillText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  unavailableTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: -0.2,
+  },
+  unavailableText: {
+    maxWidth: 280,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 18,
+    color: '#777',
+  }
+});
+{
     flex: 1,
     padding: 24,
     alignItems: 'center',
