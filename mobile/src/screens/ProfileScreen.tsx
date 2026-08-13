@@ -326,6 +326,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const isFocused = useIsFocused();
   const isDark = theme === 'dark';
   const [isEditing, setIsEditing] = useState(false);
+  const [editFocus, setEditFocus] = useState<'all' | 'bio' | 'skills' | 'project' | 'idea' | 'photos'>('all');
   const [isSaving, setIsSaving] = useState(false);
   const [editData, setEditData] = useState<any>(null);
   const [viewedProfile, setViewedProfile] = useState<any>(null);
@@ -810,7 +811,8 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   // From here onward, `profile` is guaranteed to exist.
 
-  const startEditing = () => {
+  const startEditing = (focus: 'all' | 'bio' | 'skills' | 'project' | 'idea' | 'photos' = 'all') => {
+    setEditFocus(focus);
     const existingProjects = Array.isArray((profile as any).projects)
       ? (profile as any).projects.map((project: any, index: number) => normalizeProjectDraft(project, profile.uid, index))
       : [];
@@ -1275,6 +1277,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       updateLocalProfile({ ...coreProfilePatch, ...optionalProfilePatch, ...reputationPatch });
       setLocalPreferences(nextPreferences);
       setIsEditing(false);
+      setEditFocus('all');
       syncOwnPublicProfileIndex(ownerUid, {
         ...(profile || {}),
         ...coreProfilePatch,
@@ -1785,9 +1788,10 @@ export default function ProfileScreen({ navigation, route }: any) {
       </View>
     </View>
   );
-  const renderStartEditButton = (label = 'EDIT PROFILE') =>
+  const showEdit = (section: typeof editFocus) => !isEditing || editFocus === 'all' || editFocus === section;
+  const renderStartEditButton = (label = 'EDIT PROFILE', focus: typeof editFocus = 'all') =>
     !isViewingOther ? (
-      <TouchableOpacity style={styles.inlineEditButton} onPress={startEditing} activeOpacity={0.86}>
+      <TouchableOpacity style={styles.inlineEditButton} onPress={() => startEditing(focus)} activeOpacity={0.86}>
         <SafeIcon name="PenLine" size={13} color="#000" />
         <Text style={styles.inlineEditButtonText}>{label}</Text>
       </TouchableOpacity>
@@ -1874,7 +1878,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             )}
           </View>
 
-          {!isViewingOther && (isEditing || profileDetailsReady) && (
+          {!isViewingOther && (isEditing || profileDetailsReady) && showEdit('photos') && (
             <View style={{ marginTop: 18 }}>
               <Text style={[styles.sectionHeader, { color: textColor(isDark) }]}>Photos</Text>
               <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 10 }}>
@@ -1885,7 +1889,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                     <TouchableOpacity
                       key={idx}
                       activeOpacity={0.85}
-                      onPress={() => (isEditing ? pickGalleryPhoto(idx) : startEditing())}
+                      onPress={() => (isEditing ? pickGalleryPhoto(idx) : startEditing('photos'))}
                       style={[styles.photoSlot, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
                     >
                       {uri && shouldRenderProfileImages ? (
@@ -1919,6 +1923,10 @@ export default function ProfileScreen({ navigation, route }: any) {
 
           {isEditing ? (
             <View style={styles.editForm}>
+              <Text style={[styles.sectionHeader, { color: textColor(isDark), marginBottom: 12 }]}>
+                {editFocus === 'bio' ? 'Add bio' : editFocus === 'skills' ? 'Add skills' : editFocus === 'project' ? 'Add project' : editFocus === 'idea' ? 'Add idea' : editFocus === 'photos' ? 'Add photos' : 'Edit profile'}
+              </Text>
+              {showEdit('all') ? (<>
               <TextInput 
                 style={[styles.nameInput, styles.editTextBox, editFieldStyle, { color: textColor(isDark) }]}
                 value={toTextValue(editData?.displayName)}
@@ -1979,6 +1987,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholderTextColor="#666"
               />
               {renderChoiceGroup('AVAILABILITY', 'availability', AVAILABILITY_OPTIONS)}
+              </>) : null}
+              {showEdit('bio') ? (
               <TextInput
                 multiline
                 style={[styles.bioInput, editFieldStyle, { color: textColor(isDark) }]}
@@ -1987,6 +1997,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholder="Bio: who are you, what are you building, and what help do you want?"
                 placeholderTextColor="#666"
               />
+              ) : null}
+              {showEdit('skills') ? (<>
               <TextInput
                 multiline
                 style={[styles.skillsInput, editFieldStyle, { color: textColor(isDark) }]}
@@ -2060,6 +2072,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholderTextColor="#666"
               />
               {renderMultiChoiceGroup('INDUSTRIES', 'industries', INDUSTRY_SUGGESTIONS)}
+              </>) : null}
+              {editFocus === 'all' ? (
               <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <Text style={styles.projectEditLabel}>Matching Details</Text>
                 <TextInput
@@ -2208,6 +2222,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                   autoCapitalize="none"
                 />
               </View>
+              ) : null}
+              {showEdit('project') ? (
               <View style={[styles.projectEditCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <View style={styles.projectEditHeader}>
                   <Text style={styles.projectEditLabel}>Ongoing Projects</Text>
@@ -2262,6 +2278,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                   LINKUP recommends each project to people with matching skills, interests, roles, and goals.
                 </Text>
               </View>
+              ) : null}
+              {showEdit('idea') ? (
               <View style={[styles.projectEditCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <View style={styles.projectEditHeader}>
                   <Text style={styles.projectEditLabel}>Ideas</Text>
@@ -2322,6 +2340,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   Ideas appear in the Ideas deck. When two builders like the same idea, LINKUP opens a match.
                 </Text>
               </View>
+              ) : null}
             </View>
           ) : (
             <>
@@ -2407,7 +2426,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           )}
         </View>
 
-        {!profileDetailsReady && !isEditing ? null : (
+        {(!profileDetailsReady && !isEditing) || (isEditing && editFocus !== 'all') ? null : (
           <>
         {showHighVoiceNotice && (
           <View style={[styles.highVoiceCard, { backgroundColor: isDark ? COLORS.darkBgSec : '#FFFDF0', borderColor: COLORS.primary }]}>
@@ -2431,7 +2450,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                     ? 'This builder has not added a bio yet.'
                     : 'Add your bio in Edit Profile so builders instantly understand who you are and what you need.')}
                 </Text>
-                {!isViewingOther && !profileBio ? renderStartEditButton('ADD BIO') : null}
+                {!isViewingOther && !profileBio ? renderStartEditButton('ADD BIO', 'bio') : null}
               </View>
             </View>
 
@@ -2452,14 +2471,14 @@ export default function ProfileScreen({ navigation, route }: any) {
                       </TouchableOpacity>
                     ))}
                   </View>
-                  {renderStartEditButton('ADD / EDIT SKILLS')}
+                  {renderStartEditButton('ADD / EDIT SKILLS', 'skills')}
                 </>
               ) : (
                 <View style={[styles.emptyProfileCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                   <Text style={[styles.emptyProfileText, { color: textColor(isDark, 'muted') }]}>
                     {isViewingOther ? 'No skills listed yet.' : 'Add your skills and stack so LINKUP can match you with the right builders.'}
                   </Text>
-                  {renderStartEditButton('ADD SKILLS')}
+                  {renderStartEditButton('ADD SKILLS', 'skills')}
                 </View>
               )}
             </View>
@@ -2490,7 +2509,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Text style={[styles.emptyProfileText, { color: textColor(isDark, 'muted') }]}>
                     {isViewingOther ? 'This builder has not added what they are building yet.' : 'Add your current project in Edit Profile so people can discover what you are building.'}
                   </Text>
-                  {renderStartEditButton('ADD PROJECT')}
+                  {renderStartEditButton('ADD PROJECT', 'project')}
                 </View>
               )}
             </View>
@@ -2530,7 +2549,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Text style={[styles.emptyProfileText, { color: textColor(isDark, 'muted') }]}>
                     {isViewingOther ? 'This builder has not posted ideas yet.' : 'Add ideas in Edit Profile so builders can swipe into what you want to build.'}
                   </Text>
-                  {renderStartEditButton('ADD IDEA')}
+                  {renderStartEditButton('ADD IDEA', 'idea')}
                 </View>
               )}
             </View>
@@ -2785,22 +2804,6 @@ export default function ProfileScreen({ navigation, route }: any) {
               <View style={styles.prefCopy}>
                 <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Stealth Mode</Text>
                 <Text style={styles.prefHelp}>Hides your profile from discovery/search while keeping your account active.</Text>
-              </View>
-            </View>
-            <PreferenceSwitch
-              value={stealthModeValue}
-              isDark={isDark}
-              disabled={savingPreference === 'isStealthMode'}
-              onValueChange={(v) => isEditing ? setEditData({ ...editData, isStealthMode: v }) : setPreference('isStealthMode', v)}
-            />
-          </View>
-
-          <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
-            <View style={styles.prefLabelContainer}>
-              <SafeIcon name="Globe2" size={18} color={COLORS.primary} />
-              <View style={styles.prefCopy}>
-                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Public Discovery</Text>
-                <Text style={styles.prefHelp}>When on, your prount active.</Text>
               </View>
             </View>
             <PreferenceSwitch
@@ -3104,7 +3107,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         )}
 
         {isEditing && (
-          <TouchableOpacity style={styles.cancelButton} onPress={() => setIsEditing(false)}>
+          <TouchableOpacity style={styles.cancelButton} onPress={() => { setIsEditing(false); setEditFocus('all'); }}>
             <Text style={styles.cancelText}>Discard Changes</Text>
           </TouchableOpacity>
         )}
@@ -3802,12 +3805,68 @@ const styles = StyleSheet.create({
   analyticsPanel: {
     borderRadius: 16,
     borderWidth: 1,
-    padding: 18,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 4,
+  },
+  dashRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+  },
+  dashIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dashLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  dashHint: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dashValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  themePicker: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  themeOption: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  themeOptionText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#111',
+  },
+  plusChip: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  plusChipText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#111',
   },
   analyticsHeader: {
     flexDirection: 'row',
@@ -4459,13 +4518,6 @@ const styles = StyleSheet.create({
   unavailableText: {
     maxWidth: 280,
     textAlign: 'center',
-    fontSize: 12,
-    fontWeight: '800',
-    lineHeight: 18,
-    color: '#777',
-  }
-});
-center',
     fontSize: 12,
     fontWeight: '800',
     lineHeight: 18,
