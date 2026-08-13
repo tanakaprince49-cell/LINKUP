@@ -679,12 +679,12 @@ export default function ProfileScreen({ navigation, route }: any) {
     () => profileLink.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/$/, ''),
     [profileLink]
   );
-  const profileAnalytics = ((profile as any)?.profileAnalytics && typeof (profile as any).profileAnalytics === 'object')
-    ? (profile as any).profileAnalytics
+  const profileAnalytics = ((profile as any)?.profileAnalytics && typeof (profile as any)?.profileAnalytics === 'object')
+    ? (profile as any)?.profileAnalytics
     : {};
   const visibleProfileViewCount = Math.max(
     profileViewCount,
-    Array.isArray((profile as any)?.viewedBy) ? (profile as any).viewedBy.length : 0,
+    Array.isArray((profile as any)?.viewedBy) ? (profile as any)?.viewedBy.length : 0,
     Number((profile as any)?.profileViews || profileAnalytics.views || 0) || 0
   );
   const visibleProfileClickCount = Math.max(
@@ -700,7 +700,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     Number((profile as any)?.responseRate || profileAnalytics.responseRate || 0) || 0
   ));
   const visibleResponseRate = clampScore(Math.max(profileResponseRate, fallbackResponseRate));
-  const firestoreSettings = ((profile as any)?.settings && typeof (profile as any).settings === 'object') ? (profile as any).settings : {};
+  const firestoreSettings = ((profile as any)?.settings && typeof (profile as any)?.settings === 'object') ? (profile as any)?.settings : {};
 
   useEffect(() => {
     if (isViewingOther || !myProfile?.uid) {
@@ -820,52 +820,52 @@ export default function ProfileScreen({ navigation, route }: any) {
   const startEditing = (focus: 'all' | 'bio' | 'skills' | 'project' | 'idea' | 'photos' = 'all') => {
     if (!profile) return;
     setEditFocus(focus);
-    const existingProjects = Array.isArray((profile as any).projects)
-      ? (profile as any).projects.map((project: any, index: number) => normalizeProjectDraft(project, profile.uid, index))
+    const existingProjects = Array.isArray((profile as any)?.projects)
+      ? (profile as any)?.projects.map((project: any, index: number) => normalizeProjectDraft(project, profile.uid, index))
       : [];
-    const existingIdeas = Array.isArray((profile as any).startupIdeas)
-      ? (profile as any).startupIdeas.map((idea: any, index: number) => normalizeIdeaDraft(idea, profile.uid, index))
+    const existingIdeas = Array.isArray((profile as any)?.startupIdeas)
+      ? (profile as any)?.startupIdeas.map((idea: any, index: number) => normalizeIdeaDraft(idea, profile.uid, index))
       : [];
     setEditData({ 
       ...profile,
-      username: (profile as any).username || '',
-      occupation: (profile as any).occupation || '',
-      company: (profile as any).company || '',
-      age: (profile as any).age ? String((profile as any).age) : '',
-      country: (profile as any).country || '',
+      username: (profile as any)?.username || '',
+      occupation: (profile as any)?.occupation || '',
+      company: (profile as any)?.company || '',
+      age: (profile as any)?.age ? String((profile as any)?.age) : '',
+      country: (profile as any)?.country || '',
       skills: Array.isArray(profile?.skills) ? profile.skills.join(', ') : (profile?.skills || ''),
-      interests: Array.isArray((profile as any).interests) ? (profile as any).interests.join(', ') : '',
-      industries: Array.isArray((profile as any).industries) ? (profile as any).industries.join(', ') : '',
-      lookingFor: Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor.join(', ') : '',
-      languages: Array.isArray((profile as any).languages) ? (profile as any).languages.join(', ') : '',
-      personalityType: (profile as any).personalityType || '',
-      roleSignals: Array.isArray((profile as any).roleAnswers?.manualSignals) ? (profile as any).roleAnswers.manualSignals.join(', ') : '',
+      interests: Array.isArray((profile as any)?.interests) ? (profile as any)?.interests.join(', ') : '',
+      industries: Array.isArray((profile as any)?.industries) ? (profile as any)?.industries.join(', ') : '',
+      lookingFor: Array.isArray((profile as any)?.lookingFor) ? (profile as any)?.lookingFor.join(', ') : '',
+      languages: Array.isArray((profile as any)?.languages) ? (profile as any)?.languages.join(', ') : '',
+      personalityType: (profile as any)?.personalityType || '',
+      roleSignals: Array.isArray((profile as any)?.roleAnswers?.manualSignals) ? (profile as any)?.roleAnswers.manualSignals.join(', ') : '',
       resume: {
-        shippedProducts: resumeTextValue((profile as any).resume, 'shippedProducts'),
-        sideProjects: resumeTextValue((profile as any).resume, 'sideProjects'),
-        startupAttempts: resumeTextValue((profile as any).resume, 'startupAttempts'),
-        hackathonWins: resumeTextValue((profile as any).resume, 'hackathonWins'),
-        buildStreaks: resumeTextValue((profile as any).resume, 'buildStreaks'),
+        shippedProducts: resumeTextValue((profile as any)?.resume, 'shippedProducts'),
+        sideProjects: resumeTextValue((profile as any)?.resume, 'sideProjects'),
+        startupAttempts: resumeTextValue((profile as any)?.resume, 'startupAttempts'),
+        hackathonWins: resumeTextValue((profile as any)?.resume, 'hackathonWins'),
+        buildStreaks: resumeTextValue((profile as any)?.resume, 'buildStreaks'),
       },
-      goals: (profile as any).goals || '',
-      experience: (profile as any).experience || '',
+      goals: (profile as any)?.goals || '',
+      experience: (profile as any)?.experience || '',
       startupStage: (profile as any)?.startupStage || '',
-      fundingStage: (profile as any).fundingStage || '',
-      availability: (profile as any).availability || '',
-      commitmentLevel: (profile as any).commitmentLevel || '',
-      workStyle: (profile as any).workStyle || '',
-      networkingIntent: (profile as any).networkingIntent || '',
-      ambition: (profile as any).ambition || '',
-      timezone: (profile as any).timezone || '',
-      education: (profile as any).education || '',
-      teamSizePreference: (profile as any).teamSizePreference || '',
-      remoteOnly: !!(profile as any).remoteOnly,
-      willingToRelocate: !!(profile as any).willingToRelocate,
+      fundingStage: (profile as any)?.fundingStage || '',
+      availability: (profile as any)?.availability || '',
+      commitmentLevel: (profile as any)?.commitmentLevel || '',
+      workStyle: (profile as any)?.workStyle || '',
+      networkingIntent: (profile as any)?.networkingIntent || '',
+      ambition: (profile as any)?.ambition || '',
+      timezone: (profile as any)?.timezone || '',
+      education: (profile as any)?.education || '',
+      teamSizePreference: (profile as any)?.teamSizePreference || '',
+      remoteOnly: !!(profile as any)?.remoteOnly,
+      willingToRelocate: !!(profile as any)?.willingToRelocate,
       isStealthMode: profile?.isStealthMode || false,
       hideOnlineStatus: !!(profile as any)?.hideOnlineStatus,
       turboConnect: !!(profile as any)?.turboConnect,
       hasExit: profile?.hasExit || false,
-      photos: Array.isArray((profile as any).photos) ? (profile as any).photos.slice(0, 3) : [],
+      photos: Array.isArray((profile as any)?.photos) ? (profile as any)?.photos.slice(0, 3) : [],
       projects: existingProjects.length
         ? existingProjects
         : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any)?.startupStage || 'mvp') }],
@@ -877,6 +877,10 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const generateInsights = async () => {
+    if (!profile?.uid) {
+      Alert.alert('Profile not ready', 'Wait for your profile to load, then try again.');
+      return;
+    }
     setIsSaving(true);
     const previousDiagnosticAt = getLastAIDiagnostic()?.timestamp || 0;
     try {
@@ -884,7 +888,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       const insight = await geminiProfileInsights(profile);
       await updateDoc(doc(db, 'users', profile.uid), { aiMatchInsights: insight });
       if (isViewingOther) {
-        setViewedProfile((p: any) => ({ ...p, aiMatchInsights: insight }));
+        setViewedProfile((p: any) => (p ? { ...p, aiMatchInsights: insight } : p));
       }
       const diagnostic = getLastAIDiagnostic();
       if (diagnostic && !diagnostic.ok && diagnostic.timestamp > previousDiagnosticAt) {
@@ -1603,18 +1607,18 @@ export default function ProfileScreen({ navigation, route }: any) {
     ? (typeof editData?.industries === 'string'
         ? editData.industries.split(',').map((s: string) => s.trim()).filter(Boolean)
         : (Array.isArray(editData?.industries) ? editData.industries : []))
-    : (Array.isArray((profile as any)?.industries) ? (profile as any).industries : [])) as string[];
+    : (Array.isArray((profile as any)?.industries) ? (profile as any)?.industries : [])) as string[];
 
   const lookingFor = (isEditing
     ? (typeof editData?.lookingFor === 'string'
         ? editData.lookingFor.split(',').map((s: string) => s.trim()).filter(Boolean)
         : (Array.isArray(editData?.lookingFor) ? editData.lookingFor : []))
-    : (Array.isArray((profile as any)?.lookingFor) ? (profile as any).lookingFor : [])) as string[];
-  const projects = Array.isArray((profile as any)?.projects) ? (profile as any).projects : [];
+    : (Array.isArray((profile as any)?.lookingFor) ? (profile as any)?.lookingFor : [])) as string[];
+  const projects = Array.isArray((profile as any)?.projects) ? (profile as any)?.projects : [];
   const visibleProjects = projects
     .filter((project: any) => String(project?.title || project?.description || '').trim())
     .slice(0, 10);
-  const startupIdeas = Array.isArray((profile as any)?.startupIdeas) ? (profile as any).startupIdeas : [];
+  const startupIdeas = Array.isArray((profile as any)?.startupIdeas) ? (profile as any)?.startupIdeas : [];
   const visibleStartupIdeas = startupIdeas
     .filter((idea: any) => String(idea?.title || idea?.description || '').trim())
     .slice(0, 20);
@@ -1898,7 +1902,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               <Text style={[styles.sectionHeader, { color: textColor(isDark) }]}>Photos</Text>
               <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 10 }}>
                 {[0, 1, 2].map((idx) => {
-                  const photos = (isEditing ? (editData?.photos || []) : ((profile as any).photos || [])) as string[];
+                  const photos = (isEditing ? (editData?.photos || []) : ((profile as any)?.photos || [])) as string[];
                   const uri = safeProfileImageUri(photos[idx], MOBILE_LIST_IMAGE_LIMIT);
                   return (
                     <TouchableOpacity
@@ -2582,11 +2586,11 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Text style={styles.compatSub}>Compatibility</Text>
                 </View>
                 <View style={styles.compatTagPill}>
-                  <Text style={styles.compatTagText}>{(profile as any).workStyle || 'Execution-focused'}</Text>
+                  <Text style={styles.compatTagText}>{(profile as any)?.workStyle || 'Execution-focused'}</Text>
                 </View>
               </View>
               <Text style={[styles.compatHint, { color: textColor(isDark, 'muted') }]}>
-                {compatibilityReason || `Best match for: ${[(profile as any).occupation || 'Builders', industries[0] ? `${industries[0]} teams` : null, (profile as any).commitmentLevel ? `${(profile as any).commitmentLevel} builders` : null].filter(Boolean).slice(0, 3).join(' - ')}`}
+                {compatibilityReason || `Best match for: ${[(profile as any)?.occupation || 'Builders', industries[0] ? `${industries[0]} teams` : null, (profile as any)?.commitmentLevel ? `${(profile as any)?.commitmentLevel} builders` : null].filter(Boolean).slice(0, 3).join(' - ')}`}
               </Text>
             </View>
           </View>
@@ -2648,7 +2652,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           <Text style={styles.sectionLabel}>Match Insights</Text>
           <View style={[styles.insightCard, liquidGlass(isDark, false)]}>
             <Text style={[styles.insightText, { color: textColor(isDark, 'secondary') }]}>
-              {(profile as any).aiMatchInsights || 'Generate a profile insight for this builder.'}
+              {(profile as any)?.aiMatchInsights || 'Generate a profile insight for this builder.'}
             </Text>
             {!isViewingOther && (
               <TouchableOpacity style={[styles.insightBtn, { opacity: isSaving ? 0.6 : 1 }]} disabled={isSaving} onPress={generateInsights}>

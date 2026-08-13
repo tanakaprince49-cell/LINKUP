@@ -20,8 +20,8 @@ export const displayNameFor = (profile: Partial<UserProfile> | any) => {
   return emailName || 'Builder';
 };
 
-export const handleFor = (profile: Partial<UserProfile>) =>
-  `@${cleanUsername(String((profile as any).username || displayNameFor(profile) || 'builder')) || 'builder'}`;
+export const handleFor = (profile: Partial<UserProfile> | null | undefined) =>
+  `@${cleanUsername(String((profile as any)?.username || displayNameFor(profile) || 'builder')) || 'builder'}`;
 
 export const isSyntheticProfile = (profile: any) =>
   !!profile &&

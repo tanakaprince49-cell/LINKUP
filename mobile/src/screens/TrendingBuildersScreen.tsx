@@ -159,7 +159,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
         </View>
         <Text style={styles.arenaTitle}>Who’s winning LINKUP right now</Text>
         <Text style={styles.arenaSub}>
-          Live top 3. If you’re trending, you show up here. When someone outranks you, the podium moves.
+          Fair live top 3 — profile quality, views, and recent activity. No Plus boost. Podium people get a notification.
         </Text>
         <View style={styles.statRow}>
           <View style={styles.statChip}>
