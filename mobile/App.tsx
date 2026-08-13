@@ -572,8 +572,8 @@ function AppContent() {
             <Stack.Screen name="FounderFlip" component={FounderFlipScreen} />
             <Stack.Screen name="PitchPerfect" component={PitchPerfectScreen} />
             <Stack.Screen name="NetworkQuiz" component={NetworkQuizScreen} />
-            <Stack.Screen name="Linky" component={LinkyScreen} options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="LinkyProfile" component={LinkyProfileScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="Linky" component={LinkyScreen} options={{ animation: Platform.OS === 'android' ? 'none' : 'slide_from_right' }} />
+            <Stack.Screen name="LinkyProfile" component={LinkyProfileScreen} options={{ animation: Platform.OS === 'android' ? 'none' : 'slide_from_right' }} />
             <Stack.Screen name="DailyFive" component={DailyFiveScreen} />
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
             <Stack.Screen name="CityLeague" component={CityLeagueScreen} />
