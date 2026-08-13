@@ -39,6 +39,7 @@ import PaywallModal from '../components/PaywallModal';
 import { PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
 import { subscribeToDiscoveryProfiles, loadMoreDiscoveryProfiles } from '../lib/discoveryProfiles';
+import { shareLinkupInvite } from '../lib/activation';
 
 const windowSize = Dimensions.get('window');
 const { width } = windowSize;
@@ -957,15 +958,18 @@ export default function SwipeScreen({ navigation }: any) {
     <View style={styles.emptyContainer}>
       <Target size={48} color={COLORS.primary} />
       <Text style={[styles.emptyText, { color: textColor(isDark) }]}>
-        NO MORE PROFILES
+        NO BUILDERS TO SWIPE
       </Text>
       <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
-        Check back later for new builders.
+        {allProfilesRef.current.length === 0
+          ? 'The network is still small. Invite people you know, then refresh.'
+          : 'You have seen everyone currently discoverable. Invite more builders.'}
       </Text>
-      <TouchableOpacity style={styles.resetBtn} onPress={resetDeck}>
-        <Text style={styles.resetText}>
-          REFRESH DISCOVERY
-        </Text>
+      <TouchableOpacity style={styles.resetBtn} onPress={() => void shareLinkupInvite()}>
+        <Text style={styles.resetText}>INVITE 3 BUILDERS</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.resetBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.primary }]} onPress={resetDeck}>
+        <Text style={[styles.resetText, { color: COLORS.primary }]}>REFRESH</Text>
       </TouchableOpacity>
     </View>
   );

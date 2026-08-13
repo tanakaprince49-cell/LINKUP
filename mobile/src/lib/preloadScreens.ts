@@ -10,6 +10,11 @@ export const preloadProfileScreen = () => {
 
 export const scheduleScreenPreloads = () => {
   InteractionManager.runAfterInteractions(() => {
-    setTimeout(preloadProfileScreen, Platform.OS === 'android' ? 250 : 0);
+    const delay = Platform.OS === 'android' ? 400 : 80;
+    setTimeout(preloadProfileScreen, delay);
+    setTimeout(() => {
+      require('../screens/ChatScreen');
+      require('../screens/AlertsScreen');
+    }, delay + 500);
   });
 };

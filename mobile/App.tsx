@@ -13,35 +13,39 @@ import ErrorBoundary from './src/components/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { lazyScreen } from './src/lib/lazyScreen';
 
-import SwipeScreen from './src/screens/SwipeScreen';
-import IdeaDeckScreen from './src/screens/IdeaDeckScreen';
 import DiscoveryDashboardScreen from './src/screens/DiscoveryDashboardScreen';
-import SearchScreen from './src/screens/SearchScreen';
-import MatchScreen from './src/screens/MatchScreen';
-import AlertsScreen from './src/screens/AlertsScreen';
-import MessagesScreen from './src/screens/MessagesScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-import ChatScreen from './src/screens/ChatScreen';
-import ViewersScreen from './src/screens/ViewersScreen';
 import EmailAuthScreen from './src/screens/EmailAuthScreen';
-import EmailVerificationScreen from './src/screens/EmailVerificationScreen';
 import LandingScreen from './src/screens/LandingScreen';
-import ActiveOpportunityScreen from './src/screens/ActiveOpportunityScreen';
-import ActiveOpportunitiesScreen from './src/screens/ActiveOpportunitiesScreen';
-import TrendingBuildersScreen from './src/screens/TrendingBuildersScreen';
-import RecommendedMatchesScreen from './src/screens/RecommendedMatchesScreen';
-import GamificationHubScreen from './src/screens/GamificationHubScreen';
-import FounderFlipScreen from './src/screens/FounderFlipScreen';
-import PitchPerfectScreen from './src/screens/PitchPerfectScreen';
-import NetworkQuizScreen from './src/screens/NetworkQuizScreen';
-import LinkyScreen from './src/screens/LinkyScreen';
-import LinkyProfileScreen from './src/screens/LinkyProfileScreen';
-import NewsScreen from './src/screens/NewsScreen';
+
+const SwipeScreen = lazyScreen(() => import('./src/screens/SwipeScreen'));
+const IdeaDeckScreen = lazyScreen(() => import('./src/screens/IdeaDeckScreen'));
+const SearchScreen = lazyScreen(() => import('./src/screens/SearchScreen'));
+const AlertsScreen = lazyScreen(() => import('./src/screens/AlertsScreen'));
+const MessagesScreen = lazyScreen(() => import('./src/screens/MessagesScreen'));
+const ProfileScreen = lazyScreen(() => import('./src/screens/ProfileScreen'));
+const ChatScreen = lazyScreen(() => import('./src/screens/ChatScreen'));
+const ViewersScreen = lazyScreen(() => import('./src/screens/ViewersScreen'));
+const ActiveOpportunityScreen = lazyScreen(() => import('./src/screens/ActiveOpportunityScreen'));
+const ActiveOpportunitiesScreen = lazyScreen(() => import('./src/screens/ActiveOpportunitiesScreen'));
+const TrendingBuildersScreen = lazyScreen(() => import('./src/screens/TrendingBuildersScreen'));
+const RecommendedMatchesScreen = lazyScreen(() => import('./src/screens/RecommendedMatchesScreen'));
+const GamificationHubScreen = lazyScreen(() => import('./src/screens/GamificationHubScreen'));
+const FounderFlipScreen = lazyScreen(() => import('./src/screens/FounderFlipScreen'));
+const PitchPerfectScreen = lazyScreen(() => import('./src/screens/PitchPerfectScreen'));
+const NetworkQuizScreen = lazyScreen(() => import('./src/screens/NetworkQuizScreen'));
+const DailyFiveScreen = lazyScreen(() => import('./src/screens/DailyFiveScreen'));
+const ShipLogScreen = lazyScreen(() => import('./src/screens/ShipLogScreen'));
+const CityLeagueScreen = lazyScreen(() => import('./src/screens/CityLeagueScreen'));
+const LinkyScreen = lazyScreen(() => import('./src/screens/LinkyScreen'));
+const LinkyProfileScreen = lazyScreen(() => import('./src/screens/LinkyProfileScreen'));
+const NewsScreen = lazyScreen(() => import('./src/screens/NewsScreen'));
 import { GamificationProvider } from './src/contexts/GamificationContext';
 import { setupNativeNotificationRuntimeAsync, subscribeToNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
 import { scheduleDailyReminder } from './src/lib/dailyReminder';
+import { seedConciergeWelcome } from './src/lib/activation';
 import { subscribeToUnreadMessagesCount } from './src/lib/chat';
 import OpportunityRadar from './src/components/OpportunityRadar';
 import WebAnalytics from './src/components/WebAnalytics';
@@ -105,6 +109,9 @@ const linking: any = {
       FounderFlip: 'FounderFlip',
       PitchPerfect: 'PitchPerfect',
       NetworkQuiz: 'NetworkQuiz',
+      DailyFive: 'daily-five',
+      ShipLog: 'ship',
+      CityLeague: 'league',
     },
   },
 };
@@ -245,6 +252,7 @@ function TabNavigator({ navigation }: any) {
       detachInactiveScreens={Platform.OS !== 'web'}
       screenOptions={({ route }) => ({
         lazy: true,
+        freezeOnBlur: true,
         tabBarIcon: ({ focused }) => {
           const iconMap: Record<string, { active: string; inactive: string }> = {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
@@ -350,12 +358,7 @@ function AppContent() {
     Platform.OS === 'web' ? String((globalThis as any)?.location?.pathname || '') : '';
   const isPublicSharedWebPath =
     webPathname.startsWith('/profile/') || webPathname.startsWith('/opportunity/');
-  const requiresEmailVerification = Boolean(
-    user?.email &&
-      !user.emailVerified &&
-      user.providerData?.some((provider) => provider.providerId === 'password')
-  );
-  const navigationStateKey = `${user?.uid || 'guest'}-${isOnboarded ? 'onboarded' : 'new'}-${requiresEmailVerification ? 'unverified' : 'verified'}-${authVersion}`;
+  const navigationStateKey = `${user?.uid || 'guest'}-${isOnboarded ? 'onboarded' : 'new'}-${authVersion}`;
 
   React.useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -478,7 +481,7 @@ function AppContent() {
 
   React.useEffect(() => {
     if (!user?.uid) return;
-    scheduleDailyReminder();
+    scheduleDailyReminder(user.uid);
   }, [user?.uid]);
 
   React.useEffect(() => {
@@ -511,7 +514,8 @@ function AppContent() {
         key={navigationStateKey}
         screenOptions={{
           headerShown: false,
-          animation: Platform.OS === 'web' ? 'none' : IS_LOW_END_ANDROID ? 'none' : Platform.OS === 'android' ? 'simple_push' : 'fade_from_bottom',
+          freezeOnBlur: true,
+          animation: Platform.OS === 'android' || Platform.OS === 'web' ? 'none' : 'fade_from_bottom',
         }}
       >
         {!user ? (
@@ -528,10 +532,6 @@ function AppContent() {
                 <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
               </>
             ) : null}
-          </>
-        ) : requiresEmailVerification ? (
-          <>
-            <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
           </>
         ) : !isOnboarded ? (
           <>
@@ -565,6 +565,9 @@ function AppContent() {
             <Stack.Screen name="NetworkQuiz" component={NetworkQuizScreen} />
             <Stack.Screen name="Linky" component={LinkyScreen} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="LinkyProfile" component={LinkyProfileScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="DailyFive" component={DailyFiveScreen} />
+            <Stack.Screen name="ShipLog" component={ShipLogScreen} />
+            <Stack.Screen name="CityLeague" component={CityLeagueScreen} />
           </>
         ) : null}
       </Stack.Navigator>

@@ -5,12 +5,12 @@
     "scheme": "linkup",
     "version": "9.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo-square.png",
+    "icon": "./assets/icon-padded.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png.png",
-      "resizeMode": "center",
-      "backgroundColor": "#ffffff"
+      "image": "./assets/splash-padded.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FBE618"
     },
     "ios": {
       "supportsTablet": true
@@ -19,8 +19,8 @@
       "package": "com.tana.linkup",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo-square.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/icon-padded.png",
+        "backgroundColor": "#FBE618"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

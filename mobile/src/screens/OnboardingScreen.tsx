@@ -21,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { imageAssetToDataUri } from '../lib/imageUploadLimits';
 import { publicProfileLink } from '../lib/profileLinks';
 import { LINKUP_ROLE_OPTIONS, roleInfoFor } from '../lib/roles';
+import { seedConciergeWelcome } from '../lib/activation';
 
 type Choice = { id: string; label: string; desc?: string };
 type RoleQuestion = { id: string; title: string; subtitle: string; choices: Choice[]; multi?: boolean };
@@ -267,18 +268,6 @@ const roleSkillChoicesByRole: Record<string, Choice[]> = {
 
 const roleQuestionBanks: Record<string, RoleQuestion[]> = {
   Founder: [
-    {
-      id: 'founderLane',
-      title: 'Founder lane',
-      subtitle: 'What do you naturally own inside a startup?',
-      choices: [
-        { id: 'Vision & Sales', label: 'Vision & Sales' },
-        { id: 'Product Strategy', label: 'Product Strategy' },
-        { id: 'Growth & GTM', label: 'Growth & GTM' },
-        { id: 'Community Builder', label: 'Community Builder' },
-        { id: 'Capital & Partnerships', label: 'Capital & Partnerships' },
-      ],
-    },
     {
       id: 'founderNeed',
       title: 'First missing piece',
@@ -1144,13 +1133,6 @@ export default function OnboardingScreen({ navigation }: any) {
           canNext: !!experience,
         },
         {
-          key: 'availability',
-          title: 'Availability',
-          subtitle: "What's your current availability?",
-          body: <ChoiceGrid value={availability} onChange={(v) => setAvailability(String(v))} choices={availabilityChoices} isDark={isDark} />,
-          canNext: !!availability,
-        },
-        {
           key: 'workStyle',
           title: 'Work Style',
           subtitle: 'How do you like to build?',
@@ -1192,13 +1174,6 @@ export default function OnboardingScreen({ navigation }: any) {
           </View>
         ),
         canNext: finalSkills.length > 0,
-      },
-      {
-        key: 'commitment',
-        title: 'Commitment Level',
-        subtitle: 'How available are you right now?',
-        body: <ChoiceGrid value={commitmentLevel} onChange={(v) => setCommitmentLevel(String(v))} choices={commitmentChoices} isDark={isDark} />,
-        canNext: !!commitmentLevel,
       },
       {
         key: 'stage',
@@ -1310,7 +1285,6 @@ export default function OnboardingScreen({ navigation }: any) {
           buildSkillsStep('Core Skills For Matching', 'Choose your investor edge so founders and opportunities can match properly.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Sectors', 'Which industries do you invest in?', industries, setIndustries, industryChoices),
-          buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           personalityStep,
         ];
       case 'Developer':
@@ -1320,7 +1294,6 @@ export default function OnboardingScreen({ navigation }: any) {
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Products You Want To Build', 'Which startup spaces pull you in?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'How battle-tested are you right now?', experience, setExperience, experienceChoices),
-          buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to build with teams?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
@@ -1331,7 +1304,6 @@ export default function OnboardingScreen({ navigation }: any) {
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Products You Want To Shape', 'Which startup spaces would you love to design for?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'Where are you in your design journey?', experience, setExperience, experienceChoices),
-          buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you collaborate best?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
@@ -1342,7 +1314,6 @@ export default function OnboardingScreen({ navigation }: any) {
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Markets You Understand', 'Which startup spaces do you know best?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'How experienced are you in startup growth?', experience, setExperience, experienceChoices),
-          buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to execute growth?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
@@ -1353,7 +1324,6 @@ export default function OnboardingScreen({ navigation }: any) {
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Startup Interests', 'Which spaces make you want to build?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'How far into building are you?', experience, setExperience, experienceChoices),
-          buildSingleChoiceStep('commitment', 'Commitment Level', 'How available are you to build right now?', commitmentLevel, setCommitmentLevel, commitmentChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like working with others?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
@@ -1364,7 +1334,6 @@ export default function OnboardingScreen({ navigation }: any) {
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Operating Environments', 'Which kinds of startups do you want to support?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'How experienced are you in operations?', experience, setExperience, experienceChoices),
-          buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to run execution?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
@@ -1377,7 +1346,6 @@ export default function OnboardingScreen({ navigation }: any) {
             ...roleQuestions.map(buildRoleQuestionStep),
             buildMultiChoiceStep('industries', 'Focus Areas', 'Which startup spaces do you want to be around?', industries, setIndustries, industryChoices),
             buildSingleChoiceStep('experience', 'Experience Level', 'Where are you in your journey?', experience, setExperience, experienceChoices),
-            buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
             buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to collaborate?', workStyle, setWorkStyle, workStyleChoices),
             personalityStep,
           ];
@@ -1412,45 +1380,10 @@ export default function OnboardingScreen({ navigation }: any) {
     personalityStep,
   ]);
 
+  const lookingForChoices = role === 'Investor' ? investorGoalsChoices : role === 'Founder' || !role ? goalsChoices : builderGoalsChoices;
+
   const steps = useMemo(
     () => [
-      {
-        key: 'intro',
-        title: 'Answer Carefully',
-        subtitle: 'LINKUP uses your answers to recommend cofounders, collaborators, builders, and opportunities.',
-        body: (
-          <View
-            style={[
-              styles.card,
-              liquidGlass(isDark),
-              { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
-            ]}
-          >
-            <Text style={[styles.cardTitle, { color: textColor(isDark), fontSize: 14 }]}>
-              Better answers = better matches
-            </Text>
-            <Text style={[styles.introText, { color: textColor(isDark, 'secondary') }]}>
-              Be honest about your goals, skills, work style, and availability. The smart matching system uses this profile to understand who can actually help you build.
-            </Text>
-            <View style={styles.introBullets}>
-              {[
-                'Choose what describes you today, not what sounds impressive.',
-                'Add real skills and interests so search can find you.',
-                'Answer personality questions correctly for stronger compatibility.',
-              ].map((item) => (
-                <View key={item} style={styles.introBulletRow}>
-                  <View style={styles.introDot} />
-                  <Text style={[styles.introBulletText, { color: textColor(isDark) }]}>{item}</Text>
-                </View>
-              ))}
-            </View>
-            <Text style={[styles.introFooter, { color: isDark ? COLORS.primary : '#8A7900' }]}>
-              This takes one minute. It makes LINKUP feel smart instead of random.
-            </Text>
-          </View>
-        ),
-        canNext: true,
-      },
       {
         key: 'name',
         title: 'Your Name',
@@ -1478,126 +1411,48 @@ export default function OnboardingScreen({ navigation }: any) {
         canNext: displayName.trim().length >= 2,
       },
       {
-        key: 'bio',
-        title: 'Your Bio',
-        subtitle: 'In 1-2 lines, what are you building or good at?',
-        body: (
-          <View>
-            <TextInput
-              value={bio}
-              onChangeText={setBio}
-              placeholder="Example: Execution-focused founder building an automation SaaS. Looking for a technical cofounder."
-              placeholderTextColor="#666"
-              style={[
-                styles.bioInput,
-                liquidGlass(isDark, false),
-                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
-              ]}
-              multiline
-            />
-            <Text style={{ marginTop: 10, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16 }}>
-              This improves matching quality.
-            </Text>
-          </View>
-        ),
-        canNext: bio.trim().length >= 10,
-      },
-      {
-        key: 'basics',
-        title: 'Basics',
-        subtitle: 'A few details to personalize matches.',
-        body: (
-          <View style={{ gap: 12 }}>
-            <TextInput
-              value={ageText}
-              onChangeText={(t) => setAgeText(t.replace(/[^0-9]/g, '').slice(0, 2))}
-              placeholder="Age"
-              placeholderTextColor="#666"
-              keyboardType="number-pad"
-              style={[
-                styles.textInput,
-                liquidGlass(isDark, false),
-                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
-              ]}
-            />
-            <TextInput
-              value={country}
-              onChangeText={setCountry}
-              placeholder="Country"
-              placeholderTextColor="#666"
-              style={[
-                styles.textInput,
-                liquidGlass(isDark, false),
-                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
-              ]}
-              autoCapitalize="words"
-            />
-            <TextInput
-              value={city}
-              onChangeText={setCity}
-              placeholder="City"
-              placeholderTextColor="#666"
-              style={[
-                styles.textInput,
-                liquidGlass(isDark, false),
-                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, color: textColor(isDark) },
-              ]}
-              autoCapitalize="words"
-            />
-          </View>
-        ),
-        canNext: (() => {
-          const ageNum = Number(ageText);
-          return ageNum >= 13 && ageNum <= 99 && country.trim().length >= 2 && city.trim().length >= 2;
-        })(),
-      },
-      {
-        key: 'photos',
-        title: 'Profile Picture',
-        subtitle: 'Add one clear profile picture. Extra swipe photos can be edited later from your profile.',
-        body: (
-          <View style={{ alignItems: 'center' }}>
-            <View style={{ alignItems: 'center' }}>
-              <PhotoSlot
-                label="Profile Photo"
-                uri={profilePicUri || null}
-                onPress={pickPhoto}
-                isDark={isDark}
-                circular
-              />
-            </View>
-            <Text style={{ marginTop: 12, maxWidth: 360, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16, textAlign: 'center' }}>
-              This circular preview matches how your profile photo will look on LINKUP.
-            </Text>
-            <Text style={{ marginTop: 8, maxWidth: 420, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16, textAlign: 'center' }}>
-              Want more swipe photos? Open Profile after onboarding and add them there.
-            </Text>
-          </View>
-        ),
-        canNext: !!profilePicUri,
-      },
-      {
         key: 'identity',
         title: 'Your Identity',
-        subtitle: 'What best describes you?',
+        subtitle: 'What best describes you today?',
         body: (
           <ChoiceGrid value={role} onChange={(v) => setRole(String(v))} choices={identityChoices} isDark={isDark} />
         ),
         canNext: !!role,
       },
-      ...roleSteps,
+      {
+        key: 'goals',
+        title: 'Looking For',
+        subtitle: 'Pick at least one. Skills and extras can wait.',
+        body: (
+          <ChoiceGrid
+            value={lookingFor}
+            onChange={(v) => setLookingFor(v as string[])}
+            choices={lookingForChoices}
+            multi
+            isDark={isDark}
+          />
+        ),
+        canNext: lookingFor.length > 0,
+      },
+      {
+        key: 'photos',
+        title: 'Photo (optional)',
+        subtitle: 'A face photo gets more replies. Skip if you want.',
+        body: (
+          <View style={{ alignItems: 'center' }}>
+            <PhotoSlot
+              label="Profile Photo"
+              uri={profilePicUri || null}
+              onPress={pickPhoto}
+              isDark={isDark}
+              circular
+            />
+          </View>
+        ),
+        canNext: true,
+      },
     ],
-    [
-      displayName,
-      bio,
-      ageText,
-      country,
-      city,
-      profilePicUri,
-      role,
-      isDark,
-      roleSteps,
-    ]
+    [displayName, lookingFor, lookingForChoices, profilePicUri, role, isDark]
   );
 
   const current = steps[step];
@@ -1661,6 +1516,7 @@ export default function OnboardingScreen({ navigation }: any) {
       } as any;
       await setDoc(doc(db, 'users', user.uid), onboardingProfile, { merge: true });
       await markOnboardingComplete(onboardingProfile);
+      void seedConciergeWelcome(user.uid, onboardingProfile);
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
       Alert.alert('Could not finish onboarding', 'Please deploy the latest Firestore rules, then try again.');
@@ -1732,10 +1588,16 @@ export default function OnboardingScreen({ navigation }: any) {
               onPress={finish}
               style={[styles.btn, { backgroundColor: COLORS.primary, flex: 1, opacity: !current.canNext || saving ? 0.5 : 1 }]}
             >
-              {saving ? <ActivityIndicator color="#000" /> : <Text style={[styles.btnText, { color: '#000' }]}>FINISH</Text>}
+              {saving ? <ActivityIndicator color="#000" /> : <Text style={[styles.btnText, { color: '#000' }]}>ENTER LINKUP</Text>}
             </TouchableOpacity>
           )}
         </View>
+
+        {step >= 2 ? (
+          <TouchableOpacity disabled={saving || displayName.trim().length < 2 || !role} onPress={finish} style={{ marginTop: 14, alignItems: 'center' }}>
+            <Text style={{ fontSize: 11, fontWeight: '900', letterSpacing: 1.2, color: '#888' }}>SKIP EXTRA — DO THIS LATER</Text>
+          </TouchableOpacity>
+        ) : null}
 
         <View style={{ height: 90 }} />
       </ScrollView>
