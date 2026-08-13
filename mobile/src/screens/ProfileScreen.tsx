@@ -2414,7 +2414,16 @@ export default function ProfileScreen({ navigation, route }: any) {
                       </View>
                     </View>
                     <Text style={styles.projectDescription}>
-                      {proje        {renderStartEditButton('ADD PROJECT', 'project')}
+                      {project?.description || 'Ongoing project looking for relevant collaborators.'}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <View style={[styles.emptyProfileCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+                  <Text style={[styles.emptyProfileText, { color: textColor(isDark, 'muted') }]}>
+                    {isViewingOther ? 'This builder has not added what they are building yet.' : 'Add your current project in Edit Profile so people can discover what you are building.'}
+                  </Text>
+                  {renderStartEditButton('ADD PROJECT', 'project')}
                 </View>
               )}
             </View>
