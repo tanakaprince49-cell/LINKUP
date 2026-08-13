@@ -185,9 +185,10 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 
   const trending = useMemo(() => {
     const list = [...people];
+    if (me?.uid && isDiscoverableProfile(me) && !list.some((p) => p.uid === me.uid)) list.push(me);
     list.sort((a: any, b: any) => (earnedScore(b) + (b.turboConnect ? 8 : 0)) - (earnedScore(a) + (a.turboConnect ? 8 : 0)));
     return list.slice(0, MOBILE_HORIZONTAL_CARD_LIMIT);
-  }, [people]);
+  }, [people, me]);
 
   const opportunities = useMemo(() => {
     const list = people

@@ -49,8 +49,8 @@ export default function TrendingBuildersScreen({ navigation }: any) {
     const unsub = subscribeToDiscoveryProfiles({
       userId: user.uid,
       onData: (profiles) => {
-        const list = profiles.filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        setBuilders((current) => (list.length > 0 || current.length === 0 ? list : current));
+        const list = profiles.filter((profile: any) => isDiscoverableProfile(profile));
+        setBuilders(list);
         setLoading(false);
       },
       onError: () => setLoading(false),
@@ -59,22 +59,27 @@ export default function TrendingBuildersScreen({ navigation }: any) {
     return () => unsub();
   }, [isFocused, user?.uid]);
 
+  const heatScore = (profile: any) =>
+    earnedScore(profile) + (profile?.turboConnect ? 8 : 0) + Number(profile?.viewedBy?.length || profile?.profileViews || 0) * 0.3;
+
   const trending = useMemo(() => {
-    return [...builders]
-      .sort((a: any, b: any) => {
-        const left = earnedScore(b) + (b.turboConnect ? 8 : 0) + Number(b.viewedBy?.length || 0) * 0.3;
-        const right = earnedScore(a) + (a.turboConnect ? 8 : 0) + Number(a.viewedBy?.length || 0) * 0.3;
-        return left - right;
-      })
+    const pool = [...builders];
+    if (me?.uid && isDiscoverableProfile(me) && !pool.some((p) => p.uid === me.uid)) {
+      pool.push(me);
+    }
+    return pool
+      .filter((profile: any) => profile?.uid && isDiscoverableProfile(profile))
+      .sort((a: any, b: any) => heatScore(b) - heatScore(a))
       .slice(0, 20);
-  }, [builders]);
+  }, [builders, me]);
 
   const podium = trending.slice(0, 3);
   const rest = trending.slice(3);
+  const myRank = me?.uid ? trending.findIndex((p) => p.uid === me.uid) : -1;
   const boardSize = Math.max(trending.length, 1);
 
   const openChat = async (profile: UserProfile) => {
-    if (!user?.uid || !profile?.uid) return;
+    if (!user?.uid || !profile?.uid || profile.uid === user.uid) return;
     const gate = await resolveConnectionGate(user.uid, profile.uid);
     let note = '';
     if (gate.status === 'none') {
@@ -122,9 +127,13 @@ export default function TrendingBuildersScreen({ navigation }: any) {
         <View style={{ flex: 1 }}>
           <View style={styles.nameRow}>
             <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>
-              {item.displayName || 'Builder'}
+              {item.uid === me?.uid ? 'You' : item.displayName || 'Builder'}
             </Text>
-            {item.isVerified && <VerifiedBadge size={18} />}
+            {item.uid === me?.uid ? (
+              <View style={styles.youPill}><Text style={styles.youPillText}>YOU</Text></View>
+            ) : item.isVerified ? (
+              <VerifiedBadge size={18} />
+            ) : null}
           </View>
           <Text style={styles.meta} numberOfLines={1}>
             {(item.occupation || 'Builder')} · {location}
@@ -159,16 +168,18 @@ export default function TrendingBuildersScreen({ navigation }: any) {
         </View>
         <Text style={styles.arenaTitle}>Who’s winning LINKUP right now</Text>
         <Text style={styles.arenaSub}>
-          Ranked by heat: profile strength, views, and momentum. Top 3 own the podium. Everyone else is chasing.
+          Live top 3. If you’re trending, you show up here. When someone outranks you, the podium moves.
         </Text>
         <View style={styles.statRow}>
           <View style={styles.statChip}>
             <Crown size={13} color="#111" />
-            <Text style={styles.statText}>{boardSize} on the board</Text>
+            <Text style={styles.statText}>{Math.min(3, boardSize)} trending now</Text>
           </View>
           <View style={styles.statChip}>
             <Flame size={13} color="#FF4D2E" />
-            <Text style={styles.statText}>Heat updates live</Text>
+            <Text style={styles.statText}>
+              {myRank >= 0 ? (myRank < 3 ? `You’re #${myRank + 1}` : `You’re #${myRank + 1} — chase the podium`) : 'Heat updates live'}
+            </Text>
           </View>
         </View>
       </View>
@@ -203,14 +214,15 @@ export default function TrendingBuildersScreen({ navigation }: any) {
                           style={[styles.podiumAvatar, tall && { width: 72, height: 72, borderRadius: 36 }]}
                         />
                         <Text style={[styles.podiumName, { color: textColor(isDark) }]} numberOfLines={1}>
-                          {item.displayName || 'Builder'}
+                          {item.uid === me?.uid ? 'You' : item.displayName || 'Builder'}
                         </Text>
+                        {item.uid === me?.uid ? <Text style={styles.youOnPodium}>YOU</Text> : null}
                         <Text style={styles.podiumHeat}>HEAT {heatFor(item, realIndex + 1)}</Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
-                {podium[0] ? (
+                {podium[0] && podium[0].uid !== me?.uid ? (
                   <TouchableOpacity
                     style={styles.challengeBtn}
                     onPress={() => openChat(podium[0])}
@@ -221,10 +233,15 @@ export default function TrendingBuildersScreen({ navigation }: any) {
                     ) : (
                       <>
                         <User size={15} color="#111" />
-                        <Text style={styles.challengeText}>Talk to #{1}</Text>
+                        <Text style={styles.challengeText}>Talk to #1</Text>
                       </>
                     )}
                   </TouchableOpacity>
+                ) : podium[0]?.uid === me?.uid ? (
+                  <View style={styles.youLead}>
+                    <Crown size={15} color={COLORS.primary} />
+                    <Text style={styles.youLeadText}>You’re #1 right now</Text>
+                  </View>
                 ) : null}
                 <Text style={[styles.chaseLabel, { color: textColor(isDark) }]}>THE CHASE</Text>
               </View>
@@ -340,6 +357,25 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   challengeText: { fontSize: 13, fontWeight: '900', color: '#111' },
+  youLead: {
+    marginTop: 12,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#111',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  youLeadText: { fontSize: 13, fontWeight: '900', color: COLORS.primary },
+  youPill: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  youPillText: { fontSize: 9, fontWeight: '900', color: '#111' },
+  youOnPodium: { marginTop: 2, fontSize: 9, fontWeight: '900', color: '#111' },
   chaseLabel: { marginTop: 22, marginBottom: 8, fontSize: 11, fontWeight: '900', letterSpacing: 1.6 },
   listContent: { padding: 16, paddingBottom: 120, gap: 10 },
   row: {
