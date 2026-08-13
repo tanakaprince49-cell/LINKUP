@@ -4,14 +4,14 @@ import { UserProfile } from '../types';
 const androidApiLevel = Platform.OS === 'android' ? Number(Platform.Version || 0) : 0;
 
 export const IS_LOW_END_ANDROID = Platform.OS === 'android' && androidApiLevel > 0 && androidApiLevel <= 29;
-export const MOBILE_DISCOVERY_QUERY_LIMIT = IS_LOW_END_ANDROID ? 10 : Platform.OS === 'android' ? 16 : 120;
-export const MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT = IS_LOW_END_ANDROID ? 6 : Platform.OS === 'android' ? 8 : 40;
-export const MOBILE_CHAT_MESSAGE_LIMIT = IS_LOW_END_ANDROID ? 28 : Platform.OS === 'android' ? 40 : 80;
-export const MOBILE_NOTIFICATION_QUERY_LIMIT = IS_LOW_END_ANDROID ? 20 : Platform.OS === 'android' ? 30 : 75;
-export const MOBILE_HORIZONTAL_CARD_LIMIT = IS_LOW_END_ANDROID ? 6 : 12;
-export const MOBILE_SEARCH_RENDER_LIMIT = IS_LOW_END_ANDROID ? 10 : 18;
-export const MOBILE_SWIPE_DECK_LIMIT = IS_LOW_END_ANDROID ? 8 : 12;
-export const MOBILE_LIST_IMAGE_LIMIT = 240_000;
+export const MOBILE_DISCOVERY_QUERY_LIMIT = IS_LOW_END_ANDROID ? 8 : Platform.OS === 'android' ? 14 : 60;
+export const MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT = IS_LOW_END_ANDROID ? 6 : Platform.OS === 'android' ? 10 : 24;
+export const MOBILE_CHAT_MESSAGE_LIMIT = IS_LOW_END_ANDROID ? 20 : Platform.OS === 'android' ? 28 : 80;
+export const MOBILE_NOTIFICATION_QUERY_LIMIT = IS_LOW_END_ANDROID ? 16 : Platform.OS === 'android' ? 24 : 75;
+export const MOBILE_HORIZONTAL_CARD_LIMIT = IS_LOW_END_ANDROID ? 4 : Platform.OS === 'android' ? 6 : 12;
+export const MOBILE_SEARCH_RENDER_LIMIT = IS_LOW_END_ANDROID ? 8 : Platform.OS === 'android' ? 12 : 18;
+export const MOBILE_SWIPE_DECK_LIMIT = IS_LOW_END_ANDROID ? 6 : Platform.OS === 'android' ? 10 : 12;
+export const MOBILE_LIST_IMAGE_LIMIT = Platform.OS === 'android' ? 48_000 : 240_000;
 
 const PROFILE_IMAGE_CHAR_LIMIT = 240_000;
 const LIST_IMAGE_CHAR_LIMIT = MOBILE_LIST_IMAGE_LIMIT;
@@ -77,10 +77,12 @@ export const compactProfileForList = (profile: any): UserProfile =>
     displayName: text(profile?.displayName || profile?.fullName || profile?.name, 100),
     username: text(profile?.username, 40),
     bio: text(profile?.bio, 700),
-    profilePic: safeProfileImageUri(profile?.profilePic),
-    photos: Array.isArray(profile?.photos)
-      ? profile.photos.map((uri: unknown) => safeProfileImageUri(uri)).filter(Boolean).slice(0, 3)
-      : [],
+    profilePic: safeProfileImageUri(profile?.profilePic, Platform.OS === 'android' ? 48_000 : LIST_IMAGE_CHAR_LIMIT),
+    photos: Platform.OS === 'android'
+      ? []
+      : Array.isArray(profile?.photos)
+        ? profile.photos.map((uri: unknown) => safeProfileImageUri(uri)).filter(Boolean).slice(0, 2)
+        : [],
     occupation: text(profile?.occupation, 100),
     company: text(profile?.company, 120),
     country: text(profile?.country, 80),

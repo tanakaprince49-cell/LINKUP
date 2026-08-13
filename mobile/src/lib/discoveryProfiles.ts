@@ -3,6 +3,8 @@ import { db } from './firebase';
 import { displayNameFor, isDiscoverableProfile } from './discovery';
 import {
   IS_LOW_END_ANDROID,
+  MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT,
+  MOBILE_DISCOVERY_QUERY_LIMIT,
   MOBILE_LIST_IMAGE_LIMIT,
   MOBILE_SWIPE_DECK_LIMIT,
   compactProfileForList,
@@ -146,7 +148,7 @@ type SubscribeOptions = {
 };
 
 export const loadFromPublicProfiles = async (userId: string) => {
-  const snap = await getDocs(query(collection(db, 'publicProfiles'), limit(120)));
+  const snap = await getDocs(query(collection(db, 'publicProfiles'), limit(MOBILE_DISCOVERY_QUERY_LIMIT)));
   if (!snap || snap.empty) return null;
   const rows = snap.docs.map((d: any) =>
     compactProfileForList({ uid: d.id, ...(d.data() as any) })
@@ -154,8 +156,9 @@ export const loadFromPublicProfiles = async (userId: string) => {
   return rows.filter((p: any) => p.uid !== userId && isDiscoverableProfile(p));
 };
 
-export const loadFromUsers = async (userId: string, pageSize = 60) => {
-  for (const size of [pageSize, 30, 15]) {
+export const loadFromUsers = async (userId: string, pageSize = MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT) => {
+  const sizes = Array.from(new Set([pageSize, 10, 6])).sort((a, b) => b - a);
+  for (const size of sizes) {
     try {
       const snap = await getDocs(query(collection(db, 'users'), limit(size)));
       if (!snap || snap.empty) return null;
@@ -165,43 +168,80 @@ export const loadFromUsers = async (userId: string, pageSize = 60) => {
       const visible = rows.filter((p: any) => p.uid !== userId && isDiscoverableProfile(p));
       if (visible.length > 0) return visible;
     } catch {
-      if (size === 15) return null;
+      if (size === sizes[sizes.length - 1]) return null;
     }
   }
   return null;
 };
 
-export const subscribeToDiscoveryProfiles = ({ userId, onData, onError }: SubscribeOptions) => {
-  let cancelled = false;
+type SharedListener = {
+  userId: string;
+  onData: SubscribeOptions['onData'];
+  onError?: SubscribeOptions['onError'];
+};
+
+let sharedUnsub: (() => void) | null = null;
+let sharedFallbackRunning = false;
+const sharedListeners = new Set<SharedListener>();
+let lastDiscoveryRows: UserProfile[] = [];
+let lastDiscoverySource: 'publicProfiles' | 'users' = 'publicProfiles';
+
+const emitShared = (rows: UserProfile[], source: 'publicProfiles' | 'users') => {
+  lastDiscoveryRows = rows;
+  lastDiscoverySource = source;
+  sharedListeners.forEach((listener) => {
+    listener.onData(rows.filter((p) => p.uid !== listener.userId), source);
+  });
+};
+
+const startSharedDiscovery = () => {
+  if (sharedUnsub) return;
+  const firstUserId = [...sharedListeners][0]?.userId || '';
   const emitUsersFallback = async () => {
-    const users = await loadFromUsers(userId, 80);
-    if (cancelled) return;
-    onData(users || [], 'users');
+    if (sharedFallbackRunning) return;
+    sharedFallbackRunning = true;
+    try {
+      const users = await loadFromUsers(firstUserId, MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT);
+      emitShared(users || [], 'users');
+    } finally {
+      sharedFallbackRunning = false;
+    }
   };
 
-  const q = query(collection(db, 'publicProfiles'), limit(120));
-
-  const unsub = onSnapshot(
-    q,
+  sharedUnsub = onSnapshot(
+    query(collection(db, 'publicProfiles'), limit(MOBILE_DISCOVERY_QUERY_LIMIT)),
     (snapshot) => {
       const rows = (snapshot?.docs || [])
         .map((d) => compactProfileForList({ uid: d.id, ...(d.data() as any) }))
-        .filter((p: any) => p.uid !== userId && isDiscoverableProfile(p));
+        .filter((p: any) => isDiscoverableProfile(p));
       if (rows.length > 0) {
-        onData(rows, 'publicProfiles');
+        emitShared(rows, 'publicProfiles');
         return;
       }
       void emitUsersFallback();
     },
     (error) => {
       console.error('Discovery onSnapshot error:', error);
-      onError?.(error);
+      sharedListeners.forEach((listener) => listener.onError?.(error));
       void emitUsersFallback();
     }
   );
+};
+
+export const subscribeToDiscoveryProfiles = ({ userId, onData, onError }: SubscribeOptions) => {
+  const listener: SharedListener = { userId, onData, onError };
+  sharedListeners.add(listener);
+  if (lastDiscoveryRows.length) {
+    onData(lastDiscoveryRows.filter((p) => p.uid !== userId), lastDiscoverySource);
+  }
+  startSharedDiscovery();
 
   return () => {
-    cancelled = true;
-    unsub();
+    sharedListeners.delete(listener);
+    if (sharedListeners.size === 0) {
+      sharedUnsub?.();
+      sharedUnsub = null;
+      lastDiscoveryRows = [];
+    }
   };
 };
