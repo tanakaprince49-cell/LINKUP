@@ -13,6 +13,9 @@ type Props = {
 export default function ConnectionNoteModal({ visible, name, busy, onCancel, onSend }: Props) {
   const [note, setNote] = useState('');
   const who = name || 'this builder';
+  React.useEffect(() => {
+    if (visible) setNote('');
+  }, [visible]);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
