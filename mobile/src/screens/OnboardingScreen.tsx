@@ -269,18 +269,6 @@ const roleSkillChoicesByRole: Record<string, Choice[]> = {
 const roleQuestionBanks: Record<string, RoleQuestion[]> = {
   Founder: [
     {
-      id: 'founderLane',
-      title: 'Founder lane',
-      subtitle: 'What do you naturally own inside a startup?',
-      choices: [
-        { id: 'Vision & Sales', label: 'Vision & Sales' },
-        { id: 'Product Strategy', label: 'Product Strategy' },
-        { id: 'Growth & GTM', label: 'Growth & GTM' },
-        { id: 'Community Builder', label: 'Community Builder' },
-        { id: 'Capital & Partnerships', label: 'Capital & Partnerships' },
-      ],
-    },
-    {
       id: 'founderNeed',
       title: 'First missing piece',
       subtitle: 'Who would unlock your next level fastest?',
@@ -1145,13 +1133,6 @@ export default function OnboardingScreen({ navigation }: any) {
           canNext: !!experience,
         },
         {
-          key: 'availability',
-          title: 'Availability',
-          subtitle: "What's your current availability?",
-          body: <ChoiceGrid value={availability} onChange={(v) => setAvailability(String(v))} choices={availabilityChoices} isDark={isDark} />,
-          canNext: !!availability,
-        },
-        {
           key: 'workStyle',
           title: 'Work Style',
           subtitle: 'How do you like to build?',
@@ -1193,13 +1174,6 @@ export default function OnboardingScreen({ navigation }: any) {
           </View>
         ),
         canNext: finalSkills.length > 0,
-      },
-      {
-        key: 'commitment',
-        title: 'Commitment Level',
-        subtitle: 'How available are you right now?',
-        body: <ChoiceGrid value={commitmentLevel} onChange={(v) => setCommitmentLevel(String(v))} choices={commitmentChoices} isDark={isDark} />,
-        canNext: !!commitmentLevel,
       },
       {
         key: 'stage',
@@ -1311,7 +1285,6 @@ export default function OnboardingScreen({ navigation }: any) {
           buildSkillsStep('Core Skills For Matching', 'Choose your investor edge so founders and opportunities can match properly.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Sectors', 'Which industries do you invest in?', industries, setIndustries, industryChoices),
-          buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           personalityStep,
         ];
       case 'Developer':
@@ -1321,7 +1294,6 @@ export default function OnboardingScreen({ navigation }: any) {
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Products You Want To Build', 'Which startup spaces pull you in?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'How battle-tested are you right now?', experience, setExperience, experienceChoices),
-          buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to build with teams?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
@@ -1332,7 +1304,6 @@ export default function OnboardingScreen({ navigation }: any) {
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Products You Want To Shape', 'Which startup spaces would you love to design for?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'Where are you in your design journey?', experience, setExperience, experienceChoices),
-          buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you collaborate best?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
@@ -1343,7 +1314,6 @@ export default function OnboardingScreen({ navigation }: any) {
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Markets You Understand', 'Which startup spaces do you know best?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'How experienced are you in startup growth?', experience, setExperience, experienceChoices),
-          buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to execute growth?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
@@ -1354,7 +1324,6 @@ export default function OnboardingScreen({ navigation }: any) {
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Startup Interests', 'Which spaces make you want to build?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'How far into building are you?', experience, setExperience, experienceChoices),
-          buildSingleChoiceStep('commitment', 'Commitment Level', 'How available are you to build right now?', commitmentLevel, setCommitmentLevel, commitmentChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like working with others?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
@@ -1365,7 +1334,6 @@ export default function OnboardingScreen({ navigation }: any) {
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Operating Environments', 'Which kinds of startups do you want to support?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'How experienced are you in operations?', experience, setExperience, experienceChoices),
-          buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to run execution?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
@@ -1378,7 +1346,6 @@ export default function OnboardingScreen({ navigation }: any) {
             ...roleQuestions.map(buildRoleQuestionStep),
             buildMultiChoiceStep('industries', 'Focus Areas', 'Which startup spaces do you want to be around?', industries, setIndustries, industryChoices),
             buildSingleChoiceStep('experience', 'Experience Level', 'Where are you in your journey?', experience, setExperience, experienceChoices),
-            buildSingleChoiceStep('availability', 'Availability', 'What is your current availability?', availability, setAvailability, availabilityChoices),
             buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to collaborate?', workStyle, setWorkStyle, workStyleChoices),
             personalityStep,
           ];
