@@ -11,8 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Bell, X } from 'lucide-react-native';
-import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+import { COLORS, hairline, textColor } from '../theme/theme';
 import { useTheme } from '../contexts/ThemeContext';
 
 type LinkupAlertPayload = {
@@ -24,9 +23,7 @@ type LinkupAlertPayload = {
 };
 
 const normalizeButtons = (buttons?: AlertButton[]) => {
-  if (Array.isArray(buttons) && buttons.length > 0) {
-    return buttons;
-  }
+  if (Array.isArray(buttons) && buttons.length > 0) return buttons;
   return [{ text: 'OK', style: 'default' as const }];
 };
 
@@ -80,7 +77,7 @@ export default function LinkupAlertProvider({ children }: { children: React.Reac
   }, []);
 
   const visibleButtons = current?.buttons || [];
-  const stackedButtons = visibleButtons.length > 2;
+  const stacked = visibleButtons.length > 2;
 
   return (
     <>
@@ -97,39 +94,18 @@ export default function LinkupAlertProvider({ children }: { children: React.Reac
             style={[
               styles.card,
               {
-                backgroundColor: isDark ? '#111114' : '#FFFFFF',
-                borderColor: COLORS.primary,
+                backgroundColor: isDark ? COLORS.darkCard : '#FFFFFF',
+                borderColor: hairline(isDark),
               },
             ]}
             onPress={(event) => event.stopPropagation()}
           >
-            <View style={styles.brandBand}>
-              <View style={styles.brandIcon}>
-                <Bell size={19} color="#000" strokeWidth={2.8} />
-              </View>
-              <View style={styles.brandCopy}>
-                <Text style={styles.brandText}>LINKUP</Text>
-                <Text style={styles.brandSubtext}>NOTICE</Text>
-              </View>
-              {current?.options?.cancelable === false ? null : (
-                <TouchableOpacity style={styles.closeButton} onPress={dismissFromBackdrop} activeOpacity={0.85}>
-                  <X size={18} color="#000" strokeWidth={3} />
-                </TouchableOpacity>
-              )}
-            </View>
+            <Text style={[styles.title, { color: textColor(isDark) }]}>{current?.title || 'LINKUP'}</Text>
+            {current?.message ? (
+              <Text style={[styles.message, { color: textColor(isDark, 'secondary') }]}>{current.message}</Text>
+            ) : null}
 
-            <View style={styles.body}>
-              <Text style={[styles.title, { color: isDark ? '#FFFFFF' : '#000000' }]}>
-                {current?.title || 'LINKUP'}
-              </Text>
-              {current?.message ? (
-                <Text style={[styles.message, { color: isDark ? '#D7D7D7' : '#333333' }]}>
-                  {current.message}
-                </Text>
-              ) : null}
-            </View>
-
-            <View style={[styles.actions, stackedButtons && styles.actionsStacked]}>
+            <View style={[styles.actions, stacked && styles.actionsStacked]}>
               {visibleButtons.map((button, index) => {
                 const isCancel = button.style === 'cancel';
                 const isDestructive = button.style === 'destructive';
@@ -137,12 +113,12 @@ export default function LinkupAlertProvider({ children }: { children: React.Reac
                 return (
                   <TouchableOpacity
                     key={`${current?.id || 'alert'}-${button.text || 'button'}-${index}`}
-                    activeOpacity={0.86}
+                    activeOpacity={0.85}
                     style={[
                       styles.actionButton,
-                      stackedButtons && styles.stackedActionButton,
+                      stacked && styles.stackedAction,
+                      { borderColor: hairline(isDark) },
                       isPrimary && styles.primaryButton,
-                      isCancel && styles.cancelButton,
                       isDestructive && styles.destructiveButton,
                     ]}
                     onPress={() => dismissCurrent(button)}
@@ -150,12 +126,12 @@ export default function LinkupAlertProvider({ children }: { children: React.Reac
                     <Text
                       style={[
                         styles.actionText,
+                        { color: textColor(isDark) },
                         isPrimary && styles.primaryText,
-                        isCancel && styles.cancelText,
+                        isCancel && { color: textColor(isDark, 'secondary') },
                         isDestructive && styles.destructiveText,
                       ]}
                       numberOfLines={2}
-                      adjustsFontSizeToFit
                     >
                       {button.text || 'OK'}
                     </Text>
@@ -173,144 +149,68 @@ export default function LinkupAlertProvider({ children }: { children: React.Reac
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.58)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 22,
+    paddingHorizontal: 28,
   },
   card: {
     width: '100%',
-    maxWidth: 410,
-    borderRadius: 28,
-    borderWidth: 2,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.24,
-    shadowRadius: 26,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 20,
-  },
-  brandBand: {
-    minHeight: 72,
-    backgroundColor: COLORS.primary,
-    borderBottomWidth: 2,
-    borderBottomColor: '#000',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  brandIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brandCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  brandText: {
-    fontSize: 18,
-    lineHeight: 21,
-    color: '#000',
-    fontWeight: '900',
-    fontStyle: 'italic',
-    letterSpacing: 1.6,
-  },
-  brandSubtext: {
-    marginTop: 1,
-    fontSize: 9,
-    color: '#000',
-    fontWeight: '900',
-    letterSpacing: 2,
-  },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 13,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  body: {
+    maxWidth: 340,
+    borderRadius: 16,
+    borderWidth: 1,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 8,
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 21,
-    lineHeight: 26,
-    fontWeight: '900',
-    letterSpacing: 0,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   message: {
-    marginTop: 10,
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '700',
+    marginTop: 8,
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 22,
   },
   actions: {
     flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 18,
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 18,
   },
   actionsStacked: {
     flexDirection: 'column',
   },
   actionButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#000',
-    backgroundColor: '#FFFFFF',
+    minHeight: 40,
+    minWidth: 72,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
   },
-  stackedActionButton: {
-    flex: 0,
+  stackedAction: {
     width: '100%',
   },
   primaryButton: {
     backgroundColor: COLORS.primary,
-    borderColor: '#000',
-  },
-  cancelButton: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D6D6D6',
+    borderColor: COLORS.primary,
   },
   destructiveButton: {
-    backgroundColor: '#FFF1F1',
-    borderColor: '#FFB4B4',
+    backgroundColor: 'transparent',
+    borderColor: 'rgba(225,29,72,0.35)',
   },
   actionText: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '900',
-    letterSpacing: 0.7,
-    color: '#000',
-    textAlign: 'center',
-    textTransform: 'uppercase',
+    fontSize: 15,
+    fontWeight: '700',
   },
   primaryText: {
-    color: '#000',
-  },
-  cancelText: {
-    color: '#333333',
+    color: '#111',
   },
   destructiveText: {
-    color: '#B42318',
+    color: COLORS.danger,
   },
 });
