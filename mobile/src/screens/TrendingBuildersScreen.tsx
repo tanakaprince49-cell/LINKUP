@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert } from 'react-native';
 import { ChevronLeft, Crown, Flame, Trophy, User } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
@@ -70,16 +70,30 @@ export default function TrendingBuildersScreen({ navigation }: any) {
   const boardSize = Math.max(trending.length, 1);
 
   const openChat = async (profile: UserProfile) => {
-    if (!user?.uid || !profile?.uid || profile.uid === user.uid) return;
-    const gate = await resolveConnectionGate(user.uid, profile.uid);
-    let note = '';
-    if (gate.status === 'none') {
-      const drafted = await connectionNote.ask(displayNameFor(profile));
-      if (drafted === null) return;
-      note = drafted;
+    if (!user?.uid) {
+      Alert.alert('Sign in first', 'Create or sign in to a LINKUP account to talk to #1.');
+      navigation.navigate('EmailAuth');
+      return;
     }
+    if (!profile?.uid) {
+      Alert.alert('No #1 yet', 'The board is still filling. Try again in a moment.');
+      return;
+    }
+    if (profile.uid === user.uid) {
+      Alert.alert('That’s you', 'You’re already #1 on the board.');
+      return;
+    }
+    if (busyUserId) return;
+
     setBusyUserId(profile.uid);
     try {
+      const gate = await resolveConnectionGate(user.uid, profile.uid);
+      let note = '';
+      if (gate.status === 'none') {
+        const drafted = await connectionNote.ask(displayNameFor(profile));
+        if (drafted === null) return;
+        note = drafted;
+      }
       const result = await startTalkOrRequest({
         senderId: user.uid,
         recipientId: profile.uid,
@@ -89,10 +103,37 @@ export default function TrendingBuildersScreen({ navigation }: any) {
       });
       if (result.action === 'chat' && result.matchId) {
         navigation.navigate('Chat', { matchId: result.matchId, otherUser: profile });
+        return;
       }
+      if (result.action === 'pending') {
+        Alert.alert('Request pending', `${displayNameFor(profile)} has not answered yet.`);
+        return;
+      }
+      if (result.action === 'incoming') {
+        Alert.alert('They already asked', 'Approve their request in Notifications to start chatting.');
+        navigation.navigate('Alerts');
+        return;
+      }
+      if (result.action === 'rejected') {
+        Alert.alert('Not available', 'This builder declined your last request.');
+        return;
+      }
+      Alert.alert('Request sent', `${displayNameFor(profile)} can approve or ignore it. You can chat after they approve.`);
+    } catch (error) {
+      console.warn('Talk to #1 failed:', error);
+      Alert.alert('Could not send', 'Check your connection and try again.');
     } finally {
       setBusyUserId(null);
     }
+  };
+
+  const talkToFirst = () => {
+    const first = podium[0];
+    if (!first) {
+      Alert.alert('No #1 yet', 'When someone is trending, Talk to #1 opens a request.');
+      return;
+    }
+    void openChat(first);
   };
 
   const renderRow = (item: UserProfile, index: number) => {
@@ -213,27 +254,6 @@ export default function TrendingBuildersScreen({ navigation }: any) {
                     );
                   })}
                 </View>
-                {podium[0] && podium[0].uid !== me?.uid ? (
-                  <TouchableOpacity
-                    style={styles.challengeBtn}
-                    onPress={() => openChat(podium[0])}
-                    disabled={busyUserId === podium[0].uid}
-                  >
-                    {busyUserId === podium[0].uid ? (
-                      <ActivityIndicator size="small" color="#111" />
-                    ) : (
-                      <>
-                        <User size={15} color="#111" />
-                        <Text style={styles.challengeText}>Talk to #1</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                ) : podium[0]?.uid === me?.uid ? (
-                  <View style={styles.youLead}>
-                    <Crown size={15} color={COLORS.primary} />
-                    <Text style={styles.youLeadText}>You’re #1 right now</Text>
-                  </View>
-                ) : null}
                 <Text style={[styles.chaseLabel, { color: textColor(isDark) }]}>THE CHASE</Text>
               </View>
             ) : null
@@ -342,6 +362,28 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 16,
     backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  challengeBtnBar: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  youLeadBar: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: '#111',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
