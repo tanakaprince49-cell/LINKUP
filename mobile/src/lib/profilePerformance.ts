@@ -11,7 +11,7 @@ export const MOBILE_NOTIFICATION_QUERY_LIMIT = IS_LOW_END_ANDROID ? 16 : Platfor
 export const MOBILE_HORIZONTAL_CARD_LIMIT = IS_LOW_END_ANDROID ? 4 : Platform.OS === 'android' ? 6 : 12;
 export const MOBILE_SEARCH_RENDER_LIMIT = IS_LOW_END_ANDROID ? 8 : Platform.OS === 'android' ? 12 : 18;
 export const MOBILE_SWIPE_DECK_LIMIT = IS_LOW_END_ANDROID ? 6 : Platform.OS === 'android' ? 10 : 12;
-export const MOBILE_LIST_IMAGE_LIMIT = Platform.OS === 'android' ? 48_000 : 240_000;
+export const MOBILE_LIST_IMAGE_LIMIT = 240_000;
 
 const PROFILE_IMAGE_CHAR_LIMIT = 240_000;
 const LIST_IMAGE_CHAR_LIMIT = MOBILE_LIST_IMAGE_LIMIT;
