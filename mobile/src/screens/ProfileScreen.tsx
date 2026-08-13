@@ -818,6 +818,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   // From here onward, `profile` is guaranteed to exist.
 
   const startEditing = (focus: 'all' | 'bio' | 'skills' | 'project' | 'idea' | 'photos' = 'all') => {
+    if (!profile) return;
     setEditFocus(focus);
     const existingProjects = Array.isArray((profile as any).projects)
       ? (profile as any).projects.map((project: any, index: number) => normalizeProjectDraft(project, profile.uid, index))
@@ -2611,19 +2612,19 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={styles.statusGrid}>
             <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
               <Text style={styles.statusLabel}>Stage</Text>
-              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).startupStage || '-'}</Text>
+              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any)?.startupStage || '-'}</Text>
             </View>
             <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
               <Text style={styles.statusLabel}>Funding</Text>
-              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).fundingStage || '-'}</Text>
+              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any)?.fundingStage || '-'}</Text>
             </View>
             <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
               <Text style={styles.statusLabel}>Availability</Text>
-              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).availability || 'Open'}</Text>
+              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any)?.availability || 'Open'}</Text>
             </View>
             <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
               <Text style={styles.statusLabel}>Intent</Text>
-              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).networkingIntent || 'Builder'}</Text>
+              <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any)?.networkingIntent || 'Builder'}</Text>
             </View>
           </View>
         </View>

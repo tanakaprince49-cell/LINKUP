@@ -343,6 +343,7 @@ export function localCommonalityRank(me: UserProfile | null | undefined, people:
   };
 
   return people
+    .filter((person) => !!person?.uid)
     .map((person) => ({ person, ...scorePerson(person) }))
     .sort((left, right) => right.score - left.score)
     .slice(0, limitCount)

@@ -83,7 +83,7 @@ const readCachedDiscovery = async (uid: string): Promise<UserProfile[]> => {
 
 const writeCachedDiscovery = async (uid: string, profiles: UserProfile[]) => {
   try {
-    const compactProfiles = profiles.slice(0, DISCOVERY_LIMIT).map((profile) => ({
+    const compactProfiles = profiles.slice(0, DISCOVERY_LIMIT).filter((profile) => !!profile?.uid).map((profile) => ({
       uid: profile.uid,
       displayName: displayNameFor(profile),
       username: (profile as any).username || '',

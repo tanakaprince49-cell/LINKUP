@@ -30,33 +30,36 @@ const compactCachedProject = (project: any, index: number) => ({
   lookingFor: Array.isArray(project?.lookingFor) ? project.lookingFor.slice(0, 6) : [],
   tags: Array.isArray(project?.tags) ? project.tags.slice(0, 6) : [],
 });
-const compactDashboardProfile = (profile: UserProfile) => ({
-  uid: profile.uid,
-  displayName: displayNameFor(profile),
-  username: (profile as any).username || '',
-  bio: profile.bio || '',
-  profilePic: compactCachedImage(profile.profilePic),
-  occupation: (profile as any).occupation || '',
-  company: (profile as any).company || '',
-  city: profile.city || '',
-  country: profile.country || '',
-  age: Number(profile.age || 0),
-  skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 12) : [],
-  industries: Array.isArray((profile as any).industries) ? (profile as any).industries.slice(0, 12) : [],
-  lookingFor: Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor.slice(0, 12) : [],
-  startupStage: (profile as any).startupStage || '',
-  availability: (profile as any).availability || '',
-  reputationScore: earnedScore(profile),
-  turboConnect: !!(profile as any).turboConnect,
-  isVisible: profile.isVisible !== false,
-  isStealthMode: !!profile.isStealthMode,
-  isVerified: !!profile.isVerified,
-  isBot: !!(profile as any).isBot,
-  onboarded: !!(profile as any).onboarded,
-  projects: Array.isArray((profile as any).projects)
-    ? (profile as any).projects.slice(0, 3).map(compactCachedProject)
-    : [],
-});
+const compactDashboardProfile = (profile: UserProfile) => {
+  if (!profile?.uid) return null;
+  return {
+    uid: profile.uid,
+    displayName: displayNameFor(profile),
+    username: (profile as any).username || '',
+    bio: profile.bio || '',
+    profilePic: compactCachedImage(profile.profilePic),
+    occupation: (profile as any).occupation || '',
+    company: (profile as any).company || '',
+    city: profile.city || '',
+    country: profile.country || '',
+    age: Number(profile.age || 0),
+    skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 12) : [],
+    industries: Array.isArray((profile as any).industries) ? (profile as any).industries.slice(0, 12) : [],
+    lookingFor: Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor.slice(0, 12) : [],
+    startupStage: (profile as any)?.startupStage || '',
+    availability: (profile as any).availability || '',
+    reputationScore: earnedScore(profile),
+    turboConnect: !!(profile as any).turboConnect,
+    isVisible: profile.isVisible !== false,
+    isStealthMode: !!profile.isStealthMode,
+    isVerified: !!profile.isVerified,
+    isBot: !!(profile as any).isBot,
+    onboarded: !!(profile as any).onboarded,
+    projects: Array.isArray((profile as any).projects)
+      ? (profile as any).projects.slice(0, 3).map(compactCachedProject)
+      : [],
+  };
+};
 const readCachedDashboardPeople = async (uid: string): Promise<UserProfile[]> => {
   try {
     const raw = await AsyncStorage.getItem(dashboardCacheKey(uid));
@@ -68,7 +71,10 @@ const readCachedDashboardPeople = async (uid: string): Promise<UserProfile[]> =>
 };
 const writeCachedDashboardPeople = async (uid: string, people: UserProfile[]) => {
   try {
-    await AsyncStorage.setItem(dashboardCacheKey(uid), JSON.stringify(people.slice(0, DASHBOARD_CACHE_LIMIT).map(compactDashboardProfile)));
+    await AsyncStorage.setItem(
+      dashboardCacheKey(uid),
+      JSON.stringify(people.slice(0, DASHBOARD_CACHE_LIMIT).map(compactDashboardProfile).filter(Boolean))
+    );
   } catch {
     // Cache only makes the dashboard feel instant.
   }
