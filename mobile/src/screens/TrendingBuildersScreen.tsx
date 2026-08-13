@@ -242,6 +242,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
           }
         />
       )}
+      {connectionNote.modal}
     </SafeAreaView>
   );
 }

@@ -369,6 +369,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           }
         />
       )}
+      {connectionNote.modal}
     </SafeAreaView>
   );
 }

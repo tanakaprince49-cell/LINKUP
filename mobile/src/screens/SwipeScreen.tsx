@@ -309,6 +309,7 @@ export default function SwipeScreen({ navigation }: any) {
   const [infoExpanded, setInfoExpanded] = useState(false);
   const [connectionRequest, setConnectionRequest] = useState<ConnectionRequest | null>(null);
   const [contactBusy, setContactBusy] = useState(false);
+  const connectionNote = useConnectionNote();
   const [paywallFeature, setPaywallFeature] = useState('');
   const [progressHydrated, setProgressHydrated] = useState(false);
 
