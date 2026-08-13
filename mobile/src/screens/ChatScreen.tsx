@@ -1707,6 +1707,3 @@ const styles = StyleSheet.create({
   },
   reactExtraText: { fontSize: 15, fontWeight: '800' },
 });
-700',
-  },
-});
