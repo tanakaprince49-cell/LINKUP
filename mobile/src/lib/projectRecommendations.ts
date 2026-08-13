@@ -53,7 +53,7 @@ const projectSignals = (owner: UserProfile, project: Project) =>
     ...toList(owner.industries),
     ...toList(owner.interests),
     ...toList(owner.lookingFor),
-    ...toList(owner.startupStage),
+    ...toList(owner?.startupStage),
     ...toList(owner.availability),
     ...flattenAnswers(owner.roleAnswers),
   ]);
@@ -86,13 +86,14 @@ const statusIsOngoing = (status: unknown) => {
 };
 
 export function getOngoingProjects(owner: UserProfile): ProjectRecommendation['project'][] {
+  if (!owner) return [];
   const rows = Array.isArray(owner.projects) ? owner.projects : [];
   return rows
     .map((project: any, index) => {
       const title = String(project?.title || '').trim();
       const description = String(project?.description || '').trim();
       if (!title && !description) return null;
-      const status = String(project?.status || owner.startupStage || 'mvp').trim().toLowerCase();
+      const status = String(project?.status || owner?.startupStage || 'mvp').trim().toLowerCase();
       if (!statusIsOngoing(status)) return null;
       return {
         id: String(project?.id || `${owner.uid || 'project'}_${index}`),
@@ -166,7 +167,8 @@ export function getBestProjectRecommendations(
   people: UserProfile[],
   limitCount = 5
 ) {
-  return people
+  return (people || [])
+    .filter((owner) => !!owner?.uid)
     .flatMap((owner) => getOngoingProjects(owner).map((project) => scoreProjectFit(me, owner, project)))
     .filter(Boolean)
     .sort((left, right) => right!.score - left!.score)

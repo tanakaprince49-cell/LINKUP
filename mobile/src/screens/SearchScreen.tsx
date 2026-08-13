@@ -294,7 +294,7 @@ export default function SearchScreen({ navigation, route }: any) {
       const interests = Array.isArray((p as any).interests) ? (p as any).interests : [];
       const goals = (p as any).goals || '';
       const lookingArr = Array.isArray((p as any).lookingFor) ? (p as any).lookingFor : [];
-      const startupStage = (p as any).startupStage || '';
+      const startupStage = (p as any)?.startupStage || '';
       const projectText = projectSearchText(p);
       const looking = !!(p as any).lookingForCofounder || lookingArr.map(normalize).includes('cofounder');
       const isVerified = !!(p as any).isVerified;

@@ -291,7 +291,7 @@ export function localCommonalityRank(me: UserProfile | null | undefined, people:
     const roleSignals = flattenAnswers(person.roleAnswers);
     const workStyle = normalizeText(person.workStyle);
     const commitment = normalizeText(person.commitmentLevel);
-    const stage = normalizeText(person.startupStage);
+    const stage = normalizeText(person?.startupStage);
     const role = normalizeText(person.occupation);
 
     const sharedSkills = countShared(mySkills, skills);

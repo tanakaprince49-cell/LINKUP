@@ -55,7 +55,7 @@ const opportunitySignals = (profile: UserProfile) => {
     ...toList(profile.industries),
     ...toList(profile.lookingFor),
     ...toList(profile.occupation),
-    ...toList(profile.startupStage),
+    ...toList(profile?.startupStage),
     ...toList(profile.availability),
     ...toList(project.title),
     ...toList(project.description),

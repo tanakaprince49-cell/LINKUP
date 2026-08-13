@@ -275,7 +275,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           <View style={styles.infoItem}>
             <Search size={12} color={COLORS.primary} />
             <Text style={styles.infoText} numberOfLines={1}>
-              {(item as any).startupStage || 'Exploring'}
+              {(item as any)?.startupStage || 'Exploring'}
             </Text>
           </View>
         </View>

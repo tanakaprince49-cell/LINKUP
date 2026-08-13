@@ -98,7 +98,7 @@ const writeCachedDiscovery = async (uid: string, profiles: UserProfile[]) => {
       skills: Array.isArray(profile.skills) ? profile.skills.slice(0, 12) : [],
       industries: Array.isArray((profile as any).industries) ? (profile as any).industries.slice(0, 12) : [],
       lookingFor: Array.isArray((profile as any).lookingFor) ? (profile as any).lookingFor.slice(0, 12) : [],
-      startupStage: (profile as any).startupStage || '',
+      startupStage: (profile as any)?.startupStage || '',
       availability: (profile as any).availability || '',
       reputationScore: earnedScore(profile),
       turboConnect: !!(profile as any).turboConnect,

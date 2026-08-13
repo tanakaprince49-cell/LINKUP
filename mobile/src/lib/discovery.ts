@@ -94,14 +94,14 @@ export const hasActiveOpportunityIntent = (profile: any) => {
   const activeProjects = projects.filter((project: any) => {
     const title = String(project?.title || '').trim();
     const description = String(project?.description || '').trim();
-    const status = normalizeSignal(project?.status || profile.startupStage);
+    const status = normalizeSignal(project?.status || profile?.startupStage);
     return (title || description) && !inactiveProjectPattern.test(status);
   });
   const contextText = [
     profile.goals,
     profile.bio,
     profile.networkingIntent,
-    profile.startupStage,
+    profile?.startupStage,
     profile.occupation,
     profile.company,
     ...activeProjects.flatMap((project: any) => [project?.title, project?.description, project?.status]),
@@ -123,7 +123,7 @@ export const activeOpportunityScore = (profile: any) => {
   const activeProjectCount = projects.filter((project: any) => {
     const title = String(project?.title || '').trim();
     const description = String(project?.description || '').trim();
-    const status = normalizeSignal(project?.status || profile.startupStage);
+    const status = normalizeSignal(project?.status || profile?.startupStage);
     return (title || description) && !inactiveProjectPattern.test(status);
   }).length;
   const availability = normalizeSignal(profile.availability);

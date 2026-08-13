@@ -849,7 +849,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       },
       goals: (profile as any).goals || '',
       experience: (profile as any).experience || '',
-      startupStage: (profile as any).startupStage || '',
+      startupStage: (profile as any)?.startupStage || '',
       fundingStage: (profile as any).fundingStage || '',
       availability: (profile as any).availability || '',
       commitmentLevel: (profile as any).commitmentLevel || '',
@@ -868,7 +868,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       photos: Array.isArray((profile as any).photos) ? (profile as any).photos.slice(0, 3) : [],
       projects: existingProjects.length
         ? existingProjects
-        : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any).startupStage || 'mvp') }],
+        : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any)?.startupStage || 'mvp') }],
       startupIdeas: existingIdeas.length
         ? existingIdeas
         : [{ id: `idea_${profile.uid}_0`, title: '', description: '', stage: 'Idea Stage', lookingFor: [], tags: [] }],
@@ -1623,7 +1623,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const editedProjects = isEditing
     ? (Array.isArray(editData?.projects) && editData.projects.length
         ? editData.projects
-        : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any).startupStage || 'mvp') }])
+        : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any)?.startupStage || 'mvp') }])
     : [];
   const updateEditedProject = (index: number, patch: Record<string, unknown>) => {
     const current = editedProjects.map((project: any, projectIndex: number) =>
@@ -1651,7 +1651,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       ...editData,
       projects: nextProjects.length
         ? nextProjects
-        : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any).startupStage || 'mvp') }],
+        : [{ id: `project_${profile.uid}_0`, title: '', description: '', status: normalizeProjectStatus((profile as any)?.startupStage || 'mvp') }],
     });
   };
   const editedIdeas = isEditing
