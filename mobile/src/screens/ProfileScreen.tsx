@@ -350,8 +350,8 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [notificationStatus, setNotificationStatus] = useState('checking');
   const [isProfileSaved, setIsProfileSaved] = useState(false);
   const [fullPhotoUri, setFullPhotoUri] = useState('');
-  const [profileDetailsReady, setProfileDetailsReady] = useState(Platform.OS === 'web');
-  const [profileImagesReady, setProfileImagesReady] = useState(Platform.OS === 'web');
+  const [profileDetailsReady, setProfileDetailsReady] = useState(true);
+  const [profileImagesReady, setProfileImagesReady] = useState(true);
   const [startupAnalyzerExpanded, setStartupAnalyzerExpanded] = useState(false);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState('');
@@ -541,10 +541,12 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
     if (!isFocused) return;
 
-    let cancelled = false;
-    let unsubscribe: undefined | (() => void);
     const fallbackCount = Array.isArray(myProfile.viewedBy) ? myProfile.viewedBy.length : 0;
     setProfileViewCount(fallbackCount);
+    if (Platform.OS !== 'web') return;
+
+    let cancelled = false;
+    let unsubscribe: undefined | (() => void);
     const interaction = InteractionManager.runAfterInteractions(() => {
       if (cancelled) return;
       const viewsQuery = query(collection(db, 'profileViews'), where('profileId', '==', myProfile.uid), limit(PROFILE_ANALYTICS_LIMIT));
@@ -597,6 +599,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     );
     setProfileClickCount(fallbackClicks);
     setProfileSaveCount(fallbackSaves);
+    if (Platform.OS !== 'web') return;
     const interaction = InteractionManager.runAfterInteractions(() => {
       if (cancelled) return;
       const clicksQuery = query(collection(db, 'profileClicks'), where('profileId', '==', myProfile.uid), limit(PROFILE_ANALYTICS_LIMIT));
@@ -707,6 +710,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
     setProfileResponseRate(fallbackResponseRate);
     if (!isFocused) return;
+    if (Platform.OS !== 'web') return;
 
     let cancelled = false;
     let unsubscribe: undefined | (() => void);
@@ -1899,7 +1903,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                     <TouchableOpacity
                       key={idx}
                       activeOpacity={0.85}
-                      onPress={() => (isEditing ? pickGalleryPhoto(idx) : startEditing('photos'))}
+                      onPress={() => (isEditing ? pickGalleryPhoto(idx) : startEditing('all'))}
                       style={[styles.photoSlot, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
                     >
                       {uri && shouldRenderProfileImages ? (
@@ -4533,5 +4537,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 18,
     color: '#777',
+  }
+});
+'#777',
   }
 });
