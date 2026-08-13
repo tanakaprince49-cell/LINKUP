@@ -52,7 +52,7 @@ import {
   consumeDailyUsage,
   FREE_LIMITS,
   GOOGLE_PLAY_SUBSCRIPTION_URL,
-  hasLINKUPPro,
+  hasLinkupPro,
   isAndroidProLocked,
   PRO_FEATURES,
 } from '../lib/paywall';
@@ -1655,7 +1655,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const publicDiscoveryValue = isEditing
     ? !!(editData?.isVisible ?? true)
     : localPreferences.isVisible;
-  const isProPlanActive = hasLINKUPPro(profile);
+  const isProPlanActive = hasLinkupPro(profile);
   const turboConnectValue = isEditing
     ? !!(editData?.turboConnect ?? false)
     : localPreferences.turboConnect;
