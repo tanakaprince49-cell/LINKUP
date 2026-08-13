@@ -6,7 +6,8 @@ import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { earnedScore, handleFor, isDiscoverableProfile } from '../lib/discovery';
+import { handleFor, isDiscoverableProfile } from '../lib/discovery';
+import { leagueHeat, notifyLeaguePodium, rankLeague } from '../lib/builderLeague';
 import { resolveConnectionGate, startTalkOrRequest } from '../lib/connectionRequests';
 import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { displayNameFor } from '../lib/discovery';
@@ -15,11 +16,7 @@ import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { COLORS, textColor } from '../theme/theme';
 
-const heatFor = (profile: any, rank: number) => {
-  const views = Number(profile?.viewedBy?.length || profile?.profileViews || 0);
-  const score = earnedScore(profile);
-  return Math.max(12, Math.min(99, Math.round(score * 0.7 + views * 1.4 + (profile?.turboConnect ? 8 : 0) + Math.max(0, 18 - rank * 2))));
-};
+const heatFor = (profile: any) => Math.max(1, Math.min(99, Math.round(leagueHeat(profile))));
 
 const medal = (index: number) => {
   if (index === 0) return { bg: '#FBE618', fg: '#111', label: '1ST' };
@@ -59,19 +56,13 @@ export default function TrendingBuildersScreen({ navigation }: any) {
     return () => unsub();
   }, [isFocused, user?.uid]);
 
-  const heatScore = (profile: any) =>
-    earnedScore(profile) + (profile?.turboConnect ? 8 : 0) + Number(profile?.viewedBy?.length || profile?.profileViews || 0) * 0.3;
+  const trending = useMemo(() => rankLeague(builders, me), [builders, me]);
 
-  const trending = useMemo(() => {
-    const pool = [...builders];
-    if (me?.uid && isDiscoverableProfile(me) && !pool.some((p) => p.uid === me.uid)) {
-      pool.push(me);
-    }
-    return pool
-      .filter((profile: any) => profile?.uid && isDiscoverableProfile(profile))
-      .sort((a: any, b: any) => heatScore(b) - heatScore(a))
-      .slice(0, 20);
-  }, [builders, me]);
+  useEffect(() => {
+    if (!user?.uid || trending.length < 1) return;
+    const top = trending.slice(0, 3);
+    void notifyLeaguePodium(top, user.uid);
+  }, [user?.uid, trending.map((p) => p.uid).join('|')]);
 
   const podium = trending.slice(0, 3);
   const rest = trending.slice(3);
@@ -107,7 +98,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
   const renderRow = (item: UserProfile, index: number) => {
     const rank = index + 1;
     const chip = medal(index);
-    const heat = heatFor(item, rank);
+    const heat = heatFor(item);
     const location = [item.city, item.country].filter(Boolean).join(', ') || 'Remote';
 
     return (
@@ -217,7 +208,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
                           {item.uid === me?.uid ? 'You' : item.displayName || 'Builder'}
                         </Text>
                         {item.uid === me?.uid ? <Text style={styles.youOnPodium}>YOU</Text> : null}
-                        <Text style={styles.podiumHeat}>HEAT {heatFor(item, realIndex + 1)}</Text>
+                        <Text style={styles.podiumHeat}>HEAT {heatFor(item)}</Text>
                       </TouchableOpacity>
                     );
                   })}
