@@ -986,7 +986,10 @@ service cloud.firestore {
         allow read: if canUseConversation();
         allow create: if canUseConversation() && validMessage(incoming());
         allow delete: if canUseConversation() && existing().senderId == request.auth.uid;
-        allow update: if false;
+        allow update: if canUseConversation() &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['reactions']) &&
+          incoming().reactions is map &&
+          incoming().reactions.keys().size() <= 12;
       }
     }
 

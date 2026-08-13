@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Alert, StatusBar, Modal, Pressable, ScrollView, Linking, Share, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Alert, StatusBar, Modal, Pressable, ScrollView, Linking, ActivityIndicator, Animated, PanResponder } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -118,6 +118,64 @@ const uploadToCloudinary = async (asset: ImagePicker.ImagePickerAsset, mediaKind
   return data.secure_url as string;
 };
 
+function ChatBubbleRow({
+  children,
+  onReply,
+  onReactHold,
+}: {
+  children: React.ReactNode;
+  onReply: () => void;
+  onReactHold: () => void;
+}) {
+  const shift = useRef(new Animated.Value(0)).current;
+  const replied = useRef(false);
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.3,
+      onPanResponderMove: (_e, g) => {
+        const x = Math.max(0, Math.min(88, g.dx));
+        shift.setValue(x);
+      },
+      onPanResponderRelease: (_e, g) => {
+        if (g.dx > 56 && !replied.current) {
+          replied.current = true;
+          onReply();
+          setTimeout(() => {
+            replied.current = false;
+          }, 400);
+        }
+        Animated.spring(shift, { toValue: 0, useNativeDriver: true, friction: 7 }).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(shift, { toValue: 0, useNativeDriver: true, friction: 7 }).start();
+      },
+    })
+  ).current;
+
+  return (
+    <View>
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: 8,
+          top: 0,
+          bottom: 0,
+          justifyContent: 'center',
+          opacity: shift.interpolate({ inputRange: [0, 56], outputRange: [0, 1], extrapolate: 'clamp' }),
+        }}
+      >
+        <Text style={{ fontSize: 18 }}>↩</Text>
+      </Animated.View>
+      <Animated.View style={{ transform: [{ translateX: shift }] }} {...pan.panHandlers}>
+        <Pressable delayLongPress={2000} onLongPress={onReactHold}>
+          {children}
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
+}
+
 export default function ChatScreen({ route, navigation }: any) {
   const matchId = route?.params?.matchId;
   const otherUserParam = route?.params?.otherUser;
@@ -140,6 +198,7 @@ export default function ChatScreen({ route, navigation }: any) {
   const [connectionGate, setConnectionGate] = useState<ConnectionGate>({ status: 'none' });
   const [blockedByThem, setBlockedByThem] = useState(false);
   const [revealedUnsafe, setRevealedUnsafe] = useState<Record<string, boolean>>({});
+  const [reactTarget, setReactTarget] = useState<any>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingValueRef = useRef(false);
@@ -768,92 +827,19 @@ export default function ChatScreen({ route, navigation }: any) {
     ]);
   };
 
-  const inviteToTeam = async () => {
-    if (!otherUser?.uid) return;
-    const inviteText = `Team invite: I'd like to explore building together on LINKUP. Are you open to joining a startup/project conversation?`;
-    await sendChatText(inviteText, {}, 'invited you to collaborate on a team.');
-    closeOptionsMenu();
-    Alert.alert('Invite Sent', 'A team invite message was sent in this chat.');
-  };
-
-  const scheduleMeeting = () => {
-    const meetingText = `Meeting request: Are you available for a quick LINKUP call this week?`;
-    closeOptionsMenu();
-    Alert.alert('Schedule Meeting', 'Choose how you want to schedule.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Message Request',
-        onPress: () => setInputText(meetingText),
-      },
-      {
-        text: 'Google Meet',
-        onPress: () => Linking.openURL('https://meet.google.com/new').catch(() => setInputText(meetingText)),
-      },
-      {
-        text: 'Calendly',
-        onPress: () => Linking.openURL('https://calendly.com/').catch(() => setInputText(meetingText)),
-      },
-    ]);
-  };
-
-  const shareContactCard = async () => {
+  const toggleReaction = async (item: any, emoji: string) => {
+    if (!matchId || !myUid || !item?.id) return;
+    const current = item.reactions && typeof item.reactions === 'object' ? { ...item.reactions } : {};
+    const list = Array.isArray(current[emoji]) ? current[emoji].map(String) : [];
+    const nextList = list.includes(myUid) ? list.filter((id: string) => id !== myUid) : [...list, myUid].slice(0, 40);
+    if (nextList.length) current[emoji] = nextList;
+    else delete current[emoji];
     try {
-      const card = [
-        `${profile?.displayName || user?.displayName || 'LINKUP Builder'}`,
-        profile?.occupation ? `${profile.occupation}${profile?.company ? ` @ ${profile.company}` : ''}` : '',
-        profile?.city || profile?.country ? [profile.city, profile.country].filter(Boolean).join(', ') : '',
-        profileLinkFor(profile) || publicProfileLink(user?.uid),
-      ].filter(Boolean).join('\n');
-      await Share.share({ title: 'LINKUP contact card', message: card });
-      closeOptionsMenu();
-    } catch (e) {
-      console.error('share contact error', e);
-      Alert.alert('Share failed', 'Could not open the share sheet.');
+      await updateDoc(doc(db, 'matches', matchId, 'messages', String(item.id)), { reactions: current });
+    } catch (error) {
+      console.warn('Reaction failed:', error);
+      Alert.alert('Could not react', 'Try again in a moment.');
     }
-  };
-
-  const exportConversation = async () => {
-    try {
-      const transcript = messages.length
-        ? messages.map((message) => {
-            const sender = message.senderId === user?.uid ? 'You' : (otherUser?.displayName || 'Them');
-            const time = formatMessageTime(message.timestamp) || '--:--';
-            return `[${time}] ${sender}: ${message.content || ''}`;
-          }).join('\n')
-        : 'No messages yet.';
-      await Share.share({
-        title: 'LINKUP conversation export',
-        message: `LINKUP Conversation with ${otherUser?.displayName || 'Builder'}\n\n${transcript}`,
-      });
-      closeOptionsMenu();
-    } catch (e) {
-      console.error('export conversation error', e);
-      Alert.alert('Export failed', 'Could not export this conversation.');
-    }
-  };
-
-  const reportPerson = (reason: string, messageId?: string) => {
-    if (!myUid || !otherUserId) return;
-    reportSafetyIssue({
-      reporterId: myUid,
-      reportedUserId: otherUserId,
-      matchId,
-      messageId,
-      reason,
-    })
-      .then(() => Alert.alert('Report sent', 'Thanks. LINKUP will review this. You can also block them so they cannot write you.'))
-      .catch(() => Alert.alert('Report failed', 'Could not send the report. Try again.'));
-  };
-
-  const openReportUser = () => {
-    closeOptionsMenu();
-    Alert.alert('Report this person', 'Why are you reporting them?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Scam / money ask', onPress: () => reportPerson('scam') },
-      { text: 'Harassment', onPress: () => reportPerson('harassment') },
-      { text: 'Spam', onPress: () => reportPerson('spam') },
-      { text: 'Inappropriate', onPress: () => reportPerson('inappropriate') },
-    ]);
   };
 
   const deleteMessage = (messageId: string) => {
@@ -934,15 +920,10 @@ export default function ChatScreen({ route, navigation }: any) {
         </View>
       );
     }
+    const reactionEntries = Object.entries(item.reactions || {}).filter(([, ids]) => Array.isArray(ids) && ids.length > 0) as [string, string[]][];
     return (
       <View style={[styles.messageWrapper, isMe ? styles.myMessageWrapper : styles.theirMessageWrapper]}>
-        <Pressable
-          onLongPress={() => {
-            if (!matchId) return;
-            openMessageOptions(item, isMe);
-          }}
-          delayLongPress={350}
-        >
+        <ChatBubbleRow onReply={() => replyToMessage(item)} onReactHold={() => setReactTarget(item)}>
           <View style={[
             styles.messageBubble,
             isMe ? styles.myBubble : styles.theirBubble,
@@ -991,7 +972,23 @@ export default function ChatScreen({ route, navigation }: any) {
               {formatMessageTime(item.timestamp)}
             </Text>
           </View>
-        </Pressable>
+          {reactionEntries.length ? (
+            <View style={[styles.reactionRow, isMe ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' }]}>
+              {reactionEntries.map(([emoji, ids]) => {
+                const mine = ids.includes(String(user?.uid || ''));
+                return (
+                  <TouchableOpacity
+                    key={emoji}
+                    onPress={() => toggleReaction(item, emoji)}
+                    style={[styles.reactionChip, mine && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+                  >
+                    <Text style={styles.reactionChipText}>{emoji} {ids.length}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
+        </ChatBubbleRow>
       </View>
     );
   };
@@ -1183,126 +1180,131 @@ export default function ChatScreen({ route, navigation }: any) {
       <Modal transparent visible={optionsOpen} animationType="fade" onRequestClose={closeOptionsMenu}>
         <Pressable style={styles.modalOverlay} onPress={closeOptionsMenu} />
         <View style={[styles.menuSheet, liquidGlass(isDark)]}>
-          <View style={styles.menuHeaderRow}>
-            <Text style={[styles.menuHeader, { color: textColor(isDark) }]}>Chat Options</Text>
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              {isPinned && <Pin size={14} color={COLORS.primary} />}
-              {isImportant && <Star size={14} color={COLORS.primary} fill={COLORS.primary} />}
-            </View>
+          <View style={styles.sheetHandle} />
+          <Text style={[styles.menuHeader, { color: textColor(isDark) }]}>Chat</Text>
+          <Text style={[styles.sheetHint, { color: textColor(isDark, 'muted') }]}>
+            Swipe a message to reply. Hold 2 seconds to react.
+          </Text>
+
+          <MenuItem
+            icon={<ContactRound size={18} color={textColor(isDark)} />}
+            title="View profile"
+            subtitle={otherUser?.displayName || 'Open their profile'}
+            onPress={() => {
+              closeOptionsMenu();
+              openOtherProfile();
+            }}
+          />
+          <MenuItem
+            icon={<BellOff size={18} color={textColor(isDark)} />}
+            title={mutedUntilLabel ? 'Muted' : 'Mute'}
+            subtitle={mutedUntilLabel || 'Pause notifications'}
+            onPress={() => {
+              closeOptionsMenu();
+              openMutePicker();
+            }}
+          />
+          <MenuItem
+            icon={<Pin size={18} color={textColor(isDark)} />}
+            title={isPinned ? 'Unpin' : 'Pin'}
+            subtitle={isPinned ? 'Remove from the top of inbox' : 'Keep this chat at the top'}
+            onPress={() => toggleArrayField('pinnedBy')}
+          />
+          <MenuItem
+            icon={<Archive size={18} color={textColor(isDark)} />}
+            title={isArchived ? 'Unarchive' : 'Archive'}
+            subtitle={isArchived ? 'Show in inbox again' : 'Hide from inbox'}
+            onPress={() => toggleArrayField('archivedBy')}
+          />
+          <View style={[styles.sheetDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(11,18,32,0.08)' }]} />
+          <MenuItem
+            icon={<Flag size={18} color="#EF4444" />}
+            title="Report"
+            subtitle="Scam, harassment, or spam"
+            danger
+            onPress={openReportUser}
+          />
+          <MenuItem
+            icon={<UserX size={18} color="#EF4444" />}
+            title={hasBlockedUser ? 'Unblock' : 'Block'}
+            subtitle={hasBlockedUser ? 'They can message you again' : 'They cannot write you'}
+            danger
+            onPress={() => {
+              Alert.alert(hasBlockedUser ? 'Unblock?' : 'Block this person?', hasBlockedUser ? 'They will be able to message you again.' : 'They will not be able to send you messages.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: hasBlockedUser ? 'Unblock' : 'Block', style: hasBlockedUser ? 'default' : 'destructive', onPress: toggleBlockUser },
+              ]);
+            }}
+          />
+          <MenuItem
+            icon={<Trash2 size={18} color="#EF4444" />}
+            title="Delete chat"
+            subtitle="Removes it from your inbox only"
+            danger
+            onPress={deleteConversation}
+          />
+        </View>
+      </Modal>
+
+      <Modal transparent visible={!!reactTarget} animationType="fade" onRequestClose={() => setReactTarget(null)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setReactTarget(null)} />
+        <View style={[styles.reactSheet, liquidGlass(isDark)]}>
+          <Text style={[styles.menuHeader, { color: textColor(isDark) }]}>React</Text>
+          <View style={styles.reactEmojiRow}>
+            {REACTION_EMOJIS.map((emoji) => (
+              <TouchableOpacity
+                key={emoji}
+                style={styles.reactEmojiBtn}
+                onPress={() => {
+                  const target = reactTarget;
+                  setReactTarget(null);
+                  if (target) void toggleReaction(target, emoji);
+                }}
+              >
+                <Text style={styles.reactEmoji}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 520 }}>
-            <MenuItem
-              icon={<ContactRound size={18} color={textColor(isDark)} />}
-              title="View Profile"
-              subtitle="Open full business profile"
+          <TouchableOpacity
+            style={styles.reactExtra}
+            onPress={() => {
+              const target = reactTarget;
+              setReactTarget(null);
+              if (target) replyToMessage(target);
+            }}
+          >
+            <Text style={[styles.reactExtraText, { color: textColor(isDark) }]}>Reply</Text>
+          </TouchableOpacity>
+          {reactTarget && reactTarget.senderId === user?.uid ? (
+            <TouchableOpacity
+              style={styles.reactExtra}
               onPress={() => {
-                closeOptionsMenu();
-                openOtherProfile();
+                const id = String(reactTarget.id || '');
+                setReactTarget(null);
+                if (id) deleteMessage(id);
               }}
-            />
-
-            <MenuItem
-              icon={<BellOff size={18} color={textColor(isDark)} />}
-              title="Mute Notifications"
-              subtitle={mutedUntilLabel || 'Choose duration'}
+            >
+              <Text style={[styles.reactExtraText, { color: COLORS.danger }]}>Delete</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.reactExtra}
               onPress={() => {
-                closeOptionsMenu();
-                openMutePicker();
+                const id = String(reactTarget?.id || '');
+                setReactTarget(null);
+                if (id) reportPerson('message', id);
               }}
-            />
-
-            <MenuItem
-              icon={<Pin size={18} color={textColor(isDark)} />}
-              title={isPinned ? 'Unpin Conversation' : 'Pin Conversation'}
-              subtitle="Keep this chat at the top"
-              onPress={() => toggleArrayField('pinnedBy')}
-            />
-
-            <MenuItem
-              icon={<Archive size={18} color={textColor(isDark)} />}
-              title={isArchived ? 'Unarchive Chat' : 'Archive Chat'}
-              subtitle={isArchived ? 'Show in inbox again' : 'Hide from inbox without deleting'}
-              onPress={() => toggleArrayField('archivedBy')}
-            />
-
-            <MenuItem
-              icon={<Star size={18} color={textColor(isDark)} fill={isImportant ? COLORS.primary : 'transparent'} />}
-              title={isImportant ? 'Unmark Important' : 'Mark as Important'}
-              subtitle="Highlight serious conversations"
-              onPress={() => toggleArrayField('importantBy')}
-            />
-
-            <MenuItem
-              icon={<Users size={18} color={textColor(isDark)} />}
-              title="Invite to Team"
-              subtitle="Send a collaboration invite"
-              onPress={inviteToTeam}
-            />
-
-            <MenuItem
-              icon={<Calendar size={18} color={textColor(isDark)} />}
-              title="Schedule Meeting"
-              subtitle="Zoom / Google Meet / Calendly"
-              onPress={scheduleMeeting}
-            />
-
-            <MenuItem
-              icon={<ContactRound size={18} color={textColor(isDark)} />}
-              title="Share Contact Card"
-              subtitle="Share your LINKUP identity"
-              onPress={shareContactCard}
-            />
-
-            <MenuItem
-              icon={<Shield size={18} color={isConfidential ? COLORS.primary : textColor(isDark)} />}
-              title={isConfidential ? 'Disable Confidential Mode' : 'Confidential Mode'}
-              subtitle={isConfidential ? 'Conversation marked confidential' : 'Mark this business chat confidential'}
-              onPress={() => toggleArrayField('confidentialBy')}
-            />
-
-            <MenuItem
-              icon={<FileText size={18} color={textColor(isDark)} />}
-              title="Export Conversation"
-              subtitle="Share as text transcript"
-              onPress={exportConversation}
-            />
-
-            <MenuItem
-              icon={<Flag size={18} color="#EF4444" />}
-              title="Report this person"
-              subtitle="Scam, harassment, or spam"
-              danger
-              onPress={openReportUser}
-            />
-
-            <MenuItem
-              icon={<UserX size={18} color="#EF4444" />}
-              title={hasBlockedUser ? 'Unblock User' : 'Block User'}
-              subtitle={hasBlockedUser ? 'Allow messaging again' : 'Stop messages without deleting this chat'}
-              danger
-              onPress={() => {
-                Alert.alert(hasBlockedUser ? 'Unblock user' : 'Block user', hasBlockedUser ? 'Allow this user to message you again?' : 'Block this user? The chat will stay available so you can unblock later.', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: hasBlockedUser ? 'Unblock' : 'Block', style: hasBlockedUser ? 'default' : 'destructive', onPress: toggleBlockUser },
-                ]);
-              }}
-            />
-
-            <MenuItem
-              icon={<Trash2 size={18} color="#EF4444" />}
-              title="Delete Conversation"
-              subtitle="Deletes locally for you"
-              danger
-              onPress={deleteConversation}
-            />
-          </ScrollView>
+            >
+              <Text style={[styles.reactExtraText, { color: COLORS.danger }]}>Report message</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </Modal>
 
       <Modal transparent visible={mutePickerOpen} animationType="fade" onRequestClose={closeMutePicker}>
         <Pressable style={styles.modalOverlay} onPress={closeMutePicker} />
         <View style={[styles.menuSheet, liquidGlass(isDark)]}>
+          <View style={styles.sheetHandle} />
           <Text style={[styles.menuHeader, { color: textColor(isDark) }]}>Mute</Text>
           <MenuItem icon={<BellOff size={18} color={textColor(isDark)} />} title="1 hour" onPress={() => setMute(1)} />
           <MenuItem icon={<BellOff size={18} color={textColor(isDark)} />} title="8 hours" onPress={() => setMute(8)} />
@@ -1635,7 +1637,76 @@ const styles = StyleSheet.create({
   },
   menuSub: {
     marginTop: 3,
-    fontSize: 10,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(128,128,128,0.35)',
+    marginBottom: 12,
+  },
+  sheetHint: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  sheetDivider: {
+    height: 1,
+    marginVertical: 8,
+  },
+  reactionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+  },
+  reactionChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(128,128,128,0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  reactionChipText: {
+    fontSize: 12,
     fontWeight: '700',
+  },
+  reactSheet: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 28,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+  },
+  reactEmojiRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  reactEmojiBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(128,128,128,0.12)',
+  },
+  reactEmoji: { fontSize: 24 },
+  reactExtra: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reactExtraText: { fontSize: 15, fontWeight: '800' },
+});
+700',
   },
 });
