@@ -172,25 +172,36 @@ export const loadFromUsers = async (userId: string, pageSize = 60) => {
 };
 
 export const subscribeToDiscoveryProfiles = ({ userId, onData, onError }: SubscribeOptions) => {
+  let cancelled = false;
+  const emitUsersFallback = async () => {
+    const users = await loadFromUsers(userId, 80);
+    if (cancelled) return;
+    onData(users || [], 'users');
+  };
+
   const q = query(collection(db, 'publicProfiles'), limit(120));
 
   const unsub = onSnapshot(
     q,
     (snapshot) => {
-      if (!snapshot || snapshot.empty) {
-        onData([], 'publicProfiles');
-        return;
-      }
-      const rows = snapshot.docs
+      const rows = (snapshot?.docs || [])
         .map((d) => compactProfileForList({ uid: d.id, ...(d.data() as any) }))
         .filter((p: any) => p.uid !== userId && isDiscoverableProfile(p));
-      onData(rows, 'publicProfiles');
+      if (rows.length > 0) {
+        onData(rows, 'publicProfiles');
+        return;
+      }
+      void emitUsersFallback();
     },
     (error) => {
       console.error('Discovery onSnapshot error:', error);
       onError?.(error);
+      void emitUsersFallback();
     }
   );
 
-  return unsub;
+  return () => {
+    cancelled = true;
+    unsub();
+  };
 };

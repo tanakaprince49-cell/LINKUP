@@ -599,6 +599,14 @@ export default function SwipeScreen({ navigation }: any) {
         allProfilesRef.current = orderedUsers;
         writeCachedDiscovery(user.uid, orderedUsers.filter((profile) => !isSyntheticProfile(profile))).catch(() => {});
         const remainingUsers = unswipedProfiles(orderedUsers);
+        if (remainingUsers.length === 0 && orderedUsers.length > 0) {
+          swipedSessionIdsRef.current.clear();
+          hasUserSwipedRef.current = false;
+          if (user?.uid) void clearSwipeProgress(user.uid);
+          setProfiles(orderedUsers);
+          setLoading(false);
+          return;
+        }
         if (hasUserSwipedRef.current) {
           setProfiles((current) => {
             const currentIds = new Set(current.map((profile) => profile.uid));
@@ -1308,7 +1316,22 @@ export default function SwipeScreen({ navigation }: any) {
           ) : (
             <View style={[styles.topBtn, styles.topBtnGhost, isCompactWeb && styles.compactTopBtn]} />
           )}
-          <Text style={[styles.topTitle, { color: textColor(isDark) }, isCompactWeb && styles.compactTopTitle]}>Discover</Text>
+          <View style={styles.modeSwitch}>
+            <TouchableOpacity
+              onPress={() => setMode('swipe')}
+              style={[styles.modeChip, mode === 'swipe' && styles.modeChipOn]}
+              activeOpacity={0.88}
+            >
+              <Text style={[styles.modeChipText, mode === 'swipe' && styles.modeChipTextOn]}>Swipe</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setMode('scroll')}
+              style={[styles.modeChip, mode === 'scroll' && styles.modeChipOn]}
+              activeOpacity={0.88}
+            >
+              <Text style={[styles.modeChipText, mode === 'scroll' && styles.modeChipTextOn]}>Scroll</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity onPress={rewindLast} style={[styles.topBtn, isCompactWeb && styles.compactTopBtn]}>
             <RotateCcw size={18} color={textColor(isDark)} />
           </TouchableOpacity>
@@ -1536,10 +1559,33 @@ const styles = StyleSheet.create({
   cardInfo: {
     ...StyleSheet.absoluteFillObject,
     padding: 20,
-    paddingTop: 18,
+    paddingTop: 78,
     paddingBottom: 100,
     justifyContent: 'space-between',
     zIndex: 20,
+  },
+  modeSwitch: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 999,
+    padding: 3,
+    gap: 2,
+  },
+  modeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  modeChipOn: {
+    backgroundColor: COLORS.primary,
+  },
+  modeChipText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#FFF',
+  },
+  modeChipTextOn: {
+    color: '#111',
   },
   compactCardInfo: {
     padding: 14,

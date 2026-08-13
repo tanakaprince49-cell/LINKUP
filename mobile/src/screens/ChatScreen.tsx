@@ -132,7 +132,8 @@ function ChatBubbleRow({
   const replied = useRef(false);
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.3,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 22 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6,
       onPanResponderMove: (_e, g) => {
         const x = Math.max(0, Math.min(88, g.dx));
         shift.setValue(x);
@@ -1208,7 +1209,7 @@ export default function ChatScreen({ route, navigation }: any) {
           <View style={styles.sheetHandle} />
           <Text style={[styles.menuHeader, { color: textColor(isDark) }]}>Chat</Text>
           <Text style={[styles.sheetHint, { color: textColor(isDark, 'muted') }]}>
-            Swipe a message to reply. Hold 2 seconds to react.
+            Swipe a message to reply. Hold a message to react.
           </Text>
 
           <MenuItem
