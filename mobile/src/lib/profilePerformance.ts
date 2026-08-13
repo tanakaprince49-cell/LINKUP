@@ -77,12 +77,10 @@ export const compactProfileForList = (profile: any): UserProfile =>
     displayName: text(profile?.displayName || profile?.fullName || profile?.name, 100),
     username: text(profile?.username, 40),
     bio: text(profile?.bio, 700),
-    profilePic: safeProfileImageUri(profile?.profilePic, Platform.OS === 'android' ? 48_000 : LIST_IMAGE_CHAR_LIMIT),
-    photos: Platform.OS === 'android'
-      ? []
-      : Array.isArray(profile?.photos)
-        ? profile.photos.map((uri: unknown) => safeProfileImageUri(uri)).filter(Boolean).slice(0, 2)
-        : [],
+    profilePic: safeProfileImageUri(profile?.profilePic),
+    photos: Array.isArray(profile?.photos)
+      ? profile.photos.map((uri: unknown) => safeProfileImageUri(uri)).filter(Boolean).slice(0, 3)
+      : [],
     occupation: text(profile?.occupation, 100),
     company: text(profile?.company, 120),
     country: text(profile?.country, 80),
