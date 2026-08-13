@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, increment, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from './profilePerformance';
 
@@ -124,9 +124,35 @@ export async function trackProfileClick({
       },
       { merge: true }
     );
+    if (!alreadyTracked) {
+      const bump = {
+        profileClicks: increment(1),
+        'profileAnalytics.clicks': increment(1),
+      };
+      setDoc(doc(db, 'users', profileId), bump, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'publicProfiles', profileId), bump, { merge: true }).catch(() => {});
+    }
   } catch (error) {
     if (!isPermissionDenied(error)) {
       console.warn('Profile click event skipped:', error);
     }
   }
+}
+
+export async function trackProfileSave({
+  profileId,
+  saved,
+}: {
+  profileId?: string;
+  saved: boolean;
+}) {
+  if (!profileId) return;
+  const bump = {
+    profileSaves: increment(saved ? 1 : -1),
+    'profileAnalytics.saves': increment(saved ? 1 : -1),
+  };
+  await Promise.all([
+    setDoc(doc(db, 'users', profileId), bump, { merge: true }).catch(() => {}),
+    setDoc(doc(db, 'publicProfiles', profileId), bump, { merge: true }).catch(() => {}),
+  ]);
 }

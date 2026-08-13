@@ -28,7 +28,7 @@ import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import * as Icons from 'lucide-react-native';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, deleteDoc, deleteField, doc, FieldPath, getDoc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
-import { trackProfileClick, trackProfileView } from '../lib/analytics';
+import { trackProfileClick, trackProfileSave, trackProfileView } from '../lib/analytics';
 import { resolveConnectionGate, startTalkOrRequest } from '../lib/connectionRequests';
 import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { buildConversationProfileSnapshot } from '../lib/conversationProfiles';
@@ -541,9 +541,11 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
     if (!isFocused) return;
 
-    const fallbackCount = Array.isArray(myProfile.viewedBy) ? myProfile.viewedBy.length : 0;
+    const fallbackCount = Math.max(
+      Array.isArray(myProfile.viewedBy) ? myProfile.viewedBy.length : 0,
+      Number((myProfile as any)?.profileViews || (myProfile as any)?.profileAnalytics?.views || 0) || 0
+    );
     setProfileViewCount(fallbackCount);
-    if (Platform.OS !== 'web') return;
 
     let cancelled = false;
     let unsubscribe: undefined | (() => void);
@@ -599,7 +601,6 @@ export default function ProfileScreen({ navigation, route }: any) {
     );
     setProfileClickCount(fallbackClicks);
     setProfileSaveCount(fallbackSaves);
-    if (Platform.OS !== 'web') return;
     const interaction = InteractionManager.runAfterInteractions(() => {
       if (cancelled) return;
       const clicksQuery = query(collection(db, 'profileClicks'), where('profileId', '==', myProfile.uid), limit(PROFILE_ANALYTICS_LIMIT));
@@ -710,7 +711,6 @@ export default function ProfileScreen({ navigation, route }: any) {
 
     setProfileResponseRate(fallbackResponseRate);
     if (!isFocused) return;
-    if (Platform.OS !== 'web') return;
 
     let cancelled = false;
     let unsubscribe: undefined | (() => void);
@@ -819,7 +819,9 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const startEditing = (focus: 'all' | 'bio' | 'skills' | 'project' | 'idea' | 'photos' = 'all') => {
     if (!profile) return;
-    setEditFocus(focus);
+    const allowed = ['all', 'bio', 'skills', 'project', 'idea', 'photos'];
+    const nextFocus = allowed.includes(String(focus)) ? (focus as typeof editFocus) : 'all';
+    setEditFocus(nextFocus);
     const existingProjects = Array.isArray((profile as any)?.projects)
       ? (profile as any)?.projects.map((project: any, index: number) => normalizeProjectDraft(project, profile.uid, index))
       : [];
@@ -1112,6 +1114,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       if (isProfileSaved) {
         await deleteDoc(saveRef);
         setIsProfileSaved(false);
+        trackProfileSave({ profileId: targetUserId, saved: false }).catch(() => {});
         Alert.alert('Removed', 'Profile removed from your saved builders.');
         return;
       }
@@ -1126,6 +1129,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      trackProfileSave({ profileId: targetUserId, saved: true }).catch(() => {});
       trackProfileClick({
         profileId: targetUserId,
         viewerId: myProfile.uid,
@@ -1807,10 +1811,10 @@ export default function ProfileScreen({ navigation, route }: any) {
       </View>
     </View>
   );
-  const showEdit = (section: typeof editFocus) => !isEditing || editFocus === 'all' || editFocus === section;
-  const renderStartEditButton = (label = 'EDIT PROFILE', focus: typeof editFocus = 'all') =>
+  const showEdit = (_section: typeof editFocus) => true;
+  const renderStartEditButton = (label = 'EDIT PROFILE', _focus: typeof editFocus = 'all') =>
     !isViewingOther ? (
-      <TouchableOpacity style={styles.inlineEditButton} onPress={() => startEditing(focus)} activeOpacity={0.86}>
+      <TouchableOpacity style={styles.inlineEditButton} onPress={() => startEditing('all')} activeOpacity={0.86}>
         <SafeIcon name="PenLine" size={13} color="#000" />
         <Text style={styles.inlineEditButtonText}>{label}</Text>
       </TouchableOpacity>
@@ -1860,7 +1864,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             </TouchableOpacity>
             {!isViewingOther ? (
               <TouchableOpacity
-                onPress={isEditing ? handleSave : startEditing}
+                onPress={isEditing ? handleSave : () => startEditing('all')}
                 style={[styles.iconButton, isEditing && styles.saveProfileButton]}
                 activeOpacity={0.85}
                 disabled={isSaving}
@@ -2092,7 +2096,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               />
               {renderMultiChoiceGroup('INDUSTRIES', 'industries', INDUSTRY_SUGGESTIONS)}
               </>) : null}
-              {editFocus === 'all' ? (<>
+              {isEditing ? (<>
               <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <Text style={styles.projectEditLabel}>Matching Details</Text>
                 <TextInput
