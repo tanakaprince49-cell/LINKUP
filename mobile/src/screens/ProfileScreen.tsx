@@ -2083,7 +2083,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               />
               {renderMultiChoiceGroup('INDUSTRIES', 'industries', INDUSTRY_SUGGESTIONS)}
               </>) : null}
-              {editFocus === 'all' ? (
+              {editFocus === 'all' ? (<>
               <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <Text style={styles.projectEditLabel}>Matching Details</Text>
                 <TextInput
@@ -2232,7 +2232,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   autoCapitalize="none"
                 />
               </View>
-              ) : null}
+              </>) : null}
               {showEdit('project') ? (
               <View style={[styles.projectEditCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <View style={styles.projectEditHeader}>
