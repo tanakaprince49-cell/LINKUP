@@ -275,7 +275,7 @@ const ExpandedProfilePanel = React.memo(function ExpandedProfilePanel({
           >
             <MessageSquare size={18} color={isDark ? '#FFF' : '#000'} />
             <Text style={[styles.expandedContactText, { color: isDark ? '#FFF' : '#000' }]}>
-              {contactBusy ? '...' : connectionRequest?.status === 'approved' ? 'CHAT' : connectionRequest?.status === 'pending' ? 'SENT' : 'CONTACT'}
+              {contactBusy ? '…' : connectionRequest?.status === 'approved' ? 'Chat' : connectionRequest?.status === 'pending' ? 'Sent' : 'Request'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.expandedLikeBtn} onPress={onLike}>
@@ -944,20 +944,20 @@ export default function SwipeScreen({ navigation }: any) {
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Target size={48} color={COLORS.primary} />
-      <Text style={[styles.emptyText, { color: textColor(isDark) }]}>
-        NO BUILDERS TO SWIPE
-      </Text>
+      <View style={styles.emptyIcon}>
+        <Target size={26} color="#111" />
+      </View>
+      <Text style={[styles.emptyText, { color: textColor(isDark) }]}>No one left to meet</Text>
       <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
         {allProfilesRef.current.length === 0
           ? 'The network is still small. Invite people you know, then refresh.'
-          : 'You have seen everyone currently discoverable. Invite more builders.'}
+          : 'You’ve seen everyone here. Invite more builders or refresh the deck.'}
       </Text>
       <TouchableOpacity style={styles.resetBtn} onPress={() => void shareLinkupInvite()}>
         <Text style={styles.resetText}>Invite builders</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.resetBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.primary }]} onPress={resetDeck}>
-        <Text style={[styles.resetText, { color: COLORS.primary }]}>REFRESH</Text>
+      <TouchableOpacity style={[styles.resetBtn, styles.resetGhost]} onPress={resetDeck}>
+        <Text style={[styles.resetText, { color: textColor(isDark) }]}>Refresh</Text>
       </TouchableOpacity>
     </View>
   );
@@ -990,12 +990,12 @@ export default function SwipeScreen({ navigation }: any) {
         <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={[styles.cardImg, styles.faceFocusedImg]} resizeMode="cover" fadeDuration={0} />
         <View style={styles.previewOverlay} pointerEvents="none" />
         <View style={styles.previewInfo}>
-          <Text style={styles.previewEyebrow}>NEXT BUILDER</Text>
+          <Text style={styles.previewEyebrow}>Up next</Text>
           <View style={styles.previewNameRow}>
             <Text style={styles.previewName} numberOfLines={1}>
               {displayNameFor(nextProfile)}{ageText}
             </Text>
-            {!!nextProfile.isVerified && <VerifiedBadge size={24} />}
+            {!!nextProfile.isVerified && <VerifiedBadge size={20} />}
           </View>
           <Text style={styles.previewRole} numberOfLines={1}>{roleText}</Text>
         </View>
@@ -1021,13 +1021,22 @@ export default function SwipeScreen({ navigation }: any) {
     const matchRank = existingScore != null ? { score: existingScore, reason: '' } : (myProfile ? localCommonalityRank(myProfile, [topProfile], 1)[0] : null);
     const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
     const compatibilityReason = matchRank?.reason || 'Compatibility based on profile signals';
+    const requestLabel =
+      contactBusy
+        ? '…'
+        : connectionRequest?.status === 'approved'
+          ? 'Chat'
+          : connectionRequest?.status === 'pending'
+            ? 'Sent'
+            : connectionRequest?.status === 'rejected'
+              ? 'Declined'
+              : 'Request';
     const renderCardActions = () => (
-      <View style={[styles.actionRow]}>
-        <TouchableOpacity style={[styles.actionBtnSmall]} onPress={() => animateSwipeOut('left')}>
+      <View style={styles.actionRow}>
+        <TouchableOpacity style={styles.actionBtnSmall} onPress={() => animateSwipeOut('left')} activeOpacity={0.85}>
           <View style={styles.actionBtnInnerSmall}>
-            <X size={22} color="#FF6B6B" />
+            <X size={22} color="#E11D48" />
           </View>
-          <Text style={styles.actionLabel}>Pass</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -1038,31 +1047,15 @@ export default function SwipeScreen({ navigation }: any) {
           ]}
           disabled={contactBusy || !topProfile || isSyntheticProfile(topProfile)}
           onPress={handleContactRequest}
+          activeOpacity={0.88}
         >
-          <MessageSquare size={18} color="#000" />
-          <Text style={styles.contactActionText}>
-            {contactBusy
-              ? '...'
-              : connectionRequest?.status === 'approved'
-                ? 'CHAT'
-                : connectionRequest?.status === 'pending'
-                  ? 'SENT'
-                  : connectionRequest?.status === 'rejected'
-                    ? 'NO'
-                    : 'CONTACT'}
-          </Text>
+          <MessageSquare size={18} color="#111" />
+          <Text style={styles.contactActionText}>{requestLabel}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtnLarge]} onPress={() => animateSwipeOut('right')}>
+        <TouchableOpacity style={styles.actionBtnLarge} onPress={() => animateSwipeOut('right')} activeOpacity={0.88}>
           <View style={styles.actionBtnInnerLarge}>
-            <Heart size={30} color="#000" fill="#000" />
+            <Heart size={26} color="#111" fill="#111" />
           </View>
-          <Text style={[styles.actionLabel, styles.actionLabelLarge]}>Like</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtnSmall]} onPress={rewindLast}>
-          <View style={[styles.actionBtnInnerSmall, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}>
-            <RotateCcw size={20} color="#000" />
-          </View>
-          <Text style={[styles.actionLabel, { color: '#000' }]}>REWIND</Text>
         </TouchableOpacity>
       </View>
     );
@@ -1121,62 +1114,45 @@ export default function SwipeScreen({ navigation }: any) {
 
         <View style={[styles.cardInfo, isCompactWeb && styles.compactCardInfo]}>
           <View style={styles.cardTopRow}>
-            <View style={styles.topBadgeColumn}>
-              <View style={styles.aiBadge}>
-                <Zap size={11} color="#000" fill="#000" />
-                <Text style={styles.aiBadgeText}>{compatibility}%</Text>
-              </View>
-            </View>
-            {photos.length > 1 && (
-              <View style={styles.photoThumbRow}>
-                {photos.slice(0, 3).map((uri, idx) => (
+            {photos.length > 1 ? (
+              <View style={styles.photoDots}>
+                {photos.slice(0, 5).map((_, idx) => (
                   <TouchableOpacity
-                    key={`${topProfile.uid}-${idx}`}
-                    activeOpacity={0.9}
+                    key={`${topProfile.uid}-dot-${idx}`}
                     onPress={() => setActivePhotoIndex(idx)}
-                    style={[styles.photoThumbWrap, idx === safeIndex && styles.photoThumbWrapActive]}
-                  >
-                    <Image source={{ uri }} style={styles.photoThumbImg} fadeDuration={0} />
-                  </TouchableOpacity>
+                    style={[styles.photoDot, idx === safeIndex && styles.photoDotOn]}
+                  />
                 ))}
               </View>
-            )}
+            ) : <View />}
+            <View style={styles.aiBadge}>
+              <Text style={styles.aiBadgeText}>{compatibility}%</Text>
+            </View>
           </View>
 
           <View style={[styles.compactMeta, isCompactWeb && styles.compactWebMeta]}>
             <View style={styles.nameRow}>
-              <Text style={[styles.nameText, isCompactWeb && styles.compactNameText]}>{displayNameFor(topProfile)}{ageText}</Text>
-              {topProfile.isVerified && <VerifiedBadge size={24} />}
-              {topProfile.hasExit && (
-                <View style={styles.exitBadge}>
-                  <Target size={12} color="#000" />
-                  <Text style={styles.exitText}>EXIT</Text>
-                </View>
-              )}
+              <Text style={[styles.nameText, isCompactWeb && styles.compactNameText]} numberOfLines={1}>
+                {displayNameFor(topProfile)}{ageText}
+              </Text>
+              {topProfile.isVerified && <VerifiedBadge size={22} />}
             </View>
+            <Text style={styles.metaLineText} numberOfLines={1}>{roleText}</Text>
             <View style={styles.metaLine}>
-              <Briefcase size={13} color={COLORS.primary} />
-              <Text style={styles.metaLineText} numberOfLines={1}>{roleText}</Text>
-            </View>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleBadgeText}>{roleInfoFor((topProfile as any).occupation).badge}</Text>
-            </View>
-            <View style={styles.metaLine}>
-              <MapPin size={13} color={COLORS.primary} />
+              <MapPin size={13} color="rgba(255,255,255,0.85)" />
               <Text style={styles.metaLineText} numberOfLines={1}>{locationText}</Text>
             </View>
-            <View style={styles.aiReasonPill}>
-              <SparkleDot />
-              <Text style={styles.aiReasonText} numberOfLines={1}>{compatibilityReason}</Text>
-            </View>
+            {!!compatibilityReason && (
+              <Text style={styles.aiReasonText} numberOfLines={2}>{compatibilityReason}</Text>
+            )}
             <TouchableOpacity
-              activeOpacity={0.9}
-              style={[styles.moreInfoBtn, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+              activeOpacity={0.88}
+              style={styles.moreInfoBtn}
               onPressIn={openInfoPanel}
               onPress={openInfoPanel}
             >
-              <Text style={styles.moreInfoText}>MORE INFO</Text>
-              <ChevronDown size={14} color="#000" />
+              <Text style={styles.moreInfoText}>About</Text>
+              <ChevronDown size={16} color="#111" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1263,7 +1239,7 @@ export default function SwipeScreen({ navigation }: any) {
             >
               <MessageSquare size={16} color="#000" />
               <Text style={[styles.scrollBottomLabel, { color: '#000' }]}>
-                {connectionRequest?.status === 'approved' ? 'CHAT' : connectionRequest?.status === 'pending' ? 'SENT' : 'CONTACT'}
+                {connectionRequest?.status === 'approved' ? 'Chat' : connectionRequest?.status === 'pending' ? 'Sent' : 'Request'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -1312,47 +1288,24 @@ export default function SwipeScreen({ navigation }: any) {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: '#000' }]}>
-      {!!topProfile && (
-        <View style={StyleSheet.absoluteFill}>
-          <Image source={{ uri: getSwipePhotos(topProfile)[0] || FALLBACK_PHOTO }} style={styles.fullBgImg} blurRadius={50} />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
-        </View>
-      )}
+    <View style={[styles.container, appBackground(isDark)]}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <View style={[styles.webStage, isWideWeb && styles.webStageDesktop, isCompactWeb && styles.webStageMobile]}>
           <View style={[styles.topBar, isWeb && { width: deckWidth, alignSelf: 'center' }, isCompactWeb && styles.compactTopBar]}>
           {navigation?.canGoBack() ? (
-            <TouchableOpacity 
-              onPress={() => navigation?.goBack?.()} 
-              style={[
-                styles.topBtn, 
-                isCompactWeb && styles.compactTopBtn,
-              ]}
+            <TouchableOpacity
+              onPress={() => navigation?.goBack?.()}
+              style={[styles.topBtn, isCompactWeb && styles.compactTopBtn]}
             >
-              <ChevronLeft size={20} color="#FFF" />
+              <ChevronLeft size={22} color={textColor(isDark)} />
             </TouchableOpacity>
           ) : (
             <View style={[styles.topBtn, styles.topBtnGhost, isCompactWeb && styles.compactTopBtn]} />
           )}
-          <Text style={[
-            styles.topTitle, 
-            isCompactWeb && styles.compactTopTitle,
-          ]}>SPARK</Text>
-          <View style={styles.modeToggle}>
-            <TouchableOpacity
-              style={[styles.modeToggleOption, mode === 'swipe' && { backgroundColor: COLORS.primary }]}
-              onPress={() => setMode('swipe')}
-            >
-              <Text style={[styles.modeToggleText, mode === 'swipe' && styles.modeToggleTextActive]}>↔</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeToggleOption, mode === 'scroll' && { backgroundColor: COLORS.primary }]}
-              onPress={() => setMode('scroll')}
-            >
-              <Text style={[styles.modeToggleText, mode === 'scroll' && styles.modeToggleTextActive]}>↕</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={[styles.topTitle, { color: textColor(isDark) }, isCompactWeb && styles.compactTopTitle]}>Discover</Text>
+          <TouchableOpacity onPress={rewindLast} style={[styles.topBtn, isCompactWeb && styles.compactTopBtn]}>
+            <RotateCcw size={18} color={textColor(isDark)} />
+          </TouchableOpacity>
         </View>
 
         <View style={[styles.stackArea, webDeckStyle, isCompactWeb && styles.compactStackArea]}>
@@ -1575,12 +1528,11 @@ const styles = StyleSheet.create({
   },
   cardInfo: {
     ...StyleSheet.absoluteFillObject,
-    padding: 24,
-    paddingTop: 84,
-    paddingBottom: 128,
+    padding: 20,
+    paddingTop: 18,
+    paddingBottom: 100,
     justifyContent: 'space-between',
     zIndex: 20,
-    elevation: 20,
   },
   compactCardInfo: {
     padding: 14,
@@ -1867,6 +1819,30 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   compactNameText: {
+    fontSi  },
+  exitText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#000',
+  },
+  verifiedMiniBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  nameText: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#FFF',
+    textTransform: 'uppercase',
+    flexShrink: 1,
+  },
+  compactNameText: {
     fontSize: 22,
     lineHeight: 26,
   },
@@ -2088,7 +2064,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
+    gap: 12,
+    paddingHorizontal: 32,
   },
   authGate: {
     flex: 1,
@@ -2314,5 +2291,111 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(255,255,255,0.3)',
     letterSpacing: 0.5,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  resetGhost: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(128,128,128,0.28)',
+  },
+  photoDots: {
+    flexDirection: 'row',
+    gap: 5,
+    flex: 1,
+    alignItems: 'center',
+  },
+  photoDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  photoDotOn: {
+    width: 16,
+    backgroundColor: COLORS.primary,
+  },
+});
+0.5)',
+    letterSpacing: 0.5,
+  },
+  scrollBottomActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  scrollBottomBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  scrollBottomContact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 14,
+    backgroundColor: '#FFF',
+  },
+  scrollBottomLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FFF',
+    letterSpacing: 0.6,
+  },
+  scrollSwipeHint: {
+    alignItems: 'center',
+    paddingBottom: 4,
+  },
+  scrollSwipeHintText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.3)',
+    letterSpacing: 0.5,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  resetGhost: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(128,128,128,0.28)',
+  },
+  photoDots: {
+    flexDirection: 'row',
+    gap: 5,
+    flex: 1,
+    alignItems: 'center',
+  },
+  photoDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  photoDotOn: {
+    width: 16,
+    backgroundColor: COLORS.primary,
   },
 });
