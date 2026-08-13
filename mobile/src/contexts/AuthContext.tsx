@@ -27,7 +27,7 @@ import { publicProfileLink } from '../lib/profileLinks';
 import { buildLocalProEntitlement, hasLinkupPro, readLocalProEntitlement, saveLocalProEntitlement } from '../lib/paywall';
 import { compactProfileForCache } from '../lib/profilePerformance';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
-import { loadNativeGoogleSignIn, signInToFirebaseWithGoogle } from '../lib/googleAuth';
+import { signInToFirebaseWithGoogle } from '../lib/googleAuth';
 
 let warnedPresenceRules = false;
 const onboardingStorageKey = (uid: string) => `linkup:onboarded:${uid}`;
