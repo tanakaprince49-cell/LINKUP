@@ -561,7 +561,7 @@ export default function SearchScreen({ navigation, route }: any) {
         keyboardShouldPersistTaps="handled"
       >
       <View style={[styles.searchHero, liquidGlass(isDark)]}>
-        <Text style={[styles.heroKicker, { color: COLORS.secondary }]}>BUILDER SEARCH</Text>
+        <Text style={[styles.heroKicker, { color: COLORS.secondary }]}>Search</Text>
         <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Find the missing person in your plan.</Text>
         <Text style={[styles.heroCopy, { color: textColor(isDark, 'secondary') }]}>
           Search handles, skills, projects, locations, and live intent. Then rank results by builder compatibility.
@@ -572,7 +572,7 @@ export default function SearchScreen({ navigation, route }: any) {
         <View style={[styles.searchBar, liquidGlass(isDark, false)]}>
           <Search size={18} color="#666" />
           <TextInput
-            placeholder="SEARCH BUILDERS..."
+            placeholder="Search builders"
             placeholderTextColor="#666"
             style={[styles.searchInput, { color: textColor(isDark) }]}
             value={queryText}
@@ -622,7 +622,7 @@ export default function SearchScreen({ navigation, route }: any) {
           style={[styles.saveAlertBtn, liquidGlass(isDark, false), { opacity: savingAlert ? 0.6 : 1 }]}
         >
           <Text style={[styles.saveAlertText, { color: textColor(isDark) }]}>
-            {savingAlert ? 'SAVING...' : 'SAVE SEARCH ALERT'}
+            {savingAlert ? 'Saving…' : 'Save search alert'}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -636,7 +636,7 @@ export default function SearchScreen({ navigation, route }: any) {
 
       {savedAlerts.length > 0 && (
         <View style={styles.savedAlertsWrap}>
-          <Text style={[styles.savedAlertsTitle, { color: textColor(isDark) }]}>SAVED SEARCH ALERTS</Text>
+          <Text style={[styles.savedAlertsTitle, { color: textColor(isDark) }]}>Saved search alerts</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedAlertsScroller}>
             {savedAlerts.map((alert) => (
               <TouchableOpacity
@@ -962,7 +962,7 @@ export default function SearchScreen({ navigation, route }: any) {
           )}
           {displayed.length === 0 && (
             <View style={{ alignItems: 'center', marginTop: 60, gap: 10 }}>
-              <Text style={{ fontSize: 12, fontWeight: '900', letterSpacing: 2, color: '#666' }}>NO RESULTS</Text>
+              <Text style={{ fontSize: 12, fontWeight: '900', letterSpacing: -0.2, color: '#666' }}>NO RESULTS</Text>
               <Text style={{ fontSize: 10, fontWeight: '700', color: '#666' }}>Try fewer filters.</Text>
             </View>
           )}
@@ -1008,7 +1008,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 12,
     padding: 20,
-    borderRadius: 28,
+    borderRadius: 16,
   },
   heroTitleRow: {
     flexDirection: 'row',
@@ -1018,7 +1018,7 @@ const styles = StyleSheet.create({
   heroKicker: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
   },
   heroTitle: {
     marginTop: 10,
@@ -1042,7 +1042,7 @@ const styles = StyleSheet.create({
   saveAlertBtn: {
     flex: 1,
     height: 44,
-    borderRadius: 18,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1062,7 +1062,7 @@ const styles = StyleSheet.create({
   rankBtnText: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: -0.2,
     color: '#000',
   },
   savedAlertsWrap: {
@@ -1072,7 +1072,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
   },
   savedAlertsScroller: {
     paddingHorizontal: 16,
@@ -1082,7 +1082,7 @@ const styles = StyleSheet.create({
   savedAlertPill: {
     width: 190,
     padding: 12,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   savedAlertLabel: {
     fontSize: 10,
@@ -1133,7 +1133,7 @@ const styles = StyleSheet.create({
     gap: 10,
     height: 52,
     paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   aiInput: {
     flex: 1,
@@ -1161,7 +1161,7 @@ const styles = StyleSheet.create({
     gap: 10,
     height: 52,
     paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   searchInput: {
     flex: 1,
@@ -1178,7 +1178,7 @@ const styles = StyleSheet.create({
   filterBtn: {
     width: 52,
     height: 52,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1186,7 +1186,7 @@ const styles = StyleSheet.create({
   filtersCard: {
     margin: 16,
     padding: 16,
-    borderRadius: 24,
+    borderRadius: 16,
     gap: 10,
   },
   filtersScrollContent: {
@@ -1196,7 +1196,7 @@ const styles = StyleSheet.create({
   filtersTitle: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
     textTransform: 'uppercase',
   },
   filterRow: {
@@ -1258,7 +1258,7 @@ const styles = StyleSheet.create({
   smallBtnText: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
     textTransform: 'uppercase',
   },
   resultCard: {
@@ -1266,7 +1266,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 14,
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     marginBottom: 12,
   },
@@ -1279,7 +1279,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     textTransform: 'uppercase',
-    fontStyle: 'italic',
     flexShrink: 1,
   },
   verifiedMiniBadge: {

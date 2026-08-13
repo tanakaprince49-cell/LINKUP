@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 4 },
   backText: { fontSize: 16, fontWeight: '800' },
-  title: { fontSize: 20, fontWeight: '900', fontStyle: 'italic', letterSpacing: -0.5 },
+  title: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
   headerRight: { width: 60 },
   stats: {
     flexDirection: 'row',
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
   gameOverBanner: {
     margin: 20,
     padding: 24,
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     gap: 8,

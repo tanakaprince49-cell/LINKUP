@@ -235,7 +235,7 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
           >
             <View style={styles.heroBadge}>
               <Zap size={12} color="#000" />
-              <Text style={styles.heroBadgeText}>STARTUP IDEA</Text>
+              <Text style={styles.heroBadgeText}>Startup Idea</Text>
             </View>
             <Text style={styles.heroName}>{pitch.name}</Text>
             <View style={styles.heroDivider} />
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  title: { fontSize: 20, fontWeight: '900', fontStyle: 'italic', letterSpacing: -0.5 },
+  title: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
   headerRight: {
     padding: 8,
     borderRadius: 12,
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   statText: { fontSize: 11, fontWeight: '700' },
   heroEmpty: {
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     marginHorizontal: 24,
-    borderRadius: 28,
+    borderRadius: 16,
     padding: 32,
     alignItems: 'center',
     gap: 14,
@@ -387,13 +387,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     paddingHorizontal: 12,
     paddingVertical: 5,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   heroBadgeText: { fontSize: 10, fontWeight: '900', color: '#000', letterSpacing: 1 },
   heroName: {
     fontSize: 36,
     fontWeight: '900',
-    fontStyle: 'italic',
     letterSpacing: -1.5,
     color: COLORS.primary,
     textAlign: 'center',

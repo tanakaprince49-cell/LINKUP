@@ -290,7 +290,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, liquidGlass(isDark, false)]}>
           <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>RECOMMENDED MATCHES</Text>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Recommended matches</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -329,7 +329,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
               <Text style={styles.emptySub}>Complete your profile or use search filters while LINKUP learns your matching signals.</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.emptyBtn}>
                 <Search size={16} color="#000" />
-                <Text style={styles.emptyBtnText}>OPEN SEARCH</Text>
+                <Text style={styles.emptyBtnText}>Open search</Text>
               </TouchableOpacity>
             </View>
           }
@@ -357,11 +357,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerSpacer: { width: 42, height: 42 },
-  headerTitle: { fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
+  headerTitle: { fontSize: 12, fontWeight: '900', letterSpacing: -0.2 },
   heroCard: {
     marginHorizontal: 16,
     marginTop: 4,
-    borderRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
   },
@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
     textTransform: 'uppercase',
   },
   heroSub: {
@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
     color: '#666',
   },
   listContent: {
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   card: {
-    borderRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
   },
@@ -429,13 +429,12 @@ const styles = StyleSheet.create({
   avatar: {
     width: 58,
     height: 58,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   name: {
     fontSize: 15,
     fontWeight: '900',
     textTransform: 'uppercase',
-    fontStyle: 'italic',
     flexShrink: 1,
   },
   nameRow: {
@@ -468,7 +467,7 @@ const styles = StyleSheet.create({
   },
   reasonBox: {
     marginTop: 14,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 12,
     flexDirection: 'row',
@@ -535,7 +534,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.6,
   },
   emptyCard: {
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
   },
@@ -565,7 +564,7 @@ const styles = StyleSheet.create({
   emptyBtnText: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.4,
+    letterSpacing: -0.2,
     color: '#000',
   },
 });

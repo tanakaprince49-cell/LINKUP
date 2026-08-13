@@ -262,7 +262,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             <Text style={[styles.handle, { color: COLORS.primary }]} numberOfLines={1}>{handleFor(item)}</Text>
           </View>
           <View style={[styles.livePill, { backgroundColor: isDark ? 'rgba(74,222,128,0.15)' : 'rgba(74,222,128,0.12)' }]}>
-            <Text style={styles.liveText}>ACTIVE</Text>
+            <Text style={styles.liveText}>Active</Text>
           </View>
         </View>
 
@@ -295,7 +295,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
           <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.opportunityBtn, { backgroundColor: COLORS.primary }]}>
-            <Text style={styles.opportunityBtnText}>VIEW PROFILE</Text>
+            <Text style={styles.opportunityBtnText}>View Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Search')} style={[styles.opportunityIconBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
             <Search size={15} color={textColor(isDark)} />
@@ -329,7 +329,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         {item.project.description}
       </Text>
       <View style={styles.projectSignalRow}>
-        <Text style={[styles.projectSignalLabel, { color: isDark ? '#C6B100' : '#8A7900' }]}>WHY YOU</Text>
+        <Text style={[styles.projectSignalLabel, { color: isDark ? '#C6B100' : '#8A7900' }]}>Why You</Text>
         <Text style={[styles.projectReason, { color: textColor(isDark) }]} numberOfLines={1}>
           {item.reason}
         </Text>
@@ -370,7 +370,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>Nobody here yet</Text>
             <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>This list is empty because the network is still small. Invite 3 builders or search whoever is already on LINKUP.</Text>
             <TouchableOpacity onPress={() => void shareLinkupInvite()} style={styles.emptyBtn}>
-              <Text style={styles.emptyBtnText}>INVITE BUILDERS</Text>
+              <Text style={styles.emptyBtnText}>Invite Builders</Text>
             </TouchableOpacity>
           </View>
         }
@@ -390,7 +390,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               <View style={styles.heroTop}>
                 <View style={styles.heroIconRow}>
                   <View style={styles.heroBadge}>
-                    <Text style={[styles.heroBadgeText, { color: COLORS.primary }]}>TODAY</Text>
+                    <Text style={[styles.heroBadgeText, { color: COLORS.primary }]}>Today</Text>
                   </View>
                 </View>
                 <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>
@@ -409,14 +409,14 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   style={[styles.heroBtn, { backgroundColor: COLORS.primary }]}
                 >
                   <Zap size={14} color="#000" />
-                  <Text style={[styles.heroBtnText, { color: '#000' }]}>DAILY 5</Text>
+                  <Text style={[styles.heroBtnText, { color: '#000' }]}>Daily 5</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('Swipe')}
                   style={[styles.heroBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
                 >
                   <Zap size={14} color={textColor(isDark)} />
-                  <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>SWIPE</Text>
+                  <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>Swipe</Text>
                 </TouchableOpacity>
                 <View style={[styles.heroStatus, { backgroundColor: isDark ? 'rgba(251,230,24,0.1)' : 'rgba(251,230,24,0.15)' }]}>
                   <Star size={12} color={COLORS.primary} />
@@ -435,7 +435,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                       <BellRing size={15} color="#000" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>OPPORTUNITY RADAR</Text>
+                      <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>Opportunity Radar</Text>
                       <Text style={[styles.radarSub, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>
                         {displayNameFor(topOpportunityAlert.profile)} matches your interests: {topOpportunityAlert.reason}
                       </Text>
@@ -455,7 +455,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                       <BellRing size={15} color={textColor(isDark, 'muted')} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>OPPORTUNITY RADAR</Text>
+                      <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>Opportunity Radar</Text>
                       <Text style={[styles.radarSub, { color: textColor(isDark, 'muted') }]}>No strong opportunity yet. Add more skills/interests to sharpen alerts.</Text>
                     </View>
                   </View>
@@ -483,7 +483,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               </View>
             </View>
             <View style={[styles.linkyChip, { backgroundColor: COLORS.primary }]}>
-              <Text style={styles.linkyChipText}>CHAT</Text>
+              <Text style={styles.linkyChipText}>Chat</Text>
             </View>
           </TouchableOpacity>
 
@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollArea: { flex: 1 },
   heroCard: {
-    borderRadius: 24,
+    borderRadius: 16,
     padding: 20,
     shadowColor: '#000',
     shadowOpacity: 0.06,
@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
   heroBadgeText: {
     fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: -0.2,
   },
   heroTitle: {
     fontSize: 22,
@@ -615,7 +615,7 @@ const styles = StyleSheet.create({
   heroBtnText: {
     fontSize: 11,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: -0.2,
   },
   heroStatus: {
     flexDirection: 'row',
@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   heroStatusText: {
     fontSize: 9,
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
   },
   radarCard: {
     marginTop: 16,
-    borderRadius: 18,
+    borderRadius: 16,
     padding: 14,
   },
   radarTop: {
@@ -651,7 +651,7 @@ const styles = StyleSheet.create({
   radarTitle: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
   },
   radarSub: {
     marginTop: 2,
@@ -700,7 +700,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width: 290,
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 14,
     flexDirection: 'row',
     gap: 12,
@@ -729,7 +729,7 @@ const styles = StyleSheet.create({
   scoreText: { fontSize: 10, fontWeight: '900', color: '#000', letterSpacing: 0.5 },
   opportunityCard: {
     width: 320,
-    borderRadius: 22,
+    borderRadius: 16,
     padding: 14,
     shadowColor: '#000',
     shadowOpacity: 0.04,
@@ -739,7 +739,7 @@ const styles = StyleSheet.create({
   },
   projectCard: {
     width: 320,
-    borderRadius: 22,
+    borderRadius: 16,
     padding: 14,
     shadowColor: '#000',
     shadowOpacity: 0.04,
@@ -884,12 +884,12 @@ const styles = StyleSheet.create({
   opportunityBtnText: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
     color: '#000',
   },
   emptyCard: {
     width: 290,
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
     shadowOpacity: 0.03,
@@ -919,7 +919,7 @@ const styles = StyleSheet.create({
   emptyBtnText: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
     color: '#000',
   },
   linkyCard: {
@@ -927,7 +927,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 16,
     marginTop: 8,
-    borderRadius: 24,
+    borderRadius: 16,
     padding: 14,
     gap: 12,
     borderWidth: 1,
@@ -947,7 +947,7 @@ const styles = StyleSheet.create({
   linkyCardAvatar: {
     width: 56,
     height: 56,
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: '#22C55E',
     alignItems: 'center',
     justifyContent: 'center',

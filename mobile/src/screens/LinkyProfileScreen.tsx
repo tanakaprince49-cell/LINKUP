@@ -16,7 +16,7 @@ export default function LinkyProfileScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, liquidGlass(isDark, false)]}>
           <ChevronLeft size={24} color={textColor(isDark)} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>PROFILE</Text>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Profile</Text>
         <View style={styles.backButton} />
       </View>
 
@@ -75,7 +75,7 @@ export default function LinkyProfileScreen({ navigation }: any) {
           style={styles.chatBtn}
         >
           <MessageSquare size={18} color="#000" />
-          <Text style={styles.chatBtnText}>START CHAT</Text>
+          <Text style={styles.chatBtnText}>Start Chat</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -107,14 +107,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { fontSize: 13, fontWeight: '900', letterSpacing: 2 },
+  headerTitle: { fontSize: 13, fontWeight: '900', letterSpacing: -0.2 },
   content: { padding: 16, paddingBottom: 130, gap: 14 },
-  heroCard: { borderRadius: 26, borderWidth: 1, padding: 16 },
+  heroCard: { borderRadius: 16, borderWidth: 1, padding: 16 },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: {
     width: 64,
     height: 64,
-    borderRadius: 22,
+    borderRadius: 16,
     backgroundColor: '#22C55E',
     alignItems: 'center',
     justifyContent: 'center',
@@ -125,13 +125,13 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   avatarText: { fontSize: 22, fontWeight: '900', color: '#FFF', letterSpacing: 1 },
-  name: { fontSize: 20, fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic', flexShrink: 1 },
+  name: { fontSize: 20, fontWeight: '900', textTransform: 'uppercase', flexShrink: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   handle: { marginTop: 2, fontSize: 12, fontWeight: '900', color: COLORS.primary },
   scorePill: {
     width: 52,
     height: 52,
-    borderRadius: 18,
+    borderRadius: 16,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -144,27 +144,27 @@ const styles = StyleSheet.create({
   infoTile: {
     width: '48%',
     minHeight: 104,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 12,
     gap: 6,
   },
-  infoLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 1.5, color: '#666' },
+  infoLabel: { fontSize: 9, fontWeight: '900', letterSpacing: -0.2, color: '#666' },
   infoValue: { fontSize: 12, fontWeight: '900', lineHeight: 17 },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 },
   tagChip: { borderRadius: 13, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6 },
   tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
-  insightCard: { flexDirection: 'row', gap: 12, borderRadius: 22, borderWidth: 1, padding: 14 },
+  insightCard: { flexDirection: 'row', gap: 12, borderRadius: 16, borderWidth: 1, padding: 14 },
   insightTitle: { fontSize: 13, fontWeight: '900', textTransform: 'uppercase' },
   insightText: { marginTop: 4, fontSize: 12, lineHeight: 18, fontWeight: '700', color: '#666' },
   chatBtn: {
     height: 54,
-    borderRadius: 18,
+    borderRadius: 16,
     backgroundColor: COLORS.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  chatBtnText: { fontSize: 12, fontWeight: '900', letterSpacing: 2, color: '#000' },
+  chatBtnText: { fontSize: 12, fontWeight: '900', letterSpacing: -0.2, color: '#000' },
 });

@@ -150,8 +150,8 @@ export default function MatchScreen({ navigation }: any) {
           loading ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} /> : (
             <View style={styles.emptyState}>
               <Zap size={48} color="#222" />
-              <Text style={styles.emptyText}>NO ACTIVE CONNECTIONS</Text>
-              <Text style={styles.emptySub}>START SWIPING TO BUILD YOUR NETWORK</Text>
+              <Text style={styles.emptyText}>No Active Connections</Text>
+              <Text style={styles.emptySub}>Start Swiping to Build Your Network</Text>
             </View>
           )
         }
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   },
   matchCard: {
     padding: 16,
-    borderRadius: 24,
+    borderRadius: 16,
     marginBottom: 12,
     borderWidth: 1,
   },
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: 64,
     height: 64,
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: 'rgba(251,230,24,0.25)',
   },
@@ -214,7 +214,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     textTransform: 'uppercase',
-    fontStyle: 'italic',
     flexShrink: 1,
   },
   verifiedMiniBadge: {
@@ -275,7 +274,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     color: '#444',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
   },
   emptySub: {
     fontSize: 10,

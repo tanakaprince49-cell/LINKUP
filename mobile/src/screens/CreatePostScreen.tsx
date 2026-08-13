@@ -133,13 +133,13 @@ export default function CreatePostScreen({ navigation }: any) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton}>
             <X size={20} color={textColor(isDark)} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>POST</Text>
+          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Post</Text>
           <TouchableOpacity 
             onPress={handlePost} 
             disabled={!content.trim() || isPosting}
             style={[styles.shipButton, { backgroundColor: COLORS.primary, opacity: content.trim() ? 1 : 0.5 }]}
           >
-            {isPosting ? <ActivityIndicator size="small" color="#000" /> : <Text style={styles.shipText}>POST</Text>}
+            {isPosting ? <ActivityIndicator size="small" color="#000" /> : <Text style={styles.shipText}>Post</Text>}
           </TouchableOpacity>
         </View>
 
@@ -185,11 +185,11 @@ export default function CreatePostScreen({ navigation }: any) {
         <View style={[styles.toolbar, { borderTopColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
           <TouchableOpacity style={styles.toolBtn} onPress={() => pickMedia('image')}>
             <ImageIcon size={22} color={COLORS.primary} />
-            <Text style={styles.toolText}>PHOTO</Text>
+            <Text style={styles.toolText}>Photo</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.toolBtn} onPress={() => pickMedia('video')}>
             <Video size={22} color={COLORS.primary} />
-            <Text style={styles.toolText}>VIDEO</Text>
+            <Text style={styles.toolText}>Video</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
   },
   iconButton: {
     width: 42,
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
   },
   mediaPreview: { marginTop: 24, flexDirection: 'row' },
   mediaItem: { position: 'relative', marginRight: 12 },
-  mediaImg: { width: 150, height: 200, borderRadius: 20 },
+  mediaImg: { width: 150, height: 200, borderRadius: 16 },
   removeMedia: {
     position: 'absolute',
     top: 10,

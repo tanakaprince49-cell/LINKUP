@@ -201,7 +201,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
       <View style={styles.modalOverlay}>
         <SafeAreaView style={[styles.modalContent, appBackground(isDark)]}>
           <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: textColor(isDark) }]}>COMMENTS</Text>
+            <Text style={[styles.modalTitle, { color: textColor(isDark) }]}>Comments</Text>
             <TouchableOpacity
               onPress={() => {
                 blurActiveElementOnWeb();
@@ -528,7 +528,7 @@ export default function FeedScreen({ navigation }: any) {
           <View style={styles.emptyContainer}>
             <SafeIcon name="Rocket" size={48} color="#222" />
             <Text style={styles.emptyText}>THE FEED IS QUIET...</Text>
-            <Text style={styles.emptySub}>START THE FIRST MOMENT</Text>
+            <Text style={styles.emptySub}>Start the First Moment</Text>
           </View>
         }
       />
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
   },
   card: {
     padding: 20,
-    borderRadius: 24,
+    borderRadius: 16,
     marginBottom: 16,
     borderWidth: 1,
   },
@@ -596,8 +596,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     textTransform: 'uppercase',
-    fontStyle: 'italic',
-  },
+    },
   postTime: {
     fontSize: 9,
     color: '#666',
@@ -637,7 +636,7 @@ const styles = StyleSheet.create({
   postImage: {
     width: width * 0.7,
     height: 200,
-    borderRadius: 20,
+    borderRadius: 16,
     marginRight: 12,
   },
   cardFooter: {
@@ -677,7 +676,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 12,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
   },
   closeBtn: {
     padding: 4,
@@ -723,7 +722,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 20,
+    borderRadius: 16,
     fontSize: 14,
   },
   sendBtn: {
@@ -744,7 +743,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     color: '#444',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
   },
   emptySub: {
     fontSize: 10,

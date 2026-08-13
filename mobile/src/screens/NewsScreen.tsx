@@ -87,7 +87,7 @@ export default function NewsScreen() {
         ) : null}
         <View style={styles.cardFooter}>
           <View style={[styles.categoryChip, { backgroundColor: isDark ? 'rgba(251,230,24,0.1)' : 'rgba(251,230,24,0.15)' }]}>
-            <Text style={styles.categoryText}>{item.category.toUpperCase()}</Text>
+            <Text style={styles.categoryText}>{item.category}</Text>
           </View>
           <ExternalLink size={14} color={textColor(isDark, 'muted')} />
         </View>
@@ -106,7 +106,7 @@ export default function NewsScreen() {
               style={[styles.filterChip, category === cat && { backgroundColor: COLORS.primary }]}
             >
               <Text style={[styles.filterText, { color: category === cat ? '#000' : textColor(isDark, 'muted') }]}>
-                {cat === 'all' ? 'ALL' : cat.toUpperCase()}
+                {cat === 'all' ? 'All' : cat[0].toUpperCase() + cat.slice(1)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: 'rgba(128,128,128,0.1)',
   },
   filterText: {
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   refreshBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   card: {
-    borderRadius: 24,
+    borderRadius: 16,
     marginBottom: 16,
     overflow: 'hidden',
     borderWidth: 1,

@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 4 },
   backText: { fontSize: 16, fontWeight: '800' },
-  title: { fontSize: 20, fontWeight: '900', fontStyle: 'italic', letterSpacing: -0.5 },
+  title: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
   headerRight: { width: 60 },
   progressRow: {
     flexDirection: 'row',
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     paddingHorizontal: 10,
     paddingVertical: 3,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   scoreText: { fontSize: 11, fontWeight: '900', color: '#000' },
   progressBarBg: {
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
   },
   questionCard: {
     marginHorizontal: 24,
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 24,
     marginBottom: 24,
   },

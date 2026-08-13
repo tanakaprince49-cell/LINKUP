@@ -53,12 +53,12 @@ const LinkyDashboard = ({ onSuggestion, streak, score }: { onSuggestion: (t: str
       <View style={styles.dashScoreRow}>
         <View style={styles.dashScoreItem}>
           <Text style={styles.dashScoreValue}>{score}</Text>
-          <Text style={styles.dashScoreLabel}>SCORE</Text>
+          <Text style={styles.dashScoreLabel}>Score</Text>
         </View>
         <View style={styles.dashScoreDivider} />
         <View style={styles.dashScoreItem}>
           <Text style={styles.dashScoreValue}>{streak}</Text>
-          <Text style={styles.dashScoreLabel}>STREAK</Text>
+          <Text style={styles.dashScoreLabel}>Streak</Text>
         </View>
       </View>
       <Text style={[styles.dashHint, { color: textColor(isDark, 'secondary') }]}>Try these:</Text>
@@ -113,7 +113,7 @@ const ProfileCard = ({ profile, onPress, onConnect, connectBusy }: { profile: Mi
           ) : (
             <>
               <Send size={12} color="#000" />
-              <Text style={styles.connectBtnText}>INTRO</Text>
+              <Text style={styles.connectBtnText}>Intro</Text>
             </>
           )}
         </TouchableOpacity>
@@ -396,7 +396,7 @@ export default function LinkyScreen({ navigation }: any) {
                           <Text style={styles.profileSectionCount}>{item.profileResults.length} found</Text>
                           <TouchableOpacity style={styles.connectAllBtn} onPress={() => handleConnectAll(item.profileResults!)} activeOpacity={0.8}>
                             <Send size={11} color="#000" />
-                            <Text style={styles.connectAllText}>INTRO ALL</Text>
+                            <Text style={styles.connectAllText}>Intro All</Text>
                           </TouchableOpacity>
                         </View>
                         <View style={styles.profileDivider} />
@@ -450,7 +450,7 @@ export default function LinkyScreen({ navigation }: any) {
                     ) : (
                       <>
                         <Send size={11} color="#000" />
-                        <Text style={styles.draftSendText}>SEND</Text>
+                        <Text style={styles.draftSendText}>Send</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
   headerBtn: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, marginLeft: 4 },
   headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  headerTitle: { fontSize: 17, fontWeight: '900', letterSpacing: 1.2 },
+  headerTitle: { fontSize: 17, fontWeight: '900', letterSpacing: 0 },
   headerMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
   headerOnlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#34C759' },
   headerMetaText: { fontSize: 10, fontWeight: '600', color: '#999', letterSpacing: 0.3 },
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', marginBottom: 10, gap: 8 },
   userRow: { justifyContent: 'flex-end' },
   asstRow: { justifyContent: 'flex-start' },
-  bubble: { maxWidth: '78%', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 11 },
+  bubble: { maxWidth: '78%', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 11 },
   userBubble: { borderBottomRightRadius: 4 },
   asstBubble: { borderBottomLeftRadius: 4 },
   bubbleText: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
   dashChipDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
   dashChipText: { fontSize: 13, fontWeight: '600', color: '#555' },
   proContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  proTitle: { fontSize: 18, fontWeight: '900', color: '#000', marginTop: 8, letterSpacing: 1.2 },
+  proTitle: { fontSize: 18, fontWeight: '900', color: '#000', marginTop: 8, letterSpacing: 0 },
   proSub: { fontSize: 11, fontWeight: '600', color: '#999', marginTop: 2 },
   proDivider: { width: 40, height: 2, backgroundColor: COLORS.primary, marginVertical: 16, borderRadius: 1 },
   proLocked: { fontSize: 13, fontWeight: '600', color: '#999', marginTop: 8, textAlign: 'center' },
@@ -549,7 +549,7 @@ const styles = StyleSheet.create({
   draftSendBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7 },
   draftSendText: { fontSize: 10, fontWeight: '900', color: '#000', letterSpacing: 0.5 },
   inputArea: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 10, gap: 8, alignItems: 'flex-end', borderTopWidth: 1 },
-  inputWrap: { flex: 1, borderRadius: 22, paddingHorizontal: 16, borderWidth: 1, borderColor: 'rgba(128,128,128,0.12)' },
+  inputWrap: { flex: 1, borderRadius: 16, paddingHorizontal: 16, borderWidth: 1, borderColor: 'rgba(128,128,128,0.12)' },
   input: { fontSize: 15, paddingVertical: 10, maxHeight: 100 },
   sendBtn: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   profileSection: { marginTop: 8 },

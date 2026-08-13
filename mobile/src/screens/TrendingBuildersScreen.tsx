@@ -165,7 +165,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, liquidGlass(isDark, false)]}>
           <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>TRENDING BUILDERS</Text>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Trending builders</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   heroCard: {
     marginHorizontal: 16,
     marginTop: 4,
-    borderRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
   },
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
     textTransform: 'uppercase',
   },
   heroSub: {
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   card: {
-    borderRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
   },
@@ -308,13 +308,12 @@ const styles = StyleSheet.create({
   avatar: {
     width: 58,
     height: 58,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   name: {
     fontSize: 15,
     fontWeight: '900',
     textTransform: 'uppercase',
-    fontStyle: 'italic',
     flexShrink: 1,
   },
   nameRow: {
@@ -390,7 +389,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.6,
   },
   emptyCard: {
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
   },

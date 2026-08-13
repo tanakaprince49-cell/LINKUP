@@ -244,7 +244,7 @@ export default function MessagesScreen({ navigation, route }: any) {
           )}
           <View style={{ flex: 1 }}>
             <Text style={[styles.screenTitle, { color: textColor(isDark) }]}>
-              {archivedOnly ? 'ARCHIVED CHATS' : 'MESSAGES'}
+              {archivedOnly ? 'Archived chats' : 'Messages'}
             </Text>
             <Text style={styles.screenSub}>
               {archivedOnly ? 'Hidden conversations you can still reopen.' : 'Your founder conversations and team threads.'}
@@ -257,7 +257,7 @@ export default function MessagesScreen({ navigation, route }: any) {
             style={[styles.archiveBtn, liquidGlass(isDark, false)]}
           >
             <Archive size={17} color={textColor(isDark)} />
-            <Text style={[styles.archiveBtnText, { color: textColor(isDark) }]}>ARCHIVE</Text>
+            <Text style={[styles.archiveBtnText, { color: textColor(isDark) }]}>Archive</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 42,
     height: 42,
-    borderRadius: 18,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -355,7 +355,7 @@ const styles = StyleSheet.create({
   archiveBtn: {
     height: 42,
     paddingHorizontal: 12,
-    borderRadius: 18,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderRadius: 24,
+    borderRadius: 16,
     marginBottom: 12,
     borderWidth: 1,
   },
@@ -396,8 +396,7 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 20,
     fontWeight: '900',
-    fontStyle: 'italic',
-  },
+    },
   statusDot: {
     position: 'absolute',
     bottom: -2,
@@ -423,7 +422,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     textTransform: 'uppercase',
-    fontStyle: 'italic',
     flexShrink: 1,
   },
   chatNameRow: {
@@ -487,6 +485,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
     color: '#444',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
   },
 });

@@ -52,7 +52,7 @@ import {
   consumeDailyUsage,
   FREE_LIMITS,
   GOOGLE_PLAY_SUBSCRIPTION_URL,
-  hasLinkupPro,
+  hasLINKUPPro,
   isAndroidProLocked,
   PRO_FEATURES,
 } from '../lib/paywall';
@@ -790,10 +790,10 @@ export default function ProfileScreen({ navigation, route }: any) {
         <View style={styles.unavailableWrap}>
           <TouchableOpacity onPress={goBackOrHome} style={[styles.backPill, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]}>
             <SafeIcon name="ChevronLeft" size={18} color={textColor(isDark)} />
-            <Text style={[styles.backPillText, { color: textColor(isDark) }]}>BACK</Text>
+            <Text style={[styles.backPillText, { color: textColor(isDark) }]}>Back</Text>
           </TouchableOpacity>
           <SafeIcon name="ShieldAlert" size={42} color={COLORS.primary} />
-          <Text style={[styles.unavailableTitle, { color: textColor(isDark) }]}>PROFILE UNAVAILABLE</Text>
+          <Text style={[styles.unavailableTitle, { color: textColor(isDark) }]}>Profile Unavailable</Text>
           <Text style={styles.unavailableText}>{viewedError}</Text>
         </View>
       </SafeAreaView>
@@ -1655,7 +1655,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const publicDiscoveryValue = isEditing
     ? !!(editData?.isVisible ?? true)
     : localPreferences.isVisible;
-  const isProPlanActive = hasLinkupPro(profile);
+  const isProPlanActive = hasLINKUPPro(profile);
   const turboConnectValue = isEditing
     ? !!(editData?.turboConnect ?? false)
     : localPreferences.turboConnect;
@@ -1826,7 +1826,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 {isSaving ? <ActivityIndicator size="small" color={isEditing ? '#000' : '#444'} /> : isEditing ? (
                   <View style={styles.saveProfileContent}>
                     <SafeIcon name="CheckCircle2" size={17} color="#000" fill="#00000010" />
-                    <Text style={styles.saveProfileText}>SAVE</Text>
+                    <Text style={styles.saveProfileText}>Save</Text>
                   </View>
                 ) : (
                   <SafeIcon name="PenLine" size={20} color={textColor(isDark, 'secondary')} />
@@ -1857,7 +1857,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
           {!isViewingOther && (isEditing || profileDetailsReady) && (
             <View style={{ marginTop: 18 }}>
-              <Text style={[styles.sectionHeader, { color: textColor(isDark) }]}>PHOTOS</Text>
+              <Text style={[styles.sectionHeader, { color: textColor(isDark) }]}>Photos</Text>
               <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 10 }}>
                 {[0, 1, 2].map((idx) => {
                   const photos = (isEditing ? (editData?.photos || []) : ((profile as any).photos || [])) as string[];
@@ -1986,7 +1986,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholderTextColor="#666"
               />
               <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-                <Text style={styles.projectEditLabel}>STARTUP STATUS</Text>
+                <Text style={styles.projectEditLabel}>Startup Status</Text>
                 <TextInput
                   style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                   value={toTextValue(editData?.startupStage)}
@@ -2042,7 +2042,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               />
               {renderMultiChoiceGroup('INDUSTRIES', 'industries', INDUSTRY_SUGGESTIONS)}
               <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-                <Text style={styles.projectEditLabel}>MATCHING DETAILS</Text>
+                <Text style={styles.projectEditLabel}>Matching Details</Text>
                 <TextInput
                   multiline
                   style={[styles.bioInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
@@ -2089,7 +2089,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 />
                 <View style={styles.switchEditorRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.choiceEditorLabel, { marginBottom: 2 }]}>REMOTE ONLY</Text>
+                    <Text style={[styles.choiceEditorLabel, { marginBottom: 2 }]}>Remote Only</Text>
                     <Text style={styles.choiceHelp}>Only show remote-friendly collaboration preference.</Text>
                   </View>
                   <Switch
@@ -2101,7 +2101,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 </View>
                 <View style={styles.switchEditorRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.choiceEditorLabel, { marginBottom: 2 }]}>WILLING TO RELOCATE</Text>
+                    <Text style={[styles.choiceEditorLabel, { marginBottom: 2 }]}>Willing to Relocate</Text>
                     <Text style={styles.choiceHelp}>Useful for local teams and investor-backed opportunities.</Text>
                   </View>
                   <Switch
@@ -2113,7 +2113,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 </View>
               </View>
               <View style={[styles.projectEditCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-                <Text style={styles.projectEditLabel}>RESUME SIGNALS</Text>
+                <Text style={styles.projectEditLabel}>Resume Signals</Text>
                 <TextInput
                   style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                   value={toTextValue(editData?.resume?.shippedProducts)}
@@ -2155,7 +2155,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 </Text>
               </View>
               <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-                <Text style={styles.projectEditLabel}>LINKS</Text>
+                <Text style={styles.projectEditLabel}>Links</Text>
                 <TextInput
                   style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                   value={toTextValue(editData?.socialLinks?.portfolio)}
@@ -2191,10 +2191,10 @@ export default function ProfileScreen({ navigation, route }: any) {
               </View>
               <View style={[styles.projectEditCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <View style={styles.projectEditHeader}>
-                  <Text style={styles.projectEditLabel}>ONGOING PROJECTS</Text>
+                  <Text style={styles.projectEditLabel}>Ongoing Projects</Text>
                   <TouchableOpacity style={styles.projectAddButton} onPress={addEditedProject} activeOpacity={0.85}>
                     <SafeIcon name="Plus" size={14} color="#000" />
-                    <Text style={styles.projectAddText}>ADD</Text>
+                    <Text style={styles.projectAddText}>Add</Text>
                   </TouchableOpacity>
                 </View>
                 {editedProjects.map((project: any, index: number) => (
@@ -2245,10 +2245,10 @@ export default function ProfileScreen({ navigation, route }: any) {
               </View>
               <View style={[styles.projectEditCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <View style={styles.projectEditHeader}>
-                  <Text style={styles.projectEditLabel}>IDEAS</Text>
+                  <Text style={styles.projectEditLabel}>Ideas</Text>
                   <TouchableOpacity style={styles.projectAddButton} onPress={addEditedIdea} activeOpacity={0.85}>
                     <SafeIcon name="Plus" size={14} color="#000" />
-                    <Text style={styles.projectAddText}>ADD</Text>
+                    <Text style={styles.projectAddText}>Add</Text>
                   </TouchableOpacity>
                 </View>
                 {editedIdeas.map((idea: any, index: number) => (
@@ -2336,7 +2336,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <View style={styles.profileLinkHeader}>
                     <SafeIcon name="Link" size={18} color={COLORS.primary} />
                     <View style={styles.profileLinkCopy}>
-                    <Text style={styles.profileLinkLabel}>YOUR LINKUP LINK</Text>
+                    <Text style={styles.profileLinkLabel}>Your LINKUP link</Text>
                     <Text
                       selectable
                       style={[styles.profileLinkText, { color: textColor(isDark) }]}
@@ -2349,13 +2349,13 @@ export default function ProfileScreen({ navigation, route }: any) {
                   </View>
                   <View style={styles.profileLinkActions}>
                     <TouchableOpacity onPress={copyProfileLink} style={[styles.profileLinkButton, { backgroundColor: COLORS.primary, borderWidth: 1, borderColor: COLORS.primary }]} activeOpacity={0.85}>
-                      <Text style={[styles.profileLinkAction, { color: '#000' }]}>COPY</Text>
+                      <Text style={[styles.profileLinkAction, { color: '#000' }]}>Copy</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={shareProfileLink} style={[styles.profileLinkButton, { backgroundColor: COLORS.primary, borderWidth: 1, borderColor: COLORS.primary }]} activeOpacity={0.85}>
-                      <Text style={[styles.profileLinkAction, { color: '#000' }]}>SHARE</Text>
+                      <Text style={[styles.profileLinkAction, { color: '#000' }]}>Share</Text>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={openProfileLink} style={[styles.profileLinkButton, { backgroundColor: COLORS.primary, borderWidth: 1, borderColor: COLORS.primary }]} activeOpacity={0.85}>
-                      <Text style={[styles.profileLinkAction, { color: '#000' }]}>OPEN</Text>
+                      <Text style={[styles.profileLinkAction, { color: '#000' }]}>Open</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -2394,7 +2394,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={[styles.highVoiceCard, { backgroundColor: isDark ? COLORS.darkBgSec : '#FFFDF0', borderColor: COLORS.primary }]}>
             <VerifiedBadge size={46} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.highVoiceTitle, { color: textColor(isDark) }]}>LINKUP HIGH VOICE PROGRAM</Text>
+              <Text style={[styles.highVoiceTitle, { color: textColor(isDark) }]}>LINKUP High Voice Program</Text>
               <Text style={styles.highVoiceText}>
                 This verified builder has been marked by LINKUP as a trusted, high-signal voice in the network.
               </Text>
@@ -2405,7 +2405,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         {!isEditing && (
           <>
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>ABOUT</Text>
+              <Text style={styles.sectionLabel}>About</Text>
               <View style={[styles.profileStoryCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <Text style={[styles.bioText, { color: textColor(isDark, 'secondary') }]}>
                   {profileBio || (isViewingOther
@@ -2417,7 +2417,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>SKILLS & STACK</Text>
+              <Text style={styles.sectionLabel}>Skills & Stack</Text>
               {organizedSkills.length ? (
                 <>
                   <View style={styles.organizedSkillsGrid}>
@@ -2446,7 +2446,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>BUILDING NOW</Text>
+              <Text style={styles.sectionLabel}>Building Now</Text>
               {visibleProjects.length ? (
                 visibleProjects.map((project: any, index: number) => (
                   <View
@@ -2477,7 +2477,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>IDEAS</Text>
+              <Text style={styles.sectionLabel}>Ideas</Text>
               {visibleStartupIdeas.length ? (
                 visibleStartupIdeas.map((idea: any, index: number) => (
                   <View
@@ -2521,7 +2521,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         {/* COMPATIBILITY */}
         {isViewingOther && compatibility !== null && (
           <View style={[styles.section, { marginTop: -8 }]}>
-            <Text style={styles.sectionLabel}>COMPATIBILITY</Text>
+            <Text style={styles.sectionLabel}>Compatibility</Text>
             <View style={[styles.compatCard, liquidGlass(isDark, false)]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <View>
@@ -2542,7 +2542,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         {/* LOOKING FOR */}
         {!!lookingFor.length && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>LOOKING FOR</Text>
+            <Text style={styles.sectionLabel}>Looking for</Text>
             <View style={styles.chipsRow}>
               {lookingFor.slice(0, 10).map((v, idx) => (
                 <View key={idx} style={styles.chip}>
@@ -2555,22 +2555,22 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         {/* STARTUP STATUS */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>STARTUP STATUS</Text>
+          <Text style={styles.sectionLabel}>Startup Status</Text>
           <View style={styles.statusGrid}>
             <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
-              <Text style={styles.statusLabel}>STAGE</Text>
+              <Text style={styles.statusLabel}>Stage</Text>
               <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).startupStage || '-'}</Text>
             </View>
             <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
-              <Text style={styles.statusLabel}>FUNDING</Text>
+              <Text style={styles.statusLabel}>Funding</Text>
               <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).fundingStage || '-'}</Text>
             </View>
             <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
-              <Text style={styles.statusLabel}>AVAILABILITY</Text>
+              <Text style={styles.statusLabel}>Availability</Text>
               <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).availability || 'Open'}</Text>
             </View>
             <View style={[styles.statusTile, liquidGlass(isDark, false)]}>
-              <Text style={styles.statusLabel}>INTENT</Text>
+              <Text style={styles.statusLabel}>Intent</Text>
               <Text style={[styles.statusValue, { color: textColor(isDark) }]}>{(profile as any).networkingIntent || 'Builder'}</Text>
             </View>
           </View>
@@ -2579,7 +2579,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         {/* INDUSTRY INTERESTS */}
         {!!industries.length && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>INDUSTRY INTERESTS</Text>
+            <Text style={styles.sectionLabel}>Industry Interests</Text>
             <View style={styles.chipsRow}>
               {industries.slice(0, 12).map((v, idx) => (
                 <View key={idx} style={[styles.chip, { borderColor: `${COLORS.primary}30`, backgroundColor: `${COLORS.primary}10` }]}>
@@ -2592,7 +2592,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         {/* MATCH INSIGHTS */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>MATCH INSIGHTS</Text>
+          <Text style={styles.sectionLabel}>Match Insights</Text>
           <View style={[styles.insightCard, liquidGlass(isDark, false)]}>
             <Text style={[styles.insightText, { color: textColor(isDark, 'secondary') }]}>
               {(profile as any).aiMatchInsights || 'Generate a profile insight for this builder.'}
@@ -2638,7 +2638,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         {/* ANALYTICS */}
         {!isViewingOther && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>ANALYTICS</Text>
+            <Text style={styles.sectionLabel}>Analytics</Text>
             <View
               style={[
                 styles.analyticsPanel,
@@ -2657,7 +2657,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   </View>
                 </View>
                 <View style={[styles.analyticsBadge, { backgroundColor: COLORS.primary }]}>
-                  <Text style={styles.analyticsBadgeText}>LIVE</Text>
+                  <Text style={styles.analyticsBadgeText}>Live</Text>
                 </View>
               </View>
 
@@ -2699,7 +2699,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         {!isViewingOther && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>STARTUP ANALYZER</Text>
+            <Text style={styles.sectionLabel}>Startup Analyzer</Text>
             {!startupAnalyzerExpanded ? (
               <TouchableOpacity
                 style={[styles.lazyPanelButton, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
@@ -2707,7 +2707,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 activeOpacity={0.86}
               >
                 <SafeIcon name="Gauge" size={18} color={COLORS.primary} />
-                <Text style={[styles.lazyPanelText, { color: textColor(isDark) }]}>OPEN STARTUP ANALYZER</Text>
+                <Text style={[styles.lazyPanelText, { color: textColor(isDark) }]}>Open Startup Analyzer</Text>
               </TouchableOpacity>
             ) : (
               <View style={[styles.analyzerCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
@@ -2728,7 +2728,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 onPress={runStartupAnalyzer}
                 style={[styles.analyzerButton, { opacity: startupAnalyzing ? 0.6 : 1 }]}
               >
-                {startupAnalyzing ? <ActivityIndicator size="small" color="#000" /> : <Text style={styles.analyzerButtonText}>ANALYZE IDEA</Text>}
+                {startupAnalyzing ? <ActivityIndicator size="small" color="#000" /> : <Text style={styles.analyzerButtonText}>Analyze Idea</Text>}
               </TouchableOpacity>
 
               {!!startupAnalysis && (
@@ -2769,7 +2769,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         {/* SETTINGS - only shown on own profile */}
         {!isViewingOther && (
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>SETTINGS & PREFERENCES</Text>
+          <Text style={styles.sectionLabel}>Settings & Preferences</Text>
           {!settingsExpanded ? (
             <TouchableOpacity
               style={[styles.lazyPanelButton, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
@@ -2777,7 +2777,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               activeOpacity={0.86}
             >
               <SafeIcon name="Settings" size={18} color={COLORS.primary} />
-              <Text style={[styles.lazyPanelText, { color: textColor(isDark) }]}>OPEN SETTINGS</Text>
+              <Text style={[styles.lazyPanelText, { color: textColor(isDark) }]}>Open Settings</Text>
             </TouchableOpacity>
           ) : (
             <>
@@ -2910,7 +2910,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   {subscriptionActionBusy === 'manage' ? (
                     <ActivityIndicator size="small" color="#000" />
                   ) : (
-                    <Text style={styles.subscriptionManageText}>MANAGE IN GOOGLE PLAY</Text>
+                    <Text style={styles.subscriptionManageText}>Manage In Google Play</Text>
                   )}
                 </TouchableOpacity>
 
@@ -2923,7 +2923,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   {subscriptionActionBusy === 'cancel' ? (
                     <ActivityIndicator size="small" color="#FFF" />
                   ) : (
-                    <Text style={styles.subscriptionCancelText}>CANCEL PLUS PLAN</Text>
+                    <Text style={styles.subscriptionCancelText}>Cancel Plus Plan</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -2933,7 +2933,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 style={styles.subscriptionManageBtn}
                 activeOpacity={0.84}
               >
-                <Text style={styles.subscriptionManageText}>UNLOCK LINKUP PLUS</Text>
+                <Text style={styles.subscriptionManageText}>Unlock LINKUP Plus</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -2950,7 +2950,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
 
             <View style={[styles.emailStatusPill, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec }]}>
-              <Text style={styles.emailStatusLabel}>CURRENT EMAIL</Text>
+              <Text style={styles.emailStatusLabel}>Current Email</Text>
               <Text style={[styles.emailStatusValue, { color: textColor(isDark) }]} numberOfLines={1}>
                 {user?.email || 'No email linked'}
               </Text>
@@ -2968,7 +2968,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 {accountActionBusy === 'verify-email' ? (
                   <ActivityIndicator size="small" color="#000" />
                 ) : (
-                  <Text style={styles.accountActionText}>VERIFY EMAIL</Text>
+                  <Text style={styles.accountActionText}>Verify Email</Text>
                 )}
               </TouchableOpacity>
 
@@ -2980,7 +2980,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 {accountActionBusy === 'reset-password' ? (
                   <ActivityIndicator size="small" color="#000" />
                 ) : (
-                  <Text style={styles.accountActionText}>RESET PASSWORD</Text>
+                  <Text style={styles.accountActionText}>Reset Password</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -3009,7 +3009,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               {accountActionBusy === 'change-email' ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
-                <Text style={styles.emailChangeText}>SEND EMAIL CHANGE CONFIRMATION</Text>
+                <Text style={styles.emailChangeText}>Send Email Change Confirmation</Text>
               )}
             </TouchableOpacity>
 
@@ -3019,7 +3019,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               style={[styles.mfaNoticeBtn, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
             >
               <SafeIcon name="ShieldCheck" size={16} color="#22C55E" />
-              <Text style={[styles.mfaNoticeText, { color: textColor(isDark) }]}>MULTI-FACTOR ENROLLMENT NOTICE</Text>
+              <Text style={[styles.mfaNoticeText, { color: textColor(isDark) }]}>Multi-factor Enrollment Notice</Text>
             </TouchableOpacity>
           </View>
 
@@ -3051,7 +3051,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         {isEditing && (
           <TouchableOpacity style={styles.cancelButton} onPress={() => setIsEditing(false)}>
-            <Text style={styles.cancelText}>DISCARD CHANGES</Text>
+            <Text style={styles.cancelText}>Discard Changes</Text>
           </TouchableOpacity>
         )}
 
@@ -3114,7 +3114,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
     textTransform: 'uppercase',
   },
   headerActions: {
@@ -3149,13 +3149,13 @@ const styles = StyleSheet.create({
   saveProfileText: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
     color: '#000',
   },
   actionButton: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 18,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3163,7 +3163,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 32,
     padding: 24,
-    borderRadius: 28,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -3172,14 +3172,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     color: COLORS.primary,
-    letterSpacing: 2,
+    letterSpacing: -0.2,
     textTransform: 'uppercase',
     textAlign: 'center',
   },
   photoSlot: {
     width: 82,
     height: 82,
-    borderRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3241,7 +3241,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3249,7 +3249,7 @@ const styles = StyleSheet.create({
   fullPhotoImage: {
     width: '100%',
     height: '82%',
-    borderRadius: 22,
+    borderRadius: 16,
   },
   cameraOverlay: {
     position: 'absolute',
@@ -3269,7 +3269,6 @@ const styles = StyleSheet.create({
   nameText: {
     fontSize: 28,
     fontWeight: '900',
-    fontStyle: 'italic',
     textTransform: 'uppercase',
     textAlign: 'center',
     flexShrink: 1,
@@ -3305,7 +3304,7 @@ const styles = StyleSheet.create({
   highVoiceCard: {
     marginTop: -8,
     marginBottom: 24,
-    borderRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
     flexDirection: 'row',
@@ -3343,7 +3342,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     color: '#666',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
     textTransform: 'uppercase',
     marginTop: 6,
   },
@@ -3360,7 +3359,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     color: '#000',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
   },
   roleTextLine: {
     fontSize: 12,
@@ -3418,7 +3417,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     color: '#666',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
     marginBottom: 16,
   },
   vibeCard: {
@@ -3426,7 +3425,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 16,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   vibeText: {
     fontSize: 12,
@@ -3436,20 +3435,19 @@ const styles = StyleSheet.create({
   bioText: {
     fontSize: 15,
     lineHeight: 22,
-    fontStyle: 'italic',
     fontWeight: '500',
   },
   bioInput: {
     width: '100%',
     padding: 16,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     fontSize: 15,
     minHeight: 100,
     textAlignVertical: 'top',
   },
   profileStoryCard: {
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
   },
@@ -3483,14 +3481,14 @@ const styles = StyleSheet.create({
   },
   emptyProfileCard: {
     width: '100%',
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 14,
   },
   profileLoadingCard: {
     width: '100%',
     minHeight: 74,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3500,7 +3498,7 @@ const styles = StyleSheet.create({
   lazyPanelButton: {
     width: '100%',
     minHeight: 58,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -3565,7 +3563,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   compatCard: {
-    borderRadius: 22,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: `${COLORS.primary}30`,
@@ -3579,7 +3577,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     color: '#666',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
     textTransform: 'uppercase',
     marginTop: 2,
   },
@@ -3630,7 +3628,7 @@ const styles = StyleSheet.create({
   },
   statusTile: {
     width: (width - 24 * 2 - 10) / 2,
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
@@ -3639,7 +3637,7 @@ const styles = StyleSheet.create({
   statusLabel: {
     fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
     color: '#666',
     textTransform: 'uppercase',
   },
@@ -3650,7 +3648,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   insightCard: {
-    borderRadius: 22,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
@@ -3672,7 +3670,7 @@ const styles = StyleSheet.create({
   insightBtnText: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
     color: '#000',
     textTransform: 'uppercase',
   },
@@ -3683,7 +3681,7 @@ const styles = StyleSheet.create({
   socialButton: {
     width: 50,
     height: 50,
-    borderRadius: 18,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3695,7 +3693,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -3748,7 +3746,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   analyticsPanel: {
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 18,
     shadowColor: '#000',
@@ -3869,7 +3867,7 @@ const styles = StyleSheet.create({
   accountSecurityCard: {
     marginTop: 12,
     padding: 16,
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -3877,7 +3875,7 @@ const styles = StyleSheet.create({
   subscriptionCard: {
     marginTop: 12,
     padding: 16,
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -3944,7 +3942,7 @@ const styles = StyleSheet.create({
   emailStatusLabel: {
     fontSize: 8,
     fontWeight: '900',
-    letterSpacing: 1.4,
+    letterSpacing: -0.2,
     color: '#777',
   },
   emailStatusValue: {
@@ -3956,7 +3954,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
   },
   accountActionGrid: {
     flexDirection: 'row',
@@ -4039,7 +4037,7 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
   analyzerCard: {
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
   },
@@ -4058,7 +4056,7 @@ const styles = StyleSheet.create({
   },
   analyzerInput: {
     minHeight: 110,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -4093,7 +4091,7 @@ const styles = StyleSheet.create({
   analysisScore: {
     width: 58,
     height: 58,
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: COLORS.primary,
     color: '#000',
     textAlign: 'center',
@@ -4133,7 +4131,7 @@ const styles = StyleSheet.create({
   analysisLabel: {
     fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: -0.2,
     color: COLORS.primary,
   },
   analysisText: {
@@ -4146,7 +4144,7 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 14,
     padding: 12,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
     borderColor: 'rgba(255,255,255,0.12)',
@@ -4165,7 +4163,7 @@ const styles = StyleSheet.create({
   profileLinkLabel: {
     fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: -0.2,
     color: '#666',
   },
   profileLinkText: {
@@ -4198,7 +4196,7 @@ const styles = StyleSheet.create({
   },
   projectEditCard: {
     width: '100%',
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 14,
     marginTop: 14,
@@ -4214,7 +4212,7 @@ const styles = StyleSheet.create({
   projectEditLabel: {
     fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: -0.2,
     color: COLORS.primary,
   },
   projectAddButton: {
@@ -4235,7 +4233,7 @@ const styles = StyleSheet.create({
   projectDraftCard: {
     marginTop: 12,
     borderWidth: 1,
-    borderRadius: 18,
+    borderRadius: 16,
     padding: 10,
     borderColor: 'rgba(255,255,255,0.12)',
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -4248,7 +4246,7 @@ const styles = StyleSheet.create({
   projectDraftLabel: {
     fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1.4,
+    letterSpacing: -0.2,
     color: '#777',
   },
   projectRemoveButton: {
@@ -4269,7 +4267,7 @@ const styles = StyleSheet.create({
   statusEditorCard: {
     width: '100%',
     marginTop: 14,
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
     borderColor: 'rgba(255,255,255,0.12)',
@@ -4288,7 +4286,7 @@ const styles = StyleSheet.create({
   choiceEditorLabel: {
     fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: -0.2,
     color: '#777',
     textTransform: 'uppercase',
   },
@@ -4330,7 +4328,7 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   projectCard: {
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 14,
     marginTop: 10,
@@ -4402,7 +4400,7 @@ const styles = StyleSheet.create({
   unavailableTitle: {
     fontSize: 18,
     fontWeight: '900',
-    letterSpacing: 1.5,
+    letterSpacing: -0.2,
   },
   unavailableText: {
     maxWidth: 280,

@@ -878,7 +878,7 @@ export default function ChatScreen({ route, navigation }: any) {
               >
                 <Camera size={24} color={isMe ? '#000' : (isDark ? '#FFF' : '#000')} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.videoMessageTitle, { color: isMe ? '#000' : (isDark ? '#FFF' : '#000') }]}>VIDEO</Text>
+                  <Text style={[styles.videoMessageTitle, { color: isMe ? '#000' : (isDark ? '#FFF' : '#000') }]}>Video</Text>
                   <Text style={[styles.videoMessageSub, { color: isMe ? '#00000080' : (isDark ? '#FFFFFF80' : '#00000080') }]} numberOfLines={1}>
                     Tap to open
                   </Text>
@@ -948,7 +948,7 @@ export default function ChatScreen({ route, navigation }: any) {
                 </Text>
                 <View style={styles.securityLine}>
                   <Shield size={10} color="#22C55E" />
-                  <Text style={styles.securityText}>END-TO-END ENCRYPTED</Text>
+                  <Text style={styles.securityText}>End-to-end Encrypted</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -956,11 +956,11 @@ export default function ChatScreen({ route, navigation }: any) {
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={[styles.avatar, { backgroundColor: isDark ? '#16161A' : '#EEE' }]} />
               <View>
-                <Text style={[styles.name, { color: textColor(isDark) }]}>CHAT</Text>
+                <Text style={[styles.name, { color: textColor(isDark) }]}>Chat</Text>
                 <Text style={styles.status}>Loading...</Text>
                 <View style={styles.securityLine}>
                   <Shield size={10} color="#22C55E" />
-                  <Text style={styles.securityText}>END-TO-END ENCRYPTED</Text>
+                  <Text style={styles.securityText}>End-to-end Encrypted</Text>
                 </View>
               </View>
             </View>
@@ -1068,7 +1068,7 @@ export default function ChatScreen({ route, navigation }: any) {
         <Pressable style={styles.modalOverlay} onPress={closeOptionsMenu} />
         <View style={[styles.menuSheet, liquidGlass(isDark)]}>
           <View style={styles.menuHeaderRow}>
-            <Text style={[styles.menuHeader, { color: textColor(isDark) }]}>CHAT OPTIONS</Text>
+            <Text style={[styles.menuHeader, { color: textColor(isDark) }]}>Chat Options</Text>
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
               {isPinned && <Pin size={14} color={COLORS.primary} />}
               {isImportant && <Star size={14} color={COLORS.primary} fill={COLORS.primary} />}
@@ -1179,7 +1179,7 @@ export default function ChatScreen({ route, navigation }: any) {
       <Modal transparent visible={mutePickerOpen} animationType="fade" onRequestClose={closeMutePicker}>
         <Pressable style={styles.modalOverlay} onPress={closeMutePicker} />
         <View style={[styles.menuSheet, liquidGlass(isDark)]}>
-          <Text style={[styles.menuHeader, { color: textColor(isDark) }]}>MUTE</Text>
+          <Text style={[styles.menuHeader, { color: textColor(isDark) }]}>Mute</Text>
           <MenuItem icon={<BellOff size={18} color={textColor(isDark)} />} title="1 hour" onPress={() => setMute(1)} />
           <MenuItem icon={<BellOff size={18} color={textColor(isDark)} />} title="8 hours" onPress={() => setMute(8)} />
           <MenuItem icon={<BellOff size={18} color={textColor(isDark)} />} title="24 hours" onPress={() => setMute(24)} />
@@ -1248,8 +1248,7 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 17,
     fontWeight: '900',
-    fontStyle: 'italic',
-  },
+    },
   name: {
     fontSize: 16,
     fontWeight: '900',
@@ -1303,7 +1302,7 @@ const styles = StyleSheet.create({
   confidentialText: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.4,
+    letterSpacing: -0.2,
   },
   listContent: {
     padding: 16,
@@ -1321,7 +1320,7 @@ const styles = StyleSheet.create({
   messageBubble: {
     padding: 12,
     paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   messageImage: {
     width: 220,
@@ -1393,7 +1392,7 @@ const styles = StyleSheet.create({
     width: 54,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: 16,
     marginVertical: 6,
   },
   replyBar: {
@@ -1402,7 +1401,7 @@ const styles = StyleSheet.create({
     right: 16,
     top: -56,
     borderWidth: 1,
-    borderRadius: 18,
+    borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: 'row',
@@ -1454,7 +1453,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 8,
     maxHeight: 100,
@@ -1463,7 +1462,7 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 16,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1477,7 +1476,7 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     bottom: 22,
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 14,
   },
@@ -1490,7 +1489,7 @@ const styles = StyleSheet.create({
   menuHeader: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
   },
   menuItem: {
     flexDirection: 'row',

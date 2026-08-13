@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Trophy } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { COLORS, appBackground, textColor } from '../theme/theme';
+import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { displayNameFor, isDiscoverableProfile } from '../lib/discovery';
 import { decayingRepScore, daysSince, normalizeShipLogs } from '../lib/dailyLoop';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import VerifiedBadge from '../components/VerifiedBadge';
+import ScreenHeader from '../components/ScreenHeader';
 
 export default function CityLeagueScreen({ navigation }: any) {
   const { user, profile } = useAuth();
@@ -53,34 +53,30 @@ export default function CityLeagueScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.root, appBackground(isDark)]}>
-      <View style={styles.top}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
-          <ChevronLeft size={22} color={textColor(isDark)} />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: textColor(isDark) }]}>CITY LEAGUE</Text>
-          <Text style={styles.sub}>{city || country || 'Global'} · ranked by Rep that can decay</Text>
-        </View>
-        <Trophy size={18} color={COLORS.primary} />
-      </View>
+      <ScreenHeader
+        title="City league"
+        subtitle={`${city || country || 'Global'} · ranked by Rep that can decay`}
+        onBack={() => navigation.goBack()}
+        isDark={isDark}
+      />
       {loading ? (
         <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={league}
           keyExtractor={(item) => item.uid}
-          contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 40 }}
-          ListEmptyComponent={<Text style={styles.empty}>Not enough builders in your city yet. Invite them.</Text>}
+          contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 40 }}
+          ListEmptyComponent={<Text style={[styles.empty, { color: textColor(isDark, 'muted') }]}>Not enough builders in your city yet.</Text>}
           renderItem={({ item, index }) => (
-            <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.row, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}>
-              <Text style={[styles.rank, { color: index < 3 ? COLORS.primary : textColor(isDark) }]}>{index + 1}</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.row, liquidGlass(isDark, false)]}>
+              <Text style={[styles.rank, { color: index < 3 ? COLORS.primaryStrong : textColor(isDark) }]}>{index + 1}</Text>
               <Image source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80' }} style={styles.pic} />
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>{displayNameFor(item)}</Text>
                   {item.isVerified ? <VerifiedBadge size={16} /> : null}
                 </View>
-                <Text style={styles.meta} numberOfLines={1}>{item.occupation || 'Builder'} · {item.city || item.country || 'Remote'}</Text>
+                <Text style={[styles.meta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{item.occupation || 'Builder'} · {item.city || item.country || 'Remote'}</Text>
               </View>
               <Text style={styles.score}>{item.leagueScore}</Text>
             </TouchableOpacity>
@@ -93,15 +89,11 @@ export default function CityLeagueScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  top: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
-  back: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 22, fontWeight: '900' },
-  sub: { marginTop: 3, fontSize: 11, fontWeight: '700', color: '#777' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, padding: 12 },
-  rank: { width: 24, fontSize: 16, fontWeight: '900', textAlign: 'center' },
-  pic: { width: 40, height: 40, borderRadius: 14 },
-  name: { fontSize: 14, fontWeight: '900', flexShrink: 1 },
-  meta: { marginTop: 2, fontSize: 11, fontWeight: '600', color: '#888' },
-  score: { fontSize: 16, fontWeight: '900', color: COLORS.primary },
-  empty: { textAlign: 'center', marginTop: 40, color: '#888', fontWeight: '700' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
+  rank: { width: 24, fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  pic: { width: 40, height: 40, borderRadius: 12 },
+  name: { fontSize: 15, fontWeight: '800', flexShrink: 1 },
+  meta: { marginTop: 2, fontSize: 13, fontWeight: '600' },
+  score: { fontSize: 16, fontWeight: '800', color: COLORS.primaryStrong },
+  empty: { textAlign: 'center', marginTop: 40, fontWeight: '600', fontSize: 15 },
 });

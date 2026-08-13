@@ -155,7 +155,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
     >
       <View style={[styles.iconContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.22)', borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}> 
         {safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT) ? (
-          <Image source={{ uri: safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT) }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+          <Image source={{ uri: safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT) }} style={{ width: 44, height: 44, borderRadius: 16 }} />
         ) : getIcon()}
         
         {safeProfileImageUri(notification.fromPic, MOBILE_LIST_IMAGE_LIMIT) && (
@@ -252,8 +252,8 @@ export default function AlertsScreen({ navigation }: any) {
           loading ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} /> : (
             <View style={styles.emptyContainer}>
               <Bell size={48} color={textColor(isDark, 'secondary')} />
-              <Text style={[styles.emptyText, { color: textColor(isDark) }]}>NO NEW NOTIFICATIONS</Text>
-              <Text style={[styles.emptySubText, { color: textColor(isDark, 'secondary') }]}>STAY ACTIVE TO RECEIVE UPDATES</Text>
+              <Text style={[styles.emptyText, { color: textColor(isDark) }]}>No New Notifications</Text>
+              <Text style={[styles.emptySubText, { color: textColor(isDark, 'secondary') }]}>Stay Active to Receive Updates</Text>
             </View>
           )
         }
@@ -275,14 +275,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderRadius: 24,
+    borderRadius: 16,
     marginBottom: 12,
     borderWidth: 1,
   },
   iconContainer: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: -0.2,
     marginTop: 16,
   },
   emptySubText: {

@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Check, Sparkles } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useGamification } from '../contexts/GamificationContext';
-import { COLORS, appBackground, textColor } from '../theme/theme';
+import { COLORS, appBackground, hairline, liquidGlass, textColor } from '../theme/theme';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { isDiscoverableProfile } from '../lib/discovery';
 import { buildDailyFive, DailyFiveCard, loadDailyFiveProgress, saveDailyFiveProgress } from '../lib/dailyLoop';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
+import ScreenHeader from '../components/ScreenHeader';
 
 export default function DailyFiveScreen({ navigation }: any) {
   const { user, profile } = useAuth();
@@ -70,16 +71,12 @@ export default function DailyFiveScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.root, appBackground(isDark)]}>
-      <View style={styles.top}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
-          <ChevronLeft size={22} color={textColor(isDark)} />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: textColor(isDark) }]}>DAILY 5</Text>
-          <Text style={styles.sub}>{remaining === 0 ? 'Done. Come back tomorrow.' : `${remaining} left · 90 seconds`}</Text>
-        </View>
-        <Sparkles size={18} color={COLORS.primary} />
-      </View>
+      <ScreenHeader
+        title="Daily 5"
+        subtitle={remaining === 0 ? 'Done. Come back tomorrow.' : `${remaining} left · about 90 seconds`}
+        onBack={() => navigation.goBack()}
+        isDark={isDark}
+      />
       {loading ? (
         <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
       ) : (
@@ -87,8 +84,12 @@ export default function DailyFiveScreen({ navigation }: any) {
           {cards.map((card, index) => {
             const done = doneIds.includes(card.id);
             return (
-              <TouchableOpacity key={card.id} onPress={() => openCard(card)} style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF', opacity: done ? 0.55 : 1 }]}>
-                <View style={[styles.index, { backgroundColor: done ? '#16A34A' : COLORS.primary }]}>
+              <TouchableOpacity
+                key={card.id}
+                onPress={() => openCard(card)}
+                style={[styles.card, liquidGlass(isDark, false), { opacity: done ? 0.55 : 1 }]}
+              >
+                <View style={[styles.index, { backgroundColor: done ? COLORS.success : COLORS.primary }]}>
                   {done ? <Check size={14} color="#FFF" /> : <Text style={styles.indexText}>{index + 1}</Text>}
                 </View>
                 {'pic' in card && card.pic ? (
@@ -96,7 +97,7 @@ export default function DailyFiveScreen({ navigation }: any) {
                 ) : null}
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.cardTitle, { color: textColor(isDark) }]} numberOfLines={1}>{card.title}</Text>
-                  <Text style={styles.cardSub} numberOfLines={2}>{card.subtitle}</Text>
+                  <Text style={[styles.cardSub, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>{card.subtitle}</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -109,15 +110,11 @@ export default function DailyFiveScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  top: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
-  back: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 22, fontWeight: '900', letterSpacing: -0.4 },
-  sub: { marginTop: 2, fontSize: 12, fontWeight: '700', color: '#777' },
-  list: { paddingHorizontal: 16, gap: 10 },
-  card: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, padding: 14 },
+  list: { paddingHorizontal: 20, gap: 10 },
+  card: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
   index: { width: 28, height: 28, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  indexText: { fontSize: 12, fontWeight: '900', color: '#000' },
-  pic: { width: 40, height: 40, borderRadius: 14 },
-  cardTitle: { fontSize: 14, fontWeight: '900' },
-  cardSub: { marginTop: 3, fontSize: 11, fontWeight: '600', color: '#777', lineHeight: 15 },
+  indexText: { fontSize: 13, fontWeight: '800', color: '#111' },
+  pic: { width: 40, height: 40, borderRadius: 12 },
+  cardTitle: { fontSize: 15, fontWeight: '800' },
+  cardSub: { marginTop: 3, fontSize: 13, fontWeight: '600', lineHeight: 18 },
 });

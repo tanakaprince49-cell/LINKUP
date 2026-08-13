@@ -156,7 +156,9 @@ const AppHeader = ({ navigation, title }: any) => {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.headerContainer, {
-      backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
+      backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg,
+      borderBottomWidth: 1,
+      borderBottomColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
     }]}>
       <View style={styles.headerContent}>
         <View style={styles.headerBrand}>
@@ -207,7 +209,6 @@ const AppHeader = ({ navigation, title }: any) => {
           </TouchableOpacity>
         </View>
       </View>
-      <View style={[styles.headerAccentLine, { backgroundColor: COLORS.primary }]} />
     </SafeAreaView>
   );
 };
@@ -299,15 +300,15 @@ function TabNavigator({ navigation }: any) {
         tabBarShowLabel: true,
         tabBarLabel: tabLabels[route.name] || route.name,
         tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '800',
-          letterSpacing: 0.3,
+          fontSize: 11,
+          fontWeight: '700',
+          letterSpacing: 0,
           marginTop: 1,
         },
         tabBarStyle: {
-          backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
-          borderTopWidth: 0,
-          borderTopColor: 'transparent',
+          backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg,
+          borderTopWidth: 1,
+          borderTopColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
           height: 54 + insets.bottom,
           paddingTop: 0,
           paddingBottom: insets.bottom > 0 ? 2 : 4,
@@ -325,11 +326,11 @@ function TabNavigator({ navigation }: any) {
         header: (props) => {
           const titles: Record<string, string> = {
             Dashboard: 'LINKUP',
-            Swipe: 'DISCOVER',
-            Hub: 'PLAY',
-            Search: 'SEARCH',
-            Inbox: 'MESSAGES',
-            News: 'AI NEWS',
+            Swipe: 'Discover',
+            Hub: 'Play',
+            Search: 'Search',
+            Inbox: 'Messages',
+            News: 'News',
           };
           return <AppHeader navigation={props.navigation} title={titles[props.route.name] || 'LINKUP'} />;
         },
@@ -630,32 +631,26 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   headerLogoText: {
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 1.5,
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
   headerLogoAccent: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 5,
   },
   headerLogoAccentText: {
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-    color: '#000',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: '#111',
   },
   headerTabTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-  },
-  headerAccentLine: {
-    height: 3,
-    width: 60,
-    borderTopRightRadius: 3,
-    borderBottomRightRadius: 3,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.4,
   },
   headerActions: {
     flexDirection: 'row',

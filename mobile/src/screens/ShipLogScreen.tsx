@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Rocket } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { COLORS, appBackground, textColor } from '../theme/theme';
+import { COLORS, appBackground, hairline, liquidGlass, textColor } from '../theme/theme';
 import { normalizeShipLogs, persistShipAndRep, SHIP_VERIFY_DAYS, todayKey, uniqueShipDays } from '../lib/dailyLoop';
+import ScreenHeader from '../components/ScreenHeader';
 
 export default function ShipLogScreen({ navigation }: any) {
   const { user, profile, updateLocalProfile } = useAuth();
@@ -53,21 +53,18 @@ export default function ShipLogScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.root, appBackground(isDark)]}>
-      <View style={styles.top}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
-          <ChevronLeft size={22} color={textColor(isDark)} />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: textColor(isDark) }]}>SHIP LOG</Text>
-          <Text style={styles.sub}>{days}/{SHIP_VERIFY_DAYS} days toward ship verification · Rep decays if you go quiet</Text>
-        </View>
-      </View>
-      <View style={[styles.composer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}>
+      <ScreenHeader
+        title="Ship log"
+        subtitle={`${days}/${SHIP_VERIFY_DAYS} days toward ship verification`}
+        onBack={() => navigation.goBack()}
+        isDark={isDark}
+      />
+      <View style={[styles.composer, liquidGlass(isDark, false)]}>
         <TextInput
           value={text}
           onChangeText={setText}
-          placeholder="Shipped today: launched waitlist / fixed onboarding / talked to 3 users"
-          placeholderTextColor="#888"
+          placeholder="Shipped today: launched waitlist / talked to 3 users"
+          placeholderTextColor={textColor(isDark, 'muted')}
           maxLength={180}
           multiline
           style={[styles.input, { color: textColor(isDark) }]}
@@ -76,25 +73,25 @@ export default function ShipLogScreen({ navigation }: any) {
           value={link}
           onChangeText={setLink}
           placeholder="Optional link"
-          placeholderTextColor="#888"
+          placeholderTextColor={textColor(isDark, 'muted')}
           autoCapitalize="none"
-          style={[styles.link, { color: textColor(isDark) }]}
+          style={[styles.link, { color: textColor(isDark), borderColor: hairline(isDark) }]}
         />
         <TouchableOpacity onPress={submit} disabled={saving} style={styles.btn}>
-          {saving ? <ActivityIndicator color="#000" /> : <><Rocket size={14} color="#000" /><Text style={styles.btnText}>LOG SHIP</Text></>}
+          {saving ? <ActivityIndicator color="#111" /> : <Text style={styles.btnText}>Log ship</Text>}
         </TouchableOpacity>
       </View>
       <FlatList
         data={logs}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 16, gap: 10 }}
+        contentContainerStyle={{ padding: 20, gap: 10 }}
         renderItem={({ item }) => (
-          <View style={[styles.log, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}>
+          <View style={[styles.log, liquidGlass(isDark, false)]}>
             <Text style={[styles.logText, { color: textColor(isDark) }]}>{item.text}</Text>
-            <Text style={styles.logDate}>{item.createdAt.slice(0, 10)}</Text>
+            <Text style={[styles.logDate, { color: textColor(isDark, 'muted') }]}>{item.createdAt.slice(0, 10)}</Text>
           </View>
         )}
-        ListEmptyComponent={<Text style={styles.empty}>No ships yet. One line. Today.</Text>}
+        ListEmptyComponent={<Text style={[styles.empty, { color: textColor(isDark, 'muted') }]}>No ships yet. One line. Today.</Text>}
       />
     </SafeAreaView>
   );
@@ -102,17 +99,13 @@ export default function ShipLogScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  top: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 8 },
-  back: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 22, fontWeight: '900' },
-  sub: { marginTop: 3, fontSize: 11, fontWeight: '700', color: '#777', lineHeight: 15 },
-  composer: { margin: 16, borderRadius: 18, padding: 14, gap: 10 },
-  input: { minHeight: 72, fontSize: 14, fontWeight: '700', lineHeight: 20 },
-  link: { height: 40, fontSize: 13, fontWeight: '700' },
-  btn: { height: 48, borderRadius: 14, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
-  btnText: { fontSize: 12, fontWeight: '900', letterSpacing: 1.2, color: '#000' },
-  log: { borderRadius: 16, padding: 14 },
-  logText: { fontSize: 13, fontWeight: '700', lineHeight: 18 },
-  logDate: { marginTop: 6, fontSize: 10, fontWeight: '800', color: '#888' },
-  empty: { textAlign: 'center', marginTop: 24, color: '#888', fontWeight: '700' },
+  composer: { marginHorizontal: 20, marginBottom: 8, padding: 14, gap: 10 },
+  input: { minHeight: 72, fontSize: 15, fontWeight: '600', lineHeight: 22 },
+  link: { minHeight: 48, fontSize: 15, fontWeight: '600', borderTopWidth: 1, paddingTop: 10 },
+  btn: { minHeight: 52, borderRadius: 16, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  btnText: { fontSize: 16, fontWeight: '800', color: '#111' },
+  log: { padding: 14 },
+  logText: { fontSize: 15, fontWeight: '600', lineHeight: 22 },
+  logDate: { marginTop: 6, fontSize: 12, fontWeight: '600' },
+  empty: { textAlign: 'center', marginTop: 24, fontWeight: '600', fontSize: 15 },
 });

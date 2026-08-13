@@ -130,7 +130,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, liquidGlass(isDark, false)]}>
           <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>ACTIVE OPPORTUNITIES</Text>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Active opportunities</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -163,7 +163,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
               <Text style={styles.emptySub}>Try search to find builders by role, stage, or industry.</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.emptyBtn}>
                 <Search size={16} color="#000" />
-                <Text style={styles.emptyBtnText}>OPEN SEARCH</Text>
+                <Text style={styles.emptyBtnText}>Open search</Text>
               </TouchableOpacity>
             </View>
           }
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   heroCard: {
     marginHorizontal: 16,
     marginTop: 4,
-    borderRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
   },
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
     textTransform: 'uppercase',
   },
   heroSub: {
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   card: {
-    borderRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
   },
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   emptyCard: {
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 16,
   },
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
   emptyBtnText: {
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.4,
+    letterSpacing: -0.2,
     color: '#000',
   },
 });

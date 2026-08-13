@@ -1039,7 +1039,7 @@ export default function SwipeScreen({ navigation }: any) {
           <View style={styles.actionBtnInnerSmall}>
             <X size={22} color="#FF6B6B" />
           </View>
-          <Text style={styles.actionLabel}>PASS</Text>
+          <Text style={styles.actionLabel}>Pass</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -1068,7 +1068,7 @@ export default function SwipeScreen({ navigation }: any) {
           <View style={styles.actionBtnInnerLarge}>
             <Heart size={30} color="#000" fill="#000" />
           </View>
-          <Text style={[styles.actionLabel, styles.actionLabelLarge]}>LIKE</Text>
+          <Text style={[styles.actionLabel, styles.actionLabelLarge]}>Like</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtnSmall]} onPress={rewindLast}>
           <View style={[styles.actionBtnInnerSmall, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}>
@@ -1112,7 +1112,7 @@ export default function SwipeScreen({ navigation }: any) {
             },
           ]}
         >
-          <Text style={[styles.badgeText, { color: '#4ADE80' }]}>LIKE</Text>
+          <Text style={[styles.badgeText, { color: '#4ADE80' }]}>Like</Text>
         </Animated.View>
         <Animated.View
           pointerEvents="none"
@@ -1255,7 +1255,7 @@ export default function SwipeScreen({ navigation }: any) {
               onPress={() => animateSwipeOutRef.current('left')}
             >
               <X size={20} color="#FF6B6B" />
-              <Text style={styles.scrollBottomLabel}>PASS</Text>
+              <Text style={styles.scrollBottomLabel}>Pass</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.scrollBottomContact]}
@@ -1283,7 +1283,7 @@ export default function SwipeScreen({ navigation }: any) {
               onPress={() => animateSwipeOutRef.current('right')}
             >
               <Heart size={20} color="#000" fill="#000" />
-              <Text style={styles.scrollBottomLabel}>LIKE</Text>
+              <Text style={styles.scrollBottomLabel}>Like</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -1461,7 +1461,7 @@ const styles = StyleSheet.create({
   topBtn: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.12)',
@@ -1504,7 +1504,7 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    borderRadius: 28,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'transparent',
     overflow: 'hidden',
@@ -1554,7 +1554,7 @@ const styles = StyleSheet.create({
     left: 22,
     right: 22,
     bottom: 22,
-    borderRadius: 22,
+    borderRadius: 16,
     padding: 16,
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderWidth: 1,
@@ -1564,14 +1564,13 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     color: COLORS.primary,
-    letterSpacing: 1.4,
+    letterSpacing: -0.2,
   },
   previewName: {
     marginTop: 5,
     fontSize: 22,
     fontWeight: '900',
     color: '#FFF',
-    fontStyle: 'italic',
     textTransform: 'uppercase',
     flexShrink: 1,
   },
@@ -1652,7 +1651,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   compactMeta: {
-    borderRadius: 26,
+    borderRadius: 16,
     padding: 18,
     backgroundColor: 'rgba(0,0,0,0.48)',
     borderWidth: 1,
@@ -1661,7 +1660,7 @@ const styles = StyleSheet.create({
     elevation: 30,
   },
   compactWebMeta: {
-    borderRadius: 22,
+    borderRadius: 16,
     padding: 13,
   },
   moreInfoBtn: {
@@ -1730,8 +1729,7 @@ const styles = StyleSheet.create({
   expandedName: {
     fontSize: 24,
     fontWeight: '900',
-    fontStyle: 'italic',
-  },
+    },
   expandedRole: {
     fontSize: 14,
     fontWeight: '700',
@@ -1810,7 +1808,7 @@ const styles = StyleSheet.create({
   expandedPassBtn: {
     width: 52,
     height: 52,
-    borderRadius: 26,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -1823,7 +1821,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 18,
     height: 52,
-    borderRadius: 26,
+    borderRadius: 16,
   },
   expandedContactText: {
     fontSize: 12,
@@ -1833,7 +1831,7 @@ const styles = StyleSheet.create({
   expandedLikeBtn: {
     width: 52,
     height: 52,
-    borderRadius: 26,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FF3B5C',
@@ -1877,7 +1875,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '900',
     color: '#FFF',
-    fontStyle: 'italic',
     textTransform: 'uppercase',
     flexShrink: 1,
   },
@@ -1939,7 +1936,7 @@ const styles = StyleSheet.create({
   bioCard: {
     marginTop: 14,
     padding: 16,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
   },
   bioText: {
@@ -1971,13 +1968,13 @@ const styles = StyleSheet.create({
   },
   detailCard: {
     padding: 16,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
   },
   detailLabel: {
     fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1.4,
+    letterSpacing: -0.2,
   },
   detailValue: {
     marginTop: 8,
@@ -2035,7 +2032,7 @@ const styles = StyleSheet.create({
   actionBtnInnerSmall: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.55)',
@@ -2046,7 +2043,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     color: 'rgba(255,255,255,0.4)',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
   },
   actionLabelLarge: {
     color: '#FFF',
@@ -2057,7 +2054,7 @@ const styles = StyleSheet.create({
     gap: 3,
     width: 64,
     height: 64,
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: '#FFF',
     borderWidth: 1.5,
     borderColor: 'rgba(0,0,0,0.06)',
@@ -2115,8 +2112,7 @@ const styles = StyleSheet.create({
   authGateTitle: {
     fontSize: 22,
     fontWeight: '900',
-    fontStyle: 'italic',
-    letterSpacing: 1.2,
+    letterSpacing: 0,
     textAlign: 'center',
   },
   authGateCopy: {
@@ -2130,7 +2126,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     height: 52,
     paddingHorizontal: 28,
-    borderRadius: 18,
+    borderRadius: 16,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2144,8 +2140,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: '900',
-    fontStyle: 'italic',
-  },
+    },
   emptySubtext: {
     fontSize: 13,
     marginTop: 6,
@@ -2156,7 +2151,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   resetText: {
     fontSize: 12,
@@ -2190,12 +2185,12 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 8,
     marginBottom: 8,
-    borderRadius: 24,
+    borderRadius: 16,
     overflow: 'hidden',
   },
   scrollFeedCard: {
     flex: 1,
-    borderRadius: 24,
+    borderRadius: 16,
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: '#0a0a0a',
@@ -2225,7 +2220,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 20,
+    borderRadius: 16,
   },
   scrollCompatText: {
     fontSize: 10,
@@ -2243,7 +2238,6 @@ const styles = StyleSheet.create({
   scrollCardName: {
     fontSize: 22,
     fontWeight: '900',
-    fontStyle: 'italic',
     letterSpacing: -0.5,
     color: '#FFF',
   },

@@ -1,57 +1,86 @@
 import { Platform } from 'react-native';
 
+/** One visual language for every LINKUP screen. */
 export const COLORS = {
-  // Brand
-  primary: '#FBE618',      // LINKUP Signal Yellow
-  primaryGlow: 'rgba(251, 230, 24, 0.18)',
-  primaryStrong: '#E8D000', // Darker yellow for borders/accents
-  secondary: '#00C2FF',    // Liquid Cyan
-  tertiary: '#7C3AED',     // Violet Accent
-  success: '#28E7A8',      // Mint Green
-  danger: '#FF4D6D',       // Signal Rose
-  warning: '#FFB020',      // Warm Amber
+  primary: '#FBE618',
+  primaryGlow: 'rgba(251, 230, 24, 0.16)',
+  primaryStrong: '#C9B400',
+  secondary: '#0B1220',
+  tertiary: '#42526B',
+  success: '#16A34A',
+  danger: '#E11D48',
+  warning: '#D97706',
 
-  // Dark Mode Palette (Premium Tech Noir / Glass)
-  darkBg: '#05070D',
-  darkBgSec: '#0B1020',
-  darkCard: 'rgba(16, 21, 34, 0.68)',
-  darkGlassStrong: 'rgba(20, 28, 44, 0.82)',
-  darkBorder: 'rgba(255, 255, 255, 0.14)',
-  darkBorderActive: 'rgba(251, 230, 24, 0.48)',
-  darkTextPrimary: '#FFFFFF',
-  darkTextSecondary: '#B7C0D8',
-  darkTextMuted: '#718096',
+  darkBg: '#0A0B0D',
+  darkBgSec: '#12141A',
+  darkCard: '#171A21',
+  darkGlassStrong: '#1C2028',
+  darkBorder: 'rgba(255, 255, 255, 0.10)',
+  darkBorderActive: 'rgba(251, 230, 24, 0.45)',
+  darkTextPrimary: '#F4F5F7',
+  darkTextSecondary: '#A8B0BD',
+  darkTextMuted: '#6E7683',
 
-  // Light Mode Palette (Sleek Daylight Glass)
-  lightBg: '#F4F7FB',
-  lightBgSec: '#EAF0F8',
-  lightCard: 'rgba(255, 255, 255, 0.74)',
-  lightGlassStrong: 'rgba(255, 255, 255, 0.9)',
-  lightBorder: 'rgba(15, 23, 42, 0.1)',
-  lightBorderActive: 'rgba(251, 230, 24, 0.38)',
+  lightBg: '#F7F7F5',
+  lightBgSec: '#FFFFFF',
+  lightCard: '#FFFFFF',
+  lightGlassStrong: '#FFFFFF',
+  lightBorder: 'rgba(11, 18, 32, 0.08)',
+  lightBorderActive: 'rgba(201, 180, 0, 0.45)',
   lightTextPrimary: '#0B1220',
-  lightTextSecondary: '#42526B',
-  lightTextMuted: '#8492A6',
+  lightTextSecondary: '#4B5563',
+  lightTextMuted: '#8A93A0',
 };
 
-export const GLASS_SHADOW = {
-  shadowColor: '#07111F',
-  shadowOffset: { width: 0, height: 18 },
-  shadowOpacity: 0.18,
-  shadowRadius: 30,
-  elevation: 10,
+export const RADIUS = {
+  sm: 10,
+  md: 14,
+  lg: 16,
+  xl: 20,
+  pill: 999,
 };
+
+export const SPACE = {
+  screen: 20,
+  card: 16,
+  gap: 12,
+};
+
+export const TYPE = {
+  hero: { fontSize: 30, fontWeight: '800' as const, letterSpacing: -0.7, lineHeight: 36 },
+  title: { fontSize: 22, fontWeight: '800' as const, letterSpacing: -0.4, lineHeight: 28 },
+  section: { fontSize: 16, fontWeight: '800' as const, letterSpacing: -0.2 },
+  body: { fontSize: 15, fontWeight: '600' as const, lineHeight: 22 },
+  meta: { fontSize: 13, fontWeight: '600' as const, lineHeight: 18 },
+  label: { fontSize: 13, fontWeight: '700' as const },
+  button: { fontSize: 16, fontWeight: '800' as const },
+};
+
+export const GLASS_SHADOW = Platform.select({
+  ios: {
+    shadowColor: '#0B1220',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+  },
+  android: { elevation: 1 },
+  default: {},
+});
 
 export const liquidGlass = (isDark: boolean, elevated = true) => ({
-  backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
+  backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard,
   borderWidth: 1,
   borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
+  borderRadius: RADIUS.lg,
   ...(elevated ? GLASS_SHADOW : {}),
 });
 
 export const appBackground = (isDark: boolean) => ({
   backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg,
 });
+
+export const hairline = (isDark: boolean) =>
+  isDark ? COLORS.darkBorder : COLORS.lightBorder;
 
 export const textColor = (isDark: boolean, tone: 'primary' | 'secondary' | 'muted' = 'primary') => {
   if (tone === 'secondary') return isDark ? COLORS.darkTextSecondary : COLORS.lightTextSecondary;
@@ -61,60 +90,33 @@ export const textColor = (isDark: boolean, tone: 'primary' | 'secondary' | 'mute
 
 export const THEME = {
   colors: COLORS,
+  radius: RADIUS,
+  space: SPACE,
+  type: TYPE,
   glass: {
     dark: {
       backgroundColor: COLORS.darkCard,
       borderWidth: 1,
       borderColor: COLORS.darkBorder,
-      borderRadius: 24,
+      borderRadius: RADIUS.lg,
       ...GLASS_SHADOW,
     },
     light: {
       backgroundColor: COLORS.lightCard,
       borderWidth: 1,
       borderColor: COLORS.lightBorder,
-      borderRadius: 24,
+      borderRadius: RADIUS.lg,
       ...GLASS_SHADOW,
     },
   },
   typography: {
     fontFamily: 'System',
-    logo: {
-      fontSize: 24,
-      fontWeight: '900' as const,
-      letterSpacing: -0.5,
-    },
-    hero: {
-      fontSize: 48,
-      fontWeight: '900' as const,
-      letterSpacing: -1.5,
-      lineHeight: 52,
-      fontStyle: 'italic' as const,
-    },
-    title: {
-      fontSize: 20,
-      fontWeight: '800' as const,
-      letterSpacing: 0.5,
-      textTransform: 'uppercase' as const,
-      fontStyle: 'italic' as const,
-    },
-    subtitle: {
-      fontSize: 14,
-      fontWeight: '500' as const,
-      lineHeight: 22,
-    },
-    bodyBold: {
-      fontSize: 14,
-      fontWeight: '700' as const,
-    },
-    body: {
-      fontSize: 14,
-      fontWeight: '400' as const,
-    },
-    caption: {
-      fontSize: 11,
-      fontWeight: '600' as const,
-      letterSpacing: 0.5,
-    },
+    logo: { fontSize: 18, fontWeight: '800' as const, letterSpacing: 0.4 },
+    hero: TYPE.hero,
+    title: TYPE.title,
+    subtitle: TYPE.body,
+    bodyBold: { fontSize: 15, fontWeight: '700' as const },
+    body: TYPE.body,
+    caption: TYPE.meta,
   },
 };

@@ -117,7 +117,7 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <ChevronLeft size={24} color={textColor(isDark)} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>OPPORTUNITY</Text>
+          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Opportunity</Text>
         </View>
         <View style={styles.emptyState}>
           <Text style={[styles.emptyText, { color: textColor(isDark) }]}>Opportunity not found.</Text>
@@ -132,7 +132,7 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, liquidGlass(isDark, false)]}>
           <ChevronLeft size={24} color={textColor(isDark)} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>ACTIVE OPPORTUNITY</Text>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Active Opportunity</Text>
         <View style={styles.backButton} />
       </View>
 
@@ -195,11 +195,11 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: profile.uid })} style={[styles.actionBtn, liquidGlass(isDark, false), { borderWidth: 1 }]}>
             <User size={18} color={textColor(isDark)} />
-            <Text style={[styles.actionText, { color: textColor(isDark) }]}>PROFILE</Text>
+            <Text style={[styles.actionText, { color: textColor(isDark) }]}>Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity disabled={openingChat} onPress={openChat} style={[styles.actionBtn, { backgroundColor: COLORS.primary, opacity: openingChat ? 0.6 : 1 }]}>
             {openingChat ? <ActivityIndicator size="small" color="#000" /> : <MessageSquare size={18} color="#000" />}
-            <Text style={[styles.actionText, { color: '#000' }]}>MESSAGE</Text>
+            <Text style={[styles.actionText, { color: '#000' }]}>Message</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -232,12 +232,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { fontSize: 13, fontWeight: '900', letterSpacing: 2 },
+  headerTitle: { fontSize: 13, fontWeight: '900', letterSpacing: -0.2 },
   content: { padding: 16, paddingBottom: 130, gap: 14 },
-  heroCard: { borderRadius: 26, borderWidth: 1, padding: 16 },
+  heroCard: { borderRadius: 16, borderWidth: 1, padding: 16 },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatar: { width: 58, height: 58, borderRadius: 20 },
-  name: { fontSize: 18, fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic', flexShrink: 1 },
+  avatar: { width: 58, height: 58, borderRadius: 16 },
+  name: { fontSize: 18, fontWeight: '900', textTransform: 'uppercase', flexShrink: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   verifiedMiniBadge: {
     width: 22,
@@ -250,21 +250,21 @@ const styles = StyleSheet.create({
     borderColor: '#000',
   },
   handle: { marginTop: 2, fontSize: 11, fontWeight: '900', color: COLORS.primary },
-  scorePill: { width: 48, height: 48, borderRadius: 18, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  scorePill: { width: 48, height: 48, borderRadius: 16, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   scoreText: { fontSize: 16, fontWeight: '900', color: '#000' },
   title: { marginTop: 18, fontSize: 24, lineHeight: 29, fontWeight: '900', letterSpacing: 0.5 },
   summary: { marginTop: 10, fontSize: 14, lineHeight: 21, fontWeight: '700' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
-  infoTile: { width: '48%', minHeight: 104, borderRadius: 20, borderWidth: 1, padding: 12, gap: 6 },
-  infoLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 1.5, color: '#666' },
+  infoTile: { width: '48%', minHeight: 104, borderRadius: 16, borderWidth: 1, padding: 12, gap: 6 },
+  infoLabel: { fontSize: 9, fontWeight: '900', letterSpacing: -0.2, color: '#666' },
   infoValue: { fontSize: 12, fontWeight: '900', lineHeight: 17 },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 },
   tagChip: { borderRadius: 13, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6 },
   tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
-  insightCard: { flexDirection: 'row', gap: 12, borderRadius: 22, borderWidth: 1, padding: 14 },
+  insightCard: { flexDirection: 'row', gap: 12, borderRadius: 16, borderWidth: 1, padding: 14 },
   insightTitle: { fontSize: 13, fontWeight: '900', textTransform: 'uppercase' },
   insightText: { marginTop: 4, fontSize: 12, lineHeight: 18, fontWeight: '700', color: '#666' },
-  actionBtn: { flex: 1, height: 52, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  actionBtn: { flex: 1, height: 52, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   actionText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.8 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontSize: 14, fontWeight: '900', letterSpacing: 1 },

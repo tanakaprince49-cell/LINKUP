@@ -93,7 +93,7 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View>
-            <Text style={[styles.title, { color: textColor(isDark) }]}>PLAY</Text>
+            <Text style={[styles.title, { color: textColor(isDark) }]}>Play</Text>
             <Text style={[styles.subtitle, { color: textColor(isDark, 'muted') }]}>Mini-games & challenges</Text>
           </View>
           <TouchableOpacity style={[styles.sparkPill, { backgroundColor: COLORS.primary }]}>
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  title: { fontSize: 30, fontWeight: '900', fontStyle: 'italic', letterSpacing: -1 },
+  title: { fontSize: 30, fontWeight: '900', letterSpacing: -1 },
   subtitle: { fontSize: 11, fontWeight: '700', marginTop: 2, letterSpacing: 0.3 },
   sparkPill: {
     flexDirection: 'row',
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
   loopBtn: { flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   loopBtnText: { fontSize: 11, fontWeight: '900', letterSpacing: 1, color: '#000' },
   repLine: { fontSize: 11, fontWeight: '700', marginBottom: 18 },
-  sectionLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 2, marginBottom: 12 },
+  sectionLabel: { fontSize: 11, fontWeight: '900', letterSpacing: -0.2, marginBottom: 12 },
   gamesGrid: {
     flexDirection: 'row',
     gap: 10,
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
   },
   gameCard: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 14,
     gap: 6,
     minHeight: 140,
@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
   },
   gamePlayText: { fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.5 },
   challengeCard: {
-    borderRadius: 18,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 10,
     gap: 12,
@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
   },
   badgeIcon: { fontSize: 24 },
   badgeLabel: { fontSize: 10, fontWeight: '800' },
-  card: { borderRadius: 18, overflow: 'hidden' },
+  card: { borderRadius: 16, overflow: 'hidden' },
   missionRow: {
     flexDirection: 'row',
     alignItems: 'center',
