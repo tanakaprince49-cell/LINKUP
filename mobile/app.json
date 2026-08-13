@@ -5,12 +5,12 @@
     "scheme": "linkup",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo-square.png",
+    "icon": "./assets/icon-padded.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png.png",
+      "image": "./assets/splash-padded.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FBE618"
     },
     "ios": {
       "supportsTablet": true
