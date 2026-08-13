@@ -217,7 +217,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             <Text style={styles.rankBadgeText}>{rank === 0 ? '1ST' : rank === 1 ? '2ND' : rank === 2 ? '3RD' : `#${rank + 1}`}</Text>
           </View>
         ) : null}
-        <Image>
+        <Image
           source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }}
           style={styles.avatar}
         />
@@ -493,7 +493,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           </TouchableOpacity>
 
           <Section
-            title="Recommended Matches"
+            title="Today’s 2 picks"
             icon={<Sparkles size={17} color={COLORS.primary} />}
             data={recommended}
             showScore
