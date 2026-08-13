@@ -827,6 +827,30 @@ export default function ChatScreen({ route, navigation }: any) {
     ]);
   };
 
+  const reportPerson = (reason: string, messageId?: string) => {
+    if (!myUid || !otherUserId) return;
+    reportSafetyIssue({
+      reporterId: myUid,
+      reportedUserId: otherUserId,
+      matchId,
+      messageId,
+      reason,
+    })
+      .then(() => Alert.alert('Report sent', 'Thanks. LINKUP will review this. You can also block them so they cannot write you.'))
+      .catch(() => Alert.alert('Report failed', 'Could not send the report. Try again.'));
+  };
+
+  const openReportUser = () => {
+    closeOptionsMenu();
+    Alert.alert('Report this person', 'Why are you reporting them?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Scam / money ask', onPress: () => reportPerson('scam') },
+      { text: 'Harassment', onPress: () => reportPerson('harassment') },
+      { text: 'Spam', onPress: () => reportPerson('spam') },
+      { text: 'Inappropriate', onPress: () => reportPerson('inappropriate') },
+    ]);
+  };
+
   const toggleReaction = async (item: any, emoji: string) => {
     if (!matchId || !myUid || !item?.id) return;
     const current = item.reactions && typeof item.reactions === 'object' ? { ...item.reactions } : {};
