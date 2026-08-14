@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, initializeAuth } from 'firebase/auth';
-import { initializeFirestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -34,6 +34,12 @@ export const auth = createAuth();
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
   ignoreUndefinedProperties: true,
+  // Persist Firestore docs in IndexedDB on web so repeat visits render
+  // profiles instantly from cache while the network copy refreshes.
+  // React Native has no IndexedDB, so native keeps the default memory cache.
+  ...(Platform.OS === 'web'
+    ? { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }
+    : {}),
 });
 export const functions = getFunctions(app);
 

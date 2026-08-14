@@ -165,6 +165,15 @@ const profileFromEvent = (row: AnalyticsEventRow, mode: AnalyticsMode): ViewerPr
   matchId: row.matchId,
 } as unknown as ViewerProfile);
 
+// Compact `publicProfiles` docs are far smaller than full `users` docs
+// (trimmed fields, bounded image payloads), so try the index first and only
+// fall back to the heavy `users` read when the index entry is missing.
+const loadViewerProfileSnap = async (uid: string) => {
+  const publicSnap = await getDoc(doc(db, 'publicProfiles', uid)).catch(() => null);
+  if (publicSnap?.exists()) return publicSnap;
+  return getDoc(doc(db, 'users', uid));
+};
+
 function ViewersScreen({ navigation, route }: any) {
   const { profile } = useAuth();
   const { theme } = useTheme();
@@ -209,8 +218,8 @@ function ViewersScreen({ navigation, route }: any) {
         const nextRows = await Promise.all(
           visibleRows.map(async (row) => {
             try {
-              const snap = await getDoc(doc(db, 'users', row.viewerId));
-              if (snap.exists()) {
+              const snap = await loadViewerProfileSnap(row.viewerId);
+              if (snap?.exists()) {
                 const compact = compactProfileForList({ uid: snap.id, ...(snap.data() as any) });
                 return {
                   ...compact,

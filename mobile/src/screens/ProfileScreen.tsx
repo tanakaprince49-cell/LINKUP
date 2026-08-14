@@ -27,7 +27,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import * as Icons from 'lucide-react-native';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { deleteDoc, deleteField, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, deleteField, doc, getDoc, getDocFromCache, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { trackProfileClick, trackProfileSave, trackProfileView } from '../lib/analytics';
 import { resolveConnectionGate, startTalkOrRequest } from '../lib/connectionRequests';
 import { useConnectionNote } from '../components/ConnectionNoteModal';
@@ -448,15 +448,37 @@ export default function ProfileScreen({ navigation, route }: any) {
     if (pending) return pending;
 
     const promise = (async () => {
-      const [publicSnap] = await Promise.all([
-        getDoc(doc(db, 'publicProfiles', uid)).catch(() => null),
-      ]);
-
-      if (publicSnap?.exists()) {
-        const profile = compactProfileForList({ uid: publicSnap.id, ...(publicSnap.data() as any) });
+      const publicRef = doc(db, 'publicProfiles', uid);
+      const remember = (profile: UserProfile) => {
         profileCacheRef.current.set(uid, profile);
         return profile;
+      };
+      const fromSnap = (snap: any) =>
+        snap?.exists?.() ? compactProfileForList({ uid: snap.id, ...(snap.data() as any) }) : null;
+
+      // 1) Serve instantly from the local Firestore cache when we have the
+      //    doc (repeat views / after discovery), while the network copy
+      //    refreshes the cache in the background.
+      const serverSnapPromise = getDoc(publicRef).catch(() => null as any);
+      const cachedSnap = await getDocFromCache(publicRef).catch(() => null as any);
+      const cachedProfile = fromSnap(cachedSnap);
+      if (cachedProfile) {
+        void serverSnapPromise.then((freshSnap) => {
+          const freshProfile = fromSnap(freshSnap);
+          if (freshProfile) profileCacheRef.current.set(uid, freshProfile);
+        });
+        return remember(cachedProfile);
       }
+
+      // 2) Otherwise wait for the live public index...
+      const publicProfile = fromSnap(await serverSnapPromise);
+      if (publicProfile) return remember(publicProfile);
+
+      // 3) ...and finally the full user doc so profiles never dead-end on a
+      //    missing public index entry.
+      const userSnap = await getDoc(doc(db, 'users', uid)).catch(() => null as any);
+      const userProfile = fromSnap(userSnap);
+      if (userProfile) return remember(userProfile);
 
       return null;
     })();

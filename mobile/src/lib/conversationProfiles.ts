@@ -112,16 +112,21 @@ export const loadConversationProfile = async (
 
   let merged = normalizeConversationProfile(uid, fallback || {});
 
-  const publicSnap = await getDoc(doc(db, 'publicProfiles', uid)).catch(() => null);
+  // Fire both candidate reads in parallel instead of waiting for the public
+  // index before deciding to hit `users` — the slow path drops from two
+  // serial round trips to one.
+  const publicPromise = getDoc(doc(db, 'publicProfiles', uid)).catch(() => null);
+  const userPromise = needsFullConversationProfile(merged)
+    ? getDoc(doc(db, 'users', uid)).catch(() => null)
+    : Promise.resolve(null);
+
+  const [publicSnap, userSnap] = await Promise.all([publicPromise, userPromise]);
   if (publicSnap?.exists()) {
     merged = normalizeConversationProfile(uid, publicSnap.data(), merged);
   }
 
-  if (needsFullConversationProfile(merged)) {
-    const userSnap = await getDoc(doc(db, 'users', uid)).catch(() => null);
-    if (userSnap?.exists()) {
-      merged = normalizeConversationProfile(uid, userSnap.data(), merged);
-    }
+  if (userSnap?.exists() && needsFullConversationProfile(merged)) {
+    merged = normalizeConversationProfile(uid, userSnap.data(), merged);
   }
 
   profileCache.set(uid, merged);
