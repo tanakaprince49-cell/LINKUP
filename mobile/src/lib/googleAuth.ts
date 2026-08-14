@@ -9,7 +9,7 @@ type GoogleSignInModule = {
   GoogleSignin: {
     configure: (options: Record<string, unknown>) => void;
     hasPlayServices: (options?: { showPlayServicesUpdateDialog?: boolean }) => Promise<boolean>;
-    hasPreviousSignIn?: () => Promise<boolean>;
+    hasPreviousSignIn?: () => Promise<boolean> | boolean;
     signOut?: () => Promise<void>;
     signIn: () => Promise<any>;
     getTokens?: () => Promise<{ idToken?: string | null }>;
@@ -92,7 +92,10 @@ export async function signInToFirebaseWithGoogle() {
   const { GoogleSignin } = googleModule;
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
-  const alreadySignedIn = await GoogleSignin.hasPreviousSignIn?.().catch(() => false);
+  // v13+ returns a boolean synchronously; older versions return a Promise.
+  // Promise.resolve() handles both — calling .catch directly on a boolean
+  // crashes with "undefined is not a function".
+  const alreadySignedIn = await Promise.resolve(GoogleSignin.hasPreviousSignIn?.()).catch(() => false);
   if (alreadySignedIn) {
     await GoogleSignin.signOut?.().catch(() => {});
   }
