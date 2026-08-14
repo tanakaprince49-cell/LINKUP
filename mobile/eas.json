@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 18.12.3",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -26,7 +26,7 @@
     },
     "production": {
       "environment": "production",
-      "autoIncrement": true,
+      "autoIncrement": false,
       "env": {
         "EXPO_PUBLIC_ENABLE_DIRECT_AI": "true",
         "EXPO_PUBLIC_OPENROUTER_MODEL": "deepseek/deepseek-chat"
