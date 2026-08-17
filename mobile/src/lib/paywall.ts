@@ -33,6 +33,9 @@ export const GOOGLE_PLAY_SUBSCRIPTION_URL =
 export const SWIPE_USAGE_WINDOW_HOURS = 12;
 
 export const hasLinkupPro = (profile: any) => {
+  // The web app has no IAP store (expo-iap is Android/iOS only), so all
+  // features are unlocked for web users by default.
+  if (Platform.OS === 'web') return true;
   const status = String(profile?.subscriptionStatus || '').toLowerCase();
   if (['inactive', 'canceled', 'cancelled', 'expired', 'free'].includes(status)) return false;
   const plan = String(profile?.plan || '').toLowerCase();
@@ -163,6 +166,9 @@ export const getDailyUsage = async (uid: string, feature: string) => {
 };
 
 export const consumeDailyUsage = async (uid: string, feature: string, limit: number) => {
+  if (Platform.OS === 'web') {
+    return { allowed: true, used: 0, remaining: limit, limit };
+  }
   const key = usageKey(uid || 'anonymous', feature);
   const current = await getDailyUsage(uid || 'anonymous', feature);
   if (current >= limit) {
@@ -210,6 +216,9 @@ export const getWindowUsage = async (uid: string, feature: string, windowHours: 
 export const consumeWindowUsage = async (uid: string, feature: string, limit: number, windowHours: number) => {
   const windowMs = Math.max(1, windowHours) * 60 * 60 * 1000;
   const now = Date.now();
+  if (Platform.OS === 'web') {
+    return { allowed: true, used: 0, remaining: limit, limit, windowHours, resetAt: now + windowMs };
+  }
   const key = windowUsageKey(uid || 'anonymous', feature);
   const raw = await AsyncStorage.getItem(key);
   const usage = parseWindowUsage(raw, now, windowMs);

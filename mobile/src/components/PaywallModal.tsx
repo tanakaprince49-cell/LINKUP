@@ -291,6 +291,11 @@ export default function PaywallModal({
   }, [availablePurchases, visible]);
 
   const handleUpgrade = async () => {
+    if (Platform.OS === 'web') {
+      Alert.alert('LINKUP PLUS is free on web 🎉', 'Every feature is already unlocked on the web app — no purchase needed.');
+      return;
+    }
+
     if (isPro) {
       Alert.alert('LINKUP PLUS active', 'Your account already has LINKUP PLUS.');
       return;
@@ -334,6 +339,10 @@ export default function PaywallModal({
   };
 
   const handleRestore = async () => {
+    if (Platform.OS === 'web') {
+      Alert.alert('Nothing to restore', 'Purchases only exist on the mobile apps. LINKUP PLUS is free on web.');
+      return;
+    }
     if (restoreDisabled) return;
     if (onRestore) {
       onRestore();
