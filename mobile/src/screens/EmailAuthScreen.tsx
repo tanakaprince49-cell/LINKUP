@@ -26,6 +26,7 @@ export default function EmailAuthScreen({ navigation }: any) {
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [busy, setBusy] = useState(false);
+  const [resetNotice, setResetNotice] = useState({ ok: false, text: '' });
 
   const doSignIn = async () => {
     setBusy(true);
@@ -46,9 +47,11 @@ export default function EmailAuthScreen({ navigation }: any) {
   };
 
   const doResetPassword = async () => {
+    setResetNotice({ ok: false, text: '' });
     setBusy(true);
     try {
-      await resetPassword(email);
+      const result = await resetPassword(email);
+      if (result?.message) setResetNotice({ ok: result.ok, text: result.message });
     } finally {
       setBusy(false);
     }
@@ -95,7 +98,7 @@ export default function EmailAuthScreen({ navigation }: any) {
             <Text style={[styles.label, { color: textColor(isDark, 'muted') }]}>Email</Text>
             <TextInput
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(t) => { setEmail(t); if (resetNotice.text) setResetNotice({ ok: false, text: '' }); }}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
@@ -131,6 +134,12 @@ export default function EmailAuthScreen({ navigation }: any) {
               <View style={{ height: 8 }} />
             )}
 
+            {resetNotice.text ? (
+              <Text style={{ marginTop: -4, marginBottom: 10, fontSize: 12, fontWeight: '700', lineHeight: 17, color: resetNotice.ok ? '#22C55E' : '#EF4444' }}>
+                {resetNotice.text}
+              </Text>
+            ) : null}
+
             <TouchableOpacity
               onPress={mode === 'signin' ? doSignIn : doSignUp}
               disabled={busy}
@@ -145,7 +154,7 @@ export default function EmailAuthScreen({ navigation }: any) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+              onPress={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setResetNotice({ ok: false, text: '' }); }}
               disabled={busy}
               activeOpacity={0.85}
               style={[styles.ghostBtn, fieldBorder]}

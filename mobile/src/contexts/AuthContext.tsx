@@ -320,7 +320,7 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<{ ok: boolean; message: string }>;
   sendVerificationEmail: () => Promise<void>;
   requestEmailChange: (newEmail: string) => Promise<void>;
   showMfaEnrollmentNotice: () => Promise<void>;
@@ -789,35 +789,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const resetPassword = async (email: string) => {
+  const resetPassword = async (email: string): Promise<{ ok: boolean; message: string }> => {
     const trimmedEmail = String(email || '').trim();
     if (!trimmedEmail) {
-      Alert.alert('Enter your email', 'Add your email first, then tap Forgot password again.');
-      return;
+      const message = 'Enter your email first, then tap Forgot password again.';
+      if (Platform.OS !== 'web') Alert.alert('Enter your email', message);
+      return { ok: false, message };
     }
 
     try {
       await sendPasswordResetEmail(auth, trimmedEmail);
-      Alert.alert(
-        'Reset email sent',
-        `We sent a password reset link to ${trimmedEmail}. It might land in spam, junk, or promotions, so check those folders too.`
-      );
+      const message = `We sent a password reset link to ${trimmedEmail}. It might land in spam, junk, or promotions, so check those folders too.`;
+      Alert.alert('Reset email sent', message);
+      return { ok: true, message };
     } catch (error: any) {
       console.error('Password reset error:', error);
       const code = String(error?.code || '');
-      if (code.includes('user-not-found')) {
-        Alert.alert('No account found', 'There is no account using that email yet.');
-        return;
-      }
-      if (code.includes('invalid-email')) {
-        Alert.alert('Invalid email', 'Enter a valid email address and try again.');
-        return;
-      }
-      if (code.includes('too-many-requests')) {
-        Alert.alert('Try again later', 'Too many reset attempts. Wait a bit, then try again.');
-        return;
-      }
-      Alert.alert('Reset failed', error?.message || 'Could not send reset email.');
+      const show = (title: string, message: string) => {
+        if (Platform.OS !== 'web') Alert.alert(title, message);
+        return { ok: false, message };
+      };
+      if (code.includes('user-not-found')) return show('No account found', 'There is no account using that email yet.');
+      if (code.includes('invalid-email')) return show('Invalid email', 'Enter a valid email address and try again.');
+      if (code.includes('too-many-requests')) return show('Try again later', 'Too many reset attempts. Wait a bit, then try again.');
+      return show('Reset failed', error?.message || 'Could not send reset email.');
     }
   };
 
