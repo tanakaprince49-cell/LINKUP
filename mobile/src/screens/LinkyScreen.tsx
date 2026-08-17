@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { ArrowLeft, ArrowUp, CheckCircle, FileText, Lock, RefreshCw, Send, X } from 'lucide-react-native';
 import PaywallModal from '../components/PaywallModal';
+import { hasLinkupPro } from '../lib/paywall';
 
 const STORAGE_KEY = (uid: string) => `linky_history_${uid}`;
 const LINKY_STREAK_KEY = (uid: string) => `linky_streak_${uid}`;
@@ -150,7 +151,7 @@ export default function LinkyScreen({ navigation }: any) {
   const historyRef = useRef<OpenRouterMessage[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loadedRef = useRef(false);
-  const isPro = user && ((profile as any)?.isPro || (profile as any)?.entitlements?.pro || (profile as any)?.entitlements?.linkupPro || (profile as any)?.entitlements?.linkupPlus);
+  const isPro = !!user && hasLinkupPro(profile);
   const [paywallFeature, setPaywallFeature] = useState<string | null>(null);
 
   useEffect(() => {
