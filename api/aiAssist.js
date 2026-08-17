@@ -1,6 +1,6 @@
-import { clippedJson, geminiText, handleOptions, readJsonBody, sendError, setCors } from './_gemini';
+import { clippedJson, geminiText, handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 
-const promptsByTask: Record<string, (payload: Record<string, unknown>) => { prompt: string; maxOutputTokens?: number; temperature?: number }> = {
+const promptsByTask = {
   startupAnalyzer: (payload) => ({
     maxOutputTokens: 520,
     temperature: 0.25,
@@ -89,7 +89,7 @@ const promptsByTask: Record<string, (payload: Record<string, unknown>) => { prom
   }),
 };
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req, res) {
   if (handleOptions(req, res)) return;
   if (req.method !== 'POST') {
     sendError(res, 405, 'Use POST for LINKUP AI.');
@@ -99,8 +99,8 @@ export default async function handler(req: any, res: any) {
   try {
     const body = readJsonBody(req);
     const task = String(body.task || '').trim();
-    const payload = (body.payload || {}) as Record<string, unknown>;
-    const promptConfig = promptsByTask[task]?.(payload);
+    const payload = body.payload || {};
+    const promptConfig = promptsByTask[task] ? promptsByTask[task](payload) : null;
     if (!promptConfig) {
       sendError(res, 400, 'Unsupported AI task.');
       return;
@@ -116,4 +116,4 @@ export default async function handler(req: any, res: any) {
   } catch (error) {
     sendError(res, 500, 'LINKUP AI failed on Vercel.', error);
   }
-}
+};

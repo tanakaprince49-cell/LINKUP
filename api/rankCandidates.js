@@ -1,16 +1,16 @@
-import { compactProfile, geminiText, handleOptions, localRank, readJsonBody, sendError, setCors } from './_gemini';
+import { compactProfile, geminiText, handleOptions, localRank, readJsonBody, sendError, setCors } from './_gemini.js';
 
-function parseRankedJson(text: string, allowedIds: Set<string>, maxCandidates: number) {
+function parseRankedJson(text, allowedIds, maxCandidates) {
   const start = text.indexOf('[');
   const end = text.lastIndexOf(']');
   if (start === -1 || end === -1 || end <= start) return [];
 
   const parsed = JSON.parse(text.slice(start, end + 1));
   if (!Array.isArray(parsed)) return [];
-  const seen = new Set<string>();
+  const seen = new Set();
 
   return parsed
-    .map((row: any) => ({
+    .map((row) => ({
       uid: String(row?.uid || '').trim(),
       score: Math.max(1, Math.min(100, Math.round(Number(row?.score || 0)))),
       reason: String(row?.reason || 'AI-ranked startup fit').trim().slice(0, 140),
@@ -25,7 +25,7 @@ function parseRankedJson(text: string, allowedIds: Set<string>, maxCandidates: n
     .slice(0, maxCandidates);
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req, res) {
   if (handleOptions(req, res)) return;
   if (req.method !== 'POST') {
     sendError(res, 405, 'Use POST for LINKUP AI ranking.');
@@ -37,7 +37,7 @@ export default async function handler(req: any, res: any) {
     const maxCandidates = Math.max(1, Math.min(20, Math.floor(Number(body.maxCandidates || 20))));
     const me = compactProfile(body.me || {});
     const candidates = Array.isArray(body.candidates)
-      ? body.candidates.slice(0, 20).map((candidate: unknown) => compactProfile(candidate))
+      ? body.candidates.slice(0, 20).map((candidate) => compactProfile(candidate))
       : [];
 
     if (!me.uid || candidates.length === 0) {
@@ -46,7 +46,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const local = localRank(me, candidates, maxCandidates);
-    const allowedIds = new Set<string>(candidates.map((candidate) => String(candidate.uid || '')).filter(Boolean));
+    const allowedIds = new Set(candidates.map((candidate) => String(candidate.uid || '')).filter(Boolean));
 
     const prompt = [
       'You are LINKUP AI matchmaking for startup builders.',
@@ -79,4 +79,4 @@ export default async function handler(req: any, res: any) {
   } catch (error) {
     sendError(res, 500, 'LINKUP AI ranking failed on Vercel.', error);
   }
-}
+};
