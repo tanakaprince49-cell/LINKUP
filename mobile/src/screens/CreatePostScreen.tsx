@@ -145,7 +145,7 @@ export default function CreatePostScreen({ navigation }: any) {
 
         <ScrollView style={styles.contentArea} keyboardShouldPersistTaps="handled">
           <View style={styles.inputWrapper}>
-            <Image source={{ uri: profile?.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.userThumb} />
+            <Image source={{ uri: profile?.profilePic || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }} style={styles.userThumb} />
             <TextInput
               autoFocus
               multiline

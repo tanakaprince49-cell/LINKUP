@@ -241,7 +241,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           style={styles.profileRow}
         >
           <Image
-            source={{ uri: item.profilePic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }}
+            source={{ uri: item.profilePic || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }}
             style={styles.avatar}
           />
           <View style={{ flex: 1 }}>

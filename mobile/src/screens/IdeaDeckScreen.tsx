@@ -443,7 +443,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
       )}
 
       <View style={[styles.ownerCard, liquidGlass(isDark, false)]}>
-        <Image source={{ uri: idea.ownerPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.ownerPic} />
+        <Image source={{ uri: idea.ownerPic || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }} style={styles.ownerPic} />
         <View style={{ flex: 1 }}>
           <View style={styles.ownerNameRow}>
             <Text style={[styles.ownerName, { color: textColor(isDark) }]} numberOfLines={1}>

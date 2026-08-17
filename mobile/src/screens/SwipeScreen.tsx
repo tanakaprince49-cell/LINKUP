@@ -39,6 +39,7 @@ import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
 import { PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
+import { avatarPlaceholderUri } from '../lib/defaultAvatar';
 import { subscribeToDiscoveryProfiles, loadMoreDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { shareLinkupInvite } from '../lib/activation';
 
@@ -46,7 +47,7 @@ const windowSize = Dimensions.get('window');
 const { width } = windowSize;
 const SWIPE_THRESHOLD = 0.22 * width;
 const DISCOVERY_LIMIT = 200;
-const FALLBACK_PHOTO = 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800';
+const FALLBACK_PHOTO = avatarPlaceholderUri('', 512);
 const MAX_SWIPE_DATA_URI_CHARS = 900_000;
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
 const discoveryCacheKey = (uid: string) => `linkup:discovery:v3:${uid}`;
@@ -163,7 +164,7 @@ const getSwipePhotos = (profile: UserProfile): string[] => {
     ? (profile as any).photos
     : [profile.profilePic];
   const safePhotos = rawPhotos.filter(isSafeSwipePhoto);
-  return safePhotos.length ? safePhotos : [FALLBACK_PHOTO];
+  return safePhotos.length ? safePhotos : [avatarPlaceholderUri(displayNameFor(profile), 512)];
 };
 
 const ExpandedProfilePanel = React.memo(function ExpandedProfilePanel({

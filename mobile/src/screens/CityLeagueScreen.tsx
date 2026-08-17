@@ -70,7 +70,7 @@ export default function CityLeagueScreen({ navigation }: any) {
           renderItem={({ item, index }) => (
             <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.row, liquidGlass(isDark, false)]}>
               <Text style={[styles.rank, { color: index < 3 ? COLORS.primaryStrong : textColor(isDark) }]}>{index + 1}</Text>
-              <Image source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80' }} style={styles.pic} />
+              <Image source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }} style={styles.pic} />
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>{displayNameFor(item)}</Text>

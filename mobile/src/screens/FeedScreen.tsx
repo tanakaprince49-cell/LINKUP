@@ -185,7 +185,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
       <View style={{ marginLeft: 44, marginTop: 4 }}>
         {replies.map(reply => (
           <View key={reply.id} style={[styles.commentItem, { marginBottom: 4 }]}>
-            <Image source={{ uri: reply.userPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={[styles.commentAvatar, { width: 28, height: 28 }]} />
+            <Image source={{ uri: reply.userPic || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }} style={[styles.commentAvatar, { width: 28, height: 28 }]} />
             <View style={styles.commentBody}>
               <Text style={[styles.commentUser, { color: textColor(isDark), fontSize: 11 }]}>{reply.userName}</Text>
               <Text style={[styles.commentText, { color: textColor(isDark, 'secondary'), fontSize: 12 }]}>{reply.content}</Text>
@@ -220,7 +220,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
               renderItem={({ item }) => (
                 <View style={{ marginBottom: 8 }}>
                   <View style={styles.commentItem}>
-                    <Image source={{ uri: item.userPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.commentAvatar} />
+                    <Image source={{ uri: item.userPic || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }} style={styles.commentAvatar} />
                     <View style={styles.commentBody}>
                       <View style={styles.commentHeader}>
                         <Text style={[styles.commentUser, { color: textColor(isDark) }]}>{item.userName}</Text>
@@ -411,7 +411,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       
       <View style={styles.cardHeader}>
         <TouchableOpacity style={styles.authorRow} onPress={() => navigation.navigate('Profile', { userId: post.authorId })}>
-          <Image source={{ uri: post.authorPic || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' }} style={styles.authorAvatarImg} />
+          <Image source={{ uri: post.authorPic || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }} style={styles.authorAvatarImg} />
           <View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Text style={[styles.authorName, { color: textColor(isDark) }]}>{post.authorName}</Text>

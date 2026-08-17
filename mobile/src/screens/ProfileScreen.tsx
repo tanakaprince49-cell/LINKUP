@@ -1631,9 +1631,10 @@ export default function ProfileScreen({ navigation, route }: any) {
     backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
     borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
   };
-  const heroProfilePic =
-    safeProfileImageUri(isEditing ? editData?.profilePic : profile?.profilePic, MOBILE_LIST_IMAGE_LIMIT) ||
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400';
+  const heroProfilePic = safeProfileImageUri(
+    isEditing ? editData?.profilePic : profile?.profilePic,
+    MOBILE_LIST_IMAGE_LIMIT
+  );
   const shouldRenderProfileImages = profileImagesReady || isEditing;
   const profileInitial = (displayNameFor(profile).trim()[0] || 'L').toUpperCase();
   const openFullPhoto = (uri: string) => {
@@ -1798,8 +1799,8 @@ export default function ProfileScreen({ navigation, route }: any) {
         {/* PROFILE HERO */}
         <View style={styles.heroSection}>
           <View style={styles.avatarContainer}>
-            <TouchableOpacity activeOpacity={0.9} onPress={() => openFullPhoto(heroProfilePic)}>
-              {shouldRenderProfileImages ? (
+            <TouchableOpacity activeOpacity={0.9} onPress={() => { if (heroProfilePic) openFullPhoto(heroProfilePic); }}>
+              {shouldRenderProfileImages && !!heroProfilePic ? (
                 <Image source={{ uri: heroProfilePic }} style={styles.avatar} />
               ) : (
                 <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: isDark ? COLORS.darkBgSec : '#FFFCE7' }]}>

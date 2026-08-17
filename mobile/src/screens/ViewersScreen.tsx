@@ -33,7 +33,7 @@ type ViewerProfile = UserProfile & {
 };
 
 const ANALYTICS_LIST_LIMIT = 75;
-const FALLBACK_AVATAR = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100';
+const FALLBACK_AVATAR = 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256';
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
 
 const MODE_META: Record<AnalyticsMode, any> = {

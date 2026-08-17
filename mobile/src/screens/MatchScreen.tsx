@@ -63,7 +63,7 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
     <View style={[styles.matchCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
       <View style={styles.cardMain}>
         <View style={styles.avatarContainer}>
-          <Image source={{ uri: conversationAvatarUri(otherUser.profilePic) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200' }} style={styles.avatar} />
+          <Image source={{ uri: conversationAvatarUri(otherUser.profilePic) || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }} style={styles.avatar} />
           <View style={styles.statusDot} />
         </View>
         
