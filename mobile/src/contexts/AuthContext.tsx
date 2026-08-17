@@ -24,7 +24,7 @@ import { deleteDoc, deleteField, doc, getDoc, onSnapshot, serverTimestamp, setDo
 import { auth, db } from '../lib/firebase';
 import { UserProfile } from '../types';
 import { publicProfileLink } from '../lib/profileLinks';
-import { buildLocalProEntitlement, hasLinkupPro, readLocalProEntitlement, saveLocalProEntitlement } from '../lib/paywall';
+import { buildLocalProEntitlement, hasLinkupPro, hasPaidLinkupPro, readLocalProEntitlement, saveLocalProEntitlement } from '../lib/paywall';
 import { compactProfileForCache } from '../lib/profilePerformance';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
 import { signInToFirebaseWithGoogle } from '../lib/googleAuth';
@@ -71,7 +71,10 @@ const compactHydratedProfile = async (uid: string, profileData: any) =>
 
 const withLocalProEntitlement = async (uid: string, profileData: any) => {
   const localPro = await readLocalProEntitlement(uid);
-  if (!localPro && !hasLinkupPro(profileData)) return profileData;
+  // Only genuinely paid accounts receive the Pro patch (plan, tick, etc.).
+  // The free-on-web unlock never reaches this merge, so web users neither
+  // get the verification tick nor store anything locally.
+  if (!localPro && !hasPaidLinkupPro(profileData)) return profileData;
 
   const unlockedAt =
     String(localPro?.proUnlockedAt || '') ||
@@ -518,7 +521,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (Object.keys(defaultsPatch).length) {
               setDoc(userDocRef, defaultsPatch, { merge: true }).catch(() => {});
             }
-            if (hasLinkupPro(data) && rawProfile.isVerified !== true) {
+            if (hasPaidLinkupPro(data) && rawProfile.isVerified !== true) {
               const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
               setDoc(
                 userDocRef,

@@ -32,10 +32,10 @@ export const GOOGLE_PLAY_SUBSCRIPTION_URL =
   `https://play.google.com/store/account/subscriptions?sku=${LINKUP_PLUS_PRODUCT_ID}&package=${GOOGLE_PLAY_PACKAGE_NAME}`;
 export const SWIPE_USAGE_WINDOW_HOURS = 12;
 
-export const hasLinkupPro = (profile: any) => {
-  // The web app has no IAP store (expo-iap is Android/iOS only), so all
-  // features are unlocked for web users by default.
-  if (Platform.OS === 'web') return true;
+// Real paid entitlement derived from stored profile data. Used for anything
+// that WRITES state (Firestore sync, local entitlement storage) or signals
+// paid identity (the verification tick). Never bypassed by platform.
+export const hasPaidLinkupPro = (profile: any) => {
   const status = String(profile?.subscriptionStatus || '').toLowerCase();
   if (['inactive', 'canceled', 'cancelled', 'expired', 'free'].includes(status)) return false;
   const plan = String(profile?.plan || '').toLowerCase();
@@ -52,6 +52,12 @@ export const hasLinkupPro = (profile: any) => {
     profile?.entitlements?.linkupPlus === true
   );
 };
+
+// Feature gates: everything is free on web (expo-iap has no web store), but
+// paid-only identity signals (verification tick, plan) always use
+// hasPaidLinkupPro so web users never receive or persist them for free.
+export const hasLinkupPro = (profile: any) =>
+  Platform.OS === 'web' ? true : hasPaidLinkupPro(profile);
 
 export const isAndroidProLocked = (profile: any) => Platform.OS === 'android' && !hasLinkupPro(profile);
 
@@ -153,7 +159,7 @@ export const readLocalProEntitlement = async (uid: string) => {
     const raw = await AsyncStorage.getItem(proEntitlementKey(uid));
     if (!raw) return null;
     const entitlement = JSON.parse(raw);
-    return hasLinkupPro(entitlement) ? entitlement : null;
+    return hasPaidLinkupPro(entitlement) ? entitlement : null;
   } catch {
     return null;
   }
