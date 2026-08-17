@@ -98,8 +98,36 @@ const pwaScript = [
   '</script>',
 ].join('\n');
 
+// DevTools deterrent: block right-click inspect + the common DevTools /
+// view-source keyboard shortcuts. NOTE: this is deterrence, not a lock —
+// browsers ultimately control DevTools. Real data protection lives in the
+// Firestore security rules.
+const devToolsGuard = [
+  '<!-- linkup-devtools-guard -->',
+  '<script>',
+  '(function () {',
+  "  document.addEventListener('contextmenu', function (event) {",
+  '    event.preventDefault();',
+  '  });',
+  "  document.addEventListener('keydown', function (event) {",
+  '    var key = String(event.key || \'\').toLowerCase();',
+  '    var meta = event.ctrlKey || event.metaKey;',
+  '    if (',
+  "      event.key === 'F12' ||",
+  "      (meta && event.shiftKey && (key === 'i' || key === 'j' || key === 'c' || key === 'k')) ||",
+  "      (meta && (key === 'u' || key === 's'))",
+  '    ) {',
+  '      event.preventDefault();',
+  '      event.stopPropagation();',
+  '    }',
+  '  }, true);',
+  '}());',
+  '</script>',
+].join('\n');
+
 html = injectOnce(html, 'linkup-pwa-meta', pwaHead, '</head>');
 html = injectOnce(html, 'linkup-pwa-service-worker', pwaScript, '</body>');
+html = injectOnce(html, 'linkup-devtools-guard', devToolsGuard, '</body>');
 
 fs.writeFileSync(indexPath, html);
 console.log('LINKUP PWA assets copied and index.html patched.');
