@@ -1,5 +1,9 @@
 export const MAX_PICKED_PHOTO_BYTES = 6 * 1024 * 1024;
 export const MAX_FIRESTORE_IMAGE_CHARS = 500_000;
+// Anything above ~240k chars gets stripped by the app's cache/list layers,
+// so uploads must be compressed to this size or they "save" but never show.
+// (This is why first-login profile pics vanished the next day.)
+export const MAX_APP_IMAGE_CHARS = 235_000;
 
 const formatMegabytes = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 
