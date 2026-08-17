@@ -84,7 +84,7 @@ const compressDataUriOnWeb = async (dataUri: string, savedLimit: number) => {
 
 export async function imageAssetToDataUri(
   asset: PickedImageAsset | undefined,
-  savedLimit = MAX_FIRESTORE_IMAGE_CHARS
+  savedLimit = MAX_APP_IMAGE_CHARS
 ) {
   try {
     let dataUri = '';

@@ -11,7 +11,6 @@ import {
   TextInput, 
   ActivityIndicator, 
   Dimensions,
-  Alert,
   Linking,
   Platform,
   Share,
@@ -19,6 +18,7 @@ import {
   Pressable,
   InteractionManager
 } from 'react-native';
+import { notifyUser } from '../lib/notify';
 import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
@@ -793,7 +793,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const generateInsights = async () => {
     if (!profile?.uid) {
-      Alert.alert('Profile not ready', 'Wait for your profile to load, then try again.');
+      notifyUser('Profile not ready', 'Wait for your profile to load, then try again.');
       return;
     }
     setIsSaving(true);
@@ -807,11 +807,11 @@ export default function ProfileScreen({ navigation, route }: any) {
       }
       const diagnostic = getLastAIDiagnostic();
       if (diagnostic && !diagnostic.ok && diagnostic.timestamp > previousDiagnosticAt) {
-        Alert.alert('Insight fallback', `${diagnostic.message}\n\nI saved a local profile insight so the profile still works.`);
+        notifyUser('Insight fallback', `${diagnostic.message}\n\nI saved a local profile insight so the profile still works.`);
       }
     } catch (e: any) {
       console.error('Insights error:', e);
-      Alert.alert('Insights error', describeAIError(e));
+      notifyUser('Insights error', describeAIError(e));
     } finally {
       setIsSaving(false);
     }
@@ -826,7 +826,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         url: profileLink,
       });
     } catch (e) {
-      Alert.alert('Share failed', 'Could not open the share menu.');
+      notifyUser('Share failed', 'Could not open the share menu.');
     }
   };
 
@@ -834,9 +834,9 @@ export default function ProfileScreen({ navigation, route }: any) {
     if (!profileLink) return;
     try {
       await Clipboard.setStringAsync(profileLink);
-      Alert.alert('Copied', 'Your LINKUP profile link is ready to paste.');
+      notifyUser('Copied', 'Your LINKUP profile link is ready to paste.');
     } catch (e) {
-      Alert.alert('Copy failed', 'Could not copy your profile link.');
+      notifyUser('Copy failed', 'Could not copy your profile link.');
     }
   };
 
@@ -845,18 +845,22 @@ export default function ProfileScreen({ navigation, route }: any) {
     try {
       await Linking.openURL(profileLink);
     } catch (e) {
-      Alert.alert('Open failed', 'Could not open your profile link.');
+      notifyUser('Open failed', 'Could not open your profile link.');
     }
   };
 
   const pickGalleryPhoto = async (index: number) => {
-    if (isViewingOther || !myProfile) return;
+    if (isViewingOther) return;
+    if (!myProfile) {
+      notifyUser('Profile not ready', 'Give it a second to finish loading, then tap again.');
+      return;
+    }
     const ImagePicker = await import('expo-image-picker');
     const { imageAssetToDataUri } = await import('../lib/imageUploadLimits');
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need access to your photos to update your pictures.');
+        notifyUser('Permission Denied', 'We need access to your photos to update your pictures.');
         return;
       }
     }
@@ -872,7 +876,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     if (result.canceled) return;
     const { dataUri, error } = await imageAssetToDataUri(result.assets?.[0]);
     if (!dataUri) {
-      Alert.alert('Photo too large', error || 'Please choose a smaller photo.');
+      notifyUser('Photo too large', error || 'Please choose a smaller photo.');
       return;
     }
 
@@ -889,7 +893,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       syncOwnPublicProfileIndex(myProfile.uid, { ...(profile || {}), photos: nextPhotos, uid: myProfile.uid }).catch(() => {});
     } catch (e: any) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${myProfile.uid}`);
-      Alert.alert('Upload failed', e?.message || 'Failed to update photos.');
+      notifyUser('Upload failed', e?.message || 'Failed to update photos.');
     } finally {
       setIsSaving(false);
     }
@@ -907,20 +911,24 @@ export default function ProfileScreen({ navigation, route }: any) {
       syncOwnPublicProfileIndex(myProfile.uid, { ...(profile || {}), photos: nextPhotos, uid: myProfile.uid }).catch(() => {});
     } catch (e: any) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${myProfile.uid}`);
-      Alert.alert('Delete failed', e?.message || 'Failed to remove photo.');
+      notifyUser('Delete failed', e?.message || 'Failed to remove photo.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const pickProfilePic = async () => {
-    if (isViewingOther || !myProfile) return;
+    if (isViewingOther) return;
+    if (!myProfile) {
+      notifyUser('Profile not ready', 'Give it a second to finish loading, then tap again.');
+      return;
+    }
     const ImagePicker = await import('expo-image-picker');
-    const { imageAssetToDataUri, MAX_FIRESTORE_IMAGE_CHARS } = await import('../lib/imageUploadLimits');
+    const { imageAssetToDataUri } = await import('../lib/imageUploadLimits');
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need access to your photos to update your profile picture.');
+        notifyUser('Permission Denied', 'We need access to your photos to update your profile picture.');
         return;
       }
     }
@@ -934,9 +942,9 @@ export default function ProfileScreen({ navigation, route }: any) {
     });
 
     if (!result.canceled) {
-    const { dataUri, error } = await imageAssetToDataUri(result.assets?.[0], MAX_FIRESTORE_IMAGE_CHARS);
+    const { dataUri, error } = await imageAssetToDataUri(result.assets?.[0]);
       if (!dataUri) {
-        Alert.alert('Photo too large', error || 'Please choose a smaller photo.');
+        notifyUser('Photo too large', error || 'Please choose a smaller photo.');
         return;
       }
       setIsSaving(true);
@@ -950,7 +958,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         }
       } catch (e: any) {
         handleFirestoreError(e, OperationType.UPDATE, `users/${myProfile.uid}`);
-        Alert.alert("Upload failed", e?.message || "Failed to update profile picture.");
+        notifyUser("Upload failed", e?.message || "Failed to update profile picture.");
       } finally {
         setIsSaving(false);
       }
@@ -959,7 +967,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const openChat = async () => {
     if (!myProfile?.uid) {
-      Alert.alert('Sign in to message', 'Create or sign in to a LINKUP account to message this builder.');
+      notifyUser('Sign in to message', 'Create or sign in to a LINKUP account to message this builder.');
       navigation.navigate('EmailAuth');
       return;
     }
@@ -993,22 +1001,22 @@ export default function ProfileScreen({ navigation, route }: any) {
         return;
       }
       if (result.action === 'pending') {
-        Alert.alert('Request pending', 'They have not answered yet. You can chat after they approve.');
+        notifyUser('Request pending', 'They have not answered yet. You can chat after they approve.');
         return;
       }
       if (result.action === 'incoming') {
-        Alert.alert('They already asked', 'Approve their request in Notifications to start chatting.');
+        notifyUser('They already asked', 'Approve their request in Notifications to start chatting.');
         navigation.navigate('Alerts');
         return;
       }
       if (result.action === 'rejected') {
-        Alert.alert('Not available', 'This builder declined your last request.');
+        notifyUser('Not available', 'This builder declined your last request.');
         return;
       }
-      Alert.alert('Request sent', 'They can approve or ignore it. You cannot message until they approve.');
+      notifyUser('Request sent', 'They can approve or ignore it. You cannot message until they approve.');
     } catch (e) {
       console.error('openChat error:', e);
-      Alert.alert('Error', 'Could not open chat. Please try again.');
+      notifyUser('Error', 'Could not open chat. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -1016,7 +1024,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const toggleSavedProfile = async () => {
     if (!myProfile?.uid) {
-      Alert.alert('Sign in to save', 'Create or sign in to a LINKUP account to save this profile.');
+      notifyUser('Sign in to save', 'Create or sign in to a LINKUP account to save this profile.');
       navigation.navigate('EmailAuth');
       return;
     }
@@ -1028,7 +1036,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         await deleteDoc(saveRef);
         setIsProfileSaved(false);
         trackProfileSave({ profileId: targetUserId, saved: false }).catch(() => {});
-        Alert.alert('Removed', 'Profile removed from your saved builders.');
+        notifyUser('Removed', 'Profile removed from your saved builders.');
         return;
       }
 
@@ -1051,10 +1059,10 @@ export default function ProfileScreen({ navigation, route }: any) {
         action: 'save',
       }).catch(() => {});
       setIsProfileSaved(true);
-      Alert.alert('Saved', 'Profile saved to your builders.');
+      notifyUser('Saved', 'Profile saved to your builders.');
     } catch (e) {
       console.error('save profile error:', e);
-      Alert.alert('Save failed', 'Could not save this profile. Deploy the latest Firestore rules and try again.');
+      notifyUser('Save failed', 'Could not save this profile. Deploy the latest Firestore rules and try again.');
     } finally {
       setIsSaving(false);
     }
@@ -1082,7 +1090,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     if (!editData) return;
     const ownerUid = myProfile?.uid || user?.uid || profile?.uid;
     if (!ownerUid) {
-      Alert.alert('Could not save profile', 'Sign in again, then try saving your profile.');
+      notifyUser('Could not save profile', 'Sign in again, then try saving your profile.');
       return;
     }
     setIsSaving(true);
@@ -1235,7 +1243,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             : code.includes('unavailable') || code.includes('deadline-exceeded') || code.includes('aborted') || message.includes('network')
               ? 'Firestore was temporarily unavailable. Please try again in a moment.'
               : 'Your changes were not saved. Firestore could not finish the write.';
-      Alert.alert('Could not save profile', friendlyMessage);
+      notifyUser('Could not save profile', friendlyMessage);
     } finally {
       setIsSaving(false);
     }
@@ -1248,7 +1256,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       return true;
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${profile.uid}`);
-      Alert.alert('Setting not saved', 'Could not update this preference. Please try again.');
+      notifyUser('Setting not saved', 'Could not update this preference. Please try again.');
       return false;
     }
   };
@@ -1292,7 +1300,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const handleEnableNotifications = async () => {
     if (notificationActionBusy) return;
     if (!user?.uid) {
-      Alert.alert('Sign in required', 'Sign in again, then turn notifications on.');
+      notifyUser('Sign in required', 'Sign in again, then turn notifications on.');
       return;
     }
 
@@ -1301,16 +1309,16 @@ export default function ProfileScreen({ navigation, route }: any) {
       const status = await enableAppNotificationsAsync(user.uid);
       setNotificationStatus(String(status || 'unavailable'));
       if (status === 'granted') {
-        Alert.alert('Notifications on', 'LINKUP can now notify you about messages, matches, views, and opportunities.');
+        notifyUser('Notifications on', 'LINKUP can now notify you about messages, matches, views, and opportunities.');
       } else {
-        Alert.alert('Notifications blocked', 'Android did not grant notification permission for LINKUP.', [
+        notifyUser('Notifications blocked', 'Android did not grant notification permission for LINKUP.', [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Open settings', onPress: openAppNotificationSettingsAsync },
         ]);
       }
     } catch (error) {
       console.warn('Notification permission error:', error);
-      Alert.alert('Notifications unavailable', 'Could not turn notifications on. Rebuild the APK after this update, then try again.');
+      notifyUser('Notifications unavailable', 'Could not turn notifications on. Rebuild the APK after this update, then try again.');
       await refreshNotificationStatus();
     } finally {
       setNotificationActionBusy(false);
@@ -1323,7 +1331,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     try {
       await Linking.openURL(GOOGLE_PLAY_SUBSCRIPTION_URL);
     } catch {
-      Alert.alert('Could not open Google Play', 'Open Google Play > Payments & subscriptions > Subscriptions, then choose LINKUP PLUS.');
+      notifyUser('Could not open Google Play', 'Open Google Play > Payments & subscriptions > Subscriptions, then choose LINKUP PLUS.');
     } finally {
       setSubscriptionActionBusy('');
     }
@@ -1332,7 +1340,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const performCancelProPlan = async () => {
     const ownerUid = myProfile?.uid || user?.uid || profile?.uid;
     if (!ownerUid) {
-      Alert.alert('Sign in required', 'Sign in again, then cancel your plan.');
+      notifyUser('Sign in required', 'Sign in again, then cancel your plan.');
       return;
     }
 
@@ -1377,10 +1385,10 @@ export default function ProfileScreen({ navigation, route }: any) {
         },
         { merge: true }
       );
-      Alert.alert('PLUS canceled', 'LINKUP PLUS perks are turned off for this account.');
+      notifyUser('PLUS canceled', 'LINKUP PLUS perks are turned off for this account.');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${ownerUid}`);
-      Alert.alert('Canceled on this device', 'LINKUP PLUS is off locally. If you bought through Google Play, use Manage in Google Play to stop billing.');
+      notifyUser('Canceled on this device', 'LINKUP PLUS is off locally. If you bought through Google Play, use Manage in Google Play to stop billing.');
     } finally {
       setSubscriptionActionBusy('');
     }
@@ -1394,7 +1402,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       return;
     }
 
-    Alert.alert('Cancel PLUS Plan', message, [
+    notifyUser('Cancel PLUS Plan', message, [
       { text: 'Keep PLUS', style: 'cancel' },
       { text: 'Cancel PLUS', style: 'destructive', onPress: performCancelProPlan },
     ]);
@@ -1415,7 +1423,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       return;
     }
 
-    Alert.alert("Logout", "Are you sure you want to exit the realm?", [
+    notifyUser("Logout", "Are you sure you want to exit the realm?", [
       { text: "Cancel", style: "cancel" },
       { text: "Logout", style: "destructive", onPress: performLogout}
     ]);
@@ -1427,7 +1435,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       await deleteAccount();
     } catch (e: any) {
       const message = String(e?.code || e?.message || '');
-      Alert.alert(
+      notifyUser(
         "Error",
         message.includes('requires-recent-login')
           ? "For security, log out and sign in again, then delete your account."
@@ -1445,7 +1453,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       return;
     }
 
-    Alert.alert(
+    notifyUser(
       "DELETE ACCOUNT", 
       "This is permanent. Your founder profile and all network data will be wiped from existence. Proceed?", 
       [
@@ -1472,7 +1480,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const handleCurrentPasswordReset = () => {
     const email = user?.email || '';
     if (!email) {
-      Alert.alert('No email found', 'This account does not have an email/password login attached yet.');
+      notifyUser('No email found', 'This account does not have an email/password login attached yet.');
       return;
     }
     runAccountAction('reset-password', () => resetPassword(email));
@@ -1488,7 +1496,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const runStartupAnalyzer = async () => {
     const idea = startupIdeaText.trim();
     if (idea.length < 12) {
-      Alert.alert('Add more detail', 'Describe the customer, problem, and product in one or two sentences.');
+      notifyUser('Add more detail', 'Describe the customer, problem, and product in one or two sentences.');
       return;
     }
 
@@ -1508,10 +1516,10 @@ export default function ProfileScreen({ navigation, route }: any) {
       setStartupAnalysis(result);
       const diagnostic = getLastAIDiagnostic();
       if (diagnostic && !diagnostic.ok && diagnostic.timestamp > previousDiagnosticAt) {
-        Alert.alert('Analyzer Fallback', `${diagnostic.message}\n\nI used the built-in startup analyzer so you still get feedback.`);
+        notifyUser('Analyzer Fallback', `${diagnostic.message}\n\nI used the built-in startup analyzer so you still get feedback.`);
       }
     } catch (error: any) {
-      Alert.alert('Analyzer error', describeAIError(error));
+      notifyUser('Analyzer error', describeAIError(error));
     } finally {
       setStartupAnalyzing(false);
     }
@@ -1555,7 +1563,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
   const addEditedProject = () => {
     if (editedProjects.length >= 10) {
-      Alert.alert('Project limit', 'You can add up to 10 active projects.');
+      notifyUser('Project limit', 'You can add up to 10 active projects.');
       return;
     }
     setEditData({
@@ -1587,7 +1595,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
   const addEditedIdea = () => {
     if (editedIdeas.length >= 20) {
-      Alert.alert('Idea limit', 'You can add up to 20 ideas.');
+      notifyUser('Idea limit', 'You can add up to 20 ideas.');
       return;
     }
     setEditData({
@@ -2596,9 +2604,9 @@ export default function ProfileScreen({ navigation, route }: any) {
               style={[styles.vibeCard, liquidGlass(isDark, false)]}
               onPress={() => {
                 if (profile?.vibeMedia) {
-                  Linking.openURL(profile.vibeMedia).catch(err => Alert.alert("Invalid Link", "Could not open vibe intro link."));
+                  Linking.openURL(profile.vibeMedia).catch(err => notifyUser("Invalid Link", "Could not open vibe intro link."));
                 } else {
-                  Alert.alert("No Vibe", "This user hasn't set a vibe intro yet.");
+                  notifyUser("No Vibe", "This user hasn't set a vibe intro yet.");
                 }
               }}
             >

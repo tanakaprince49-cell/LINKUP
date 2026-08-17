@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   TextInput,
   Platform,
 } from 'react-native';
@@ -19,6 +18,7 @@ import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import * as ImagePicker from 'expo-image-picker';
 import { imageAssetToDataUri } from '../lib/imageUploadLimits';
+import { notifyUser } from '../lib/notify';
 import { publicProfileLink } from '../lib/profileLinks';
 import { LINKUP_ROLE_OPTIONS, roleInfoFor } from '../lib/roles';
 import { seedConciergeWelcome } from '../lib/activation';
@@ -940,7 +940,7 @@ export default function OnboardingScreen({ navigation }: any) {
       if (Platform.OS !== 'web') {
         const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (lib.status !== 'granted') {
-          Alert.alert('Permission Denied', 'Please allow photo library access.');
+          notifyUser('Permission Denied', 'Please allow photo library access.');
           return;
         }
       }
@@ -957,14 +957,14 @@ export default function OnboardingScreen({ navigation }: any) {
       const asset = result.assets?.[0];
       const { dataUri, error } = await imageAssetToDataUri(asset);
       if (!dataUri) {
-        Alert.alert('Photo too large', error || 'Please choose a smaller photo.');
+        notifyUser('Photo too large', error || 'Please choose a smaller photo.');
         return;
       }
 
       setProfilePicUri(dataUri);
     } catch (e: any) {
       console.error('pickPhoto error', e);
-      Alert.alert('Error', e?.message || 'Could not pick photo.');
+      notifyUser('Error', e?.message || 'Could not pick photo.');
     }
   };
 
@@ -1510,7 +1510,7 @@ export default function OnboardingScreen({ navigation }: any) {
       void seedConciergeWelcome(user.uid, onboardingProfile);
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
-      Alert.alert('Could not finish onboarding', 'Please deploy the latest Firestore rules, then try again.');
+      notifyUser('Could not finish onboarding', 'Please deploy the latest Firestore rules, then try again.');
     } finally {
       setSaving(false);
     }
