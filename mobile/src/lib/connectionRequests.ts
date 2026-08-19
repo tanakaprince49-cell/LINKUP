@@ -100,6 +100,7 @@ export async function startTalkOrRequest(input: {
   senderName?: string;
   senderPic?: string;
   message?: string;
+  recipientName?: string;
 }) {
   const gate = await resolveConnectionGate(input.senderId, input.recipientId);
   if (gate.status === 'approved') {
@@ -149,6 +150,7 @@ export async function requestConnection({
   contextType,
   ideaId,
   ideaTitle,
+  recipientName,
 }: {
   senderId: string;
   recipientId: string;
@@ -158,6 +160,7 @@ export async function requestConnection({
   contextType?: 'idea';
   ideaId?: string;
   ideaTitle?: string;
+  recipientName?: string;
 }) {
   const requestId = connectionRequestId(senderId, recipientId);
   const requestRef = doc(db, 'connectionRequests', requestId);
@@ -203,6 +206,20 @@ export async function requestConnection({
     isRead: false,
     timestamp: serverTimestamp(),
   });
+
+  // Confirm the send in the SENDER's notifications — sending a request
+  // should never feel like shouting into the void.
+  const safeRecipientName = String(recipientName || '').trim().slice(0, 80);
+  await addDoc(collection(db, 'notifications'), {
+    userId: senderId,
+    fromId: recipientId,
+    fromName: 'LINKUP',
+    fromPic: '',
+    type: 'system',
+    content: `Connection request sent${safeRecipientName ? ` to ${safeRecipientName}` : ''}. We'll let you know the moment they answer.`,
+    isRead: false,
+    timestamp: serverTimestamp(),
+  }).catch(() => {});
 
   return {
     id: requestId,

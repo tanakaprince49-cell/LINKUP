@@ -15,7 +15,6 @@ import {
   InteractionManager,
   Platform,
   useWindowDimensions,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
@@ -41,6 +40,7 @@ import { PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
 import { avatarPlaceholderUri } from '../lib/defaultAvatar';
 import ProCrownBadge from '../components/ProCrownBadge';
+import { notifyUser } from '../lib/notify';
 import { subscribeToDiscoveryProfiles, loadMoreDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { shareLinkupInvite } from '../lib/activation';
 
@@ -794,6 +794,7 @@ export default function SwipeScreen({ navigation }: any) {
         senderName: displayNameFor(myProfile || user),
         senderPic: safeProfileImageUri(myProfile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT),
         message: querySnapshot.empty ? 'liked your profile and wants to talk.' : 'liked you back and wants to talk.',
+        recipientName: displayNameFor(target),
       }).catch(() => {});
 
       if (querySnapshot.empty) {
@@ -822,12 +823,12 @@ export default function SwipeScreen({ navigation }: any) {
     }
 
     if (connectionRequest?.status === 'pending') {
-      Alert.alert('Request pending', `${displayNameFor(target)} has not answered yet.`);
+      notifyUser('Request pending', `${displayNameFor(target)} has not answered yet.`);
       return;
     }
 
     if (connectionRequest?.status === 'rejected') {
-      Alert.alert('Request rejected', `${displayNameFor(target)} declined this request.`);
+      notifyUser('Request rejected', `${displayNameFor(target)} declined this request.`);
       return;
     }
 
@@ -842,13 +843,14 @@ export default function SwipeScreen({ navigation }: any) {
         senderName: displayNameFor(myProfile || user),
         senderPic: safeProfileImageUri(myProfile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT),
         message: drafted,
+        recipientName: displayNameFor(target),
       });
       setConnectionRequest(request);
       trackAction('connect');
-      Alert.alert('Request sent', `${displayNameFor(target)} can approve or reject it.`);
+      notifyUser('Request sent', `${displayNameFor(target)} can approve or reject it.`);
     } catch (error) {
       console.warn('Contact request failed:', error);
-      Alert.alert('Request failed', 'Could not send this contact request. Check Firebase rules and try again.');
+      notifyUser('Request failed', 'Could not send this contact request. Check Firebase rules and try again.');
     } finally {
       setContactBusy(false);
     }
@@ -1203,8 +1205,8 @@ export default function SwipeScreen({ navigation }: any) {
           <View style={styles.scrollCardBody}>
             <View style={styles.scrollCardTop}>
               <View style={[styles.scrollCompatPill, { backgroundColor: COLORS.primary }]}>
-                <Zap size={10} color="#000" fill="#000" />
-                <Text style={styles.scrollCompatText}>{compatibility}%</Text>
+                <Zap size={14} color="#000" fill="#000" />
+                <Text style={styles.scrollCompatText}>{compatibility}% match</Text>
               </View>
             </View>
             <View style={styles.scrollCardMeta}>
@@ -2240,15 +2242,21 @@ const styles = StyleSheet.create({
   scrollCompatPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 16,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
   scrollCompatText: {
-    fontSize: 10,
+    fontSize: 16,
     fontWeight: '900',
     color: '#000',
+    letterSpacing: -0.3,
   },
   scrollCardMeta: {
     gap: 4,

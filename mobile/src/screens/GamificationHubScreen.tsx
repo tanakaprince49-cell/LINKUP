@@ -119,6 +119,9 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
           <TouchableOpacity onPress={() => navigation.navigate('CityLeague')} style={[styles.loopBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
             <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>LEAGUE</Text>
           </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('IdeaDeck')} style={[styles.loopBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
+            <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>IDEAS</Text>
+          </TouchableOpacity>
         </View>
         <Text style={[styles.repLine, { color: textColor(isDark, 'muted') }]}>
           REP {Number(profile?.reputationScore || 0)} · decays if you go quiet · ship 3 days to verify

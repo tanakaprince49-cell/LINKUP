@@ -22,6 +22,10 @@ What's new in 12.0.0:
 - **Web dialogs:** new `notifyUser` — `Alert.alert` is a silent no-op on react-native-web, now falls back to `window.alert`/`confirm` with 2-button support (Profile, Onboarding, Linky, Trending Builders). Logout & Cancel-PLUS dialogs work on web.
 - **League consistency:** shared `leaguePool` loader reads the same Firestore docs in stable order on every device (300-cap); City League + Builder League + dashboard preview all rank that identical pool with deterministic tie-breaks.
 - **UI:** distinct Daily 5 (Flame) / Swipe (ArrowLeftRight) / Today's picks (UserCheck) icons; Linky screen re-themed to brand lime + theme-aware colors, verified badge, `Â·` mojibake fixed.
+- **Connecting:** connection-note modal rides above the keyboard on web/iOS PWA (visualViewport inset) and Android (KAV height); senders now get a "request sent" confirmation notification; connect-flow success/failure dialogs visible on web.
+- **Offline screen:** new flat-illustration cat-yanking-the-cable art + plain "No internet connection" copy.
+- **Brand:** hand-drawn geometric "L + rising arrow" SVG mark replaces the AI-looking logo everywhere `BrandMark` renders (landing, auth, verification).
+- **Discovery:** Idea Deck is now linked from Explore + Play hub (was orphaned); scroll-mode match percentage pill is big and readable (`72% match`).
 
 ## 11.0.0 (versionCode 11)
 

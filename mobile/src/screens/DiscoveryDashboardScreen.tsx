@@ -452,6 +452,16 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 </View>
               </View>
 
+              <TouchableOpacity
+                onPress={() => navigation.navigate('IdeaDeck')}
+                activeOpacity={0.88}
+                style={[styles.ideaDeckBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
+              >
+                <Lightbulb size={15} color={COLORS.primaryStrong} />
+                <Text style={[styles.ideaDeckBtnText, { color: textColor(isDark) }]}>Idea Deck — swipe startup ideas worth building</Text>
+                <ChevronRight size={15} color={textColor(isDark, 'muted')} />
+              </TouchableOpacity>
+
               {topOpportunityAlert ? (
                 <TouchableOpacity
                   activeOpacity={0.9}
@@ -660,6 +670,16 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     letterSpacing: 1,
   },
+  ideaDeckBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 16,
+  },
+  ideaDeckBtnText: { flex: 1, fontSize: 13, fontWeight: '800', letterSpacing: -0.2 },
   radarCard: {
     marginTop: 16,
     borderRadius: 16,

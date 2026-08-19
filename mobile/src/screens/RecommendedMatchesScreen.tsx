@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { ChevronLeft, MessageSquare, Search, Sparkles, Target, User, Zap } from 'lucide-react-native';
@@ -17,6 +17,7 @@ import { consumeDailyUsage, FREE_LIMITS, getDailyUsage } from '../lib/paywall';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import ProCrownBadge from '../components/ProCrownBadge';
+import { notifyUser } from '../lib/notify';
 
 type MatchScore = {
   score: number;
@@ -69,7 +70,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
 
       const lastNotifiedDate = await AsyncStorage.getItem(`linkup:last-notified-date:${user.uid}`);
       if (lastDate !== today && lastNotifiedDate !== today) {
-        Alert.alert(
+        notifyUser(
           'Today’s 2 picks',
           'Two builders ranked for you today. Treat them like real intros, not a feed.',
           [{ text: 'OK', onPress: () => AsyncStorage.setItem(`linkup:last-notified-date:${user.uid}`, today) }]
@@ -173,7 +174,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
 
     const usage = await consumeDailyUsage(user.uid, 'dailyRecommendations', FREE_LIMITS.dailyRecommendations);
     if (!usage.allowed && lastRecommendationDate === today) {
-      Alert.alert('That’s today’s 2', 'Come back tomorrow for 2 new recommended builders.');
+      notifyUser('That’s today’s 2', 'Come back tomorrow for 2 new recommended builders.');
       return;
     }
 
@@ -185,6 +186,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         senderName: displayNameFor(me || user),
         senderPic: safeProfileImageUri((me as any)?.profilePic, MOBILE_LIST_IMAGE_LIMIT),
         message: note,
+        recipientName: displayNameFor(profile),
       });
       await AsyncStorage.setItem(`linkup:last-recommendation-date:${user.uid}`, today);
       setLastRecommendationDate(today);
@@ -194,22 +196,22 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         return;
       }
       if (result.action === 'incoming') {
-        Alert.alert('They already asked', 'Approve their request in Notifications to chat.');
+        notifyUser('They already asked', 'Approve their request in Notifications to chat.');
         navigation.navigate('Alerts');
         return;
       }
       if (result.action === 'pending') {
-        Alert.alert('Request pending', 'They still need to approve before you can message.');
+        notifyUser('Request pending', 'They still need to approve before you can message.');
         return;
       }
       if (result.action === 'rejected') {
-        Alert.alert('Not available', 'This builder declined your last request.');
+        notifyUser('Not available', 'This builder declined your last request.');
         return;
       }
-      Alert.alert('Request sent', 'They can approve or ignore. Chat opens only after they approve.');
+      notifyUser('Request sent', 'They can approve or ignore. Chat opens only after they approve.');
     } catch (error) {
       console.error('Recommended match chat error:', error);
-      Alert.alert('Chat unavailable', 'Could not open this conversation right now.');
+      notifyUser('Chat unavailable', 'Could not open this conversation right now.');
     } finally {
       setBusyUserId(null);
     }
@@ -228,7 +230,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         <View style={styles.cardTop}>
           <TouchableOpacity
             style={styles.scorePill}
-            onPress={() => Alert.alert('Compatibility', `${match.score}%\n\n${match.reason}`)}
+            onPress={() => notifyUser('Compatibility', `${match.score}%\n\n${match.reason}`)}
             activeOpacity={0.85}
           >
             <Sparkles size={12} color="#000" />

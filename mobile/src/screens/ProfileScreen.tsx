@@ -996,6 +996,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         senderName: displayNameFor(myProfile),
         senderPic: safeProfileImageUri(myProfile.profilePic, MOBILE_LIST_IMAGE_LIMIT),
         message: note,
+        recipientName: displayNameFor(profile),
       });
       if (result.action === 'chat' && result.matchId) {
         navigation.navigate('Chat', { matchId: result.matchId, otherUser: otherUserSnapshot });

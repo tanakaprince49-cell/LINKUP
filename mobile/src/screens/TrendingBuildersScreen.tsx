@@ -106,6 +106,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
         senderName: displayNameFor(me || user),
         senderPic: safeProfileImageUri((me as any)?.profilePic, MOBILE_LIST_IMAGE_LIMIT),
         message: note,
+        recipientName: displayNameFor(profile),
       });
       if (result.action === 'chat' && result.matchId) {
         navigation.navigate('Chat', { matchId: result.matchId, otherUser: profile });

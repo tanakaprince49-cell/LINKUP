@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Easing,
   Image,
@@ -17,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { notifyUser } from '../lib/notify';
 import { useIsFocused } from '@react-navigation/native';
 import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { ChevronLeft, Heart, Lightbulb, MessageSquare, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
@@ -198,7 +198,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
         matchId,
         content: `You both liked "${idea.title}".`,
       });
-      Alert.alert('Idea match', `You and ${partnerProfile ? displayNameFor(partnerProfile) : partnerDoc.swiperName || 'a builder'} both want to build around "${idea.title}".`, [
+      notifyUser('Idea match', `You and ${partnerProfile ? displayNameFor(partnerProfile) : partnerDoc.swiperName || 'a builder'} both want to build around "${idea.title}".`, [
         { text: 'Keep swiping', style: 'cancel' },
         { text: 'Open chat', onPress: () => navigation.navigate('Chat', { matchId, otherUser: partnerProfile || { uid: partnerDoc.swiperId, displayName: partnerDoc.swiperName } }) },
       ]);
@@ -230,7 +230,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
       await likeIdea(idea);
     } catch (error: any) {
       console.warn('Idea like failed:', error);
-      Alert.alert('Idea swipe failed', error?.message || 'Could not save this idea swipe. Deploy the latest Firestore rules and try again.');
+      notifyUser('Idea swipe failed', error?.message || 'Could not save this idea swipe. Deploy the latest Firestore rules and try again.');
     } finally {
       setBusy(false);
     }
@@ -269,18 +269,18 @@ export default function IdeaDeckScreen({ navigation }: any) {
 
   const postIdea = async () => {
     if (!user?.uid) {
-      Alert.alert('Sign in required', 'Please sign in before posting an idea.');
+      notifyUser('Sign in required', 'Please sign in before posting an idea.');
       return;
     }
 
     const title = ideaTitle.trim();
     const description = ideaDescription.trim();
     if (!title || !description) {
-      Alert.alert('Finish your idea', 'Add a title and short description so builders understand what you want to build.');
+      notifyUser('Finish your idea', 'Add a title and short description so builders understand what you want to build.');
       return;
     }
     if (ideaFields.length === 0 || ideaLookingFor.length === 0) {
-      Alert.alert('Add signals', 'Choose at least one field and one thing you are looking for.');
+      notifyUser('Add signals', 'Choose at least one field and one thing you are looking for.');
       return;
     }
 
@@ -318,7 +318,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
       setConfettiActive(true);
       setTimeout(() => setConfettiActive(false), 1200);
     } catch (error: any) {
-      Alert.alert('Could not post idea', error?.message || 'Please deploy the latest Firestore rules and try again.');
+      notifyUser('Could not post idea', error?.message || 'Please deploy the latest Firestore rules and try again.');
     } finally {
       setPosting(false);
     }
@@ -338,11 +338,11 @@ export default function IdeaDeckScreen({ navigation }: any) {
     if (!user?.uid || !inviteIdea || inviteBusy) return;
     const message = inviteMessage.trim();
     if (!message) {
-      Alert.alert('Add a message', 'Write a short message so the idea owner knows why you want to connect.');
+      notifyUser('Add a message', 'Write a short message so the idea owner knows why you want to connect.');
       return;
     }
     if (inviteIdea.ownerId === user.uid) {
-      Alert.alert('This is your idea', 'Other builders can request to connect with you from this card.');
+      notifyUser('This is your idea', 'Other builders can request to connect with you from this card.');
       return;
     }
 
@@ -357,17 +357,18 @@ export default function IdeaDeckScreen({ navigation }: any) {
         contextType: 'idea',
         ideaId: inviteIdea.id,
         ideaTitle: inviteIdea.title,
+        recipientName: String((inviteIdea as any).ownerName || ''),
       });
       setInviteIdea(null);
       setInviteMessage('');
-      Alert.alert(
+      notifyUser(
         request.status === 'approved' ? 'Already connected' : 'Invite sent',
         request.status === 'approved'
           ? 'You can already message this builder.'
           : `${inviteIdea.ownerName} can approve or reject your invite from notifications.`
       );
     } catch (error: any) {
-      Alert.alert('Could not send invite', error?.message || 'Please deploy the latest Firestore rules and try again.');
+      notifyUser('Could not send invite', error?.message || 'Please deploy the latest Firestore rules and try again.');
     } finally {
       setInviteBusy(false);
     }
