@@ -34,6 +34,10 @@ if (!fs.existsSync(indexPath)) {
 let html = fs.readFileSync(indexPath, 'utf8');
 html = html.replace(/<meta\s+name=["']viewport["'][^>]*>\s*/i, '');
 
+// Browsers + installed PWAs pin favicons hard (separate favicon DB), so give
+// the cat mark a fresh URL to bust every cache layer in one move.
+html = html.replace(/href="\/favicon\.ico(\?[^"]*)?"/, 'href="/favicon.ico?v=cat1"');
+
 const pwaHead = [
   '<!-- linkup-pwa-meta -->',
   '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />',
@@ -44,7 +48,7 @@ const pwaHead = [
   '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />',
   '<meta name="apple-mobile-web-app-title" content="LINKUP" />',
   '<meta name="mobile-web-app-capable" content="yes" />',
-  '<link rel="apple-touch-icon" href="/icons/icon-192.png" />',
+  '<link rel="apple-touch-icon" href="/icons/icon-192.png?v=cat1" />',
   '<link rel="preconnect" href="https://firestore.googleapis.com" />',
   '<link rel="preconnect" href="https://identitytoolkit.googleapis.com" />',
   '<link rel="preconnect" href="https://www.googleapis.com" />',
