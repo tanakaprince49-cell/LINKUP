@@ -422,8 +422,8 @@ export default function IdeaDeckScreen({ navigation }: any) {
         </View>
         <View style={[styles.signalCard, liquidGlass(isDark)]}>
           <Text style={styles.signalLabel}>Looking for</Text>
-          <Text style={[styles.signalValue, { color: textColor(isDark) }]} numberOfLines={2}>
-            {(idea.lookingFor || []).slice(0, 3).join(', ') || 'Builders'}
+          <Text style={[styles.signalValue, { color: textColor(isDark) }]}>
+            {(idea.lookingFor || []).slice(0, 4).join(', ') || 'Builders'}
           </Text>
         </View>
       </View>

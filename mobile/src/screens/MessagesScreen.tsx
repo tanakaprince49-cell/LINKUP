@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, getDoc, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
-import { MessageSquare, ChevronRight, Pin, Star, Archive, ChevronLeft } from 'lucide-react-native';
+import { MessageSquare, Pin, Star, Archive, ChevronLeft } from 'lucide-react-native';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { buildConversationProfileSnapshot, conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { shareLinkupInvite } from '../lib/activation';
+import { notifyUser } from '../lib/notify';
+import ProCrownBadge from '../components/ProCrownBadge';
 
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
 
@@ -131,7 +133,7 @@ const ConversationItem = React.memo(({ match, navigation }: { match: Match, navi
       onPress={() => navigation.navigate('Chat', { matchId: match.id, otherUser: chatUserSnapshot })}
       onLongPress={() => {
         if (!user?.uid) return;
-        Alert.alert('Delete chat', 'Remove this chat from your inbox?', [
+        notifyUser('Delete chat', 'Remove this chat from your inbox?', [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Delete',
@@ -141,7 +143,7 @@ const ConversationItem = React.memo(({ match, navigation }: { match: Match, navi
                 await updateDoc(doc(db, 'matches', match.id), { deletedBy: arrayUnion(user.uid) } as any);
               } catch (e) {
                 console.error('Delete chat error:', e);
-                Alert.alert('Error', 'Could not delete chat.');
+                notifyUser('Error', 'Could not delete chat.');
               }
             },
           },
@@ -156,7 +158,7 @@ const ConversationItem = React.memo(({ match, navigation }: { match: Match, navi
             <Text style={styles.avatarFallbackText}>{avatarInitial}</Text>
           </View>
         )}
-        <View style={[styles.statusDot, { backgroundColor: isOnline ? '#22C55E' : '#666' }]} />
+        {isOnline ? <View style={styles.statusDot} /> : null}
       </View>
       <View style={styles.chatInfo}>
         <View style={styles.chatHeader}>
@@ -167,22 +169,18 @@ const ConversationItem = React.memo(({ match, navigation }: { match: Match, navi
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isPinned && <Pin size={12} color={COLORS.primary} />}
             {isImportant && <Star size={12} color={COLORS.primary} fill={COLORS.primary} />}
-            <Text style={styles.chatTime}>{formatTimeAgo(match.lastMessageTime)}</Text>
+            <Text style={[styles.chatTime, { color: textColor(isDark, 'muted') }]}>{formatTimeAgo(match.lastMessageTime)}</Text>
           </View>
         </View>
-        <Text style={styles.lastMessage} numberOfLines={1}>
+        <Text style={[styles.lastMessage, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
           {match.lastMessage || `Start the conversation with ${(otherUser.displayName || 'Builder').split(' ')[0]}`}
         </Text>
-        {!isOnline && !!otherUser.lastActiveAt && (
-          <Text style={styles.presenceText}>{formatLastSeen(otherUser.lastActiveAt)}</Text>
-        )}
       </View>
       {unreadCount > 0 && (
         <View style={styles.unreadBadge}>
           <Text style={styles.unreadBadgeText}>{unreadCount > 99 ? '99+' : String(unreadCount)}</Text>
         </View>
       )}
-      <ChevronRight size={16} color="#666" />
     </TouchableOpacity>
   );
 });
@@ -251,6 +249,7 @@ export default function MessagesScreen({ navigation, route }: any) {
             </Text>
           </View>
         </View>
+        <ProCrownBadge />
         {!archivedOnly && (
           <TouchableOpacity
             onPress={() => navigation.navigate('ArchivedChats', { archivedOnly: true })}
@@ -419,9 +418,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   chatName: {
-    fontSize: 14,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
     flexShrink: 1,
   },
   chatNameRow: {
@@ -442,9 +441,8 @@ const styles = StyleSheet.create({
     borderColor: '#000',
   },
   chatTime: {
-    fontSize: 10,
-    color: '#666',
-    fontWeight: '900',
+    fontSize: 11,
+    fontWeight: '700',
   },
   lastMessage: {
     fontSize: 12,

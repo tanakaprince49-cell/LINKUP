@@ -2,6 +2,7 @@ import 'react-native-gesture-handler';
 import React from 'react';
 import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text, Platform, InteractionManager } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
@@ -58,6 +59,7 @@ import { useOnlineStatus } from './src/lib/network';
 import OfflineScreen from './src/components/OfflineScreen';
 import { IS_LOW_END_ANDROID, safeProfileImageUri } from './src/lib/profilePerformance';
 import { preloadProfileScreen, scheduleScreenPreloads } from './src/lib/preloadScreens';
+import { profileIdFromLink } from './src/lib/profileLinks';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -351,7 +353,7 @@ function TabNavigator({ navigation }: any) {
       />
       <Tab.Screen name="Hub" component={GamificationHubScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
-      <Tab.Screen name="Inbox" component={MessagesScreen} />
+      <Tab.Screen name="Inbox" component={MessagesScreen} options={{ headerShown: false }} />
       <Tab.Screen name="News" component={NewsScreen} />
     </Tab.Navigator>
   );
@@ -505,6 +507,44 @@ function AppContent() {
       history.replaceState(null, '', '/landing');
     }
   }, [user?.uid]);
+
+  // Shared LINKUP profile links (/profile/<uid>) must survive the login jump:
+  // remember who the visitor came to see, then drop them on that profile once
+  // they are signed in (and onboarded).
+  const pendingSharedProfileRef = React.useRef(
+    Platform.OS === 'web' ? profileIdFromLink(String((globalThis as any)?.location?.pathname || '')) : ''
+  );
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || !user?.uid || !isOnboarded) return;
+    const target = pendingSharedProfileRef.current;
+    pendingSharedProfileRef.current = '';
+    if (!target || target === user.uid) return;
+    const timer = setTimeout(() => {
+      if (navigationRef.isReady()) {
+        (navigationRef as any).navigate('Profile', { userId: target });
+      }
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [user?.uid, isOnboarded]);
+
+  // Onboarding's "Finish now" sets this flag so brand-new users land directly
+  // on their own profile to keep editing, instead of the dashboard.
+  React.useEffect(() => {
+    if (!user?.uid || !isOnboarded) return;
+    let cancelled = false;
+    AsyncStorage.getItem('@linkup/pendingSelfProfileSetup')
+      .then((value) => {
+        if (cancelled || value !== '1') return;
+        void AsyncStorage.removeItem('@linkup/pendingSelfProfileSetup').catch(() => {});
+        setTimeout(() => {
+          if (navigationRef.isReady()) (navigationRef as any).navigate('Profile');
+        }, 450);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid, isOnboarded]);
 
   if (loading) return (
     <View style={{ flex: 1, ...appBackground(isDark), alignItems: 'center', justifyContent: 'center' }}>

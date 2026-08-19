@@ -29,7 +29,7 @@ import * as Icons from 'lucide-react-native';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { deleteDoc, deleteField, doc, getDoc, getDocFromCache, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { trackProfileClick, trackProfileSave, trackProfileView } from '../lib/analytics';
-import { resolveConnectionGate, startTalkOrRequest } from '../lib/connectionRequests';
+import { resolveConnectionGate, startTalkOrRequest, subscribeToConnectionGate, type ConnectionGate } from '../lib/connectionRequests';
 import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { buildConversationProfileSnapshot } from '../lib/conversationProfiles';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
@@ -41,6 +41,8 @@ import { profileLinkFor } from '../lib/profileLinks';
 import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
 import VerifiedBadge from '../components/VerifiedBadge';
 import ProCrownBadge from '../components/ProCrownBadge';
+import SocialGlyph from '../components/SocialGlyph';
+import { SOCIAL_CHIP_STYLE, SOCIAL_FIELDS, normalizeSocialUrl, sanitizeSocialLinks, socialLinkEntries } from '../lib/socialLinks';
 import type { StartupResume, UserProfile } from '../types';
 import PaywallModal from '../components/PaywallModal';
 import {
@@ -329,6 +331,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [isEditing, setIsEditing] = useState(false);
   const [editFocus, setEditFocus] = useState<'all' | 'bio' | 'skills' | 'project' | 'idea' | 'photos'>('all');
   const [isSaving, setIsSaving] = useState(false);
+  const [connectionGate, setConnectionGate] = useState<ConnectionGate | null>(null);
   const [editData, setEditData] = useState<any>(null);
   const [viewedProfile, setViewedProfile] = useState<any>(null);
   const [viewedLoading, setViewedLoading] = useState(false);
@@ -366,6 +369,16 @@ export default function ProfileScreen({ navigation, route }: any) {
       ? rawTargetUserId.trim()
       : '';
   const isViewingOther = Boolean(targetUserId && targetUserId !== myProfile?.uid);
+
+  // Live connection state with the profile being viewed, so the action
+  // button can show "Request pending" instead of a dead second attempt.
+  useEffect(() => {
+    if (!isViewingOther || !myProfile?.uid || !targetUserId) {
+      setConnectionGate(null);
+      return;
+    }
+    return subscribeToConnectionGate(myProfile.uid, targetUserId, setConnectionGate);
+  }, [isViewingOther, myProfile?.uid, targetUserId]);
   const profile = isViewingOther ? viewedProfile : myProfile;
   const proLocked = isAndroidProLocked(myProfile);
   const openPaywall = (feature: string) => setPaywallFeature(feature);
@@ -716,6 +729,14 @@ export default function ProfileScreen({ navigation, route }: any) {
           <SafeIcon name="ShieldAlert" size={42} color={COLORS.primary} />
           <Text style={[styles.unavailableTitle, { color: textColor(isDark) }]}>Profile Unavailable</Text>
           <Text style={styles.unavailableText}>{viewedError}</Text>
+          {!user?.uid && (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('EmailAuth')}
+              style={[styles.actionButton, { backgroundColor: COLORS.primary, borderWidth: 1, borderColor: COLORS.primary, paddingHorizontal: 22 }]}
+            >
+              <Text style={{ color: '#000', fontWeight: '800' }}>Join LINKUP</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -755,6 +776,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       lookingFor: Array.isArray((profile as any)?.lookingFor) ? (profile as any)?.lookingFor.join(', ') : '',
       languages: Array.isArray((profile as any)?.languages) ? (profile as any)?.languages.join(', ') : '',
       personalityType: (profile as any)?.personalityType || '',
+      socialLinks: { ...((profile as any)?.socialLinks || {}) },
       roleSignals: Array.isArray((profile as any)?.roleAnswers?.manualSignals) ? (profile as any)?.roleAnswers.manualSignals.join(', ') : '',
       resume: {
         shippedProducts: resumeTextValue((profile as any)?.resume, 'shippedProducts'),
@@ -1183,6 +1205,8 @@ export default function ProfileScreen({ navigation, route }: any) {
           portfolio: limitText(editData.socialLinks?.portfolio, 240),
           linkedin: limitText(editData.socialLinks?.linkedin, 240),
           github: limitText(editData.socialLinks?.github, 240),
+          tiktok: limitText(editData.socialLinks?.tiktok, 240),
+          instagram: limitText(editData.socialLinks?.instagram, 240),
           twitter: limitText(editData.socialLinks?.twitter, 240),
         },
         settings: {
@@ -1945,6 +1969,32 @@ export default function ProfileScreen({ navigation, route }: any) {
                 placeholderTextColor="#666"
               />
               ) : null}
+              <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, marginTop: 12 }]}>
+                <Text style={styles.projectEditLabel}>Socials (optional)</Text>
+                {SOCIAL_FIELDS.map((field) => {
+                  const chip = SOCIAL_CHIP_STYLE[field.network];
+                  return (
+                    <View key={field.key} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 }}>
+                      <View style={[styles.socialIconBox, { backgroundColor: chip.bg }]}>
+                        <SocialGlyph network={field.network} size={16} color={chip.fg} />
+                      </View>
+                      <TextInput
+                        style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), flex: 1 }]}
+                        value={toTextValue(editData?.socialLinks?.[field.key])}
+                        onChangeText={(t: string) => setSocialLinkField(field.key, t)}
+                        placeholder={field.placeholder}
+                        placeholderTextColor="#666"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="url"
+                      />
+                    </View>
+                  );
+                })}
+                <Text style={styles.projectEditHelp}>
+                  Handles or full links both work. Icons show on your profile — tap to open.
+                </Text>
+              </View>
               {showEdit('skills') ? (<>
               <TextInput
                 multiline
@@ -2317,6 +2367,30 @@ export default function ProfileScreen({ navigation, route }: any) {
                 {[profile?.city, profile?.country].filter(Boolean).join(', ') || 'Remote'}
               </Text>
 
+              {(() => {
+                const entries = socialLinkEntries((profile as any)?.socialLinks);
+                if (!entries.length) return null;
+                return (
+                  <View style={styles.socialRow}>
+                    {entries.map((entry) => (
+                      <TouchableOpacity
+                        key={entry.key}
+                        activeOpacity={0.85}
+                        accessibilityLabel={entry.label}
+                        onPress={() =>
+                          Linking.openURL(normalizeSocialUrl(entry.key, entry.url)).catch(() =>
+                            notifyUser('Could not open link', entry.url)
+                          )
+                        }
+                        style={[styles.socialChip, { backgroundColor: entry.bg }]}
+                      >
+                        <SocialGlyph network={entry.network} size={18} color={entry.fg} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                );
+              })()}
+
               {!isViewingOther && !!profileLink && (
                 <View style={[styles.profileLinkCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                   <View style={styles.profileLinkHeader}>
@@ -2349,11 +2423,46 @@ export default function ProfileScreen({ navigation, route }: any) {
               
               {isViewingOther && (
                 <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-                  <TouchableOpacity 
-                    style={[styles.actionButton, { flex: 1, backgroundColor: COLORS.primary, borderWidth: 1, borderColor: COLORS.primary }]}
-                    onPress={openChat}
+                  {!user?.uid ? (
+                    <TouchableOpacity
+                      style={[styles.actionButton, { flex: 1, borderWidth: 1, borderColor: COLORS.primary, backgroundColor: COLORS.primary }]}
+                      onPress={() => navigation.navigate('EmailAuth')}
+                    >
+                      <Text style={{ color: '#000', fontWeight: '800' }}>
+                        Join LINKUP to connect
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                  <>
+                  <TouchableOpacity
+                    style={[styles.actionButton, { flex: 1, borderWidth: 1, borderColor: COLORS.primary, backgroundColor: connectionGate?.status === 'approved' || !connectionGate || connectionGate.status === 'none' ? COLORS.primary : (isDark ? COLORS.darkCard : COLORS.lightCard) }]}
+                    onPress={() => {
+                      if (connectionGate?.status === 'pending_out') {
+                        notifyUser('Request pending', `${displayNameFor(profile)} has not answered yet. You can chat after they approve.`);
+                        return;
+                      }
+                      if (connectionGate?.status === 'pending_in') {
+                        navigation.navigate('Alerts');
+                        return;
+                      }
+                      if (connectionGate?.status === 'rejected') {
+                        notifyUser('Request declined', `${displayNameFor(profile)} declined your last request.`);
+                        return;
+                      }
+                      void openChat();
+                    }}
                   >
-                    <Text style={{ color: '#000', fontWeight: '800' }}>Request to talk</Text>
+                    <Text style={{ color: connectionGate?.status === 'approved' || !connectionGate || connectionGate.status === 'none' ? '#000' : COLORS.primaryStrong, fontWeight: '800' }}>
+                      {connectionGate?.status === 'approved'
+                        ? 'Message'
+                        : connectionGate?.status === 'pending_out'
+                          ? 'Request pending'
+                          : connectionGate?.status === 'pending_in'
+                            ? 'Answer their request'
+                            : connectionGate?.status === 'rejected'
+                              ? 'Request declined'
+                              : 'Request to talk'}
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.actionButton, {
@@ -2368,6 +2477,8 @@ export default function ProfileScreen({ navigation, route }: any) {
                       {isProfileSaved ? 'Saved' : 'Save'}
                     </Text>
                   </TouchableOpacity>
+                  </>
+                  )}
                 </View>
               )}
             </>
@@ -3381,6 +3492,27 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '900',
     marginTop: 4,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 12,
+  },
+  socialChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  socialIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   editForm: {
     alignItems: 'stretch',

@@ -45,10 +45,7 @@ type SavedSearchAlert = {
   queryText: string;
   location: string;
   skills: string;
-  experience: string;
   industry: string;
-  availability: string;
-  timezone: string;
   lookingForRole: string;
   stageFilter: string;
   lookingForCofounder: boolean;
@@ -151,14 +148,12 @@ export default function SearchScreen({ navigation, route }: any) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [location, setLocation] = useState('');
   const [skills, setSkills] = useState(''); // comma-separated
-  const [experience, setExperience] = useState(''); // free-text
   const [industry, setIndustry] = useState('');
-  const [availability, setAvailability] = useState(''); // free-text
-  const [timezone, setTimezone] = useState('');
   const [lookingForRole, setLookingForRole] = useState('');
   const [stageFilter, setStageFilter] = useState('');
   const [lookingForCofounder, setLookingForCofounder] = useState(false);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [hasPhotoOnly, setHasPhotoOnly] = useState(false);
   const [activeWithin, setActiveWithin] = useState<'any' | 'today' | 'week'>('any');
   const [minCompatibility, setMinCompatibility] = useState(0); // 0..100
   const routedSkill = String(route?.params?.skill || route?.params?.initialSkill || '').trim();
@@ -288,9 +283,6 @@ export default function SearchScreen({ navigation, route }: any) {
       const occupation = (p as any).occupation || '';
       const userSkills = Array.isArray(p.skills) ? p.skills : [];
       const industries = Array.isArray((p as any).industries) ? (p as any).industries : [];
-      const exp = (p as any).experience || '';
-      const tz = (p as any).timezone || '';
-      const avail = (p as any).availability || '';
       const interests = Array.isArray((p as any).interests) ? (p as any).interests : [];
       const goals = (p as any).goals || '';
       const lookingArr = Array.isArray((p as any).lookingFor) ? (p as any).lookingFor : [];
@@ -330,10 +322,6 @@ export default function SearchScreen({ navigation, route }: any) {
         if (!ok) return false;
       }
 
-      if (experience.trim()) {
-        if (!includesAny(exp, [experience])) return false;
-      }
-
       if (industry.trim()) {
         const ok = industries.some((s: string) => includesAny(s, [industry]));
         if (!ok) return false;
@@ -352,17 +340,14 @@ export default function SearchScreen({ navigation, route }: any) {
         if (!includesAny(startupStage, stageNeedles(stageFilter))) return false;
       }
 
-      if (availability.trim()) {
-        if (!includesAny(avail, [availability])) return false;
-      }
-
-      if (timezone.trim()) {
-        if (!includesAny(tz, [timezone])) return false;
-      }
-
       if (lookingForCofounder && !looking) return false;
 
       if (verifiedOnly && !isVerified) return false;
+
+      if (hasPhotoOnly) {
+        const pic = String((p as any).profilePic || '').trim();
+        if (!pic) return false;
+      }
 
       if (activeWithin !== 'any') {
         const date = lastActiveAt?.toDate ? lastActiveAt.toDate() : (lastActiveAt ? new Date(lastActiveAt) : null);
@@ -377,7 +362,7 @@ export default function SearchScreen({ navigation, route }: any) {
 
       return true;
     });
-  }, [allProfiles, queryText, location, skills, experience, industry, availability, timezone, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, activeWithin, minCompatibility, computeCompatibility]);
+  }, [allProfiles, queryText, location, skills, industry, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, hasPhotoOnly, activeWithin, minCompatibility, computeCompatibility]);
 
   const displayed = useMemo(() => {
     const turboBoost = (p: UserProfile) => ((p as any).turboConnect ? 1 : 0);
@@ -433,10 +418,7 @@ export default function SearchScreen({ navigation, route }: any) {
     queryText,
     location,
     skills,
-    experience,
     industry,
-    availability,
-    timezone,
     lookingForRole,
     stageFilter,
     lookingForCofounder,
@@ -450,10 +432,7 @@ export default function SearchScreen({ navigation, route }: any) {
     setQueryText(alert.queryText || '');
     setLocation(alert.location || '');
     setSkills(alert.skills || '');
-    setExperience(alert.experience || '');
     setIndustry(alert.industry || '');
-    setAvailability(alert.availability || '');
-    setTimezone(alert.timezone || '');
     setLookingForRole(alert.lookingForRole || '');
     setStageFilter(alert.stageFilter || '');
     setLookingForCofounder(!!alert.lookingForCofounder);
@@ -470,14 +449,11 @@ export default function SearchScreen({ navigation, route }: any) {
       queryText,
       location,
       skills,
-      experience,
       industry,
-      availability,
-      timezone,
       lookingForRole,
       stageFilter,
       aiQuery,
-    ].some((value) => String(value || '').trim()) || lookingForCofounder || verifiedOnly || minCompatibility > 0;
+    ].some((value) => String(value || '').trim()) || lookingForCofounder || verifiedOnly || hasPhotoOnly || minCompatibility > 0;
 
     if (!hasSignal) {
       Alert.alert('Add a search first', 'Type what you are building or choose filters before saving an alert.');
@@ -509,14 +485,12 @@ export default function SearchScreen({ navigation, route }: any) {
   const clearFilters = () => {
     setLocation('');
     setSkills('');
-    setExperience('');
     setIndustry('');
-    setAvailability('');
-    setTimezone('');
     setLookingForRole('');
     setStageFilter('');
     setLookingForCofounder(false);
     setVerifiedOnly(false);
+    setHasPhotoOnly(false);
     setActiveWithin('any');
     setMinCompatibility(0);
   };
@@ -531,9 +505,6 @@ export default function SearchScreen({ navigation, route }: any) {
       if (typeof r.location === 'string') setLocation(r.location);
       if (Array.isArray(r.skills)) setSkills(r.skills.join(', '));
       if (typeof r.industry === 'string') setIndustry(r.industry);
-      if (typeof r.experience === 'string') setExperience(r.experience);
-      if (typeof r.availability === 'string') setAvailability(r.availability);
-      if (typeof r.timezone === 'string') setTimezone(r.timezone);
       if (typeof r.lookingForCofounder === 'boolean') setLookingForCofounder(r.lookingForCofounder);
       setFilterOpen(true);
       const diagnostic = getLastAIDiagnostic();
@@ -668,23 +639,6 @@ export default function SearchScreen({ navigation, route }: any) {
               style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
             />
             <TextInput
-              placeholder="Timezone"
-              placeholderTextColor="#666"
-              value={timezone}
-              onChangeText={setTimezone}
-              style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
-            />
-          </View>
-
-          <View style={styles.filterRow}>
-            <TextInput
-              placeholder="Skills (comma-separated)"
-              placeholderTextColor="#666"
-              value={skills}
-              onChangeText={setSkills}
-              style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
-            />
-            <TextInput
               placeholder="Industry"
               placeholderTextColor="#666"
               value={industry}
@@ -695,17 +649,10 @@ export default function SearchScreen({ navigation, route }: any) {
 
           <View style={styles.filterRow}>
             <TextInput
-              placeholder="Experience (e.g. intermediate)"
+              placeholder="Skills (comma-separated)"
               placeholderTextColor="#666"
-              value={experience}
-              onChangeText={setExperience}
-              style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
-            />
-            <TextInput
-              placeholder="Availability (e.g. evenings)"
-              placeholderTextColor="#666"
-              value={availability}
-              onChangeText={setAvailability}
+              value={skills}
+              onChangeText={setSkills}
               style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
             />
           </View>
@@ -797,6 +744,15 @@ export default function SearchScreen({ navigation, route }: any) {
           >
             <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: verifiedOnly ? '#000' : (textColor(isDark)) }}>
               VERIFIED ONLY
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.togglePill, { backgroundColor: hasPhotoOnly ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec), borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+            onPress={() => setHasPhotoOnly((v) => !v)}
+          >
+            <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: hasPhotoOnly ? '#000' : (textColor(isDark)) }}>
+              HAS PHOTO
             </Text>
           </TouchableOpacity>
 

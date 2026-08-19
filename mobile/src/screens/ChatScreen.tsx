@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Alert, StatusBar, Modal, Pressable, ScrollView, Linking, ActivityIndicator, Animated, PanResponder } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, StatusBar, Modal, Pressable, ScrollView, Linking, ActivityIndicator, Animated, PanResponder } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +20,8 @@ import { MOBILE_CHAT_MESSAGE_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri
 import { conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
 import { subscribeToConnectionGate, type ConnectionGate } from '../lib/connectionRequests';
 import { allowSendRate, reportSafetyIssue, scanMessageSafety, theyBlockedMe } from '../lib/messageSafety';
+import { ensureDirectMatch } from '../lib/chat';
+import { notifyUser } from '../lib/notify';
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '👏', '😮'] as const;
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
@@ -188,6 +190,7 @@ export default function ChatScreen({ route, navigation }: any) {
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
+  const matchRepairRef = useRef(false);
   const [otherUser, setOtherUser] = useState<any>(otherUserParam || null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [mutePickerOpen, setMutePickerOpen] = useState(false);
@@ -208,6 +211,28 @@ export default function ChatScreen({ route, navigation }: any) {
   const myUid = user?.uid;
   const proLocked = isAndroidProLocked(profile);
   const openPaywall = (feature: string) => setPaywallFeature(feature);
+  const [introBusy, setIntroBusy] = useState(false);
+  const handleDraftIntro = async () => {
+    if (introBusy) return;
+    if (proLocked) {
+      openPaywall(PRO_FEATURES.warmIntro);
+      return;
+    }
+    setIntroBusy(true);
+    try {
+      const intro = await generateWarmIntro(profile, otherUser);
+      const cleanIntro = String(intro || '').trim();
+      if (cleanIntro) {
+        setInputText(cleanIntro);
+      } else {
+        notifyUser('Intro unavailable', 'Try again in a moment.');
+      }
+    } catch (error) {
+      notifyUser('Intro unavailable', 'Try again in a moment.');
+    } finally {
+      setIntroBusy(false);
+    }
+  };
   const otherUserId = useMemo(
     () => {
       if (otherUser?.uid) return otherUser.uid;
@@ -260,7 +285,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
   useEffect(() => {
     if (matchId) return;
-    Alert.alert('Chat unavailable', 'Open a chat from a real connection (match).');
+    notifyUser('Chat unavailable', 'Open a chat from a real connection (match).');
     navigation.goBack();
   }, [matchId, navigation]);
 
@@ -302,7 +327,17 @@ export default function ChatScreen({ route, navigation }: any) {
     const unsub = onSnapshot(
       doc(db, 'matches', matchId),
       (snap) => {
-        if (!snap.exists()) return;
+        if (!snap.exists()) {
+          // Self-heal: messages can exist under a match doc that never got
+          // created, which hides the whole conversation from the Inbox.
+          if (!matchRepairRef.current && user?.uid && otherUserId) {
+            matchRepairRef.current = true;
+            ensureDirectMatch(user.uid, otherUserId).catch(() => {
+              matchRepairRef.current = false;
+            });
+          }
+          return;
+        }
         setMatchMeta({ id: snap.id, ...snap.data() });
       },
       (err) => {
@@ -470,29 +505,29 @@ export default function ChatScreen({ route, navigation }: any) {
     if (!text.trim() || !user) return;
     if (!matchId) return;
     if (!canSendMessages) {
-      Alert.alert('Wait for approval', 'You can only message after they approve your connection request.');
+      notifyUser('Wait for approval', 'You can only message after they approve your connection request.');
       return;
     }
     if (hasBlockedUser) {
-      Alert.alert('User blocked', 'Unblock this user before sending a message.');
+      notifyUser('User blocked', 'Unblock this user before sending a message.');
       return;
     }
     if (blockedByThem) {
-      Alert.alert('Cannot message', 'This builder has blocked you.');
+      notifyUser('Cannot message', 'This builder has blocked you.');
       return;
     }
     if (!allowSendRate(user.uid)) {
-      Alert.alert('Slow down', 'Too many messages in a short time. Wait a minute.');
+      notifyUser('Slow down', 'Too many messages in a short time. Wait a minute.');
       return;
     }
     const scan = scanMessageSafety(text);
     if (scan.blocked) {
-      Alert.alert('Blocked for safety', scan.warning || 'That message is not allowed.');
+      notifyUser('Blocked for safety', scan.warning || 'That message is not allowed.');
       return;
     }
     if (!scan.ok) {
       const proceed = await new Promise<boolean>((resolve) => {
-        Alert.alert('Check this message', scan.warning, [
+        notifyUser('Check this message', scan.warning, [
           { text: 'Edit', style: 'cancel', onPress: () => resolve(false) },
           { text: 'Send anyway', onPress: () => resolve(true) },
         ]);
@@ -539,27 +574,27 @@ export default function ChatScreen({ route, navigation }: any) {
       await setDoc(doc(db, 'presence', user.uid), { isOnline: true, lastActiveAt: serverTimestamp() }, { merge: true });
     } catch (e) {
       console.error(e);
-      Alert.alert('Message failed', 'Could not send this message. Check your connection and Firebase rules.');
+      notifyUser('Message failed', 'Could not send this message. Check your connection and Firebase rules.');
     }
   };
 
   const sendChatMedia = async (asset: ImagePicker.ImagePickerAsset, mediaKind: 'image' | 'video') => {
     if (!user || !matchId) return;
     if (hasBlockedUser) {
-      Alert.alert('User blocked', 'Unblock this user before sending media.');
+      notifyUser('User blocked', 'Unblock this user before sending media.');
       return;
     }
 
     const size = Number(asset.fileSize || 0);
     if (mediaKind === 'video' && !cloudinaryEnabled()) {
-      Alert.alert(
+      notifyUser(
         'Video host needed',
         'Firebase Storage is not available on your plan, so videos need a free media host. Add Cloudinary cloud name and unsigned upload preset to enable video chat.'
       );
       return;
     }
     if (mediaKind === 'video' && size > MAX_CHAT_VIDEO_BYTES) {
-      Alert.alert('File too large', `Video must be under ${Math.round(MAX_CHAT_VIDEO_BYTES / 1024 / 1024)} MB.`);
+      notifyUser('File too large', `Video must be under ${Math.round(MAX_CHAT_VIDEO_BYTES / 1024 / 1024)} MB.`);
       return;
     }
 
@@ -575,7 +610,7 @@ export default function ChatScreen({ route, navigation }: any) {
         const preparedImage = await imageAssetToDataUri(asset, MAX_FREE_INLINE_IMAGE_CHARS);
         mediaUrl = preparedImage.dataUri || inlineImageDataUri(asset);
         if (mediaUrl.length > MAX_FREE_INLINE_IMAGE_CHARS) {
-          Alert.alert('Photo too large', 'Choose a smaller photo. This no-storage mode supports compact chat photos only.');
+          notifyUser('Photo too large', 'Choose a smaller photo. This no-storage mode supports compact chat photos only.');
           return;
         }
         if (!mediaUrl) {
@@ -634,7 +669,7 @@ export default function ChatScreen({ route, navigation }: any) {
       await setDoc(doc(db, 'presence', user.uid), { isOnline: true, lastActiveAt: serverTimestamp() }, { merge: true });
     } catch (e) {
       console.error('Media message failed:', e);
-      Alert.alert('Media failed', 'Could not send this media. Check your connection and try a smaller file.');
+      notifyUser('Media failed', 'Could not send this media. Check your connection and try a smaller file.');
     } finally {
       setMediaBusy(false);
     }
@@ -647,7 +682,7 @@ export default function ChatScreen({ route, navigation }: any) {
         ? await ImagePicker.requestCameraPermissionsAsync()
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission needed', source === 'camera' ? 'Allow camera access to take media.' : 'Allow photo access to send media.');
+      notifyUser('Permission needed', source === 'camera' ? 'Allow camera access to take media.' : 'Allow photo access to send media.');
       return;
     }
 
@@ -669,14 +704,14 @@ export default function ChatScreen({ route, navigation }: any) {
   const openMediaPicker = () => {
     if (!user || !matchId) return;
     if (hasBlockedUser) {
-      Alert.alert('User blocked', 'Unblock this user before sending media.');
+      notifyUser('User blocked', 'Unblock this user before sending media.');
       return;
     }
     if (Platform.OS === 'web') {
       void pickAndSendMedia('library', 'image');
       return;
     }
-    Alert.alert('Send media', 'Choose what to send.', [
+    notifyUser('Send media', 'Choose what to send.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Photo Library', onPress: () => pickAndSendMedia('library', 'image') },
       { text: 'Video Library', onPress: () => pickAndSendMedia('library', 'video') },
@@ -716,7 +751,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
   const toggleArrayField = async (field: 'pinnedBy' | 'archivedBy' | 'importantBy' | 'confidentialBy' | 'deletedBy') => {
     if (!matchId) {
-      Alert.alert('Demo chat', 'Pin/Archive/Important works on real chats (a matchId is required).');
+      notifyUser('Demo chat', 'Pin/Archive/Important works on real chats (a matchId is required).');
       return;
     }
     if (!myUid) return;
@@ -729,25 +764,25 @@ export default function ChatScreen({ route, navigation }: any) {
 
       if (field === 'archivedBy') {
         closeOptionsMenu();
-        Alert.alert(has ? 'Unarchived' : 'Archived', has ? 'This chat is back in your inbox.' : 'This chat is now archived.');
+        notifyUser(has ? 'Unarchived' : 'Archived', has ? 'This chat is back in your inbox.' : 'This chat is now archived.');
         if (!has) navigation.goBack();
         return;
       }
 
       if (field === 'deletedBy') {
         closeOptionsMenu();
-        Alert.alert('Deleted', 'This conversation was removed from your inbox.');
+        notifyUser('Deleted', 'This conversation was removed from your inbox.');
         navigation.goBack();
         return;
       }
 
       closeOptionsMenu();
-      if (field === 'pinnedBy') Alert.alert(has ? 'Unpinned' : 'Pinned', has ? 'Conversation unpinned.' : 'Conversation pinned.');
-      if (field === 'importantBy') Alert.alert(has ? 'Unmarked' : 'Marked Important', has ? 'Removed from important.' : 'Marked as important.');
-      if (field === 'confidentialBy') Alert.alert(has ? 'Confidential Off' : 'Confidential On', has ? 'Confidential mode disabled.' : 'This conversation is now marked confidential.');
+      if (field === 'pinnedBy') notifyUser(has ? 'Unpinned' : 'Pinned', has ? 'Conversation unpinned.' : 'Conversation pinned.');
+      if (field === 'importantBy') notifyUser(has ? 'Unmarked' : 'Marked Important', has ? 'Removed from important.' : 'Marked as important.');
+      if (field === 'confidentialBy') notifyUser(has ? 'Confidential Off' : 'Confidential On', has ? 'Confidential mode disabled.' : 'This conversation is now marked confidential.');
     } catch (e) {
       console.error('toggle field error', e);
-      Alert.alert('Error', 'Action failed. Check Firebase permissions.');
+      notifyUser('Error', 'Action failed. Check Firebase permissions.');
     } finally {
       setBusyAction(false);
     }
@@ -755,7 +790,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
   const setMute = async (hours: number | 'forever' | 'off') => {
     if (!matchId) {
-      Alert.alert('Demo chat', 'Mute works on real chats (a matchId is required).');
+      notifyUser('Demo chat', 'Mute works on real chats (a matchId is required).');
       return;
     }
     if (!myUid) return;
@@ -775,11 +810,11 @@ export default function ChatScreen({ route, navigation }: any) {
       await updateDoc(ref, { mutedUntilBy } as any);
       closeMutePicker();
       closeOptionsMenu();
-      if (hours === 'off') Alert.alert('Unmuted', 'Notifications unmuted.');
-      else Alert.alert('Muted', hours === 'forever' ? 'Muted forever.' : `Muted for ${hours} hour(s).`);
+      if (hours === 'off') notifyUser('Unmuted', 'Notifications unmuted.');
+      else notifyUser('Muted', hours === 'forever' ? 'Muted forever.' : `Muted for ${hours} hour(s).`);
     } catch (e) {
       console.error('mute error', e);
-      Alert.alert('Error', 'Could not update mute.');
+      notifyUser('Error', 'Could not update mute.');
     } finally {
       setBusyAction(false);
     }
@@ -795,7 +830,7 @@ export default function ChatScreen({ route, navigation }: any) {
       if (hasBlockedUser) {
         await deleteDoc(doc(db, 'blocks', blockId));
         closeOptionsMenu();
-        Alert.alert('Unblocked', `${otherUser.displayName || 'User'} can now message you again.`);
+        notifyUser('Unblocked', `${otherUser.displayName || 'User'} can now message you again.`);
         return;
       }
 
@@ -806,10 +841,10 @@ export default function ChatScreen({ route, navigation }: any) {
       });
 
       closeOptionsMenu();
-      Alert.alert('Blocked', `${otherUser.displayName || 'User'} is blocked. The chat stays here so you can unblock later.`);
+      notifyUser('Blocked', `${otherUser.displayName || 'User'} is blocked. The chat stays here so you can unblock later.`);
     } catch (e) {
       console.error('block toggle error', e);
-      Alert.alert('Error', hasBlockedUser ? 'Could not unblock user.' : 'Could not block user.');
+      notifyUser('Error', hasBlockedUser ? 'Could not unblock user.' : 'Could not block user.');
     } finally {
       setBusyAction(false);
     }
@@ -817,7 +852,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
   const deleteConversation = async () => {
     if (!matchId) return;
-    Alert.alert('Delete conversation', 'Delete this chat from your inbox?', [
+    notifyUser('Delete conversation', 'Delete this chat from your inbox?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -838,13 +873,13 @@ export default function ChatScreen({ route, navigation }: any) {
       messageId,
       reason,
     })
-      .then(() => Alert.alert('Report sent', 'Thanks. LINKUP will review this. You can also block them so they cannot write you.'))
-      .catch(() => Alert.alert('Report failed', 'Could not send the report. Try again.'));
+      .then(() => notifyUser('Report sent', 'Thanks. LINKUP will review this. You can also block them so they cannot write you.'))
+      .catch(() => notifyUser('Report failed', 'Could not send the report. Try again.'));
   };
 
   const openReportUser = () => {
     closeOptionsMenu();
-    Alert.alert('Report this person', 'Why are you reporting them?', [
+    notifyUser('Report this person', 'Why are you reporting them?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Scam / money ask', onPress: () => reportPerson('scam') },
       { text: 'Harassment', onPress: () => reportPerson('harassment') },
@@ -864,13 +899,13 @@ export default function ChatScreen({ route, navigation }: any) {
       await updateDoc(doc(db, 'matches', matchId, 'messages', String(item.id)), { reactions: current });
     } catch (error) {
       console.warn('Reaction failed:', error);
-      Alert.alert('Could not react', 'Try again in a moment.');
+      notifyUser('Could not react', 'Try again in a moment.');
     }
   };
 
   const deleteMessage = (messageId: string) => {
     if (!matchId || !messageId) return;
-    Alert.alert('Delete message', 'Delete this message for everyone?', [
+    notifyUser('Delete message', 'Delete this message for everyone?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -880,7 +915,7 @@ export default function ChatScreen({ route, navigation }: any) {
             await deleteDoc(doc(db, 'matches', matchId, 'messages', messageId));
           } catch (e) {
             console.error('Delete message error:', e);
-            Alert.alert('Error', 'Could not delete message.');
+            notifyUser('Error', 'Could not delete message.');
           }
         },
       },
@@ -909,7 +944,7 @@ export default function ChatScreen({ route, navigation }: any) {
       });
     }
     options.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert('Message options', '', options);
+    notifyUser('Message options', '', options);
   };
 
   const MenuItem = ({ icon, title, subtitle, danger, onPress }: any) => (
@@ -978,7 +1013,7 @@ export default function ChatScreen({ route, navigation }: any) {
               <TouchableOpacity
                 activeOpacity={0.9}
                 style={[styles.videoMessageCard, { backgroundColor: isMe ? '#00000018' : (isDark ? '#222226' : '#FFFFFF') }]}
-                onPress={() => Linking.openURL(item.mediaUrl).catch(() => Alert.alert('Video unavailable', 'Could not open this video.'))}
+                onPress={() => Linking.openURL(item.mediaUrl).catch(() => notifyUser('Video unavailable', 'Could not open this video.'))}
               >
                 <Camera size={24} color={isMe ? '#000' : (isDark ? '#FFF' : '#000')} />
                 <View style={{ flex: 1 }}>
@@ -1021,14 +1056,14 @@ export default function ChatScreen({ route, navigation }: any) {
 
   const otherIsTyping = !!(otherUserId && matchMeta?.typingBy?.[otherUserId]);
   const otherIsOnline = isPresenceOnline(otherUser);
-  const headerStatus = otherIsTyping ? 'TYPING...' : (otherIsOnline ? 'ONLINE' : formatLastSeen(otherUser?.lastActiveAt));
+  const headerStatus = otherIsTyping ? 'TYPING...' : (otherIsOnline ? 'ONLINE' : '');
   const headerStatusColor = otherIsTyping ? COLORS.primary : (otherIsOnline ? COLORS.success : textColor(isDark, 'muted'));
   const headerAvatarUri = conversationAvatarUri(otherUser?.profilePic);
   const headerInitial = String(otherUser?.displayName || 'L').trim().charAt(0).toUpperCase() || 'L';
   const canOpenOtherProfile = !!otherUserId && otherUserId !== 'undefined';
   const openOtherProfile = () => {
     if (!canOpenOtherProfile) {
-      Alert.alert('Profile unavailable', 'This chat is missing the other builder profile. Try reopening it from Messages.');
+      notifyUser('Profile unavailable', 'This chat is missing the other builder profile. Try reopening it from Messages.');
       return;
     }
     navigation.navigate('Profile', { userId: otherUserId });
@@ -1063,13 +1098,11 @@ export default function ChatScreen({ route, navigation }: any) {
                   <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>{otherUser.displayName || 'Builder'}</Text>
                   {!!otherUser.isVerified && <VerifiedBadge size={20} />}
                 </View>
-                <Text style={[styles.status, { color: headerStatusColor }]}>
-                  {headerStatus}
-                </Text>
-                <View style={styles.securityLine}>
-                  <Shield size={10} color="#22C55E" />
-                  <Text style={styles.securityText}>Safety tools on</Text>
-                </View>
+                {headerStatus ? (
+                  <Text style={[styles.status, { color: headerStatusColor }]}>
+                    {headerStatus}
+                  </Text>
+                ) : null}
               </View>
             </TouchableOpacity>
           ) : (
@@ -1078,10 +1111,6 @@ export default function ChatScreen({ route, navigation }: any) {
               <View>
                 <Text style={[styles.name, { color: textColor(isDark) }]}>Chat</Text>
                 <Text style={styles.status}>Loading...</Text>
-                <View style={styles.securityLine}>
-                  <Shield size={10} color="#22C55E" />
-                  <Text style={styles.securityText}>Safety tools on</Text>
-                </View>
               </View>
             </View>
           )}
@@ -1097,6 +1126,14 @@ export default function ChatScreen({ route, navigation }: any) {
         <Text style={[styles.confidentialText, { color: textColor(isDark, 'secondary') }]}>
           Stay on LINKUP. Never send money, OTPs, or your ID. Report anything off.
         </Text>
+        <TouchableOpacity
+          onPress={handleDraftIntro}
+          activeOpacity={0.85}
+          style={styles.introBtn}
+        >
+          <Zap size={11} color="#000" fill="#000" />
+          <Text style={styles.introBtnText}>Intro</Text>
+        </TouchableOpacity>
       </View>
 
       {isConfidential && (
@@ -1162,19 +1199,12 @@ export default function ChatScreen({ route, navigation }: any) {
               </TouchableOpacity>
             </View>
           )}
-          <TouchableOpacity 
-            style={[styles.toolBtn, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]} 
-            onPress={async () => {
-              if (proLocked) {
-                openPaywall(PRO_FEATURES.warmIntro);
-                return;
-              }
-              Alert.alert("INTRO", "Drafting a perfect opening based on your profiles...");
-              const intro = await generateWarmIntro(profile, otherUser);
-              setInputText((intro || '').trim());
-            }}
+          <TouchableOpacity
+            style={[styles.toolBtn, liquidGlass(isDark, false), { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]}
+            onPress={handleDraftIntro}
+            disabled={introBusy}
           >
-            <Zap size={20} color={COLORS.primary} fill={COLORS.primary} />
+            {introBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Zap size={20} color={COLORS.primary} fill={COLORS.primary} />}
           </TouchableOpacity>
           <TouchableOpacity style={[styles.toolBtn, liquidGlass(isDark, false), mediaBusy && styles.toolBtnDisabled, { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]} onPress={openMediaPicker} disabled={mediaBusy}>
             {mediaBusy ? <ActivityIndicator size="small" color="#666" /> : <Camera size={20} color="#666" />}
@@ -1256,7 +1286,7 @@ export default function ChatScreen({ route, navigation }: any) {
             subtitle={hasBlockedUser ? 'They can message you again' : 'They cannot write you'}
             danger
             onPress={() => {
-              Alert.alert(hasBlockedUser ? 'Unblock?' : 'Block this person?', hasBlockedUser ? 'They will be able to message you again.' : 'They will not be able to send you messages.', [
+              notifyUser(hasBlockedUser ? 'Unblock?' : 'Block this person?', hasBlockedUser ? 'They will be able to message you again.' : 'They will not be able to send you messages.', [
                 { text: 'Cancel', style: 'cancel' },
                 { text: hasBlockedUser ? 'Unblock' : 'Block', style: hasBlockedUser ? 'default' : 'destructive', onPress: toggleBlockUser },
               ]);
@@ -1451,6 +1481,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
+  introBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  introBtnText: { fontSize: 11, fontWeight: '900', color: '#000', letterSpacing: 0.3 },
   confidentialText: {
     fontSize: 10,
     fontWeight: '900',

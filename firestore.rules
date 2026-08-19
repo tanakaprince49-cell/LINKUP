@@ -541,6 +541,23 @@ service cloud.firestore {
           (data[field] is string && data[field].size() <= 80);
       }
 
+      function validSocialValue(data, key) {
+        return !data.socialLinks.keys().hasAny([key]) ||
+          (data.socialLinks[key] is string && data.socialLinks[key].size() <= 240);
+      }
+
+      function validPublicSocials(data) {
+        return !data.keys().hasAny(['socialLinks']) ||
+          (data.socialLinks is map &&
+            data.socialLinks.keys().hasOnly(['linkedin', 'github', 'tiktok', 'instagram', 'twitter', 'portfolio']) &&
+            validSocialValue(data, 'linkedin') &&
+            validSocialValue(data, 'github') &&
+            validSocialValue(data, 'tiktok') &&
+            validSocialValue(data, 'instagram') &&
+            validSocialValue(data, 'twitter') &&
+            validSocialValue(data, 'portfolio'));
+      }
+
       function validPublicProfile(data) {
         return data.uid == userId &&
           data.keys().hasOnly([
@@ -556,6 +573,7 @@ service cloud.firestore {
             'isVisible', 'isStealthMode', 'turboConnect', 'hideOnlineStatus',
             'isVerified', 'verificationProgram', 'isPro', 'plan',
             'subscriptionPlan', 'subscriptionStatus',
+            'socialLinks',
             'onboarded', 'deleted', 'lastActiveAt', 'updatedAt'
           ]) &&
           validPublicString(data, 'displayName', 100) &&
@@ -606,10 +624,14 @@ service cloud.firestore {
           validPublicNumber(data, 'profileClicks', 1000000) &&
           validPublicNumber(data, 'profileSaves', 1000000) &&
           validPublicNumber(data, 'responseRate', 100) &&
-          validPublicTimestampish(data, 'lastActiveAt');
+          validPublicTimestampish(data, 'lastActiveAt') &&
+          validPublicSocials(data);
       }
 
-      allow get, list: if isSignedIn();
+      // Single shared profile links must open for people who are not signed
+      // in yet (growth loop). Lists stay signed-in so the index cannot be scraped.
+      allow get: if true;
+      allow list: if isSignedIn();
       allow create, update: if isOwner(userId) && validPublicProfile(incoming());
       allow delete: if isOwner(userId);
     }

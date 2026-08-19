@@ -1,6 +1,7 @@
 import { collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, startAfter } from 'firebase/firestore';
 import { db } from './firebase';
 import { displayNameFor, isDiscoverableProfile } from './discovery';
+import { sanitizeSocialLinks } from './socialLinks';
 import {
   IS_LOW_END_ANDROID,
   MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT,
@@ -97,6 +98,7 @@ export const buildPublicProfileIndex = (profile: any) => {
     plan: text((compact as any).plan, 40),
     subscriptionPlan: text((compact as any).subscriptionPlan, 40),
     subscriptionStatus: text((compact as any).subscriptionStatus, 40),
+    socialLinks: sanitizeSocialLinks((compact as any).socialLinks),
     onboarded: !!(compact as any).onboarded,
     deleted: false,
     lastActiveAt: (compact as any).lastActiveAt || null,

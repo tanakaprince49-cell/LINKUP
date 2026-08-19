@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, query, where, onSnapshot, doc, updateDoc, limit } from 'firebase/firestore';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
@@ -10,6 +10,7 @@ import { AppNotification } from '../types';
 import { markUnreadNotificationsRead } from '../lib/notifications';
 import { COLORS, appBackground, hairline, liquidGlass, textColor } from '../theme/theme';
 import { respondToConnectionRequest } from '../lib/connectionRequests';
+import { notifyUser } from '../lib/notify';
 import { challengeId as makeChallengeId } from '../lib/gameChallenges';
 import { MOBILE_LIST_IMAGE_LIMIT, MOBILE_NOTIFICATION_QUERY_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X } from 'lucide-react-native';
@@ -61,6 +62,8 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         return <MessageSquare size={16} color="#111" />;
       case 'connection_request':
         return <UserPlus size={16} color="#111" />;
+      case 'connection_rejected':
+        return <X size={16} color="#111" />;
       case 'view':
         return <Eye size={16} color="#111" />;
       default:
@@ -99,7 +102,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
       }
     } catch (error) {
       console.warn('Connection request response failed:', error);
-      Alert.alert('Action failed', 'Could not answer this request. Try again.');
+      notifyUser('Action failed', 'Could not answer this request. Try again.');
     } finally {
       setBusy(false);
     }
@@ -297,6 +300,8 @@ const styles = StyleSheet.create({
   content: { flex: 1 },
   contentText: { fontSize: 15, fontWeight: '600', lineHeight: 21 },
   timeText: { fontSize: 12, fontWeight: '600', marginTop: 4 },
+  noteBox: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginTop: 8 },
+  noteText: { fontSize: 13, fontWeight: '600', lineHeight: 18, fontStyle: 'italic' },
   requestActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   approveBtn: {
     flex: 1,

@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, setDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -22,6 +23,11 @@ import { notifyUser } from '../lib/notify';
 import { publicProfileLink } from '../lib/profileLinks';
 import { LINKUP_ROLE_OPTIONS, roleInfoFor } from '../lib/roles';
 import { seedConciergeWelcome } from '../lib/activation';
+
+// One-time "finish your profile" notice at the end of onboarding. The flag is
+// set the moment the notice is answered either way, so it never nags twice.
+const PROFILE_SETUP_NOTICE_KEY = '@linkup/profileSetupNoticeSeen';
+const PENDING_SELF_PROFILE_KEY = '@linkup/pendingSelfProfileSetup';
 
 type Choice = { id: string; label: string; desc?: string };
 type RoleQuestion = { id: string; title: string; subtitle: string; choices: Choice[]; multi?: boolean };
@@ -817,7 +823,6 @@ const ChoiceGrid = ({
                 fontWeight: '800',
                 color: on ? '#111' : textColor(isDark),
               }}
-              numberOfLines={2}
             >
               {c.label}
             </Text>
@@ -878,6 +883,23 @@ export default function OnboardingScreen({ navigation }: any) {
 
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  // null = still checking storage; only users who have never answered the
+  // end-of-onboarding notice get to see it.
+  const [profileNoticeSeen, setProfileNoticeSeen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(PROFILE_SETUP_NOTICE_KEY)
+      .then((value) => {
+        if (!cancelled) setProfileNoticeSeen(value === '1');
+      })
+      .catch(() => {
+        if (!cancelled) setProfileNoticeSeen(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
@@ -1402,6 +1424,75 @@ export default function OnboardingScreen({ navigation }: any) {
         canNext: displayName.trim().length >= 2,
       },
       {
+        key: 'age',
+        title: 'How old are you?',
+        subtitle: 'So matches land in the right range. You must be 16 or older.',
+        body: (
+          <View>
+            <TextInput
+              value={ageText}
+              onChangeText={(text) => setAgeText(text.replace(/[^0-9]/g, '').slice(0, 2))}
+              placeholder="Your age"
+              placeholderTextColor={textColor(isDark, 'muted')}
+              keyboardType="number-pad"
+              maxLength={2}
+              returnKeyType="done"
+              style={[
+                styles.textInput,
+                {
+                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
+                  color: textColor(isDark),
+                },
+              ]}
+            />
+          </View>
+        ),
+        canNext: (() => {
+          const age = Number(ageText);
+          return ageText.trim().length > 0 && Number.isInteger(age) && age >= 16 && age <= 99;
+        })(),
+      },
+      {
+        key: 'homebase',
+        title: 'Where are you based?',
+        subtitle: 'Country and city. Matches care about your scene and timezone.',
+        body: (
+          <View style={{ gap: 10 }}>
+            <TextInput
+              value={country}
+              onChangeText={setCountry}
+              placeholder="Country (e.g. Zimbabwe)"
+              placeholderTextColor={textColor(isDark, 'muted')}
+              autoCapitalize="words"
+              returnKeyType="next"
+              style={[
+                styles.textInput,
+                {
+                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
+                  color: textColor(isDark),
+                },
+              ]}
+            />
+            <TextInput
+              value={city}
+              onChangeText={setCity}
+              placeholder="City (e.g. Harare)"
+              placeholderTextColor={textColor(isDark, 'muted')}
+              autoCapitalize="words"
+              returnKeyType="done"
+              style={[
+                styles.textInput,
+                {
+                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
+                  color: textColor(isDark),
+                },
+              ]}
+            />
+          </View>
+        ),
+        canNext: country.trim().length >= 2 && city.trim().length >= 2,
+      },
+      {
         key: 'identity',
         title: 'What best describes you?',
         subtitle: 'Pick the lane people should match you on.',
@@ -1415,13 +1506,18 @@ export default function OnboardingScreen({ navigation }: any) {
         title: 'Who are you looking for?',
         subtitle: 'Pick at least one. You can add more later.',
         body: (
-          <ChoiceGrid
-            value={lookingFor}
-            onChange={(v) => setLookingFor(v as string[])}
-            choices={lookingForChoices}
-            multi
-            isDark={isDark}
-          />
+          <View>
+            <ChoiceGrid
+              value={lookingFor}
+              onChange={(v) => setLookingFor(v as string[])}
+              choices={lookingForChoices}
+              multi
+              isDark={isDark}
+            />
+            <Text style={{ marginTop: 10, fontSize: 12, fontWeight: '700', color: textColor(isDark, 'muted') }}>
+              Pick all that apply — scroll to see every option.
+            </Text>
+          </View>
         ),
         canNext: lookingFor.length > 0,
       },
@@ -1442,8 +1538,53 @@ export default function OnboardingScreen({ navigation }: any) {
         ),
         canNext: true,
       },
+      ...(profileNoticeSeen !== false
+        ? []
+        : [
+            {
+              key: 'profile-setup-notice',
+              title: "You're in. One more thing.",
+              subtitle: 'It is recommended that you finish setting up your profile to get accurate matches.',
+              body: (
+                <View>
+                  <View
+                    style={{
+                      borderWidth: 1,
+                      borderRadius: 14,
+                      padding: 16,
+                      marginBottom: 18,
+                      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(11,18,32,0.03)',
+                    }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: '900', color: textColor(isDark) }}>
+                      Complete profiles get sharper matches
+                    </Text>
+                    <Text style={{ marginTop: 6, fontSize: 13, fontWeight: '600', lineHeight: 19, color: textColor(isDark, 'muted') }}>
+                      Bio, skills, projects and social links tell the matching engine who to put in front of you. It takes about two minutes and you can edit everything later.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    disabled={saving}
+                    onPress={finishToProfile}
+                    style={[styles.btn, styles.primaryBtn, { opacity: saving ? 0.5 : 1 }]}
+                  >
+                    {saving ? <ActivityIndicator color="#111" /> : <Text style={[styles.btnText, { color: '#111' }]}>Finish now</Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    disabled={saving}
+                    onPress={finishToHome}
+                    style={{ marginTop: 14, alignItems: 'center', opacity: saving ? 0.5 : 1 }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: textColor(isDark, 'muted') }}>I'll do it later</Text>
+                  </TouchableOpacity>
+                </View>
+              ),
+              canNext: true,
+            },
+          ]),
     ],
-    [displayName, lookingFor, lookingForChoices, profilePicUri, role, isDark]
+    [displayName, lookingFor, lookingForChoices, profilePicUri, role, isDark, ageText, country, city, profileNoticeSeen, saving]
   );
 
   const current = steps[step];
@@ -1516,6 +1657,19 @@ export default function OnboardingScreen({ navigation }: any) {
     }
   };
 
+  // Hoisted on purpose: the end-of-onboarding notice step references these
+  // before this point in the file.
+  function finishToProfile() {
+    void AsyncStorage.setItem(PROFILE_SETUP_NOTICE_KEY, '1').catch(() => {});
+    void AsyncStorage.setItem(PENDING_SELF_PROFILE_KEY, '1').catch(() => {});
+    void finish();
+  }
+
+  function finishToHome() {
+    void AsyncStorage.setItem(PROFILE_SETUP_NOTICE_KEY, '1').catch(() => {});
+    void finish();
+  }
+
   const fieldBorder = { borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)' };
 
   return (
@@ -1574,6 +1728,9 @@ export default function OnboardingScreen({ navigation }: any) {
             >
               <Text style={[styles.btnText, { color: '#111' }]}>Continue</Text>
             </TouchableOpacity>
+          ) : current.key === 'profile-setup-notice' ? (
+            // The notice step carries its own Finish now / later buttons.
+            <View style={{ flex: 1 }} />
           ) : (
             <TouchableOpacity
               disabled={!current.canNext || saving}
@@ -1585,17 +1742,21 @@ export default function OnboardingScreen({ navigation }: any) {
           )}
         </View>
 
-        {step >= 2 ? (
+        {step >= 2 && current.key !== 'profile-setup-notice' ? (
           <TouchableOpacity
             disabled={saving || displayName.trim().length < 2 || !role}
-            onPress={finish}
+            onPress={() => {
+              // Skippers still see the one-time profile-setup notice on the way out.
+              if (steps[steps.length - 1]?.key === 'profile-setup-notice') setStep(steps.length - 1);
+              else void finish();
+            }}
             style={{ marginTop: 16, alignItems: 'center' }}
           >
             <Text style={{ fontSize: 14, fontWeight: '800', color: textColor(isDark, 'muted') }}>Skip extra — do this later</Text>
           </TouchableOpacity>
         ) : null}
 
-        <View style={{ height: 48 }} />
+        <View style={{ height: 120 }} />
       </ScrollView>
     </SafeAreaView>
   );

@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { UserProfile } from '../types';
+import { sanitizeSocialLinks } from './socialLinks';
 
 const androidApiLevel = Platform.OS === 'android' ? Number(Platform.Version || 0) : 0;
 
@@ -108,7 +109,7 @@ export const compactProfileForList = (profile: any): UserProfile =>
     teamSizePreference: text(profile?.teamSizePreference, 80),
     roleAnswers: compactAnswers(profile?.roleAnswers),
     personalityAnswers: compactAnswers(profile?.personalityAnswers),
-    socialLinks: {},
+    socialLinks: sanitizeSocialLinks(profile?.socialLinks),
     resume: compactResume(profile?.resume),
     projects: Array.isArray(profile?.projects) ? profile.projects.slice(0, 10).map(compactProject) : [],
     startupIdeas: Array.isArray(profile?.startupIdeas) ? profile.startupIdeas.slice(0, 20).map(compactIdea) : [],
