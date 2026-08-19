@@ -11,6 +11,7 @@ import VerifiedBadge from '../components/VerifiedBadge';
 
 import { compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+import ProCrownBadge from '../components/ProCrownBadge';
 
 type AnalyticsMode = 'views' | 'clicks' | 'saves' | 'response';
 
@@ -432,7 +433,10 @@ function ViewersScreen({ navigation, route }: any) {
             <HeaderIcon size={14} color="#000" />
           </View>
           <View style={styles.headerTextWrap}>
-            <Text style={[styles.title, { color: textColor(isDark) }]}>{meta.title}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={[styles.title, { color: textColor(isDark) }]}>{meta.title}</Text>
+              <ProCrownBadge />
+            </View>
             <Text style={[styles.subtitle, { color: textColor(isDark, 'muted') }]}>
               {responseRate === null ? meta.subtitle : `${responseRate}% response rate`}
             </Text>

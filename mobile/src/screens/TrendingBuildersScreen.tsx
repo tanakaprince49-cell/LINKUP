@@ -1,20 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
+import { notifyUser } from '../lib/notify';
 import { ChevronLeft, Crown, Flame, Trophy, User } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import { handleFor, isDiscoverableProfile } from '../lib/discovery';
+import { handleFor } from '../lib/discovery';
 import { leagueHeat, notifyLeaguePodium, rankLeague } from '../lib/builderLeague';
 import { resolveConnectionGate, startTalkOrRequest } from '../lib/connectionRequests';
 import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { displayNameFor } from '../lib/discovery';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import VerifiedBadge from '../components/VerifiedBadge';
-import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
+import { loadLeaguePool } from '../lib/leaguePool';
 import { COLORS, textColor } from '../theme/theme';
+import ProCrownBadge from '../components/ProCrownBadge';
 
 const heatFor = (profile: any) => Math.max(1, Math.min(99, Math.round(leagueHeat(profile))));
 
@@ -43,17 +45,21 @@ export default function TrendingBuildersScreen({ navigation }: any) {
     }
     if (!isFocused) return;
 
-    const unsub = subscribeToDiscoveryProfiles({
-      userId: user.uid,
-      onData: (profiles) => {
-        const list = profiles.filter((profile: any) => isDiscoverableProfile(profile));
-        setBuilders(list);
+    let alive = true;
+    setLoading(true);
+    loadLeaguePool()
+      .then((rows) => {
+        if (!alive) return;
+        setBuilders(rows);
         setLoading(false);
-      },
-      onError: () => setLoading(false),
-    });
+      })
+      .catch(() => {
+        if (alive) setLoading(false);
+      });
 
-    return () => unsub();
+    return () => {
+      alive = false;
+    };
   }, [isFocused, user?.uid]);
 
   const trending = useMemo(() => rankLeague(builders, me), [builders, me]);
@@ -71,16 +77,16 @@ export default function TrendingBuildersScreen({ navigation }: any) {
 
   const openChat = async (profile: UserProfile) => {
     if (!user?.uid) {
-      Alert.alert('Sign in first', 'Create or sign in to a LINKUP account to talk to #1.');
+      notifyUser('Sign in first', 'Create or sign in to a LINKUP account to talk to #1.');
       navigation.navigate('EmailAuth');
       return;
     }
     if (!profile?.uid) {
-      Alert.alert('No #1 yet', 'The board is still filling. Try again in a moment.');
+      notifyUser('No #1 yet', 'The board is still filling. Try again in a moment.');
       return;
     }
     if (profile.uid === user.uid) {
-      Alert.alert('That’s you', 'You’re already #1 on the board.');
+      notifyUser('That’s you', 'You’re already #1 on the board.');
       return;
     }
     if (busyUserId) return;
@@ -106,22 +112,22 @@ export default function TrendingBuildersScreen({ navigation }: any) {
         return;
       }
       if (result.action === 'pending') {
-        Alert.alert('Request pending', `${displayNameFor(profile)} has not answered yet.`);
+        notifyUser('Request pending', `${displayNameFor(profile)} has not answered yet.`);
         return;
       }
       if (result.action === 'incoming') {
-        Alert.alert('They already asked', 'Approve their request in Notifications to start chatting.');
+        notifyUser('They already asked', 'Approve their request in Notifications to start chatting.');
         navigation.navigate('Alerts');
         return;
       }
       if (result.action === 'rejected') {
-        Alert.alert('Not available', 'This builder declined your last request.');
+        notifyUser('Not available', 'This builder declined your last request.');
         return;
       }
-      Alert.alert('Request sent', `${displayNameFor(profile)} can approve or ignore it. You can chat after they approve.`);
+      notifyUser('Request sent', `${displayNameFor(profile)} can approve or ignore it. You can chat after they approve.`);
     } catch (error) {
       console.warn('Talk to #1 failed:', error);
-      Alert.alert('Could not send', 'Check your connection and try again.');
+      notifyUser('Could not send', 'Check your connection and try again.');
     } finally {
       setBusyUserId(null);
     }
@@ -130,7 +136,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
   const talkToFirst = () => {
     const first = podium[0];
     if (!first) {
-      Alert.alert('No #1 yet', 'When someone is trending, Talk to #1 opens a request.');
+      notifyUser('No #1 yet', 'When someone is trending, Talk to #1 opens a request.');
       return;
     }
     void openChat(first);
@@ -189,6 +195,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
           <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>BUILDER LEAGUE</Text>
+        <ProCrownBadge />
         <View style={styles.headerSpacer} />
       </View>
 

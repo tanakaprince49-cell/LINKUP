@@ -10,6 +10,7 @@ import { Match, UserProfile } from '../types';
 import { MessageSquare, User, Zap, Sparkles, ChevronRight, Briefcase } from 'lucide-react-native';
 import { ensureDirectMatch } from '../lib/chat';
 import VerifiedBadge from '../components/VerifiedBadge';
+import ProCrownBadge from '../components/ProCrownBadge';
 import { conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
@@ -136,6 +137,10 @@ export default function MatchScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
+      <View style={styles.screenTitleRow}>
+        <Text style={[styles.screenTitle, { color: textColor(isDark) }]}>Connections</Text>
+        <ProCrownBadge />
+      </View>
       <FlatList
         data={matches}
         keyExtractor={(item) => item.id}
@@ -161,6 +166,8 @@ export default function MatchScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  screenTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 6 },
+  screenTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.3 },
   container: {
     flex: 1,
   },

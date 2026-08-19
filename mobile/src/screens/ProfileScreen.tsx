@@ -40,6 +40,7 @@ import { displayNameFor } from '../lib/discovery';
 import { profileLinkFor } from '../lib/profileLinks';
 import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
 import VerifiedBadge from '../components/VerifiedBadge';
+import ProCrownBadge from '../components/ProCrownBadge';
 import type { StartupResume, UserProfile } from '../types';
 import PaywallModal from '../components/PaywallModal';
 import {
@@ -2300,6 +2301,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 {profile?.isVerified && (
                   <VerifiedBadge size={30} style={styles.inlineVerifiedBadge} />
                 )}
+                {!isViewingOther && <ProCrownBadge size={17} />}
               </View>
               <Text style={styles.handleText}>
                 @{cleanUsername((profile as any)?.username || displayNameFor(profile) || 'builder')}

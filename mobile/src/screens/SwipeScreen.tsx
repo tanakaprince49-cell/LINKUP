@@ -40,6 +40,7 @@ import PaywallModal from '../components/PaywallModal';
 import { PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
 import { avatarPlaceholderUri } from '../lib/defaultAvatar';
+import ProCrownBadge from '../components/ProCrownBadge';
 import { subscribeToDiscoveryProfiles, loadMoreDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { shareLinkupInvite } from '../lib/activation';
 
@@ -1333,6 +1334,7 @@ export default function SwipeScreen({ navigation }: any) {
               <Text style={[styles.modeChipText, mode === 'scroll' && styles.modeChipTextOn]}>Scroll</Text>
             </TouchableOpacity>
           </View>
+          <ProCrownBadge />
           <TouchableOpacity onPress={rewindLast} style={[styles.topBtn, isCompactWeb && styles.compactTopBtn]}>
             <RotateCcw size={18} color={textColor(isDark)} />
           </TouchableOpacity>

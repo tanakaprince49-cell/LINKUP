@@ -16,6 +16,7 @@ import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { consumeDailyUsage, FREE_LIMITS, getDailyUsage } from '../lib/paywall';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+import ProCrownBadge from '../components/ProCrownBadge';
 
 type MatchScore = {
   score: number;
@@ -325,6 +326,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Recommended matches</Text>
+        <ProCrownBadge />
         <View style={styles.headerSpacer} />
       </View>
 

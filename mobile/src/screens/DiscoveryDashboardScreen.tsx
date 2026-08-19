@@ -9,10 +9,11 @@ import { UserProfile } from '../types';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
 import { activeOpportunityScore, displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
-import { leagueHeat } from '../lib/builderLeague';
+import { rankLeague } from '../lib/builderLeague';
+import { loadLeaguePool } from '../lib/leaguePool';
 import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { Sparkles, TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star } from 'lucide-react-native';
+import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, ArrowLeftRight, UserCheck } from 'lucide-react-native';
 import { shareLinkupInvite } from '../lib/activation';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
@@ -91,6 +92,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 
   const [loading, setLoading] = useState(false);
   const [people, setPeople] = useState<UserProfile[]>([]);
+  const [leaguePeople, setLeaguePeople] = useState<any[]>([]);
   const [aiRank, setAiRank] = useState<Record<string, { score: number; reason: string }>>({});
   const [aiLoading, setAiLoading] = useState(false);
   const [opportunityRadar, setOpportunityRadar] = useState<OpportunityAlert[]>([]);
@@ -129,6 +131,19 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     return () => {
       isMounted = false;
       unsub();
+    };
+  }, [isFocused, user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid || !isFocused) return;
+    let alive = true;
+    loadLeaguePool()
+      .then((rows) => {
+        if (alive) setLeaguePeople(rows);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
     };
   }, [isFocused, user?.uid]);
 
@@ -184,12 +199,12 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     return list.filter((x) => x.s >= 0).slice(0, 2).map((x) => x.p);
   }, [people, aiRank, localRank]);
 
+  // The Builder League preview uses the shared league pool + the exact same
+  // ranker as the full league screen, so standings match on every device.
   const trending = useMemo(() => {
-    const list = [...people];
-    if (me?.uid && isDiscoverableProfile(me) && !list.some((p) => p.uid === me.uid)) list.push(me);
-    list.sort((a: any, b: any) => (earnedScore(b) + (b.turboConnect ? 8 : 0)) - (earnedScore(a) + (a.turboConnect ? 8 : 0)));
-    return list.slice(0, MOBILE_HORIZONTAL_CARD_LIMIT);
-  }, [people, me]);
+    const pool = leaguePeople.length > 0 ? leaguePeople : people;
+    return rankLeague(pool as any, me).slice(0, MOBILE_HORIZONTAL_CARD_LIMIT);
+  }, [leaguePeople, people, me]);
 
   const opportunities = useMemo(() => {
     const list = people
@@ -421,14 +436,14 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   onPress={() => navigation.navigate('DailyFive')}
                   style={[styles.heroBtn, { backgroundColor: COLORS.primary }]}
                 >
-                  <Zap size={14} color="#000" />
+                  <Flame size={14} color="#000" />
                   <Text style={[styles.heroBtnText, { color: '#000' }]}>Daily 5</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('Swipe')}
                   style={[styles.heroBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
                 >
-                  <Zap size={14} color={textColor(isDark)} />
+                  <ArrowLeftRight size={14} color={textColor(isDark)} />
                   <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>Swipe</Text>
                 </TouchableOpacity>
                 <View style={[styles.heroStatus, { backgroundColor: isDark ? 'rgba(251,230,24,0.1)' : 'rgba(251,230,24,0.15)' }]}>
@@ -502,7 +517,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 
           <Section
             title="Today’s 2 picks"
-            icon={<Sparkles size={17} color={COLORS.primary} />}
+            icon={<UserCheck size={17} color={COLORS.primary} />}
             data={recommended}
             showScore
             onViewAll={() => navigation.navigate('RecommendedMatches')}

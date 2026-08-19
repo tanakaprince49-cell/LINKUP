@@ -4,8 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
-import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
-import { displayNameFor, isDiscoverableProfile } from '../lib/discovery';
+import { loadLeaguePool } from '../lib/leaguePool';
+import { displayNameFor } from '../lib/discovery';
 import { decayingRepScore, daysSince, normalizeShipLogs } from '../lib/dailyLoop';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import VerifiedBadge from '../components/VerifiedBadge';
@@ -22,14 +22,20 @@ export default function CityLeagueScreen({ navigation }: any) {
 
   useEffect(() => {
     if (!user?.uid) return;
-    return subscribeToDiscoveryProfiles({
-      userId: user.uid,
-      onData: (profiles) => {
-        setPeople(profiles.filter((p: any) => isDiscoverableProfile(p)));
+    let alive = true;
+    setLoading(true);
+    loadLeaguePool()
+      .then((rows) => {
+        if (!alive) return;
+        setPeople(rows);
         setLoading(false);
-      },
-      onError: () => setLoading(false),
-    });
+      })
+      .catch(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, [user?.uid]);
 
   const league = useMemo(() => {
@@ -47,7 +53,10 @@ export default function CityLeagueScreen({ navigation }: any) {
         const score = decayingRepScore(p, { shipCount: logs.length || Number(p.shipCount || 0), idleDays: daysSince(logs[0]?.createdAt || p.lastShippedAt) });
         return { ...p, leagueScore: score };
       })
-      .sort((a, b) => b.leagueScore - a.leagueScore)
+      .sort((a, b) => {
+        const diff = b.leagueScore - a.leagueScore;
+        return diff !== 0 ? diff : String(a.uid).localeCompare(String(b.uid));
+      })
       .slice(0, 25);
   }, [people, city, country]);
 

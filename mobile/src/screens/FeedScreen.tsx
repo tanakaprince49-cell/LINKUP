@@ -40,6 +40,7 @@ import * as Icons from 'lucide-react-native';
 import { generateFeedback } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import VerifiedBadge from '../components/VerifiedBadge';
+import ProCrownBadge from '../components/ProCrownBadge';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
@@ -518,6 +519,10 @@ export default function FeedScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
+      <View style={styles.screenTitleRow}>
+        <Text style={[styles.screenTitle, { color: textColor(isDark) }]}>The Feed</Text>
+        <ProCrownBadge />
+      </View>
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
@@ -537,6 +542,8 @@ export default function FeedScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  screenTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 6 },
+  screenTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.3 },
   container: {
     flex: 1,
   },

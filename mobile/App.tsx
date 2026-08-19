@@ -53,6 +53,7 @@ import PWAInstallPrompt from './src/components/PWAInstallPrompt';
 import LinkupAlertProvider from './src/components/LinkupAlertProvider';
 import { blurActiveElementOnWeb } from './src/lib/webFocus';
 import { hasLinkupPro } from './src/lib/paywall';
+import ProCrownBadge from './src/components/ProCrownBadge';
 import { useOnlineStatus } from './src/lib/network';
 import OfflineScreen from './src/components/OfflineScreen';
 import { IS_LOW_END_ANDROID, safeProfileImageUri } from './src/lib/profilePerformance';
@@ -174,6 +175,9 @@ const AppHeader = ({ navigation, title }: any) => {
           ) : (
             <Text style={[styles.headerTabTitle, { color: textColor(isDark) }]}>{title}</Text>
           )}
+          <View style={{ marginLeft: 8 }}>
+            <ProCrownBadge />
+          </View>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
