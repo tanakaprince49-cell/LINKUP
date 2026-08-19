@@ -5,6 +5,7 @@ type Theme = 'light' | 'dark';
 
 interface ThemeContextType {
   theme: Theme;
+  themeReady: boolean;
   toggleTheme: () => void;
   setThemeMode: (nextTheme: Theme) => Promise<void>;
 }
@@ -40,16 +41,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     void setThemeMode(theme === 'dark' ? 'light' : 'dark');
   };
 
-  if (!ready) {
-    return (
-      <ThemeContext.Provider value={{ theme, toggleTheme, setThemeMode }}>
-        {children}
-      </ThemeContext.Provider>
-    );
-  }
-
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setThemeMode }}>
+    <ThemeContext.Provider value={{ theme, themeReady: ready, toggleTheme, setThemeMode }}>
       {children}
     </ThemeContext.Provider>
   );

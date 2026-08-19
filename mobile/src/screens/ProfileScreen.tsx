@@ -2642,8 +2642,17 @@ export default function ProfileScreen({ navigation, route }: any) {
             <Text style={styles.sectionLabel}>Looking for</Text>
             <View style={styles.chipsRow}>
               {lookingFor.slice(0, 10).map((v, idx) => (
-                <View key={idx} style={styles.chip}>
-                  <Text style={styles.chipText}>{String(v).toUpperCase()}</Text>
+                <View
+                  key={idx}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.chipText, { color: textColor(isDark) }]}>{String(v).toUpperCase()}</Text>
                 </View>
               ))}
             </View>

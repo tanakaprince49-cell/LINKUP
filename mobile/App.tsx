@@ -60,6 +60,11 @@ import OfflineScreen from './src/components/OfflineScreen';
 import { IS_LOW_END_ANDROID, safeProfileImageUri } from './src/lib/profilePerformance';
 import { preloadProfileScreen, scheduleScreenPreloads } from './src/lib/preloadScreens';
 import { profileIdFromLink } from './src/lib/profileLinks';
+import * as SplashScreen from 'expo-splash-screen';
+
+// Hold the native splash until the JS side paints one stable frame in the
+// final theme/screen. Kills the light-then-dark "blink" on Android cold start.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -361,7 +366,7 @@ function TabNavigator({ navigation }: any) {
 
 function AppContent() {
   const { user, profile, loading, authVersion, isOnboarded } = useAuth();
-  const { theme } = useTheme();
+  const { theme, themeReady } = useTheme();
   const isDark = theme === 'dark';
   const online = useOnlineStatus();
   const [offlineRetry, setOfflineRetry] = React.useState(0);
@@ -376,6 +381,21 @@ function AppContent() {
     setupNativeNotificationRuntimeAsync().catch((error) => {
       console.warn('Native notification runtime unavailable:', error);
     });
+  }, []);
+
+  // Reveal only when the theme is hydrated AND auth+profile resolved, so the
+  // first painted frame is already the final screen in the final theme.
+  React.useEffect(() => {
+    if (!themeReady || loading) return;
+    void SplashScreen.hideAsync().catch(() => {});
+  }, [themeReady, loading]);
+
+  // Absolute failsafe: never trap anyone on the splash screen.
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      void SplashScreen.hideAsync().catch(() => {});
+    }, 8000);
+    return () => clearTimeout(timer);
   }, []);
 
   const openNotificationTarget = React.useCallback((data: any) => {
