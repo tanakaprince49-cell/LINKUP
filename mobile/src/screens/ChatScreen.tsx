@@ -7,7 +7,7 @@ import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, u
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { ChevronLeft, Send, Camera, Zap, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X, Flag } from 'lucide-react-native';
+import { ChevronLeft, Send, Camera, Sparkles, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X, Flag } from 'lucide-react-native';
 import { generateWarmIntro } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { profileLinkFor, publicProfileLink } from '../lib/profileLinks';
@@ -1189,7 +1189,7 @@ export default function ChatScreen({ route, navigation }: any) {
             onPress={handleDraftIntro}
             disabled={introBusy}
           >
-            {introBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Zap size={20} color={COLORS.primary} fill={COLORS.primary} />}
+            {introBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Sparkles size={20} color={COLORS.primary} fill={COLORS.primary} />}
           </TouchableOpacity>
           <TouchableOpacity style={[styles.toolBtn, liquidGlass(isDark, false), mediaBusy && styles.toolBtnDisabled, { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]} onPress={openMediaPicker} disabled={mediaBusy}>
             {mediaBusy ? <ActivityIndicator size="small" color="#666" /> : <Camera size={20} color="#666" />}
@@ -1466,16 +1466,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  introBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  introBtnText: { fontSize: 11, fontWeight: '900', color: '#000', letterSpacing: 0.3 },
   confidentialText: {
     fontSize: 10,
     fontWeight: '900',
