@@ -270,7 +270,7 @@ function TabNavigator({ navigation }: any) {
         tabBarIcon: ({ focused }) => {
           const iconMap: Record<string, { active: string; inactive: string }> = {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
-            Swipe: { active: 'Zap', inactive: 'Zap' },
+            Swipe: { active: 'Layers', inactive: 'Layers' },
             Hub: { active: 'Gamepad2', inactive: 'Gamepad2' },
             Search: { active: 'Search', inactive: 'Search' },
             Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },

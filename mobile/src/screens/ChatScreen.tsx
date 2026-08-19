@@ -1121,21 +1121,6 @@ export default function ChatScreen({ route, navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.confidentialBanner, liquidGlass(isDark, false)]}>
-        <Shield size={14} color={COLORS.primaryStrong} />
-        <Text style={[styles.confidentialText, { color: textColor(isDark, 'secondary') }]}>
-          Stay on LINKUP. Never send money, OTPs, or your ID. Report anything off.
-        </Text>
-        <TouchableOpacity
-          onPress={handleDraftIntro}
-          activeOpacity={0.85}
-          style={styles.introBtn}
-        >
-          <Zap size={11} color="#000" fill="#000" />
-          <Text style={styles.introBtnText}>Intro</Text>
-        </TouchableOpacity>
-      </View>
-
       {isConfidential && (
         <View style={[styles.confidentialBanner, liquidGlass(isDark, false), { borderColor: 'rgba(251,230,24,0.33)' }]}>
           <Shield size={14} color={COLORS.primary} />
