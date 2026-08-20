@@ -7,11 +7,11 @@
 ```
 What's new in 12.0.0:
 
-• 👑 LINKUP PLUS members now wear a crown at the top of the app
-• 🖼️ No more random placeholder photos — profiles without a picture show clean initials instead
-• 📸 Adding a profile picture now works reliably on every device
-• 🏆 Builder League & City League now show the SAME standings on every phone
-• ✨ Fresh, clearer icons on Explore (Daily 5, Swipe, Today's picks) and a restyled Linky AI chat that matches the app
+• 🐱 New brand! Meet the plug-in cat — LINKUP's new logo on your app icon, splash and web
+• ⚡ Smoother startup (no more white flash) and snappier first profile load
+• 🎯 Discover: match % now sits next to each name, new card-stack tab icon
+• 💬 Chats decluttered — AI intro magic-wand lives in the message box
+• 👑 PLUS crown, real social links with brand logos, working profile share links
 ```
 
 ### Full changelog (internal)
@@ -38,6 +38,18 @@ What's new in 12.0.0:
 - **"Your LINKUP link" works:** `/profile/<uid>` links now open for people who aren't signed in — public get on the public profile index (lists stay signed-in), the app keeps a signed-out visitor on the shared page, "Join LINKUP to connect" CTA on the profile + a join button on the unavailable screen, and after login you're dropped on the exact profile you came from. **Requires `firebase deploy --only firestore:rules`.**
 - **Onboarding grew up:** new Age (16+) and Country+City steps (saved to the profile + public index), and a one-time end-of-onboarding notice — "finish your profile for accurate matches" with **Finish now** (lands you straight on your profile to keep editing) and **I'll do it later**. Stored flag means it never shows twice; early "Skip extra" routes through it too.
 - **Socials with real logos:** optional LinkedIn, GitHub, TikTok, Instagram, X and Website on your profile — brand-true SVG glyphs (lucide ships no brand icons), handle-or-URL input tolerated, tappable chips on every profile view, synced to the public index. **Requires `firebase deploy --only firestore:rules`.**
+
+### Rebrand & stability batch (shipped with 12.0.0)
+
+- **New brand mark — the plug-in cat:** cat plugging the cable back into the socket (= LINKUP connects you) is now the app icon, adaptive icon, splash, favicon, PWA icons, and the login/landing/verification marks. Lime flattened to brand `#FBE618`; adaptive-icon art zoomed out to sit clean inside the Android mask.
+- **No more startup blink:** cold start used to flash white while the theme hydrated — `expo-splash-screen` now holds the splash until the theme + auth are ready (8s failsafe), so it loads straight into home.
+- **"Looking for" chips fixed:** profile looking-for chips were white-on-white invisible in light mode — now themed like the rest of the card.
+- **Favicon refresh:** `?v=cat1` cache-busters + service-worker bump so every device picks up the new cat icon on the web app.
+- **Chat declutter:** the always-on "Stay on LINKUP, never send money…" banner is gone; crypto/OTP/off-app scanning still runs silently in the background, plus per-message warnings.
+- **AI warm intro = magic wand:** single intro button lives in the message composer with a `WandSparkles` icon (reads "AI write it for me"); drafts into the box so you can edit before sending.
+- **Discover (scroll mode):** the match-% pill was hidden behind the back button — it now sits next to the person's name, icon swapped from Zap to a 🎯 Target (fit = bullseye), and Zap is fully purged from Discover. Discover tab icon is now a Layers card-stack.
+- **Firestore silence on Android:** forced long-polling on native — kills the `RPC 'Listen' stream transport errored` console spam every ~75s; web keeps fast streams + IndexedDB cache.
+- **Cold-start diet:** a fresh install's first profile fetch downloads ~40% fewer (and leaner) docs, so the first deck shows up much faster and afterwards comes from cache.
 - **Looking-for visibility:** onboarding choice labels no longer clipped at 2 lines, scroll hint added, fat bottom spacer; idea cards show up to 4 looking-for roles without clipping.
 
 ## 11.0.0 (versionCode 11)
