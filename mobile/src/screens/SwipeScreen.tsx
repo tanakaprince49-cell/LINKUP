@@ -33,7 +33,7 @@ import { useGamification } from '../contexts/GamificationContext';
 import { UserProfile } from '../types';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { roleInfoFor } from '../lib/roles';
-import { X, Heart, Zap, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare } from 'lucide-react-native';
+import { X, Heart, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare } from 'lucide-react-native';
 import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
 import { PRO_FEATURES } from '../lib/paywall';
@@ -222,7 +222,7 @@ const ExpandedProfilePanel = React.memo(function ExpandedProfilePanel({
           <Text style={[styles.expandedLocation, { color: isDark ? '#718096' : '#8492A6' }]}>{locationText}</Text>
 
           <View style={[styles.expandedMatchRow, { backgroundColor: isDark ? 'rgba(251,230,24,0.12)' : 'rgba(251,230,24,0.15)' }]}>
-            <Zap size={14} color={COLORS.primary} fill={COLORS.primary} />
+            <Target size={14} color={COLORS.primary} />
             <Text style={[styles.expandedMatchText, { color: COLORS.primary }]}>
               {compatibility}% fit — {compatibilityReason}
             </Text>
@@ -1203,16 +1203,14 @@ export default function SwipeScreen({ navigation }: any) {
           <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.scrollCardImg} resizeMode="cover" />
           <View style={styles.scrollCardOverlay} />
           <View style={styles.scrollCardBody}>
-            <View style={styles.scrollCardTop}>
-              <View style={[styles.scrollCompatPill, { backgroundColor: COLORS.primary }]}>
-                <Zap size={14} color="#000" fill="#000" />
-                <Text style={styles.scrollCompatText}>{compatibility}% match</Text>
-              </View>
-            </View>
             <View style={styles.scrollCardMeta}>
               <View style={styles.scrollCardNameRow}>
-                <Text style={styles.scrollCardName}>{displayNameFor(profile)}{ageText}</Text>
+                <Text style={styles.scrollCardName} numberOfLines={1}>{displayNameFor(profile)}{ageText}</Text>
                 {profile.isVerified && <VerifiedBadge size={18} />}
+                <View style={styles.scrollCompatPillSmall}>
+                  <Target size={12} color="#000" />
+                  <Text style={styles.scrollCompatTextSmall}>{compatibility}%</Text>
+                </View>
               </View>
               <Text style={styles.scrollCardRole} numberOfLines={1}>{roleText}</Text>
               <Text style={styles.scrollCardLocation} numberOfLines={1}>{locationText}</Text>
@@ -1282,7 +1280,7 @@ export default function SwipeScreen({ navigation }: any) {
     return (
       <ScreenRoot style={[styles.container, isWeb && styles.webRoot, appBackground(isDark)]}>
         <View style={styles.authGate}>
-          <Zap size={44} color={COLORS.primary} fill={COLORS.primary} />
+          <Target size={44} color={COLORS.primary} />
           <Text style={[styles.authGateTitle, { color: textColor(isDark) }]}>JOIN LINKUP FIRST</Text>
           <Text style={[styles.authGateCopy, { color: textColor(isDark, 'secondary') }]}>Sign in to unlock smart matchmaking, builder search, and swipe discovery.</Text>
           <TouchableOpacity
@@ -2232,31 +2230,29 @@ const styles = StyleSheet.create({
   },
   scrollCardBody: {
     flex: 1,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
+    gap: 10,
     padding: 18,
   },
-  scrollCardTop: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-  },
-  scrollCompatPill: {
+  scrollCompatPillSmall: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: COLORS.primary,
     shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
   },
-  scrollCompatText: {
-    fontSize: 16,
+  scrollCompatTextSmall: {
+    fontSize: 12,
     fontWeight: '900',
     color: '#000',
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   scrollCardMeta: {
     gap: 4,
@@ -2271,6 +2267,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -0.5,
     color: '#FFF',
+    flexShrink: 1,
   },
   scrollCardRole: {
     fontSize: 13,
