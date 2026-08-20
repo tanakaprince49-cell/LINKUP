@@ -32,14 +32,22 @@ const createAuth = () => {
 
 export const auth = createAuth();
 export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
   ignoreUndefinedProperties: true,
-  // Persist Firestore docs in IndexedDB on web so repeat visits render
-  // profiles instantly from cache while the network copy refreshes.
-  // React Native has no IndexedDB, so native keeps the default memory cache.
   ...(Platform.OS === 'web'
-    ? { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }
-    : {}),
+    ? {
+        // Web handles WebChannel streams fine; auto-detect picks the best transport.
+        experimentalAutoDetectLongPolling: true,
+        // Persist Firestore docs in IndexedDB on web so repeat visits render
+        // profiles instantly from cache while the network copy refreshes.
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      }
+    : {
+        // React Native / Expo Go: WebChannel listen streams flap roughly every
+        // 75s and flood the console with "RPC 'Listen' stream transport errored"
+        // warnings. Forcing long polling on native makes the transport stable
+        // and silences the noise without touching the web app.
+        experimentalForceLongPolling: true,
+      }),
 });
 export const functions = getFunctions(app);
 
