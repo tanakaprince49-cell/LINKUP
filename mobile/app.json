@@ -58,7 +58,16 @@
           "microphonePermission": "Allow LINKUP to record audio when sending chat videos."
         }
       ],
-      "expo-iap"
+      "expo-iap",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ]
     ],
     "owner": "talala"
   }
