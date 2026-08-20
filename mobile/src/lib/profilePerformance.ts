@@ -6,7 +6,7 @@ const androidApiLevel = Platform.OS === 'android' ? Number(Platform.Version || 0
 
 export const IS_LOW_END_ANDROID = Platform.OS === 'android' && androidApiLevel > 0 && androidApiLevel <= 29;
 export const MOBILE_DISCOVERY_QUERY_LIMIT = IS_LOW_END_ANDROID ? 8 : Platform.OS === 'android' ? 14 : 60;
-export const MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT = IS_LOW_END_ANDROID ? 6 : Platform.OS === 'android' ? 10 : 24;
+export const MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT = IS_LOW_END_ANDROID ? 5 : Platform.OS === 'android' ? 6 : 24;
 export const MOBILE_CHAT_MESSAGE_LIMIT = IS_LOW_END_ANDROID ? 20 : Platform.OS === 'android' ? 28 : 80;
 export const MOBILE_NOTIFICATION_QUERY_LIMIT = IS_LOW_END_ANDROID ? 16 : Platform.OS === 'android' ? 24 : 75;
 export const MOBILE_HORIZONTAL_CARD_LIMIT = IS_LOW_END_ANDROID ? 4 : Platform.OS === 'android' ? 6 : 12;
