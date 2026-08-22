@@ -149,8 +149,8 @@ type SubscribeOptions = {
   onError?: (error: unknown) => void;
 };
 
-export const loadFromPublicProfiles = async (userId: string) => {
-  const snap = await getDocs(query(collection(db, 'publicProfiles'), limit(MOBILE_DISCOVERY_QUERY_LIMIT)));
+export const loadFromPublicProfiles = async (userId: string, maxResults = MOBILE_DISCOVERY_QUERY_LIMIT) => {
+  const snap = await getDocs(query(collection(db, 'publicProfiles'), limit(maxResults)));
   if (!snap || snap.empty) return null;
   const rows = snap.docs.map((d: any) =>
     compactProfileForList({ uid: d.id, ...(d.data() as any) })

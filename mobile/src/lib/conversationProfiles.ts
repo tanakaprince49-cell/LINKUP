@@ -6,7 +6,16 @@ import { UserProfile } from '../types';
 export const CONVERSATION_AVATAR_CHAR_LIMIT = 240_000;
 
 const text = (value: unknown, max = 120) => String(value ?? '').trim().slice(0, max);
-const profileCache = new Map<string, UserProfile>();
+
+type CachedConversationProfile = {
+  profile: UserProfile;
+  checkedFat: boolean;
+  at: number;
+};
+
+const profileCache = new Map<string, CachedConversationProfile>();
+const inflightLoads = new Map<string, Promise<UserProfile>>();
+const CONVERSATION_PROFILE_TTL_MS = 15 * 60 * 1000;
 
 export const conversationAvatarUri = (value: unknown) =>
   safeProfileImageUri(value, CONVERSATION_AVATAR_CHAR_LIMIT);
@@ -101,32 +110,55 @@ export const normalizeConversationProfile = (
 export const needsFullConversationProfile = (profile: Partial<UserProfile> | null | undefined) =>
   !profile || isPlaceholderName((profile as any)?.displayName) || !conversationAvatarUri((profile as any)?.profilePic);
 
-export const loadConversationProfile = async (
+export const loadConversationProfile = (
   uid: string,
   fallback: Partial<UserProfile> | null = null
 ): Promise<UserProfile> => {
   const cached = profileCache.get(uid);
-  if (cached && !needsFullConversationProfile(cached)) {
-    return normalizeConversationProfile(uid, cached, fallback);
-  }
-
-  let merged = normalizeConversationProfile(uid, fallback || {});
-
-  // Lean index first: `users` docs are fat (base64 photos up to ~900KB) — only
-  // fetch one if the lean index can't fill name + avatar. Chat lists render
-  // instantly from the index without ever paying the fat-doc tax.
-  const publicSnap = await getDoc(doc(db, 'publicProfiles', uid)).catch(() => null);
-  if (publicSnap?.exists()) {
-    merged = normalizeConversationProfile(uid, publicSnap.data(), merged);
-  }
-
-  if (needsFullConversationProfile(merged)) {
-    const userSnap = await getDoc(doc(db, 'users', uid)).catch(() => null);
-    if (userSnap?.exists()) {
-      merged = normalizeConversationProfile(uid, userSnap.data(), merged);
+  if (cached && Date.now() - cached.at < CONVERSATION_PROFILE_TTL_MS) {
+    // Cache hit: return instantly when the entry is complete, OR when we
+    // already paid the fat users-doc tax once (checkedFat). Without this,
+    // photo-less profiles failed the completeness check forever and the inbox
+    // re-downloaded their ~900KB users doc on every single open.
+    if (!needsFullConversationProfile(cached.profile) || cached.checkedFat) {
+      return Promise.resolve(normalizeConversationProfile(uid, cached.profile, fallback));
     }
   }
 
-  profileCache.set(uid, merged);
-  return merged;
+  // Dedupe: 30 chat rows asking about the same person share ONE fetch.
+  const inflight = inflightLoads.get(uid);
+  if (inflight) {
+    return inflight.then((profile) => normalizeConversationProfile(uid, profile, fallback));
+  }
+
+  const task = (async () => {
+    let merged = normalizeConversationProfile(uid, cached?.profile || fallback || {});
+    let checkedFat = !!cached?.checkedFat;
+
+    // Lean index first: `users` docs are fat (base64 photos up to ~900KB) — only
+    // fetch one if the lean index can't fill name + avatar. Chat lists render
+    // instantly from the index without ever paying the fat-doc tax.
+    const publicSnap = await getDoc(doc(db, 'publicProfiles', uid)).catch(() => null);
+    if (publicSnap?.exists()) {
+      merged = normalizeConversationProfile(uid, publicSnap.data(), merged);
+    }
+
+    if (needsFullConversationProfile(merged) && !checkedFat) {
+      checkedFat = true;
+      const userSnap = await getDoc(doc(db, 'users', uid)).catch(() => null);
+      if (userSnap?.exists()) {
+        merged = normalizeConversationProfile(uid, userSnap.data(), merged);
+      }
+    }
+
+    profileCache.set(uid, { profile: merged, checkedFat, at: Date.now() });
+    return merged;
+  })();
+
+  inflightLoads.set(uid, task);
+  return task
+    .then((profile) => normalizeConversationProfile(uid, profile, fallback))
+    .finally(() => {
+      inflightLoads.delete(uid);
+    });
 };

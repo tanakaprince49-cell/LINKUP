@@ -32,6 +32,23 @@ import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, MOBILE_SEARCH_RENDER_LIMIT
 import { loadFromPublicProfiles } from '../lib/discoveryProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
+// Search pulls a bigger page of lean publicProfiles docs than the swipe deck:
+// they're ~1KB each with hosted-URL images, so 60 of them is a tiny download
+// that makes search results far richer.
+const SEARCH_POOL_LIMIT = 60;
+const SEARCH_LOAD_TIMEOUT_MS = 9000;
+
+// Module-level pool cache: revisiting Search renders the last pool INSTANTLY
+// and refreshes silently in the background instead of showing a spinner every
+// single time the tab gets focus.
+let searchPoolCache: { userId: string; rows: UserProfile[] } | null = null;
+
+const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T | null> =>
+  Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+
 const normalize = (v: string) => v.trim().toLowerCase();
 const LOOKING_FOR_FILTERS = ['Cofounder', 'Startup Team', 'Mentor', 'Internship', 'Freelance Work', 'Investment', ...LINKUP_ROLE_LABELS];
 const STAGE_FILTERS = ['Idea', 'MVP', 'Early Users', 'Revenue', 'Scaling', 'Fundraising'];
@@ -204,13 +221,28 @@ export default function SearchScreen({ navigation, route }: any) {
   useEffect(() => {
     if (!user || !isFocused) return;
     let cancelled = false;
-    setLoading(true);
+
+    // Instant paint from cache; the network refresh below swaps in fresh rows
+    // silently. Only a cold cache shows the spinner at all.
+    const cachedRows = searchPoolCache && searchPoolCache.userId === user.uid ? searchPoolCache.rows : [];
+    if (cachedRows.length) {
+      setAllProfiles(cachedRows);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
 
     const load = async () => {
       try {
-        const list = await loadFromPublicProfiles(user.uid);
+        const list = await withTimeout(
+          loadFromPublicProfiles(user.uid, SEARCH_POOL_LIMIT),
+          SEARCH_LOAD_TIMEOUT_MS
+        );
         if (cancelled) return;
-        if (list && list.length > 0) setAllProfiles(list);
+        if (list && list.length > 0) {
+          setAllProfiles(list);
+          searchPoolCache = { userId: user.uid, rows: list };
+        }
       } catch (error) {
         console.error('SearchScreen load error:', error);
       }

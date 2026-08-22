@@ -216,6 +216,16 @@ export default function MessagesScreen({ navigation, route }: any) {
         });
         setMatches(visible);
         setLoading(false);
+
+        // Warm every conversation profile in parallel the moment the inbox
+        // lands, so rows never wait for a per-mount fetch — when each row
+        // mounts, its profile is already an instant cache hit (deduped in
+        // conversationProfiles, so this costs one round-trip per person max).
+        visible.forEach((m: any) => {
+          const otherId = otherParticipantId(m, user.uid);
+          if (!otherId) return;
+          void loadConversationProfile(otherId, fallbackConversationUser(m, otherId)).catch(() => {});
+        });
       },
       (err) => {
         console.warn('Messages list unavailable:', err);
