@@ -29,7 +29,7 @@ import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
 import PaywallModal from '../components/PaywallModal';
 import { PRO_FEATURES } from '../lib/paywall';
 import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, MOBILE_SEARCH_RENDER_LIMIT, safeProfileImageUri, compactProfileForList } from '../lib/profilePerformance';
-import { loadFromPublicProfiles } from '../lib/discoveryProfiles';
+import { loadFromPublicProfiles, loadFromUsers } from '../lib/discoveryProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 // Search pulls a bigger page of lean publicProfiles docs than the swipe deck:
@@ -37,6 +37,10 @@ import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 // that makes search results far richer.
 const SEARCH_POOL_LIMIT = 60;
 const SEARCH_LOAD_TIMEOUT_MS = 9000;
+// If the lean index is still sparse (backfill pending, young userbase), search
+// tops the pool up from the capped legacy users query so it ALWAYS has people
+// to match against. Once the index is full this never fires.
+const SEARCH_MIN_POOL = 8;
 
 // Module-level pool cache: revisiting Search renders the last pool INSTANTLY
 // and refreshes silently in the background instead of showing a spinner every
@@ -277,9 +281,21 @@ export default function SearchScreen({ navigation, route }: any) {
           SEARCH_LOAD_TIMEOUT_MS
         );
         if (cancelled) return;
-        if (list && list.length > 0) {
-          setAllProfiles(list);
-          searchPoolCache = { userId: user.uid, rows: list };
+        let rows = list && list.length ? list : null;
+        if (!rows || rows.length < SEARCH_MIN_POOL) {
+          // Index still sparse — bridge with the capped legacy query so the
+          // user always gets results. Merge, dedupe by uid.
+          const fallbackRows = await withTimeout(loadFromUsers(user.uid), 6000);
+          if (cancelled) return;
+          if (fallbackRows?.length) {
+            rows = rows
+              ? [...rows, ...fallbackRows.filter((f: any) => !rows!.some((r: any) => r.uid === f.uid))]
+              : fallbackRows;
+          }
+        }
+        if (rows && rows.length > 0) {
+          setAllProfiles(rows);
+          searchPoolCache = { userId: user.uid, rows };
         }
       } catch (error) {
         console.error('SearchScreen load error:', error);
