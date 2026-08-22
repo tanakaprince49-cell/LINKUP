@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 import React from 'react';
 import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text, Platform, InteractionManager } from 'react-native';
-import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -264,6 +264,7 @@ function TabNavigator({ navigation }: any) {
     <Tab.Navigator
       initialRouteName="Dashboard"
       detachInactiveScreens={Platform.OS !== 'web'}
+      sceneContainerStyle={{ backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }}
       screenOptions={({ route }) => ({
         lazy: true,
         freezeOnBlur: true,
@@ -576,11 +577,27 @@ function AppContent() {
     return <OfflineScreen onRetry={() => setOfflineRetry((n) => n + 1)} />;
   }
 
+  // Nav background matches the app theme (never the native black host
+  // container) + a quick native crossfade instead of a hard cut. Together
+  // these kill the "black blink" users saw on every Android page change: the
+  // old screen stays visible while the new one paints in underneath.
+  const navThemeBase = isDark ? DarkTheme : DefaultTheme;
+  const navTheme = {
+    ...navThemeBase,
+    colors: {
+      ...navThemeBase.colors,
+      background: isDark ? COLORS.darkBg : COLORS.lightBg,
+      card: isDark ? COLORS.darkBg : COLORS.lightBg,
+    },
+  };
+  const navContentBg = { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg };
+
   return (
     <NavigationContainer
       ref={navigationRef}
       key={navigationStateKey}
       linking={linking}
+      theme={navTheme}
       onStateChange={blurActiveElementOnWeb}
     >
       <Stack.Navigator
@@ -588,7 +605,9 @@ function AppContent() {
         screenOptions={{
           headerShown: false,
           freezeOnBlur: true,
-          animation: Platform.OS === 'android' || Platform.OS === 'web' ? 'none' : 'fade_from_bottom',
+          contentStyle: navContentBg,
+          animation: Platform.OS === 'android' || Platform.OS === 'web' ? 'fade' : 'fade_from_bottom',
+          animationDuration: 180,
         }}
       >
         {!user ? (
@@ -600,7 +619,7 @@ function AppContent() {
                 <Stack.Screen
               name="Profile"
               component={ProfileScreen}
-              options={{ animation: Platform.OS === 'android' ? 'none' : 'fade_from_bottom' }}
+              options={{ animation: Platform.OS === 'android' ? 'fade' : 'fade_from_bottom' }}
             />
                 <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
               </>
@@ -620,7 +639,7 @@ function AppContent() {
             <Stack.Screen
               name="Profile"
               component={ProfileScreen}
-              options={{ animation: Platform.OS === 'android' ? 'none' : Platform.OS === 'web' ? 'none' : 'fade_from_bottom' }}
+              options={{ animation: Platform.OS === 'android' ? 'fade' : Platform.OS === 'web' ? 'none' : 'fade_from_bottom' }}
             />
             <Stack.Screen name="Alerts" component={AlertsScreen} />
             <Stack.Screen name="Messages" component={MessagesScreen} />
@@ -636,8 +655,8 @@ function AppContent() {
             <Stack.Screen name="FounderFlip" component={FounderFlipScreen} />
             <Stack.Screen name="PitchPerfect" component={PitchPerfectScreen} />
             <Stack.Screen name="NetworkQuiz" component={NetworkQuizScreen} />
-            <Stack.Screen name="Linky" component={LinkyScreen} options={{ animation: Platform.OS === 'android' ? 'none' : 'slide_from_right' }} />
-            <Stack.Screen name="LinkyProfile" component={LinkyProfileScreen} options={{ animation: Platform.OS === 'android' ? 'none' : 'slide_from_right' }} />
+            <Stack.Screen name="Linky" component={LinkyScreen} options={{ animation: Platform.OS === 'android' ? 'fade' : 'slide_from_right' }} />
+            <Stack.Screen name="LinkyProfile" component={LinkyProfileScreen} options={{ animation: Platform.OS === 'android' ? 'fade' : 'slide_from_right' }} />
             <Stack.Screen name="DailyFive" component={DailyFiveScreen} />
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
             <Stack.Screen name="CityLeague" component={CityLeagueScreen} />

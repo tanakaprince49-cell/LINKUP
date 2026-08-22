@@ -178,6 +178,39 @@ export default function SearchScreen({ navigation, route }: any) {
   const routedSearchToken = String(route?.params?.searchToken || '');
   const openPaywall = (feature: string) => setPaywallFeature(feature);
 
+  // Idle mode: NO profiles are loaded until the user actually asks for them.
+  // Zero reads while browsing filters/thinking — the pool (and Firestore
+  // bandwidth + battery) is only spent the moment there's real search intent.
+  const hasSearchIntent = useMemo(
+    () =>
+      !!(
+        queryText.trim() ||
+        location.trim() ||
+        skills.trim() ||
+        industry.trim() ||
+        lookingForRole.trim() ||
+        stageFilter ||
+        lookingForCofounder ||
+        verifiedOnly ||
+        hasPhotoOnly ||
+        activeWithin !== 'any' ||
+        minCompatibility > 0
+      ),
+    [
+      queryText,
+      location,
+      skills,
+      industry,
+      lookingForRole,
+      stageFilter,
+      lookingForCofounder,
+      verifiedOnly,
+      hasPhotoOnly,
+      activeWithin,
+      minCompatibility,
+    ]
+  );
+
   const sliderWidth = 240;
   const knobX = useRef(0);
 
@@ -220,6 +253,11 @@ export default function SearchScreen({ navigation, route }: any) {
 
   useEffect(() => {
     if (!user || !isFocused) return;
+    if (!hasSearchIntent) {
+      // Idle: don't touch Firestore at all — nothing loads until they search.
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
 
     // Instant paint from cache; the network refresh below swaps in fresh rows
@@ -251,7 +289,7 @@ export default function SearchScreen({ navigation, route }: any) {
 
     load();
     return () => { cancelled = true; };
-  }, [isFocused, user?.uid]);
+  }, [isFocused, user?.uid, hasSearchIntent]);
 
   useEffect(() => {
     if (routedSkill) {
@@ -879,7 +917,29 @@ export default function SearchScreen({ navigation, route }: any) {
         </View>
       )}
 
-      {loading && allProfiles.length === 0 ? (
+      {!hasSearchIntent ? (
+        <View style={styles.idleWrap}>
+          <View style={[styles.idleIconTile, { backgroundColor: COLORS.primary }]}>
+            <Search size={26} color="#000" />
+          </View>
+          <Text style={[styles.idleTitle, { color: textColor(isDark) }]}>Search anyone on LINKUP</Text>
+          <Text style={[styles.idleCopy, { color: textColor(isDark, 'secondary') }]}>
+            Nothing loads until you ask — type a name, skill, city, or role and the builders you're looking for appear instantly. Zero waiting, zero wasted data.
+          </Text>
+          <View style={styles.idleChipsRow}>
+            {['CTO', 'Designer', 'Fintech', 'Harare', 'Investor'].map((suggestion) => (
+              <TouchableOpacity
+                key={suggestion}
+                onPress={() => setQueryText(suggestion)}
+                style={[styles.idleChip, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+              >
+                <Text style={[styles.idleChipText, { color: textColor(isDark) }]}>{suggestion.toUpperCase()}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.idleHint}>try the AI bar above: "ML engineer in South Africa into fintech"</Text>
+        </View>
+      ) : loading && allProfiles.length === 0 ? (
         <ActivityIndicator color={COLORS.primary} style={{ marginTop: 30 }} />
       ) : (
         <View style={styles.resultsList}>
@@ -1086,6 +1146,57 @@ const styles = StyleSheet.create({
   resultsList: {
     padding: 16,
     paddingBottom: 20,
+  },
+  idleWrap: {
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingTop: 40,
+    gap: 12,
+  },
+  idleIconTile: {
+    width: 58,
+    height: 58,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  idleTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  idleCopy: {
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  idleChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  idleChip: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  idleChipText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  idleHint: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#777',
+    textAlign: 'center',
   },
   resultsLimitCard: {
     alignItems: 'center',
