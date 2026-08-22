@@ -112,21 +112,19 @@ export const loadConversationProfile = async (
 
   let merged = normalizeConversationProfile(uid, fallback || {});
 
-  // Fire both candidate reads in parallel instead of waiting for the public
-  // index before deciding to hit `users` — the slow path drops from two
-  // serial round trips to one.
-  const publicPromise = getDoc(doc(db, 'publicProfiles', uid)).catch(() => null);
-  const userPromise = needsFullConversationProfile(merged)
-    ? getDoc(doc(db, 'users', uid)).catch(() => null)
-    : Promise.resolve(null);
-
-  const [publicSnap, userSnap] = await Promise.all([publicPromise, userPromise]);
+  // Lean index first: `users` docs are fat (base64 photos up to ~900KB) — only
+  // fetch one if the lean index can't fill name + avatar. Chat lists render
+  // instantly from the index without ever paying the fat-doc tax.
+  const publicSnap = await getDoc(doc(db, 'publicProfiles', uid)).catch(() => null);
   if (publicSnap?.exists()) {
     merged = normalizeConversationProfile(uid, publicSnap.data(), merged);
   }
 
-  if (userSnap?.exists() && needsFullConversationProfile(merged)) {
-    merged = normalizeConversationProfile(uid, userSnap.data(), merged);
+  if (needsFullConversationProfile(merged)) {
+    const userSnap = await getDoc(doc(db, 'users', uid)).catch(() => null);
+    if (userSnap?.exists()) {
+      merged = normalizeConversationProfile(uid, userSnap.data(), merged);
+    }
   }
 
   profileCache.set(uid, merged);

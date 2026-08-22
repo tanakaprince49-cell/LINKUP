@@ -1,5 +1,25 @@
 # LINKUP Release Notes
 
+## 13.0.0 (versionCode 13)
+
+**Play Console (paste into "What's new in this release"):**
+
+```
+What's new in 13.0.0:
+
+• ⚡ BIG speed fix: profiles, search and chats now load in seconds, not minutes
+• 🖼️ Startup no longer freezes — the app opens straight into people
+• 📱 Smaller download: the app is now minified and runs lighter on every phone
+• 🔁 Now looks right on tablets, foldables and landscape mode
+• 🐱 Plus the new plug-in cat brand, magic-wand AI intros, and match % next to every name
+```
+
+### Full changelog (internal)
+
+- **League pool no longer firehoses Firestore:** `loadLeaguePool` used to pull up to **300 raw `users` docs (incl. ~900KB base64 photos each)** on every cold app start and re-fetch every 5 minutes — tens of MB and hundreds of MB of live JS strings. Every Firestore listener queued behind it (the "profiles take 5 minutes" symptom) and garbage collection froze navigation (the "black blink between pages" symptom). Now reads the lean `publicProfiles` index, URL-only images, compacted rows, 30-min cache. Standings stay deterministic (same stable doc-ID order on every device).
+- **Discover cache cannot freeze startup again:** `writeCachedDiscovery` used to serialise up to 200 profiles *with base64 photos* into one giant AsyncStorage JSON, and `readCachedDiscovery` re-parsed it on the JS main thread at every open. Now the cache keeps text/meta only — photo pixels only ever travel as hosted URLs; profile docs hydrate from Firestore behind the instantly-rendered deck.
+- **Inbox/conversation fan-out de-fatted:** every chat row used to fetch the full fat `users/<uid>` doc (with photo) in parallel with the lean index. Now it tries `publicProfiles` first and only touches `users` when the index can't supply a name/avatar — inbox renders from kilobytes instead of megabytes.
+
 ## 12.0.0 (versionCode 12)
 
 **Play Console (paste into "What's new in this release"):**

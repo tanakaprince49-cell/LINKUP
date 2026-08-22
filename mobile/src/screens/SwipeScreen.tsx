@@ -90,8 +90,8 @@ const writeCachedDiscovery = async (uid: string, profiles: UserProfile[]) => {
       displayName: displayNameFor(profile),
       username: (profile as any).username || '',
       bio: profile.bio || '',
-      profilePic: isSafeSwipePhoto(profile.profilePic) ? profile.profilePic : '',
-      photos: Array.isArray((profile as any).photos) ? (profile as any).photos.filter(isSafeSwipePhoto).slice(0, 3) : [],
+      profilePic: isCacheableSwipePhoto(profile.profilePic) ? (profile.profilePic as string).slice(0, 1000) : '',
+      photos: Array.isArray((profile as any).photos) ? (profile as any).photos.filter(isCacheableSwipePhoto).slice(0, 3) : [],
       occupation: (profile as any).occupation || '',
       company: (profile as any).company || '',
       city: profile.city || '',
@@ -159,6 +159,11 @@ const isSafeSwipePhoto = (uri: unknown): uri is string => {
   if (!value) return false;
   return !value.startsWith('data:') || value.length <= MAX_SWIPE_DATA_URI_CHARS;
 };
+
+// Cache only hosted (https) photos. Base64 data URIs are megabytes of JSON —
+// serialising them to AsyncStorage froze the whole app on startup.
+const isCacheableSwipePhoto = (uri: unknown): uri is string =>
+  typeof uri === 'string' && /^https:\/\//.test(uri);
 
 const getSwipePhotos = (profile: UserProfile): string[] => {
   const rawPhotos: unknown[] = Array.isArray((profile as any).photos) && (profile as any).photos.length > 0
