@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Keyboard
 import * as ImagePicker from 'expo-image-picker';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, setDoc, arrayUnion, arrayRemove, increment, limitToLast } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, getDocsFromCache, setDoc, arrayUnion, arrayRemove, increment, limitToLast } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -14,6 +14,9 @@ import { profileLinkFor, publicProfileLink } from '../lib/profileLinks';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { imageAssetToDataUri } from '../lib/imageUploadLimits';
+import { uploadImageToImageKit } from '../lib/imagekitUpload';
+import { AppImage } from '../components/AppImage';
+import { ikAvatar, ikImage } from '../lib/ikImage';
 import PaywallModal from '../components/PaywallModal';
 import { isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_CHAT_MESSAGE_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
@@ -303,10 +306,25 @@ export default function ChatScreen({ route, navigation }: any) {
       limitToLast(MOBILE_CHAT_MESSAGE_LIMIT)
     );
 
+    // Lane 0: disk cache — the last conversation re-opens instantly even
+    // fully offline; fresh network results replace it right after.
+    let painted = false;
+    void getDocsFromCache(q)
+      .then((snap) => {
+        if (!painted && !snap.empty) {
+          painted = true;
+          const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setMessages(msgs);
+          scrollToLatest();
+        }
+      })
+      .catch(() => {});
+
     // Lane 1 (race): paint history from a one-shot read instantly — streams
     // can hang silently on hostile networks, one-shots can't.
     void getDocs(q)
       .then((snap) => {
+        if (!snap.empty) painted = true;
         const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setMessages(msgs);
         scrollToLatest();
@@ -317,13 +335,14 @@ export default function ChatScreen({ route, navigation }: any) {
     const unsub = onSnapshot(
       q,
       (snap) => {
+        if (!snap.empty) painted = true;
         const msgs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setMessages(msgs);
         scrollToLatest();
       },
       (err) => {
         console.warn('Chat messages unavailable:', err);
-        setMessages([]);
+        if (!painted) setMessages([]); // keep cache-painted history on screen
       }
     );
 
@@ -627,7 +646,20 @@ export default function ChatScreen({ route, navigation }: any) {
         if (!mediaUrl) {
           throw new Error(preparedImage.error || 'Image data was unavailable.');
         }
-        storedMediaSize = mediaUrl.length;
+        // CDN-FIRST: park the photo on ImageKit so message docs stay a few
+        // hundred bytes and history loads instantly. Base64 inline stays as
+        // the offline/degraded fallback only.
+        const hosted = await uploadImageToImageKit(
+          user.uid,
+          mediaUrl,
+          { folder: '/linkup-chat-media', fileName: `${user.uid}-${Date.now()}.${ext}` }
+        ).catch(() => null);
+        if (hosted) {
+          mediaUrl = hosted;
+          storedMediaSize = size;
+        } else {
+          storedMediaSize = mediaUrl.length;
+        }
       }
 
       const caption = inputText.trim();
@@ -1017,7 +1049,7 @@ export default function ChatScreen({ route, navigation }: any) {
             )}
             {item.type === 'image' && !!item.mediaUrl && (
               <TouchableOpacity activeOpacity={0.92} onPress={() => Linking.openURL(item.mediaUrl).catch(() => {})}>
-                <Image source={{ uri: safeProfileImageUri(item.mediaUrl, MOBILE_LIST_IMAGE_LIMIT) || item.mediaUrl }} style={styles.messageImage} resizeMode="cover" />
+                <AppImage uri={ikImage(safeProfileImageUri(item.mediaUrl, MOBILE_LIST_IMAGE_LIMIT) || item.mediaUrl, 640, 65)} style={styles.messageImage} />
               </TouchableOpacity>
             )}
             {item.type === 'video' && !!item.mediaUrl && (
@@ -1094,7 +1126,7 @@ export default function ChatScreen({ route, navigation }: any) {
               onPress={openOtherProfile}
             >
               {headerAvatarUri ? (
-                <Image source={{ uri: headerAvatarUri }} style={styles.avatar} />
+                <AppImage uri={ikAvatar(headerAvatarUri)} style={styles.avatar} />
               ) : (
                 <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: isDark ? '#181818' : '#FFF8B8' }]}>
                   <Text style={styles.avatarFallbackText}>{headerInitial}</Text>

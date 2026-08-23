@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, endAt, getDocs, limit, onSnapshot, orderBy, query, setDoc, startAfter, startAt } from 'firebase/firestore';
+import { collection, deleteDoc, doc, endAt, getDocs, getDocsFromCache, limit, onSnapshot, orderBy, query, setDoc, startAfter, startAt } from 'firebase/firestore';
 import { db } from './firebase';
 import { displayNameFor, isDiscoverableProfile } from './discovery';
 import { sanitizeSocialLinks } from './socialLinks';
@@ -6,10 +6,9 @@ import {
   IS_LOW_END_ANDROID,
   MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT,
   MOBILE_DISCOVERY_QUERY_LIMIT,
-  MOBILE_LIST_IMAGE_LIMIT,
   MOBILE_SWIPE_DECK_LIMIT,
   compactProfileForList,
-  safeProfileImageUri,
+  storedProfileImageUri,
 } from './profilePerformance';
 import { UserProfile } from '../types';
 
@@ -47,9 +46,11 @@ export const buildPublicProfileIndex = (profile: any) => {
   const compact = compactProfileForList(profile);
   if (!compact?.uid || !isDiscoverableProfile(compact)) return null;
 
-  // Photos live in many places across legacy users docs. Hosted URLs win
-  // FIRST (profilePicUrl is written by the ImageKit migration) so self-index
-  // syncs never clobber CDN photos with fat base64 again.
+  // Photos live in many places across legacy users docs. The lean index is
+  // the hot read path for the ENTIRE app, so it is strict hosted-URLs-only:
+  // base64 never enters publicProfiles again (that era made screens wait on
+  // megabytes of paint). A base64-only avatar briefly shows as blank in
+  // discovery until the automatic ImageKit upload lands profilePicUrl.
   const photoCandidates = [
     (profile as any).profilePicUrl,
     (profile as any).photoURL,
@@ -63,9 +64,8 @@ export const buildPublicProfileIndex = (profile: any) => {
     (compact as any).profilePic,
     ...(Array.isArray((profile as any).photos) ? (profile as any).photos : []),
   ];
-  const indexPic = safeProfileImageUri(
-    photoCandidates.find((v) => typeof v === 'string' && v.trim()),
-    MOBILE_LIST_IMAGE_LIMIT
+  const indexPic = storedProfileImageUri(
+    photoCandidates.find((v) => typeof v === 'string' && v.trim())
   );
 
   return {
@@ -262,7 +262,12 @@ const startSharedDiscovery = () => {
     sharedFallbackRunning = true;
     try {
       const users = await loadFromUsers(firstUserId, MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT);
-      emitShared(users || [], 'users');
+      // Never blank a deck the cache lane already painted with an empty
+      // fallback — an empty server response over a painted board is worse
+      // than slightly stale rows.
+      if ((users && users.length > 0) || lastDiscoveryRows.length === 0) {
+        emitShared(users || [], 'users');
+      }
     } finally {
       sharedFallbackRunning = false;
     }
@@ -295,14 +300,30 @@ const startSharedDiscovery = () => {
     }
   }, 25000);
 
+  // Lane 0: LOCAL CACHE paint (pure disk, zero network). On repeat opens the
+  // deck appears in <100ms even at 0 bars; lanes 1/2 then refresh it. Cache
+  // misses/errors are silent — the watchdog below still guards first-run.
+  void (async () => {
+    try {
+      const snap = await getDocsFromCache(leanQuery);
+      const rows = rowsFrom(snap?.docs || []);
+      if (!delivered && rows.length > 0) emitShared(rows, 'publicProfiles');
+    } catch {
+      /* empty cache — network lanes handle it */
+    }
+  })();
+
   // Lane 1: one-shot read (plain HTTP — always works where streams die)
   void (async () => {
     try {
       const snap = await getDocs(leanQuery);
       const rows = rowsFrom(snap?.docs || []);
-      if (!mark()) return;
-      if (rows.length > 0) emitShared(rows, 'publicProfiles');
-      else void emitUsersFallback();
+      if (rows.length > 0) {
+        mark();
+        emitShared(rows, 'publicProfiles');
+      } else if (mark()) {
+        void emitUsersFallback();
+      }
     } catch {
       if (mark()) void emitUsersFallback();
     }

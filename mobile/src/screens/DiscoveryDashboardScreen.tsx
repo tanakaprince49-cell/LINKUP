@@ -18,6 +18,8 @@ import { shareLinkupInvite } from '../lib/activation';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { IS_LOW_END_ANDROID, MOBILE_HORIZONTAL_CARD_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
+import { AppImage } from '../components/AppImage';
+import { ikAvatar } from '../lib/ikImage';
 
 const dashboardCacheKey = (uid: string) => `linkup:dashboard:v3:${uid}`;
 const DASHBOARD_CACHE_LIMIT = IS_LOW_END_ANDROID ? 24 : 60;
@@ -246,8 +248,8 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             <Text style={styles.rankBadgeText}>{rank === 0 ? '1ST' : rank === 1 ? '2ND' : rank === 2 ? '3RD' : `#${rank + 1}`}</Text>
           </View>
         ) : null}
-        <Image
-          source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }}
+        <AppImage
+          uri={ikAvatar(safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT)) || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256'}
           style={styles.avatar}
         />
         <View style={{ flex: 1 }}>
@@ -285,8 +287,8 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         activeOpacity={0.9}
       >
         <View style={styles.opportunityTop}>
-          <Image
-            source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }}
+          <AppImage
+            uri={ikAvatar(safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT)) || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256'}
             style={styles.smallAvatar}
           />
           <View style={{ flex: 1 }}>

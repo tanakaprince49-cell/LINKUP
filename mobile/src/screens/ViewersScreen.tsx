@@ -10,6 +10,8 @@ import { UserProfile } from '../types';
 import VerifiedBadge from '../components/VerifiedBadge';
 
 import { compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
+import { AppImage } from '../components/AppImage';
+import { ikAvatar } from '../lib/ikImage';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import ProCrownBadge from '../components/ProCrownBadge';
 
@@ -401,7 +403,7 @@ function ViewersScreen({ navigation, route }: any) {
         activeOpacity={0.84}
       >
         <View style={styles.viewerCardLeft}>
-          <Image source={{ uri: safeProfileImageUri(item.profilePic) || FALLBACK_AVATAR }} style={styles.avatar} />
+          <AppImage uri={ikAvatar(safeProfileImageUri(item.profilePic)) || FALLBACK_AVATAR} style={styles.avatar} />
           <View style={styles.viewerCardMeta}>
             <View style={styles.nameRow}>
               <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>

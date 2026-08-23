@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, query, where, onSnapshot, doc, updateDoc, limit } from 'firebase/firestore';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { db } from '../lib/firebase';
+import { AppImage } from '../components/AppImage';
+import { ikAvatar } from '../lib/ikImage';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppNotification } from '../types';
@@ -151,7 +153,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
     >
       <View style={styles.avatarWrap}>
         {pic ? (
-          <Image source={{ uri: pic }} style={styles.avatar} />
+          <AppImage uri={ikAvatar(pic)} style={styles.avatar} />
         ) : (
           <View style={styles.avatarFallback}>
             <Text style={styles.avatarLetter}>{(notification.fromName || 'L').slice(0, 1).toUpperCase()}</Text>

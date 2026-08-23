@@ -1,4 +1,5 @@
 import { db } from './firebase';
+import { storedProfileImageUri } from './profilePerformance';
 import {
   doc, setDoc, getDoc, onSnapshot, collection, query, where,
   updateDoc, Timestamp,
@@ -69,7 +70,7 @@ export async function sendGameChallenge(params: {
     userId: params.recipientId,
     fromId: params.senderId,
     fromName: params.senderName,
-    fromPic: params.senderPic || null,
+    fromPic: storedProfileImageUri(params.senderPic) || null,
     type: 'game_challenge',
     content: `challenged you to ${params.gameType}!`,
     isRead: false,

@@ -6,6 +6,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, increment, query, where, getDocs, limit } from 'firebase/firestore';
 import { uploadMedia } from '../lib/storage';
+import { uploadImageToImageKit } from '../lib/imagekitUpload';
+import { storedProfileImageUri } from '../lib/profilePerformance';
 import { isDiscoverableProfile } from '../lib/discovery';
 import * as ImagePicker from 'expo-image-picker';
 import { X, Camera, Video, Send, Image as ImageIcon } from 'lucide-react-native';
@@ -69,10 +71,31 @@ export default function CreatePostScreen({ navigation }: any) {
       const hashtags = content.match(/#[a-z0-9_]+/gi) || [];
       const tags = content.match(/@[a-z0-9_]+/gi) || [];
 
+      // HARD RULE: base64 NEVER enters Firestore (it once made notifications
+      // weigh 53MB). Every media item is pushed to the ImageKit CDN first —
+      // uploads that fail (offline / missing server key) are dropped, the
+      // text post still goes through.
+      const stamp = Date.now();
+      const hostedMedia = (
+        await Promise.all(
+          (media || []).map(async (item, index) => {
+            if (typeof item !== 'string') return null;
+            if (/^https?:\/\//i.test(item)) return item;
+            if (item.startsWith('data:image')) {
+              return uploadImageToImageKit(user.uid, item, {
+                folder: '/linkup-posts',
+                fileName: `${user.uid}-${stamp}-${index}.jpg`,
+              });
+            }
+            return null; // base64 videos / anything else: never stored
+          })
+        )
+      ).filter(Boolean) as string[];
+
       await addDoc(collection(db, 'posts'), {
         authorId: user.uid,
         authorName: profile?.displayName || user.displayName || 'Builder',
-        authorPic: profile?.profilePic || '',
+        authorPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
         authorVerified: !!profile?.isVerified,
         content,
         timestamp: serverTimestamp(),
@@ -81,7 +104,7 @@ export default function CreatePostScreen({ navigation }: any) {
         viewsCount: 0,
         likedBy: [],
         viewedBy: [],
-        media, // media already contains base64 strings
+        media: hostedMedia, // CDN URLs only — base64 never reaches Firestore
         hashtags,
         mentions: tags,
         type: 'update',

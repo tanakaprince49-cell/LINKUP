@@ -1,6 +1,6 @@
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { safeProfileImageUri } from './profilePerformance';
+import { storedProfileImageUri } from './profilePerformance';
 import { UserProfile } from '../types';
 
 export const CONVERSATION_AVATAR_CHAR_LIMIT = 240_000;
@@ -17,8 +17,10 @@ const profileCache = new Map<string, CachedConversationProfile>();
 const inflightLoads = new Map<string, Promise<UserProfile>>();
 const CONVERSATION_PROFILE_TTL_MS = 15 * 60 * 1000;
 
-export const conversationAvatarUri = (value: unknown) =>
-  safeProfileImageUri(value, CONVERSATION_AVATAR_CHAR_LIMIT);
+// Conversation/match snapshots are PERSISTED inside matches docs — they must
+// stay base64-free forever (strict, hosted URLs only; legacy base64 renders
+// from users docs at load time and never gets re-snapshotted).
+export const conversationAvatarUri = (value: unknown) => storedProfileImageUri(value);
 
 const isPlaceholderName = (value: unknown) => {
   const name = text(value).toLowerCase();
@@ -58,7 +60,8 @@ const profileNameFor = (profile: any = {}, fallback: any = {}) =>
 
 const profilePicFor = (profile: any = {}, fallback: any = {}) =>
   conversationAvatarUri(
-    profile?.profilePic ||
+    profile?.profilePicUrl ||
+      profile?.profilePic ||
       profile?.photoURL ||
       profile?.photoUrl ||
       profile?.avatarUrl ||
@@ -66,6 +69,7 @@ const profilePicFor = (profile: any = {}, fallback: any = {}) =>
       profile?.picture ||
       profile?.imageUrl ||
       profile?.profileImage ||
+      fallback?.profilePicUrl ||
       fallback?.profilePic ||
       fallback?.photoURL ||
       fallback?.photoUrl ||

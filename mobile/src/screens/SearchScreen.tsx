@@ -14,8 +14,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { doc, getDoc, onSnapshot, serverTimestamp, setDoc, collection, query, where } from 'firebase/firestore';
+import { doc, getDoc, getDocsFromCache, onSnapshot, serverTimestamp, setDoc, collection, query, where, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { AppImage } from '../components/AppImage';
+import { ikAvatar } from '../lib/ikImage';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
@@ -276,6 +278,24 @@ export default function SearchScreen({ navigation, route }: any) {
       setLoading(false);
     } else {
       setLoading(true);
+    }
+
+    // Lane 0: Firestore DISK cache — after the first successful load, every
+    // cold start of Search paints instantly at 0 bars; the network refresh
+    // below swaps in fresh rows silently.
+    if (!cachedRows.length) {
+      void getDocsFromCache(query(collection(db, 'publicProfiles'), limit(SEARCH_POOL_LIMIT)))
+        .then((snap) => {
+          if (cancelled || snap.empty) return;
+          const rows = snap.docs
+            .map((d) => compactProfileForList({ uid: d.id, ...(d.data() as any) }))
+            .filter((p: any) => p?.uid && p.uid !== user.uid);
+          if (rows.length) {
+            setAllProfiles(rows);
+            setLoading(false);
+          }
+        })
+        .catch(() => {});
     }
 
     const load = async () => {
@@ -1024,8 +1044,8 @@ export default function SearchScreen({ navigation, route }: any) {
                 });
               }}
             >
-              <Image
-                source={{ uri: safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT) || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }}
+              <AppImage
+                uri={ikAvatar(safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT)) || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256'}
                 style={styles.resultAvatar}
               />
               <View style={{ flex: 1 }}>

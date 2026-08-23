@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, getDoc, getDocs, limit } from 'firebase/firestore';
+import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, getDoc, getDocs, getDocsFromCache, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -9,6 +9,8 @@ import { Match, UserProfile } from '../types';
 import { MessageSquare, Pin, Star, Archive, ChevronLeft } from 'lucide-react-native';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { buildConversationProfileSnapshot, conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
+import { AppImage } from '../components/AppImage';
+import { ikAvatar } from '../lib/ikImage';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { shareLinkupInvite } from '../lib/activation';
 import { notifyUser } from '../lib/notify';
@@ -152,7 +154,7 @@ const ConversationItem = React.memo(({ match, navigation }: { match: Match, navi
     >
       <View style={styles.avatarContainer}>
         {avatarUri ? (
-          <Image source={{ uri: avatarUri }} style={styles.avatar} />
+          <AppImage uri={ikAvatar(avatarUri)} style={styles.avatar} />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: isDark ? '#181818' : '#FFF8B8' }]}>
             <Text style={styles.avatarFallbackText}>{avatarInitial}</Text>
@@ -231,6 +233,7 @@ export default function MessagesScreen({ navigation, route }: any) {
     // stream keeps the inbox live afterwards. A final watchdog ends the
     // spinner honestly even if Firestore is completely unreachable.
     let delivered = false;
+    let painted = false; // anything (incl. disk cache) on screen?
     const watchdog = setTimeout(() => {
       if (!delivered) {
         delivered = true;
@@ -238,8 +241,20 @@ export default function MessagesScreen({ navigation, route }: any) {
       }
     }, 12000);
 
+    // Lane 0: disk cache — instant inbox on repeat opens, zero network.
+    // Silent on miss; network lanes below refresh + replace.
+    void getDocsFromCache(q)
+      .then((snap) => {
+        if (!delivered && !snap.empty) {
+          painted = true;
+          handleSnap(snap);
+        }
+      })
+      .catch(() => {});
+
     void getDocs(q)
       .then((snap) => {
+        if (!snap.empty) painted = true;
         if (!delivered) {
           delivered = true;
           clearTimeout(watchdog);
@@ -259,7 +274,7 @@ export default function MessagesScreen({ navigation, route }: any) {
         delivered = true;
         clearTimeout(watchdog);
         console.warn('Messages list unavailable:', err);
-        setMatches([]);
+        if (!painted) setMatches([]); // keep cache-painted inbox on screen
         setLoading(false);
       }
     );

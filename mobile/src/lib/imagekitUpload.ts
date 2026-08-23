@@ -22,7 +22,17 @@ export type ImageKitAuthParams = {
   signature: string;
 };
 
-export const uploadAvatarToImageKit = async (uid: string, dataUri: string): Promise<string | null> => {
+export type ImageKitUploadOptions = {
+  folder?: string;
+  fileName?: string;
+  useUniqueFileName?: boolean;
+};
+
+export const uploadImageToImageKit = async (
+  uid: string,
+  dataUri: string,
+  options: ImageKitUploadOptions = {}
+): Promise<string | null> => {
   if (!uid || typeof dataUri !== 'string' || !dataUri.startsWith('data:image')) return null;
   try {
     const authRes = await fetch(AUTH_ENDPOINT);
@@ -32,9 +42,9 @@ export const uploadAvatarToImageKit = async (uid: string, dataUri: string): Prom
 
     const form = new FormData();
     form.append('file', dataUri);
-    form.append('fileName', `${uid}.jpg`);
-    form.append('folder', IMAGEKIT_AVATAR_FOLDER);
-    form.append('useUniqueFileName', 'false');
+    form.append('fileName', options.fileName || `${uid}.jpg`);
+    form.append('folder', options.folder || IMAGEKIT_AVATAR_FOLDER);
+    form.append('useUniqueFileName', options.useUniqueFileName === false ? 'false' : 'true');
     form.append('publicKey', IMAGEKIT_PUBLIC_KEY);
     form.append('signature', signature);
     form.append('expire', String(expire));
@@ -48,6 +58,13 @@ export const uploadAvatarToImageKit = async (uid: string, dataUri: string): Prom
     if (!res.ok || !data?.url) return null;
     return String(data.url);
   } catch {
-    return null; // Upload is opportunistic — base64 save already succeeded.
+    return null; // Upload is opportunistic — caller decides the fallback.
   }
 };
+
+export const uploadAvatarToImageKit = (uid: string, dataUri: string) =>
+  uploadImageToImageKit(uid, dataUri, {
+    folder: IMAGEKIT_AVATAR_FOLDER,
+    fileName: `${uid}.jpg`,
+    useUniqueFileName: false,
+  });

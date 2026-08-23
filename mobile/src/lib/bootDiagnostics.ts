@@ -9,7 +9,7 @@ import { db } from './firebase';
  * Paste everything starting with [LINKUP-DIAG] when reporting issues.
  */
 
-const BUILD_STAMP = 'diag-1 (post-4b230b6 race architecture)';
+const BUILD_STAMP = 'diag-2 (post-purge: cache-first lanes + disk-cached CDN images)';
 const TAG = '[LINKUP-DIAG]';
 
 const now = () => Date.now();

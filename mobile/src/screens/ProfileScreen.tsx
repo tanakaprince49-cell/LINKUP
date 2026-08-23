@@ -63,6 +63,8 @@ import {
 } from '../lib/paywall';
 import { MAX_FIRESTORE_IMAGE_CHARS } from '../lib/imageUploadLimits';
 import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
+import { AppImage } from '../components/AppImage';
+import { ikImage } from '../lib/ikImage';
 
 const { width } = Dimensions.get('window');
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
@@ -1841,7 +1843,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={styles.avatarContainer}>
             <TouchableOpacity activeOpacity={0.9} onPress={() => { if (heroProfilePic) openFullPhoto(heroProfilePic); }}>
               {shouldRenderProfileImages && !!heroProfilePic ? (
-                <Image source={{ uri: heroProfilePic }} style={styles.avatar} />
+                <AppImage uri={ikImage(heroProfilePic, 320, 60)} style={styles.avatar} />
               ) : (
                 <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: isDark ? COLORS.darkBgSec : '#FFFCE7' }]}>
                   <Text style={[styles.avatarInitial, { color: textColor(isDark) }]}>{profileInitial}</Text>
@@ -1871,7 +1873,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                     >
                       {uri && shouldRenderProfileImages ? (
                         <>
-                          <Image source={{ uri }} style={styles.photoSlotImg} />
+                          <AppImage uri={ikImage(uri, 480, 60)} style={styles.photoSlotImg} />
                           {isEditing && (
                             <TouchableOpacity
                               style={styles.photoDeleteButton}
@@ -3193,7 +3195,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           <TouchableOpacity style={styles.photoModalClose} onPress={closeFullPhoto}>
             <SafeIcon name="X" size={22} color="#FFF" />
           </TouchableOpacity>
-          <Image source={{ uri: fullPhotoUri }} style={styles.fullPhotoImage} resizeMode="contain" />
+          <AppImage uri={fullPhotoUri} style={styles.fullPhotoImage} contentFit="contain" />
         </Pressable>
       </Modal>
       {connectionNote.modal}

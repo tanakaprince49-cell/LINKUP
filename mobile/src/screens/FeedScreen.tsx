@@ -34,6 +34,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { storedProfileImageUri } from '../lib/profilePerformance';
 import { useTheme } from '../contexts/ThemeContext';
 import { Post } from '../types';
 import * as Icons from 'lucide-react-native';
@@ -105,7 +106,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
         await addDoc(collection(db, 'posts', post.id, 'comments', replyingTo.id, 'replies'), {
           userId: user.uid,
           userName: profile?.displayName || user.displayName || 'Builder',
-          userPic: profile?.profilePic || '',
+          userPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
           content: text,
           timestamp: serverTimestamp(),
           likes: [],
@@ -116,7 +117,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
             userId: replyingTo.userId,
             fromId: user.uid,
             fromName: profile?.displayName || 'Someone',
-            fromPic: profile?.profilePic || '',
+            fromPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
             type: 'comment',
             content: 'replied to your comment.',
             isRead: false,
@@ -128,7 +129,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
         await addDoc(collection(db, 'posts', post.id, 'comments'), {
           userId: user.uid,
           userName: profile?.displayName || user.displayName || 'Builder',
-          userPic: profile?.profilePic || '',
+          userPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
           content: text,
           timestamp: serverTimestamp(),
           likes: [],
@@ -152,7 +153,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
         userId: item.userId,
         fromId: user.uid,
         fromName: profile?.displayName || 'Someone',
-        fromPic: profile?.profilePic || '',
+        fromPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
         type: 'like',
         content: 'liked your comment.',
         isRead: false,
@@ -330,7 +331,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
           userId: post.authorId,
           fromId: user.uid,
           fromName: profile?.displayName || 'Someone',
-          fromPic: profile?.profilePic || '',
+          fromPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
           type: 'like',
           content: 'liked your post.',
           isRead: false,

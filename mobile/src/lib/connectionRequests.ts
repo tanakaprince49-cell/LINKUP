@@ -1,7 +1,7 @@
 import { addDoc, collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { directMatchId, ensureDirectMatch } from './chat';
-import { safeProfileImageUri } from './profilePerformance';
+import { storedProfileImageUri } from './profilePerformance';
 
 export type ConnectionRequestStatus = 'pending' | 'approved' | 'rejected';
 
@@ -23,8 +23,10 @@ export function connectionRequestId(senderId: string, recipientId: string) {
   return `${senderId}_${recipientId}`;
 }
 
+// Photos embedded in request + notification docs are PERSISTED — strict
+// hosted-URLs-only so base64 never re-enters Firestore through this path.
 const safeContactImage = (value?: string) => {
-  return safeProfileImageUri(value || '', 900_000);
+  return storedProfileImageUri(value || '');
 };
 
 export type ConnectionGateStatus = 'none' | 'pending_out' | 'pending_in' | 'approved' | 'rejected';

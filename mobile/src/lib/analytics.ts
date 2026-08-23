@@ -1,6 +1,6 @@
 import { addDoc, collection, doc, getDoc, increment, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from './profilePerformance';
+import { storedProfileImageUri } from './profilePerformance';
 
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
 
@@ -36,7 +36,7 @@ export async function trackProfileView({
   if (!profileId || !viewerId || profileId === viewerId) return;
 
   const viewRef = doc(db, 'profileViews', `${profileId}_${viewerId}`);
-  const safeViewerPic = safeProfileImageUri(viewerPic, MOBILE_LIST_IMAGE_LIMIT);
+  const safeViewerPic = storedProfileImageUri(viewerPic);
   let alreadyTracked = false;
   let viewSaved = false;
 
@@ -97,7 +97,7 @@ export async function trackProfileClick({
   if (!profileId || !viewerId || profileId === viewerId) return;
 
   const safeAction = cleanClickAction(action);
-  const safeViewerPic = safeProfileImageUri(viewerPic);
+  const safeViewerPic = storedProfileImageUri(viewerPic);
   const clickRef = doc(db, 'profileClicks', `${profileId}_${viewerId}_${safeAction}`);
   let alreadyTracked = false;
 

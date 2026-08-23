@@ -33,6 +33,20 @@ export const safeProfileImageUri = (value: unknown, maxChars = LIST_IMAGE_CHAR_L
   return uri;
 };
 
+// HARD RULE (since the base64 purge): Firestore NEVER stores base64 photos
+// again. Anything being PERSISTED to a document (notifications, matches,
+// connection requests, posts, the lean index) goes through this — hosted
+// http(s) URLs pass, data: URIs and junk are dropped to ''. Display code
+// keeps using safeProfileImageUri so legacy/local base64 still renders.
+export const storedProfileImageUri = (value: unknown) => {
+  const uri = text(value, Number.MAX_SAFE_INTEGER);
+  if (!uri) return '';
+  if (uri.startsWith('data:')) return '';
+  if (!/^https?:\/\//i.test(uri)) return '';
+  if (uri.length > 2048) return '';
+  return uri;
+};
+
 const compactAnswers = (value: unknown) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.entries(value as Record<string, unknown>)

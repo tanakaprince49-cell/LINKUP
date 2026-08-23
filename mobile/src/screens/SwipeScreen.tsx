@@ -37,7 +37,9 @@ import { X, Heart, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcas
 import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
 import { PRO_FEATURES } from '../lib/paywall';
-import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
+import { compactProfileForList, storedProfileImageUri } from '../lib/profilePerformance';
+import { AppImage } from '../components/AppImage';
+import { ikCard } from '../lib/ikImage';
 import { avatarPlaceholderUri } from '../lib/defaultAvatar';
 import ProCrownBadge from '../components/ProCrownBadge';
 import { notifyUser } from '../lib/notify';
@@ -837,7 +839,7 @@ export default function SwipeScreen({ navigation }: any) {
         senderId: user.uid,
         recipientId: target.uid,
         senderName: displayNameFor(myProfile || user),
-        senderPic: safeProfileImageUri(myProfile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT),
+        senderPic: storedProfileImageUri((myProfile as any)?.profilePicUrl || myProfile?.profilePic || user.photoURL || ''),
         message: querySnapshot.empty ? 'liked your profile and wants to talk.' : 'liked you back and wants to talk.',
         recipientName: displayNameFor(target),
       }).catch(() => {});
@@ -886,7 +888,7 @@ export default function SwipeScreen({ navigation }: any) {
         senderId: user.uid,
         recipientId: target.uid,
         senderName: displayNameFor(myProfile || user),
-        senderPic: safeProfileImageUri(myProfile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT),
+        senderPic: storedProfileImageUri((myProfile as any)?.profilePicUrl || myProfile?.profilePic || user.photoURL || ''),
         message: drafted,
         recipientName: displayNameFor(target),
       });
@@ -1050,7 +1052,7 @@ export default function SwipeScreen({ navigation }: any) {
           },
         ]}
       >
-        <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={[styles.cardImg, styles.faceFocusedImg]} resizeMode="cover" fadeDuration={0} />
+        <AppImage uri={ikCard(photos[0]) || FALLBACK_PHOTO} style={[styles.cardImg, styles.faceFocusedImg]} transitionMs={0} />
         <View style={styles.previewOverlay} pointerEvents="none" />
         <View style={styles.previewInfo}>
           <Text style={styles.previewEyebrow}>Up next</Text>
@@ -1172,7 +1174,7 @@ export default function SwipeScreen({ navigation }: any) {
           <Text style={[styles.badgeText, { color: '#FF4444' }]}>NOPE</Text>
         </Animated.View>
 
-        <Image source={{ uri: photos[safeIndex] || FALLBACK_PHOTO }} style={[styles.cardImg, styles.faceFocusedImg]} resizeMode="cover" fadeDuration={0} />
+        <AppImage uri={ikCard(photos[safeIndex]) || FALLBACK_PHOTO} style={[styles.cardImg, styles.faceFocusedImg]} transitionMs={0} />
         <View style={[styles.cardOverlay, infoExpanded && styles.cardOverlayExpanded]} pointerEvents="none" />
 
         <View style={[styles.cardInfo, isCompactWeb && styles.compactCardInfo]}>
@@ -1245,7 +1247,7 @@ export default function SwipeScreen({ navigation }: any) {
           style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
           {...scrollPanResponder.panHandlers}
         >
-          <Image source={{ uri: photos[0] || FALLBACK_PHOTO }} style={styles.scrollCardImg} resizeMode="cover" />
+          <AppImage uri={ikCard(photos[0]) || FALLBACK_PHOTO} style={styles.scrollCardImg} />
           <View style={styles.scrollCardOverlay} />
           <View style={styles.scrollCardBody}>
             <View style={styles.scrollCardMeta}>
