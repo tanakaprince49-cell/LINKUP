@@ -1083,10 +1083,6 @@ export default function ChatScreen({ route, navigation }: any) {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
-      <View style={styles.scene} pointerEvents="none">
-        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
-        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: COLORS.primaryGlow }]} />
-      </View>
       <View style={[styles.header, liquidGlass(isDark, false), { borderBottomColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, justifyContent: 'space-between' }]}> 
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>

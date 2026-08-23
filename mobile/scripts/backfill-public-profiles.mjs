@@ -65,6 +65,8 @@ function buildIndex(uid, p) {
     uid,
     displayName,
     username: text(p.username, 40),
+    searchName: displayName.toLowerCase(),
+    searchUsername: text(p.username, 40).toLowerCase(),
     bio: text(p.bio, 700),
     profilePic: img(p.profilePic),
     occupation: text(p.occupation, 100),

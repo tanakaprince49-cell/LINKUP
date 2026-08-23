@@ -269,10 +269,6 @@ export default function MessagesScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
-      <View style={styles.scene} pointerEvents="none">
-        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
-        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(223,251,63,0.08)' : 'rgba(223,251,63,0.16)' }]} />
-      </View>
       <View style={[styles.topBar, liquidGlass(isDark, false)]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
           {(archivedOnly || navigation.canGoBack?.()) && (

@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, startAfter } from 'firebase/firestore';
+import { collection, deleteDoc, doc, endAt, getDocs, limit, onSnapshot, orderBy, query, setDoc, startAfter, startAt } from 'firebase/firestore';
 import { db } from './firebase';
 import { displayNameFor, isDiscoverableProfile } from './discovery';
 import { sanitizeSocialLinks } from './socialLinks';
@@ -71,6 +71,10 @@ export const buildPublicProfileIndex = (profile: any) => {
     uid: compact.uid,
     displayName: displayNameFor(compact),
     username: text((compact as any).username, 40),
+    // Lowercase twins for server-side prefix search (Firestore is
+    // case-sensitive; these let ANY person be found by name/@handle).
+    searchName: displayNameFor(compact).toLowerCase(),
+    searchUsername: text((compact as any).username, 40).toLowerCase(),
     bio: text(compact.bio, 700),
     profilePic: indexPic,
     occupation: text((compact as any).occupation, 100),
@@ -178,8 +182,41 @@ export const loadFromPublicProfiles = async (userId: string, maxResults = MOBILE
   return rows.filter((p: any) => p.uid !== userId && isDiscoverableProfile(p));
 };
 
-export const loadFromUsers = async (userId: string, pageSize = MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT) => {
-  const sizes = Array.from(new Set([pageSize, 10, 6])).sort((a, b) => b - a);
+/**
+ * Server-side person search: prefix-match ANYONE in the lean index by name or
+ * @username, no matter how tiny the local pool is. "Search someone → they come
+ * up." Results are lean rows; merging/deduping happens in the caller.
+ */
+export const searchPublicProfiles = async (term: string, maxResults = 20): Promise<UserProfile[]> => {
+  const needle = term.trim().toLowerCase().replace(/^@+/, '').slice(0, 40);
+  if (!needle) return [];
+
+  const mkQuery = (field: 'searchName' | 'searchUsername') =>
+    query(
+      collection(db, 'publicProfiles'),
+      orderBy(field),
+      startAt(needle),
+      endAt(needle + '\uf8ff'),
+      limit(maxResults)
+    );
+
+  const settle = (p: Promise<any>) => p.catch(() => null);
+  const [byName, byUsername] = await Promise.all([
+    settle(getDocs(mkQuery('searchName'))),
+    settle(getDocs(mkQuery('searchUsername'))),
+  ]);
+
+  const seen = new Map<string, UserProfile>();
+  for (const snap of [byName, byUsername]) {
+    snap?.forEach((d: any) => {
+      const row = compactProfileForList({ uid: d.id, ...(d.data() as any) });
+      if (row?.uid && isDiscoverableProfile(row) && !seen.has(row.uid)) seen.set(row.uid, row);
+    });
+  }
+  return [...seen.values()];
+};
+
+export const loadFromUsers = async (userId: string, pageSize = MOBILE_DISCOVERY_FALLBACK_QUERY_LIMIT) => {  const sizes = Array.from(new Set([pageSize, 10, 6])).sort((a, b) => b - a);
   for (const size of sizes) {
     try {
       const snap = await getDocs(query(collection(db, 'users'), limit(size)));
@@ -255,7 +292,7 @@ const startSharedDiscovery = () => {
       delivered = true;
       void emitUsersFallback();
     }
-  }, 10000);
+  }, 25000);
 
   // Lane 1: one-shot read (plain HTTP — always works where streams die)
   void (async () => {

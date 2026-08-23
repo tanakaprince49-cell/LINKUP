@@ -29,14 +29,16 @@ import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
 import PaywallModal from '../components/PaywallModal';
 import { PRO_FEATURES } from '../lib/paywall';
 import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, MOBILE_SEARCH_RENDER_LIMIT, safeProfileImageUri, compactProfileForList } from '../lib/profilePerformance';
-import { loadFromPublicProfiles, loadFromUsers } from '../lib/discoveryProfiles';
+import { loadFromPublicProfiles, loadFromUsers, searchPublicProfiles } from '../lib/discoveryProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 // Search pulls a bigger page of lean publicProfiles docs than the swipe deck:
 // they're ~1KB each with hosted-URL images, so 60 of them is a tiny download
 // that makes search results far richer.
 const SEARCH_POOL_LIMIT = 60;
-const SEARCH_LOAD_TIMEOUT_MS = 9000;
+// Tuned to reality: on ~1Mbps links a single Firestore read can legitimately
+// take 20+ seconds. Short timeouts = guaranteed "no results". Patience wins.
+const SEARCH_LOAD_TIMEOUT_MS = 28000;
 // If the lean index is still sparse (backfill pending, young userbase), search
 // tops the pool up from the capped legacy users query so it ALWAYS has people
 // to match against. Once the index is full this never fires.
@@ -155,6 +157,8 @@ export default function SearchScreen({ navigation, route }: any) {
 
   const [loading, setLoading] = useState(true);
   const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
+  const [serverHits, setServerHits] = useState<UserProfile[]>([]);
+  const [serverSearching, setServerSearching] = useState(false);
   const [queryText, setQueryText] = useState('');
   const [aiQuery, setAiQuery] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -329,6 +333,45 @@ export default function SearchScreen({ navigation, route }: any) {
   }, [queryText, location, skills, industry, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, activeWithin]);
 
   useEffect(() => {
+    // Server-side person search: when there's real text in the box, ask
+    // Firestore directly (debounced). ANY user in the database is findable by
+    // name or @handle — not just whoever happens to be in the local pool.
+    const needle = queryText.trim();
+    if (!needle) {
+      setServerHits([]);
+      setServerSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setServerSearching(true);
+    const timer = setTimeout(async () => {
+      if (!user?.uid) {
+        setServerSearching(false);
+        return;
+      }
+      const hits = await withTimeout(searchPublicProfiles(needle), SEARCH_LOAD_TIMEOUT_MS).catch(() => null);
+      if (cancelled) return;
+      setServerHits(hits || []);
+      setServerSearching(false);
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [queryText, user?.uid]);
+
+  // Server hits land first, then the local pool — deduped, pool widgets like
+  // filters/ranking still apply to everyone.
+  const combined = useMemo(() => {
+    const merged = [...serverHits];
+    const seen = new Set(serverHits.map((p) => p.uid));
+    allProfiles.forEach((p) => {
+      if (p?.uid && !seen.has(p.uid)) merged.push(p);
+    });
+    return merged;
+  }, [serverHits, allProfiles]);
+
+  useEffect(() => {
     if (!user?.uid) {
       setSavedAlerts([]);
       return;
@@ -365,7 +408,7 @@ export default function SearchScreen({ navigation, route }: any) {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    return allProfiles.filter((p) => {
+    return combined.filter((p) => {
       const name = p.displayName || '';
       const username = cleanUsername(String((p as any).username || ''));
       const handle = username ? `@${username}` : profileHandle(p);
@@ -459,7 +502,7 @@ export default function SearchScreen({ navigation, route }: any) {
 
       return true;
     });
-  }, [allProfiles, queryText, location, skills, industry, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, hasPhotoOnly, activeWithin, minCompatibility, computeCompatibility]);
+  }, [combined, queryText, location, skills, industry, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, hasPhotoOnly, activeWithin, minCompatibility, computeCompatibility]);
 
   const displayed = useMemo(() => {
     const turboBoost = (p: UserProfile) => ((p as any).turboConnect ? 1 : 0);
@@ -620,10 +663,6 @@ export default function SearchScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
-      <View style={styles.scene} pointerEvents="none">
-        <View style={[styles.scenePane, styles.scenePaneA, { backgroundColor: isDark ? 'rgba(0,194,255,0.1)' : 'rgba(0,194,255,0.14)' }]} />
-        <View style={[styles.scenePane, styles.scenePaneB, { backgroundColor: isDark ? 'rgba(124,58,237,0.12)' : 'rgba(124,58,237,0.1)' }]} />
-      </View>
       <ScrollView
         contentContainerStyle={styles.searchContent}
         showsVerticalScrollIndicator
@@ -967,7 +1006,7 @@ export default function SearchScreen({ navigation, route }: any) {
           </View>
           <Text style={styles.idleHint}>try the AI bar above: "ML engineer in South Africa into fintech"</Text>
         </View>
-      ) : loading && allProfiles.length === 0 ? (
+      ) : (loading || serverSearching) && combined.length === 0 ? (
         <ActivityIndicator color={COLORS.primary} style={{ marginTop: 30 }} />
       ) : (
         <View style={styles.resultsList}>
