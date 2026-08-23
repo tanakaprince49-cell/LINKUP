@@ -47,12 +47,11 @@ export const buildPublicProfileIndex = (profile: any) => {
   const compact = compactProfileForList(profile);
   if (!compact?.uid || !isDiscoverableProfile(compact)) return null;
 
-  // Photos live in many places across legacy users docs — try every known
-  // field (plus the photos[] array) so the index card shows a face whenever
-  // one exists, not only when it's stored in profilePic.
+  // Photos live in many places across legacy users docs. Hosted URLs win
+  // FIRST (profilePicUrl is written by the ImageKit migration) so self-index
+  // syncs never clobber CDN photos with fat base64 again.
   const photoCandidates = [
-    (profile as any).profilePic,
-    (compact as any).profilePic,
+    (profile as any).profilePicUrl,
     (profile as any).photoURL,
     (profile as any).photoUrl,
     (profile as any).avatarUrl,
@@ -60,6 +59,8 @@ export const buildPublicProfileIndex = (profile: any) => {
     (profile as any).picture,
     (profile as any).imageUrl,
     (profile as any).profileImage,
+    (profile as any).profilePic,
+    (compact as any).profilePic,
     ...(Array.isArray((profile as any).photos) ? (profile as any).photos : []),
   ];
   const indexPic = safeProfileImageUri(
