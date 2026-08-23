@@ -1,6 +1,7 @@
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { hasActiveOpportunityIntent, opportunityDetails } from './discovery';
+import { rotateFeed } from './feedRotation';
 import { UserProfile } from '../types';
 
 export type OpportunityAlert = {
@@ -129,6 +130,27 @@ export function getBestOpportunityAlerts(
     .filter(Boolean)
     .sort((left, right) => right!.score - left!.score)
     .slice(0, limitCount) as OpportunityAlert[];
+}
+
+/**
+ * The radar users actually see: same scorer, but anti-rerun. Rotates daily
+ * through fresh candidates (see feedRotation.ts) instead of pinning the
+ * same 3 faces to the top of home forever.
+ */
+export async function getRotatedOpportunityAlerts(
+  me: UserProfile | null | undefined,
+  people: UserProfile[],
+  limitCount = 3
+): Promise<OpportunityAlert[]> {
+  const ranked = getBestOpportunityAlerts(me, people, Math.max(people.length, limitCount));
+  return rotateFeed(
+    me?.uid,
+    'opportunityRadar',
+    ranked,
+    limitCount,
+    (alert) => alert.profile.uid,
+    (alert) => alert.score
+  );
 }
 
 export async function maybeCreateOpportunityAlerts(

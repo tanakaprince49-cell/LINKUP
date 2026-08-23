@@ -1,6 +1,7 @@
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { handleFor } from './discovery';
+import { rotateFeed } from './feedRotation';
 import { Project, UserProfile } from '../types';
 
 export type ProjectRecommendation = {
@@ -173,6 +174,27 @@ export function getBestProjectRecommendations(
     .filter(Boolean)
     .sort((left, right) => right!.score - left!.score)
     .slice(0, limitCount) as ProjectRecommendation[];
+}
+
+/**
+ * Anti-rerun variant for the home "projects" rail: same scorer, but the
+ * visible window rotates daily through fresh recommendations so the rail
+ * stops looping the same projects (see feedRotation.ts).
+ */
+export async function getRotatedProjectRecommendations(
+  me: UserProfile | null | undefined,
+  people: UserProfile[],
+  limitCount = 5
+): Promise<ProjectRecommendation[]> {
+  const all = getBestProjectRecommendations(me, people, Math.max(people.length * 2, limitCount));
+  return rotateFeed(
+    me?.uid,
+    'projectRecommendations',
+    all,
+    limitCount,
+    (rec) => rec.owner?.uid || rec.id,
+    (rec) => rec.score
+  );
 }
 
 export async function maybeCreateProjectRecommendationAlerts(

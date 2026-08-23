@@ -11,8 +11,8 @@ import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } fro
 import { activeOpportunityScore, displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { rankLeague } from '../lib/builderLeague';
 import { loadLeaguePool } from '../lib/leaguePool';
-import { getBestOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
-import { getBestProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
+import { getBestOpportunityAlerts, getRotatedOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
+import { getBestProjectRecommendations, getRotatedProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
 import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, ArrowLeftRight, UserCheck } from 'lucide-react-native';
 import { shareLinkupInvite } from '../lib/activation';
 import VerifiedBadge from '../components/VerifiedBadge';
@@ -227,13 +227,29 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     return list.slice(0, MOBILE_HORIZONTAL_CARD_LIMIT).map((x) => x.profile);
   }, [people]);
 
-  const projectRecommendations = useMemo(
-    () => getBestProjectRecommendations(me, IS_LOW_END_ANDROID ? people.slice(0, 10) : people, IS_LOW_END_ANDROID ? 4 : 8),
-    [me, people]
-  );
+  const [projectRecommendations, setProjectRecommendations] = useState<ProjectRecommendation[]>([]);
+  useEffect(() => {
+    // ANTI-RERUN: both rails rotate daily through fresh candidates (seen-log
+    // in AsyncStorage). Pure scorer kept as the instant fallback so a broken
+    // storage read can never blank the rail. Users rioted over reruns — this
+    // is the kill shot.
+    let cancelled = false;
+    const pool = IS_LOW_END_ANDROID ? people.slice(0, 10) : people;
+    const limitCount = IS_LOW_END_ANDROID ? 4 : 8;
+    void getRotatedProjectRecommendations(me, pool, limitCount)
+      .then((recs) => { if (!cancelled) setProjectRecommendations(recs); })
+      .catch(() => { if (!cancelled) setProjectRecommendations(getBestProjectRecommendations(me, pool, limitCount)); });
+    return () => { cancelled = true; };
+  }, [me, people]);
 
   useEffect(() => {
-    setOpportunityRadar(getBestOpportunityAlerts(me, IS_LOW_END_ANDROID ? people.slice(0, 10) : people, IS_LOW_END_ANDROID ? 1 : 3));
+    let cancelled = false;
+    const pool = IS_LOW_END_ANDROID ? people.slice(0, 10) : people;
+    const limitCount = IS_LOW_END_ANDROID ? 1 : 3;
+    void getRotatedOpportunityAlerts(me, pool, limitCount)
+      .then((alerts) => { if (!cancelled) setOpportunityRadar(alerts); })
+      .catch(() => { if (!cancelled) setOpportunityRadar(getBestOpportunityAlerts(me, pool, limitCount)); });
+    return () => { cancelled = true; };
   }, [me, people]);
 
   const topOpportunityAlert = opportunityRadar[0];
