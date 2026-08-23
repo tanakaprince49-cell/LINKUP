@@ -31,7 +31,7 @@
         "EXPO_PUBLIC_ENABLE_DIRECT_AI": "true",
         "EXPO_PUBLIC_OPENROUTER_MODEL": "deepseek/deepseek-chat"
       },
-      "artifactPaths": [
+      "buildArtifactPaths": [
         "android/app/build/outputs/mapping/release/mapping.txt"
       ]
     },
