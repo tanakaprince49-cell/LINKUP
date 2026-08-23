@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { notifyUser } from '../lib/notify';
 import { ChevronLeft, Crown, Flame, Trophy, User } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -63,6 +65,39 @@ export default function TrendingBuildersScreen({ navigation }: any) {
   }, [isFocused, user?.uid]);
 
   const trending = useMemo(() => rankLeague(builders, me), [builders, me]);
+
+  const photoUpgradedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    // League pool rows carry only small inline photos (the pool is held in
+    // memory). For any displayed row missing a face, pull that person's real
+    // photo from their users doc — once per person per session.
+    trending.slice(0, 20).forEach((person: any) => {
+      if (!person?.uid || photoUpgradedRef.current.has(person.uid)) return;
+      if (String(person.profilePic || '').trim()) return;
+      photoUpgradedRef.current.add(person.uid);
+      void getDoc(doc(db, 'users', person.uid))
+        .then((snap) => {
+          if (!snap.exists()) return;
+          const u: any = snap.data();
+          const candidates = [
+            u.profilePic,
+            u.photoURL,
+            u.photoUrl,
+            u.avatarUrl,
+            u.avatar,
+            u.picture,
+            u.imageUrl,
+            ...(Array.isArray(u.photos) ? u.photos : []),
+          ];
+          const pic = candidates.find(
+            (v) => typeof v === 'string' && v.trim() && (!String(v).startsWith('data:') || String(v).length <= 900_000)
+          );
+          if (!pic) return;
+          setBuilders((current) => current.map((b: any) => (b.uid === person.uid ? { ...b, profilePic: pic } : b)));
+        })
+        .catch(() => {});
+    });
+  }, [trending]);
 
   useEffect(() => {
     if (!user?.uid || trending.length < 1) return;

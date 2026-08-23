@@ -23,9 +23,12 @@ const CACHE_TTL_MS = 30 * 60 * 1000;
 
 let cached: { at: number; rows: any[] } | null = null;
 
+// League avatars are tiny circles — keep https URLs and small data URIs
+// (<=~90KB binary = 120K chars); still drop megabyte-scale base64 monsters.
 const urlOnlyImage = (value: unknown) => {
   const uri = String(value || '');
-  return /^https:\/\//.test(uri) ? uri.slice(0, 1000) : '';
+  if (/^https?:\/\//.test(uri)) return uri.slice(0, 1000);
+  return uri.startsWith('data:image') && uri.length <= 120_000 ? uri : '';
 };
 
 const leanLeagueRow = (docId: string, data: any) => ({
