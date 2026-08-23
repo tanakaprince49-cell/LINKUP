@@ -83,6 +83,9 @@ export const loadLeaguePool = async (options: { force?: boolean } = {}): Promise
   // Stable input order keeps tie-breaks identical across devices.
   rows.sort((a, b) => String(a.uid).localeCompare(String(b.uid)));
 
-  cached = { at: Date.now(), rows };
-  return rows;
+  // Never cache an EMPTY pool for 30 minutes — an unlucky fetch before the
+  // index existed (or on a dead network) would blank every league surface for
+  // half an hour. Empty = retry on the next mount instead.
+  cached = rows.length > 0 ? { at: Date.now(), rows } : null;
+  return cached?.rows || rows;
 };
