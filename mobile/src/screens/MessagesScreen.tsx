@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, getDoc, limit } from 'firebase/firestore';
+import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, getDoc, getDocs, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -196,10 +196,9 @@ export default function MessagesScreen({ navigation, route }: any) {
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, 'matches'), where(new FieldPath('participants', user.uid), '==', true), limit(80));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const raw = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any as Match));
+
+    const handleSnap = (snap: any) => {
+        const raw = snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as any as Match));
         const visible = raw.filter((m: any) => {
           const archived = Array.isArray(m.archivedBy) && m.archivedBy.includes(user.uid);
           const deleted = Array.isArray(m.deletedBy) && m.deletedBy.includes(user.uid);
@@ -226,15 +225,34 @@ export default function MessagesScreen({ navigation, route }: any) {
           if (!otherId) return;
           void loadConversationProfile(otherId, fallbackConversationUser(m, otherId)).catch(() => {});
         });
+    };
+
+    // Watchdog: if the live listener neither delivers nor errors within 8s
+    // (silent stream hang on hostile networks), serve a one-shot read so the
+    // inbox can never sit empty/spinning forever.
+    let delivered = false;
+    const watchdog = setTimeout(() => {
+      if (delivered) return;
+      getDocs(q).then(handleSnap).catch(() => {});
+    }, 8000);
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        delivered = true;
+        clearTimeout(watchdog);
+        handleSnap(snap);
       },
       (err) => {
+        delivered = true;
+        clearTimeout(watchdog);
         console.warn('Messages list unavailable:', err);
         setMatches([]);
         setLoading(false);
       }
     );
-    
-    return () => { unsub(); };
+
+    return () => { clearTimeout(watchdog); unsub(); };
   }, [user, archivedOnly]);
 
   return (

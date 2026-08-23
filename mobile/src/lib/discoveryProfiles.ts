@@ -210,9 +210,20 @@ const startSharedDiscovery = () => {
     }
   };
 
+  // Watchdog: on flaky networks (or carriers/proxies that strangle streaming
+  // listeners) the snapshot can be neither delivered NOR errored — a silent
+  // hang that left the deck empty forever. If nothing arrives within 8s,
+  // serve the one-shot legacy query (plain getDocs works where streams die).
+  let delivered = false;
+  const watchdog = setTimeout(() => {
+    if (!delivered) void emitUsersFallback();
+  }, 8000);
+
   sharedUnsub = onSnapshot(
     query(collection(db, 'publicProfiles'), limit(MOBILE_DISCOVERY_QUERY_LIMIT)),
     (snapshot) => {
+      delivered = true;
+      clearTimeout(watchdog);
       const rows = (snapshot?.docs || [])
         .map((d) => compactProfileForList({ uid: d.id, ...(d.data() as any) }))
         .filter((p: any) => isDiscoverableProfile(p));
@@ -223,11 +234,19 @@ const startSharedDiscovery = () => {
       void emitUsersFallback();
     },
     (error) => {
+      delivered = true;
+      clearTimeout(watchdog);
       console.error('Discovery onSnapshot error:', error);
       sharedListeners.forEach((listener) => listener.onError?.(error));
       void emitUsersFallback();
     }
   );
+
+  const originalUnsub = sharedUnsub;
+  sharedUnsub = () => {
+    clearTimeout(watchdog);
+    originalUnsub();
+  };
 };
 
 export const subscribeToDiscoveryProfiles = ({ userId, onData, onError }: SubscribeOptions) => {
