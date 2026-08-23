@@ -33,6 +33,7 @@ import { resolveConnectionGate, startTalkOrRequest, subscribeToConnectionGate, t
 import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { buildConversationProfileSnapshot } from '../lib/conversationProfiles';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
+import { uploadAvatarToImageKit } from '../lib/imagekitUpload';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
 import { normalizeIdeaDraft } from '../lib/ideas';
@@ -975,7 +976,16 @@ export default function ProfileScreen({ navigation, route }: any) {
         await updateOwnProfileDoc({ profilePic: dataUri });
         updateLocalProfile({ profilePic: dataUri });
         syncOwnPublicProfileIndex(myProfile.uid, { ...(profile || {}), profilePic: dataUri, uid: myProfile.uid }).catch(() => {});
-        
+
+        // CDN lane: host the new avatar on ImageKit (free). Saves the hosted
+        // URL as profilePicUrl — the lean index prefers hosted photos first,
+        // so lists/lists stay featherweight automatically.
+        void uploadAvatarToImageKit(myProfile.uid, dataUri).then((url) => {
+          if (!url) return;
+          updateOwnProfileDoc({ profilePicUrl: url }).catch(() => {});
+          updateLocalProfile({ profilePicUrl: url });
+        });
+
         if (isEditing) {
           setEditData({ ...editData, profilePic: dataUri });
         }
