@@ -946,29 +946,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        loading,
-        authVersion,
-        isOnboarded,
+  // Memoized context value: without this, the object identity changed on EVERY
+  // provider render (presence pings, profile listeners, parent renders), which
+  // re-rendered every screen in the app each time. Now consumers only
+  // re-render when the data they actually read changes.
+  const contextValue = useMemo(
+    () => ({
+      user,
+      profile,
+      loading,
+      authVersion,
+      isOnboarded,
       authError,
       clearAuthError: () => setAuthError(null),
       updateLocalProfile,
       signInWithGoogle,
-        signUpWithEmail,
-        signInWithEmail,
-        resetPassword,
-        sendVerificationEmail,
-        requestEmailChange,
-        showMfaEnrollmentNotice,
-        reloadCurrentUser,
-        markOnboardingComplete,
-        logout,
-        deleteAccount,
-      }}
+      signUpWithEmail,
+      signInWithEmail,
+      resetPassword,
+      sendVerificationEmail,
+      requestEmailChange,
+      showMfaEnrollmentNotice,
+      reloadCurrentUser,
+      markOnboardingComplete,
+      logout,
+      deleteAccount,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user, profile, loading, authVersion, isOnboarded, authError]
+  );
+
+  return (
+    <AuthContext.Provider
+      value={contextValue}
     >
       {children}
     </AuthContext.Provider>

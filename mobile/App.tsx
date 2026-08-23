@@ -264,10 +264,11 @@ function TabNavigator({ navigation }: any) {
     <Tab.Navigator
       initialRouteName="Dashboard"
       detachInactiveScreens={Platform.OS !== 'web'}
-      sceneContainerStyle={{ backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }}
       screenOptions={({ route }) => ({
         lazy: true,
         freezeOnBlur: true,
+        // v7 API: tab scenes paint the app theme behind everything (no black frames).
+        sceneStyle: { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg },
         tabBarIcon: ({ focused }) => {
           const iconMap: Record<string, { active: string; inactive: string }> = {
             Dashboard: { active: 'Compass', inactive: 'Compass' },

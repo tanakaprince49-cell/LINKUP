@@ -322,6 +322,13 @@ export default function SearchScreen({ navigation, route }: any) {
   }, [routedSkill, routedQuery, routedSearchToken]);
 
   useEffect(() => {
+    // Any new search/filter input invalidates the previous AI ranking —
+    // otherwise fresh results get sorted by scores computed for an OLD query.
+    setAiRankMode(false);
+    setAiRankMap({});
+  }, [queryText, location, skills, industry, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, activeWithin]);
+
+  useEffect(() => {
     if (!user?.uid) {
       setSavedAlerts([]);
       return;
@@ -402,7 +409,11 @@ export default function SearchScreen({ navigation, route }: any) {
       }
 
       if (skillList.length > 0) {
-        const ok = skillList.every((needle) =>
+        // OR-match: a builder with ANY of the searched skills is a candidate.
+        // The old AND-match ("every") needed all of them, so searching
+        // "React, Python" excluded someone who only knows React — brutal on a
+        // growing userbase. Ranking (compat score) handles ordering.
+        const ok = skillList.some((needle) =>
           userSkills.some((s) => includesAny(s, [needle]))
         );
         if (!ok) return false;
@@ -579,6 +590,7 @@ export default function SearchScreen({ navigation, route }: any) {
     setHasPhotoOnly(false);
     setActiveWithin('any');
     setMinCompatibility(0);
+    knobX.current = 0; // reset the gesture origin too, or the next drag JUMPS
   };
 
   const applyAiQuery = async () => {
