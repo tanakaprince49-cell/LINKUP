@@ -26,9 +26,14 @@ const DASHBOARD_CACHE_LIMIT = IS_LOW_END_ANDROID ? 24 : 60;
 
 // HOME PALETTE (founder request): clean white + dark gold ONLY.
 // No lime (#FBE618), no green, no tints of anything else on this screen.
-const HOME_GOLD = '#C9A227'; // fills, buttons, icons
-const HOME_GOLD_DEEP = '#8A6D1A'; // small text accents (readable on white)
-const HOME_GOLD_TINT = 'rgba(201,162,39,0.12)'; // subtle chips/backdrops
+// HOME PALETTE: pure monochrome white — zero gold anywhere (incl. Linky AI).
+// White fills ride a hairline border so they stay visible on the white canvas;
+// icons + small accent text are ink; backdrops are neutral gray.
+const HOME_GOLD = '#FFFFFF'; // fills, buttons (always paired with hairline)
+const HOME_GOLD_DEEP = '#111827'; // small text accents (ink, readable on white)
+const HOME_GOLD_TINT = 'rgba(17,24,39,0.05)'; // subtle chips/backdrops
+const HOME_INK = '#111827'; // icons / spinners
+const HOME_LINE = 'rgba(17,24,39,0.12)'; // hairline edge for white fills
 const compactCachedImage = (value: unknown) => {
   return safeProfileImageUri(value, MOBILE_LIST_IMAGE_LIMIT);
 };
@@ -244,7 +249,9 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}
       >
         {typeof rank === 'number' ? (
-          <View style={[styles.rankBadge, rank < 3 && { backgroundColor: HOME_GOLD }]}>
+          <View style={[styles.rankBadge, rank < 3 && { backgroundColor: HOME_GOLD,
+    borderWidth: 1,
+    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
             <Text style={styles.rankBadgeText}>{rank === 0 ? '1ST' : rank === 1 ? '2ND' : rank === 2 ? '3RD' : `#${rank + 1}`}</Text>
           </View>
         ) : null}
@@ -308,11 +315,11 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 
         <View style={styles.opportunityMetaGrid}>
           <View style={styles.opportunityMeta}>
-            <Target size={11} color={HOME_GOLD} />
+            <Target size={11} color={HOME_INK} />
             <Text style={[styles.opportunityMetaText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{details.roleNeed}</Text>
           </View>
           <View style={styles.opportunityMeta}>
-            <Briefcase size={11} color={HOME_GOLD} />
+            <Briefcase size={11} color={HOME_INK} />
             <Text style={[styles.opportunityMetaText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{details.stage}</Text>
           </View>
           <View style={styles.opportunityMeta}>
@@ -330,7 +337,9 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         </View>
 
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.opportunityBtn, { backgroundColor: HOME_GOLD }]}>
+          <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.opportunityBtn, { backgroundColor: HOME_GOLD,
+    borderWidth: 1,
+    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
             <Text style={styles.opportunityBtnText}>View Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Search')} style={[styles.opportunityIconBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
@@ -418,7 +427,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
       {loading && people.length === 0 ? (
-        <ActivityIndicator color={HOME_GOLD} style={{ marginTop: 40 }} />
+        <ActivityIndicator color={HOME_INK} style={{ marginTop: 40 }} />
       ) : (
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
           <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
@@ -442,7 +451,9 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               <View style={styles.heroActions}>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('DailyFive')}
-                  style={[styles.heroBtn, { backgroundColor: HOME_GOLD }]}
+                  style={[styles.heroBtn, { backgroundColor: HOME_GOLD,
+    borderWidth: 1,
+    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}
                 >
                   <Flame size={14} color="#000" />
                   <Text style={[styles.heroBtnText, { color: '#000' }]}>Daily 5</Text>
@@ -454,8 +465,8 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   <ArrowLeftRight size={14} color={textColor(isDark)} />
                   <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>Swipe</Text>
                 </TouchableOpacity>
-                <View style={[styles.heroStatus, { backgroundColor: isDark ? HOME_GOLD_TINT : HOME_GOLD_TINT }]}>
-                  <Star size={12} color={HOME_GOLD} />
+                <View style={[styles.heroStatus, { backgroundColor: HOME_GOLD_TINT }]}>
+                  <Star size={12} color={HOME_INK} />
                   <Text style={styles.heroStatusText}>{aiLoading ? 'UPDATING...' : 'READY'}</Text>
                 </View>
               </View>
@@ -465,7 +476,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 activeOpacity={0.88}
                 style={[styles.ideaDeckBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
               >
-                <Lightbulb size={15} color={HOME_GOLD} />
+                <Lightbulb size={15} color={HOME_INK} />
                 <Text style={[styles.ideaDeckBtnText, { color: textColor(isDark) }]}>Idea Deck — swipe startup ideas worth building</Text>
                 <ChevronRight size={15} color={textColor(isDark, 'muted')} />
               </TouchableOpacity>
@@ -477,7 +488,9 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   style={[styles.radarCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}
                 >
                   <View style={styles.radarTop}>
-                    <View style={[styles.radarIcon, { backgroundColor: HOME_GOLD }]}>
+                    <View style={[styles.radarIcon, { backgroundColor: HOME_GOLD,
+    borderWidth: 1,
+    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
                       <BellRing size={15} color="#000" />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -486,7 +499,9 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                         {displayNameFor(topOpportunityAlert.profile)} matches your interests: {topOpportunityAlert.reason}
                       </Text>
                     </View>
-                    <View style={[styles.radarScore, { backgroundColor: HOME_GOLD }]}>
+                    <View style={[styles.radarScore, { backgroundColor: HOME_GOLD,
+    borderWidth: 1,
+    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
                       <Text style={styles.radarScoreText}>{topOpportunityAlert.score}%</Text>
                     </View>
                   </View>
@@ -528,14 +543,16 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 <Text style={[styles.meta, { color: textColor(isDark, 'muted') }]}>AI Assistant</Text>
               </View>
             </View>
-            <View style={[styles.linkyChip, { backgroundColor: HOME_GOLD }]}>
+            <View style={[styles.linkyChip, { backgroundColor: HOME_GOLD,
+    borderWidth: 1,
+    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
               <Text style={styles.linkyChipText}>Chat</Text>
             </View>
           </TouchableOpacity>
 
           <Section
             title="Today’s 2 picks"
-            icon={<UserCheck size={17} color={HOME_GOLD} />}
+            icon={<UserCheck size={17} color={HOME_INK} />}
             data={recommended}
             showScore
             onViewAll={() => navigation.navigate('RecommendedMatches')}
@@ -543,7 +560,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           <View style={{ marginTop: 24 }}>
             <TouchableOpacity style={styles.sectionHeader} onPress={() => navigation.navigate('ActiveOpportunities')} activeOpacity={0.8}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Rocket size={17} color={HOME_GOLD} />
+                <Rocket size={17} color={HOME_INK} />
                 <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>Project Matches</Text>
               </View>
               <View style={styles.sectionChevron}>
@@ -571,7 +588,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           </View>
           <Section
             title="Builder League"
-            icon={<TrendingUp size={17} color={HOME_GOLD} />}
+            icon={<TrendingUp size={17} color={HOME_INK} />}
             data={trending}
             showRank
             onViewAll={() => navigation.navigate('TrendingBuilders')}
@@ -615,6 +632,8 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 12,
     backgroundColor: HOME_GOLD,
+    borderWidth: 1,
+    borderColor: HOME_LINE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -782,6 +801,8 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     backgroundColor: HOME_GOLD,
+    borderWidth: 1,
+    borderColor: HOME_LINE,
   },
   scoreText: { fontSize: 10, fontWeight: '900', color: '#000', letterSpacing: 0.5 },
   opportunityCard: {
@@ -814,6 +835,8 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 14,
     backgroundColor: HOME_GOLD,
+    borderWidth: 1,
+    borderColor: HOME_LINE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -827,6 +850,8 @@ const styles = StyleSheet.create({
     minWidth: 44,
     borderRadius: 8,
     backgroundColor: HOME_GOLD,
+    borderWidth: 1,
+    borderColor: HOME_LINE,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
@@ -885,7 +910,7 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '900',
     letterSpacing: 0.8,
-    color: 'HOME_GOLD_DEEP',
+    color: HOME_GOLD_DEEP,
   },
   opportunitySummary: {
     marginTop: 12,
@@ -969,6 +994,8 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 12,
     backgroundColor: HOME_GOLD,
+    borderWidth: 1,
+    borderColor: HOME_LINE,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 12,
