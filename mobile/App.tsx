@@ -13,6 +13,7 @@ import ErrorBoundary from './src/components/ErrorBoundary';
 
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
+import { runBootDiagnostics } from './src/lib/bootDiagnostics';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { lazyScreen } from './src/lib/lazyScreen';
 
@@ -391,6 +392,16 @@ function AppContent() {
     if (!themeReady || loading) return;
     void SplashScreen.hideAsync().catch(() => {});
   }, [themeReady, loading]);
+
+  // Connection Doctor: one cold-start diagnostic run, logged to the Metro
+  // terminal under [LINKUP-DIAG] — tells us exactly which Firestore lane is
+  // dead on any device/network. Never blocks render.
+  const bootDiagRanRef = React.useRef(false);
+  React.useEffect(() => {
+    if (loading || bootDiagRanRef.current) return;
+    bootDiagRanRef.current = true;
+    runBootDiagnostics(user?.uid);
+  }, [loading, user?.uid]);
 
   // Absolute failsafe: never trap anyone on the splash screen.
   React.useEffect(() => {
