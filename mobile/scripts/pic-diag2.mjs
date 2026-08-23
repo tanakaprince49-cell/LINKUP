@@ -1,0 +1,21 @@
+import { initializeApp } from 'firebase/app';
+import { initializeFirestore, getDocs, collection } from 'firebase/firestore';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { readFileSync } from 'node:fs';
+const config = JSON.parse(readFileSync(new URL('../firebase-applet-config.json', import.meta.url)));
+const app = initializeApp(config);
+const db = initializeFirestore(app, { experimentalForceLongPolling: true });
+const auth = getAuth(app);
+await signInWithEmailAndPassword(auth, process.argv[2], process.argv[3]);
+const idx = await getDocs(collection(db, 'publicProfiles'));
+const forms = {};
+let sample = '';
+idx.forEach((d) => {
+  const p = String(d.data().profilePic || '');
+  const key = !p ? 'EMPTY' : p.startsWith('data:') ? p.slice(0, 22) : p.startsWith('https://ui-avatars') ? 'ui-avatars' : 'https-hosted';
+  forms[key] = (forms[key] || 0) + 1;
+  if (!sample && p.startsWith('data:')) sample = p.slice(0, 60) + ' ... [' + p.length + ' chars]';
+});
+console.log(JSON.stringify(forms, null, 1));
+console.log('data-URI sample:', sample);
+process.exit(0);

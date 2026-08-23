@@ -47,12 +47,32 @@ export const buildPublicProfileIndex = (profile: any) => {
   const compact = compactProfileForList(profile);
   if (!compact?.uid || !isDiscoverableProfile(compact)) return null;
 
+  // Photos live in many places across legacy users docs — try every known
+  // field (plus the photos[] array) so the index card shows a face whenever
+  // one exists, not only when it's stored in profilePic.
+  const photoCandidates = [
+    (profile as any).profilePic,
+    (compact as any).profilePic,
+    (profile as any).photoURL,
+    (profile as any).photoUrl,
+    (profile as any).avatarUrl,
+    (profile as any).avatar,
+    (profile as any).picture,
+    (profile as any).imageUrl,
+    (profile as any).profileImage,
+    ...(Array.isArray((profile as any).photos) ? (profile as any).photos : []),
+  ];
+  const indexPic = safeProfileImageUri(
+    photoCandidates.find((v) => typeof v === 'string' && v.trim()),
+    MOBILE_LIST_IMAGE_LIMIT
+  );
+
   return {
     uid: compact.uid,
     displayName: displayNameFor(compact),
     username: text((compact as any).username, 40),
     bio: text(compact.bio, 700),
-    profilePic: safeProfileImageUri((profile as any).profilePic || compact.profilePic, MOBILE_LIST_IMAGE_LIMIT),
+    profilePic: indexPic,
     occupation: text((compact as any).occupation, 100),
     company: text((compact as any).company, 120),
     country: text(compact.country, 80),

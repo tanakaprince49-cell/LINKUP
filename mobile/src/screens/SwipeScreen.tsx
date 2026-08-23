@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { collection, query, where, addDoc, limit, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, query, where, addDoc, limit, serverTimestamp, getDocs, doc, getDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../lib/firebase';
 import { displayNameFor, earnedScore, isDiscoverableProfile, isSyntheticProfile } from '../lib/discovery';
@@ -323,6 +323,7 @@ export default function SwipeScreen({ navigation }: any) {
   const swipedSessionIdsRef = useRef<Set<string>>(new Set());
   const hasUserSwipedRef = useRef(false);
   const allProfilesRef = useRef<UserProfile[]>([]);
+  const photoUpgradedRef = useRef<Set<string>>(new Set());
   const scoreByIdRef = useRef<Map<string, number>>(new Map());
   const lastSwipedProfileRef = useRef<UserProfile | null>(null);
   const [mode, setMode] = useState<'swipe' | 'scroll'>('swipe');
@@ -760,6 +761,45 @@ export default function SwipeScreen({ navigation }: any) {
         .filter((uri) => /^https?:\/\//.test(uri))
         .forEach((uri) => Image.prefetch(uri).catch(() => {}));
     });
+  }, [topProfile?.uid, nextProfile?.uid, profiles.length]);
+
+  useEffect(() => {
+    // Photo upgrade pass. Lean index rows and the instant-cache carry no
+    // guaranteed pic (index keeps <=240KB data URIs; cache is https-only), so
+    // a card can arrive faceless. For the visible top cards with no renderable
+    // pic, pull their single users doc ONCE per session and patch real photos
+    // in place. Bounded, cached, and silent.
+    [topProfile, nextProfile, profiles[2]]
+      .filter(Boolean)
+      .forEach((target: any) => {
+        if (!target?.uid || photoUpgradedRef.current.has(target.uid)) return;
+        if (isSafeSwipePhoto(target.profilePic)) return;
+        photoUpgradedRef.current.add(target.uid);
+        void getDoc(doc(db, 'users', target.uid))
+          .then((snap) => {
+            if (!snap.exists()) return;
+            const u: any = snap.data();
+            const candidates = [
+              u.profilePic,
+              ...(Array.isArray(u.photos) ? u.photos : []),
+              u.photoURL,
+              u.photoUrl,
+              u.avatarUrl,
+              u.picture,
+            ];
+            const usable = candidates.filter(isSafeSwipePhoto);
+            if (!usable.length) return;
+            const photos =
+              Array.isArray(u.photos) && u.photos.filter(isSafeSwipePhoto).length
+                ? u.photos.filter(isSafeSwipePhoto)
+                : [usable[0]];
+            const patch = (list: any[]) =>
+              list.map((cp) => (cp.uid === target.uid ? { ...cp, profilePic: usable[0], photos } : cp));
+            setProfiles((current) => patch(current as any[]));
+            allProfilesRef.current = patch(allProfilesRef.current as any[]);
+          })
+          .catch(() => {});
+      });
   }, [topProfile?.uid, nextProfile?.uid, profiles.length]);
 
   useEffect(() => {
