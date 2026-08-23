@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Keyboard
 import * as ImagePicker from 'expo-image-picker';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc, arrayUnion, arrayRemove, increment, limitToLast } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, setDoc, arrayUnion, arrayRemove, increment, limitToLast } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -303,6 +303,17 @@ export default function ChatScreen({ route, navigation }: any) {
       limitToLast(MOBILE_CHAT_MESSAGE_LIMIT)
     );
 
+    // Lane 1 (race): paint history from a one-shot read instantly — streams
+    // can hang silently on hostile networks, one-shots can't.
+    void getDocs(q)
+      .then((snap) => {
+        const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setMessages(msgs);
+        scrollToLatest();
+      })
+      .catch(() => {});
+
+    // Lane 2: live stream keeps the thread real-time when it works.
     const unsub = onSnapshot(
       q,
       (snap) => {

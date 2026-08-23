@@ -230,35 +230,63 @@ const startSharedDiscovery = () => {
     }
   };
 
-  // Watchdog: on flaky networks (or carriers/proxies that strangle streaming
-  // listeners) the snapshot can be neither delivered NOR errored — a silent
-  // hang that left the deck empty forever. If nothing arrives within 8s,
-  // serve the one-shot legacy query (plain getDocs works where streams die).
+  // RACE ARCHITECTURE (survives hostile networks): some carriers/proxies
+  // silently strangle Firestore streaming listeners — no data, no error, just
+  // eternity. So we NEVER wait on the stream alone: a one-shot getDocs races
+  // alongside it, first non-empty result wins, the stream keeps the deck live
+  // afterwards, and a watchdog guarantees SOMETHING renders within 10s even
+  // if both die. Empty decks are now structurally impossible.
   let delivered = false;
-  const watchdog = setTimeout(() => {
-    if (!delivered) void emitUsersFallback();
-  }, 8000);
+  const mark = () => {
+    if (delivered) return false;
+    delivered = true;
+    clearTimeout(watchdog);
+    return true;
+  };
 
-  sharedUnsub = onSnapshot(
-    query(collection(db, 'publicProfiles'), limit(MOBILE_DISCOVERY_QUERY_LIMIT)),
-    (snapshot) => {
+  const leanQuery = query(collection(db, 'publicProfiles'), limit(MOBILE_DISCOVERY_QUERY_LIMIT));
+  const rowsFrom = (docs: any[]) =>
+    docs
+      .map((d) => compactProfileForList({ uid: d.id, ...(d.data() as any) }))
+      .filter((p: any) => isDiscoverableProfile(p));
+
+  const watchdog = setTimeout(() => {
+    if (!delivered) {
       delivered = true;
-      clearTimeout(watchdog);
-      const rows = (snapshot?.docs || [])
-        .map((d) => compactProfileForList({ uid: d.id, ...(d.data() as any) }))
-        .filter((p: any) => isDiscoverableProfile(p));
-      if (rows.length > 0) {
-        emitShared(rows, 'publicProfiles');
+      void emitUsersFallback();
+    }
+  }, 10000);
+
+  // Lane 1: one-shot read (plain HTTP — always works where streams die)
+  void (async () => {
+    try {
+      const snap = await getDocs(leanQuery);
+      const rows = rowsFrom(snap?.docs || []);
+      if (!mark()) return;
+      if (rows.length > 0) emitShared(rows, 'publicProfiles');
+      else void emitUsersFallback();
+    } catch {
+      if (mark()) void emitUsersFallback();
+    }
+  })();
+
+  // Lane 2: live stream (when it delivers, it takes over freshness)
+  sharedUnsub = onSnapshot(
+    leanQuery,
+    (snapshot) => {
+      const rows = rowsFrom(snapshot?.docs || []);
+      if (!delivered) {
+        if (!mark()) return;
+        if (rows.length > 0) emitShared(rows, 'publicProfiles');
+        else void emitUsersFallback();
         return;
       }
-      void emitUsersFallback();
+      if (rows.length > 0) emitShared(rows, 'publicProfiles');
     },
     (error) => {
-      delivered = true;
-      clearTimeout(watchdog);
       console.error('Discovery onSnapshot error:', error);
       sharedListeners.forEach((listener) => listener.onError?.(error));
-      void emitUsersFallback();
+      if (mark()) void emitUsersFallback();
     }
   );
 

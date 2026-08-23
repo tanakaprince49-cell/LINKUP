@@ -227,14 +227,26 @@ export default function MessagesScreen({ navigation, route }: any) {
         });
     };
 
-    // Watchdog: if the live listener neither delivers nor errors within 8s
-    // (silent stream hang on hostile networks), serve a one-shot read so the
-    // inbox can never sit empty/spinning forever.
+    // RACE: stream and one-shot run in parallel — first result wins, the
+    // stream keeps the inbox live afterwards. A final watchdog ends the
+    // spinner honestly even if Firestore is completely unreachable.
     let delivered = false;
     const watchdog = setTimeout(() => {
-      if (delivered) return;
-      getDocs(q).then(handleSnap).catch(() => {});
-    }, 8000);
+      if (!delivered) {
+        delivered = true;
+        setLoading(false);
+      }
+    }, 12000);
+
+    void getDocs(q)
+      .then((snap) => {
+        if (!delivered) {
+          delivered = true;
+          clearTimeout(watchdog);
+          handleSnap(snap);
+        }
+      })
+      .catch(() => {});
 
     const unsub = onSnapshot(
       q,
