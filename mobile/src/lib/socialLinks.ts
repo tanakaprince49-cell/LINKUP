@@ -25,7 +25,7 @@ export const SOCIAL_CHIP_STYLE: Record<SocialGlyphName, { bg: string; fg: string
   tiktok: { bg: '#010101', fg: '#FFFFFF' },
   instagram: { bg: '#E1306C', fg: '#FFFFFF' },
   x: { bg: '#000000', fg: '#FFFFFF' },
-  website: { bg: '#FBE618', fg: '#111111' },
+  website: { bg: '#FFFFFF', fg: '#111111' },
 };
 
 const SOCIAL_KEYS = SOCIAL_FIELDS.map((field) => field.key);

@@ -78,7 +78,7 @@ export default function DailyFiveScreen({ navigation }: any) {
         isDark={isDark}
       />
       {loading ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
+        <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 40 }} />
       ) : (
         <View style={styles.list}>
           {cards.map((card, index) => {

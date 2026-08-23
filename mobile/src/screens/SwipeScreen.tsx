@@ -228,9 +228,9 @@ const ExpandedProfilePanel = React.memo(function ExpandedProfilePanel({
           <Text style={[styles.expandedRole, { color: isDark ? '#B7C0D8' : '#42526B' }]}>{roleText}</Text>
           <Text style={[styles.expandedLocation, { color: isDark ? '#718096' : '#8492A6' }]}>{locationText}</Text>
 
-          <View style={[styles.expandedMatchRow, { backgroundColor: isDark ? 'rgba(251,230,24,0.12)' : 'rgba(251,230,24,0.15)' }]}>
-            <Target size={14} color={COLORS.primary} />
-            <Text style={[styles.expandedMatchText, { color: COLORS.primary }]}>
+          <View style={[styles.expandedMatchRow, { backgroundColor: isDark ? 'rgba(17, 24, 39,0.12)' : 'rgba(17, 24, 39,0.15)' }]}>
+            <Target size={14} color={COLORS.primaryStrong} />
+            <Text style={[styles.expandedMatchText, { color: COLORS.primaryStrong }]}>
               {compatibility}% fit — {compatibilityReason}
             </Text>
           </View>
@@ -1327,7 +1327,7 @@ export default function SwipeScreen({ navigation }: any) {
     return (
       <ScreenRoot style={[styles.container, isWeb && styles.webRoot, appBackground(isDark)]}>
         <View style={styles.authGate}>
-          <Target size={44} color={COLORS.primary} />
+          <Target size={44} color={COLORS.primaryStrong} />
           <Text style={[styles.authGateTitle, { color: textColor(isDark) }]}>JOIN LINKUP FIRST</Text>
           <Text style={[styles.authGateCopy, { color: textColor(isDark, 'secondary') }]}>Sign in to unlock smart matchmaking, builder search, and swipe discovery.</Text>
           <TouchableOpacity
@@ -1345,7 +1345,7 @@ export default function SwipeScreen({ navigation }: any) {
   if ((!progressHydrated || loading) && profiles.length === 0) {
     return (
       <View style={[styles.container, appBackground(isDark), { justifyContent: 'center' }]}>
-        <ActivityIndicator color={COLORS.primary} />
+        <ActivityIndicator color={COLORS.primaryStrong} />
       </View>
     );
   }
@@ -1584,7 +1584,7 @@ const styles = StyleSheet.create({
   previewEyebrow: {
     fontSize: 9,
     fontWeight: '900',
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
     letterSpacing: -0.2,
   },
   previewName: {
@@ -1687,7 +1687,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.2)',
   },
   photoThumbWrapActive: {
-    borderColor: COLORS.primary,
+    borderColor: COLORS.lightBorderActive,
   },
   photoThumbImg: {
     width: '100%',
@@ -1788,7 +1788,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginTop: 12,
-    backgroundColor: 'rgba(251,230,24,0.1)',
+    backgroundColor: 'rgba(17, 24, 39,0.1)',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
@@ -1980,9 +1980,9 @@ const styles = StyleSheet.create({
   aiReasonPill: {
     marginTop: 12,
     borderRadius: 14,
-    backgroundColor: 'rgba(251,230,24,0.12)',
+    backgroundColor: 'rgba(17, 24, 39,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(251,230,24,0.26)',
+    borderColor: 'rgba(17, 24, 39,0.26)',
     paddingHorizontal: 10,
     paddingVertical: 8,
     flexDirection: 'row',

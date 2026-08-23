@@ -79,7 +79,7 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
           <Text style={styles.lastMsg} numberOfLines={1}>{match.lastMessage || `You connected! Start the conversation.`}</Text>
           
           <View style={styles.aiReasonBox}>
-            <Sparkles size={10} color={COLORS.primary} />
+            <Sparkles size={10} color={COLORS.primaryStrong} />
             <Text style={styles.aiReasonText}>SYNERGY: {otherUser.skills?.[0] || 'Innovation'} + {otherUser.skills?.[1] || 'Growth'}</Text>
           </View>
         </View>
@@ -101,7 +101,7 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
             }
           }}
         >
-          <MessageSquare size={20} color={COLORS.primary} fill="transparent" />
+          <MessageSquare size={20} color={COLORS.primaryStrong} fill="transparent" />
         </TouchableOpacity>
       </View>
     </View>
@@ -152,7 +152,7 @@ export default function MatchScreen({ navigation }: any) {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          loading ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} /> : (
+          loading ? <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 50 }} /> : (
             <View style={styles.emptyState}>
               <Zap size={48} color="#222" />
               <Text style={styles.emptyText}>No Active Connections</Text>
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: 'rgba(251,230,24,0.25)',
+    borderColor: 'rgba(17, 24, 39,0.25)',
   },
   statusDot: {
     position: 'absolute',
@@ -237,11 +237,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: 'rgba(251,230,24,0.09)',
+    backgroundColor: 'rgba(17, 24, 39,0.09)',
   },
   roleText: {
     fontSize: 8,
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
     fontWeight: '900',
   },
   lastMsg: {
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
   aiReasonText: {
     fontSize: 9,
     fontWeight: '900',
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
     letterSpacing: 0.5,
   },
   msgBtn: {

@@ -120,7 +120,7 @@ const GameChallengeModal: React.FC<GameChallengeModalProps> = ({ visible, gameTy
               </TouchableOpacity>
             </View>
           ) : loading ? (
-            <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
+            <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 40 }} />
           ) : matches.length === 0 ? (
             <View style={styles.emptyBox}>
               <MessageSquare size={32} color={textColor(isDark, 'muted')} />
@@ -151,7 +151,7 @@ const GameChallengeModal: React.FC<GameChallengeModalProps> = ({ visible, gameTy
                     )}
                     <Text style={[styles.connName, { color: textColor(isDark) }]}>{name}</Text>
                     {sending === item.otherId ? (
-                      <ActivityIndicator size="small" color={COLORS.primary} />
+                      <ActivityIndicator size="small" color={COLORS.primaryStrong} />
                     ) : (
                       <View style={[styles.sendBtn, { backgroundColor: COLORS.primary }]}>
                         <Zap size={12} color="#000" fill="#000" />

@@ -1084,7 +1084,7 @@ export default function ChatScreen({ route, navigation }: any) {
                   <TouchableOpacity
                     key={emoji}
                     onPress={() => toggleReaction(item, emoji)}
-                    style={[styles.reactionChip, mine && { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+                    style={[styles.reactionChip, mine && { backgroundColor: COLORS.primary, borderColor: COLORS.lightBorderActive }]}
                   >
                     <Text style={styles.reactionChipText}>{emoji} {ids.length}</Text>
                   </TouchableOpacity>
@@ -1161,8 +1161,8 @@ export default function ChatScreen({ route, navigation }: any) {
       </View>
 
       {isConfidential && (
-        <View style={[styles.confidentialBanner, liquidGlass(isDark, false), { borderColor: 'rgba(251,230,24,0.33)' }]}>
-          <Shield size={14} color={COLORS.primary} />
+        <View style={[styles.confidentialBanner, liquidGlass(isDark, false), { borderColor: 'rgba(17, 24, 39,0.33)' }]}>
+          <Shield size={14} color={COLORS.primaryStrong} />
           <Text style={[styles.confidentialText, { color: isDark ? COLORS.primary : '#92400E' }]}>
             CONFIDENTIAL BUSINESS CHAT
           </Text>
@@ -1228,7 +1228,7 @@ export default function ChatScreen({ route, navigation }: any) {
             onPress={handleDraftIntro}
             disabled={introBusy}
           >
-            {introBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <WandSparkles size={20} color={COLORS.primary} />}
+            {introBusy ? <ActivityIndicator size="small" color={COLORS.primaryStrong} /> : <WandSparkles size={20} color={COLORS.primaryStrong} />}
           </TouchableOpacity>
           <TouchableOpacity style={[styles.toolBtn, liquidGlass(isDark, false), mediaBusy && styles.toolBtnDisabled, { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]} onPress={openMediaPicker} disabled={mediaBusy}>
             {mediaBusy ? <ActivityIndicator size="small" color="#666" /> : <Camera size={20} color="#666" />}
@@ -1448,7 +1448,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: COLORS.primary,
+    borderColor: COLORS.lightBorderActive,
   },
   avatarFallbackText: {
     color: '#000',

@@ -32,6 +32,10 @@ const dailySeed = (userId: string, feed: string) => {
 const tieJitter = (seed: number, id: string) => hashString(`${seed}:${id}`);
 
 const seenKey = (userId: string, feed: string) => `linkup:feedSeen:${feed}:${userId}`;
+const stateKey = (userId: string, feed: string) => `linkup:feedState:${feed}:${userId}`;
+
+// USER DECREE: a featured person stays exactly 24 hours, then swaps.
+const HOLD_MS = 24 * 60 * 60 * 1000;
 
 export async function rotateFeed<T>(
   userId: string | undefined,
@@ -52,7 +56,22 @@ export async function rotateFeed<T>(
     return tieJitter(seed, idOf(a)) - tieJitter(seed, idOf(b));
   });
 
-  // 2) fresh-first: anything never shown outranks a rerun
+  // 2) THE 24H HOLD: if we already featured a set less than 24h ago and it's
+  // still in the pool, keep serving exactly it. A person holds the spot for
+  // a full day, THEN the radar changes the person.
+  const byId = new Map(jittered.map((item) => [idOf(item), item] as const));
+  try {
+    const raw = await AsyncStorage.getItem(stateKey(uid, feed));
+    const state = raw ? (JSON.parse(raw) as { at?: number; ids?: string[] }) : null;
+    if (state && Array.isArray(state.ids) && state.ids.length && Date.now() - Number(state.at || 0) < HOLD_MS) {
+      const held = state.ids.map((id) => byId.get(id)).filter(Boolean) as T[];
+      if (held.length) return held;
+    }
+  } catch {
+    /* storage read failed — fall through and rotate fresh */
+  }
+
+  // 3) fresh-first: anything never shown outranks a rerun
   let seen: string[] = [];
   try {
     seen = JSON.parse((await AsyncStorage.getItem(seenKey(uid, feed))) || '[]');
@@ -63,13 +82,14 @@ export async function rotateFeed<T>(
   const fresh = jittered.filter((item) => !seenSet.has(idOf(item)));
   const working = fresh.length >= limitCount ? fresh : jittered;
 
-  // 3) daily rotating window through the working pool
+  // 4) pick the next window through the working pool
   const windows = Math.max(1, Math.ceil(working.length / limitCount));
   const start = (seed % windows) * limitCount;
   const shown = working.slice(start, start + limitCount);
   if (!shown.length) return working.slice(0, limitCount);
 
-  // 4) remember what we showed (cap below pool size so it can always rotate)
+  // 5) stamp the featured set NOW — it holds for the next 24h — and log seen
+  void AsyncStorage.setItem(stateKey(uid, feed), JSON.stringify({ at: Date.now(), ids: shown.map(idOf) })).catch(() => {});
   const keep = Math.max(12, jittered.length - limitCount);
   const next = [...seen, ...shown.map((item) => idOf(item)).filter((id) => !seenSet.has(id))].slice(-keep);
   void AsyncStorage.setItem(seenKey(uid, feed), JSON.stringify(next)).catch(() => {});

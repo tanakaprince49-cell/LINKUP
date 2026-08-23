@@ -418,7 +418,7 @@ function ViewersScreen({ navigation, route }: any) {
           </View>
         </View>
         <View style={styles.viewerCardAction}>
-          <RowIcon size={18} color={COLORS.primary} />
+          <RowIcon size={18} color={COLORS.primaryStrong} />
         </View>
       </TouchableOpacity>
     );
@@ -470,7 +470,7 @@ function ViewersScreen({ navigation, route }: any) {
 
       {loading ? (
         <View style={styles.loaderWrap}>
-          <ActivityIndicator color={COLORS.primary} size="small" />
+          <ActivityIndicator color={COLORS.primaryStrong} size="small" />
         </View>
       ) : (
         <FlatList
@@ -482,7 +482,7 @@ function ViewersScreen({ navigation, route }: any) {
           ListEmptyComponent={
             <View style={styles.empty}>
               <View style={styles.emptyIconWrap}>
-                <HeaderIcon size={36} color={COLORS.primary} />
+                <HeaderIcon size={36} color={COLORS.primaryStrong} />
               </View>
               <Text style={[styles.emptyText, { color: textColor(isDark) }]}>{meta.empty}</Text>
               <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>{meta.emptySub}</Text>
@@ -619,7 +619,7 @@ const styles = StyleSheet.create({
   viewerTime: {
     fontSize: 10,
     fontWeight: '800',
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
     marginTop: 3,
     letterSpacing: 0.5,
   },
@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: 'rgba(251,230,24,0.12)',
+    backgroundColor: 'rgba(17, 24, 39,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
@@ -642,7 +642,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 16,
-    backgroundColor: 'rgba(251,230,24,0.12)',
+    backgroundColor: 'rgba(17, 24, 39,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,

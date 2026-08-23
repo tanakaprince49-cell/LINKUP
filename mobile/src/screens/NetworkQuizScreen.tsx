@@ -228,10 +228,10 @@ const NetworkQuizScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
       {waitingForOpponent ? (
         <View style={styles.waitingWrap}>
           {countdown > 0 ? (
-            <Text style={[styles.countdownText, { color: COLORS.primary }]}>{countdown}</Text>
+            <Text style={[styles.countdownText, { color: COLORS.primaryStrong }]}>{countdown}</Text>
           ) : (
             <>
-              <Loader size={36} color={COLORS.primary} />
+              <Loader size={36} color={COLORS.primaryStrong} />
               <Text style={[styles.waitingText, { color: textColor(isDark) }]}>Waiting for opponent...</Text>
               <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share the challenge so your friend joins</Text>
             </>
@@ -240,7 +240,7 @@ const NetworkQuizScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
       ) : !finished && questions.length > 0 ? (
         <>
           <View style={styles.progressRow}>
-            <Brain size={14} color={COLORS.primary} />
+            <Brain size={14} color={COLORS.primaryStrong} />
             <Text style={[styles.progressText, { color: textColor(isDark, 'muted') }]}>
               {current + 1} / {questions.length}
             </Text>

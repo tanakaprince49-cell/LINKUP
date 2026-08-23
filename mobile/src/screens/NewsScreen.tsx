@@ -86,7 +86,7 @@ export default function NewsScreen() {
           </Text>
         ) : null}
         <View style={styles.cardFooter}>
-          <View style={[styles.categoryChip, { backgroundColor: isDark ? 'rgba(251,230,24,0.1)' : 'rgba(251,230,24,0.15)' }]}>
+          <View style={[styles.categoryChip, { backgroundColor: isDark ? 'rgba(17, 24, 39,0.1)' : 'rgba(17, 24, 39,0.15)' }]}>
             <Text style={styles.categoryText}>{item.category}</Text>
           </View>
           <ExternalLink size={14} color={textColor(isDark, 'muted')} />
@@ -112,12 +112,12 @@ export default function NewsScreen() {
           ))}
         </ScrollView>
         <TouchableOpacity onPress={() => loadNews(true)} style={styles.refreshBtn}>
-          <RefreshCw size={16} color={COLORS.primary} />
+          <RefreshCw size={16} color={COLORS.primaryStrong} />
         </TouchableOpacity>
       </View>
 
       {loading ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 80 }} />
+        <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 80 }} />
       ) : (
         <FlatList
           data={filtered}
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
   sourceText: {
     fontSize: 11,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
     letterSpacing: 0.5,
   },
   timeText: {
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 9,
     fontWeight: '900',
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
     letterSpacing: 1,
   },
   emptyState: {

@@ -173,10 +173,10 @@ const FounderFlipScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
       {waitingForOpponent ? (
         <View style={styles.waitingWrap}>
           {countdown > 0 ? (
-            <Text style={[styles.countdownText, { color: COLORS.primary }]}>{countdown}</Text>
+            <Text style={[styles.countdownText, { color: COLORS.primaryStrong }]}>{countdown}</Text>
           ) : (
             <>
-              <Loader size={36} color={COLORS.primary} />
+              <Loader size={36} color={COLORS.primaryStrong} />
               <Text style={[styles.waitingText, { color: textColor(isDark) }]}>Waiting for opponent...</Text>
               <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share the challenge so your friend joins</Text>
             </>
@@ -186,11 +186,11 @@ const FounderFlipScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
         <>
       <View style={styles.stats}>
         <View style={[styles.statBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-          <Text style={[styles.statNum, { color: COLORS.primary }]}>{moves}</Text>
+          <Text style={[styles.statNum, { color: COLORS.primaryStrong }]}>{moves}</Text>
           <Text style={[styles.statLabel, { color: textColor(isDark, 'muted') }]}>Moves</Text>
         </View>
         <View style={[styles.statBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-          <Text style={[styles.statNum, { color: COLORS.primary }]}>{matchedPairs}/8</Text>
+          <Text style={[styles.statNum, { color: COLORS.primaryStrong }]}>{matchedPairs}/8</Text>
           <Text style={[styles.statLabel, { color: textColor(isDark, 'muted') }]}>Pairs</Text>
         </View>
       </View>

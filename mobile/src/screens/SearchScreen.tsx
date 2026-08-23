@@ -723,7 +723,7 @@ export default function SearchScreen({ navigation, route }: any) {
 
       <View style={styles.aiRow}>
         <View style={[styles.aiBar, liquidGlass(isDark, false)]}>
-          <Star size={18} color={COLORS.primary} />
+          <Star size={18} color={COLORS.primaryStrong} />
           <TextInput
             placeholder='Try: "ML engineer in South Africa into fintech"'
             placeholderTextColor="#666"
@@ -1027,7 +1027,7 @@ export default function SearchScreen({ navigation, route }: any) {
           <Text style={styles.idleHint}>try the AI bar above: "ML engineer in South Africa into fintech"</Text>
         </View>
       ) : (loading || serverSearching) && combined.length === 0 ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 30 }} />
+        <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 30 }} />
       ) : (
         <View style={styles.resultsList}>
           {visibleResults.map((item) => (
@@ -1485,7 +1485,7 @@ const styles = StyleSheet.create({
   },
   resultHandle: {
     fontSize: 10,
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
     fontWeight: '900',
     marginTop: 2,
   },
@@ -1554,7 +1554,7 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     backgroundColor: '#FFFFFF',
     borderWidth: 3,
-    borderColor: COLORS.primary,
+    borderColor: COLORS.lightBorderActive,
     top: -7,
   },
   pillsRow: {

@@ -45,7 +45,7 @@ export default function LinkyProfileScreen({ navigation }: any) {
 
           <View style={styles.grid}>
             <InfoTile icon={<Zap size={16} color="#22C55E" />} label="Role" value="AI Assistant" isDark={isDark} />
-            <InfoTile icon={<Globe size={16} color={COLORS.primary} />} label="Network" value="Everywhere" isDark={isDark} />
+            <InfoTile icon={<Globe size={16} color={COLORS.primaryStrong} />} label="Network" value="Everywhere" isDark={isDark} />
             <InfoTile icon={<Lightbulb size={16} color="#F59E0B" />} label="Specialty" value="Matchmaking" isDark={isDark} />
             <InfoTile icon={<Target size={16} color="#EF4444" />} label="Focus" value="Founder connections" isDark={isDark} />
           </View>
@@ -60,7 +60,7 @@ export default function LinkyProfileScreen({ navigation }: any) {
         </View>
 
         <View style={[styles.insightCard, liquidGlass(isDark)]}>
-          <Sparkles size={18} color={COLORS.primary} />
+          <Sparkles size={18} color={COLORS.primaryStrong} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.insightTitle, { color: textColor(isDark) }]}>Why Linky AI</Text>
             <Text style={styles.insightText}>
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 22, fontWeight: '900', color: '#FFF', letterSpacing: 1 },
   name: { fontSize: 20, fontWeight: '900', textTransform: 'uppercase', flexShrink: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  handle: { marginTop: 2, fontSize: 12, fontWeight: '900', color: COLORS.primary },
+  handle: { marginTop: 2, fontSize: 12, fontWeight: '900', color: COLORS.primaryStrong },
   scorePill: {
     width: 52,
     height: 52,

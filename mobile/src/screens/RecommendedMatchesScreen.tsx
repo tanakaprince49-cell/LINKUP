@@ -262,7 +262,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         </TouchableOpacity>
 
         <View style={[styles.reasonBox, liquidGlass(isDark, false)]}>
-          <Zap size={14} color={COLORS.primary} />
+          <Zap size={14} color={COLORS.primaryStrong} />
           <Text style={[styles.reasonText, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
             {match.reason}
           </Text>
@@ -270,13 +270,13 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
 
         <View style={styles.infoRow}>
           <View style={styles.infoItem}>
-            <Target size={12} color={COLORS.primary} />
+            <Target size={12} color={COLORS.primaryStrong} />
             <Text style={styles.infoText} numberOfLines={1}>
               {asList((item as any).lookingFor).slice(0, 2).join(', ') || 'Networking'}
             </Text>
           </View>
           <View style={styles.infoItem}>
-            <Search size={12} color={COLORS.primary} />
+            <Search size={12} color={COLORS.primaryStrong} />
             <Text style={styles.infoText} numberOfLines={1}>
               {(item as any)?.startupStage || 'Exploring'}
             </Text>
@@ -309,7 +309,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
             <Text style={[styles.actionText, { color: textColor(isDark) }]}>PROFILE</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+            style={[styles.actionBtn, { backgroundColor: COLORS.primary, borderColor: COLORS.lightBorderActive }]}
             onPress={() => openChat(item)}
             disabled={busyUserId === item.uid}
           >
@@ -334,7 +334,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
 
       <View style={[styles.heroCard, liquidGlass(isDark)]}>
         <View style={styles.heroRow}>
-          <Sparkles size={20} color={COLORS.primary} />
+          <Sparkles size={20} color={COLORS.primaryStrong} />
           <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Recommended people for you</Text>
         </View>
         <Text style={styles.heroSub}>
@@ -349,7 +349,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       </View>
 
       {loading && people.length === 0 ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 48 }} />
+        <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 48 }} />
       ) : (
         <FlatList
           data={recommended}
@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 10,
     fontWeight: '900',
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
   },
   meta: {
     marginTop: 4,

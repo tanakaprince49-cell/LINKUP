@@ -169,8 +169,8 @@ const ConversationItem = React.memo(({ match, navigation }: { match: Match, navi
             {!!otherUser.isVerified && <VerifiedBadge size={20} />}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {isPinned && <Pin size={12} color={COLORS.primary} />}
-            {isImportant && <Star size={12} color={COLORS.primary} fill={COLORS.primary} />}
+            {isPinned && <Pin size={12} color={COLORS.primaryStrong} />}
+            {isImportant && <Star size={12} color={COLORS.primaryStrong} fill={COLORS.primary} />}
             <Text style={[styles.chatTime, { color: textColor(isDark, 'muted') }]}>{formatTimeAgo(match.lastMessageTime)}</Text>
           </View>
         </View>
@@ -312,7 +312,7 @@ export default function MessagesScreen({ navigation, route }: any) {
         )}
       </View>
       {loading ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} />
+        <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 50 }} />
       ) : (
         <FlatList
           data={matches}
@@ -338,7 +338,7 @@ export default function MessagesScreen({ navigation, route }: any) {
                     <Text style={{ fontSize: 11, fontWeight: '900', color: '#000', letterSpacing: 1 }}>OPEN DISCOVER</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => void shareLinkupInvite()}>
-                    <Text style={{ fontSize: 11, fontWeight: '900', color: COLORS.primary, letterSpacing: 1 }}>INVITE BUILDERS</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '900', color: COLORS.primaryStrong, letterSpacing: 1 }}>INVITE BUILDERS</Text>
                   </TouchableOpacity>
                 </>
               ) : null}
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: COLORS.primary,
+    borderColor: COLORS.lightBorderActive,
   },
   avatarFallbackText: {
     color: '#000',

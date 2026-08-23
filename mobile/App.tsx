@@ -286,7 +286,7 @@ function TabNavigator({ navigation }: any) {
               <View style={[
                 styles.tabIconInner,
                 focused && {
-                  backgroundColor: isDark ? 'rgba(251,230,24,0.12)' : 'rgba(251,230,24,0.18)',
+                  backgroundColor: isDark ? 'rgba(17, 24, 39,0.12)' : 'rgba(17, 24, 39,0.18)',
                   shadowColor: COLORS.primary,
                   shadowOpacity: 0.2,
                   shadowRadius: 8,
@@ -581,7 +581,7 @@ function AppContent() {
 
   if (loading) return (
     <View style={{ flex: 1, ...appBackground(isDark), alignItems: 'center', justifyContent: 'center' }}>
-      <ActivityIndicator color={COLORS.primary} />
+      <ActivityIndicator color={COLORS.primaryStrong} />
     </View>
   );
 

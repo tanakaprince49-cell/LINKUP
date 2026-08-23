@@ -100,11 +100,11 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
 
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
-            <Target size={12} color={COLORS.primary} />
+            <Target size={12} color={COLORS.primaryStrong} />
             <Text style={styles.metaText} numberOfLines={1}>{details.roleNeed}</Text>
           </View>
           <View style={styles.metaItem}>
-            <Briefcase size={12} color={COLORS.primary} />
+            <Briefcase size={12} color={COLORS.primaryStrong} />
             <Text style={styles.metaText} numberOfLines={1}>{details.stage}</Text>
           </View>
           <View style={styles.metaItem}>
@@ -145,7 +145,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
       </View>
 
       {loading && builders.length === 0 ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 48 }} />
+        <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 48 }} />
       ) : (
         <FlatList
           data={opportunities}
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
   handle: {
     marginTop: 2,
     fontSize: 10,
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
     fontWeight: '900',
   },
   livePill: {

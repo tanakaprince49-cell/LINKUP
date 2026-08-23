@@ -23,7 +23,7 @@ export function lazyScreen(loader: () => Promise<{ default: React.ComponentType<
     if (!cached) {
       return (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0B0B0B' }}>
-          <ActivityIndicator color={COLORS.primary} />
+          <ActivityIndicator color={COLORS.primaryStrong} />
         </View>
       );
     }

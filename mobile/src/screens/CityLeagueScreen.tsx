@@ -71,7 +71,7 @@ export default function CityLeagueScreen({ navigation }: any) {
         isDark={isDark}
       />
       {loading ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
+        <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={league}

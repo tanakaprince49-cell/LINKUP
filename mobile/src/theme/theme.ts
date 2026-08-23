@@ -2,9 +2,9 @@ import { Platform } from 'react-native';
 
 /** One visual language for every LINKUP screen. */
 export const COLORS = {
-  primary: '#FBE618',
-  primaryGlow: 'rgba(251, 230, 24, 0.16)',
-  primaryStrong: '#C9B400',
+  primary: '#FFFFFF', // WHITE MONOCHROME (app-wide; fills ride hairline borders)
+  primaryGlow: 'rgba(17, 24, 39, 0.05)',
+  primaryStrong: '#111827', // ink (was gold-strong)
   secondary: '#0B1220',
   tertiary: '#42526B',
   success: '#16A34A',
@@ -16,7 +16,7 @@ export const COLORS = {
   darkCard: '#171A21',
   darkGlassStrong: '#1C2028',
   darkBorder: 'rgba(255, 255, 255, 0.10)',
-  darkBorderActive: 'rgba(251, 230, 24, 0.45)',
+  darkBorderActive: 'rgba(255, 255, 255, 0.30)',
   darkTextPrimary: '#F4F5F7',
   darkTextSecondary: '#A8B0BD',
   darkTextMuted: '#6E7683',
@@ -26,7 +26,7 @@ export const COLORS = {
   lightCard: '#FFFFFF',
   lightGlassStrong: '#FFFFFF',
   lightBorder: 'rgba(11, 18, 32, 0.08)',
-  lightBorderActive: 'rgba(201, 180, 0, 0.45)',
+  lightBorderActive: 'rgba(17, 24, 39, 0.30)',
   lightTextPrimary: '#0B1220',
   lightTextSecondary: '#4B5563',
   lightTextMuted: '#8A93A0',

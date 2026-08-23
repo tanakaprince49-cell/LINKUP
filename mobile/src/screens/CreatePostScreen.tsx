@@ -207,11 +207,11 @@ export default function CreatePostScreen({ navigation }: any) {
 
         <View style={[styles.toolbar, { borderTopColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
           <TouchableOpacity style={styles.toolBtn} onPress={() => pickMedia('image')}>
-            <ImageIcon size={22} color={COLORS.primary} />
+            <ImageIcon size={22} color={COLORS.primaryStrong} />
             <Text style={styles.toolText}>Photo</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.toolBtn} onPress={() => pickMedia('video')}>
-            <Video size={22} color={COLORS.primary} />
+            <Video size={22} color={COLORS.primaryStrong} />
             <Text style={styles.toolText}>Video</Text>
           </TouchableOpacity>
         </View>
@@ -238,11 +238,11 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 14,
-    backgroundColor: 'rgba(251,230,24,0.09)',
+    backgroundColor: 'rgba(17, 24, 39,0.09)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: 'rgba(251,230,24,0.19)',
+    borderColor: 'rgba(17, 24, 39,0.19)',
   },
   shipButton: {
     paddingHorizontal: 20,
@@ -288,13 +288,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(251,230,24,0.06)',
+    backgroundColor: 'rgba(17, 24, 39,0.06)',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
   },
   toolText: {
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,

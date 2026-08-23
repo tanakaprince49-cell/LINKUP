@@ -20,6 +20,10 @@ import { ikAvatar } from '../lib/ikImage';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { loadLeaguePool } from '../lib/leaguePool';
 import { COLORS, textColor } from '../theme/theme';
+// FROZEN BY USER DECREE: the Builder League screen keeps the OG acid-yellow
+// identity even though the rest of the app went full white monochrome.
+const LEAGUE_YELLOW = '#FBE618';
+
 import ProCrownBadge from '../components/ProCrownBadge';
 
 const heatFor = (profile: any) => Math.max(1, Math.min(99, Math.round(leagueHeat(profile))));
@@ -28,7 +32,7 @@ const medal = (index: number) => {
   if (index === 0) return { bg: '#FBE618', fg: '#111', label: '1ST' };
   if (index === 1) return { bg: '#D7DCE3', fg: '#111', label: '2ND' };
   if (index === 2) return { bg: '#E08A3A', fg: '#111', label: '3RD' };
-  return { bg: 'rgba(251,230,24,0.14)', fg: COLORS.primary, label: `#${index + 1}` };
+  return { bg: 'rgba(251,230,24,0.14)', fg: LEAGUE_YELLOW, label: `#${index + 1}` };
 };
 
 export default function TrendingBuildersScreen({ navigation }: any) {
@@ -191,7 +195,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
         key={item.uid}
         activeOpacity={0.88}
         onPress={() => navigation.navigate('Profile', { userId: item.uid })}
-        style={[styles.row, { backgroundColor: isDark ? '#161616' : '#FFF', borderColor: index < 3 ? COLORS.primary : isDark ? '#2A2A2A' : '#EFEFEF' }]}
+        style={[styles.row, { backgroundColor: isDark ? '#161616' : '#FFF', borderColor: index < 3 ? LEAGUE_YELLOW : isDark ? '#2A2A2A' : '#EFEFEF' }]}
       >
         <View style={[styles.rankBox, { backgroundColor: chip.bg }]}>
           <Text style={[styles.rankText, { color: chip.fg }]}>{chip.label}</Text>
@@ -262,7 +266,7 @@ export default function TrendingBuildersScreen({ navigation }: any) {
       </View>
 
       {loading && builders.length === 0 ? (
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 48 }} />
+        <ActivityIndicator color={LEAGUE_YELLOW} style={{ marginTop: 48 }} />
       ) : (
         <FlatList
           data={rest}
@@ -344,7 +348,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 4,
     borderRadius: 22,
-    backgroundColor: COLORS.primary,
+    backgroundColor: LEAGUE_YELLOW,
     padding: 18,
   },
   liveRow: {
@@ -396,17 +400,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.06)',
   },
-  podiumFirst: { paddingTop: 16, paddingBottom: 16, borderWidth: 2, borderColor: COLORS.primary },
+  podiumFirst: { paddingTop: 16, paddingBottom: 16, borderWidth: 2, borderColor: LEAGUE_YELLOW },
   podiumRank: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 8 },
   podiumRankText: { fontSize: 9, fontWeight: '900', color: '#111' },
-  podiumAvatar: { width: 54, height: 54, borderRadius: 27, borderWidth: 2, borderColor: COLORS.primary },
+  podiumAvatar: { width: 54, height: 54, borderRadius: 27, borderWidth: 2, borderColor: LEAGUE_YELLOW },
   podiumName: { marginTop: 8, fontSize: 11, fontWeight: '900', textAlign: 'center' },
   podiumHeat: { marginTop: 3, fontSize: 10, fontWeight: '900', color: '#FF4D2E' },
   challengeBtn: {
     marginTop: 12,
     height: 48,
     borderRadius: 16,
-    backgroundColor: COLORS.primary,
+    backgroundColor: LEAGUE_YELLOW,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -417,7 +421,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     height: 50,
     borderRadius: 16,
-    backgroundColor: COLORS.primary,
+    backgroundColor: LEAGUE_YELLOW,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -445,9 +449,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  youLeadText: { fontSize: 13, fontWeight: '900', color: COLORS.primary },
+  youLeadText: { fontSize: 13, fontWeight: '900', color: LEAGUE_YELLOW },
   youPill: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: LEAGUE_YELLOW,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,

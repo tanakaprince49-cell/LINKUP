@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    borderColor: COLORS.lightBorderActive,
   },
   destructiveButton: {
     backgroundColor: 'transparent',

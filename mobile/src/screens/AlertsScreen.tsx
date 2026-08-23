@@ -168,7 +168,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         </Text>
         <Text style={[styles.timeText, { color: textColor(isDark, 'muted') }]}>{formatTimeAgo(notification.timestamp)}</Text>
         {notification.note ? (
-          <View style={[styles.noteBox, { backgroundColor: isDark ? 'rgba(251,230,24,0.08)' : '#FFF8C5' }]}>
+          <View style={[styles.noteBox, { backgroundColor: isDark ? 'rgba(17, 24, 39,0.08)' : '#FFF8C5' }]}>
             <Text style={[styles.noteText, { color: textColor(isDark) }]}>“{notification.note}”</Text>
           </View>
         ) : null}
@@ -249,7 +249,7 @@ export default function AlertsScreen({ navigation }: any) {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator color={COLORS.primary} style={{ marginTop: 50 }} />
+            <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 50 }} />
           ) : (
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIcon}>
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 10,
   },
-  itemUnread: { borderColor: COLORS.primary },
+  itemUnread: { borderColor: COLORS.lightBorderActive },
   avatarWrap: { width: 48, height: 48, marginRight: 12 },
   avatar: { width: 48, height: 48, borderRadius: 16 },
   avatarFallback: {

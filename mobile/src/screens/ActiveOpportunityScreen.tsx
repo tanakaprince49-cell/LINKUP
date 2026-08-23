@@ -105,7 +105,7 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
   if (loading) {
     return (
       <SafeAreaView edges={['top']} style={[styles.container, appBackground(isDark)]}>
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 80 }} />
+        <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 80 }} />
       </SafeAreaView>
     );
   }
@@ -156,8 +156,8 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
           <Text style={[styles.summary, { color: textColor(isDark, 'secondary') }]}>{details.summary}</Text>
 
           <View style={styles.grid}>
-            <InfoTile icon={<Target size={16} color={COLORS.primary} />} label="Looking For" value={details.roleNeed} isDark={isDark} />
-            <InfoTile icon={<Briefcase size={16} color={COLORS.primary} />} label="Stage" value={details.stage} isDark={isDark} />
+            <InfoTile icon={<Target size={16} color={COLORS.primaryStrong} />} label="Looking For" value={details.roleNeed} isDark={isDark} />
+            <InfoTile icon={<Briefcase size={16} color={COLORS.primaryStrong} />} label="Stage" value={details.stage} isDark={isDark} />
             <InfoTile icon={<Clock size={16} color="#4ADE80" />} label="Availability" value={details.availability} isDark={isDark} />
             <InfoTile icon={<MapPin size={16} color="#EF4444" />} label="Location" value={details.location} isDark={isDark} />
           </View>
@@ -174,12 +174,12 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
         </View>
 
         <View style={[styles.insightCard, liquidGlass(isDark)]}>
-          <Sparkles size={18} color={COLORS.primary} />
+          <Sparkles size={18} color={COLORS.primaryStrong} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.insightTitle, { color: textColor(isDark) }]}>Why this matters</Text>
             {aiLoadingReason ? (
               <View style={styles.aiLoadingRow}>
-                <ActivityIndicator size="small" color={COLORS.primary} />
+                <ActivityIndicator size="small" color={COLORS.primaryStrong} />
                 <Text style={[styles.aiLoadingText, { color: textColor(isDark, 'muted') }]}>Analyzing fit...</Text>
               </View>
             ) : aiReason ? (
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#000',
   },
-  handle: { marginTop: 2, fontSize: 11, fontWeight: '900', color: COLORS.primary },
+  handle: { marginTop: 2, fontSize: 11, fontWeight: '900', color: COLORS.primaryStrong },
   scorePill: { width: 48, height: 48, borderRadius: 16, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   scoreText: { fontSize: 16, fontWeight: '900', color: '#000' },
   title: { marginTop: 18, fontSize: 24, lineHeight: 29, fontWeight: '900', letterSpacing: 0.5 },

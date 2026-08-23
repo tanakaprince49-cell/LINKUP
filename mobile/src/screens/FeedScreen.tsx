@@ -514,7 +514,7 @@ export default function FeedScreen({ navigation }: any) {
 
   if (loading) return (
     <View style={{ flex: 1, backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg, alignItems: 'center', justifyContent: 'center' }}>
-      <ActivityIndicator color={COLORS.primary} />
+      <ActivityIndicator color={COLORS.primaryStrong} />
     </View>
   );
 

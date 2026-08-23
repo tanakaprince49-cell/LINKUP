@@ -102,7 +102,7 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.streakStrip, { backgroundColor: streakCount > 0 ? 'rgba(251,230,24,0.1)' : 'transparent', borderColor: streakCount > 0 ? 'rgba(251,230,24,0.2)' : 'transparent' }]}>
+        <View style={[styles.streakStrip, { backgroundColor: streakCount > 0 ? 'rgba(17, 24, 39,0.1)' : 'transparent', borderColor: streakCount > 0 ? 'rgba(17, 24, 39,0.2)' : 'transparent' }]}>
           <Flame size={18} color={streakCount > 0 ? COLORS.primary : textColor(isDark, 'muted')} fill={streakCount > 0 ? COLORS.primary : 'transparent'} />
           <Text style={[styles.streakText, { color: streakCount > 0 ? COLORS.primary : textColor(isDark, 'muted') }]}>
             {streakCount > 0 ? `Day ${streakCount} 🔥 Best: ${longestStreak}` : 'Start your streak!'}
@@ -259,7 +259,7 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
           <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>WEEKLY</Text>
           <View style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
             <View style={styles.weeklyRow}>
-              <TrendingUp size={14} color={COLORS.primary} />
+              <TrendingUp size={14} color={COLORS.primaryStrong} />
               <Text style={[styles.weeklyLabel, { color: textColor(isDark) }]}>Activity</Text>
             </View>
             <View style={styles.weeklyGrid}>

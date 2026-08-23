@@ -66,7 +66,7 @@ const LinkyDashboard = ({ onSuggestion, streak, score }: { onSuggestion: (t: str
       </View>
       <Text style={[styles.dashHint, { color: textColor(isDark, 'secondary') }]}>Try these:</Text>
       {suggestions.map((s) => (
-        <TouchableOpacity key={s} style={[styles.dashChip, { backgroundColor: isDark ? COLORS.primaryGlow : 'rgba(251,230,24,0.12)' }]} onPress={() => onSuggestion(s)} activeOpacity={0.7}>
+        <TouchableOpacity key={s} style={[styles.dashChip, { backgroundColor: isDark ? COLORS.primaryGlow : 'rgba(17, 24, 39,0.12)' }]} onPress={() => onSuggestion(s)} activeOpacity={0.7}>
           <View style={[styles.dashChipDot, { backgroundColor: COLORS.primaryStrong }]} />
           <Text style={[styles.dashChipText, { color: textColor(isDark) }]}>{s}</Text>
         </TouchableOpacity>
@@ -429,7 +429,7 @@ export default function LinkyScreen({ navigation }: any) {
             {draftIntro ? (
               <View style={[styles.draftBanner, { backgroundColor: isDark ? COLORS.darkBgSec : '#F0F0F0' }]}>
                 <View style={styles.draftRow}>
-                  <FileText size={13} color={COLORS.primary} />
+                  <FileText size={13} color={COLORS.primaryStrong} />
                   <Text style={[styles.draftTo, { color: textColor(isDark) }]} numberOfLines={1}>
                     To: {draftIntro.recipient.displayName || 'User'}
                     {draftIntro.recipient.occupation ? ` · ${draftIntro.recipient.occupation}` : ''}
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
   dashSubtitle: { fontSize: 12, fontWeight: '600', color: '#999', marginTop: 2 },
   dashScoreRow: { flexDirection: 'row', alignItems: 'center', gap: 32, marginBottom: 20 },
   dashScoreItem: { alignItems: 'center' },
-  dashScoreValue: { fontSize: 32, fontWeight: '900', color: COLORS.primary },
+  dashScoreValue: { fontSize: 32, fontWeight: '900', color: COLORS.primaryStrong },
   dashScoreLabel: { fontSize: 9, fontWeight: '800', color: '#999', marginTop: 3, letterSpacing: 1 },
   dashScoreDivider: { width: 1, height: 36, backgroundColor: '#1A1A1F10' },
   dashHint: { fontSize: 11, fontWeight: '800', marginBottom: 10, alignSelf: 'flex-start', letterSpacing: 0.5, color: '#999' },

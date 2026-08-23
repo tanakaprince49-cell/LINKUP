@@ -813,7 +813,7 @@ const ChoiceGrid = ({
             onPress={() => toggle(c.id)}
             style={[
               styles.choice,
-              on && { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+              on && { backgroundColor: COLORS.primary, borderColor: COLORS.lightBorderActive },
               !on && { borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)' },
             ]}
           >
@@ -1911,7 +1911,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     lineHeight: 30,
     fontWeight: '800',
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
   },
   profilePhotoEmptyText: {
     marginTop: 12,

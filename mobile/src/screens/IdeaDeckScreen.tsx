@@ -593,7 +593,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
 
       {loading && ideas.length === 0 ? (
         <View style={styles.center}>
-          <ActivityIndicator color={COLORS.primary} />
+          <ActivityIndicator color={COLORS.primaryStrong} />
         </View>
       ) : topIdea ? (
         <View style={styles.deckWrap}>
@@ -613,7 +613,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
         </View>
       ) : (
         <View style={styles.emptyWrap}>
-          <Zap size={48} color={COLORS.primary} fill={COLORS.primary} />
+          <Zap size={48} color={COLORS.primaryStrong} fill={COLORS.primary} />
           <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No Ideas Yet</Text>
           <Text style={styles.emptyText}>Post an idea here so builders can swipe into it.</Text>
           <TouchableOpacity onPress={() => setComposerOpen(true)} style={styles.emptyButton}>
@@ -735,7 +735,7 @@ const styles = StyleSheet.create({
     width: 190,
     height: 190,
     borderRadius: 95,
-    backgroundColor: 'rgba(251,230,24,0.19)',
+    backgroundColor: 'rgba(17, 24, 39,0.19)',
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   ideaIcon: {
@@ -755,7 +755,7 @@ const styles = StyleSheet.create({
   signalLabel: { fontSize: 8, fontWeight: '900', letterSpacing: -0.2, color: '#777' },
   signalValue: { marginTop: 6, fontSize: 12, fontWeight: '900' },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 20 },
-  tagPill: { borderRadius: 999, backgroundColor: 'rgba(251,230,24,0.10)', borderWidth: 1, borderColor: 'rgba(251,230,24,0.27)', paddingHorizontal: 10, paddingVertical: 7 },
+  tagPill: { borderRadius: 999, backgroundColor: 'rgba(17, 24, 39,0.10)', borderWidth: 1, borderColor: 'rgba(17, 24, 39,0.27)', paddingHorizontal: 10, paddingVertical: 7 },
   tagText: { fontSize: 9, fontWeight: '900', color: '#8A7900', letterSpacing: 0.9 },
   ideaInviteBtn: { marginTop: 18, height: 50, borderRadius: 16, backgroundColor: COLORS.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   ideaInviteText: { color: '#000', fontSize: 11, fontWeight: '900', letterSpacing: -0.2 },
@@ -794,7 +794,7 @@ const styles = StyleSheet.create({
   composeLabel: { marginTop: 8, marginBottom: 10, fontSize: 11, fontWeight: '900', letterSpacing: -0.2 },
   composeChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   composeChip: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: COLORS.lightCard },
-  composeChipActive: {     borderColor: COLORS.primary, backgroundColor: COLORS.primary },
+  composeChipActive: {     borderColor: COLORS.lightBorderActive, backgroundColor: COLORS.primary },
   composeChipText: { color: '#555', fontSize: 11, fontWeight: '900' },
   composeChipTextActive: { color: '#000' },
   postIdeaBtn: { height: 56, borderRadius: 16, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },

@@ -142,21 +142,21 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
           <Text style={[styles.backText, { color: textColor(isDark) }]}>← Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Lightbulb size={16} color={COLORS.primary} />
+          <Lightbulb size={16} color={COLORS.primaryStrong} />
           <Text style={[styles.title, { color: textColor(isDark) }]}>Pitch Perfect</Text>
         </View>
         <TouchableOpacity style={styles.headerRight} onPress={generatePitch}>
-          <RefreshCw size={18} color={COLORS.primary} />
+          <RefreshCw size={18} color={COLORS.primaryStrong} />
         </TouchableOpacity>
       </View>
 
       {waitingForOpponent ? (
         <View style={styles.waitingWrap}>
           {countdown > 0 ? (
-            <Text style={[styles.countdownText, { color: COLORS.primary }]}>{countdown}</Text>
+            <Text style={[styles.countdownText, { color: COLORS.primaryStrong }]}>{countdown}</Text>
           ) : (
             <>
-              <Loader size={36} color={COLORS.primary} />
+              <Loader size={36} color={COLORS.primaryStrong} />
               <Text style={[styles.waitingText, { color: textColor(isDark) }]}>Waiting for opponent...</Text>
               <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share the challenge so your friend joins</Text>
             </>
@@ -195,7 +195,7 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
 
       <View style={styles.statsRow}>
         <View style={[styles.statChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-          <Zap size={12} color={COLORS.primary} />
+          <Zap size={12} color={COLORS.primaryStrong} />
           <Text style={[styles.statText, { color: textColor(isDark) }]}>{generatedCount} generated</Text>
         </View>
         <View style={[styles.statChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
@@ -207,7 +207,7 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
       {!pitch && (
         <View style={styles.heroEmpty}>
           <View style={styles.heroEmptyIconWrap}>
-            <Lightbulb size={40} color={COLORS.primary} />
+            <Lightbulb size={40} color={COLORS.primaryStrong} />
           </View>
           <Text style={[styles.heroEmptyTitle, { color: textColor(isDark) }]}>
             Your Next Big Idea
@@ -246,7 +246,7 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
 
           <View style={styles.actionBar}>
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]} onPress={generatePitch}>
-              <RefreshCw size={16} color={COLORS.primary} />
+              <RefreshCw size={16} color={COLORS.primaryStrong} />
               <Text style={[styles.actionLabel, { color: textColor(isDark) }]}>New</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -271,7 +271,7 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
           {faves.length > 0 && (
             <View style={styles.favesSection}>
               <View style={styles.favesHeader}>
-                <Trophy size={14} color={COLORS.primary} />
+                <Trophy size={14} color={COLORS.primaryStrong} />
                 <Text style={[styles.favesTitle, { color: textColor(isDark) }]}>Saved Ideas</Text>
               </View>
               {faves.slice(0, 5).map((name, i) => (
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
   headerRight: {
     padding: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(251,230,24,0.15)',
+    backgroundColor: 'rgba(17, 24, 39,0.15)',
   },
   statsRow: {
     flexDirection: 'row',
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(251,230,24,0.12)',
+    backgroundColor: 'rgba(17, 24, 39,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: '900',
     letterSpacing: -1.5,
-    color: COLORS.primary,
+    color: COLORS.primaryStrong,
     textAlign: 'center',
   },
   heroDivider: {

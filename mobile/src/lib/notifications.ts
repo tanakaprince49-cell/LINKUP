@@ -69,7 +69,7 @@ async function ensureNativeNotificationRuntime() {
       description: 'Matches, messages, profile views, and opportunity alerts.',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FBE618',
+      lightColor: '#FFFFFF',
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       sound: 'default',
     });

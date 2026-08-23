@@ -390,7 +390,7 @@ export default function PaywallModal({
             </View>
 
             <View style={[styles.popularBadge, { backgroundColor: isDark ? 'rgba(223, 251, 63, 0.14)' : COLORS.primaryGlow }]}> 
-              <Crown size={13} color={COLORS.primary} />
+              <Crown size={13} color={COLORS.primaryStrong} />
               <Text style={[styles.popularText, { color: COLORS.lightTextPrimary }]}>FOR FOUNDERS, CREATORS & TEAMS</Text>
             </View>
 
@@ -447,7 +447,7 @@ export default function PaywallModal({
             </View>
             {PRO_PERKS.map((perk) => (
               <View key={perk} style={styles.perkRow}>
-                <CheckCircle2 size={18} color={COLORS.primary} />
+                <CheckCircle2 size={18} color={COLORS.primaryStrong} />
                 <Text style={[styles.perkText, { color: textColor(isDark, 'secondary') }]}>{perk}</Text>
               </View>
             ))}
