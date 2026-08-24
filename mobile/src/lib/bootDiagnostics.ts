@@ -9,7 +9,7 @@ import { db } from './firebase';
  * Paste everything starting with [LINKUP-DIAG] when reporting issues.
  */
 
-const BUILD_STAMP = 'diag-3 (white monochrome + 24h radar hold)';
+const BUILD_STAMP = 'diag-4 (HD images: 1080p cards + f-auto)';
 const TAG = '[LINKUP-DIAG]';
 
 const now = () => Date.now();

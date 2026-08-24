@@ -1049,7 +1049,7 @@ export default function ChatScreen({ route, navigation }: any) {
             )}
             {item.type === 'image' && !!item.mediaUrl && (
               <TouchableOpacity activeOpacity={0.92} onPress={() => Linking.openURL(item.mediaUrl).catch(() => {})}>
-                <AppImage uri={ikImage(safeProfileImageUri(item.mediaUrl, MOBILE_LIST_IMAGE_LIMIT) || item.mediaUrl, 640, 65)} style={styles.messageImage} />
+                <AppImage uri={ikImage(safeProfileImageUri(item.mediaUrl, MOBILE_LIST_IMAGE_LIMIT) || item.mediaUrl, 1080, 85)} style={styles.messageImage} />
               </TouchableOpacity>
             )}
             {item.type === 'video' && !!item.mediaUrl && (

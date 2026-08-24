@@ -1843,7 +1843,7 @@ export default function ProfileScreen({ navigation, route }: any) {
           <View style={styles.avatarContainer}>
             <TouchableOpacity activeOpacity={0.9} onPress={() => { if (heroProfilePic) openFullPhoto(heroProfilePic); }}>
               {shouldRenderProfileImages && !!heroProfilePic ? (
-                <AppImage uri={ikImage(heroProfilePic, 320, 60)} style={styles.avatar} />
+                <AppImage uri={ikImage(heroProfilePic, 640, 85)} style={styles.avatar} />
               ) : (
                 <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: isDark ? COLORS.darkBgSec : '#FFFCE7' }]}>
                   <Text style={[styles.avatarInitial, { color: textColor(isDark) }]}>{profileInitial}</Text>
@@ -1873,7 +1873,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                     >
                       {uri && shouldRenderProfileImages ? (
                         <>
-                          <AppImage uri={ikImage(uri, 480, 60)} style={styles.photoSlotImg} />
+                          <AppImage uri={ikImage(uri, 800, 80)} style={styles.photoSlotImg} />
                           {isEditing && (
                             <TouchableOpacity
                               style={styles.photoDeleteButton}
