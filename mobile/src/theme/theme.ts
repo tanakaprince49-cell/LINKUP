@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { Storage as KV } from 'expo-sqlite/kv-store';
+import { kvGetSync, kvSetSync } from './flavorStorage';
 
 /**
  * BRAND FLAVORS: the user-pickable identity of the whole app.
@@ -20,27 +20,11 @@ export const BRAND_FLAVOR_KEY = 'linkup:brandFlavor';
 const normalizeFlavor = (value: unknown): BrandFlavor | null =>
   value === 'yellow' || value === 'white' ? value : null;
 
-export const getStoredBrandFlavorSync = (): BrandFlavor | null => {
-  try {
-    if (Platform.OS === 'web') {
-      return normalizeFlavor((globalThis as any)?.localStorage?.getItem(BRAND_FLAVOR_KEY));
-    }
-    return normalizeFlavor(KV.getItemSync(BRAND_FLAVOR_KEY));
-  } catch {
-    return null;
-  }
-};
+export const getStoredBrandFlavorSync = (): BrandFlavor | null =>
+  normalizeFlavor(kvGetSync(BRAND_FLAVOR_KEY));
 
 export const storeBrandFlavorSync = (flavor: BrandFlavor) => {
-  try {
-    if (Platform.OS === 'web') {
-      (globalThis as any)?.localStorage?.setItem(BRAND_FLAVOR_KEY, flavor);
-      return;
-    }
-    KV.setItemSync(BRAND_FLAVOR_KEY, flavor);
-  } catch {
-    /* flavor persistence is best-effort; never crash a boot over it */
-  }
+  kvSetSync(BRAND_FLAVOR_KEY, flavor);
 };
 
 const FLAVOR_TOKENS: Record<BrandFlavor, {
