@@ -26,11 +26,13 @@ const FLAVOR_TOKENS: Record<BrandFlavor, {
     lightBorderActive: 'rgba(17, 24, 39, 0.30)',
   },
   yellow: {
+    // FULL YELLOW by user decree — in yellow mode EVERYTHING is yellow:
+    // fills, text accents, icons, active borders, the lot.
     primary: '#FBE618',
     primaryGlow: 'rgba(251, 230, 24, 0.16)',
-    primaryStrong: '#C9B400',
-    darkBorderActive: 'rgba(251, 230, 24, 0.45)',
-    lightBorderActive: 'rgba(201, 180, 0, 0.45)',
+    primaryStrong: '#FBE618',
+    darkBorderActive: 'rgba(251, 230, 24, 0.55)',
+    lightBorderActive: 'rgba(251, 230, 24, 0.55)',
   },
 };
 

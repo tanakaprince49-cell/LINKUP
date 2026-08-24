@@ -41,14 +41,22 @@ export default function CityLeagueScreen({ navigation }: any) {
   }, [user?.uid]);
 
   const league = useMemo(() => {
-    const samePlace = people.filter((p) => {
+    // JUDGED BY COUNTRY/CITY (user decree): the league is LOCAL to what's in
+    // your profile settings. Same-city + same-country builders only, ranked
+    // by decaying Rep. The old code silently fell back to the GLOBAL pool
+    // when locals were < 3 — so everyone worldwide saw the same faces and it
+    // was a fake "city" league. Now: you set a location, you get YOUR local
+    // table, even if it's small (honest beats fake). No location set at all?
+    // Then and only then it's the Global league.
+    const hasLocation = !!(city || country);
+    const locals = people.filter((p) => {
       const pCity = String(p.city || '').toLowerCase();
       const pCountry = String(p.country || '').toLowerCase();
       if (city && pCity === city.toLowerCase()) return true;
-      if (!city && country && pCountry === country.toLowerCase()) return true;
+      if (country && pCountry === country.toLowerCase()) return true;
       return false;
     });
-    const pool = samePlace.length >= 3 ? samePlace : people;
+    const pool = hasLocation ? locals : people;
     return [...pool]
       .map((p) => {
         const logs = normalizeShipLogs(p.shipLogs);
@@ -65,8 +73,8 @@ export default function CityLeagueScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.root, appBackground(isDark)]}>
       <ScreenHeader
-        title="City league"
-        subtitle={`${city || country || 'Global'} · ranked by Rep that can decay`}
+        title={city || country ? 'City league' : 'Global league'}
+        subtitle={`${city ? `${city}${country ? `, ${country}` : ''}` : country || 'Global'} · ranked by Rep that can decay`}
         onBack={() => navigation.goBack()}
         isDark={isDark}
       />
@@ -77,7 +85,13 @@ export default function CityLeagueScreen({ navigation }: any) {
           data={league}
           keyExtractor={(item) => item.uid}
           contentContainerStyle={{ padding: 20, gap: 10, paddingBottom: 40 }}
-          ListEmptyComponent={<Text style={[styles.empty, { color: textColor(isDark, 'muted') }]}>Not enough builders in your city yet.</Text>}
+          ListEmptyComponent={
+            <Text style={[styles.empty, { color: textColor(isDark, 'muted') }]}>
+              {city || country
+                ? `No ranked builders in ${city || country} yet — invite builders from your area and take the crown first.`
+                : 'No ranked builders yet.'}
+            </Text>
+          }
           renderItem={({ item, index }) => (
             <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.row, liquidGlass(isDark, false)]}>
               <Text style={[styles.rank, { color: index < 3 ? COLORS.primaryStrong : textColor(isDark) }]}>{index + 1}</Text>

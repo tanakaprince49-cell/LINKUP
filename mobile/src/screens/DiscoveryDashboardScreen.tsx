@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfile } from '../types';
-import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+import { COLORS, appBackground, getBrandFlavor, liquidGlass, textColor } from '../theme/theme';
 import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
 import { activeOpportunityScore, displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { rankLeague } from '../lib/builderLeague';
@@ -26,14 +26,17 @@ const DASHBOARD_CACHE_LIMIT = IS_LOW_END_ANDROID ? 24 : 60;
 
 // HOME PALETTE (founder request): clean white + dark gold ONLY.
 // No lime (#FBE618), no green, no tints of anything else on this screen.
-// HOME PALETTE: pure monochrome white — zero gold anywhere (incl. Linky AI).
-// White fills ride a hairline border so they stay visible on the white canvas;
-// icons + small accent text are ink; backdrops are neutral gray.
-const HOME_GOLD = '#FFFFFF'; // fills, buttons (always paired with hairline)
-const HOME_GOLD_DEEP = '#111827'; // small text accents (ink, readable on white)
-const HOME_GOLD_TINT = 'rgba(17,24,39,0.05)'; // subtle chips/backdrops
-const HOME_INK = '#111827'; // icons / spinners
-const HOME_LINE = 'rgba(17,24,39,0.12)'; // hairline edge for white fills
+// HOME PALETTE: follows the app-wide BRAND FLAVOR (user decree).
+//   white mode  → pure monochrome white (fills + hairline, ink accents)
+//   yellow mode → FULL YELLOW everything (fills, icons, small text)
+// getBrandFlavor() is final before any module loads (index.ts bootstrap), so
+// module-level constants below are correct from the first frame.
+const HOME_FLAVOR_YELLOW = getBrandFlavor() === 'yellow';
+const HOME_GOLD = HOME_FLAVOR_YELLOW ? '#FBE618' : '#FFFFFF'; // fills, buttons
+const HOME_GOLD_DEEP = HOME_FLAVOR_YELLOW ? '#FBE618' : '#111827'; // small accent text
+const HOME_GOLD_TINT = HOME_FLAVOR_YELLOW ? 'rgba(251,230,24,0.12)' : 'rgba(17,24,39,0.05)'; // subtle chips/backdrops
+const HOME_INK = HOME_FLAVOR_YELLOW ? '#FBE618' : '#111827'; // icons / spinners
+const HOME_LINE = HOME_FLAVOR_YELLOW ? 'rgba(251,230,24,0.45)' : 'rgba(17,24,39,0.12)'; // hairline edge for fills
 const compactCachedImage = (value: unknown) => {
   return safeProfileImageUri(value, MOBILE_LIST_IMAGE_LIMIT);
 };
