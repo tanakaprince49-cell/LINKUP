@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { applyBrandFlavor, BrandFlavor, BRAND_FLAVOR_KEY } from '../theme/theme';
+import { applyBrandFlavor, BrandFlavor, BRAND_FLAVOR_KEY, getStoredBrandFlavorSync, storeBrandFlavorSync } from '../theme/theme';
 
 type Theme = 'light' | 'dark';
 
@@ -18,18 +18,23 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>('light');
-  const [brandFlavor, setBrandFlavorState] = useState<BrandFlavor>('white');
+  // Sync source of truth (kv-store/localStorage) — matches what index.ts
+  // applied pre-boot, so context never disagrees with the module palettes.
+  const [brandFlavor, setBrandFlavorState] = useState<BrandFlavor>(() => getStoredBrandFlavorSync() || 'white');
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void Promise.all([AsyncStorage.getItem(THEME_KEY), AsyncStorage.getItem(BRAND_FLAVOR_KEY)])
-      .then(([storedTheme, storedFlavor]) => {
+      .then(([storedTheme, legacyFlavor]) => {
         if (cancelled) return;
         if (storedTheme === 'dark' || storedTheme === 'light') setTheme(storedTheme);
-        if (storedFlavor === 'white' || storedFlavor === 'yellow') {
-          applyBrandFlavor(storedFlavor);
-          setBrandFlavorState(storedFlavor);
+        // One-way legacy migration: a flavor only in AsyncStorage moves into
+        // the sync store once, then AsyncStorage stops being the truth.
+        if (!getStoredBrandFlavorSync() && (legacyFlavor === 'white' || legacyFlavor === 'yellow')) {
+          storeBrandFlavorSync(legacyFlavor);
+          applyBrandFlavor(legacyFlavor);
+          setBrandFlavorState(legacyFlavor);
         }
       })
       .finally(() => {
@@ -46,10 +51,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const setBrandFlavor = async (flavor: BrandFlavor) => {
-    // Live: inline/render-time COLORS reads flip immediately via re-render.
-    // Module-level StyleSheets capture it fully on next app start (index.ts
-    // applies the flavor before the module graph loads).
+    // Live: apply now for render-time COLORS reads; persist to the SYNC store
+    // so the next cold boot applies it before any StyleSheet is built.
     applyBrandFlavor(flavor);
+    storeBrandFlavorSync(flavor);
     setBrandFlavorState(flavor);
     await AsyncStorage.setItem(BRAND_FLAVOR_KEY, flavor).catch(() => {});
   };

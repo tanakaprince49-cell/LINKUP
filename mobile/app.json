@@ -67,7 +67,8 @@
             "enableShrinkResourcesInReleaseBuilds": true
           }
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "owner": "talala"
   }

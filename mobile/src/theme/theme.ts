@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { Storage as KV } from 'expo-sqlite/kv-store';
 
 /**
  * BRAND FLAVORS: the user-pickable identity of the whole app.
@@ -7,9 +8,40 @@ import { Platform } from 'react-native';
  * applyBrandFlavor mutates the COLORS singleton; index.ts applies the stored
  * flavor BEFORE the app module graph loads, so module-level StyleSheet.create
  * calls capture the right palette from the first pixel.
+ *
+ * Storage MUST be synchronous at boot (AsyncStorage cost us a boot crash —
+ * "main has not been registered" — because awaiting it delays registration
+ * past the native mount). expo-sqlite/kv-store is sync on native; web uses
+ * localStorage. AsyncStorage stays as a legacy fallback migration source.
  */
 export type BrandFlavor = 'white' | 'yellow';
 export const BRAND_FLAVOR_KEY = 'linkup:brandFlavor';
+
+const normalizeFlavor = (value: unknown): BrandFlavor | null =>
+  value === 'yellow' || value === 'white' ? value : null;
+
+export const getStoredBrandFlavorSync = (): BrandFlavor | null => {
+  try {
+    if (Platform.OS === 'web') {
+      return normalizeFlavor((globalThis as any)?.localStorage?.getItem(BRAND_FLAVOR_KEY));
+    }
+    return normalizeFlavor(KV.getItemSync(BRAND_FLAVOR_KEY));
+  } catch {
+    return null;
+  }
+};
+
+export const storeBrandFlavorSync = (flavor: BrandFlavor) => {
+  try {
+    if (Platform.OS === 'web') {
+      (globalThis as any)?.localStorage?.setItem(BRAND_FLAVOR_KEY, flavor);
+      return;
+    }
+    KV.setItemSync(BRAND_FLAVOR_KEY, flavor);
+  } catch {
+    /* flavor persistence is best-effort; never crash a boot over it */
+  }
+};
 
 const FLAVOR_TOKENS: Record<BrandFlavor, {
   primary: string;
