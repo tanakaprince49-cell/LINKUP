@@ -7,11 +7,13 @@
 ```
 What's new in 13.0.0:
 
-• ⚡ BIG speed fix: profiles, search and chats now load in seconds, not minutes
-• 🖼️ Startup no longer freezes — the app opens straight into people
-• 📱 Smaller download: the app is now minified and runs lighter on every phone
-• 🔁 Now looks right on tablets, foldables and landscape mode
-• 🐱 Plus the new plug-in cat brand, magic-wand AI intros, and match % next to every name
+⚡ Massively faster — rebuilt for speed: screens now open near-instantly
+🖼 Photos load from a new fast cloud in HD quality
+🎨 New themes — pick Full White or OG Yellow (Profile → Appearance)
+🏙 City League is now truly local: ranked by Rep in YOUR city & country
+🔁 Fresh faces every 24 hours on the Opportunity Radar
+🧭 You can always see which screen you're on
+🛠 Big stability and crash fixes
 ```
 
 ### Full changelog (internal)
