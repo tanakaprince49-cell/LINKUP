@@ -71,7 +71,7 @@ const isPermissionDenied = (error: any) => String(error?.code || '').includes('p
 
 
 // ULTRA-SAFE ICON RENDERER
-const SafeIcon = ({ name, size = 20, color = COLORS.primary, fill = "transparent", style }: any) => {
+const SafeIcon = ({ name, size = 20, color = COLORS.primaryStrong, fill = "transparent", style }: any) => {
   const IconComponent = (Icons as any)[name];
   if (!IconComponent) {
     return <View style={[{ width: size, height: size, backgroundColor: color + '20', borderRadius: 4 }, style]} />;
@@ -79,7 +79,7 @@ const SafeIcon = ({ name, size = 20, color = COLORS.primary, fill = "transparent
   return <IconComponent size={size} color={color} fill={fill} style={style} />;
 };
 
-const Badge = ({ name, iconName, color = COLORS.primary }: { name: string, iconName: string, color?: string }) => {
+const Badge = ({ name, iconName, color = COLORS.primaryStrong }: { name: string, iconName: string, color?: string }) => {
   return (
     <View style={[styles.badgeItem, { backgroundColor: `${color}10`, borderColor: `${color}20` }]}>
       <SafeIcon name={iconName} size={12} color={color} />
@@ -328,7 +328,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     showMfaEnrollmentNotice,
     updateLocalProfile,
   } = useAuth();
-  const { theme, setThemeMode } = useTheme();
+  const { theme, setThemeMode, brandFlavor, setBrandFlavor } = useTheme();
   const isFocused = useIsFocused();
   const isDark = theme === 'dark';
   const [isEditing, setIsEditing] = useState(false);
@@ -2926,13 +2926,54 @@ export default function ProfileScreen({ navigation, route }: any) {
                   style={[
                     styles.themeOption,
                     {
-                      borderColor: on ? COLORS.primary : (isDark ? COLORS.darkBorder : COLORS.lightBorder),
+                      borderColor: on ? COLORS.primaryStrong : (isDark ? COLORS.darkBorder : COLORS.lightBorder),
                       backgroundColor: on ? COLORS.primary : (isDark ? COLORS.darkCard : '#FFF'),
                     },
                   ]}
                 >
                   <SafeIcon name={mode === 'dark' ? 'Moon' : 'Sun'} size={16} color="#111" />
                   <Text style={styles.themeOptionText}>{mode === 'dark' ? 'Dark' : 'Light'}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name="Droplet" size={18} color={COLORS.primaryStrong} />
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>App colour</Text>
+                <Text style={styles.prefHelp}>Full white monochrome or the OG LINKUP yellow. Fully lands everywhere on next app start.</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.themePicker}>
+            {(['white', 'yellow'] as const).map((flavor) => {
+              const on = brandFlavor === flavor;
+              return (
+                <TouchableOpacity
+                  key={flavor}
+                  onPress={() => void setBrandFlavor(flavor)}
+                  activeOpacity={0.88}
+                  style={[
+                    styles.themeOption,
+                    {
+                      borderColor: on ? '#111827' : (isDark ? COLORS.darkBorder : COLORS.lightBorder),
+                      backgroundColor: isDark ? COLORS.darkCard : '#FFF',
+                    },
+                  ]}
+                >
+                  <View
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: 7,
+                      backgroundColor: flavor === 'yellow' ? '#FBE618' : '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: '#111827',
+                    }}
+                  />
+                  <Text style={[styles.themeOptionText, { color: textColor(isDark) }]}>{flavor === 'yellow' ? 'Full Yellow' : 'Full White'}</Text>
                 </TouchableOpacity>
               );
             })}

@@ -1,10 +1,50 @@
 import { Platform } from 'react-native';
 
+/**
+ * BRAND FLAVORS: the user-pickable identity of the whole app.
+ *   white  — full monochrome (default): white fills, ink text/icons/borders
+ *   yellow — the OG acid-yellow LINKUP identity
+ * applyBrandFlavor mutates the COLORS singleton; index.ts applies the stored
+ * flavor BEFORE the app module graph loads, so module-level StyleSheet.create
+ * calls capture the right palette from the first pixel.
+ */
+export type BrandFlavor = 'white' | 'yellow';
+export const BRAND_FLAVOR_KEY = 'linkup:brandFlavor';
+
+const FLAVOR_TOKENS: Record<BrandFlavor, {
+  primary: string;
+  primaryGlow: string;
+  primaryStrong: string;
+  darkBorderActive: string;
+  lightBorderActive: string;
+}> = {
+  white: {
+    primary: '#FFFFFF',
+    primaryGlow: 'rgba(17, 24, 39, 0.05)',
+    primaryStrong: '#111827',
+    darkBorderActive: 'rgba(255, 255, 255, 0.30)',
+    lightBorderActive: 'rgba(17, 24, 39, 0.30)',
+  },
+  yellow: {
+    primary: '#FBE618',
+    primaryGlow: 'rgba(251, 230, 24, 0.16)',
+    primaryStrong: '#C9B400',
+    darkBorderActive: 'rgba(251, 230, 24, 0.45)',
+    lightBorderActive: 'rgba(201, 180, 0, 0.45)',
+  },
+};
+
+let currentBrandFlavor: BrandFlavor = 'white';
+export const getBrandFlavor = () => currentBrandFlavor;
+export const applyBrandFlavor = (flavor: BrandFlavor) => {
+  if (!FLAVOR_TOKENS[flavor]) return;
+  currentBrandFlavor = flavor;
+  Object.assign(COLORS, FLAVOR_TOKENS[flavor]);
+};
+
 /** One visual language for every LINKUP screen. */
 export const COLORS = {
-  primary: '#FFFFFF', // WHITE MONOCHROME (app-wide; fills ride hairline borders)
-  primaryGlow: 'rgba(17, 24, 39, 0.05)',
-  primaryStrong: '#111827', // ink (was gold-strong)
+  ...FLAVOR_TOKENS.white,
   secondary: '#0B1220',
   tertiary: '#42526B',
   success: '#16A34A',

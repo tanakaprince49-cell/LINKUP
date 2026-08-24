@@ -1,9 +1,21 @@
 import 'react-native-gesture-handler';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { registerRootComponent } from 'expo';
+import { applyBrandFlavor, BRAND_FLAVOR_KEY } from './src/theme/theme';
 
-import App from './App';
+// Apply the stored brand flavor (white monochrome / OG yellow) BEFORE the app
+// module graph loads: screens build their StyleSheets from COLORS at import
+// time, so the palette must be final before the first screen module evaluates.
+async function bootstrap() {
+  try {
+    const flavor = await AsyncStorage.getItem(BRAND_FLAVOR_KEY);
+    if (flavor === 'yellow' || flavor === 'white') applyBrandFlavor(flavor);
+  } catch {
+    /* default white stands */
+  }
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const App = require('./App').default;
+  registerRootComponent(App);
+}
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
-registerRootComponent(App);
+void bootstrap();

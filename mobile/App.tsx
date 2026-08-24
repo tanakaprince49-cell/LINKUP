@@ -311,7 +311,10 @@ function TabNavigator({ navigation }: any) {
             </View>
           );
         },
-        tabBarActiveTintColor: COLORS.primary,
+        // ACTIVE TAB MUST BE VISIBLE. primaryStrong is ink in white flavour,
+        // gold-strong in yellow flavour — always legible on the light bar
+        // (COLORS.primary became white-on-white here after the white flip).
+        tabBarActiveTintColor: COLORS.primaryStrong,
         tabBarInactiveTintColor: isDark ? '#6B7280' : '#9CA3AF',
         tabBarShowLabel: true,
         tabBarLabel: tabLabels[route.name] || route.name,
