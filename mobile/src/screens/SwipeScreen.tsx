@@ -13,6 +13,7 @@ import {
   ScrollView,
   FlatList,
   InteractionManager,
+  Linking,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -33,7 +34,14 @@ import { useGamification } from '../contexts/GamificationContext';
 import { UserProfile } from '../types';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { roleInfoFor } from '../lib/roles';
-import { X, Heart, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare } from 'lucide-react-native';
+import { X, Heart, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare, Globe, Package, Zap } from 'lucide-react-native';
+import {
+  SponsoredIdeaDeckItem,
+  recordCampaignClick,
+  recordCampaignImpression,
+  sponsoredIdeaCardsForViewer,
+  subscribeActiveCampaigns,
+} from '../lib/campaigns';
 import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
 import { consumeWindowUsage, FREE_LIMITS, getWindowUsage, hasLinkupPro, PRO_FEATURES, SWIPE_USAGE_WINDOW_HOURS } from '../lib/paywall';
@@ -323,6 +331,51 @@ export default function SwipeScreen({ navigation }: any) {
 
   // Free discovery budget: 12 profiles per 12 hours. PLUS = unlimited.
   const isProUser = hasLinkupPro(myProfile);
+
+  // --- Discover boost (sponsored interstitial) ----------------------------
+  // A sponsored product card shows as an interstitial every
+  // DISCOVER_SPONSORED_EVERY profile swipes. It never enters the profiles
+  // array (so ranking/rescue logic is untouched), never burns the swipe
+  // budget, and PLUS members never see it. Empty paid inventory falls back
+  // to the PLUS house promo via sponsoredIdeaCardsForViewer.
+  const DISCOVER_SPONSORED_EVERY = 4;
+  const [discoverySponsor, setDiscoverySponsor] = useState<SponsoredIdeaDeckItem | null>(null);
+  const sponsorQueueRef = useRef<SponsoredIdeaDeckItem[]>([]);
+  const sponsorIndexRef = useRef(0);
+  const swipesSinceSponsorRef = useRef(0);
+  useEffect(() => {
+    if (!user?.uid || isProUser) {
+      sponsorQueueRef.current = [];
+      setDiscoverySponsor(null);
+      return;
+    }
+    let cancelled = false;
+    const unsubscribeSponsored = subscribeActiveCampaigns(async (campaigns) => {
+      try {
+        const boosted = campaigns.filter(
+          (campaign) => Array.isArray(campaign.placements) && campaign.placements.includes('discover')
+        );
+        const items = await sponsoredIdeaCardsForViewer(boosted, user.uid);
+        if (cancelled) return;
+        sponsorQueueRef.current = items;
+      } catch {
+        // Sponsored delivery is best-effort; discovery always renders.
+      }
+    }, () => {});
+    return () => {
+      cancelled = true;
+      unsubscribeSponsored();
+    };
+  }, [user?.uid, isProUser]);
+
+  const maybeShowDiscoverySponsor = () => {
+    const queue = sponsorQueueRef.current;
+    if (!queue.length || isProUser || !user?.uid) return;
+    const next = queue[sponsorIndexRef.current % queue.length];
+    sponsorIndexRef.current += 1;
+    setDiscoverySponsor(next);
+    void recordCampaignImpression(next.campaignId, user.uid);
+  };
   const swipeBudgetRef = useRef<number | null>(null);
   const [swipesLeft, setSwipesLeft] = useState<number | null>(null);
 
@@ -939,6 +992,27 @@ export default function SwipeScreen({ navigation }: any) {
   };
 
   const completeSwipe = (direction: 'left' | 'right', swipedItem?: UserProfile) => {
+    // Sponsored interstitial consumes itself — no profile is touched, no
+    // budget is burned, no like/skip is written to Firestore.
+    if (discoverySponsor) {
+      swipePosition.stopAnimation();
+      swipePosition.setValue({ x: 0, y: 0 });
+      hasUserSwipedRef.current = true;
+      setActivePhotoIndex(0);
+      setInfoExpanded(false);
+      if (direction === 'right') {
+        void recordCampaignClick(discoverySponsor.campaignId, user?.uid || '');
+        if (discoverySponsor.house) {
+          openPaywall('Unlimited Discovery');
+        } else if (discoverySponsor.website) {
+          Linking.openURL(discoverySponsor.website).catch(() => {});
+        }
+      }
+      setDiscoverySponsor(null);
+      trackAction('swipe');
+      return;
+    }
+
     const item = swipedItem || profiles[0];
     if (!item) return;
 
@@ -983,6 +1057,13 @@ export default function SwipeScreen({ navigation }: any) {
     }
 
     trackAction(direction === 'right' ? 'like' : 'swipe');
+
+    // Every DISCOVER_SPONSORED_EVERY real swipes, queue the sponsored slot.
+    swipesSinceSponsorRef.current += 1;
+    if (swipesSinceSponsorRef.current >= DISCOVER_SPONSORED_EVERY) {
+      swipesSinceSponsorRef.current = 0;
+      maybeShowDiscoverySponsor();
+    }
   };
 
   const resetSwipePosition = () => {
@@ -1022,13 +1103,14 @@ export default function SwipeScreen({ navigation }: any) {
 
   const animateSwipeOut = (direction: 'left' | 'right') => {
     const swipedItem = profiles[0];
-    if (isAnimatingRef.current || !swipedItem) return;
-    if (!isProUser && (swipeBudgetRef.current ?? Number.POSITIVE_INFINITY) <= 0) {
+    if (isAnimatingRef.current || (!discoverySponsor && !swipedItem)) return;
+    // Sponsored cards never hit the swipe-budget gate.
+    if (!discoverySponsor && !isProUser && (swipeBudgetRef.current ?? Number.POSITIVE_INFINITY) <= 0) {
       openPaywall('Unlimited Discovery');
       return;
     }
 
-    startSwipeAnimation(direction, swipedItem);
+    startSwipeAnimation(direction, swipedItem as UserProfile);
   };
 
   completeSwipeRef.current = completeSwipe;
@@ -1133,7 +1215,67 @@ export default function SwipeScreen({ navigation }: any) {
     );
   };
 
+  const renderSponsoredCard = () => {
+    if (!discoverySponsor) return null;
+    return (
+      <Animated.View
+        key={`sponsor-${discoverySponsor.id}`}
+        style={[
+          styles.card,
+          styles.deckCardLayer,
+          liquidGlass(isDark, false),
+          isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
+          {
+            opacity: topCardOpacity,
+            transform: isWeb
+              ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
+              : [
+                  { translateX: swipePosition.x },
+                  { translateY: swipePosition.y },
+                  { rotate: cardRotate },
+                  { scale: topCardScale },
+                ],
+          },
+        ]}
+        {...(infoExpanded ? {} : panResponder.panHandlers)}
+      >
+        <View style={styles.sponsorBody}>
+          <View style={styles.sponsorPill}>
+            <Text style={styles.sponsorPillText}>SPONSORED</Text>
+          </View>
+          <View style={styles.sponsorIconTile}>
+            {discoverySponsor.house ? (
+              <Zap size={38} color={COLORS.lightTextPrimary} fill={COLORS.lightTextPrimary} />
+            ) : (
+              <Package size={38} color={COLORS.lightTextPrimary} />
+            )}
+          </View>
+          <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={3}>
+            {discoverySponsor.title}
+          </Text>
+          <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={4}>
+            {discoverySponsor.description}
+          </Text>
+          <TouchableOpacity
+            activeOpacity={0.88}
+            style={styles.sponsorCta}
+            onPress={() => {
+              void recordCampaignClick(discoverySponsor.campaignId, user?.uid || '');
+              if (discoverySponsor.house) openPaywall('Unlimited Discovery');
+              else if (discoverySponsor.website) Linking.openURL(discoverySponsor.website).catch(() => {});
+            }}
+          >
+            <Globe size={15} color="#000" />
+            <Text style={styles.sponsorCtaText}>{discoverySponsor.house ? 'Upgrade to PLUS' : 'Visit Website'}</Text>
+          </TouchableOpacity>
+          <Text style={styles.sponsorHint}>Swipe right to open · left to skip</Text>
+        </View>
+      </Animated.View>
+    );
+  };
+
   const renderCard = () => {
+    if (discoverySponsor) return renderSponsoredCard();
     if (!topProfile) return renderEmpty();
 
     const photos = getSwipePhotos(topProfile);
@@ -2282,6 +2424,36 @@ const styles = StyleSheet.create({
     color: '#000',
     letterSpacing: 1,
   },
+  sponsorBody: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 22, gap: 14 },
+  sponsorIconTile: {
+    width: 84,
+    height: 84,
+    borderRadius: 26,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  sponsorPill: { borderRadius: 999, backgroundColor: '#111217', paddingHorizontal: 12, paddingVertical: 6 },
+  sponsorPillText: { color: '#FFF', fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  sponsorTitle: { fontSize: 28, lineHeight: 34, fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' },
+  sponsorTagline: { fontSize: 14, lineHeight: 21, fontWeight: '700', textAlign: 'center' },
+  sponsorCta: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.primary,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+  },
+  sponsorCtaText: { color: '#000', fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
+  sponsorHint: { marginTop: 8, fontSize: 10, fontWeight: '800', color: '#8A8A93', textAlign: 'center' },
   modeToggle: {
     flexDirection: 'row',
     gap: 4,

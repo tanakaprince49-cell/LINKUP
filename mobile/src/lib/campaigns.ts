@@ -60,7 +60,7 @@ export const CAMPAIGN_PLACEMENT_OPTIONS: { id: string; label: string; desc: stri
   { id: 'search', label: 'Search boost', desc: 'Sponsored slot pinned to the top of search', available: true },
   { id: 'hub', label: 'Hub strip', desc: 'Banner on the discovery home screen', available: true },
   { id: 'linky', label: 'Linky picks', desc: 'Linky may recommend you — always disclosed as sponsored', available: true },
-  { id: 'discover', label: 'Discover boost', desc: 'Boosted card in the people deck — next update', available: false },
+  { id: 'discover', label: 'Discover boost', desc: 'Sponsored card shows every 4th swipe in the people deck', available: true },
 ];
 
 /** House ads fill empty inventory: when no advertiser campaign is eligible we
@@ -363,10 +363,13 @@ export const injectSponsored = (organic: IdeaDeckItem[], sponsored: IdeaDeckItem
 };
 
 export const recordCampaignImpression = async (campaignId: string, viewerUid: string) => {
-  if (!campaignId || campaignId.startsWith('house_')) return;
+  if (!campaignId) return;
   const views = await campaignViewsToday(viewerUid, campaignId).catch(() => 0);
   if (views >= CAMPAIGN_IMPRESSION_DAILY_CAP) return;
+  // House promos count against the same per-day cap locally, but write nothing
+  // to Firestore (there is no campaign doc behind them).
   await AsyncStorage.setItem(seenKey(viewerUid, campaignId), String(views + 1)).catch(() => {});
+  if (campaignId.startsWith('house_')) return;
   updateDoc(doc(db, 'campaigns', campaignId), { statsImpressions: increment(1) }).catch(() => {});
 };
 
