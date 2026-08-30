@@ -20,18 +20,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { notifyUser } from '../lib/notify';
 import { useIsFocused } from '@react-navigation/native';
 import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { ChevronLeft, Globe, Heart, Lightbulb, MessageSquare, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
+import { ChevronLeft, Globe, Heart, Infinity as InfinityIcon, Lightbulb, MessageSquare, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { ensureDirectMatch } from '../lib/chat';
 import { requestConnection } from '../lib/connectionRequests';
 import { displayNameFor, isDiscoverableProfile } from '../lib/discovery';
-import { collectIdeaDeck, IdeaDeckItem, safeIdeaId } from '../lib/ideas';
+import { collectIdeaDeck, fillWithDemoIdeas, IdeaDeckItem, safeIdeaId } from '../lib/ideas';
 import { StartupIdea, UserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
-import { FREE_LIMITS, PRO_FEATURES, hasLinkupPro } from '../lib/paywall';
+import { IDEA_DECK_FREE_FOREVER, PRO_FEATURES, hasLinkupPro } from '../lib/paywall';
 import {
   injectSponsored,
   recordCampaignClick,
@@ -40,6 +40,7 @@ import {
   subscribeActiveCampaigns,
 } from '../lib/campaigns';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
+import { ikAvatar } from '../lib/ikImage';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { getIdeaHabit, markIdeaHabitDone, todayKey } from '../lib/dailyLoop';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
@@ -129,7 +130,10 @@ export default function IdeaDeckScreen({ navigation }: any) {
   rebuildDeckRef.current = () => {
     const organic = organicIdeasRef.current.filter((idea) => !swipedIdeasRef.current.has(idea.id));
     const merged = injectSponsored(organic, sponsoredIdeasRef.current);
-    setIdeas((current) => (merged.length > 0 || current.length === 0 ? merged : current));
+    // Real ideas always come first; demo ideas only top the deck up so a fresh
+    // install never lands on an empty screen.
+    const filled = fillWithDemoIdeas(merged, swipedIdeasRef.current);
+    setIdeas((current) => (filled.length > 0 || current.length === 0 ? filled : current));
   };
 
   useEffect(() => {
@@ -210,6 +214,12 @@ export default function IdeaDeckScreen({ navigation }: any) {
     if (!user?.uid || !idea?.id) return;
     if ((idea as any).sponsored && (idea as any).campaignId) {
       void recordCampaignClick((idea as any).campaignId, user.uid);
+    }
+    // Demo ideas are seeded sample content. Liking one must not write a swipe
+    // doc or notify their fictional owner.
+    if ((idea as any).demo) {
+      notifyUser('Sample idea', 'This is a demo idea showing how the deck works — swipe on to the next one.');
+      return;
     }
     const swipeId = `${idea.id}_${user.uid}`;
     const myName = displayNameFor(myProfile || user);
@@ -478,7 +488,11 @@ export default function IdeaDeckScreen({ navigation }: any) {
       <View style={styles.cardGlow} />
       <View style={styles.cardHeader}>
         <View style={styles.ideaIcon}>
-          <Lightbulb size={24} color="#000" fill="#00000012" />
+          {(idea as any).sponsored && (idea as any).logo ? (
+            <Image source={{ uri: ikAvatar((idea as any).logo) }} style={styles.ideaSponsorLogo} resizeMode="cover" />
+          ) : (
+            <Lightbulb size={24} color="#000" fill="#00000012" />
+          )}
         </View>
         <View style={[styles.sourcePill, (idea as any).sponsored && styles.sponsoredPill]}>
           <Text style={[styles.sourceText, (idea as any).sponsored && styles.sponsoredText]}>
@@ -674,7 +688,12 @@ export default function IdeaDeckScreen({ navigation }: any) {
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
           <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Ideas</Text>
-          <Text style={styles.headerSub}>Swipe ideas. Match on intent.</Text>
+          {IDEA_DECK_FREE_FOREVER ? (
+            <View style={[styles.freeForeverPill, { backgroundColor: COLORS.primary }]}>
+              <InfinityIcon size={10} color="#000" strokeWidth={3} />
+              <Text style={styles.freeForeverText}>FREE FOREVER · NO LIMITS</Text>
+            </View>
+          ) : null}
         </View>
         <TouchableOpacity onPress={() => setComposerOpen(true)} style={[styles.headerBtn, styles.plusBtn]}>
           <Plus size={22} color="#000" />
@@ -718,7 +737,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
       <PaywallModal
         visible={!!paywallFeature}
         feature={paywallFeature || PRO_FEATURES.startupAnalyzer}
-        description={`Free accounts get ${FREE_LIMITS.dailyIdeaSwipes} idea swipes per day and ${FREE_LIMITS.startupIdeas} posted ideas. LINKUP PLUS unlocks unlimited ideas.`}
+        description={'Ideas are free forever - swipe and post as many as you like. LINKUP PLUS unlocks discovery, Who Viewed You, advanced search and removes every sponsored card.'}
         onClose={() => setPaywallFeature('')}
       />
     </SafeAreaView>
@@ -803,6 +822,16 @@ const styles = StyleSheet.create({
   headerBtnGhost: { width: 44, height: 44 },
   headerTitle: { fontSize: 16, fontWeight: '900', letterSpacing: 4 },
   headerSub: { marginTop: 4, color: '#666', fontSize: 10, fontWeight: '900', letterSpacing: 0 },
+  freeForeverPill: {
+    marginTop: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  freeForeverText: { color: '#000', fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   deckWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 112 },
   previewLayer: { position: 'absolute', top: 36, zIndex: 1 },
@@ -835,7 +864,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  ideaSponsorLogo: { width: '100%', height: '100%' },
   sourcePill: { borderRadius: 999, backgroundColor: COLORS.primary, paddingHorizontal: 12, paddingVertical: 7 },
   sponsoredPill: { backgroundColor: '#111217' },
   sponsoredText: { color: '#FFF' },

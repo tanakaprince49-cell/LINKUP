@@ -8,6 +8,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
 import { subscribeToChallenges, GameChallenge, respondToChallenge, GameType } from '../lib/gameChallenges';
+import { SponsoredSlot } from '../components/SponsoredCard';
+import { hasLinkupPro } from '../lib/paywall';
 import GameChallengeModal from '../components/GameChallengeModal';
 import {
   Flame, Zap, Trophy, Target, TrendingUp,
@@ -126,6 +128,9 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         <Text style={[styles.repLine, { color: textColor(isDark, 'muted') }]}>
           REP {Number(profile?.reputationScore || 0)} · decays if you go quiet · ship 3 days to verify
         </Text>
+
+        {/* One sponsored card at a time; hidden for PLUS members. */}
+        <SponsoredSlot placement="play" viewerUid={user?.uid} enabled={!hasLinkupPro(profile)} />
 
         <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>GAMES</Text>
 

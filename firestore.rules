@@ -1277,6 +1277,28 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ------------------------------------------------------------
+    // LinkUp web billing (Paynow, Zimbabwe)
+    //
+    // Paynow is a one-time gateway with no recurring API, so web plans are
+    // sold as PREPAID TERMS. See PAYNOW_SETUP.md.
+    //
+    // Both collections are SERVER-WRITE ONLY: the /api/paynow* Vercel
+    // functions use Firebase Admin, which bypasses rules entirely. Clients
+    // can read their own records so the UI can show payment state, but a
+    // client can never mark its own transaction paid — that would be free
+    // PLUS for anyone who opened devtools.
+    // ------------------------------------------------------------
+    match /paynowTransactions/{reference} {
+      allow read: if isSignedIn() && existing().uid == request.auth.uid;
+      allow write: if false;
+    }
+
+    match /webSubscriptions/{uid} {
+      allow read: if isOwner(uid) || isCampaignAdmin();
+      allow write: if false;
+    }
+
     match /campaigns/{campaignId} {
       allow get, list: if isSignedIn();
       allow create: if isSignedIn() &&

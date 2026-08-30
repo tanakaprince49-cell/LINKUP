@@ -16,7 +16,16 @@ import {
   hasLinkupPro,
   saveLocalProEntitlement,
 } from '../lib/paywall';
+import {
+  TRIAL_DAYS,
+  describeSubscriptionOffer,
+  offerTokenFor,
+  pickSubscriptionOffer,
+  saveTrialStart,
+  trialThenPrice,
+} from '../lib/trial';
 import { publicProfileLink } from '../lib/profileLinks';
+import { checkPaynowPayment, startPaynowCheckout, takePendingReference } from '../lib/webCheckout';
 
 type PaywallModalProps = {
   visible: boolean;
@@ -45,6 +54,7 @@ const PRICING_PLANS = [
   {
     id: 'monthly',
     productId: LINKUP_PLUS_PRODUCT_ID,
+    webPlanKey: 'plus_1m',
     label: 'Monthly',
     originalPrice: '$25.00',
     price: LINKUP_PLUS_MONTHLY_PRICE,
@@ -55,6 +65,7 @@ const PRICING_PLANS = [
   {
     id: 'yearly',
     productId: LINKUP_PLUS_YEARLY_PRODUCT_ID,
+    webPlanKey: 'plus_12m',
     label: 'Yearly',
     price: LINKUP_PLUS_YEARLY_PRICE,
     cadence: '/yr',
@@ -128,14 +139,24 @@ export default function PaywallModal({
     [subscriptions]
   );
 
-  const getPlanPrice = React.useCallback(
-    (plan: PlusPlan) => {
-      const product = productForPlan(plan);
-      const offerPrice = product?.subscriptionOffers?.find((offer) => !!offer.displayPrice)?.displayPrice;
-      return offerPrice || product?.displayPrice || plan.price;
-    },
+  /** The offer to actually buy — prefers the free-trial offer over the bare base plan. */
+  const offerForPlan = React.useCallback(
+    (plan: PlusPlan) => pickSubscriptionOffer(productForPlan(plan)),
     [productForPlan]
   );
+
+  /** Real trial length + post-trial price straight from Play's pricing phases. */
+  const trialForPlan = React.useCallback(
+    (plan: PlusPlan) => describeSubscriptionOffer(offerForPlan(plan), plan.price, TRIAL_DAYS),
+    [offerForPlan]
+  );
+
+  const getPlanPrice = React.useCallback(
+    (plan: PlusPlan) => trialForPlan(plan).priceLabel,
+    [trialForPlan]
+  );
+
+  const selectedTrial = trialForPlan(selectedPrice);
 
   React.useEffect(() => {
     if (!visible) return;
@@ -183,6 +204,13 @@ export default function PaywallModal({
         ? fallbackDisplayName.slice(0, 100)
         : 'LINKUP Member';
     const unlockedAt = new Date().toISOString();
+    const purchasedProductId = getPurchaseProductId(purchase);
+    const purchasedPlan =
+      PRICING_PLANS.find((plan) => plan.productId === purchasedProductId) || selectedPrice;
+    // Play owns the trial clock; this local record only powers the countdown UI.
+    void saveTrialStart(user.uid, purchasedProductId, trialForPlan(purchasedPlan).trialDays).catch(
+      () => {}
+    );
     const existingSettings =
       profile?.settings && typeof profile.settings === 'object'
         ? profile.settings
@@ -206,7 +234,7 @@ export default function PaywallModal({
     const localProPatch = {
       ...buildLocalProEntitlement(unlockedAt),
       billingProvider: purchase.store || (Platform.OS === 'android' ? 'google-play' : 'app-store'),
-      subscriptionProductId: getPurchaseProductId(purchase),
+      subscriptionProductId: purchasedProductId,
       subscriptionTransactionId: purchase.transactionId || purchase.id || null,
       subscriptionPurchaseToken: purchase.purchaseToken || null,
       settings: proSettings,
@@ -227,7 +255,7 @@ export default function PaywallModal({
           plan: 'plus',
           subscriptionPlan: 'plus',
           subscriptionStatus: 'active',
-          subscriptionProductId: getPurchaseProductId(purchase),
+          subscriptionProductId: purchasedProductId,
           subscriptionTransactionId: purchase.transactionId || purchase.id || null,
           subscriptionPurchaseToken: purchase.purchaseToken || null,
           billingProvider: purchase.store || (Platform.OS === 'android' ? 'google-play' : 'app-store'),
@@ -291,11 +319,6 @@ export default function PaywallModal({
   }, [availablePurchases, visible]);
 
   const handleUpgrade = async () => {
-    if (Platform.OS === 'web') {
-      Alert.alert('LINKUP PLUS is free on web 🎉', 'Every feature is already unlocked on the web app — no purchase needed.');
-      return;
-    }
-
     if (isPro) {
       Alert.alert('LINKUP PLUS active', 'Your account already has LINKUP PLUS.');
       return;
@@ -307,8 +330,27 @@ export default function PaywallModal({
     }
 
     const plan = PRICING_PLANS.find((item) => item.id === selectedPlan) || PRICING_PLANS[0];
-    const product = productForPlan(plan);
-    const offerToken = product?.subscriptionOffers?.find((offer) => !!offer.offerTokenAndroid)?.offerTokenAndroid;
+
+    // WEB BILLING: Paynow. Prices are identical to Play (shared/pricing.js).
+    // Play policy: this branch must never be reachable from the Android app —
+    // it is guarded by Platform.OS and native keeps expo-iap below.
+    if (Platform.OS === 'web') {
+      setIsPurchasing(true);
+      setStoreError('');
+      try {
+        const { redirectUrl } = await startPaynowCheckout(plan.webPlanKey);
+        // Full navigation to Paynow's hosted page. We return via
+        // PAYNOW_RETURN_URL and settle up from usePaynowReturn().
+        (window as any)?.location?.assign?.(redirectUrl);
+      } catch (error: any) {
+        setIsPurchasing(false);
+        Alert.alert('Checkout failed', error?.message || 'Paynow could not start checkout right now.');
+      }
+      return;
+    }
+
+    // Buy the TRIAL offer, not the bare base plan — same subscription, $0 for 7 days.
+    const offerToken = offerTokenFor(offerForPlan(plan));
 
     if (Platform.OS === 'android' && !offerToken) {
       const message = storeError || 'LINKUP PLUS is not ready in Google Play yet. Check the subscription product IDs and base-plan offers in Play Console.';
@@ -340,7 +382,25 @@ export default function PaywallModal({
 
   const handleRestore = async () => {
     if (Platform.OS === 'web') {
-      Alert.alert('Nothing to restore', 'Purchases only exist on the mobile apps. LINKUP PLUS is free on web.');
+      if (restoreDisabled) return;
+      setIsRestoring(true);
+      try {
+        // No Play-style restore on web: the entitlement is already streaming
+        // from webSubscriptions/{uid}. All we can do is force the server to
+        // reconcile a payment whose webhook never landed.
+        const pending = takePendingReference();
+        if (pending) await checkPaynowPayment(pending);
+        Alert.alert(
+          'Restore purchases',
+          pending
+            ? 'We checked your latest Paynow payment. If it completed, LINKUP PLUS is now active.'
+            : 'LINKUP PLUS is tied to your LINKUP account, so it is already active here if you have paid.'
+        );
+      } catch (error: any) {
+        Alert.alert('Restore failed', error?.message || 'We could not check your Paynow payment right now.');
+      } finally {
+        setIsRestoring(false);
+      }
       return;
     }
     if (restoreDisabled) return;
@@ -389,9 +449,16 @@ export default function PaywallModal({
               </TouchableOpacity>
             </View>
 
-            <View style={[styles.popularBadge, { backgroundColor: isDark ? 'rgba(223, 251, 63, 0.14)' : COLORS.primaryGlow }]}> 
-              <Crown size={13} color={COLORS.primaryStrong} />
-              <Text style={[styles.popularText, { color: COLORS.lightTextPrimary }]}>FOR FOUNDERS, CREATORS & TEAMS</Text>
+            <View style={styles.badgeRow}>
+              <View style={[styles.popularBadge, { backgroundColor: isDark ? 'rgba(223, 251, 63, 0.14)' : COLORS.primaryGlow }]}> 
+                <Crown size={13} color={COLORS.primaryStrong} />
+                <Text style={[styles.popularText, { color: COLORS.lightTextPrimary }]}>FOR FOUNDERS, CREATORS & TEAMS</Text>
+              </View>
+              {selectedTrial.hasTrial ? (
+                <View style={[styles.trialRibbon, { backgroundColor: COLORS.primary }]}>
+                  <Text style={styles.trialRibbonText}>{`${selectedTrial.trialDays} DAYS FREE`}</Text>
+                </View>
+              ) : null}
             </View>
 
             <Text style={[styles.title, { color: textColor(isDark) }]}>Build your startup faster</Text>
@@ -433,7 +500,9 @@ export default function PaywallModal({
                       <Text style={[styles.priceValue, selected && styles.priceValueSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark) }]}>{storePrice}</Text>
                       <Text style={[styles.priceCadence, selected && styles.priceCadenceSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.cadence}</Text>
                     </View>
-                    <Text style={[styles.priceHelper, selected && styles.priceHelperSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.helper}</Text>
+                    <Text style={[styles.priceHelper, selected && styles.priceHelperSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>
+                      {trialForPlan(plan).hasTrial ? trialThenPrice(trialForPlan(plan), plan.cadence) : plan.helper}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
@@ -464,9 +533,16 @@ export default function PaywallModal({
                 ? 'OPENING GOOGLE PLAY...'
                 : isPro
                   ? 'PLUS ACTIVE'
-                  : 'Build Faster with PLUS'}
+                  : selectedTrial.hasTrial
+                    ? `START ${selectedTrial.trialDays}-DAY FREE TRIAL`
+                    : 'Build Faster with PLUS'}
             </Text>
           </TouchableOpacity>
+          {!isPro && selectedTrial.hasTrial ? (
+            <Text style={[styles.trialLegal, { color: textColor(isDark, 'muted') }]}>
+              {`Nothing is charged for ${selectedTrial.trialDays} days. From day ${selectedTrial.trialDays + 1} it renews at ${selectedTrial.priceLabel}${selectedPrice.cadence} — cancel anytime in Google Play.`}
+            </Text>
+          ) : null}
           <TouchableOpacity
             onPress={handleRestore}
             style={[styles.restoreBtn, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }, (restoreDisabled || isRestoring) && styles.restoreBtnDisabled]}
@@ -549,7 +625,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   popularBadge: {
-    marginTop: 18,
     alignSelf: 'flex-start',
     minHeight: 32,
     borderRadius: 12,
@@ -674,6 +749,32 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   priceHelperSelected: {
+  },
+  badgeRow: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  trialRibbon: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  trialRibbonText: {
+    color: '#000000',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  trialLegal: {
+    marginHorizontal: 18,
+    marginTop: 10,
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   scrollBody: {
     flex: 1,

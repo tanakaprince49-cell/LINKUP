@@ -1,5 +1,5 @@
-import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CAMPAIGNS_PRICES, formatUsd } from './pricing';
 import {
   addDoc,
   collection,
@@ -31,8 +31,8 @@ import { IdeaDeckItem } from './ideas';
 
 export const LINKUP_CAMPAIGNS_PRODUCT_ID = 'linkup_campaigns_monthly';
 export const LINKUP_CAMPAIGNS_YEARLY_PRODUCT_ID = 'linkup_campaigns_yearly';
-export const LINKUP_CAMPAIGNS_MONTHLY_PRICE = '$29.99';
-export const LINKUP_CAMPAIGNS_YEARLY_PRICE = '$249.99';
+export const LINKUP_CAMPAIGNS_MONTHLY_PRICE = formatUsd(CAMPAIGNS_PRICES.monthly);
+export const LINKUP_CAMPAIGNS_YEARLY_PRICE = formatUsd(CAMPAIGNS_PRICES.yearly);
 export const CAMPAIGNS_PRODUCT_IDS = [LINKUP_CAMPAIGNS_PRODUCT_ID, LINKUP_CAMPAIGNS_YEARLY_PRODUCT_ID];
 
 /** Max campaigns a subscriber may have in a live-ish state at once. */
@@ -61,6 +61,8 @@ export const CAMPAIGN_PLACEMENT_OPTIONS: { id: string; label: string; desc: stri
   { id: 'hub', label: 'Hub strip', desc: 'Banner on the discovery home screen', available: true },
   { id: 'linky', label: 'Linky picks', desc: 'Linky may recommend you — always disclosed as sponsored', available: true },
   { id: 'discover', label: 'Discover boost', desc: 'Sponsored card shows every 4th swipe in the people deck', available: true },
+  { id: 'news', label: 'News feed', desc: 'Sponsored card inside the AI news feed', available: true },
+  { id: 'play', label: 'Play tab', desc: 'Sponsored card on the Play screen', available: true },
 ];
 
 /** House ads fill empty inventory: when no advertiser campaign is eligible we
@@ -77,6 +79,8 @@ export type CampaignCreative = {
   tagline?: string;
   description: string;
   website?: string;
+  /** Advertiser logo (ImageKit URL). Shown on every sponsored placement. */
+  logoUrl?: string;
   category?: string[];
   ideaId?: string;
   title?: string;
@@ -121,8 +125,18 @@ const seenKey = (uid: string, campaignId: string) => `linkup:campaign-seen:${uid
 const clickedKey = (uid: string, campaignId: string) => `linkup:campaign-clicked:${uid || 'anonymous'}:${campaignId}:${todayStamp()}`;
 const accountCacheKey = (uid: string) => `linkup:campaigns-account:${uid || 'anonymous'}`;
 
-export const hasCampaignsPlan = (account: CampaignsAccount | null | undefined) => {
-  if (Platform.OS === 'web') return true;
+/**
+ * Does this account have an active Campaigns plan?
+ *
+ * No web shortcut: on web the plan is bought through Paynow and lives in
+ * webSubscriptions/{uid}, not campaignAccounts/{uid}. Callers on web pass the
+ * web flag in via `webOverride` (see withWebEntitlements).
+ */
+export const hasCampaignsPlan = (
+  account: CampaignsAccount | null | undefined,
+  webOverride?: boolean
+) => {
+  if (webOverride === true) return true;
   return String(account?.status || '').toLowerCase() === 'active';
 };
 
@@ -255,22 +269,47 @@ export const updateCampaignCreative = async (
   });
 };
 
+/**
+ * Admin check with two independent paths:
+ *   1. config/admins — the console-managed `uids` array (primary).
+ *   2. users/{uid}.isAdmin === true — per-account fallback so an admin can be
+ *      granted straight from the user doc without a Console/CLI edit.
+ * Each path owns its own try/catch so a failed read on one never masks the
+ * other, and neither can throw out of this function.
+ */
 export const isCampaignAdmin = async (uid: string) => {
   if (!uid) return false;
+
   try {
     const snap = await getDoc(doc(db, 'config', 'admins'));
     const uids = snap.data()?.uids;
-    return Array.isArray(uids) && uids.includes(uid);
+    if (Array.isArray(uids) && uids.includes(uid)) return true;
   } catch {
-    return false;
+    // Missing doc, permission denied, offline — fall through to the user doc.
   }
+
+  try {
+    const userSnap = await getDoc(doc(db, 'users', uid));
+    if (userSnap.exists() && userSnap.data()?.isAdmin === true) return true;
+  } catch {
+    // Fall through — not an admin.
+  }
+
+  return false;
 };
 
 // ---------------------------------------------------------------------------
 // Serving — viewer-side. This is where the anti-abuse guarantees live.
 // ---------------------------------------------------------------------------
 
-export type SponsoredIdeaDeckItem = IdeaDeckItem & { sponsored: true; campaignId: string; website?: string; house?: boolean };
+export type SponsoredIdeaDeckItem = IdeaDeckItem & {
+  sponsored: true;
+  campaignId: string;
+  website?: string;
+  house?: boolean;
+  /** Advertiser logo for the sponsored card. Empty for the house promo. */
+  logo?: string;
+};
 
 export const normalizeWebsite = (value: string) => {
   const trimmed = String(value || '').trim();
@@ -288,7 +327,7 @@ const campaignViewsToday = async (uid: string, campaignId: string) => {
   return Number.isFinite(count) ? Math.max(0, count) : 0;
 };
 
-const toSponsoredItem = (campaign: Campaign): SponsoredIdeaDeckItem => {
+export const toSponsoredItem = (campaign: Campaign): SponsoredIdeaDeckItem => {
   const creative = campaign.creative;
   const isProduct = creative.source === 'product';
   return {
@@ -297,6 +336,7 @@ const toSponsoredItem = (campaign: Campaign): SponsoredIdeaDeckItem => {
     sponsored: true,
     house: false,
     website: isProduct ? normalizeWebsite(creative.website || '') : '',
+    logo: creative.logoUrl || '',
     title: (isProduct ? creative.productName : creative.title) || 'Sponsored',
     description: (isProduct ? creative.tagline : creative.description) || creative.description || '',
     stage: isProduct ? 'Product' : creative.stage || 'Idea Stage',
@@ -324,6 +364,7 @@ export const buildHouseIdeaCard = (): SponsoredIdeaDeckItem => ({
   sponsored: true,
   house: true,
   website: '',
+  logo: '',
   title: 'Go PLUS',
   description: 'Unlimited swipes & rewinds, Who Viewed You, advanced search and zero sponsored cards.',
   stage: 'PLUS',
@@ -358,6 +399,24 @@ export const sponsoredIdeaCardsForViewer = async (campaigns: Campaign[], viewerU
     return [...eligible.slice(dayIndex), ...eligible.slice(0, dayIndex)].map(toSponsoredItem);
   }
   return eligible.map(toSponsoredItem);
+};
+
+/**
+ * Any active campaign, regardless of placement targeting.
+ *
+ * THIN-INVENTORY FALLBACK ONLY. If a surface has no advertiser who actually
+ * bought its placement, it shows the next best thing rather than an empty
+ * slot — otherwise a new placement (news, play) looks broken until someone
+ * happens to tick that box. It is never used to pad a surface that does have
+ * targeted inventory, and it should be deleted once inventory is healthy.
+ */
+export const fetchAnyActiveCampaigns = async (max: number = 1): Promise<Campaign[]> => {
+  try {
+    const snap = await getDocs(query(collection(db, 'campaigns'), where('status', '==', 'active'), limit(12)));
+    return snap.docs.map((entry) => ({ id: entry.id, ...entry.data() }) as Campaign).slice(0, max);
+  } catch {
+    return [];
+  }
 };
 
 /** One-shot fetch of active campaigns serving a given placement (search, hub, linky). */

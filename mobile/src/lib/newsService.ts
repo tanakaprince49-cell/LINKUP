@@ -219,14 +219,42 @@ const sampleArticles: NewsArticle[] = [
   },
 ];
 
-const freshSampleArticles = (): NewsArticle[] =>
-  sampleArticles.map((a, i) => ({
+// Rotates the fallback pool on every call. Previously the samples came back in
+// the same order with the same timestamps, so a refresh looked like nothing
+// happened at all even though the fetch had run.
+let sampleRotation = 0;
+const freshSampleArticles = (): NewsArticle[] => {
+  const offset = sampleRotation % sampleArticles.length;
+  // 7 is coprime with 20, so the order keeps changing between refreshes.
+  sampleRotation += 7;
+  const rotated = [...sampleArticles.slice(offset), ...sampleArticles.slice(0, offset)];
+  return rotated.map((a, i) => ({
     ...a,
-    id: `${a.id}-${Date.now()}`,
+    id: `${a.id}-${Date.now()}-${i}`,
     publishedAt: new Date(Date.now() - i * 3_600_000 * Math.random()).toISOString(),
   }));
+};
 
 export const fetchAINews = async (): Promise<NewsArticle[]> => {
+  // WEB goes through our own /api/news route. NewsAPI blocks browser origins
+  // on the developer plan, so a direct call from the page always failed and
+  // quietly returned the sample list — the feed looked frozen. The server
+  // route has no origin, and it keeps the key out of the bundle.
+  if (Platform.OS === 'web') {
+    try {
+      const response = await fetch('/api/news');
+      if (!response.ok) throw new Error(`news route returned ${response.status}`);
+      const json = await response.json();
+      if (!Array.isArray(json?.articles) || json.articles.length === 0) {
+        throw new Error('news route returned no articles');
+      }
+      return json.articles as NewsArticle[];
+    } catch (err) {
+      console.warn('News route fetch failed, using sample data:', err);
+      return freshSampleArticles();
+    }
+  }
+
   if (!API_KEY) return freshSampleArticles();
 
   try {

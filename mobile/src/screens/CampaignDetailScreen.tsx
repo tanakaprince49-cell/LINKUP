@@ -8,6 +8,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -30,6 +31,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
+import { ikAvatar } from '../lib/ikImage';
 import {
   CAMPAIGN_PLACEMENT_OPTIONS,
   Campaign,
@@ -118,8 +120,13 @@ export default function CampaignDetailScreen({ navigation, route }: any) {
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={[styles.statusHero, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-            <View style={[styles.statusPill, { backgroundColor: statusMeta.bg }]}>
-              <Text style={[styles.statusPillText, { color: statusMeta.color }]}>{statusMeta.label}</Text>
+            <View style={styles.heroTopRow}>
+              {!!campaign.creative?.logoUrl && (
+                <Image source={{ uri: ikAvatar(campaign.creative.logoUrl) }} style={styles.heroLogo} resizeMode="cover" />
+              )}
+              <View style={[styles.statusPill, { backgroundColor: statusMeta.bg }]}>
+                <Text style={[styles.statusPillText, { color: statusMeta.color }]}>{statusMeta.label}</Text>
+              </View>
             </View>
             <Text style={[styles.heroName, { color: textColor(isDark) }]}>{campaign.name}</Text>
             <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
@@ -250,6 +257,8 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   missingText: { fontSize: 13, fontWeight: '800' },
   scroll: { padding: 16, paddingTop: 6, paddingBottom: 48 },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  heroLogo: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.04)' },
   statusHero: { borderWidth: 1, borderRadius: 24, padding: 18, alignItems: 'flex-start', gap: 10 },
   statusPill: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   statusPillText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
