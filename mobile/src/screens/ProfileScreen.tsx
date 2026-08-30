@@ -386,6 +386,23 @@ export default function ProfileScreen({ navigation, route }: any) {
     return subscribeToConnectionGate(myProfile.uid, targetUserId, setConnectionGate);
   }, [isViewingOther, myProfile?.uid, targetUserId]);
   const profile = isViewingOther ? viewedProfile : myProfile;
+  const isProPlanActive = hasLinkupPro(profile);
+  const [plusTrial, setPlusTrial] = useState<TrialRecord | null>(null);
+
+  // Trial countdown for the account pill — Play owns billing, this is display only.
+  useEffect(() => {
+    if (!myProfile?.uid) {
+      setPlusTrial(null);
+      return;
+    }
+    let cancelled = false;
+    readActiveTrial(myProfile.uid, [LINKUP_PLUS_PRODUCT_ID, LINKUP_PLUS_YEARLY_PRODUCT_ID]).then((record) => {
+      if (!cancelled) setPlusTrial(record);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [myProfile?.uid, isProPlanActive]);
   const proLocked = isAndroidProLocked(myProfile);
   const openPaywall = (feature: string) => setPaywallFeature(feature);
 
@@ -1664,23 +1681,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const publicDiscoveryValue = isEditing
     ? !!(editData?.isVisible ?? true)
     : localPreferences.isVisible;
-  const isProPlanActive = hasLinkupPro(profile);
-  const [plusTrial, setPlusTrial] = useState<TrialRecord | null>(null);
 
-  // Trial countdown for the account pill — Play owns billing, this is display only.
-  useEffect(() => {
-    if (!myProfile?.uid) {
-      setPlusTrial(null);
-      return;
-    }
-    let cancelled = false;
-    readActiveTrial(myProfile.uid, [LINKUP_PLUS_PRODUCT_ID, LINKUP_PLUS_YEARLY_PRODUCT_ID]).then((record) => {
-      if (!cancelled) setPlusTrial(record);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [myProfile?.uid, isProPlanActive]);
   const turboConnectValue = isEditing
     ? !!(editData?.turboConnect ?? false)
     : localPreferences.turboConnect;
