@@ -486,7 +486,7 @@ function ViewersScreen({ navigation, route }: any) {
           <Text style={{ fontSize: 20, fontWeight: '900', color: textColor(isDark), textAlign: 'center' }}>
             {rows.length > 0
               ? `${rows.length} builder${rows.length === 1 ? '' : 's'} checked you out`
-              : 'See who's checking you out'}
+              : "See who's checking you out"}
           </Text>
           <Text style={{ marginTop: 10, fontSize: 14, lineHeight: 20, textAlign: 'center', color: textColor(isDark, 'muted') }}>
             Names, photos, and profiles of everyone researching you are a LINKUP PLUS superpower.
