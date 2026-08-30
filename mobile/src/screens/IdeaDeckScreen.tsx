@@ -34,6 +34,7 @@ import PaywallModal from '../components/PaywallModal';
 import { IDEA_DECK_FREE_FOREVER, PRO_FEATURES, hasLinkupPro } from '../lib/paywall';
 import {
   injectSponsored,
+  isSponsoredHiddenForViewer,
   recordCampaignClick,
   recordCampaignImpression,
   sponsorOneLiner,
@@ -130,10 +131,15 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const rebuildDeckRef = useRef<() => void>(() => {});
   rebuildDeckRef.current = () => {
     const organic = organicIdeasRef.current.filter((idea) => !swipedIdeasRef.current.has(idea.id));
-    const merged = injectSponsored(organic, sponsoredIdeasRef.current);
     // Real ideas always come first; demo ideas only top the deck up so a fresh
     // install never lands on an empty screen.
-    const filled = fillWithDemoIdeas(merged, swipedIdeasRef.current);
+    const filled = fillWithDemoIdeas(organic, swipedIdeasRef.current);
+    // Sponsored is injected AFTER the demo fill, on purpose. Injecting first
+    // put the ad at index 3 of the *organic* deck — and when the network has
+    // few real ideas, the demo filler pushed it to card #1 or buried it. The
+    // slot is a promise about what the viewer sees, so it is placed in the
+    // deck they actually get: the 4th card.
+    const merged = injectSponsored(filled, sponsoredIdeasRef.current);
     setIdeas((current) => (filled.length > 0 || current.length === 0 ? filled : current));
   };
 
@@ -170,12 +176,16 @@ export default function IdeaDeckScreen({ navigation }: any) {
     return () => unsubscribe();
   }, [isFocused, user?.uid]);
 
-  // Sponsored cards: PLUS members are ad-free; everyone else sees at most
-  // 1 sponsored card per SPONSORED_INTERVAL organic cards.
-  const viewerIsPlus = hasLinkupPro(myProfile);
+  // Sponsored cards: PLUS members are ad-free — except founder/admin accounts,
+  // who need to see the placements to review and QA them. Everyone else sees
+  // at most 1 sponsored card per SPONSORED_INTERVAL organic cards.
+  const adsHiddenForViewer = isSponsoredHiddenForViewer(myProfile, {
+    email: user?.email,
+    isAdmin: (myProfile as any)?.isAdmin,
+  });
   useEffect(() => {
     if (!user?.uid || !isFocused) return;
-    if (Platform.OS !== 'web' && viewerIsPlus) {
+    if (Platform.OS !== 'web' && adsHiddenForViewer) {
       sponsoredIdeasRef.current = [];
       rebuildDeckRef.current();
       return;
@@ -195,7 +205,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
       cancelled = true;
       unsubscribeSponsored();
     };
-  }, [isFocused, user?.uid, viewerIsPlus]);
+  }, [isFocused, user?.uid, adsHiddenForViewer]);
 
   // Impression bookkeeping: one counted view per render of a sponsored top card,
   // capped per viewer per day inside recordCampaignImpression.

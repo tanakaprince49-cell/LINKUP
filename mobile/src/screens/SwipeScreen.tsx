@@ -39,6 +39,7 @@ import {
   Campaign,
   SponsoredIdeaDeckItem,
   buildHouseIdeaCard,
+  isSponsoredHiddenForViewer,
   recordCampaignClick,
   recordCampaignImpression,
   sponsorOneLiner,
@@ -345,6 +346,13 @@ export default function SwipeScreen({ navigation }: any) {
 
   // Free discovery budget: 12 profiles per 12 hours. PLUS = unlimited.
   const isProUser = hasLinkupPro(myProfile);
+  // Ad visibility is its own switch: PLUS is ad-free, but founder/admin
+  // accounts still see the placements so they can review and QA them. This
+  // NEVER gates entitlement — budget, paywall and features read isProUser.
+  const adsHiddenForViewer = isSponsoredHiddenForViewer(myProfile, {
+    email: user?.email,
+    isAdmin: (myProfile as any)?.isAdmin,
+  });
 
   // --- Discover boost (sponsored interstitial) ----------------------------
   // A sponsored product card shows as an interstitial every
@@ -366,7 +374,7 @@ export default function SwipeScreen({ navigation }: any) {
   const swipesSinceSponsorRef = useRef(0);
 
   useEffect(() => {
-    if (!user?.uid || isProUser) {
+    if (!user?.uid || adsHiddenForViewer) {
       sponsorInventoryRef.current = [];
       setDiscoverySponsor(null);
       return;
@@ -386,7 +394,7 @@ export default function SwipeScreen({ navigation }: any) {
       cancelled = true;
       unsubscribeSponsored();
     };
-  }, [user?.uid, isProUser]);
+  }, [user?.uid, adsHiddenForViewer]);
 
   /**
    * Choose the next sponsored card.
@@ -416,7 +424,7 @@ export default function SwipeScreen({ navigation }: any) {
   };
 
   const maybeShowDiscoverySponsor = () => {
-    if (isProUser || !user?.uid) return;
+    if (adsHiddenForViewer || !user?.uid) return;
     const next = pickNextSponsor();
     if (!next) return;
     setDiscoverySponsor(next);

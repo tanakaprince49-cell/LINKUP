@@ -16,6 +16,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { hasLinkupPro } from './paywall';
 import { isAdminEmail, isAdminIdentity, type AdminIdentity } from './admin';
 import { IdeaDeckItem } from './ideas';
 
@@ -334,6 +335,18 @@ export const normalizeWebsite = (value: string) => {
 
 export const websiteDisplay = (value: string) =>
   normalizeWebsite(value).replace(/^https?:\/\//i, '').replace(/\/+$/, '').slice(0, 40);
+
+/**
+ * Should this viewer be shielded from sponsored placements?
+ *
+ * PLUS members are ad-free — with exactly one exception: the founder/admin
+ * accounts. You cannot review, price or QA an ad product you are not allowed
+ * to see, so allowlisted owners get the sponsored slots a normal PLUS
+ * subscriber is shielded from. Ordinary PLUS members are unaffected, and the
+ * entitlement checks (budget, paywall, features) never read this.
+ */
+export const isSponsoredHiddenForViewer = (profile: any, identity?: AdminIdentity): boolean =>
+  hasLinkupPro(profile) && !isAdminIdentity(identity);
 
 /**
  * ONE scannable line: what the product actually does.
