@@ -255,15 +255,33 @@ export const updateCampaignCreative = async (
   });
 };
 
+/**
+ * Admin check with two independent paths:
+ *   1. config/admins — the console-managed `uids` array (primary).
+ *   2. users/{uid}.isAdmin === true — per-account fallback so an admin can be
+ *      granted straight from the user doc without a Console/CLI edit.
+ * Each path owns its own try/catch so a failed read on one never masks the
+ * other, and neither can throw out of this function.
+ */
 export const isCampaignAdmin = async (uid: string) => {
   if (!uid) return false;
+
   try {
     const snap = await getDoc(doc(db, 'config', 'admins'));
     const uids = snap.data()?.uids;
-    return Array.isArray(uids) && uids.includes(uid);
+    if (Array.isArray(uids) && uids.includes(uid)) return true;
   } catch {
-    return false;
+    // Missing doc, permission denied, offline — fall through to the user doc.
   }
+
+  try {
+    const userSnap = await getDoc(doc(db, 'users', uid));
+    if (userSnap.exists() && userSnap.data()?.isAdmin === true) return true;
+  } catch {
+    // Fall through — not an admin.
+  }
+
+  return false;
 };
 
 // ---------------------------------------------------------------------------
