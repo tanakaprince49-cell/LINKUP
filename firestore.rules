@@ -47,12 +47,12 @@ service cloud.firestore {
         (!data.keys().hasAny(['isStealthMode']) || data.isStealthMode == false);
     }
 
-    match /{document=**} {
-      allow read, write: if isSignedIn();
-    }
-
     // ------------------------------------------------------------
     // Users / public builder profiles
+    // NOTE: there is deliberately NO wildcard match in this file. Every
+    // collection the app touches has an explicit block; anything else
+    // falls through to the Firestore default: deny. If you add a new
+    // collection, add its block here or writes will fail in production.
     // ------------------------------------------------------------
     match /users/{userId} {
       function hasDirectMatchWithSignedInUser() {
@@ -1298,6 +1298,58 @@ service cloud.firestore {
           incoming().statsClicks >= existing().statsClicks &&
           incoming().statsClicks <= existing().statsClicks + 8)
       );
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------
+    // Feed posts (+ nested comments/replies)
+    // Anyone signed in can read and react (counters/likes/viewedBy);
+    // only the author can create-as-self, edit content, or delete.
+    // ------------------------------------------------------------
+    match /posts/{postId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() &&
+        incoming().authorId == request.auth.uid &&
+        incoming().content is string &&
+        incoming().content.size() <= 8000;
+      allow update: if isSignedIn() && (
+        existing().authorId == request.auth.uid ||
+        incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'viewsCount', 'likedBy', 'viewedBy'])
+      );
+      allow delete: if isSignedIn() && existing().authorId == request.auth.uid;
+
+      match /comments/{commentId} {
+        allow get, list: if isSignedIn();
+        allow create: if isSignedIn() &&
+          incoming().userId == request.auth.uid &&
+          incoming().content is string &&
+          incoming().content.size() <= 2000;
+        allow update: if isSignedIn() &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['likes']);
+        allow delete: if isSignedIn() && (
+          existing().userId == request.auth.uid ||
+          get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid
+        );
+
+        match /replies/{replyId} {
+          allow get, list: if isSignedIn();
+          allow create: if isSignedIn() &&
+            incoming().userId == request.auth.uid &&
+            incoming().content is string &&
+            incoming().content.size() <= 2000;
+          allow update: if isSignedIn() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['likes']);
+          allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+        }
+      }
+    }
+
+    // ------------------------------------------------------------
+    // Legacy per-user profile aux store (Linky score etc.)
+    // ------------------------------------------------------------
+    match /profiles/{userId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isOwner(userId);
       allow delete: if false;
     }
   }
