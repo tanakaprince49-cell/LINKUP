@@ -36,7 +36,7 @@ import { roleInfoFor } from '../lib/roles';
 import { X, Heart, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare } from 'lucide-react-native';
 import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
-import { PRO_FEATURES } from '../lib/paywall';
+import { consumeWindowUsage, FREE_LIMITS, getWindowUsage, hasLinkupPro, PRO_FEATURES, SWIPE_USAGE_WINDOW_HOURS } from '../lib/paywall';
 import { compactProfileForList, storedProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
 import { ikCard } from '../lib/ikImage';
@@ -320,6 +320,28 @@ export default function SwipeScreen({ navigation }: any) {
   const [contactBusy, setContactBusy] = useState(false);
   const connectionNote = useConnectionNote();
   const [paywallFeature, setPaywallFeature] = useState('');
+
+  // Free discovery budget: 12 profiles per 12 hours. PLUS = unlimited.
+  const isProUser = hasLinkupPro(myProfile);
+  const swipeBudgetRef = useRef<number | null>(null);
+  const [swipesLeft, setSwipesLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.uid || isProUser) {
+      swipeBudgetRef.current = null;
+      setSwipesLeft(null);
+      return;
+    }
+    (async () => {
+      const usage = await getWindowUsage(user.uid, 'discovery-swipes', SWIPE_USAGE_WINDOW_HOURS);
+      if (cancelled) return;
+      const left = Math.max(0, FREE_LIMITS.swipesPer12Hours - usage.used);
+      swipeBudgetRef.current = left;
+      setSwipesLeft(left);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.uid, isProUser]);
   const [progressHydrated, setProgressHydrated] = useState(false);
 
   const swipedSessionIdsRef = useRef<Set<string>>(new Set());
@@ -925,6 +947,12 @@ export default function SwipeScreen({ navigation }: any) {
       void handleLike(item);
     }
 
+    if (!isProUser && user?.uid) {
+      swipeBudgetRef.current = Math.max(0, (swipeBudgetRef.current ?? FREE_LIMITS.swipesPer12Hours) - 1);
+      setSwipesLeft(swipeBudgetRef.current);
+      void consumeWindowUsage(user.uid, 'discovery-swipes', FREE_LIMITS.swipesPer12Hours, SWIPE_USAGE_WINDOW_HOURS).catch(() => {});
+    }
+
     trackAction(direction === 'right' ? 'like' : 'swipe');
   };
 
@@ -967,6 +995,10 @@ export default function SwipeScreen({ navigation }: any) {
   const animateSwipeOut = (direction: 'left' | 'right') => {
     const swipedItem = profiles[0];
     if (isAnimatingRef.current || !swipedItem) return;
+    if (!isProUser && (swipeBudgetRef.current ?? Number.POSITIVE_INFINITY) <= 0) {
+      openPaywall('Unlimited Discovery');
+      return;
+    }
 
     startSwipeAnimation(direction, swipedItem);
   };
@@ -978,6 +1010,11 @@ export default function SwipeScreen({ navigation }: any) {
   const rewindLast = () => {
     const last = lastSwipedProfileRef.current;
     if (!last || isAnimatingRef.current) return;
+    // Rewinds are a PLUS power tool — free swipes are final.
+    if (!isProUser) {
+      openPaywall('Unlimited Rewinds');
+      return;
+    }
     lastSwipedProfileRef.current = null;
     swipePosition.setValue({ x: 0, y: 0 });
     isAnimatingRef.current = false;
@@ -1382,6 +1419,20 @@ export default function SwipeScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
           <ProCrownBadge />
+          {!isProUser && swipesLeft != null ? (
+            <View style={{
+              paddingHorizontal: 9,
+              paddingVertical: 4,
+              borderRadius: 999,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
+              borderWidth: 1,
+              borderColor: swipesLeft > 0 ? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)') : '#EF4444',
+            }}>
+              <Text style={{ fontSize: 11, fontWeight: '800', color: swipesLeft > 0 ? COLORS.primaryStrong : '#EF4444' }}>
+                {swipesLeft > 0 ? `${swipesLeft} left` : 'Limit hit'}
+              </Text>
+            </View>
+          ) : null}
           <TouchableOpacity onPress={rewindLast} style={[styles.topBtn, isCompactWeb && styles.compactTopBtn]}>
             <RotateCcw size={18} color={textColor(isDark)} />
           </TouchableOpacity>

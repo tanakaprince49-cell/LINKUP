@@ -18,7 +18,7 @@ import { uploadImageToImageKit } from '../lib/imagekitUpload';
 import { AppImage } from '../components/AppImage';
 import { ikAvatar, ikImage } from '../lib/ikImage';
 import PaywallModal from '../components/PaywallModal';
-import { isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
+import { consumeMonthlyUsage, FREE_LIMITS, isAndroidProLocked, PRO_FEATURES } from '../lib/paywall';
 import { MOBILE_CHAT_MESSAGE_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
 import { subscribeToConnectionGate, type ConnectionGate } from '../lib/connectionRequests';
@@ -218,8 +218,12 @@ export default function ChatScreen({ route, navigation }: any) {
   const handleDraftIntro = async () => {
     if (introBusy) return;
     if (proLocked) {
-      openPaywall(PRO_FEATURES.warmIntro);
-      return;
+      // Free tier taster: exactly 1 AI warm intro per month, then the paywall.
+      const usage = await consumeMonthlyUsage(user?.uid || 'anonymous', 'warmIntro', FREE_LIMITS.warmIntrosPerMonth);
+      if (!usage.allowed) {
+        openPaywall(PRO_FEATURES.warmIntro);
+        return;
+      }
     }
     setIntroBusy(true);
     try {

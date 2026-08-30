@@ -10,14 +10,63 @@ export const PRO_FEATURES = {
 } as const;
 
 export const FREE_LIMITS = {
-  swipesPer12Hours: 9999,
-  dailyIdeaSwipes: 9999,
+  swipesPer12Hours: 12,
+  dailyIdeaSwipes: 5,
   dailyStartupAnalyzer: 3,
-  savedProfiles: 9999,
-  projects: 9999,
-  startupIdeas: 9999,
-  dailyRecommendations: 2,
+  savedProfiles: 5,
+  projects: 3,
+  startupIdeas: 3,
+  weeklyRecommendations: 3,
+  warmIntrosPerMonth: 1,
 } as const;
+
+// ISO week key like 2026-W35 (weekly allowances reset on Monday).
+export const getCurrentWeekKey = () => {
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+};
+
+const currentMonthKey = () => new Date().toISOString().slice(0, 7);
+
+const periodUsageKey = (uid: string, feature: string, period: string) =>
+  `linkup:free-usage:${uid}:${feature}:${period}`;
+
+const getPeriodUsage = async (uid: string, feature: string, period: string) => {
+  const raw = await AsyncStorage.getItem(periodUsageKey(uid || 'anonymous', feature, period));
+  const count = Number.parseInt(String(raw || '0'), 10);
+  return Number.isFinite(count) ? Math.max(0, count) : 0;
+};
+
+const consumePeriodUsage = async (uid: string, feature: string, limit: number, period: string) => {
+  if (Platform.OS === 'web') {
+    return { allowed: true, used: 0, remaining: limit, limit };
+  }
+  const key = periodUsageKey(uid || 'anonymous', feature, period);
+  const current = await getPeriodUsage(uid || 'anonymous', feature, period);
+  if (current >= limit) {
+    return { allowed: false, used: current, remaining: 0, limit };
+  }
+  const next = current + 1;
+  await AsyncStorage.setItem(key, String(next));
+  return { allowed: true, used: next, remaining: Math.max(0, limit - next), limit };
+};
+
+export const getWeeklyUsage = (uid: string, feature: string) =>
+  getPeriodUsage(uid, feature, getCurrentWeekKey());
+
+export const consumeWeeklyUsage = (uid: string, feature: string, limit: number) =>
+  consumePeriodUsage(uid, feature, limit, getCurrentWeekKey());
+
+export const getMonthlyUsage = (uid: string, feature: string) =>
+  getPeriodUsage(uid, feature, currentMonthKey());
+
+export const consumeMonthlyUsage = (uid: string, feature: string, limit: number) =>
+  consumePeriodUsage(uid, feature, limit, currentMonthKey());
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
 const usageKey = (uid: string, feature: string) => `linkup:free-usage:${uid}:${feature}:${todayKey()}`;
@@ -113,33 +162,36 @@ export const buildLocalFreeEntitlement = (canceledAt: string = new Date().toISOS
   verificationProgram: '',
   verifiedBy: '',
   verifiedAt: null,
-  turboConnect: true,
-  analyticsUnlocked: true,
-  profileAnalyticsUnlocked: true,
-  readReceiptsEnabled: true,
-  messagePriorityEnabled: true,
+  // Free tier = the demo, not the product. Downgraded accounts keep their
+  // profile and matches but lose every PLUS lever. Gating constants live in
+  // FREE_LIMITS; these flags are the hard on/off switches.
+  turboConnect: false,
+  analyticsUnlocked: false,
+  profileAnalyticsUnlocked: false,
+  readReceiptsEnabled: false,
+  messagePriorityEnabled: false,
   entitlements: {
     pro: false,
     linkupPro: false,
     linkupPlus: false,
-    unlimitedSwipes: true,
-    unlimitedIdeaSwipes: true,
-    advancedSearch: true,
-    aiSearch: true,
-    savedSearchAlerts: true,
-    profileViewers: true,
-    unlimitedSavedProfiles: true,
-    turboConnect: true,
-    priorityOpportunities: true,
-    aiMatchReasons: true,
-    profileImprovementSuggestions: true,
+    unlimitedSwipes: false,
+    unlimitedIdeaSwipes: false,
+    advancedSearch: false,
+    aiSearch: false,
+    savedSearchAlerts: false,
+    profileViewers: false,
+    unlimitedSavedProfiles: false,
+    turboConnect: false,
+    priorityOpportunities: false,
+    aiMatchReasons: false,
+    profileImprovementSuggestions: false,
     unlimitedStartupAnalyzer: false,
     warmIntroGenerator: false,
     moreMedia: true,
     verifiedFounder: false,
-    profileAnalytics: true,
-    readReceipts: true,
-    messagePriority: true,
+    profileAnalytics: false,
+    readReceipts: false,
+    messagePriority: false,
   },
 });
 

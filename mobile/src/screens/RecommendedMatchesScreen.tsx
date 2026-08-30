@@ -13,7 +13,7 @@ import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
-import { consumeDailyUsage, FREE_LIMITS, getDailyUsage } from '../lib/paywall';
+import { consumeWeeklyUsage, FREE_LIMITS, getCurrentWeekKey, getWeeklyUsage } from '../lib/paywall';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import ProCrownBadge from '../components/ProCrownBadge';
@@ -58,21 +58,22 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
   }, [me, people]);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const currentWeek = useMemo(() => getCurrentWeekKey(), []);
 
   useEffect(() => {
     if (!user?.uid) return;
 
     const loadDailyUsage = async () => {
-      const used = await getDailyUsage(user.uid, 'dailyRecommendations');
+      const used = await getWeeklyUsage(user.uid, 'recommendations');
       setDailyRecommendationsUsed(used);
       const lastDate = await AsyncStorage.getItem(`linkup:last-recommendation-date:${user.uid}`);
       setLastRecommendationDate(lastDate);
 
       const lastNotifiedDate = await AsyncStorage.getItem(`linkup:last-notified-date:${user.uid}`);
-      if (lastDate !== today && lastNotifiedDate !== today) {
+      if (lastDate !== currentWeek && lastNotifiedDate !== today) {
         notifyUser(
-          'Today’s 2 picks',
-          'Two builders ranked for you today. Treat them like real intros, not a feed.',
+          'This week’s 3 picks',
+          'Three builders ranked for you this week. Treat them like real intros, not a feed.',
           [{ text: 'OK', onPress: () => AsyncStorage.setItem(`linkup:last-notified-date:${user.uid}`, today) }]
         );
       }
@@ -148,7 +149,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
   }, [isFocused, user?.uid, me?.uid, people.length, lastRankedProfileIds]);
 
   const recommended = useMemo(() => {
-    const limit = lastRecommendationDate === today ? Math.max(0, FREE_LIMITS.dailyRecommendations - dailyRecommendationsUsed) : FREE_LIMITS.dailyRecommendations;
+    const limit = lastRecommendationDate === currentWeek ? Math.max(0, FREE_LIMITS.weeklyRecommendations - dailyRecommendationsUsed) : FREE_LIMITS.weeklyRecommendations;
     return people
       .map((person) => {
         const score = scores[person.uid]?.score ?? localScores[person.uid]?.score ?? 1;
@@ -159,7 +160,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       .sort((left, right) => right.weight - left.weight)
       .slice(0, limit)
       .map((entry) => entry.person);
-  }, [people, scores, localScores, dailyRecommendationsUsed, lastRecommendationDate, today]);
+  }, [people, scores, localScores, dailyRecommendationsUsed, lastRecommendationDate, today, currentWeek]);
 
   const openChat = async (profile: UserProfile) => {
     if (!user?.uid || !profile?.uid) return;
@@ -172,9 +173,9 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       note = drafted;
     }
 
-    const usage = await consumeDailyUsage(user.uid, 'dailyRecommendations', FREE_LIMITS.dailyRecommendations);
-    if (!usage.allowed && lastRecommendationDate === today) {
-      notifyUser('That’s today’s 2', 'Come back tomorrow for 2 new recommended builders.');
+    const usage = await consumeWeeklyUsage(user.uid, 'recommendations', FREE_LIMITS.weeklyRecommendations);
+    if (!usage.allowed && lastRecommendationDate === currentWeek) {
+      notifyUser('That’s this week’s 3', 'Come back next week for 3 new recommended builders.');
       return;
     }
 
@@ -188,8 +189,8 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         message: note,
         recipientName: displayNameFor(profile),
       });
-      await AsyncStorage.setItem(`linkup:last-recommendation-date:${user.uid}`, today);
-      setLastRecommendationDate(today);
+      await AsyncStorage.setItem(`linkup:last-recommendation-date:${user.uid}`, currentWeek);
+      setLastRecommendationDate(currentWeek);
       setDailyRecommendationsUsed(usage.used + 1);
       if (result.action === 'chat' && result.matchId) {
         navigation.navigate('Chat', { matchId: result.matchId, otherUser: profile });
@@ -341,9 +342,9 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           Ranked by shared skills, industries, goals, work style, and compatibility so you can find useful people faster.
         </Text>
         <Text style={styles.heroSub}>
-          {lastRecommendationDate === today
-            ? `${dailyRecommendationsUsed}/${FREE_LIMITS.dailyRecommendations} daily recommendations used`
-            : `${FREE_LIMITS.dailyRecommendations} daily recommendations available`}
+          {lastRecommendationDate === currentWeek
+            ? `${dailyRecommendationsUsed}/${FREE_LIMITS.weeklyRecommendations} weekly recommendations used`
+            : `${FREE_LIMITS.weeklyRecommendations} weekly recommendations available`}
         </Text>
         <Text style={styles.aiStatus}>{aiLoading ? 'RANKING...' : 'MATCHES READY'}</Text>
       </View>
