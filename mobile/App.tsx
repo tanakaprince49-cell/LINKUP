@@ -768,9 +768,10 @@ export default function App() {
 
     const checkForDeploy = () => {
       try {
-        const current = Array.prototype.map
-          .call(document.querySelectorAll('script[src]'), (el: any) => String(el?.src || ''))
-          .find((src: string) => src.includes('/index-') && src.endsWith('.js'));
+        const scripts = Array.from(document.querySelectorAll('script[src]')) as HTMLScriptElement[];
+        const current = scripts
+          .map((el) => String(el?.src || ''))
+          .find((src) => src.includes('/index-') && src.endsWith('.js'));
         if (!current) return;
         const last = Number(window.sessionStorage?.getItem(RELOAD_KEY) || 0);
         if (Date.now() - last < THROTTLE_MS) return;
