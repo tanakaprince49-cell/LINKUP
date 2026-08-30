@@ -20,7 +20,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [theme, setTheme] = useState<Theme>('light');
   // Sync source of truth (kv-store/localStorage) — matches what index.ts
   // applied pre-boot, so context never disagrees with the module palettes.
-  const [brandFlavor, setBrandFlavorState] = useState<BrandFlavor>(() => getStoredBrandFlavorSync() || 'white');
+  const [brandFlavor, setBrandFlavorState] = useState<BrandFlavor>(() => getStoredBrandFlavorSync() || 'yellow');
   const [ready, setReady] = useState(false);
 
   useEffect(() => {

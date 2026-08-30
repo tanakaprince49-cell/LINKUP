@@ -1119,7 +1119,9 @@ export default function SwipeScreen({ navigation }: any) {
       }).catch(() => {});
     }
 
-    if (!isProUser && user?.uid) {
+    // Scroll mode is unlimited, so it must not spend the swipe budget either —
+    // otherwise the badge would count down towards a wall that isn't there.
+    if (!isProUser && user?.uid && mode !== 'scroll') {
       swipeBudgetRef.current = Math.max(0, (swipeBudgetRef.current ?? FREE_LIMITS.swipesPer12Hours) - 1);
       setSwipesLeft(swipeBudgetRef.current);
       void consumeWindowUsage(user.uid, 'discovery-swipes', FREE_LIMITS.swipesPer12Hours, SWIPE_USAGE_WINDOW_HOURS).catch(() => {});
@@ -1173,8 +1175,12 @@ export default function SwipeScreen({ navigation }: any) {
   const animateSwipeOut = (direction: 'left' | 'right') => {
     const swipedItem = profiles[0];
     if (isAnimatingRef.current || (!discoverySponsor && !swipedItem)) return;
-    // Sponsored cards never hit the swipe-budget gate.
-    if (!discoverySponsor && !isProUser && (swipeBudgetRef.current ?? Number.POSITIVE_INFINITY) <= 0) {
+    // Sponsored cards never hit the swipe-budget gate, and neither does scroll
+    // mode: the 12-per-12h budget belongs to the swipe deck. Without this the
+    // Pass/Like buttons in the scroll feed (which route through here) locked
+    // the feed the moment a card-mode budget ran out, even though scrolling
+    // itself never spent any of it.
+    if (!discoverySponsor && !isProUser && mode !== 'scroll' && (swipeBudgetRef.current ?? Number.POSITIVE_INFINITY) <= 0) {
       openPaywall('Unlimited Discovery');
       return;
     }
@@ -1284,6 +1290,38 @@ export default function SwipeScreen({ navigation }: any) {
     );
   };
 
+  /**
+   * Sponsored card chrome.
+   *
+   * The card-mode styles hardcoded `#FFFFFF` for the title and a white pill,
+   * so in light mode the product name was white-on-white and simply vanished
+   * (and the "SPONSORED" pill had no background to speak of). Everything
+   * here now derives from the theme; the pill uses the same ink-on-paper
+   * inversion as the Campaigns hero so it reads in both modes.
+   */
+  const sponsorPillBg = isDark ? '#FFFFFF' : COLORS.inkButton;
+  const sponsorPillInk = isDark ? '#0A0B0D' : '#FFFFFF';
+  const sponsorTileBg = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(10, 11, 13, 0.06)';
+  const sponsorIconInk = isDark ? '#FFFFFF' : COLORS.inkButton;
+
+  const renderSponsorBadge = () => (
+    <View style={[styles.sponsorPill, { backgroundColor: sponsorPillBg }]}>
+      <Text style={[styles.sponsorPillText, { color: sponsorPillInk }]}>SPONSORED</Text>
+    </View>
+  );
+
+  const renderSponsorLogo = () => (
+    <View style={[styles.sponsorIconTile, !discoverySponsor?.logo && { backgroundColor: sponsorTileBg }]}>
+      {discoverySponsor?.logo ? (
+        <Image source={{ uri: ikAvatar(discoverySponsor.logo) }} style={styles.sponsorLogo} resizeMode="cover" />
+      ) : discoverySponsor?.house ? (
+        <Zap size={38} color={sponsorIconInk} fill={sponsorIconInk} />
+      ) : (
+        <Package size={38} color={sponsorIconInk} />
+      )}
+    </View>
+  );
+
   const renderSponsoredCard = () => {
     if (!discoverySponsor) return null;
     return (
@@ -1309,24 +1347,16 @@ export default function SwipeScreen({ navigation }: any) {
         {...(infoExpanded ? {} : panResponder.panHandlers)}
       >
         <View style={styles.sponsorBody}>
-          <View style={[styles.sponsorPill, styles.scrollSponsorPill]}>
-            <Text style={[styles.sponsorPillText, styles.scrollSponsorPillText]}>SPONSORED</Text>
-          </View>
-          <View style={[styles.sponsorIconTile, !discoverySponsor.logo && { backgroundColor: COLORS.primary }]}>
-            {discoverySponsor.logo ? (
-              <Image source={{ uri: ikAvatar(discoverySponsor.logo) }} style={styles.sponsorLogo} resizeMode="cover" />
-            ) : discoverySponsor.house ? (
-              <Zap size={38} color={COLORS.lightTextPrimary} fill={COLORS.lightTextPrimary} />
-            ) : (
-              <Package size={38} color={COLORS.lightTextPrimary} />
-            )}
-          </View>
-          <Text style={[styles.sponsorTitle, styles.scrollSponsorTitle]} numberOfLines={3}>
+          {renderSponsorBadge()}
+          {renderSponsorLogo()}
+          <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={2}>
             {discoverySponsor.title}
           </Text>
-          <Text style={[styles.sponsorTagline, styles.scrollSponsorTagline]} numberOfLines={4}>
-            {discoverySponsor.description}
-          </Text>
+          {!!discoverySponsor.description && (
+            <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={5}>
+              {discoverySponsor.description}
+            </Text>
+          )}
           <TouchableOpacity
             activeOpacity={0.88}
             style={styles.sponsorCta}
@@ -1514,24 +1544,16 @@ export default function SwipeScreen({ navigation }: any) {
         {...scrollPanResponder.panHandlers}
       >
         <View style={styles.sponsorBody}>
-          <View style={styles.sponsorPill}>
-            <Text style={styles.sponsorPillText}>SPONSORED</Text>
-          </View>
-          <View style={[styles.sponsorIconTile, !discoverySponsor.logo && { backgroundColor: COLORS.primary }]}>
-            {discoverySponsor.logo ? (
-              <Image source={{ uri: ikAvatar(discoverySponsor.logo) }} style={styles.sponsorLogo} resizeMode="cover" />
-            ) : discoverySponsor.house ? (
-              <Zap size={38} color={COLORS.lightTextPrimary} fill={COLORS.lightTextPrimary} />
-            ) : (
-              <Package size={38} color={COLORS.lightTextPrimary} />
-            )}
-          </View>
-          <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={3}>
+          {renderSponsorBadge()}
+          {renderSponsorLogo()}
+          <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={2}>
             {discoverySponsor.title}
           </Text>
-          <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={4}>
-            {discoverySponsor.description}
-          </Text>
+          {!!discoverySponsor.description && (
+            <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={5}>
+              {discoverySponsor.description}
+            </Text>
+          )}
           <TouchableOpacity
             activeOpacity={0.88}
             style={styles.sponsorCta}
@@ -1740,7 +1762,7 @@ export default function SwipeScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
           <ProCrownBadge />
-          {!isProUser && swipesLeft != null ? (
+          {!isProUser && swipesLeft != null && mode !== 'scroll' ? (
             <View style={{
               paddingHorizontal: 9,
               paddingVertical: 4,
@@ -2607,10 +2629,6 @@ const styles = StyleSheet.create({
   sponsorHint: { marginTop: 8, fontSize: 10, fontWeight: '800', color: '#8A8A93', textAlign: 'center' },
   // Scroll-mode sponsored card sits on the dark photo card in BOTH themes,
   // so it carries its own light-on-dark palette instead of theme colours.
-  scrollSponsorPill: { backgroundColor: COLORS.primary },
-  scrollSponsorPillText: { color: '#000000' },
-  scrollSponsorTitle: { color: '#FFFFFF' },
-  scrollSponsorTagline: { color: 'rgba(255,255,255,0.72)' },
   sponsorLogo: { width: '100%', height: '100%', borderRadius: 26 },
   modeToggle: {
     flexDirection: 'row',

@@ -9,6 +9,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { NewsArticle, fetchAINews } from '../lib/newsService';
 import { db } from '../lib/firebase';
 import { COLORS, liquidGlass, textColor } from '../theme/theme';
+import { SponsoredCard, useSponsoredSlot } from '../components/SponsoredCard';
+import { hasLinkupPro } from '../lib/paywall';
 
 const CATEGORIES = ['all', 'startup', 'tech', 'company', 'research'] as const;
 
@@ -23,12 +25,16 @@ function timeAgo(dateStr: string): string {
 
 export default function NewsScreen() {
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const isDark = theme === 'dark';
+  const isPro = hasLinkupPro(profile);
+  // One sponsored card at a time, and never for PLUS members.
+  const sponsored = useSponsoredSlot('news', user?.uid, !isPro);
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [category, setCategory] = useState<string>('all');
+  const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const notifiedRef = useRef(false);
 
   const loadNews = useCallback(async (isRefresh = false) => {
@@ -36,6 +42,7 @@ export default function NewsScreen() {
     else setLoading(true);
     const data = await fetchAINews();
     setArticles(data);
+    setLastUpdated(Date.now());
     setLoading(false);
     setRefreshing(false);
 
@@ -64,6 +71,24 @@ export default function NewsScreen() {
   useEffect(() => { loadNews(); }, [loadNews]);
 
   const filtered = category === 'all' ? articles : articles.filter(a => a.category === category);
+
+  // One sponsored card woven into the feed a few stories down, so it reads as
+  // part of the list rather than an ad bolted onto the top.
+  const feedData = React.useMemo<Array<{ kind: 'article'; article: NewsArticle } | { kind: 'sponsored' }>>(() => {
+    const rows: Array<{ kind: 'article'; article: NewsArticle } | { kind: 'sponsored' }> = filtered.map((article) => ({
+      kind: 'article',
+      article,
+    }));
+    if (sponsored) rows.splice(Math.min(3, rows.length), 0, { kind: 'sponsored' });
+    return rows;
+  }, [filtered, sponsored]);
+
+  const renderRow = ({ item }: { item: (typeof feedData)[number] }) => {
+    if (item.kind === 'sponsored') {
+      return sponsored ? <SponsoredCard campaign={sponsored} viewerUid={user?.uid} /> : null;
+    }
+    return renderArticle({ item: item.article });
+  };
 
   const renderArticle = ({ item }: { item: NewsArticle }) => (
     <TouchableOpacity
@@ -111,18 +136,21 @@ export default function NewsScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
-        <TouchableOpacity onPress={() => loadNews(true)} style={styles.refreshBtn}>
+        <TouchableOpacity onPress={() => loadNews(true)} style={styles.refreshBtn} disabled={refreshing}>
           <RefreshCw size={16} color={COLORS.primaryStrong} />
         </TouchableOpacity>
+        <Text style={[styles.updatedText, { color: textColor(isDark, 'muted') }]}>
+          {refreshing ? 'Updating…' : `Updated ${timeAgo(new Date(lastUpdated).toISOString())} ago`}
+        </Text>
       </View>
 
       {loading ? (
         <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 80 }} />
       ) : (
         <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          renderItem={renderArticle}
+          data={feedData}
+          keyExtractor={(item, index) => (item.kind === 'sponsored' ? `sponsored-${sponsored?.id}` : item.article.id || String(index))}
+          renderItem={renderRow}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
           refreshing={refreshing}
@@ -236,6 +264,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: COLORS.primaryStrong,
     letterSpacing: 1,
+  },
+  updatedText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    marginRight: 16,
   },
   emptyState: {
     alignItems: 'center',

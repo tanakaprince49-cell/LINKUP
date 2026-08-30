@@ -25,7 +25,7 @@ import { db } from '../lib/firebase';
 import { ensureDirectMatch } from '../lib/chat';
 import { requestConnection } from '../lib/connectionRequests';
 import { displayNameFor, isDiscoverableProfile } from '../lib/discovery';
-import { collectIdeaDeck, IdeaDeckItem, safeIdeaId } from '../lib/ideas';
+import { collectIdeaDeck, fillWithDemoIdeas, IdeaDeckItem, safeIdeaId } from '../lib/ideas';
 import { StartupIdea, UserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -130,7 +130,10 @@ export default function IdeaDeckScreen({ navigation }: any) {
   rebuildDeckRef.current = () => {
     const organic = organicIdeasRef.current.filter((idea) => !swipedIdeasRef.current.has(idea.id));
     const merged = injectSponsored(organic, sponsoredIdeasRef.current);
-    setIdeas((current) => (merged.length > 0 || current.length === 0 ? merged : current));
+    // Real ideas always come first; demo ideas only top the deck up so a fresh
+    // install never lands on an empty screen.
+    const filled = fillWithDemoIdeas(merged, swipedIdeasRef.current);
+    setIdeas((current) => (filled.length > 0 || current.length === 0 ? filled : current));
   };
 
   useEffect(() => {
@@ -211,6 +214,12 @@ export default function IdeaDeckScreen({ navigation }: any) {
     if (!user?.uid || !idea?.id) return;
     if ((idea as any).sponsored && (idea as any).campaignId) {
       void recordCampaignClick((idea as any).campaignId, user.uid);
+    }
+    // Demo ideas are seeded sample content. Liking one must not write a swipe
+    // doc or notify their fictional owner.
+    if ((idea as any).demo) {
+      notifyUser('Sample idea', 'This is a demo idea showing how the deck works — swipe on to the next one.');
+      return;
     }
     const swipeId = `${idea.id}_${user.uid}`;
     const myName = displayNameFor(myProfile || user);

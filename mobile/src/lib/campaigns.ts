@@ -61,6 +61,8 @@ export const CAMPAIGN_PLACEMENT_OPTIONS: { id: string; label: string; desc: stri
   { id: 'hub', label: 'Hub strip', desc: 'Banner on the discovery home screen', available: true },
   { id: 'linky', label: 'Linky picks', desc: 'Linky may recommend you — always disclosed as sponsored', available: true },
   { id: 'discover', label: 'Discover boost', desc: 'Sponsored card shows every 4th swipe in the people deck', available: true },
+  { id: 'news', label: 'News feed', desc: 'Sponsored card inside the AI news feed', available: true },
+  { id: 'play', label: 'Play tab', desc: 'Sponsored card on the Play screen', available: true },
 ];
 
 /** House ads fill empty inventory: when no advertiser campaign is eligible we
