@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,10 +13,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, onSnapshot } from 'firebase/firestore';
 import {
   ChevronLeft,
+  ExternalLink,
   Eye,
+  Globe,
   Lightbulb,
   Megaphone,
   MousePointerClick,
+  Package,
   Pause,
   Play,
   Square,
@@ -26,7 +30,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
-import { Campaign, campaignStatusMeta, setCampaignStatus } from '../lib/campaigns';
+import {
+  CAMPAIGN_PLACEMENT_OPTIONS,
+  Campaign,
+  campaignStatusMeta,
+  normalizeWebsite,
+  setCampaignStatus,
+  websiteDisplay,
+} from '../lib/campaigns';
 
 export default function CampaignDetailScreen({ navigation, route }: any) {
   const { user } = useAuth();
@@ -146,18 +157,36 @@ export default function CampaignDetailScreen({ navigation, route }: any) {
           <View style={[styles.creativeCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
             <View style={styles.creativeHeader}>
               <View style={[styles.creativeIcon, { backgroundColor: COLORS.primary }]}>
-                <Lightbulb size={18} color={COLORS.lightTextPrimary} />
+                {campaign.creative?.source === 'product' ? (
+                  <Package size={18} color={COLORS.lightTextPrimary} />
+                ) : (
+                  <Lightbulb size={18} color={COLORS.lightTextPrimary} />
+                )}
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.creativeTitle, { color: textColor(isDark) }]} numberOfLines={2}>
-                  {campaign.creative?.title}
+                  {campaign.creative?.productName || campaign.creative?.title}
                 </Text>
                 <Text style={[styles.creativeStage, { color: textColor(isDark, 'muted') }]}>
-                  {campaign.creative?.stage || 'Idea Stage'} · Idea Deck
+                  {(campaign.placements || []).map((p) => CAMPAIGN_PLACEMENT_OPTIONS.find((o) => o.id === p)?.label || p).join(' · ') || 'Idea Deck'}
                 </Text>
               </View>
             </View>
-            <Text style={[styles.creativeDesc, { color: textColor(isDark, 'secondary') }]}>{campaign.creative?.description}</Text>
+            <Text style={[styles.creativeTagline, { color: textColor(isDark) }]}>{campaign.creative?.tagline || campaign.creative?.description}</Text>
+            {!!campaign.creative?.description && campaign.creative?.source === 'product' && (
+              <Text style={[styles.creativeDesc, { color: textColor(isDark, 'secondary') }]}>{campaign.creative.description}</Text>
+            )}
+            {!!campaign.creative?.website && (
+              <TouchableOpacity
+                onPress={() => Linking.openURL(normalizeWebsite(campaign.creative.website || '')).catch(() => {})}
+                style={styles.websiteChip}
+                activeOpacity={0.8}
+              >
+                <Globe size={13} color="#000" />
+                <Text style={styles.websiteChipText}>{websiteDisplay(campaign.creative.website)}</Text>
+                <ExternalLink size={11} color="#000" />
+              </TouchableOpacity>
+            )}
             {(campaign.industries || []).length > 0 && (
               <View style={styles.tagsRow}>
                 {campaign.industries.slice(0, 6).map((tag) => (
@@ -236,7 +265,20 @@ const styles = StyleSheet.create({
   creativeIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   creativeTitle: { fontSize: 15, fontWeight: '900' },
   creativeStage: { marginTop: 3, fontSize: 10, fontWeight: '800' },
-  creativeDesc: { marginTop: 12, fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  creativeTagline: { marginTop: 12, fontSize: 14, lineHeight: 20, fontWeight: '900' },
+  creativeDesc: { marginTop: 8, fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  websiteChip: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: COLORS.primary,
+    borderRadius: 13,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  websiteChipText: { color: '#000', fontSize: 11, fontWeight: '900' },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   tagPill: {
     borderRadius: 999,

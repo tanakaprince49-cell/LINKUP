@@ -4,6 +4,7 @@ import {
   Animated,
   Easing,
   Image,
+  Linking,
   Modal,
   PanResponder,
   Platform,
@@ -19,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { notifyUser } from '../lib/notify';
 import { useIsFocused } from '@react-navigation/native';
 import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { ChevronLeft, Heart, Lightbulb, MessageSquare, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
+import { ChevronLeft, Globe, Heart, Lightbulb, MessageSquare, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { ensureDirectMatch } from '../lib/chat';
 import { requestConnection } from '../lib/connectionRequests';
@@ -283,6 +284,17 @@ export default function IdeaDeckScreen({ navigation }: any) {
     });
     requestAnimationFrame(() => position.setValue({ x: 0, y: 0 }));
     if (direction !== 'right') return;
+    const sponsoredMeta = idea as any;
+    if (sponsoredMeta?.sponsored) {
+      // Right-swiping an ad = click intent, not an idea like.
+      void recordCampaignClick(sponsoredMeta.campaignId, user?.uid || '');
+      if (sponsoredMeta.house) {
+        openPaywall(PRO_FEATURES.startupAnalyzer);
+      } else if (sponsoredMeta.website) {
+        Linking.openURL(sponsoredMeta.website).catch(() => {});
+      }
+      return;
+    }
     setBusy(true);
     try {
       await likeIdea(idea);
@@ -499,11 +511,26 @@ export default function IdeaDeckScreen({ navigation }: any) {
         ))}
       </View>
 
-      {!isPreview && (
-        <TouchableOpacity onPress={() => openInviteComposer(idea)} style={styles.ideaInviteBtn}>
-          <MessageSquare size={17} color="#000" />
-          <Text style={styles.ideaInviteText}>Send 5-line Invite</Text>
+      {!isPreview && (idea as any).sponsored ? (
+        <TouchableOpacity
+          onPress={() => {
+            const meta = idea as any;
+            void recordCampaignClick(meta.campaignId, user?.uid || '');
+            if (meta.house) openPaywall(PRO_FEATURES.startupAnalyzer);
+            else if (meta.website) Linking.openURL(meta.website).catch(() => {});
+          }}
+          style={styles.ideaInviteBtn}
+        >
+          <Globe size={17} color="#000" />
+          <Text style={styles.ideaInviteText}>{(idea as any).house ? 'Upgrade to PLUS' : 'Visit Website'}</Text>
         </TouchableOpacity>
+      ) : (
+        !isPreview && (
+          <TouchableOpacity onPress={() => openInviteComposer(idea)} style={styles.ideaInviteBtn}>
+            <MessageSquare size={17} color="#000" />
+            <Text style={styles.ideaInviteText}>Send 5-line Invite</Text>
+          </TouchableOpacity>
+        )
       )}
 
       <View style={[styles.ownerCard, liquidGlass(isDark, false)]}>

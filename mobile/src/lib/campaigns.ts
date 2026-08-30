@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   increment,
   limit,
   onSnapshot,
@@ -52,16 +53,36 @@ export const CAMPAIGN_INDUSTRY_OPTIONS = [
   'Social',
 ];
 
+/** Placements an advertiser can buy. `available: false` ships in a later build
+ * — the chip renders disabled so the roadmap is visible without overselling. */
+export const CAMPAIGN_PLACEMENT_OPTIONS: { id: string; label: string; desc: string; available: boolean }[] = [
+  { id: 'ideas', label: 'Idea Deck', desc: 'Sponsored card inside the idea swipe flow', available: true },
+  { id: 'search', label: 'Search boost', desc: 'Sponsored slot pinned to the top of search', available: true },
+  { id: 'hub', label: 'Hub strip', desc: 'Banner on the discovery home screen', available: true },
+  { id: 'linky', label: 'Linky picks', desc: 'Linky may recommend you — always disclosed as sponsored', available: true },
+  { id: 'discover', label: 'Discover boost', desc: 'Boosted card in the people deck — next update', available: false },
+];
+
+/** House ads fill empty inventory: when no advertiser campaign is eligible we
+ * promote PLUS ourselves instead of wasting the slot. */
+export const HOUSE_PLUS_CAMPAIGN_ID = 'house_plus';
+
 export type CampaignStatus = 'pending_review' | 'active' | 'paused' | 'rejected' | 'ended';
 
+/** Advertisers promote a PRODUCT (app, service, startup). `idea` source is
+ * kept for back-compat with campaigns created before the product pivot. */
 export type CampaignCreative = {
-  source: 'idea';
-  ideaId: string;
-  title: string;
+  source: 'product' | 'idea';
+  productName?: string;
+  tagline?: string;
   description: string;
-  stage: string;
-  lookingFor: string[];
-  tags: string[];
+  website?: string;
+  category?: string[];
+  ideaId?: string;
+  title?: string;
+  stage?: string;
+  lookingFor?: string[];
+  tags?: string[];
 };
 
 export type Campaign = {
@@ -174,8 +195,12 @@ export const createCampaign = async (input: {
   name: string;
   creative: CampaignCreative;
   industries: string[];
+  placements: string[];
   planProductId?: string;
 }) => {
+  const placements = (input.placements.length ? input.placements : ['ideas']).filter((placement) =>
+    CAMPAIGN_PLACEMENT_OPTIONS.some((option) => option.id === placement && option.available)
+  );
   const ref = await addDoc(collection(db, 'campaigns'), {
     ownerId: input.ownerId,
     ownerName: input.ownerName,
@@ -186,7 +211,7 @@ export const createCampaign = async (input: {
     ownerVerified: !!input.ownerVerified,
     name: input.name.slice(0, 90),
     status: 'pending_review',
-    placements: ['ideas'],
+    placements: placements.length ? placements : ['ideas'],
     creative: input.creative,
     industries: input.industries.slice(0, 6),
     planProductId: input.planProductId || '',
@@ -222,7 +247,17 @@ export const isCampaignAdmin = async (uid: string) => {
 // Serving — viewer-side. This is where the anti-abuse guarantees live.
 // ---------------------------------------------------------------------------
 
-export type SponsoredIdeaDeckItem = IdeaDeckItem & { sponsored: true; campaignId: string };
+export type SponsoredIdeaDeckItem = IdeaDeckItem & { sponsored: true; campaignId: string; website?: string; house?: boolean };
+
+export const normalizeWebsite = (value: string) => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed.replace(/^\/+/, '')}`;
+};
+
+export const websiteDisplay = (value: string) =>
+  normalizeWebsite(value).replace(/^https?:\/\//i, '').replace(/\/+$/, '').slice(0, 40);
 
 const campaignViewsToday = async (uid: string, campaignId: string) => {
   const raw = await AsyncStorage.getItem(seenKey(uid, campaignId));
@@ -230,33 +265,69 @@ const campaignViewsToday = async (uid: string, campaignId: string) => {
   return Number.isFinite(count) ? Math.max(0, count) : 0;
 };
 
-const toSponsoredItem = (campaign: Campaign): SponsoredIdeaDeckItem => ({
-  id: `sponsored_${campaign.id}`,
-  campaignId: campaign.id,
+const toSponsoredItem = (campaign: Campaign): SponsoredIdeaDeckItem => {
+  const creative = campaign.creative;
+  const isProduct = creative.source === 'product';
+  return {
+    id: `sponsored_${campaign.id}`,
+    campaignId: campaign.id,
+    sponsored: true,
+    house: false,
+    website: isProduct ? normalizeWebsite(creative.website || '') : '',
+    title: (isProduct ? creative.productName : creative.title) || 'Sponsored',
+    description: (isProduct ? creative.tagline : creative.description) || creative.description || '',
+    stage: isProduct ? 'Product' : creative.stage || 'Idea Stage',
+    lookingFor: Array.isArray(creative.lookingFor) ? creative.lookingFor : isProduct ? ['Customers', 'Feedback'] : [],
+    tags: Array.isArray(creative.category) && creative.category.length
+      ? creative.category
+      : Array.isArray(creative.tags)
+        ? creative.tags
+        : [],
+    ownerId: campaign.ownerId,
+    ownerName: campaign.ownerName || 'Sponsor',
+    ownerPic: campaign.ownerPic || '',
+    ownerOccupation: campaign.ownerOccupation || '',
+    ownerCity: campaign.ownerCity || '',
+    ownerCountry: campaign.ownerCountry || '',
+    ownerVerified: !!campaign.ownerVerified,
+    source: 'startupIdea',
+  };
+};
+
+/** Our own PLUS promo, drawn when paid inventory is empty. */
+export const buildHouseIdeaCard = (): SponsoredIdeaDeckItem => ({
+  id: `sponsored_${HOUSE_PLUS_CAMPAIGN_ID}`,
+  campaignId: HOUSE_PLUS_CAMPAIGN_ID,
   sponsored: true,
-  title: campaign.creative.title,
-  description: campaign.creative.description,
-  stage: campaign.creative.stage || 'Idea Stage',
-  lookingFor: Array.isArray(campaign.creative.lookingFor) ? campaign.creative.lookingFor : [],
-  tags: Array.isArray(campaign.creative.tags) ? campaign.creative.tags : [],
-  ownerId: campaign.ownerId,
-  ownerName: campaign.ownerName || 'Sponsor',
-  ownerPic: campaign.ownerPic || '',
-  ownerOccupation: campaign.ownerOccupation || '',
-  ownerCity: campaign.ownerCity || '',
-  ownerCountry: campaign.ownerCountry || '',
-  ownerVerified: !!campaign.ownerVerified,
+  house: true,
+  website: '',
+  title: 'Go PLUS',
+  description: 'Unlimited swipes & rewinds, Who Viewed You, advanced search and zero sponsored cards.',
+  stage: 'PLUS',
+  lookingFor: [],
+  tags: ['PLUS', 'UNLIMITED'],
+  ownerId: 'linkup',
+  ownerName: 'LinkUp',
+  ownerPic: '',
+  ownerOccupation: 'Membership',
+  ownerCity: '',
+  ownerCountry: '',
+  ownerVerified: true,
   source: 'startupIdea',
 });
 
 export const sponsoredIdeaCardsForViewer = async (campaigns: Campaign[], viewerUid: string): Promise<SponsoredIdeaDeckItem[]> => {
   const eligible: Campaign[] = [];
   for (const campaign of campaigns) {
-    if (!campaign?.creative?.title) continue;
+    if (!campaign?.creative) continue;
     if (campaign.ownerId === viewerUid) continue; // never advertise to yourself
     const views = await campaignViewsToday(viewerUid, campaign.id).catch(() => 0);
     if (views >= CAMPAIGN_IMPRESSION_DAILY_CAP) continue;
     eligible.push(campaign);
+  }
+  if (!eligible.length) {
+    // House ads: unsold inventory promotes PLUS instead of going dark.
+    return [buildHouseIdeaCard()];
   }
   if (eligible.length > 1) {
     // Daily rotation gives every active campaign a fair share of first slot.
@@ -264,6 +335,19 @@ export const sponsoredIdeaCardsForViewer = async (campaigns: Campaign[], viewerU
     return [...eligible.slice(dayIndex), ...eligible.slice(0, dayIndex)].map(toSponsoredItem);
   }
   return eligible.map(toSponsoredItem);
+};
+
+/** One-shot fetch of active campaigns serving a given placement (search, hub, linky). */
+export const fetchActiveCampaignsForPlacement = async (placement: string, max: number = 3): Promise<Campaign[]> => {
+  try {
+    const snap = await getDocs(query(collection(db, 'campaigns'), where('status', '==', 'active'), limit(12)));
+    return snap.docs
+      .map((entry) => ({ id: entry.id, ...entry.data() }) as Campaign)
+      .filter((campaign) => Array.isArray(campaign.placements) && campaign.placements.includes(placement))
+      .slice(0, max);
+  } catch {
+    return [];
+  }
 };
 
 export const injectSponsored = (organic: IdeaDeckItem[], sponsored: IdeaDeckItem[], interval: number = SPONSORED_INTERVAL): IdeaDeckItem[] => {
@@ -279,7 +363,7 @@ export const injectSponsored = (organic: IdeaDeckItem[], sponsored: IdeaDeckItem
 };
 
 export const recordCampaignImpression = async (campaignId: string, viewerUid: string) => {
-  if (!campaignId) return;
+  if (!campaignId || campaignId.startsWith('house_')) return;
   const views = await campaignViewsToday(viewerUid, campaignId).catch(() => 0);
   if (views >= CAMPAIGN_IMPRESSION_DAILY_CAP) return;
   await AsyncStorage.setItem(seenKey(viewerUid, campaignId), String(views + 1)).catch(() => {});
@@ -287,7 +371,7 @@ export const recordCampaignImpression = async (campaignId: string, viewerUid: st
 };
 
 export const recordCampaignClick = async (campaignId: string, viewerUid?: string) => {
-  if (!campaignId) return;
+  if (!campaignId || campaignId.startsWith('house_')) return;
   const key = clickedKey(viewerUid || 'anonymous', campaignId);
   const already = await AsyncStorage.getItem(key).catch(() => null);
   if (already) return;

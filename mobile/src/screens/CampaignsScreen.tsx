@@ -51,10 +51,11 @@ import {
 } from '../lib/campaigns';
 
 const CAMPAIGNS_PERKS = [
+  'Showcase your product on Idea Deck, Search, Hub & Linky picks',
   '3 active campaigns at once — swap creatives anytime',
-  'Native sponsored cards inside the Idea Deck',
+  'Sponsored cards with your website as the call-to-action',
   'Live impressions, clicks & CTR on every campaign',
-  'Reach verified founders, builders & investors only',
+  'Reach verified founders, builders & early adopters only',
   'Pause, resume or replace campaigns in one tap',
   'Priority human review — live within 24 hours',
 ];
@@ -341,7 +342,7 @@ export default function CampaignsScreen({ navigation }: any) {
           {campaign.name}
         </Text>
         <Text style={[styles.campaignMeta, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
-          {campaign.creative?.title || 'Untitled creative'} · 👁 {campaign.statsImpressions || 0} · 👆 {campaign.statsClicks || 0}
+          {campaign.creative?.productName || campaign.creative?.title || 'Untitled product'} · {(campaign.placements || []).length} placement{(campaign.placements || []).length === 1 ? '' : 's'} · 👁 {campaign.statsImpressions || 0} · 👆 {campaign.statsClicks || 0}
         </Text>
       </View>
       {renderStatusPill(campaign.status)}
@@ -352,13 +353,17 @@ export default function CampaignsScreen({ navigation }: any) {
   const renderPaywall = () => (
     <View>
       <View style={[styles.heroCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorderActive : COLORS.lightBorderActive }]}>
-        <View style={[styles.popularBadge, { backgroundColor: isDark ? 'rgba(223,251,63,0.14)' : COLORS.primaryGlow }]}>
-          <Megaphone size={13} color={COLORS.primaryStrong} />
-          <Text style={[styles.popularText, { color: COLORS.lightTextPrimary }]}>LINKUP CAMPAIGNS</Text>
+        <View style={styles.heroTopRow}>
+          <View style={[styles.heroIconWrap, { backgroundColor: COLORS.primary }]}>
+            <Megaphone size={26} color={COLORS.lightTextPrimary} />
+          </View>
+          <View style={[styles.popularBadge, { backgroundColor: isDark ? 'rgba(223,251,63,0.14)' : COLORS.primaryGlow }]}>
+            <Text style={[styles.popularText, { color: COLORS.lightTextPrimary }]}>LINKUP CAMPAIGNS</Text>
+          </View>
         </View>
-        <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Put your startup in front of every founder</Text>
+        <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Put your product in front of every founder</Text>
         <Text style={[styles.heroCopy, { color: textColor(isDark, 'secondary') }]}>
-          Sponsored cards blend natively into the Idea Deck — the exact place builders decide what to work on next. No banner blindness, no ad soup: a hand-reviewed, founders-only audience.
+          Sponsored cards with your website as the call-to-action — placed natively across the Idea Deck, Search, the Hub and Linky's picks. No banner blindness, no ad soup: a hand-reviewed, founders-only audience.
         </Text>
 
         <View style={styles.pricingGrid}>
@@ -438,21 +443,22 @@ export default function CampaignsScreen({ navigation }: any) {
       </View>
 
       <View style={styles.statRow}>
-        <View style={[styles.statCard, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-          <Eye size={15} color={COLORS.primaryStrong} />
-          <Text style={[styles.statValue, { color: textColor(isDark) }]}>{totalImpressions}</Text>
-          <Text style={[styles.statLabel, { color: textColor(isDark, 'muted') }]}>Impressions</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-          <MousePointerClick size={15} color={COLORS.primaryStrong} />
-          <Text style={[styles.statValue, { color: textColor(isDark) }]}>{totalClicks}</Text>
-          <Text style={[styles.statLabel, { color: textColor(isDark, 'muted') }]}>Clicks</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-          <TrendingUp size={15} color={COLORS.primaryStrong} />
-          <Text style={[styles.statValue, { color: textColor(isDark) }]}>{totalCtr}%</Text>
-          <Text style={[styles.statLabel, { color: textColor(isDark, 'muted') }]}>CTR</Text>
-        </View>
+        {[
+          { Icon: Eye, value: totalImpressions, label: 'Views' },
+          { Icon: MousePointerClick, value: totalClicks, label: 'Clicks' },
+          { Icon: TrendingUp, value: `${totalCtr}%`, label: 'CTR' },
+        ].map(({ Icon, value, label }) => (
+          <View
+            key={label}
+            style={[styles.statCard, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+          >
+            <View style={[styles.statIconWrap, { backgroundColor: isDark ? 'rgba(223,251,63,0.14)' : COLORS.primaryGlow }]}>
+              <Icon size={14} color={COLORS.primaryStrong} />
+            </View>
+            <Text style={[styles.statValue, { color: textColor(isDark) }]}>{value}</Text>
+            <Text style={[styles.statLabel, { color: textColor(isDark, 'muted') }]}>{label}</Text>
+          </View>
+        ))}
       </View>
 
       <TouchableOpacity
@@ -473,10 +479,12 @@ export default function CampaignsScreen({ navigation }: any) {
       <Text style={[styles.sectionLabel, { color: textColor(isDark, 'muted') }]}>MY CAMPAIGNS</Text>
       {campaigns.length === 0 ? (
         <View style={[styles.emptyCard, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-          <Megaphone size={30} color={COLORS.primaryStrong} />
+          <View style={[styles.emptyIconWrap, { backgroundColor: isDark ? 'rgba(223,251,63,0.14)' : COLORS.primaryGlow }]}>
+            <Megaphone size={26} color={COLORS.primaryStrong} />
+          </View>
           <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No campaigns yet</Text>
           <Text style={[styles.emptyCopy, { color: textColor(isDark, 'secondary') }]}>
-            Launch your first sponsored card and watch founders swipe into your idea.
+            Put your product in the deck where founders decide what to build next — launch your first campaign in 2 minutes.
           </Text>
         </View>
       ) : (
@@ -503,7 +511,7 @@ export default function CampaignsScreen({ navigation }: any) {
                   {campaign.name}
                 </Text>
                 <Text style={[styles.campaignMeta, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
-                  {campaign.creative?.title} — {campaign.creative?.description}
+                  {campaign.creative?.productName || campaign.creative?.title} — {campaign.creative?.tagline || campaign.creative?.description}
                 </Text>
                 <Text style={[styles.campaignMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
                   by {campaign.ownerName} · {(campaign.industries || []).join(', ') || 'no targeting'}
@@ -585,7 +593,20 @@ const styles = StyleSheet.create({
   headerSub: { marginTop: 4, color: '#666', fontSize: 10, fontWeight: '900' },
   center: { paddingVertical: 80, alignItems: 'center', justifyContent: 'center' },
   scroll: { padding: 16, paddingTop: 6, paddingBottom: 48 },
-  heroCard: { borderWidth: 1, borderRadius: 24, padding: 18 },
+  heroCard: { borderWidth: 1, borderRadius: 28, padding: 20 },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  heroIconWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
   popularBadge: {
     alignSelf: 'flex-start',
     borderRadius: 12,
@@ -644,12 +665,14 @@ const styles = StyleSheet.create({
   },
   planBannerText: { fontSize: 12, fontWeight: '900', flex: 1 },
   statRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  statCard: { flex: 1, borderWidth: 1, borderRadius: 18, padding: 14, gap: 6 },
-  statValue: { fontSize: 20, fontWeight: '900' },
+  statCard: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14, gap: 7 },
+  statIconWrap: { width: 30, height: 30, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  statValue: { fontSize: 22, fontWeight: '900' },
   statLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   capHint: { marginTop: 8, fontSize: 10, fontWeight: '800', textAlign: 'center' },
   sectionLabel: { marginTop: 22, marginBottom: 10, fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
-  emptyCard: { borderWidth: 1, borderRadius: 24, padding: 26, alignItems: 'center', gap: 10 },
+  emptyCard: { borderWidth: 1, borderRadius: 28, padding: 30, alignItems: 'center', gap: 12 },
+  emptyIconWrap: { width: 56, height: 56, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { fontSize: 16, fontWeight: '900' },
   emptyCopy: { fontSize: 12, lineHeight: 18, fontWeight: '700', textAlign: 'center' },
   campaignRow: {

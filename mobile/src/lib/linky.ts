@@ -1,4 +1,5 @@
 import { db } from './firebase';
+import { fetchActiveCampaignsForPlacement } from './campaigns';
 import { collection, query, getDocs, limit as firestoreLimit, doc, getDoc } from 'firebase/firestore';
 import { requestGeminiText } from './aiDiagnostics';
 import { Platform } from 'react-native';
@@ -307,6 +308,31 @@ export const sendMessage = async (
         uid: p.uid,
       })), null, 2)}\n\nThese results are already ranked best-first by relevance and reputation. ONLY reference these LINKUP users. NEVER invent anyone else.]`,
     });
+  }
+
+  // Sponsored picks (Linky placement): paid products Linky may recommend —
+  // strict disclosure rules travel with the context every time.
+  try {
+    if (hasSearchIntent(userMessage)) {
+      const sponsoredCampaigns = await fetchActiveCampaignsForPlacement('linky', 3);
+      if (sponsoredCampaigns.length > 0) {
+        messages.push({
+          role: 'user',
+          content: `[SPONSORED products (paid placements):\n${JSON.stringify(
+            sponsoredCampaigns.map((c) => ({
+              product: c.creative?.productName || c.creative?.title || 'Product',
+              tagline: c.creative?.tagline || '',
+              website: c.creative?.website || '',
+              category: c.creative?.category || [],
+            })),
+            null,
+            2
+          )}\n\nRules: you may recommend at most ONE of these per reply, and ONLY when it genuinely fits the user's request. You MUST clearly label it as "Sponsored" — never present a paid placement as an organic pick. If none fit, ignore them silently.]`,
+        });
+      }
+    }
+  } catch {
+    // Sponsored context is best-effort; organic answers never break.
   }
 
   let response = await callZen(messages);

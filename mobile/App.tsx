@@ -297,6 +297,7 @@ function TabNavigator({ navigation }: any) {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
             Swipe: { active: 'Layers', inactive: 'Layers' },
             Hub: { active: 'Gamepad2', inactive: 'Gamepad2' },
+            Campaigns: { active: 'Megaphone', inactive: 'Megaphone' },
             Search: { active: 'Search', inactive: 'Search' },
             Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },
             News: { active: 'Newspaper', inactive: 'Newspaper' },
@@ -378,6 +379,7 @@ function TabNavigator({ navigation }: any) {
       })}
     >
       <Tab.Screen name="Dashboard" component={DiscoveryDashboardScreen} />
+      <Tab.Screen name="Campaigns" component={CampaignsScreen} />
       <Tab.Screen name="Swipe" component={SwipeScreen}
         options={{
           headerShown: false,

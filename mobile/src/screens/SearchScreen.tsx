@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Linking,
   PanResponder,
   Platform,
   ScrollView,
@@ -30,6 +31,13 @@ import { isDiscoverableProfile } from '../lib/discovery';
 import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
 import PaywallModal from '../components/PaywallModal';
 import { hasLinkupPro, PRO_FEATURES } from '../lib/paywall';
+import {
+  Campaign,
+  fetchActiveCampaignsForPlacement,
+  recordCampaignClick,
+  recordCampaignImpression,
+  websiteDisplay,
+} from '../lib/campaigns';
 import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, MOBILE_SEARCH_RENDER_LIMIT, safeProfileImageUri, compactProfileForList } from '../lib/profilePerformance';
 import { loadFromPublicProfiles, loadFromUsers, searchPublicProfiles } from '../lib/discoveryProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
@@ -174,6 +182,25 @@ export default function SearchScreen({ navigation, route }: any) {
   // filters, saved search alerts, and AI search/ranking. Free keeps plain
   // text, location, skills and looking-for.
   const isPro = hasLinkupPro(me);
+  // Sponsored search slot: single campaign pinned above results for free
+  // members; PLUS members never see campaigns.
+  const [searchSponsor, setSearchSponsor] = useState<Campaign | null>(null);
+  useEffect(() => {
+    if (isPro || !user?.uid) {
+      setSearchSponsor(null);
+      return;
+    }
+    let cancelled = false;
+    fetchActiveCampaignsForPlacement('search', 1).then((campaigns) => {
+      if (cancelled) return;
+      const pick = campaigns.find((campaign) => campaign.ownerId !== user.uid) || null;
+      setSearchSponsor(pick);
+      if (pick) void recordCampaignImpression(pick.id, user.uid);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isPro, user?.uid]);
   const guardAdvancedSearch = () => {
     if (isPro) return true;
     openPaywall('Advanced Search Filters');
@@ -1062,6 +1089,32 @@ export default function SearchScreen({ navigation, route }: any) {
         <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 30 }} />
       ) : (
         <View style={styles.resultsList}>
+          {searchSponsor && (
+            <TouchableOpacity
+              activeOpacity={0.88}
+              style={[styles.sponsorRow, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+              onPress={() => {
+                void recordCampaignClick(searchSponsor.id, user?.uid || '');
+                const url = searchSponsor.creative?.website || '';
+                if (url) Linking.openURL(url).catch(() => {});
+              }}
+            >
+              <View style={styles.sponsorPill}>
+                <Text style={styles.sponsorPillText}>SPONSORED</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={1}>
+                  {searchSponsor.creative?.productName || searchSponsor.creative?.title || 'Sponsored'}
+                </Text>
+                <Text style={[styles.sponsorSub, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+                  {searchSponsor.creative?.tagline || searchSponsor.creative?.description || ''}
+                </Text>
+                {!!searchSponsor.creative?.website && (
+                  <Text style={styles.sponsorUrl} numberOfLines={1}>{websiteDisplay(searchSponsor.creative.website)}</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          )}
           {visibleResults.map((item) => (
             <TouchableOpacity
               key={item.uid}
@@ -1262,10 +1315,28 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#666',
   },
-  resultsList: {
-    padding: 16,
+  resultsList: {    padding: 16,
     paddingBottom: 20,
   },
+  sponsorRow: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  sponsorPill: {
+    borderRadius: 999,
+    backgroundColor: '#111217',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  sponsorPillText: { color: '#FFF', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  sponsorTitle: { fontSize: 13, fontWeight: '900' },
+  sponsorSub: { marginTop: 2, fontSize: 10, fontWeight: '800' },
+  sponsorUrl: { marginTop: 3, fontSize: 10, fontWeight: '900', color: '#8A7900' },
   idleWrap: {
     alignItems: 'center',
     paddingHorizontal: 32,
