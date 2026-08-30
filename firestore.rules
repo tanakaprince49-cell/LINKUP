@@ -1250,5 +1250,55 @@ service cloud.firestore {
       allow update: if isSignedIn() && validProfileClickUpdate();
       allow delete: if false;
     }
+
+    // ------------------------------------------------------------
+    // LinkUp Campaigns (in-house sponsored placements)
+    // Advertisers create campaigns (always pending_review), an admin
+    // approves/rejects, any signed-in viewer may only bump the stat
+    // counters. campaignAccounts holds each advertiser's plan state.
+    // config/admins (console-managed) lists admin uids.
+    // ------------------------------------------------------------
+    function isCampaignAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/config/admins) &&
+        request.auth.uid in get(/databases/$(database)/documents/config/admins).data.get('uids', []);
+    }
+
+    match /config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /campaignAccounts/{uid} {
+      allow read: if isOwner(uid) || isCampaignAdmin();
+      allow create, update: if isOwner(uid) &&
+        incoming().uid == request.auth.uid &&
+        incoming().status in ['active', 'canceled', 'expired', 'free'];
+      allow delete: if false;
+    }
+
+    match /campaigns/{campaignId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().status == 'pending_review' &&
+        incoming().name is string &&
+        incoming().name.size() <= 90 &&
+        incoming().statsImpressions == 0 &&
+        incoming().statsClicks == 0;
+      allow update: if isSignedIn() && (
+        isCampaignAdmin() ||
+        (existing().ownerId == request.auth.uid &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+          incoming().status in ['active', 'paused'] &&
+          existing().status in ['active', 'paused']) ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['statsImpressions', 'statsClicks']) &&
+          incoming().statsImpressions >= existing().statsImpressions &&
+          incoming().statsImpressions <= existing().statsImpressions + 32 &&
+          incoming().statsClicks >= existing().statsClicks &&
+          incoming().statsClicks <= existing().statsClicks + 8)
+      );
+      allow delete: if false;
+    }
   }
 }

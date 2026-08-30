@@ -44,6 +44,9 @@ const CityLeagueScreen = lazyScreen(() => import('./src/screens/CityLeagueScreen
 const LinkyScreen = lazyScreen(() => import('./src/screens/LinkyScreen'));
 const LinkyProfileScreen = lazyScreen(() => import('./src/screens/LinkyProfileScreen'));
 const NewsScreen = lazyScreen(() => import('./src/screens/NewsScreen'));
+const CampaignsScreen = lazyScreen(() => import('./src/screens/CampaignsScreen'));
+const CreateCampaignScreen = lazyScreen(() => import('./src/screens/CreateCampaignScreen'));
+const CampaignDetailScreen = lazyScreen(() => import('./src/screens/CampaignDetailScreen'));
 
 // Warm these chunks right after startup via their REAL .preload() so first
 // taps/pushes render instantly. Tabs first (every tab switch used to flash),
@@ -681,6 +684,9 @@ function AppContent() {
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="SwipeDeck" component={SwipeScreen} />
             <Stack.Screen name="IdeaDeck" component={IdeaDeckScreen} />
+            <Stack.Screen name="Campaigns" component={CampaignsScreen} />
+            <Stack.Screen name="CreateCampaign" component={CreateCampaignScreen} />
+            <Stack.Screen name="CampaignDetail" component={CampaignDetailScreen} />
             <Stack.Screen name="Viewers" component={ViewersScreen} />
             <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
             <Stack.Screen name="ActiveOpportunities" component={ActiveOpportunitiesScreen} />

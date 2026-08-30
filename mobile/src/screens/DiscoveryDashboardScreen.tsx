@@ -13,7 +13,7 @@ import { rankLeague } from '../lib/builderLeague';
 import { loadLeaguePool } from '../lib/leaguePool';
 import { getBestOpportunityAlerts, getRotatedOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, getRotatedProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, ArrowLeftRight, UserCheck } from 'lucide-react-native';
+import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, ArrowLeftRight, UserCheck, Megaphone } from 'lucide-react-native';
 import { shareLinkupInvite } from '../lib/activation';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
@@ -497,6 +497,16 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               >
                 <Lightbulb size={15} color={HOME_INK} />
                 <Text style={[styles.ideaDeckBtnText, { color: textColor(isDark) }]}>Idea Deck — swipe startup ideas worth building</Text>
+                <ChevronRight size={15} color={textColor(isDark, 'muted')} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Campaigns')}
+                activeOpacity={0.88}
+                style={[styles.ideaDeckBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
+              >
+                <Megaphone size={15} color={HOME_INK} />
+                <Text style={[styles.ideaDeckBtnText, { color: textColor(isDark) }]}>Campaigns — put your startup in front of every founder</Text>
                 <ChevronRight size={15} color={textColor(isDark, 'muted')} />
               </TouchableOpacity>
 
