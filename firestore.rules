@@ -1256,12 +1256,26 @@ service cloud.firestore {
     // Advertisers create campaigns (always pending_review), an admin
     // approves/rejects, any signed-in viewer may only bump the stat
     // counters. campaignAccounts holds each advertiser's plan state.
-    // config/admins (console-managed) lists admin uids.
+    // Admin comes from three places: the founder email allowlist, the
+    // console-managed config/admins uid list, or users/{uid}.isAdmin.
     // ------------------------------------------------------------
     function isCampaignAdmin() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/config/admins) &&
-        request.auth.uid in get(/databases/$(database)/documents/config/admins).data.get('uids', []);
+      // Three independent paths. Order matters: the email allowlist is a free
+      // check (no document read), so an allowlisted founder short-circuits
+      // before we spend any of the request's document-access budget.
+      //
+      //  1. FOUNDER ALLOWLIST — matched on the auth token's email, so admin
+      //     survives a missing, unreadable or rewritten config/admins doc.
+      //     Keep in sync with ADMIN_EMAILS in mobile/src/lib/admin.ts.
+      //  2. config/admins — the console-managed uid list.
+      //  3. users/{uid}.isAdmin === true — per-account grant.
+      return isSignedIn() && (
+        request.auth.token.get('email', '') in ['tanakaprince49@gmail.com'] ||
+        (exists(/databases/$(database)/documents/config/admins) &&
+          request.auth.uid in get(/databases/$(database)/documents/config/admins).data.get('uids', [])) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true)
+      );
     }
 
     match /config/{docId} {

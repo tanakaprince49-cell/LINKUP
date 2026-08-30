@@ -27,6 +27,7 @@ import { publicProfileLink } from '../lib/profileLinks';
 import { buildLocalProEntitlement, hasLinkupPro, hasPaidLinkupPro, readLocalProEntitlement, saveLocalProEntitlement } from '../lib/paywall';
 import { compactProfileForCache } from '../lib/profilePerformance';
 import { isWebBilling, subscribeWebSubscription, withWebEntitlements } from '../lib/webSubscription';
+import { withAdminEntitlements } from '../lib/admin';
 import { checkPaynowPayment, takePendingReference } from '../lib/webCheckout';
 import type { WebSubscription } from '../lib/webSubscription';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
@@ -358,10 +359,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // the user paid through Google Play on Android or Paynow on web. On native this
   // memo is a pass-through: Play owns billing there.
   const [webSubscription, setWebSubscription] = useState<WebSubscription | null>(null);
-  const profile = useMemo(
-    () => (isWebBilling() ? withWebEntitlements(rawProfile, webSubscription) : rawProfile),
-    [rawProfile, webSubscription]
-  );
+  const profile = useMemo(() => {
+    const billed = isWebBilling() ? withWebEntitlements(rawProfile, webSubscription) : rawProfile;
+    // FOUNDER / ADMIN: the allowlist is matched on the signed-in email, so it
+    // cannot be lost to a Firestore read that failed or a user doc that never
+    // got its isAdmin flag. Folding it in here — the one funnel every gate
+    // reads — means PLUS, Campaigns and the free-limit counters all agree.
+    return withAdminEntitlements(billed, { email: user?.email, isAdmin: (billed as any)?.isAdmin });
+  }, [rawProfile, webSubscription, user?.email]);
   const isOnboarded = Boolean(user?.uid && (profile?.onboarded || completedOnboardingUid === user.uid));
 
   useEffect(() => {

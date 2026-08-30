@@ -16,6 +16,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { isAdminEmail, isAdminIdentity, type AdminIdentity } from './admin';
 import { IdeaDeckItem } from './ideas';
 
 // ---------------------------------------------------------------------------
@@ -270,14 +271,17 @@ export const updateCampaignCreative = async (
 };
 
 /**
- * Admin check with two independent paths:
- *   1. config/admins — the console-managed `uids` array (primary).
- *   2. users/{uid}.isAdmin === true — per-account fallback so an admin can be
- *      granted straight from the user doc without a Console/CLI edit.
+ * Admin check with three independent paths:
+ *   0. Founder allowlist by email (see lib/admin.ts) — instant, offline-safe,
+ *      and immune to a missing Firestore flag. Pass `{ email, isAdmin }` when
+ *      the caller already has the signed-in identity to skip the round trips.
+ *   1. config/admins — the console-managed `uids` array.
+ *   2. users/{uid}.isAdmin === true, or the user doc's email on the allowlist.
  * Each path owns its own try/catch so a failed read on one never masks the
  * other, and neither can throw out of this function.
  */
-export const isCampaignAdmin = async (uid: string) => {
+export const isCampaignAdmin = async (uid: string, identity?: AdminIdentity) => {
+  if (isAdminIdentity(identity)) return true;
   if (!uid) return false;
 
   try {
@@ -290,7 +294,8 @@ export const isCampaignAdmin = async (uid: string) => {
 
   try {
     const userSnap = await getDoc(doc(db, 'users', uid));
-    if (userSnap.exists() && userSnap.data()?.isAdmin === true) return true;
+    const data = userSnap.data();
+    if (data?.isAdmin === true || isAdminEmail(data?.email)) return true;
   } catch {
     // Fall through — not an admin.
   }

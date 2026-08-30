@@ -37,6 +37,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
 import { ikAvatar } from '../lib/ikImage';
+import { isAdminIdentity } from '../lib/admin';
 import ScreenHeader from '../components/ScreenHeader';
 import {
   CAMPAIGNS_PRODUCT_IDS,
@@ -128,7 +129,7 @@ const compactNumber = (value: number) => {
 };
 
 export default function CampaignsScreen({ navigation }: any) {
-  const { user, webSubscription } = useAuth();
+  const { user, profile, webSubscription } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -136,7 +137,7 @@ export default function CampaignsScreen({ navigation }: any) {
   const [loadingAccount, setLoadingAccount] = useState(true);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [pending, setPending] = useState<Campaign[]>([]);
-  const [admin, setAdmin] = useState(false);
+  const [remoteAdmin, setRemoteAdmin] = useState(false);
   const [purchaseBusy, setPurchaseBusy] = useState(false);
   const [storeError, setStoreError] = useState('');
   const [moderationBusy, setModerationBusy] = useState('');
@@ -147,7 +148,21 @@ export default function CampaignsScreen({ navigation }: any) {
   const [selectedPlan, setSelectedPlan] = useState<CampaignsPlan['id']>('monthly');
   const processedPurchases = useRef(new Set<string>());
 
-  const hasPlan = hasCampaignsPlan(account, webCampaignsActive(webSubscription));
+  /**
+   * Founder/admin recognition.
+   *
+   * This is decided from the signed-in identity, never from a Firestore read:
+   * the founder's admin rights were being lost whenever `config/admins` or
+   * `users/{uid}.isAdmin` failed to materialise (offline, rules, a recreated
+   * user doc). `remoteAdmin` still picks up console-granted admins.
+   */
+  const identity = { email: user?.email, isAdmin: (profile as any)?.isAdmin };
+  const isAdmin = isAdminIdentity(identity);
+  const admin = isAdmin || remoteAdmin;
+
+  // Admins own the product: Campaigns is theirs whether or not a plan was
+  // ever purchased, so they never land on the paywall.
+  const hasPlan = isAdmin || hasCampaignsPlan(account, webCampaignsActive(webSubscription));
   const liveCount = countLiveCampaigns(campaigns);
   const totalImpressions = campaigns.reduce((sum, campaign) => sum + (campaign.statsImpressions || 0), 0);
   const totalClicks = campaigns.reduce((sum, campaign) => sum + (campaign.statsClicks || 0), 0);
@@ -229,9 +244,15 @@ export default function CampaignsScreen({ navigation }: any) {
       setAccount(data);
       setLoadingAccount(false);
     });
-    isCampaignAdmin(user.uid).then((flag) => {
-      if (mounted) setAdmin(flag);
-    });
+    // The email allowlist already answered "yes" — skip the round trip so the
+    // moderation queue appears on the first paint, online or not.
+    if (isAdminIdentity({ email: user?.email, isAdmin: (profile as any)?.isAdmin })) {
+      setRemoteAdmin(true);
+    } else {
+      isCampaignAdmin(user.uid, { email: user?.email, isAdmin: (profile as any)?.isAdmin }).then((flag) => {
+        if (mounted) setRemoteAdmin(flag);
+      });
+    }
     const unsubscribeMine = subscribeMyCampaigns(
       user.uid,
       (rows) => {
