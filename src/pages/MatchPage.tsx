@@ -142,7 +142,7 @@ export default function MatchPage() {
               )}
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/90 to-transparent p-4">
                 <h4 className="font-black text-white text-xs uppercase tracking-tight">{rec.displayName}</h4>
-                <p className="text-[9px] text-accent-yellow font-bold mb-3 truncate uppercase tracking-widest">{rec.skills[0] || 'Visionary'}</p>
+                <p className="text-[9px] text-accent-yellow font-bold mb-3 truncate uppercase tracking-widest">{rec.skills?.[0] || 'Visionary'}</p>
                 <div className="flex items-center gap-1 rounded-lg bg-accent-yellow px-2 py-1 w-fit">
                   <Star size={8} className="text-black" fill="currentColor" />
                   <span className="text-[8px] font-black text-black uppercase tracking-widest">Connect</span>

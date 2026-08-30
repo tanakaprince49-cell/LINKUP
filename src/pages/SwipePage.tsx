@@ -138,7 +138,7 @@ const SwipeCard = ({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {user.skills.map((skill, i) => (
+              {(user.skills || []).map((skill, i) => (
                 <span key={i} className="px-3 py-1.5 bg-black/5 dark:bg-white/5 rounded-xl text-[10px] font-black uppercase border border-black/5 dark:border-white/5 text-black/40 dark:text-white/40 tracking-widest">
                   {skill}
                 </span>
@@ -166,7 +166,7 @@ const SwipeCard = ({
                 <div className="space-y-4">
                   <h3 className="text-lg font-black uppercase italic tracking-tighter text-black dark:text-white">Current <span className="text-accent-yellow">Projects</span></h3>
                   <div className="grid gap-3">
-                    {user.projects.map((proj, i) => (
+                    {(user.projects || []).map((proj, i) => (
                       <div key={i} className="p-4 rounded-3xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 space-y-2">
                         <h4 className="font-black uppercase tracking-widest text-xs text-accent-yellow">{proj.name}</h4>
                         <p className="text-[11px] font-medium text-black/60 dark:text-white/60 leading-relaxed">{proj.description}</p>

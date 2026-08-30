@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
-import { User, X, Camera, MapPin, Globe, Briefcase, Award, Settings, LogOut, Trash2, ShieldCheck, Plus, Moon, Sun } from 'lucide-react';
+import { User, X, Camera, MapPin, Globe, Briefcase, Award, Settings, LogOut, Trash2, ShieldCheck, Plus, Moon, Sun, Zap } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 const safeDisplayNameForSave = (value: unknown) => {
