@@ -47,6 +47,7 @@ import {
   toSponsoredItem,
 } from '../lib/campaigns';
 import VerifiedBadge from '../components/VerifiedBadge';
+import ErrorBoundary from '../components/ErrorBoundary';
 import PaywallModal from '../components/PaywallModal';
 import { consumeWindowUsage, FREE_LIMITS, getWindowUsage, hasLinkupPro, PRO_FEATURES, SWIPE_USAGE_WINDOW_HOURS } from '../lib/paywall';
 import { compactProfileForList, storedProfileImageUri } from '../lib/profilePerformance';
@@ -406,7 +407,9 @@ export default function SwipeScreen({ navigation }: any) {
    */
   const pickNextSponsor = (): SponsoredIdeaDeckItem | null => {
     const inventory = sponsorInventoryRef.current;
-    if (!inventory.length) return buildHouseIdeaCard();
+    // No paid inventory: promote PLUS — but never to someone who already has
+    // it. A premium viewer gets no card rather than a "Go PLUS" upsell.
+    if (!inventory.length) return isProUser ? null : buildHouseIdeaCard();
 
     const shown = sponsorShownRef.current;
     const ranked = [...inventory].sort((a, b) => {
@@ -522,6 +525,7 @@ export default function SwipeScreen({ navigation }: any) {
   feedRef.current = feed;
   const profilesRef = useRef<UserProfile[]>(profiles);
   profilesRef.current = profiles;
+  const lastCacheSignatureRef = useRef('');
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedItem?: UserProfile) => void>(() => {});
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const resetSwipePositionRef = useRef<() => void>(() => {});
@@ -889,7 +893,20 @@ export default function SwipeScreen({ navigation }: any) {
         }
 
         allProfilesRef.current = orderedUsers;
-        writeCachedDiscovery(user.uid, orderedUsers.filter((profile) => !isSyntheticProfile(profile))).catch(() => {});
+        // Cold-start cache write, guarded by a signature check.
+        //
+        // This listener re-emits on every write to any profile in the pool
+        // (presence, updatedAt, view tracking), and each emission used to
+        // serialise the whole deck to AsyncStorage — a multi-hundred-KB JSON
+        // write on the JS thread, on Android, several times per swipe. That
+        // is a long main-thread stall, which is what "it goes blank while I
+        // keep swiping" looks like from the outside. The cache only needs to
+        // change when the actual roster changes.
+        const cacheSignature = `${orderedUsers.length}:${deckKey(orderedUsers)}`;
+        if (cacheSignature !== lastCacheSignatureRef.current) {
+          lastCacheSignatureRef.current = cacheSignature;
+          writeCachedDiscovery(user.uid, orderedUsers.filter((profile) => !isSyntheticProfile(profile))).catch(() => {});
+        }
         const remainingUsers = unswipedProfiles(orderedUsers);
         if (remainingUsers.length === 0 && orderedUsers.length > 0) {
           swipedSessionIdsRef.current.clear();
@@ -1974,14 +1991,19 @@ export default function SwipeScreen({ navigation }: any) {
         </View>
 
         <View style={[styles.stackArea, webDeckStyle, isCompactWeb && styles.compactStackArea]}>
-          {mode === 'swipe' ? (
-            <>
-              {renderPreviewCard()}
-              {renderCard()}
-            </>
-          ) : (
-            renderScrollProfile()
-          )}
+          {/* If a card ever throws, show a labelled retry inside the deck
+              instead of an empty gap. A blank deck is indistinguishable from
+              "the app died", and gives nobody anything to report. */}
+          <ErrorBoundary screenName="Discovery deck" inline>
+            {mode === 'swipe' ? (
+              <>
+                {renderPreviewCard()}
+                {renderCard()}
+              </>
+            ) : (
+              renderScrollProfile()
+            )}
+          </ErrorBoundary>
         </View>
       </View>
       {connectionNote.modal}

@@ -9,7 +9,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
 import { subscribeToChallenges, GameChallenge, respondToChallenge, GameType } from '../lib/gameChallenges';
 import { SponsoredSlot } from '../components/SponsoredCard';
-import { hasLinkupPro } from '../lib/paywall';
+import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 import GameChallengeModal from '../components/GameChallengeModal';
 import {
   Flame, Zap, Trophy, Target, TrendingUp,
@@ -130,7 +130,15 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         </Text>
 
         {/* One sponsored card at a time; hidden for PLUS members. */}
-        <SponsoredSlot placement="play" viewerUid={user?.uid} enabled={!hasLinkupPro(profile)} />
+        {/* PLUS is ad-free, except founder/admin accounts who review the
+            placements. Never upsell PLUS to someone who already has it. */}
+        <SponsoredSlot
+          placement="play"
+          viewerUid={user?.uid}
+          enabled={
+            !isSponsoredHiddenForViewer(profile, { email: user?.email, isAdmin: (profile as any)?.isAdmin })
+          }
+        />
 
         <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>GAMES</Text>
 

@@ -193,7 +193,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
     let cancelled = false;
     const unsubscribeSponsored = subscribeActiveCampaigns(async (campaigns) => {
       try {
-        const items = await sponsoredIdeaCardsForViewer(campaigns, user.uid);
+        const items = await sponsoredIdeaCardsForViewer(campaigns, user.uid, hasLinkupPro(myProfile));
         if (cancelled) return;
         sponsoredIdeasRef.current = items;
         rebuildDeckRef.current();

@@ -432,7 +432,11 @@ export const buildHouseIdeaCard = (): SponsoredIdeaDeckItem => ({
   source: 'startupIdea',
 });
 
-export const sponsoredIdeaCardsForViewer = async (campaigns: Campaign[], viewerUid: string): Promise<SponsoredIdeaDeckItem[]> => {
+export const sponsoredIdeaCardsForViewer = async (
+  campaigns: Campaign[],
+  viewerUid: string,
+  viewerIsPlus: boolean = false
+): Promise<SponsoredIdeaDeckItem[]> => {
   const eligible: Campaign[] = [];
   for (const campaign of campaigns) {
     if (!campaign?.creative) continue;
@@ -442,7 +446,11 @@ export const sponsoredIdeaCardsForViewer = async (campaigns: Campaign[], viewerU
     eligible.push(campaign);
   }
   if (!eligible.length) {
-    // House ads: unsold inventory promotes PLUS instead of going dark.
+    // House ads fill unsold inventory — but ONLY for people who have not
+    // already bought PLUS. Showing "Go PLUS — unlimited swipes" to someone
+    // who is paying for PLUS reads as a broken app, and an empty slot is
+    // strictly better than upselling a subscriber.
+    if (viewerIsPlus) return [];
     return [buildHouseIdeaCard()];
   }
   if (eligible.length > 1) {
