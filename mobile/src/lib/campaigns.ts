@@ -325,7 +325,7 @@ const campaignViewsToday = async (uid: string, campaignId: string) => {
   return Number.isFinite(count) ? Math.max(0, count) : 0;
 };
 
-const toSponsoredItem = (campaign: Campaign): SponsoredIdeaDeckItem => {
+export const toSponsoredItem = (campaign: Campaign): SponsoredIdeaDeckItem => {
   const creative = campaign.creative;
   const isProduct = creative.source === 'product';
   return {

@@ -36,11 +36,13 @@ import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { roleInfoFor } from '../lib/roles';
 import { X, Heart, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare, Globe, Package, Zap } from 'lucide-react-native';
 import {
+  Campaign,
   SponsoredIdeaDeckItem,
+  buildHouseIdeaCard,
   recordCampaignClick,
   recordCampaignImpression,
-  sponsoredIdeaCardsForViewer,
   subscribeActiveCampaigns,
+  toSponsoredItem,
 } from '../lib/campaigns';
 import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
@@ -340,27 +342,33 @@ export default function SwipeScreen({ navigation }: any) {
   // to the PLUS house promo via sponsoredIdeaCardsForViewer.
   const DISCOVER_SPONSORED_EVERY = 4;
   const [discoverySponsor, setDiscoverySponsor] = useState<SponsoredIdeaDeckItem | null>(null);
-  const sponsorQueueRef = useRef<SponsoredIdeaDeckItem[]>([]);
-  const sponsorIndexRef = useRef(0);
+  // Raw live inventory. Deliberately NOT pre-filtered by the daily impression
+  // cap: recording an impression writes to the campaign doc, which re-fires the
+  // listener, which used to rebuild the queue with the cap applied — so after
+  // ~2 views per campaign every real ad was filtered out and users only ever
+  // saw the same house promo. The cap still throttles impression STATS inside
+  // recordCampaignImpression; it just no longer decides what you get shown.
+  const sponsorInventoryRef = useRef<Campaign[]>([]);
+  const sponsorShownRef = useRef<Record<string, number>>({});
+  const lastSponsorIdRef = useRef<string>('');
   const swipesSinceSponsorRef = useRef(0);
+
   useEffect(() => {
     if (!user?.uid || isProUser) {
-      sponsorQueueRef.current = [];
+      sponsorInventoryRef.current = [];
       setDiscoverySponsor(null);
       return;
     }
     let cancelled = false;
-    const unsubscribeSponsored = subscribeActiveCampaigns(async (campaigns) => {
-      try {
-        const boosted = campaigns.filter(
-          (campaign) => Array.isArray(campaign.placements) && campaign.placements.includes('discover')
-        );
-        const items = await sponsoredIdeaCardsForViewer(boosted, user.uid);
-        if (cancelled) return;
-        sponsorQueueRef.current = items;
-      } catch {
-        // Sponsored delivery is best-effort; discovery always renders.
-      }
+    const unsubscribeSponsored = subscribeActiveCampaigns((campaigns) => {
+      if (cancelled) return;
+      sponsorInventoryRef.current = campaigns.filter(
+        (campaign) =>
+          !!campaign?.creative &&
+          Array.isArray(campaign.placements) &&
+          campaign.placements.includes('discover') &&
+          campaign.ownerId !== user.uid // never advertise to yourself
+      );
     }, () => {});
     return () => {
       cancelled = true;
@@ -368,11 +376,37 @@ export default function SwipeScreen({ navigation }: any) {
     };
   }, [user?.uid, isProUser]);
 
+  /**
+   * Choose the next sponsored card.
+   *
+   * Fewest-shows-first, so every live campaign gets a turn before any of them
+   * repeats; ties are shuffled so the running order differs from cycle to
+   * cycle; and it is never the same campaign twice in a row. Falls back to the
+   * PLUS house promo only when there is genuinely no paid inventory.
+   */
+  const pickNextSponsor = (): SponsoredIdeaDeckItem | null => {
+    const inventory = sponsorInventoryRef.current;
+    if (!inventory.length) return buildHouseIdeaCard();
+
+    const shown = sponsorShownRef.current;
+    const ranked = [...inventory].sort((a, b) => {
+      const diff = (shown[a.id] || 0) - (shown[b.id] || 0);
+      return diff !== 0 ? diff : Math.random() - 0.5;
+    });
+    const next =
+      ranked.length > 1
+        ? ranked.find((campaign) => campaign.id !== lastSponsorIdRef.current) || ranked[0]
+        : ranked[0];
+
+    lastSponsorIdRef.current = next.id;
+    shown[next.id] = (shown[next.id] || 0) + 1;
+    return toSponsoredItem(next);
+  };
+
   const maybeShowDiscoverySponsor = () => {
-    const queue = sponsorQueueRef.current;
-    if (!queue.length || isProUser || !user?.uid) return;
-    const next = queue[sponsorIndexRef.current % queue.length];
-    sponsorIndexRef.current += 1;
+    if (isProUser || !user?.uid) return;
+    const next = pickNextSponsor();
+    if (!next) return;
     setDiscoverySponsor(next);
     void recordCampaignImpression(next.campaignId, user.uid);
   };
