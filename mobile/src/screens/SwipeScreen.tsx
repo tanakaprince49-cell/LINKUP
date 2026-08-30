@@ -929,6 +929,13 @@ export default function SwipeScreen({ navigation }: any) {
     const item = swipedItem || profiles[0];
     if (!item) return;
 
+    // Reset the gesture transform BEFORE the deck updates. The next card
+    // becomes the top card in this very same commit — if it paints while
+    // swipePosition still holds the old exit offset, it renders ~a screen
+    // away for a frame and the user sees "blank … person" (the swipe blink).
+    swipePosition.stopAnimation();
+    swipePosition.setValue({ x: 0, y: 0 });
+
     hasUserSwipedRef.current = true;
     swipedSessionIdsRef.current.add(item.uid);
     lastSwipedProfileRef.current = item;
@@ -980,11 +987,10 @@ export default function SwipeScreen({ navigation }: any) {
       useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
     }).start(({ finished }) => {
       if (finished) {
+        // completeSwipe resets swipePosition synchronously before swapping the
+        // deck, so no stale-offset frame can paint between exit and next card.
         completeSwipe(direction, swipedItem);
-        requestAnimationFrame(() => {
-          swipePosition.setValue({ x: 0, y: 0 });
-          isAnimatingRef.current = false;
-        });
+        isAnimatingRef.current = false;
         return;
       }
       swipePosition.setValue({ x: 0, y: 0 });
