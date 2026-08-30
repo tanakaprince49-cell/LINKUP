@@ -11,6 +11,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   Keyboard,
+  Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -129,14 +130,45 @@ const ProfileCard = ({ profile, onPress, onConnect, connectBusy }: { profile: Mi
   );
 };
 
-const TypingIndicator = ({ seconds, isDark }: { seconds: number; isDark: boolean }) => (
-  <View style={styles.typingRow}>
-    <LinkyAvatar size={28} />
-    <View style={[styles.typingBubble, { backgroundColor: isDark ? COLORS.darkBgSec : '#F0F0F0' }]}>
-      <Text style={[styles.typingLabel, { color: textColor(isDark, 'muted') }]}>Thinking{seconds > 0 ? ` ${seconds}s` : '...'}</Text>
+const TypingIndicator = ({ seconds, isDark }: { seconds: number; isDark: boolean }) => {
+  // Three bouncing dots — the universal "Linky is thinking" signal.
+  const dotAnims = React.useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
+
+  React.useEffect(() => {
+    const loops = dotAnims.map((anim, index) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(index * 140),
+          Animated.timing(anim, { toValue: -5, duration: 260, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0, duration: 260, useNativeDriver: true }),
+          Animated.delay(460),
+        ])
+      )
+    );
+    loops.forEach((loop) => loop.start());
+    return () => loops.forEach((loop) => loop.stop());
+  }, [dotAnims]);
+
+  return (
+    <View style={styles.typingRow}>
+      <LinkyAvatar size={28} />
+      <View style={[styles.typingBubble, { backgroundColor: isDark ? COLORS.darkBgSec : '#F0F0F0' }]}>
+        <Text style={[styles.typingDotsLabel, { color: textColor(isDark, 'muted') }]}>Linky is typing</Text>
+        <View style={styles.typingDotsWrap}>
+          {dotAnims.map((anim, index) => (
+            <Animated.View
+              key={index}
+              style={[
+                styles.typingDot,
+                { backgroundColor: COLORS.primaryStrong, transform: [{ translateY: anim }] },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 export default function LinkyScreen({ navigation }: any) {
   const { theme } = useTheme();
@@ -358,7 +390,7 @@ export default function LinkyScreen({ navigation }: any) {
           <LinkyAvatar size={36} />
           <View>
             <View style={styles.headerNameRow}>
-              <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Linky AI</Text>
+              <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Linky</Text>
               <VerifiedBadge size={15} />
             </View>
             <View style={styles.headerMetaRow}>
@@ -527,8 +559,11 @@ const styles = StyleSheet.create({
   asstBubble: { borderBottomLeftRadius: 4 },
   bubbleText: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
   typingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, marginLeft: 14 },
-  typingBubble: { borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#F0F0F0' },
+  typingBubble: { borderRadius: 14, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#F0F0F0', flexDirection: 'row', alignItems: 'center', gap: 10 },
   typingLabel: { fontSize: 13, fontWeight: '600', color: '#999' },
+  typingDotsLabel: { fontSize: 12, fontWeight: '700' },
+  typingDotsWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  typingDot: { width: 7, height: 7, borderRadius: 4 },
   dashContainer: { alignItems: 'center', paddingVertical: 24 },
   dashAvatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 20 },
   dashTitle: { fontSize: 22, fontWeight: '900', letterSpacing: 1 },

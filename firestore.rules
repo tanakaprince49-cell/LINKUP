@@ -47,12 +47,12 @@ service cloud.firestore {
         (!data.keys().hasAny(['isStealthMode']) || data.isStealthMode == false);
     }
 
-    match /{document=**} {
-      allow read, write: if isSignedIn();
-    }
-
     // ------------------------------------------------------------
     // Users / public builder profiles
+    // NOTE: there is deliberately NO wildcard match in this file. Every
+    // collection the app touches has an explicit block; anything else
+    // falls through to the Firestore default: deny. If you add a new
+    // collection, add its block here or writes will fail in production.
     // ------------------------------------------------------------
     match /users/{userId} {
       function hasDirectMatchWithSignedInUser() {
@@ -1248,6 +1248,111 @@ service cloud.firestore {
       allow list: if isSignedIn() && existing().profileId == request.auth.uid;
       allow create: if isSignedIn() && validProfileClickCreate(incoming());
       allow update: if isSignedIn() && validProfileClickUpdate();
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------
+    // LinkUp Campaigns (in-house sponsored placements)
+    // Advertisers create campaigns (always pending_review), an admin
+    // approves/rejects, any signed-in viewer may only bump the stat
+    // counters. campaignAccounts holds each advertiser's plan state.
+    // config/admins (console-managed) lists admin uids.
+    // ------------------------------------------------------------
+    function isCampaignAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/config/admins) &&
+        request.auth.uid in get(/databases/$(database)/documents/config/admins).data.get('uids', []);
+    }
+
+    match /config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /campaignAccounts/{uid} {
+      allow read: if isOwner(uid) || isCampaignAdmin();
+      allow create, update: if isOwner(uid) &&
+        incoming().uid == request.auth.uid &&
+        incoming().status in ['active', 'canceled', 'expired', 'free'];
+      allow delete: if false;
+    }
+
+    match /campaigns/{campaignId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().status == 'pending_review' &&
+        incoming().name is string &&
+        incoming().name.size() <= 90 &&
+        incoming().statsImpressions == 0 &&
+        incoming().statsClicks == 0;
+      allow update: if isSignedIn() && (
+        isCampaignAdmin() ||
+        (existing().ownerId == request.auth.uid &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+          incoming().status in ['active', 'paused'] &&
+          existing().status in ['active', 'paused']) ||
+        (existing().ownerId == request.auth.uid &&
+          existing().status == 'pending_review' &&
+          !incoming().diff(existing()).affectedKeys().hasAny(['ownerId', 'status', 'statsImpressions', 'statsClicks', 'createdAt', 'reviewNote'])) ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['statsImpressions', 'statsClicks']) &&
+          incoming().statsImpressions >= existing().statsImpressions &&
+          incoming().statsImpressions <= existing().statsImpressions + 32 &&
+          incoming().statsClicks >= existing().statsClicks &&
+          incoming().statsClicks <= existing().statsClicks + 8)
+      );
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------
+    // Feed posts (+ nested comments/replies)
+    // Anyone signed in can read and react (counters/likes/viewedBy);
+    // only the author can create-as-self, edit content, or delete.
+    // ------------------------------------------------------------
+    match /posts/{postId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() &&
+        incoming().authorId == request.auth.uid &&
+        incoming().content is string &&
+        incoming().content.size() <= 8000;
+      allow update: if isSignedIn() && (
+        existing().authorId == request.auth.uid ||
+        incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'viewsCount', 'likedBy', 'viewedBy'])
+      );
+      allow delete: if isSignedIn() && existing().authorId == request.auth.uid;
+
+      match /comments/{commentId} {
+        allow get, list: if isSignedIn();
+        allow create: if isSignedIn() &&
+          incoming().userId == request.auth.uid &&
+          incoming().content is string &&
+          incoming().content.size() <= 2000;
+        allow update: if isSignedIn() &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['likes']);
+        allow delete: if isSignedIn() && (
+          existing().userId == request.auth.uid ||
+          get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid
+        );
+
+        match /replies/{replyId} {
+          allow get, list: if isSignedIn();
+          allow create: if isSignedIn() &&
+            incoming().userId == request.auth.uid &&
+            incoming().content is string &&
+            incoming().content.size() <= 2000;
+          allow update: if isSignedIn() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['likes']);
+          allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+        }
+      }
+    }
+
+    // ------------------------------------------------------------
+    // Legacy per-user profile aux store (Linky score etc.)
+    // ------------------------------------------------------------
+    match /profiles/{userId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isOwner(userId);
       allow delete: if false;
     }
   }

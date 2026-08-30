@@ -44,6 +44,28 @@ const CityLeagueScreen = lazyScreen(() => import('./src/screens/CityLeagueScreen
 const LinkyScreen = lazyScreen(() => import('./src/screens/LinkyScreen'));
 const LinkyProfileScreen = lazyScreen(() => import('./src/screens/LinkyProfileScreen'));
 const NewsScreen = lazyScreen(() => import('./src/screens/NewsScreen'));
+const CampaignsScreen = lazyScreen(() => import('./src/screens/CampaignsScreen'));
+const CreateCampaignScreen = lazyScreen(() => import('./src/screens/CreateCampaignScreen'));
+const CampaignDetailScreen = lazyScreen(() => import('./src/screens/CampaignDetailScreen'));
+
+// Warm these chunks right after startup via their REAL .preload() so first
+// taps/pushes render instantly. Tabs first (every tab switch used to flash),
+// then the highest-traffic stack screens. Deep/game screens stay cold — the
+// lazy fallback is theme-matched now, so cold loads are invisible anyway.
+const PRELOADED_SCREENS = [
+  SwipeScreen,
+  GamificationHubScreen,
+  SearchScreen,
+  MessagesScreen,
+  NewsScreen,
+  ProfileScreen,
+  ChatScreen,
+  AlertsScreen,
+  RecommendedMatchesScreen,
+  ViewersScreen,
+  IdeaDeckScreen,
+  TrendingBuildersScreen,
+];
 import { GamificationProvider } from './src/contexts/GamificationContext';
 import { setupNativeNotificationRuntimeAsync, subscribeToNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
 import { scheduleDailyReminder } from './src/lib/dailyReminder';
@@ -275,6 +297,7 @@ function TabNavigator({ navigation }: any) {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
             Swipe: { active: 'Layers', inactive: 'Layers' },
             Hub: { active: 'Gamepad2', inactive: 'Gamepad2' },
+            Campaigns: { active: 'Megaphone', inactive: 'Megaphone' },
             Search: { active: 'Search', inactive: 'Search' },
             Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },
             News: { active: 'Newspaper', inactive: 'Newspaper' },
@@ -366,6 +389,7 @@ function TabNavigator({ navigation }: any) {
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Inbox" component={MessagesScreen} options={{ headerShown: false }} />
       <Tab.Screen name="News" component={NewsScreen} />
+      <Tab.Screen name="Campaigns" component={CampaignsScreen} />
     </Tab.Navigator>
   );
 }
@@ -523,7 +547,7 @@ function AppContent() {
 
   React.useEffect(() => {
     if (!user?.uid || !isOnboarded) return;
-    scheduleScreenPreloads();
+    scheduleScreenPreloads(PRELOADED_SCREENS);
   }, [user?.uid, isOnboarded]);
 
   React.useEffect(() => {
@@ -662,6 +686,9 @@ function AppContent() {
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="SwipeDeck" component={SwipeScreen} />
             <Stack.Screen name="IdeaDeck" component={IdeaDeckScreen} />
+            <Stack.Screen name="Campaigns" component={CampaignsScreen} />
+            <Stack.Screen name="CreateCampaign" component={CreateCampaignScreen} />
+            <Stack.Screen name="CampaignDetail" component={CampaignDetailScreen} />
             <Stack.Screen name="Viewers" component={ViewersScreen} />
             <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
             <Stack.Screen name="ActiveOpportunities" component={ActiveOpportunitiesScreen} />

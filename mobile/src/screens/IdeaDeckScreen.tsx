@@ -4,6 +4,7 @@ import {
   Animated,
   Easing,
   Image,
+  Linking,
   Modal,
   PanResponder,
   Platform,
@@ -19,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { notifyUser } from '../lib/notify';
 import { useIsFocused } from '@react-navigation/native';
 import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { ChevronLeft, Heart, Lightbulb, MessageSquare, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
+import { ChevronLeft, Globe, Heart, Lightbulb, MessageSquare, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { ensureDirectMatch } from '../lib/chat';
 import { requestConnection } from '../lib/connectionRequests';
@@ -30,7 +31,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
-import { FREE_LIMITS, PRO_FEATURES } from '../lib/paywall';
+import { FREE_LIMITS, PRO_FEATURES, hasLinkupPro } from '../lib/paywall';
+import {
+  injectSponsored,
+  recordCampaignClick,
+  recordCampaignImpression,
+  sponsoredIdeaCardsForViewer,
+  subscribeActiveCampaigns,
+} from '../lib/campaigns';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { getIdeaHabit, markIdeaHabitDone, todayKey } from '../lib/dailyLoop';
@@ -67,6 +75,8 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState('');
   const swipedIdeasRef = useRef<Set<string>>(new Set());
+  const organicIdeasRef = useRef<IdeaDeckItem[]>([]);
+  const sponsoredIdeasRef = useRef<IdeaDeckItem[]>([]);
   const position = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const animateSwipeRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedIdea?: IdeaDeckItem) => void>(() => {});
@@ -113,6 +123,15 @@ export default function IdeaDeckScreen({ navigation }: any) {
     })
   ).current;
 
+  // Organic deck + sponsored cards merge here. Density is capped viewer-side
+  // (SPONSORED_INTERVAL), so advertisers can never flood the deck.
+  const rebuildDeckRef = useRef<() => void>(() => {});
+  rebuildDeckRef.current = () => {
+    const organic = organicIdeasRef.current.filter((idea) => !swipedIdeasRef.current.has(idea.id));
+    const merged = injectSponsored(organic, sponsoredIdeasRef.current);
+    setIdeas((current) => (merged.length > 0 || current.length === 0 ? merged : current));
+  };
+
   useEffect(() => {
     if (!user?.uid) {
       setIdeas([]);
@@ -125,8 +144,8 @@ export default function IdeaDeckScreen({ navigation }: any) {
       userId: user.uid,
       onData: (profiles) => {
         const users = profiles.filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        const deck = collectIdeaDeck(users as UserProfile[], user.uid).filter((idea) => !swipedIdeasRef.current.has(idea.id));
-        setIdeas((current) => (deck.length > 0 || current.length === 0 ? deck : current));
+        organicIdeasRef.current = collectIdeaDeck(users as UserProfile[], user.uid);
+        rebuildDeckRef.current();
         setLoading(false);
       },
       onError: (error) => {
@@ -137,6 +156,43 @@ export default function IdeaDeckScreen({ navigation }: any) {
 
     return () => unsubscribe();
   }, [isFocused, user?.uid]);
+
+  // Sponsored cards: PLUS members are ad-free; everyone else sees at most
+  // 1 sponsored card per SPONSORED_INTERVAL organic cards.
+  const viewerIsPlus = hasLinkupPro(myProfile);
+  useEffect(() => {
+    if (!user?.uid || !isFocused) return;
+    if (Platform.OS !== 'web' && viewerIsPlus) {
+      sponsoredIdeasRef.current = [];
+      rebuildDeckRef.current();
+      return;
+    }
+    let cancelled = false;
+    const unsubscribeSponsored = subscribeActiveCampaigns(async (campaigns) => {
+      try {
+        const items = await sponsoredIdeaCardsForViewer(campaigns, user.uid);
+        if (cancelled) return;
+        sponsoredIdeasRef.current = items;
+        rebuildDeckRef.current();
+      } catch {
+        // Sponsored delivery is best-effort; the organic deck always renders.
+      }
+    }, () => {});
+    return () => {
+      cancelled = true;
+      unsubscribeSponsored();
+    };
+  }, [isFocused, user?.uid, viewerIsPlus]);
+
+  // Impression bookkeeping: one counted view per render of a sponsored top card,
+  // capped per viewer per day inside recordCampaignImpression.
+  useEffect(() => {
+    const top = ideas[0] as any;
+    if (top?.sponsored && top?.campaignId && user?.uid) {
+      void recordCampaignImpression(top.campaignId, user.uid);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ideas[0]?.id, user?.uid]);
 
   const notify = async (payload: Record<string, any>) => {
     try {
@@ -152,6 +208,9 @@ export default function IdeaDeckScreen({ navigation }: any) {
 
   const likeIdea = async (idea: IdeaDeckItem) => {
     if (!user?.uid || !idea?.id) return;
+    if ((idea as any).sponsored && (idea as any).campaignId) {
+      void recordCampaignClick((idea as any).campaignId, user.uid);
+    }
     const swipeId = `${idea.id}_${user.uid}`;
     const myName = displayNameFor(myProfile || user);
     const myPic = safeProfileImageUri(myProfile?.profilePic || user.photoURL || '', MOBILE_LIST_IMAGE_LIMIT);
@@ -225,6 +284,17 @@ export default function IdeaDeckScreen({ navigation }: any) {
     });
     requestAnimationFrame(() => position.setValue({ x: 0, y: 0 }));
     if (direction !== 'right') return;
+    const sponsoredMeta = idea as any;
+    if (sponsoredMeta?.sponsored) {
+      // Right-swiping an ad = click intent, not an idea like.
+      void recordCampaignClick(sponsoredMeta.campaignId, user?.uid || '');
+      if (sponsoredMeta.house) {
+        openPaywall(PRO_FEATURES.startupAnalyzer);
+      } else if (sponsoredMeta.website) {
+        Linking.openURL(sponsoredMeta.website).catch(() => {});
+      }
+      return;
+    }
     setBusy(true);
     try {
       await likeIdea(idea);
@@ -325,6 +395,9 @@ export default function IdeaDeckScreen({ navigation }: any) {
   };
 
   const openInviteComposer = (idea: IdeaDeckItem) => {
+    if ((idea as any).sponsored && (idea as any).campaignId) {
+      void recordCampaignClick((idea as any).campaignId, user?.uid || '');
+    }
     setInviteIdea(idea);
     setInviteMessage(`I like this idea. I can help with ${String((myProfile as any)?.occupation || 'building it')}.`);
   };
@@ -407,8 +480,10 @@ export default function IdeaDeckScreen({ navigation }: any) {
         <View style={styles.ideaIcon}>
           <Lightbulb size={24} color="#000" fill="#00000012" />
         </View>
-        <View style={styles.sourcePill}>
-          <Text style={styles.sourceText}>Tinder for Ideas</Text>
+        <View style={[styles.sourcePill, (idea as any).sponsored && styles.sponsoredPill]}>
+          <Text style={[styles.sourceText, (idea as any).sponsored && styles.sponsoredText]}>
+            {(idea as any).sponsored ? 'Sponsored' : 'Tinder for Ideas'}
+          </Text>
         </View>
       </View>
 
@@ -436,11 +511,26 @@ export default function IdeaDeckScreen({ navigation }: any) {
         ))}
       </View>
 
-      {!isPreview && (
-        <TouchableOpacity onPress={() => openInviteComposer(idea)} style={styles.ideaInviteBtn}>
-          <MessageSquare size={17} color="#000" />
-          <Text style={styles.ideaInviteText}>Send 5-line Invite</Text>
+      {!isPreview && (idea as any).sponsored ? (
+        <TouchableOpacity
+          onPress={() => {
+            const meta = idea as any;
+            void recordCampaignClick(meta.campaignId, user?.uid || '');
+            if (meta.house) openPaywall(PRO_FEATURES.startupAnalyzer);
+            else if (meta.website) Linking.openURL(meta.website).catch(() => {});
+          }}
+          style={styles.ideaInviteBtn}
+        >
+          <Globe size={17} color="#000" />
+          <Text style={styles.ideaInviteText}>{(idea as any).house ? 'Upgrade to PLUS' : 'Visit Website'}</Text>
         </TouchableOpacity>
+      ) : (
+        !isPreview && (
+          <TouchableOpacity onPress={() => openInviteComposer(idea)} style={styles.ideaInviteBtn}>
+            <MessageSquare size={17} color="#000" />
+            <Text style={styles.ideaInviteText}>Send 5-line Invite</Text>
+          </TouchableOpacity>
+        )
       )}
 
       <View style={[styles.ownerCard, liquidGlass(isDark, false)]}>
@@ -747,6 +837,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sourcePill: { borderRadius: 999, backgroundColor: COLORS.primary, paddingHorizontal: 12, paddingVertical: 7 },
+  sponsoredPill: { backgroundColor: '#111217' },
+  sponsoredText: { color: '#FFF' },
   sourceText: { color: '#000', fontSize: 9, fontWeight: '900', letterSpacing: 0 },
   ideaTitle: { marginTop: 36, fontSize: 34, lineHeight: 40, fontWeight: '900', textTransform: 'uppercase' },
   ideaDescription: { marginTop: 16, fontSize: 16, lineHeight: 24, fontWeight: '800' },

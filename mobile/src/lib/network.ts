@@ -46,7 +46,7 @@ export function useOnlineStatus() {
     const appSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') check();
     });
-    const nav = typeof navigator !== 'undefined' ? navigator : null;
+    const nav: any = typeof navigator !== 'undefined' ? navigator : null;
     const onBrowser = () => check();
     nav?.addEventListener?.('online', onBrowser);
     nav?.addEventListener?.('offline', onBrowser);

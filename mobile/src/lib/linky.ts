@@ -1,4 +1,5 @@
 import { db } from './firebase';
+import { fetchActiveCampaignsForPlacement } from './campaigns';
 import { collection, query, getDocs, limit as firestoreLimit, doc, getDoc } from 'firebase/firestore';
 import { requestGeminiText } from './aiDiagnostics';
 import { Platform } from 'react-native';
@@ -23,6 +24,7 @@ export interface MiniProfile {
   country?: string;
   occupation?: string;
   company?: string;
+  repScore?: number;
 }
 
 export interface OpenRouterMessage {
@@ -40,50 +42,67 @@ Keep responses professional, direct, and under 4 sentences. Use ONLY plain text 
 
 const searchUsers = async (params: any): Promise<MiniProfile[]> => {
   const maxLimit = Math.min(params.limit || 5, 10);
-  const seen = new Set<string>();
-  const results: MiniProfile[] = [];
-
   const q = params.query?.trim();
   if (!q) return [];
 
   const keywords = q.toLowerCase().split(/\s+/).filter((w: string) => w.length > 1 && !['me','for','up','in','a','an','the','with','and','or','to','of','is','i','my','by','on','at'].includes(w));
 
+  // Ranked retrieval: every profile is SCORED, not first-come-first-served.
+  // Strong signals (skills, name, role) outweigh weak ones (bio words), and
+  // quality signals (photo, reputation, recent activity) break the tie.
   try {
-    const snap = await getDocs(query(collection(db, 'publicProfiles'), firestoreLimit(60)));
-    const docs = snap.docs;
-    for (let i = 0; i < docs.length && results.length < maxLimit; i++) {
-      const d = docs[i];
-      if (seen.has(d.id)) continue;
+    const snap = await getDocs(query(collection(db, 'publicProfiles'), firestoreLimit(150)));
+    const scored: Array<{ score: number; profile: MiniProfile }> = [];
+    for (const d of snap.docs) {
       const data = d.data() as Record<string, any>;
-      const fields = [
-        (data.displayName || '').toLowerCase(),
-        (data.occupation || '').toLowerCase(),
-        (data.city || '').toLowerCase(),
-        (data.country || '').toLowerCase(),
-        (data.bio || '').toLowerCase(),
-        ...(Array.isArray(data.skills) ? data.skills.map((s: string) => s.toLowerCase()) : []),
-        ...(Array.isArray(data.industries) ? data.industries.map((s: string) => s.toLowerCase()) : []),
-      ];
-      const matched = keywords.some((kw: string) => fields.some((f: string) => f.includes(kw)));
-      if (!matched) continue;
-      seen.add(d.id);
-      results.push({
-        uid: d.id,
-        displayName: data.displayName || 'User',
-        profilePic: data.profilePic || data.photos?.[0] || '',
-        bio: data.bio || '',
-        skills: Array.isArray(data.skills) ? data.skills : [],
-        city: data.city || '',
-        country: data.country || '',
-        occupation: data.occupation || '',
-        company: data.company || '',
+      if (data.isVisible === false || data.isStealthMode === true || data.onboarded === false) continue;
+
+      const skills = (Array.isArray(data.skills) ? data.skills : []).map((s: string) => String(s || '').toLowerCase());
+      const industries = (Array.isArray(data.industries) ? data.industries : []).map((s: string) => String(s || '').toLowerCase());
+      const name = String(data.displayName || '').toLowerCase();
+      const occupation = String(data.occupation || '').toLowerCase();
+      const location = [data.city, data.country].filter(Boolean).join(' ').toLowerCase();
+      const bio = String(data.bio || '').toLowerCase();
+
+      let score = 0;
+      for (const kw of keywords) {
+        if (!kw) continue;
+        if (skills.some((s) => s.includes(kw))) score += 4;
+        if (name.includes(kw)) score += 3;
+        if (occupation.includes(kw)) score += 3;
+        if (industries.some((s) => s.includes(kw))) score += 2;
+        if (location.includes(kw)) score += 2;
+        if (bio.includes(kw)) score += 1;
+      }
+      if (score === 0) continue;
+
+      if (data.profilePic || data.photos?.[0]) score += 1;
+      const rep = Number(data.reputationScore ?? data.founderScore ?? 0) || 0;
+      if (rep >= 50) score += 1;
+
+      scored.push({
+        score,
+        profile: {
+          uid: d.id,
+          displayName: data.displayName || 'User',
+          profilePic: data.profilePic || data.photos?.[0] || '',
+          bio: data.bio || '',
+          skills: Array.isArray(data.skills) ? data.skills : [],
+          city: data.city || '',
+          country: data.country || '',
+          occupation: data.occupation || '',
+          company: data.company || '',
+          repScore: rep,
+        },
       });
     }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, maxLimit).map((entry) => entry.profile);
   } catch (e) {
     console.warn('Linky search failed', e);
   }
 
-  return results;
+  return [];
 };
 
 const getUserProfile = async (uid: string): Promise<MiniProfile | null> => {
@@ -187,10 +206,10 @@ export const getLinkyProfileData = () => ({
   uid: 'linky-ai',
   displayName: 'Linky',
   username: 'linky',
-  bio: 'The official AI assistant for LINKUP. I help founders, engineers, and entrepreneurs find each other by searching the network for skills, location, industry, and more. Built by the LINKUP team.',
-  profilePic: 'https://ui-avatars.com/api/?name=AI&background=DFFB3F&color=000&size=200&bold=true&font-size=0.5',
+  bio: 'Linky is the official assistant for LINKUP. I help founders, engineers, and entrepreneurs find each other by searching the network for skills, location, industry, and more. Built by the LINKUP team.',
+  profilePic: 'https://ui-avatars.com/api/?name=Linky&background=DFFB3F&color=000&size=200&bold=true&font-size=0.4',
   photos: [],
-  occupation: 'AI Assistant',
+  occupation: 'Linky Assistant',
   company: 'LINKUP',
   country: 'USA',
   city: 'San Francisco',
@@ -208,7 +227,7 @@ export const getLinkyProfileData = () => ({
   availability: '24/7',
   languages: ['English'],
   workStyle: 'Fast-paced',
-  education: 'LINKUP AI',
+  education: 'LINKUP',
   networkingIntent: 'Helping founders connect',
   ambition: 'impact',
   remoteOnly: false,
@@ -233,7 +252,7 @@ export const getLinkyProfileData = () => ({
   isVisible: true,
   isVerified: true,
   verificationProgram: 'LINKUP Official',
-  badges: ['AI', 'LINKUP Verified', 'Founding Member'],
+  badges: ['Linky', 'LINKUP Verified', 'Founding Member'],
   settings: { publicDiscovery: true, stealthMode: false, hideOnlineStatus: false },
   hasExit: false,
   isStealthMode: false,
@@ -284,9 +303,36 @@ export const sendMessage = async (
         company: p.company,
         skills: p.skills,
         location: [p.city, p.country].filter(Boolean).join(', '),
+        reputation: p.repScore || 0,
+        bio: String(p.bio || '').slice(0, 160),
         uid: p.uid,
-      })), null, 2)}\n\nONLY reference these LINKUP users. NEVER invent anyone else.]`,
+      })), null, 2)}\n\nThese results are already ranked best-first by relevance and reputation. ONLY reference these LINKUP users. NEVER invent anyone else.]`,
     });
+  }
+
+  // Sponsored picks (Linky placement): paid products Linky may recommend —
+  // strict disclosure rules travel with the context every time.
+  try {
+    if (hasSearchIntent(userMessage)) {
+      const sponsoredCampaigns = await fetchActiveCampaignsForPlacement('linky', 3);
+      if (sponsoredCampaigns.length > 0) {
+        messages.push({
+          role: 'user',
+          content: `[SPONSORED products (paid placements):\n${JSON.stringify(
+            sponsoredCampaigns.map((c) => ({
+              product: c.creative?.productName || c.creative?.title || 'Product',
+              tagline: c.creative?.tagline || '',
+              website: c.creative?.website || '',
+              category: c.creative?.category || [],
+            })),
+            null,
+            2
+          )}\n\nRules: you may recommend at most ONE of these per reply, and ONLY when it genuinely fits the user's request. You MUST clearly label it as "Sponsored" — never present a paid placement as an organic pick. If none fit, ignore them silently.]`,
+        });
+      }
+    }
+  } catch {
+    // Sponsored context is best-effort; organic answers never break.
   }
 
   let response = await callZen(messages);

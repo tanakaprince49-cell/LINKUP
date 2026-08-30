@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Linking,
   PanResponder,
   Platform,
   ScrollView,
@@ -29,7 +30,14 @@ import VerifiedBadge from '../components/VerifiedBadge';
 import { isDiscoverableProfile } from '../lib/discovery';
 import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
 import PaywallModal from '../components/PaywallModal';
-import { PRO_FEATURES } from '../lib/paywall';
+import { hasLinkupPro, PRO_FEATURES } from '../lib/paywall';
+import {
+  Campaign,
+  fetchActiveCampaignsForPlacement,
+  recordCampaignClick,
+  recordCampaignImpression,
+  websiteDisplay,
+} from '../lib/campaigns';
 import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, MOBILE_SEARCH_RENDER_LIMIT, safeProfileImageUri, compactProfileForList } from '../lib/profilePerformance';
 import { loadFromPublicProfiles, loadFromUsers, searchPublicProfiles } from '../lib/discoveryProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
@@ -170,6 +178,34 @@ export default function SearchScreen({ navigation, route }: any) {
   const [savedAlerts, setSavedAlerts] = useState<SavedSearchAlert[]>([]);
   const [savingAlert, setSavingAlert] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState('');
+  // Advanced search is LINKUP PLUS: industry/stage/verified/compatibility
+  // filters, saved search alerts, and AI search/ranking. Free keeps plain
+  // text, location, skills and looking-for.
+  const isPro = hasLinkupPro(me);
+  // Sponsored search slot: single campaign pinned above results for free
+  // members; PLUS members never see campaigns.
+  const [searchSponsor, setSearchSponsor] = useState<Campaign | null>(null);
+  useEffect(() => {
+    if (isPro || !user?.uid) {
+      setSearchSponsor(null);
+      return;
+    }
+    let cancelled = false;
+    fetchActiveCampaignsForPlacement('search', 1).then((campaigns) => {
+      if (cancelled) return;
+      const pick = campaigns.find((campaign) => campaign.ownerId !== user.uid) || null;
+      setSearchSponsor(pick);
+      if (pick) void recordCampaignImpression(pick.id, user.uid);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isPro, user?.uid]);
+  const guardAdvancedSearch = () => {
+    if (isPro) return true;
+    openPaywall('Advanced Search Filters');
+    return false;
+  };
 
   // Filters (simple + client-side for now)
   const [filterOpen, setFilterOpen] = useState(false);
@@ -482,7 +518,7 @@ export default function SearchScreen({ navigation, route }: any) {
         if (!ok) return false;
       }
 
-      if (industry.trim()) {
+      if (isPro && industry.trim()) {
         const ok = industries.some((s: string) => includesAny(s, [industry]));
         if (!ok) return false;
       }
@@ -496,13 +532,13 @@ export default function SearchScreen({ navigation, route }: any) {
         if (!roleHit) return false;
       }
 
-      if (stageFilter.trim()) {
+      if (isPro && stageFilter.trim()) {
         if (!includesAny(startupStage, stageNeedles(stageFilter))) return false;
       }
 
       if (lookingForCofounder && !looking) return false;
 
-      if (verifiedOnly && !isVerified) return false;
+      if (isPro && verifiedOnly && !isVerified) return false;
 
       if (hasPhotoOnly) {
         const pic = String((p as any).profilePic || '').trim();
@@ -518,11 +554,11 @@ export default function SearchScreen({ navigation, route }: any) {
         if (diffMs > limitMs) return false;
       }
 
-      if (compatibility < minCompatibility) return false;
+      if (isPro && compatibility < minCompatibility) return false;
 
       return true;
     });
-  }, [combined, queryText, location, skills, industry, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, hasPhotoOnly, activeWithin, minCompatibility, computeCompatibility]);
+  }, [combined, queryText, location, skills, industry, lookingForRole, stageFilter, lookingForCofounder, verifiedOnly, hasPhotoOnly, activeWithin, minCompatibility, computeCompatibility, isPro]);
 
   const displayed = useMemo(() => {
     const turboBoost = (p: UserProfile) => ((p as any).turboConnect ? 1 : 0);
@@ -536,6 +572,10 @@ export default function SearchScreen({ navigation, route }: any) {
 
   const runAiRanking = async () => {
     if (!user) return;
+    if (!isPro) {
+      openPaywall('AI Search & Ranking');
+      return;
+    }
     const candidateIds = filtered.map((p) => p.uid).filter(Boolean).slice(0, 40);
     if (candidateIds.length === 0) return;
 
@@ -605,6 +645,10 @@ export default function SearchScreen({ navigation, route }: any) {
 
   const saveSearchAlert = async () => {
     if (!user?.uid) return;
+    if (!isPro) {
+      openPaywall('Saved Search Alerts');
+      return;
+    }
     const hasSignal = [
       queryText,
       location,
@@ -658,6 +702,10 @@ export default function SearchScreen({ navigation, route }: any) {
 
   const applyAiQuery = async () => {
     if (!aiQuery.trim()) return;
+    if (!isPro) {
+      openPaywall('AI Search & Ranking');
+      return;
+    }
     setAiLoading(true);
     const previousDiagnosticAt = getLastAIDiagnostic()?.timestamp || 0;
     try {
@@ -762,7 +810,7 @@ export default function SearchScreen({ navigation, route }: any) {
         </TouchableOpacity>
       </View>
 
-      {savedAlerts.length > 0 && (
+      {isPro && savedAlerts.length > 0 && (
         <View style={styles.savedAlertsWrap}>
           <Text style={[styles.savedAlertsTitle, { color: textColor(isDark) }]}>Saved search alerts</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedAlertsScroller}>
@@ -796,10 +844,10 @@ export default function SearchScreen({ navigation, route }: any) {
               style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
             />
             <TextInput
-              placeholder="Industry"
+              placeholder={isPro ? 'Industry' : 'Industry — LINKUP PLUS'}
               placeholderTextColor="#666"
               value={industry}
-              onChangeText={setIndustry}
+              onChangeText={(value) => { if (guardAdvancedSearch()) setIndustry(value); }}
               style={[styles.filterInput, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, color: textColor(isDark) }]}
             />
           </View>
@@ -846,7 +894,7 @@ export default function SearchScreen({ navigation, route }: any) {
                 return (
                   <TouchableOpacity
                     key={option}
-                    onPress={() => setStageFilter(active ? '' : option)}
+                    onPress={() => { if (guardAdvancedSearch()) setStageFilter(active ? '' : option); }}
                     style={[
                       styles.choicePill,
                       {
@@ -870,7 +918,7 @@ export default function SearchScreen({ navigation, route }: any) {
                 return (
                   <TouchableOpacity
                     key={option}
-                    onPress={() => setIndustry(active ? '' : option)}
+                    onPress={() => { if (guardAdvancedSearch()) setIndustry(active ? '' : option); }}
                     style={[
                       styles.choicePill,
                       {
@@ -897,10 +945,10 @@ export default function SearchScreen({ navigation, route }: any) {
 
           <TouchableOpacity
             style={[styles.togglePill, { backgroundColor: verifiedOnly ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec), borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
-            onPress={() => setVerifiedOnly((v) => !v)}
+            onPress={() => { if (guardAdvancedSearch()) setVerifiedOnly((v) => !v); }}
           >
             <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: verifiedOnly ? '#000' : (textColor(isDark)) }}>
-              VERIFIED ONLY
+              VERIFIED ONLY{isPro ? '' : ' · PLUS'}
             </Text>
           </TouchableOpacity>
 
@@ -913,6 +961,16 @@ export default function SearchScreen({ navigation, route }: any) {
             </Text>
           </TouchableOpacity>
 
+          {!isPro ? (
+            <TouchableOpacity
+              style={[styles.togglePill, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, marginTop: 4 }]}
+              onPress={() => openPaywall('Advanced Search Filters')}
+            >
+              <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 1, color: textColor(isDark) }}>
+                COMPATIBILITY FILTER · PLUS
+              </Text>
+            </TouchableOpacity>
+          ) : (
           <View style={{ marginTop: 4 }}>
             <Text style={[styles.filtersTitle, { color: textColor(isDark) }]}>COMPATIBILITY {minCompatibility}%+</Text>
             <View style={styles.sliderRow}>
@@ -949,6 +1007,7 @@ export default function SearchScreen({ navigation, route }: any) {
               </View>
             )}
           </View>
+          )}
 
           <View style={{ marginTop: 4 }}>
             <Text style={[styles.filtersTitle, { color: textColor(isDark) }]}>RECENTLY ACTIVE</Text>
@@ -1030,6 +1089,32 @@ export default function SearchScreen({ navigation, route }: any) {
         <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 30 }} />
       ) : (
         <View style={styles.resultsList}>
+          {searchSponsor && (
+            <TouchableOpacity
+              activeOpacity={0.88}
+              style={[styles.sponsorRow, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+              onPress={() => {
+                void recordCampaignClick(searchSponsor.id, user?.uid || '');
+                const url = searchSponsor.creative?.website || '';
+                if (url) Linking.openURL(url).catch(() => {});
+              }}
+            >
+              <View style={styles.sponsorPill}>
+                <Text style={styles.sponsorPillText}>SPONSORED</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={1}>
+                  {searchSponsor.creative?.productName || searchSponsor.creative?.title || 'Sponsored'}
+                </Text>
+                <Text style={[styles.sponsorSub, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+                  {searchSponsor.creative?.tagline || searchSponsor.creative?.description || ''}
+                </Text>
+                {!!searchSponsor.creative?.website && (
+                  <Text style={styles.sponsorUrl} numberOfLines={1}>{websiteDisplay(searchSponsor.creative.website)}</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          )}
           {visibleResults.map((item) => (
             <TouchableOpacity
               key={item.uid}
@@ -1230,10 +1315,28 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#666',
   },
-  resultsList: {
-    padding: 16,
+  resultsList: {    padding: 16,
     paddingBottom: 20,
   },
+  sponsorRow: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  sponsorPill: {
+    borderRadius: 999,
+    backgroundColor: '#111217',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  sponsorPillText: { color: '#FFF', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  sponsorTitle: { fontSize: 13, fontWeight: '900' },
+  sponsorSub: { marginTop: 2, fontSize: 10, fontWeight: '800' },
+  sponsorUrl: { marginTop: 3, fontSize: 10, fontWeight: '900', color: '#8A7900' },
   idleWrap: {
     alignItems: 'center',
     paddingHorizontal: 32,

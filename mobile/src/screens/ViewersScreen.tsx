@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, doc, FieldPath, getDoc, limit, onSnapshot, query, where } from 'firebase/firestore';
-import { Bookmark, ChevronLeft, Eye, Gauge, MessageSquare, MousePointerClick, UserPlus } from 'lucide-react-native';
+import { Bookmark, ChevronLeft, Eye, Gauge, Lock, MessageSquare, MousePointerClick, UserPlus } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import VerifiedBadge from '../components/VerifiedBadge';
+import PaywallModal from '../components/PaywallModal';
+import { hasLinkupPro } from '../lib/paywall';
 
 import { compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
@@ -185,6 +187,10 @@ function ViewersScreen({ navigation, route }: any) {
   const [mode, setMode] = useState<AnalyticsMode>(requestedMode);
   const [rows, setRows] = useState<ViewerProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  // Who Viewed You is the #1 PLUS conversion hook: free users learn THAT
+  // builders looked, never WHO. Names/photos unlock on upgrade.
+  const isPro = hasLinkupPro(profile);
+  const [paywallFeature, setPaywallFeature] = useState('');
   const meta = MODE_META[mode];
   const HeaderIcon = meta.Icon;
 
@@ -472,6 +478,27 @@ function ViewersScreen({ navigation, route }: any) {
         <View style={styles.loaderWrap}>
           <ActivityIndicator color={COLORS.primaryStrong} size="small" />
         </View>
+      ) : !isPro ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+          <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: COLORS.primary + '1A', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
+            <Lock size={30} color={COLORS.primaryStrong} />
+          </View>
+          <Text style={{ fontSize: 20, fontWeight: '900', color: textColor(isDark), textAlign: 'center' }}>
+            {rows.length > 0
+              ? `${rows.length} builder${rows.length === 1 ? '' : 's'} checked you out`
+              : "See who's checking you out"}
+          </Text>
+          <Text style={{ marginTop: 10, fontSize: 14, lineHeight: 20, textAlign: 'center', color: textColor(isDark, 'muted') }}>
+            Names, photos, and profiles of everyone researching you are a LINKUP PLUS superpower.
+          </Text>
+          <TouchableOpacity
+            onPress={() => setPaywallFeature('Who Viewed You')}
+            style={{ marginTop: 22, backgroundColor: COLORS.primary, paddingHorizontal: 26, paddingVertical: 13, borderRadius: 999 }}
+            activeOpacity={0.9}
+          >
+            <Text style={{ color: '#000', fontWeight: '900', fontSize: 14 }}>Unlock with PLUS</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           data={rows}
@@ -490,6 +517,12 @@ function ViewersScreen({ navigation, route }: any) {
           }
         />
       )}
+      <PaywallModal
+        visible={!!paywallFeature}
+        onClose={() => setPaywallFeature('')}
+        feature={paywallFeature || 'Who Viewed You'}
+        description={'Who Viewed You is a LINKUP PLUS feature. Upgrade to see the names and profiles of everyone researching you.'}
+      />
     </SafeAreaView>
   );
 }

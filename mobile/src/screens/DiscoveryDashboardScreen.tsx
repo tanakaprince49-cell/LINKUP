@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,7 +13,9 @@ import { rankLeague } from '../lib/builderLeague';
 import { loadLeaguePool } from '../lib/leaguePool';
 import { getBestOpportunityAlerts, getRotatedOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, getRotatedProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, ArrowLeftRight, UserCheck } from 'lucide-react-native';
+import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, ArrowLeftRight, UserCheck, Megaphone, Globe } from 'lucide-react-native';
+import { hasLinkupPro } from '../lib/paywall';
+import { Campaign, fetchActiveCampaignsForPlacement, recordCampaignClick, recordCampaignImpression, websiteDisplay } from '../lib/campaigns';
 import { shareLinkupInvite } from '../lib/activation';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
@@ -100,6 +102,25 @@ const writeCachedDashboardPeople = async (uid: string, people: UserProfile[]) =>
 
 function DiscoveryDashboardScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
+  // Hub ad strip: one sponsored slot for free members; PLUS members never see it.
+  const [hubSponsor, setHubSponsor] = useState<Campaign | null>(null);
+  const viewerIsPro = hasLinkupPro(me);
+  useEffect(() => {
+    if (viewerIsPro || !user?.uid) {
+      setHubSponsor(null);
+      return;
+    }
+    let cancelled = false;
+    fetchActiveCampaignsForPlacement('hub', 1).then((campaigns) => {
+      if (cancelled) return;
+      const pick = campaigns.find((campaign) => campaign.ownerId !== user.uid) || null;
+      setHubSponsor(pick);
+      if (pick) void recordCampaignImpression(pick.id, user.uid);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewerIsPro, user?.uid]);
   const { theme } = useTheme();
   const isFocused = useIsFocused();
   const isDark = theme === 'dark';
@@ -270,7 +291,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         {typeof rank === 'number' ? (
           <View style={[styles.rankBadge, rank < 3 && { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
+    borderColor: HOME_LINE }]}>
             <Text style={styles.rankBadgeText}>{rank === 0 ? '1ST' : rank === 1 ? '2ND' : rank === 2 ? '3RD' : `#${rank + 1}`}</Text>
           </View>
         ) : null}
@@ -358,7 +379,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
           <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.opportunityBtn, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
+    borderColor: HOME_LINE }]}>
             <Text style={styles.opportunityBtnText}>View Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Search')} style={[styles.opportunityIconBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
@@ -472,7 +493,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   onPress={() => navigation.navigate('DailyFive')}
                   style={[styles.heroBtn, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}
+    borderColor: HOME_LINE }]}
                 >
                   <Flame size={14} color="#000" />
                   <Text style={[styles.heroBtnText, { color: '#000' }]}>Daily 5</Text>
@@ -500,6 +521,41 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 <ChevronRight size={15} color={textColor(isDark, 'muted')} />
               </TouchableOpacity>
 
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Campaigns')}
+                activeOpacity={0.88}
+                style={[styles.ideaDeckBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
+              >
+                <Megaphone size={15} color={HOME_INK} />
+                <Text style={[styles.ideaDeckBtnText, { color: textColor(isDark) }]}>Campaigns — put your product in front of every founder</Text>
+                <ChevronRight size={15} color={textColor(isDark, 'muted')} />
+              </TouchableOpacity>
+
+              {hubSponsor && (
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  onPress={() => {
+                    void recordCampaignClick(hubSponsor.id, user?.uid || '');
+                    const url = hubSponsor.creative?.website || '';
+                    if (url) Linking.openURL(url).catch(() => {});
+                  }}
+                  style={[styles.sponsorStrip, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}
+                >
+                  <View style={styles.sponsorStripPill}>
+                    <Text style={styles.sponsorStripPillText}>SPONSORED</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sponsorStripTitle, { color: textColor(isDark) }]} numberOfLines={1}>
+                      {hubSponsor.creative?.productName || hubSponsor.creative?.title || 'Sponsored'}
+                    </Text>
+                    <Text style={[styles.sponsorStripSub, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
+                      {hubSponsor.creative?.tagline || hubSponsor.creative?.description || ''}
+                    </Text>
+                  </View>
+                  <Globe size={14} color={textColor(isDark, 'muted')} />
+                </TouchableOpacity>
+              )}
+
               {topOpportunityAlert ? (
                 <TouchableOpacity
                   activeOpacity={0.9}
@@ -509,7 +565,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   <View style={styles.radarTop}>
                     <View style={[styles.radarIcon, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
+    borderColor: HOME_LINE }]}>
                       <BellRing size={15} color="#000" />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -520,7 +576,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                     </View>
                     <View style={[styles.radarScore, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
+    borderColor: HOME_LINE }]}>
                       <Text style={styles.radarScoreText}>{topOpportunityAlert.score}%</Text>
                     </View>
                   </View>
@@ -564,7 +620,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             </View>
             <View style={[styles.linkyChip, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
+    borderColor: HOME_LINE }]}>
               <Text style={styles.linkyChipText}>Chat</Text>
             </View>
           </TouchableOpacity>
@@ -726,6 +782,21 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   ideaDeckBtnText: { flex: 1, fontSize: 13, fontWeight: '800', letterSpacing: -0.2 },
+  sponsorStrip: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.10)',
+  },
+  sponsorStripPill: { borderRadius: 999, backgroundColor: '#111217', paddingHorizontal: 9, paddingVertical: 5 },
+  sponsorStripPillText: { color: '#FFF', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  sponsorStripTitle: { fontSize: 12, fontWeight: '900' },
+  sponsorStripSub: { marginTop: 2, fontSize: 10, fontWeight: '800' },
   radarCard: {
     marginTop: 16,
     borderRadius: 16,
@@ -1079,6 +1150,22 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
     color: '#000',
+  },
+  rankBadge: {
+    minWidth: 34,
+    height: 34,
+    paddingHorizontal: 6,
+    borderRadius: 17,
+    backgroundColor: 'rgba(148,163,184,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  rankBadgeText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    color: '#111827',
   },
 });
 
