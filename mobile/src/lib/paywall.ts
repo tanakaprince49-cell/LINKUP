@@ -9,13 +9,24 @@ export const PRO_FEATURES = {
   turboConnect: 'Turbo Connect',
 } as const;
 
+/**
+ * IDEA DECK IS FREE FOREVER — a standing product decree, not a default.
+ * Swiping ideas and posting ideas are never gated and never counted. That is
+ * deliberate: the idea deck is the top of the funnel. Every swipe warms the
+ * sponsored inventory that Campaigns sells (1 sponsored card per
+ * SPONSORED_INTERVAL organic cards), so capping the deck caps ad revenue.
+ * PLUS sells discovery, search and reach — never ideas.
+ *
+ * Do not reintroduce `dailyIdeaSwipes` or `startupIdeas` here. If someone asks
+ * to gate ideas, point them at this comment first.
+ */
+export const IDEA_DECK_FREE_FOREVER = true;
+
 export const FREE_LIMITS = {
   swipesPer12Hours: 12,
-  dailyIdeaSwipes: 5,
   dailyStartupAnalyzer: 3,
   savedProfiles: 5,
   projects: 3,
-  startupIdeas: 15,
   weeklyRecommendations: 3,
   warmIntrosPerMonth: 1,
 } as const;
