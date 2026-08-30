@@ -23,6 +23,8 @@ import {
   Megaphone,
   MousePointerClick,
   Package,
+  Pause,
+  Play,
   Pencil,
   Plus,
   ShieldCheck,
@@ -429,11 +431,40 @@ export default function CampaignsScreen({ navigation }: any) {
   // ------------------------------------------------------------
   // Stat tile — the league's score column, reused three ways
   // ------------------------------------------------------------
-  const StatTile = ({ Icon, value, label }: { Icon: any; value: string; label: string }) => (
-    <View style={[styles.statTile, liquidGlass(isDark, false)]}>
-      <Icon size={13} color={COLORS.primaryStrong} />
-      <Text style={[styles.statValue, { color: textColor(isDark) }]}>{value}</Text>
-      <Text style={[styles.statLabel, { color: textColor(isDark, 'muted') }]}>{label}</Text>
+  // ------------------------------------------------------------
+  // Launch Console hero
+  //
+  // The dashboard used to be one more white card with three small tiles on
+  // it, indistinguishable from every other screen. This inverts the block
+  // instead: solid ink on paper in light mode, paper on ink in dark. It is
+  // the one place on the page that is not a card, which is what makes the
+  // page feel designed rather than stacked.
+  // ------------------------------------------------------------
+  const heroBg = isDark ? '#FFFFFF' : COLORS.inkButton;
+  const heroInk = isDark ? '#0A0B0D' : '#FFFFFF';
+  const heroMuted = isDark ? 'rgba(10, 11, 13, 0.55)' : 'rgba(255, 255, 255, 0.62)';
+  const heroRule = isDark ? 'rgba(10, 11, 13, 0.12)' : 'rgba(255, 255, 255, 0.16)';
+  const heroSoft = isDark ? 'rgba(10, 11, 13, 0.08)' : 'rgba(255, 255, 255, 0.14)';
+  const capacityPct = Math.round((Math.min(liveCount, MAX_ACTIVE_CAMPAIGNS) / MAX_ACTIVE_CAMPAIGNS) * 100);
+
+  // Share of voice: each campaign's slice of the advertiser's own reach.
+  // Ranked, top five, and drawn from real per-campaign counters — no
+  // invented timeseries.
+  const shareOfVoice = [...campaigns]
+    .map((campaign) => ({
+      id: campaign.id,
+      name: campaign.creative?.productName || campaign.creative?.title || campaign.name || 'Untitled',
+      views: campaign.statsImpressions || 0,
+    }))
+    .filter((entry) => entry.views > 0)
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 5);
+  const shareLead = shareOfVoice[0]?.views || 1;
+
+  const HeroStat = ({ value, label }: { value: string; label: string }) => (
+    <View style={styles.heroStatItem}>
+      <Text style={[styles.heroStatValue, { color: heroInk }]}>{value}</Text>
+      <Text style={[styles.heroStatLabel, { color: heroMuted }]}>{label}</Text>
     </View>
   );
 
@@ -445,6 +476,14 @@ export default function CampaignsScreen({ navigation }: any) {
     const editable = campaign.status === 'pending_review';
     const logo = campaign.creative?.logoUrl || '';
     const ctr = ctrFor(campaign.statsImpressions || 0, campaign.statsClicks || 0);
+
+    // Pause/resume straight from the console — no detour into a detail screen.
+    const togglePause = () => {
+      const nextStatus = campaign.status === 'active' ? 'paused' : 'active';
+      void setCampaignStatus(campaign.id, nextStatus as any).catch(() =>
+        notifyUser('Could not update', 'We could not change this campaign. Try again in a moment.')
+      );
+    };
 
     return (
       <TouchableOpacity
@@ -470,8 +509,9 @@ export default function CampaignsScreen({ navigation }: any) {
             {placementsLabel(campaign) || 'Idea Deck'}
           </Text>
           <View style={styles.rowStatusRow}>
-            <View style={[styles.statusDot, { backgroundColor: meta.color }]} />
-            <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
+            <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
+              <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
+            </View>
           </View>
         </View>
 
@@ -483,6 +523,20 @@ export default function CampaignsScreen({ navigation }: any) {
           </Text>
         </View>
 
+        {(campaign.status === 'active' || campaign.status === 'paused') && (
+          <TouchableOpacity
+            onPress={togglePause}
+            style={styles.editBtn}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {campaign.status === 'active' ? (
+              <Pause size={13} color={textColor(isDark, 'secondary')} />
+            ) : (
+              <Play size={13} color={textColor(isDark, 'secondary')} />
+            )}
+          </TouchableOpacity>
+        )}
         {editable && (
           <TouchableOpacity
             onPress={() => navigation.navigate('CreateCampaign', { editCampaign: campaign })}
@@ -502,43 +556,79 @@ export default function CampaignsScreen({ navigation }: any) {
   // ------------------------------------------------------------
   const renderDashboard = () => (
     <View>
-      <View style={[styles.leagueCard, liquidGlass(isDark, false)]}>
-        <View style={styles.leagueTopRow}>
-          <View style={styles.leagueBadge}>
-            <ShieldCheck size={12} color={COLORS.primaryStrong} />
-            <Text style={styles.leagueBadgeText}>{trialLabel || 'CAMPAIGNS ACTIVE'}</Text>
+      <View style={[styles.hero, { backgroundColor: heroBg }]}>
+        <View style={styles.heroTop}>
+          <View style={[styles.heroPill, { backgroundColor: heroSoft }]}>
+            <View style={[styles.heroPulse, { backgroundColor: heroInk }]} />
+            <Text style={[styles.heroPillText, { color: heroInk }]}>{trialLabel || 'CAMPAIGNS LIVE'}</Text>
           </View>
-          <View style={styles.slotDots}>
-            {Array.from({ length: MAX_ACTIVE_CAMPAIGNS }).map((_, index) => (
-              <View key={index} style={[styles.slotDot, index < liveCount && styles.slotDotFilled]} />
-            ))}
-          </View>
+          <Text style={[styles.heroSlot, { color: heroMuted }]}>
+            {liveCount}/{MAX_ACTIVE_CAMPAIGNS} SLOTS
+          </Text>
         </View>
 
-        <Text style={[styles.leagueTitle, { color: textColor(isDark) }]}>
-          {liveCount === 0 ? 'Ready to get seen?' : `${liveCount} of ${MAX_ACTIVE_CAMPAIGNS} slots live`}
-        </Text>
-        <Text style={[styles.leagueCopy, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>
-          {liveCount === 0
-            ? 'Your placements are armed. Launch your first sponsored card in 2 minutes.'
-            : 'Your products are earning attention across LinkUp right now.'}
-        </Text>
+        <Text style={[styles.heroReach, { color: heroInk }]}>{compactNumber(totalImpressions)}</Text>
+        <Text style={[styles.heroReachLabel, { color: heroMuted }]}>total views across your campaigns</Text>
 
-        <View style={styles.statGrid}>
-          <StatTile Icon={Eye} value={compactNumber(totalImpressions)} label="Views" />
-          <StatTile Icon={MousePointerClick} value={compactNumber(totalClicks)} label="Clicks" />
-          <StatTile Icon={TrendingUp} value={totalCtr} label="CTR" />
+        <View style={styles.heroMeterRow}>
+          <View style={[styles.heroMeterTrack, { backgroundColor: heroRule }]}>
+            <View style={[styles.heroMeterFill, { backgroundColor: heroInk, width: `${capacityPct}%` }]} />
+          </View>
+        </View>
+        <Text style={[styles.heroMeterText, { color: heroMuted }]}>{capacityPct}% of your slots in use</Text>
+
+        <View style={[styles.heroDivider, { backgroundColor: heroRule }]} />
+
+        <View style={styles.heroStats}>
+          <HeroStat value={compactNumber(totalClicks)} label="Clicks" />
+          <HeroStat value={totalCtr} label="CTR" />
+          <HeroStat value={String(liveCount)} label="Live" />
         </View>
       </View>
 
+      {shareOfVoice.length > 0 && (
+        <View>
+          <Text style={[styles.sectionLabel, { color: textColor(isDark, 'muted') }]}>SHARE OF VOICE</Text>
+          <View style={[styles.shareCard, liquidGlass(isDark, false)]}>
+            {shareOfVoice.map((entry) => (
+              <View key={entry.id} style={styles.shareRow}>
+                <Text style={[styles.shareName, { color: textColor(isDark) }]} numberOfLines={1}>
+                  {entry.name}
+                </Text>
+                <View style={styles.shareBarRow}>
+                  <View style={[styles.shareTrack, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBg }]}>
+                    <View
+                      style={[
+                        styles.shareFill,
+                        {
+                          backgroundColor: COLORS.primaryStrong,
+                          width: `${Math.max(4, Math.round((entry.views / shareLead) * 100))}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.shareValue, { color: textColor(isDark, 'muted') }]}>
+                    {compactNumber(entry.views)}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
       <TouchableOpacity
-        style={[styles.primaryBtn, { backgroundColor: COLORS.primary }, liveCount >= MAX_ACTIVE_CAMPAIGNS && styles.primaryBtnDisabled]}
+        style={[
+          styles.primaryBtn,
+          { backgroundColor: COLORS.inkButton },
+          liveCount >= MAX_ACTIVE_CAMPAIGNS && styles.primaryBtnDisabled,
+        ]}
         activeOpacity={0.86}
         disabled={liveCount >= MAX_ACTIVE_CAMPAIGNS}
         onPress={() => navigation.navigate('CreateCampaign')}
       >
-        <Plus size={16} color={COLORS.lightTextPrimary} />
-        <Text style={[styles.primaryBtnText, { color: COLORS.lightTextPrimary }]}>NEW CAMPAIGN</Text>
+        <Plus size={16} color={COLORS.inkButtonText} />
+        <Text style={[styles.primaryBtnText, { color: COLORS.inkButtonText }]}>NEW CAMPAIGN</Text>
       </TouchableOpacity>
       {liveCount >= MAX_ACTIVE_CAMPAIGNS && (
         <Text style={[styles.capHint, { color: textColor(isDark, 'muted') }]}>
@@ -860,18 +950,6 @@ const styles = StyleSheet.create({
   leagueTitle: { marginTop: 14, fontSize: 21, lineHeight: 27, fontWeight: '900', letterSpacing: -0.3 },
   leagueCopy: { marginTop: 6, fontSize: 12, lineHeight: 18, fontWeight: '600' },
 
-  statGrid: { flexDirection: 'row', gap: 8, marginTop: 16 },
-  statTile: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 11,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    gap: 3,
-  },
-  statValue: { fontSize: 17, fontWeight: '900' },
-  statLabel: { fontSize: 8, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase' },
-
   // --- campaign rows ---
   row: {
     flexDirection: 'row',
@@ -905,6 +983,41 @@ const styles = StyleSheet.create({
   editBtn: { padding: 4 },
 
   // --- empty state ---
+  hero: { borderRadius: 26, padding: 20 },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  heroPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  heroPulse: { width: 6, height: 6, borderRadius: 3 },
+  heroPillText: { fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
+  heroSlot: { fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
+  heroReach: { marginTop: 18, fontSize: 46, lineHeight: 50, fontWeight: '900', letterSpacing: -1.6 },
+  heroReachLabel: { marginTop: 2, fontSize: 11, fontWeight: '700' },
+  heroMeterRow: { marginTop: 16 },
+  heroMeterTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  heroMeterFill: { height: 6, borderRadius: 3 },
+  heroMeterText: { marginTop: 7, fontSize: 10, fontWeight: '800' },
+  heroDivider: { height: 1, marginVertical: 16 },
+  heroStats: { flexDirection: 'row', gap: 10 },
+  heroStatItem: { flex: 1 },
+  heroStatValue: { fontSize: 19, fontWeight: '900', letterSpacing: -0.4 },
+  heroStatLabel: { marginTop: 1, fontSize: 9, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase' },
+
+  shareCard: { borderRadius: 20, padding: 14, gap: 12 },
+  shareRow: { gap: 6 },
+  shareName: { fontSize: 11, fontWeight: '800' },
+  shareBarRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  shareTrack: { flex: 1, height: 8, borderRadius: 4, overflow: 'hidden' },
+  shareFill: { height: 8, borderRadius: 4 },
+  shareValue: { minWidth: 34, textAlign: 'right', fontSize: 9, fontWeight: '800' },
+
+  statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, alignSelf: 'flex-start' },
+
   emptyCard: { borderRadius: 20, padding: 24, alignItems: 'center', gap: 6 },
   emptyIconWrap: {
     width: 46,

@@ -35,11 +35,15 @@ const FLAVOR_TOKENS: Record<BrandFlavor, {
   lightBorderActive: string;
 }> = {
   white: {
+    // "Full White" is a warm-paper monochrome, not a flat white sheet: pure
+    // white cards sit on a warm off-white stock, hairlines are crisp and cool,
+    // and primary actions are solid ink. That layering is what stops it
+    // reading as a default/basic theme.
     primary: '#FFFFFF',
-    primaryGlow: 'rgba(17, 24, 39, 0.05)',
-    primaryStrong: '#111827',
-    darkBorderActive: 'rgba(255, 255, 255, 0.30)',
-    lightBorderActive: 'rgba(17, 24, 39, 0.30)',
+    primaryGlow: 'rgba(10, 11, 13, 0.06)',
+    primaryStrong: '#0A0B0D',
+    darkBorderActive: 'rgba(255, 255, 255, 0.34)',
+    lightBorderActive: 'rgba(10, 11, 13, 0.44)',
   },
   yellow: {
     // FULL YELLOW by user decree — in yellow mode EVERYTHING is yellow:
@@ -79,15 +83,23 @@ export const COLORS = {
   darkTextSecondary: '#A8B0BD',
   darkTextMuted: '#6E7683',
 
-  lightBg: '#F7F7F5',
+  // Warm paper stock underneath pure-white cards. The contrast between the two
+  // is what gives the light theme depth instead of looking like one flat sheet.
+  lightBg: '#F1F0EC',
   lightBgSec: '#FFFFFF',
   lightCard: '#FFFFFF',
   lightGlassStrong: '#FFFFFF',
-  lightBorder: 'rgba(11, 18, 32, 0.08)',
-  lightBorderActive: 'rgba(17, 24, 39, 0.30)',
-  lightTextPrimary: '#0B1220',
-  lightTextSecondary: '#4B5563',
-  lightTextMuted: '#8A93A0',
+  lightBorder: 'rgba(10, 11, 13, 0.10)',
+  lightBorderActive: 'rgba(10, 11, 13, 0.44)',
+  lightTextPrimary: '#0A0B0D',
+  lightTextSecondary: '#4A5058',
+  lightTextMuted: '#8B9199',
+
+  // Solid-ink action surfaces. In a monochrome theme the confident move is a
+  // near-black CTA with white text — the opposite of a white-on-white chip.
+  inkButton: '#0A0B0D',
+  inkButtonText: '#FFFFFF',
+  inkButtonPressed: '#23262B',
 };
 
 export const RADIUS = {
@@ -114,15 +126,34 @@ export const TYPE = {
   button: { fontSize: 16, fontWeight: '800' as const },
 };
 
+/**
+ * Card elevation.
+ *
+ * `default` covers web, and it used to be `{}` — which meant the web app had
+ * NO shadows anywhere and every surface looked like part of one flat page.
+ * React Native Web understands boxShadow, so give it the same lift as native.
+ */
 export const GLASS_SHADOW = Platform.select({
   ios: {
-    shadowColor: '#0B1220',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
+    shadowColor: '#0A0B0D',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.09,
+    shadowRadius: 18,
   },
-  android: { elevation: 1 },
-  default: {},
+  android: { elevation: 3 },
+  default: { boxShadow: '0 6px 18px rgba(10, 11, 13, 0.10)' },
+});
+
+/** Deeper lift for modals and anything that floats above the page. */
+export const GLASS_SHADOW_LG = Platform.select({
+  ios: {
+    shadowColor: '#0A0B0D',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.18,
+    shadowRadius: 40,
+  },
+  android: { elevation: 10 },
+  default: { boxShadow: '0 22px 60px rgba(10, 11, 13, 0.22)' },
 });
 
 export const liquidGlass = (isDark: boolean, elevated = true) => ({
