@@ -693,14 +693,11 @@ export default function SwipeScreen({ navigation }: any) {
     const len = feedRef.current.length;
     const cur = scrollIndexRef.current;
     if (dir === 'up' && cur < len - 1) {
-      // Scroll mode spends the same 12-per-12h discovery budget as the swipe
-      // deck, so the limit locks here too instead of scrolling forever. Cards
-      // already paid for (scrolled back over) stay free.
-      const upcoming = feedRef.current[cur + 1];
-      if (!hasDiscoveryBudget(upcoming?.uid) || !spendDiscoveryBudget(upcoming?.uid)) {
-        openPaywall('Unlimited Discovery');
-        return;
-      }
+      // SCROLLING IS BROWSING — always free, never paywalled. The 12-per-12h
+      // discovery budget is spent by ACTIONS (like/pass/request), not by
+      // looking, so swiping up must never open the paywall. The feed still
+      // locks at the last card (see the scrollIndex clamp below) instead of
+      // running past the end and looping back to the first profile.
       isScrollAnimatingRef.current = true;
       scrollPosition.setValue(360);
       setScrollIndex(cur + 1);

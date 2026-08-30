@@ -45,9 +45,12 @@ export const isAdminIdentity = (identity: AdminIdentity): boolean =>
  */
 export function withAdminEntitlements(profile: any, identity: AdminIdentity): any {
   const isAdmin = isAdminIdentity(identity) || profile?.isAdmin === true;
-  if (!isAdmin) return profile;
+  // Never invent a profile. Screens treat a non-null profile as fully loaded
+  // (ProfileScreen renders straight off it), so synthesising one for a
+  // not-yet-loaded account would hand them an object with no uid and no data.
+  if (!isAdmin || !profile) return profile;
 
-  const base: any = profile || {};
+  const base: any = profile;
   const status = String(base.subscriptionStatus || '').toLowerCase();
   const lapsed = ['inactive', 'canceled', 'cancelled', 'expired', 'free'].includes(status);
 

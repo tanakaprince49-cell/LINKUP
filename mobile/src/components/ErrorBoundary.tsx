@@ -13,6 +13,9 @@ interface Props {
 interface State {
   hasError: boolean;
   error: string;
+  /** Component stack, captured so a production crash can still be reported. */
+  details: string;
+  copied: boolean;
 }
 
 /**
@@ -23,22 +26,40 @@ interface State {
 export default class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: '' };
+    this.state = { hasError: false, error: '', details: '', copied: false };
   }
 
   static getDerivedStateFromError(error: unknown): State {
     const message = error instanceof Error ? error.message : String(error || 'Unknown error');
-    return { hasError: true, error: message.slice(0, 300) };
+    return { hasError: true, error: message.slice(0, 300), details: '', copied: false };
   }
 
   componentDidCatch(error: unknown, info: React.ErrorInfo) {
-    // Log full error in dev
-    if (__DEV__) {
-      console.error('[ErrorBoundary] Caught error:', error, info);
-    } else {
-      console.warn('[ErrorBoundary] Screen crash caught:', String(error).slice(0, 200));
-    }
+    // Always log the full error. A crash screen that hides the message means
+    // nobody can tell what actually broke in production.
+    console.error('[ErrorBoundary] Caught error:', error, info);
+    const stack = (error instanceof Error && error.stack) || info?.componentStack || '';
+    this.setState({ details: String(stack).slice(0, 1200) });
   }
+
+  /** Copy the stack to the clipboard (web) so it can be pasted into a report. */
+  handleCopy = () => {
+    const payload = this.state.details || this.state.error;
+    try {
+      if (Platform.OS === 'web' && (globalThis as any)?.navigator?.clipboard?.writeText) {
+        void (globalThis as any).navigator.clipboard.writeText(payload);
+        this.setState({ copied: true });
+        return;
+      }
+    } catch {
+      // Clipboard blocked (insecure context / permissions) — fall through.
+    }
+    try {
+      (globalThis as any)?.prompt?.('Copy the error details', payload);
+    } catch {
+      // noop
+    }
+  };
 
   handleRetry = () => {
     this.setState({ hasError: false, error: '' });
@@ -55,7 +76,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   };
 
   render() {
-    const { hasError, error } = this.state;
+    const { hasError, error, details, copied } = this.state;
     const { children, screenName, inline } = this.props;
 
     if (!hasError) return children as React.ReactElement;
@@ -83,15 +104,27 @@ export default class ErrorBoundary extends React.Component<Props, State> {
           <Text style={styles.subtitle}>
             This page encountered an error. You can retry or go back to the home screen.
           </Text>
-          {__DEV__ && error ? (
+          {error ? (
             <View style={styles.devError}>
-              <Text style={styles.devErrorText}>{error}</Text>
+              <Text style={styles.devErrorText} selectable>
+                {error}
+              </Text>
             </View>
+          ) : null}
+          {details ? (
+            <Text style={styles.devErrorText} selectable numberOfLines={4}>
+              {details}
+            </Text>
           ) : null}
           <View style={styles.actions}>
             <TouchableOpacity onPress={this.handleRetry} style={[styles.btn, styles.retryBtn]}>
               <Text style={styles.retryBtnText}>Retry</Text>
             </TouchableOpacity>
+            {error || details ? (
+              <TouchableOpacity onPress={this.handleCopy} style={[styles.btn, styles.homeBtn]}>
+                <Text style={styles.homeBtnText}>{copied ? 'Copied ✓' : 'Copy error'}</Text>
+              </TouchableOpacity>
+            ) : null}
             {Platform.OS === 'web' && (
               <TouchableOpacity onPress={this.handleGoHome} style={[styles.btn, styles.homeBtn]}>
                 <Text style={styles.homeBtnText}>Go Home</Text>

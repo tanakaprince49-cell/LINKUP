@@ -7,7 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfile } from '../types';
 import { COLORS, appBackground, getBrandFlavor, liquidGlass, textColor } from '../theme/theme';
-import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
+import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid, spreadTiedScores } from '../lib/matchmaking';
 import { activeOpportunityScore, displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { rankLeague } from '../lib/builderLeague';
 import { loadLeaguePool } from '../lib/leaguePool';
@@ -236,6 +236,25 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     return list.filter((x) => x.s >= 0).slice(0, 2).map((x) => x.p);
   }, [people, aiRank, localRank]);
 
+  /**
+   * Display scores for the picks rail.
+   *
+   * The scorer clamps anything with fewer than two overlapping dimensions to
+   * 20, so with a small network both picks genuinely score the same and the
+   * rail showed "20% / 20%". Ranking is decided by `recommended`; this only
+   * spreads the DISPLAYED (and passed-on) numbers so two people standing next
+   * to each other never repeat a percentage.
+   */
+  const pickScoreById = useMemo(() => {
+    const entries = recommended.map((p) => ({
+      uid: p.uid,
+      score: Math.round(aiRank[p.uid]?.score ?? localRank[p.uid]?.score ?? 1),
+    }));
+    const map: Record<string, number> = {};
+    for (const entry of spreadTiedScores(entries)) map[entry.uid] = entry.score;
+    return map;
+  }, [recommended, aiRank, localRank]);
+
   // The Builder League preview uses the shared league pool + the exact same
   // ranker as the full league screen, so standings match on every device.
   const trending = useMemo(() => {
@@ -282,7 +301,9 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     const localMatch = localRank[item.uid];
     const aiMatch = aiRank[item.uid];
     const match = localMatch || aiMatch;
-    const score = match?.score ?? null;
+    // The picks rail shows de-duplicated scores so the two cards never read
+    // the same percentage; every other rail keeps the raw score.
+    const score = (showScore ? pickScoreById[item.uid] : undefined) ?? match?.score ?? null;
     return (
       <TouchableOpacity
         onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: score, compatibilityReason: match?.reason || '' })}

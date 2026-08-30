@@ -639,7 +639,9 @@ export default function ProfileScreen({ navigation, route }: any) {
   }, [isFocused, isViewingOther, myProfile?.uid, targetUserId]);
 
   // NOTE: do not early-return before hooks below (Rules of Hooks).
-  const isBusy = isViewingOther ? viewedLoading && !viewedProfile : !myProfile;
+  // A profile without a uid is not loadable — everything below renders off
+  // `profile`, so spin instead of painting a half-built object.
+  const isBusy = isViewingOther ? viewedLoading && !viewedProfile : !myProfile?.uid;
   const safeProfile: any = profile || myProfile || { uid: targetUserId || user?.uid || '', displayName: 'Builder', skills: [] };
 
   const reputationProfile = useMemo(() => {

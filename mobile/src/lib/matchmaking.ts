@@ -282,6 +282,8 @@ export function localCommonalityRank(me: UserProfile | null | undefined, people:
   const myCommitment = normalizeText(me?.commitmentLevel);
   const myStage = normalizeText(me?.startupStage);
   const myRole = normalizeText(me?.occupation);
+  const myCity = normalizeText((me as any)?.city);
+  const myCountry = normalizeText((me as any)?.country);
 
   const scorePerson = (person: UserProfile) => {
     const skills = toNormalizedArray(person.skills);
@@ -293,6 +295,8 @@ export function localCommonalityRank(me: UserProfile | null | undefined, people:
     const commitment = normalizeText(person.commitmentLevel);
     const stage = normalizeText(person?.startupStage);
     const role = normalizeText(person.occupation);
+    const city = normalizeText((person as any)?.city);
+    const country = normalizeText((person as any)?.country);
 
     const sharedSkills = countShared(mySkills, skills);
     const sharedIndustries = countShared(myIndustries, industries);
@@ -304,6 +308,11 @@ export function localCommonalityRank(me: UserProfile | null | undefined, people:
     const sameStage = myStage && stage && myStage === stage ? 1 : 0;
     const complementaryRole = myRole && role && complementaryRoles[myRole]?.includes(role) ? 1 : 0;
     const sameRole = myRole && role && myRole === role ? 1 : 0;
+    // Location is a real compatibility signal AND the thing that most often
+    // separates two otherwise identical sparse profiles, which is why it is
+    // scored here instead of only being shown on the card.
+    const sameCity = myCity && city && myCity === city ? 1 : 0;
+    const sameCountry = !sameCity && myCountry && country && myCountry === country ? 1 : 0;
 
     const overlapDimensions = [sharedSkills, sharedIndustries, sharedGoals, sharedPersonality, sameWorkStyle, sameCommitment, complementaryRole].filter(Boolean).length;
 
@@ -317,7 +326,9 @@ export function localCommonalityRank(me: UserProfile | null | undefined, people:
       sameCommitment * 5 +
       sameStage * 4 +
       complementaryRole * 10 +
-      sameRole * 4;
+      sameRole * 4 +
+      sameCity * 3 +
+      sameCountry * 1;
 
     let score = Math.max(1, Math.min(100, Math.round(rawScore)));
 
@@ -333,6 +344,8 @@ export function localCommonalityRank(me: UserProfile | null | undefined, people:
     if (sharedPersonality) reasonParts.push(`${sharedPersonality} personality match${sharedPersonality === 1 ? '' : 'es'}`);
     if (sameWorkStyle) reasonParts.push('same work style');
     if (sameCommitment) reasonParts.push('same commitment level');
+    if (sameCity) reasonParts.push('same city');
+    else if (sameCountry) reasonParts.push('same country');
     if (complementaryRole) reasonParts.push('complementary role match');
     if (sameStage && !reasonParts.length) reasonParts.push('similar startup stage');
 
@@ -348,4 +361,29 @@ export function localCommonalityRank(me: UserProfile | null | undefined, people:
     .sort((left, right) => right.score - left.score)
     .slice(0, limitCount)
     .map((entry) => ({ uid: entry.person.uid, score: entry.score, reason: entry.reason, cached: true as const }));
+}
+
+/**
+ * Nudge duplicate scores apart, deterministically.
+ *
+ * The scorer is deliberately coarse: with a small network and sparse profiles
+ * several people legitimately land on the exact same number (everything with
+ * fewer than two overlapping dimensions is capped at 20), so a rail like
+ * "Today's 2 picks" used to show two identical percentages side by side.
+ *
+ * Order is preserved and the highest score keeps its value — each later entry
+ * is only ever pushed *below* the one before it, by `step` points, so the
+ * ranking stays truthful while the numbers read as distinct.
+ */
+export function spreadTiedScores<T extends { uid: string; score: number }>(
+  entries: T[],
+  step = 2
+): T[] {
+  let previous = Number.POSITIVE_INFINITY;
+  return entries.map((entry) => {
+    const raw = Number.isFinite(entry?.score) ? Math.round(entry.score) : 1;
+    const score = raw < previous ? raw : Math.max(1, previous - step);
+    previous = score;
+    return { ...entry, score };
+  });
 }
