@@ -15,6 +15,7 @@ const IMAGEKIT_URL_ENDPOINT = 'https://ik.imagekit.io/vjkzaxrro';
 const AUTH_ENDPOINT = 'https://linkup-muqu.vercel.app/api/imagekitAuth';
 
 export const IMAGEKIT_AVATAR_FOLDER = '/linkup-avatars';
+export const IMAGEKIT_CAMPAIGN_FOLDER = '/linkup-campaigns';
 
 export type ImageKitAuthParams = {
   token: string;
@@ -67,4 +68,13 @@ export const uploadAvatarToImageKit = (uid: string, dataUri: string) =>
     folder: IMAGEKIT_AVATAR_FOLDER,
     fileName: `${uid}.jpg`,
     useUniqueFileName: false,
+  });
+
+/** Advertiser logos for LinkUp Campaigns. Unique names so a re-uploaded logo
+ *  never collides with a cached one on the CDN. */
+export const uploadCampaignLogoToImageKit = (uid: string, dataUri: string) =>
+  uploadImageToImageKit(uid, dataUri, {
+    folder: IMAGEKIT_CAMPAIGN_FOLDER,
+    fileName: `${uid}-logo.jpg`,
+    useUniqueFileName: true,
   });

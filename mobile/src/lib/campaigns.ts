@@ -77,6 +77,8 @@ export type CampaignCreative = {
   tagline?: string;
   description: string;
   website?: string;
+  /** Advertiser logo (ImageKit URL). Shown on every sponsored placement. */
+  logoUrl?: string;
   category?: string[];
   ideaId?: string;
   title?: string;
@@ -288,7 +290,14 @@ export const isCampaignAdmin = async (uid: string) => {
 // Serving — viewer-side. This is where the anti-abuse guarantees live.
 // ---------------------------------------------------------------------------
 
-export type SponsoredIdeaDeckItem = IdeaDeckItem & { sponsored: true; campaignId: string; website?: string; house?: boolean };
+export type SponsoredIdeaDeckItem = IdeaDeckItem & {
+  sponsored: true;
+  campaignId: string;
+  website?: string;
+  house?: boolean;
+  /** Advertiser logo for the sponsored card. Empty for the house promo. */
+  logo?: string;
+};
 
 export const normalizeWebsite = (value: string) => {
   const trimmed = String(value || '').trim();
@@ -315,6 +324,7 @@ const toSponsoredItem = (campaign: Campaign): SponsoredIdeaDeckItem => {
     sponsored: true,
     house: false,
     website: isProduct ? normalizeWebsite(creative.website || '') : '',
+    logo: creative.logoUrl || '',
     title: (isProduct ? creative.productName : creative.title) || 'Sponsored',
     description: (isProduct ? creative.tagline : creative.description) || creative.description || '',
     stage: isProduct ? 'Product' : creative.stage || 'Idea Stage',
@@ -342,6 +352,7 @@ export const buildHouseIdeaCard = (): SponsoredIdeaDeckItem => ({
   sponsored: true,
   house: true,
   website: '',
+  logo: '',
   title: 'Go PLUS',
   description: 'Unlimited swipes & rewinds, Who Viewed You, advanced search and zero sponsored cards.',
   stage: 'PLUS',

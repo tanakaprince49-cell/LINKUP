@@ -1102,6 +1102,9 @@ export default function SearchScreen({ navigation, route }: any) {
               <View style={styles.sponsorPill}>
                 <Text style={styles.sponsorPillText}>SPONSORED</Text>
               </View>
+              {!!searchSponsor.creative?.logoUrl && (
+                <Image source={{ uri: ikAvatar(searchSponsor.creative.logoUrl) }} style={styles.sponsorLogo} resizeMode="cover" />
+              )}
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={1}>
                   {searchSponsor.creative?.productName || searchSponsor.creative?.title || 'Sponsored'}
@@ -1337,6 +1340,7 @@ const styles = StyleSheet.create({
   sponsorTitle: { fontSize: 13, fontWeight: '900' },
   sponsorSub: { marginTop: 2, fontSize: 10, fontWeight: '800' },
   sponsorUrl: { marginTop: 3, fontSize: 10, fontWeight: '900', color: '#8A7900' },
+  sponsorLogo: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.04)' },
   idleWrap: {
     alignItems: 'center',
     paddingHorizontal: 32,

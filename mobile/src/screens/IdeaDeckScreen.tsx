@@ -40,6 +40,7 @@ import {
   subscribeActiveCampaigns,
 } from '../lib/campaigns';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
+import { ikAvatar } from '../lib/ikImage';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { getIdeaHabit, markIdeaHabitDone, todayKey } from '../lib/dailyLoop';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
@@ -478,7 +479,11 @@ export default function IdeaDeckScreen({ navigation }: any) {
       <View style={styles.cardGlow} />
       <View style={styles.cardHeader}>
         <View style={styles.ideaIcon}>
-          <Lightbulb size={24} color="#000" fill="#00000012" />
+          {(idea as any).sponsored && (idea as any).logo ? (
+            <Image source={{ uri: ikAvatar((idea as any).logo) }} style={styles.ideaSponsorLogo} resizeMode="cover" />
+          ) : (
+            <Lightbulb size={24} color="#000" fill="#00000012" />
+          )}
         </View>
         <View style={[styles.sourcePill, (idea as any).sponsored && styles.sponsoredPill]}>
           <Text style={[styles.sourceText, (idea as any).sponsored && styles.sponsoredText]}>
@@ -850,7 +855,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
+  ideaSponsorLogo: { width: '100%', height: '100%' },
   sourcePill: { borderRadius: 999, backgroundColor: COLORS.primary, paddingHorizontal: 12, paddingVertical: 7 },
   sponsoredPill: { backgroundColor: '#111217' },
   sponsoredText: { color: '#FFF' },

@@ -544,6 +544,9 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   <View style={styles.sponsorStripPill}>
                     <Text style={styles.sponsorStripPillText}>SPONSORED</Text>
                   </View>
+                  {!!hubSponsor.creative?.logoUrl && (
+                    <Image source={{ uri: ikAvatar(hubSponsor.creative.logoUrl) }} style={styles.sponsorStripLogo} resizeMode="cover" />
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.sponsorStripTitle, { color: textColor(isDark) }]} numberOfLines={1}>
                       {hubSponsor.creative?.productName || hubSponsor.creative?.title || 'Sponsored'}
@@ -797,6 +800,7 @@ const styles = StyleSheet.create({
   sponsorStripPillText: { color: '#FFF', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
   sponsorStripTitle: { fontSize: 12, fontWeight: '900' },
   sponsorStripSub: { marginTop: 2, fontSize: 10, fontWeight: '800' },
+  sponsorStripLogo: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.04)' },
   radarCard: {
     marginTop: 16,
     borderRadius: 16,

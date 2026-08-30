@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -11,12 +12,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   CheckCircle2,
   ChevronLeft,
   ExternalLink,
   Globe,
+  ImagePlus,
   LayoutGrid,
   Lightbulb,
   Megaphone,
@@ -24,6 +27,7 @@ import {
   Search,
   Send,
   Sparkles,
+  X as XIcon,
   Zap,
 } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
@@ -31,6 +35,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { displayNameFor } from '../lib/discovery';
 import { notifyUser } from '../lib/notify';
+import { uploadCampaignLogoToImageKit } from '../lib/imagekitUpload';
+import { ikAvatar } from '../lib/ikImage';
 import {
   CAMPAIGN_INDUSTRY_OPTIONS,
   CAMPAIGN_PLACEMENT_OPTIONS,
@@ -68,6 +74,8 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
     editCampaign?.creative?.category?.length ? editCampaign.creative.category : editCampaign?.industries || []
   );
   const [placements, setPlacements] = useState<string[]>(editCampaign?.placements?.length ? editCampaign.placements : ['ideas']);
+  const [logoUrl, setLogoUrl] = useState(editCampaign?.creative?.logoUrl || '');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const cleanWebsite = normalizeWebsite(website);
@@ -81,6 +89,39 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
 
   const openWebsitePreview = () => {
     if (cleanWebsite) Linking.openURL(cleanWebsite).catch(() => {});
+  };
+
+  const pickLogo = async () => {
+    if (uploadingLogo) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      notifyUser('Permission needed', 'Allow photo access to upload your logo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      base64: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    if (!asset.base64) {
+      notifyUser('Upload failed', 'Could not read that image. Try another one.');
+      return;
+    }
+    setUploadingLogo(true);
+    const hosted = await uploadCampaignLogoToImageKit(
+      user?.uid || 'anonymous',
+      `data:image/jpeg;base64,${asset.base64}`
+    );
+    setUploadingLogo(false);
+    if (!hosted) {
+      notifyUser('Upload failed', 'The logo did not reach the CDN. Check your connection and try again.');
+      return;
+    }
+    setLogoUrl(hosted);
   };
 
   const submit = async () => {
@@ -104,6 +145,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
         tagline: tagline.trim().slice(0, 90),
         description: description.trim().slice(0, 500),
         website: cleanWebsite,
+        logoUrl: logoUrl.trim(),
         category,
       };
       if (isEditing && editCampaign) {
@@ -214,6 +256,44 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
             </TouchableOpacity>
           )}
 
+          <Text style={[styles.label, { color: textColor(isDark, 'muted') }]}>LOGO (OPTIONAL)</Text>
+          <View style={styles.logoRow}>
+            <TouchableOpacity
+              onPress={pickLogo}
+              disabled={uploadingLogo}
+              activeOpacity={0.85}
+              style={[
+                styles.logoTile,
+                liquidGlass(isDark),
+                { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
+              ]}
+            >
+              {uploadingLogo ? (
+                <ActivityIndicator color={COLORS.primaryStrong} />
+              ) : logoUrl ? (
+                <Image source={{ uri: ikAvatar(logoUrl) }} style={styles.logoImage} resizeMode="cover" />
+              ) : (
+                <ImagePlus size={22} color={COLORS.primaryStrong} />
+              )}
+            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.logoTitle, { color: textColor(isDark) }]}>
+                {logoUrl ? 'Logo ready' : 'Add your logo'}
+              </Text>
+              <Text style={[styles.logoHint, { color: textColor(isDark, 'muted') }]}>
+                {logoUrl
+                  ? 'It appears on every sponsored card, search row and Linky mention.'
+                  : 'Square works best. Without one we show a plain package icon.'}
+              </Text>
+              {logoUrl ? (
+                <TouchableOpacity onPress={() => setLogoUrl('')} style={styles.logoRemove} activeOpacity={0.8}>
+                  <XIcon size={11} color="#DC2626" />
+                  <Text style={styles.logoRemoveText}>Remove logo</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+
           <Text style={[styles.label, { color: textColor(isDark, 'muted') }]}>CATEGORY (UP TO 3)</Text>
           <View style={styles.chipRow}>
             {CAMPAIGN_INDUSTRY_OPTIONS.map((option) => {
@@ -296,8 +376,12 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
           </View>
           <View style={[styles.previewCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
             <View style={styles.previewHeader}>
-              <View style={[styles.previewIcon, { backgroundColor: COLORS.primary }]}>
-                <Package size={18} color={COLORS.lightTextPrimary} />
+              <View style={[styles.previewIcon, { backgroundColor: logoUrl ? 'rgba(0,0,0,0.04)' : COLORS.primary }]}>
+                {logoUrl ? (
+                  <Image source={{ uri: ikAvatar(logoUrl) }} style={styles.previewLogo} resizeMode="cover" />
+                ) : (
+                  <Package size={18} color={COLORS.lightTextPrimary} />
+                )}
               </View>
               <View style={styles.sponsoredPill}>
                 <Text style={styles.sponsoredPillText}>SPONSORED</Text>
@@ -390,6 +474,22 @@ const styles = StyleSheet.create({
   placementDesc: { marginTop: 2, fontSize: 10, lineHeight: 15, fontWeight: '800' },
   checkGhost: { width: 20, height: 20, borderRadius: 10, borderWidth: 2 },
   soonBadge: { fontSize: 9, fontWeight: '900', letterSpacing: 1, color: '#8A7900' },
+  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  logoTile: {
+    width: 74,
+    height: 74,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  logoImage: { width: '100%', height: '100%' },
+  logoTitle: { fontSize: 14, fontWeight: '900' },
+  logoHint: { marginTop: 4, fontSize: 10, lineHeight: 15, fontWeight: '700' },
+  logoRemove: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  logoRemoveText: { color: '#DC2626', fontSize: 10, fontWeight: '900' },
+  previewLogo: { width: '100%', height: '100%', borderRadius: 15 },
   previewCard: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 10 },
   previewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   previewIcon: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },

@@ -47,7 +47,7 @@ import PaywallModal from '../components/PaywallModal';
 import { consumeWindowUsage, FREE_LIMITS, getWindowUsage, hasLinkupPro, PRO_FEATURES, SWIPE_USAGE_WINDOW_HOURS } from '../lib/paywall';
 import { compactProfileForList, storedProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
-import { ikCard } from '../lib/ikImage';
+import { ikAvatar, ikCard } from '../lib/ikImage';
 import { avatarPlaceholderUri } from '../lib/defaultAvatar';
 import ProCrownBadge from '../components/ProCrownBadge';
 import { notifyUser } from '../lib/notify';
@@ -1278,8 +1278,10 @@ export default function SwipeScreen({ navigation }: any) {
           <View style={[styles.sponsorPill, styles.scrollSponsorPill]}>
             <Text style={[styles.sponsorPillText, styles.scrollSponsorPillText]}>SPONSORED</Text>
           </View>
-          <View style={styles.sponsorIconTile}>
-            {discoverySponsor.house ? (
+          <View style={[styles.sponsorIconTile, !discoverySponsor.logo && { backgroundColor: COLORS.primary }]}>
+            {discoverySponsor.logo ? (
+              <Image source={{ uri: ikAvatar(discoverySponsor.logo) }} style={styles.sponsorLogo} resizeMode="cover" />
+            ) : discoverySponsor.house ? (
               <Zap size={38} color={COLORS.lightTextPrimary} fill={COLORS.lightTextPrimary} />
             ) : (
               <Package size={38} color={COLORS.lightTextPrimary} />
@@ -1481,8 +1483,10 @@ export default function SwipeScreen({ navigation }: any) {
           <View style={styles.sponsorPill}>
             <Text style={styles.sponsorPillText}>SPONSORED</Text>
           </View>
-          <View style={styles.sponsorIconTile}>
-            {discoverySponsor.house ? (
+          <View style={[styles.sponsorIconTile, !discoverySponsor.logo && { backgroundColor: COLORS.primary }]}>
+            {discoverySponsor.logo ? (
+              <Image source={{ uri: ikAvatar(discoverySponsor.logo) }} style={styles.sponsorLogo} resizeMode="cover" />
+            ) : discoverySponsor.house ? (
               <Zap size={38} color={COLORS.lightTextPrimary} fill={COLORS.lightTextPrimary} />
             ) : (
               <Package size={38} color={COLORS.lightTextPrimary} />
@@ -2573,6 +2577,7 @@ const styles = StyleSheet.create({
   scrollSponsorPillText: { color: '#000000' },
   scrollSponsorTitle: { color: '#FFFFFF' },
   scrollSponsorTagline: { color: 'rgba(255,255,255,0.72)' },
+  sponsorLogo: { width: '100%', height: '100%', borderRadius: 26 },
   modeToggle: {
     flexDirection: 'row',
     gap: 4,
