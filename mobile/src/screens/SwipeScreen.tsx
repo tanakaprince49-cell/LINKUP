@@ -376,6 +376,30 @@ export default function SwipeScreen({ navigation }: any) {
     setDiscoverySponsor(next);
     void recordCampaignImpression(next.campaignId, user.uid);
   };
+
+  /**
+   * Resolve the sponsored slot that is currently on screen.
+   *
+   * Scroll mode has no swipe animation to hang this off, so the sponsored
+   * card is a stop in the feed: advancing or pressing an action resolves it
+   * before the feed moves again. 'open' counts a click (right-swipe
+   * equivalent); 'skip' just dismisses. Returns true if a slot was resolved.
+   */
+  const resolveSponsor = (action: 'open' | 'skip') => {
+    const sponsor = discoverySponsor;
+    if (!sponsor) return false;
+    if (action === 'open') {
+      void recordCampaignClick(sponsor.campaignId, user?.uid || '');
+      if (sponsor.house) openPaywall('Unlimited Discovery');
+      else if (sponsor.website) Linking.openURL(sponsor.website).catch(() => {});
+    }
+    setDiscoverySponsor(null);
+    return true;
+  };
+  const resolveSponsorRef = useRef<(action: 'open' | 'skip') => boolean>(() => false);
+  resolveSponsorRef.current = resolveSponsor;
+  const maybeShowSponsorRef = useRef<() => void>(() => {});
+  maybeShowSponsorRef.current = maybeShowDiscoverySponsor;
   const swipeBudgetRef = useRef<number | null>(null);
   const [swipesLeft, setSwipesLeft] = useState<number | null>(null);
 
@@ -598,6 +622,8 @@ export default function SwipeScreen({ navigation }: any) {
   ).current;
 
   const goToProfile = (dir: 'up' | 'down') => {
+    // A sponsored slot on screen resolves before the feed moves again.
+    if (resolveSponsorRef.current('skip')) return;
     const len = feedRef.current.length;
     const cur = scrollIndexRef.current;
     if (dir === 'up' && cur < len - 1) {
@@ -608,6 +634,12 @@ export default function SwipeScreen({ navigation }: any) {
       Animated.spring(scrollPosition, {
         toValue: 0, friction: 9, useNativeDriver: false,
       }).start(() => { isScrollAnimatingRef.current = false; });
+      // Every DISCOVER_SPONSORED_EVERY advances, queue the sponsored slot.
+      swipesSinceSponsorRef.current += 1;
+      if (swipesSinceSponsorRef.current >= DISCOVER_SPONSORED_EVERY) {
+        swipesSinceSponsorRef.current = 0;
+        maybeShowSponsorRef.current();
+      }
     } else if (dir === 'down' && cur > 0) {
       isScrollAnimatingRef.current = true;
       scrollPosition.setValue(-360);
@@ -618,6 +650,9 @@ export default function SwipeScreen({ navigation }: any) {
       }).start(() => { isScrollAnimatingRef.current = false; });
     }
   };
+
+  const goToProfileRef = useRef<(dir: 'up' | 'down') => void>(() => {});
+  goToProfileRef.current = goToProfile;
 
   const scrollPanResponder = useRef(
     PanResponder.create({
@@ -636,9 +671,9 @@ export default function SwipeScreen({ navigation }: any) {
       onPanResponderRelease: (_evt, gs) => {
         if (isScrollAnimatingRef.current) return;
         if (gs.dy < -70) {
-          goToProfile('up');
+          goToProfileRef.current('up');
         } else if (gs.dy > 70) {
-          goToProfile('down');
+          goToProfileRef.current('down');
         } else {
           Animated.spring(scrollPosition, {
             toValue: 0, friction: 7, useNativeDriver: false,
@@ -1240,8 +1275,8 @@ export default function SwipeScreen({ navigation }: any) {
         {...(infoExpanded ? {} : panResponder.panHandlers)}
       >
         <View style={styles.sponsorBody}>
-          <View style={styles.sponsorPill}>
-            <Text style={styles.sponsorPillText}>SPONSORED</Text>
+          <View style={[styles.sponsorPill, styles.scrollSponsorPill]}>
+            <Text style={[styles.sponsorPillText, styles.scrollSponsorPillText]}>SPONSORED</Text>
           </View>
           <View style={styles.sponsorIconTile}>
             {discoverySponsor.house ? (
@@ -1250,10 +1285,10 @@ export default function SwipeScreen({ navigation }: any) {
               <Package size={38} color={COLORS.lightTextPrimary} />
             )}
           </View>
-          <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={3}>
+          <Text style={[styles.sponsorTitle, styles.scrollSponsorTitle]} numberOfLines={3}>
             {discoverySponsor.title}
           </Text>
-          <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={4}>
+          <Text style={[styles.sponsorTagline, styles.scrollSponsorTagline]} numberOfLines={4}>
             {discoverySponsor.description}
           </Text>
           <TouchableOpacity
@@ -1433,7 +1468,79 @@ export default function SwipeScreen({ navigation }: any) {
     );
   };
 
+  /** Scroll-mode sponsored stop: same creative as the swipe interstitial,
+   *  laid out to match the scroll card so the feed never jumps. */
+  const renderScrollSponsor = () => {
+    if (!discoverySponsor) return null;
+    return (
+      <Animated.View
+        style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
+        {...scrollPanResponder.panHandlers}
+      >
+        <View style={styles.sponsorBody}>
+          <View style={styles.sponsorPill}>
+            <Text style={styles.sponsorPillText}>SPONSORED</Text>
+          </View>
+          <View style={styles.sponsorIconTile}>
+            {discoverySponsor.house ? (
+              <Zap size={38} color={COLORS.lightTextPrimary} fill={COLORS.lightTextPrimary} />
+            ) : (
+              <Package size={38} color={COLORS.lightTextPrimary} />
+            )}
+          </View>
+          <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={3}>
+            {discoverySponsor.title}
+          </Text>
+          <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={4}>
+            {discoverySponsor.description}
+          </Text>
+          <TouchableOpacity
+            activeOpacity={0.88}
+            style={styles.sponsorCta}
+            onPress={() => resolveSponsor('open')}
+          >
+            <Globe size={15} color="#000" />
+            <Text style={styles.sponsorCtaText}>{discoverySponsor.house ? 'Upgrade to PLUS' : 'Visit Website'}</Text>
+          </TouchableOpacity>
+          <Text style={styles.sponsorHint}>Swipe up to skip · tap to open</Text>
+        </View>
+        <View style={styles.scrollBottomActions}>
+          <TouchableOpacity
+            style={[styles.scrollBottomBtn, { backgroundColor: 'rgba(0,0,0,0.5)', borderColor: 'rgba(255,255,255,0.2)' }]}
+            onPress={() => resolveSponsor('skip')}
+          >
+            <X size={20} color="#FF6B6B" />
+            <Text style={styles.scrollBottomLabel}>Skip</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.scrollBottomContact} onPress={() => resolveSponsor('open')}>
+            <MessageSquare size={16} color="#000" />
+            <Text style={[styles.scrollBottomLabel, { color: '#000' }]}>Learn more</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.scrollBottomBtn, { backgroundColor: '#FF3B5C' }]}
+            onPress={() => resolveSponsor('open')}
+          >
+            <Heart size={20} color="#000" fill="#000" />
+            <Text style={styles.scrollBottomLabel}>Open</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    );
+  };
+
   const renderScrollProfile = () => {
+    // The sponsored slot wins the frame it owns, but never when the deck is
+    // empty with nothing behind it.
+    if (discoverySponsor) {
+      return (
+        <View style={styles.scrollFeed}>
+          {renderScrollSponsor()}
+          <View style={styles.scrollSwipeHint}>
+            <Text style={styles.scrollSwipeHintText}>sponsored · {Math.max(0, feed.length - scrollIndex - 1)} profiles left</Text>
+          </View>
+        </View>
+      );
+    }
     if (feed.length === 0) return renderEmpty();
     const profile = feed[scrollIndex] || feed[0];
     const photos = getSwipePhotos(profile);
@@ -1486,7 +1593,10 @@ export default function SwipeScreen({ navigation }: any) {
           <View style={styles.scrollBottomActions}>
             <TouchableOpacity
               style={[styles.scrollBottomBtn, { backgroundColor: 'rgba(0,0,0,0.5)', borderColor: 'rgba(255,255,255,0.2)' }]}
-              onPress={() => animateSwipeOutRef.current('left')}
+              onPress={() => {
+                if (resolveSponsorRef.current('skip')) return;
+                animateSwipeOutRef.current('left');
+              }}
             >
               <X size={20} color="#FF6B6B" />
               <Text style={styles.scrollBottomLabel}>Pass</Text>
@@ -1514,7 +1624,10 @@ export default function SwipeScreen({ navigation }: any) {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.scrollBottomBtn, { backgroundColor: '#FF3B5C' }]}
-              onPress={() => animateSwipeOutRef.current('right')}
+              onPress={() => {
+                if (resolveSponsorRef.current('open')) return;
+                animateSwipeOutRef.current('right');
+              }}
             >
               <Heart size={20} color="#000" fill="#000" />
               <Text style={styles.scrollBottomLabel}>Like</Text>
@@ -2454,6 +2567,12 @@ const styles = StyleSheet.create({
   },
   sponsorCtaText: { color: '#000', fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
   sponsorHint: { marginTop: 8, fontSize: 10, fontWeight: '800', color: '#8A8A93', textAlign: 'center' },
+  // Scroll-mode sponsored card sits on the dark photo card in BOTH themes,
+  // so it carries its own light-on-dark palette instead of theme colours.
+  scrollSponsorPill: { backgroundColor: COLORS.primary },
+  scrollSponsorPillText: { color: '#000000' },
+  scrollSponsorTitle: { color: '#FFFFFF' },
+  scrollSponsorTagline: { color: 'rgba(255,255,255,0.72)' },
   modeToggle: {
     flexDirection: 'row',
     gap: 4,
