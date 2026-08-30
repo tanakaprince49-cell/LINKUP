@@ -750,6 +750,59 @@ export default function App() {
     ? (({ children }: { children: React.ReactNode }) => <View style={{ flex: 1 }}>{children}</View>)
     : GestureHandlerRootView;
 
+  /**
+   * WEB: pick up new deploys instead of running a stale bundle forever.
+   *
+   * A tab (or installed PWA) left open across a deploy keeps executing the OLD
+   * entry bundle, whose lazy chunks no longer exist on the CDN. Screens then
+   * fail with React error #300 and every shipped fix looks like it "didn't
+   * work" — the user is literally running yesterday's code.
+   *
+   * Compare the entry chunk a fresh fetch of `/` points at with the one this
+   * page is executing. If they differ, reload once (throttled per tab).
+   */
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof document === 'undefined') return;
+    const RELOAD_KEY = 'linkup:deploy-reload-at';
+    const THROTTLE_MS = 60_000;
+
+    const checkForDeploy = () => {
+      try {
+        const current = Array.prototype.map
+          .call(document.querySelectorAll('script[src]'), (el: any) => String(el?.src || ''))
+          .find((src: string) => src.includes('/index-') && src.endsWith('.js'));
+        if (!current) return;
+        const last = Number(window.sessionStorage?.getItem(RELOAD_KEY) || 0);
+        if (Date.now() - last < THROTTLE_MS) return;
+        void fetch('/', { cache: 'no-store', credentials: 'omit' })
+          .then((response) => response.text())
+          .then((html) => {
+            const match = html.match(/\/_expo\/static\/js\/web\/(index-[A-Za-z0-9_-]+\.js)/);
+            if (!match || current.includes(match[1])) return;
+            try {
+              window.sessionStorage?.setItem(RELOAD_KEY, String(Date.now()));
+            } catch {
+              // Storage blocked — reload anyway, the throttle just won't hold.
+            }
+            window.location?.reload?.();
+          })
+          .catch(() => {});
+      } catch {
+        // Never let update-checking break the app.
+      }
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') checkForDeploy();
+    };
+    const timer = setTimeout(checkForDeploy, 5000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
   return (
     <ErrorBoundary screenName="App">
       <RootView style={{ flex: 1 }}>

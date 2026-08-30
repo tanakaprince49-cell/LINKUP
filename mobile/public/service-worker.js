@@ -1,4 +1,4 @@
-const CACHE_NAME = 'linkup-pwa-v7';
+const CACHE_NAME = 'linkup-pwa-v8';
 const CORE_ASSETS = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
