@@ -75,6 +75,15 @@ export default class ErrorBoundary extends React.Component<Props, State> {
     }
   };
 
+  /**
+   * Which deployment produced this bundle.
+   *
+   * A tab left open across a deploy keeps running the previous bundle, so "it
+   * still crashes" can simply mean "I am on yesterday's code". Printing the
+   * build id on the crash screen makes every report unambiguous.
+   */
+  buildId = () => String((globalThis as any)?.__LINKUP_BUILD__ || 'unknown').slice(0, 12);
+
   render() {
     const { hasError, error, details, copied } = this.state;
     const { children, screenName, inline } = this.props;
@@ -103,6 +112,9 @@ export default class ErrorBoundary extends React.Component<Props, State> {
           </Text>
           <Text style={styles.subtitle}>
             This page encountered an error. You can retry or go back to the home screen.
+          </Text>
+          <Text style={styles.devErrorText} selectable>
+            {`build ${this.buildId()}`}
           </Text>
           {error ? (
             <View style={styles.devError}>

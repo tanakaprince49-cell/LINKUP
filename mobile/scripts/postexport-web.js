@@ -129,7 +129,25 @@ const devToolsGuard = [
   '</script>',
 ].join('\n');
 
+// BUILD IDENTITY. A tab left open across a deploy keeps running the previous
+// bundle, so "I still see the bug" can mean "I am on yesterday's code". The
+// crash screen prints this id, which makes every bug report unambiguous.
+const buildId = String(
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.GITHUB_SHA ||
+    process.env.COMMIT_REF ||
+    'dev'
+).slice(0, 12);
+
+const buildScript = [
+  '<!-- linkup-build-id -->',
+  '<script>',
+  `  window.__LINKUP_BUILD__ = ${JSON.stringify(buildId)};`,
+  '</script>',
+].join('\n');
+
 html = injectOnce(html, 'linkup-pwa-meta', pwaHead, '</head>');
+html = injectOnce(html, 'linkup-build-id', buildScript, '</body>');
 html = injectOnce(html, 'linkup-pwa-service-worker', pwaScript, '</body>');
 html = injectOnce(html, 'linkup-devtools-guard', devToolsGuard, '</body>');
 
