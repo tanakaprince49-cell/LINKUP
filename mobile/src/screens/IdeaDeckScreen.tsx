@@ -408,6 +408,12 @@ export default function IdeaDeckScreen({ navigation }: any) {
     if ((idea as any).sponsored && (idea as any).campaignId) {
       void recordCampaignClick((idea as any).campaignId, user?.uid || '');
     }
+    // Demo ideas are seeded content attributed to Linky — there is no inbox
+    // behind them, so the invite composer must never open for one.
+    if ((idea as any).demo) {
+      notifyUser('Sample idea', 'This is a demo idea from Linky — swipe on to the next one.');
+      return;
+    }
     setInviteIdea(idea);
     setInviteMessage(`I like this idea. I can help with ${String((myProfile as any)?.occupation || 'building it')}.`);
   };

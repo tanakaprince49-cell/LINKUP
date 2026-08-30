@@ -686,6 +686,50 @@ export default function SwipeScreen({ navigation }: any) {
     })
   ).current;
 
+  // --- Scroll step animation ---------------------------------------------
+  // The scroll feed is ONE card translated by `scrollPosition`. That makes it
+  // fragile in a specific way: if a spring is ever interrupted — mode switch,
+  // the card unmounting mid-animation, the app backgrounded — React Native
+  // never fires its completion callback, so `isScrollAnimatingRef` stays true
+  // forever, the card stays parked ~a screen away, and every further gesture
+  // is ignored. That is the "scroll mode goes blank after a few swipes" bug:
+  // not a crash, a card translated off-screen with a dead gesture handler.
+  //
+  // So every scroll animation goes through these three rules:
+  //   1. stop whatever is already running before starting a new one;
+  //   2. settle through ONE function that clears the flag AND re-centres the
+  //      card, so the two can never disagree;
+  //   3. keep a timer safety net, in case the spring never reports back.
+  const SCROLL_STEP_MS = 900;
+  const scrollAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const settleScroll = () => {
+    if (scrollAnimTimerRef.current) {
+      clearTimeout(scrollAnimTimerRef.current);
+      scrollAnimTimerRef.current = null;
+    }
+    isScrollAnimatingRef.current = false;
+    scrollPosition.stopAnimation();
+    scrollPosition.setValue(0);
+  };
+
+  const animateScrollStep = (from: number) => {
+    settleScroll();
+    isScrollAnimatingRef.current = true;
+    scrollPosition.setValue(from);
+    Animated.spring(scrollPosition, {
+      toValue: 0, friction: 9, useNativeDriver: false,
+    }).start(() => settleScroll());
+    scrollAnimTimerRef.current = setTimeout(settleScroll, SCROLL_STEP_MS);
+  };
+
+  const springScrollBack = () => {
+    scrollPosition.stopAnimation();
+    Animated.spring(scrollPosition, {
+      toValue: 0, friction: 7, useNativeDriver: false,
+    }).start();
+  };
+
   const goToProfile = (dir: 'up' | 'down') => {
     // A sponsored slot on screen resolves before the feed moves again. The
     // sponsored stop is an ad, not a discovery, so it never spends budget.
@@ -698,13 +742,9 @@ export default function SwipeScreen({ navigation }: any) {
       // looking, so swiping up must never open the paywall. The feed still
       // locks at the last card (see the scrollIndex clamp below) instead of
       // running past the end and looping back to the first profile.
-      isScrollAnimatingRef.current = true;
-      scrollPosition.setValue(360);
       setScrollIndex(cur + 1);
       scrollIndexRef.current = cur + 1;
-      Animated.spring(scrollPosition, {
-        toValue: 0, friction: 9, useNativeDriver: false,
-      }).start(() => { isScrollAnimatingRef.current = false; });
+      animateScrollStep(360);
       // Every DISCOVER_SPONSORED_EVERY advances, queue the sponsored slot.
       swipesSinceSponsorRef.current += 1;
       if (swipesSinceSponsorRef.current >= DISCOVER_SPONSORED_EVERY) {
@@ -712,18 +752,28 @@ export default function SwipeScreen({ navigation }: any) {
         maybeShowSponsorRef.current();
       }
     } else if (dir === 'down' && cur > 0) {
-      isScrollAnimatingRef.current = true;
-      scrollPosition.setValue(-360);
       setScrollIndex(cur - 1);
       scrollIndexRef.current = cur - 1;
-      Animated.spring(scrollPosition, {
-        toValue: 0, friction: 9, useNativeDriver: false,
-      }).start(() => { isScrollAnimatingRef.current = false; });
+      animateScrollStep(-360);
     }
   };
 
   const goToProfileRef = useRef<(dir: 'up' | 'down') => void>(() => {});
   goToProfileRef.current = goToProfile;
+
+  // Switching modes must never leave the feed parked off-centre by a step
+  // animation that was still in flight when the card unmounted.
+  useEffect(() => {
+    settleScroll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  useEffect(
+    () => () => {
+      if (scrollAnimTimerRef.current) clearTimeout(scrollAnimTimerRef.current);
+    },
+    []
+  );
 
   // The feed shrinks under the scroll index whenever a card is liked/passed.
   // Without this clamp scrollIndex points past the end, renderScrollProfile
@@ -766,15 +816,11 @@ export default function SwipeScreen({ navigation }: any) {
         } else if (gs.dy > 70) {
           goToProfileRef.current('down');
         } else {
-          Animated.spring(scrollPosition, {
-            toValue: 0, friction: 7, useNativeDriver: false,
-          }).start();
+          springScrollBack();
         }
       },
       onPanResponderTerminate: () => {
-        Animated.spring(scrollPosition, {
-          toValue: 0, friction: 7, useNativeDriver: false,
-        }).start();
+        springScrollBack();
       },
       onPanResponderTerminationRequest: () => false,
     })
@@ -985,7 +1031,15 @@ export default function SwipeScreen({ navigation }: any) {
     // a card can arrive faceless. For the visible top cards with no renderable
     // pic, pull their single users doc ONCE per session and patch real photos
     // in place. Bounded, cached, and silent.
-    [topProfile, nextProfile, profiles[2]]
+    // Scroll mode shows the card at the scroll index, which can sit far from
+    // the top of the deck, so that card is upgraded too — otherwise deep cards
+    // are the only ones that stay faceless.
+    [
+      topProfile,
+      nextProfile,
+      profiles[2],
+      mode === 'scroll' ? feedRef.current[Math.min(scrollIndexRef.current, feedRef.current.length - 1)] : null,
+    ]
       .filter(Boolean)
       .forEach((target: any) => {
         if (!target?.uid || photoUpgradedRef.current.has(target.uid)) return;
@@ -1016,7 +1070,7 @@ export default function SwipeScreen({ navigation }: any) {
           })
           .catch(() => {});
       });
-  }, [topProfile?.uid, nextProfile?.uid, profiles.length]);
+  }, [topProfile?.uid, nextProfile?.uid, profiles.length, mode, scrollIndex]);
 
   useEffect(() => {
     setInfoExpanded(false);

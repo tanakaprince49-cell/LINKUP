@@ -26,7 +26,7 @@ export type IdeaDeckItem = StartupIdea & {
  * `demo: true` is load-bearing — swipe handlers must never persist these or
  * notify their fictional owners.
  */
-export const DEMO_IDEAS: IdeaDeckItem[] = [
+const DEMO_SEED_IDEAS: IdeaDeckItem[] = [
   {
     id: 'demo_farmlink', title: 'FarmLink', source: 'startupIdea', demo: true,
     description: 'A marketplace that connects smallholder farmers directly to bulk buyers, so produce stops travelling through four middlemen before it gets paid for.',
@@ -119,7 +119,32 @@ export const DEMO_IDEAS: IdeaDeckItem[] = [
   },
 ];
 
-/** Trim trailing whitespace that crept into a couple of the seed names. */
+/**
+ * Demo ideas are attributed to Linky, never to an invented founder.
+ *
+ * They are seeded sample content: there is no human behind them, so a name
+ * like "Tendai M." implied a builder you could message, invite or look up.
+ * Linky is the one persona that is genuinely ours, and it carries the
+ * verified tick so the attribution reads as official rather than as a fake
+ * member of the network. `ownerId` stays 'demo' so nothing can be written to
+ * the real Linky account from a sample card.
+ */
+const LINKY_DEMO_OWNER = {
+  ownerId: 'demo',
+  ownerName: 'Linky',
+  ownerVerified: true,
+  ownerOccupation: 'AI Co-founder · LINKUP',
+  ownerCity: '',
+  ownerCountry: '',
+  ownerPic: 'https://ui-avatars.com/api/?name=Linky&background=DFFB3F&color=000&size=200&bold=true&font-size=0.4',
+} as const;
+
+export const DEMO_IDEAS: IdeaDeckItem[] = DEMO_SEED_IDEAS.map((idea) => ({
+  ...idea,
+  ...LINKY_DEMO_OWNER,
+  demo: true,
+}));
+
 export const DEMO_IDEA_COUNT = DEMO_IDEAS.length;
 
 /**

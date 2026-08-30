@@ -40,8 +40,14 @@ export const CAMPAIGNS_PRODUCT_IDS = [LINKUP_CAMPAIGNS_PRODUCT_ID, LINKUP_CAMPAI
 export const MAX_ACTIVE_CAMPAIGNS = 3;
 /** One viewer sees the same campaign at most this many times per day. */
 export const CAMPAIGN_IMPRESSION_DAILY_CAP = 2;
-/** One sponsored card per N organic cards in the deck. */
-export const SPONSORED_INTERVAL = 10;
+/**
+ * One sponsored card per N organic cards in the deck.
+ *
+ * 4 means the sponsored card lands at index 3 — the 4th card the viewer
+ * swipes. Density is capped here, on the VIEWER side, so an advertiser buying
+ * more campaigns can never flood anyone's deck.
+ */
+export const SPONSORED_INTERVAL = 4;
 
 export const CAMPAIGN_INDUSTRY_OPTIONS = [
   'SaaS',
