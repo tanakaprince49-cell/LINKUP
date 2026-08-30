@@ -1976,32 +1976,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 26,
   },
-  exitText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#000',
-  },
-  verifiedMiniBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#000',
-  },
-  nameText: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#FFF',
-    textTransform: 'uppercase',
-    flexShrink: 1,
-  },
-  compactNameText: {
-    fontSize: 22,
-    lineHeight: 26,
-  },
   metaLine: {
     flexDirection: 'row',
     alignItems: 'center',

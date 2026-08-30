@@ -1505,7 +1505,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     );
   };
 
-  const runAccountAction = async (actionName: string, action: () => Promise<void>) => {
+  const runAccountAction = async (actionName: string, action: () => Promise<unknown>) => {
     if (accountActionBusy) return;
     setAccountActionBusy(actionName);
     try {

@@ -270,7 +270,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         {typeof rank === 'number' ? (
           <View style={[styles.rankBadge, rank < 3 && { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
+    borderColor: HOME_LINE }]}>
             <Text style={styles.rankBadgeText}>{rank === 0 ? '1ST' : rank === 1 ? '2ND' : rank === 2 ? '3RD' : `#${rank + 1}`}</Text>
           </View>
         ) : null}
@@ -358,7 +358,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
           <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.opportunityBtn, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
+    borderColor: HOME_LINE }]}>
             <Text style={styles.opportunityBtnText}>View Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Search')} style={[styles.opportunityIconBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
@@ -472,7 +472,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   onPress={() => navigation.navigate('DailyFive')}
                   style={[styles.heroBtn, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}
+    borderColor: HOME_LINE }]}
                 >
                   <Flame size={14} color="#000" />
                   <Text style={[styles.heroBtnText, { color: '#000' }]}>Daily 5</Text>
@@ -509,7 +509,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   <View style={styles.radarTop}>
                     <View style={[styles.radarIcon, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
+    borderColor: HOME_LINE }]}>
                       <BellRing size={15} color="#000" />
                     </View>
                     <View style={{ flex: 1 }}>
@@ -520,7 +520,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                     </View>
                     <View style={[styles.radarScore, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
+    borderColor: HOME_LINE }]}>
                       <Text style={styles.radarScoreText}>{topOpportunityAlert.score}%</Text>
                     </View>
                   </View>
@@ -564,7 +564,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             </View>
             <View style={[styles.linkyChip, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
-    borderColor: HOME_LINE, borderWidth: 1, borderColor: HOME_LINE }]}>
+    borderColor: HOME_LINE }]}>
               <Text style={styles.linkyChipText}>Chat</Text>
             </View>
           </TouchableOpacity>
@@ -1079,6 +1079,22 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
     color: '#000',
+  },
+  rankBadge: {
+    minWidth: 34,
+    height: 34,
+    paddingHorizontal: 6,
+    borderRadius: 17,
+    backgroundColor: 'rgba(148,163,184,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  rankBadgeText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    color: '#111827',
   },
 });
 
