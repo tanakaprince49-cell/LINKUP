@@ -401,6 +401,24 @@ export const sponsoredIdeaCardsForViewer = async (campaigns: Campaign[], viewerU
   return eligible.map(toSponsoredItem);
 };
 
+/**
+ * Any active campaign, regardless of placement targeting.
+ *
+ * THIN-INVENTORY FALLBACK ONLY. If a surface has no advertiser who actually
+ * bought its placement, it shows the next best thing rather than an empty
+ * slot — otherwise a new placement (news, play) looks broken until someone
+ * happens to tick that box. It is never used to pad a surface that does have
+ * targeted inventory, and it should be deleted once inventory is healthy.
+ */
+export const fetchAnyActiveCampaigns = async (max: number = 1): Promise<Campaign[]> => {
+  try {
+    const snap = await getDocs(query(collection(db, 'campaigns'), where('status', '==', 'active'), limit(12)));
+    return snap.docs.map((entry) => ({ id: entry.id, ...entry.data() }) as Campaign).slice(0, max);
+  } catch {
+    return [];
+  }
+};
+
 /** One-shot fetch of active campaigns serving a given placement (search, hub, linky). */
 export const fetchActiveCampaignsForPlacement = async (placement: string, max: number = 3): Promise<Campaign[]> => {
   try {

@@ -7,6 +7,7 @@ import { ikAvatar } from '../lib/ikImage';
 import {
   Campaign,
   fetchActiveCampaignsForPlacement,
+  fetchAnyActiveCampaigns,
   recordCampaignClick,
   recordCampaignImpression,
 } from '../lib/campaigns';
@@ -98,27 +99,7 @@ export function SponsoredSlot({
   viewerUid?: string;
   enabled?: boolean;
 }) {
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
-
-  useEffect(() => {
-    if (!enabled || !viewerUid) {
-      setCampaign(null);
-      return;
-    }
-    let cancelled = false;
-    fetchActiveCampaignsForPlacement(placement, 1)
-      .then((list) => {
-        if (cancelled) return;
-        const pick = list.find((entry) => entry.ownerId !== viewerUid && entry.creative) || null;
-        setCampaign(pick);
-        if (pick) void recordCampaignImpression(pick.id, viewerUid);
-      })
-      .catch(() => setCampaign(null));
-    return () => {
-      cancelled = true;
-    };
-  }, [placement, viewerUid, enabled]);
-
+  const campaign = useSponsoredSlot(placement, viewerUid, enabled);
   if (!campaign) return null;
   return <SponsoredCard campaign={campaign} viewerUid={viewerUid} />;
 }
@@ -133,14 +114,16 @@ export function useSponsoredSlot(placement: string, viewerUid?: string, enabled 
       return;
     }
     let cancelled = false;
-    fetchActiveCampaignsForPlacement(placement, 1)
-      .then((list) => {
-        if (cancelled) return;
-        const pick = list.find((entry) => entry.ownerId !== viewerUid && entry.creative) || null;
-        setCampaign(pick);
-        if (pick) void recordCampaignImpression(pick.id, viewerUid);
-      })
-      .catch(() => setCampaign(null));
+    (async () => {
+      const targeted = await fetchActiveCampaignsForPlacement(placement, 1).catch(() => []);
+      // No advertiser bought this placement? Fall back to any live campaign
+      // rather than showing nothing. See fetchAnyActiveCampaigns.
+      const pool = targeted.length ? targeted : await fetchAnyActiveCampaigns(1).catch(() => []);
+      if (cancelled) return;
+      const pick = pool.find((entry) => entry.ownerId !== viewerUid && entry.creative) || null;
+      setCampaign(pick);
+      if (pick) void recordCampaignImpression(pick.id, viewerUid);
+    })();
     return () => {
       cancelled = true;
     };

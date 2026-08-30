@@ -34,6 +34,7 @@ import { hasLinkupPro, PRO_FEATURES } from '../lib/paywall';
 import {
   Campaign,
   fetchActiveCampaignsForPlacement,
+  fetchAnyActiveCampaigns,
   recordCampaignClick,
   recordCampaignImpression,
   websiteDisplay,
@@ -191,12 +192,16 @@ export default function SearchScreen({ navigation, route }: any) {
       return;
     }
     let cancelled = false;
-    fetchActiveCampaignsForPlacement('search', 1).then((campaigns) => {
+    (async () => {
+      const targeted = await fetchActiveCampaignsForPlacement('search', 1).catch(() => []);
+      // Thin-inventory fallback: no advertiser bought Search boost, so show
+      // any live campaign rather than nothing. See fetchAnyActiveCampaigns.
+      const pool = targeted.length ? targeted : await fetchAnyActiveCampaigns(1).catch(() => []);
       if (cancelled) return;
-      const pick = campaigns.find((campaign) => campaign.ownerId !== user.uid) || null;
+      const pick = pool.find((campaign) => campaign.ownerId !== user.uid && campaign.creative) || null;
       setSearchSponsor(pick);
       if (pick) void recordCampaignImpression(pick.id, user.uid);
-    });
+    })();
     return () => {
       cancelled = true;
     };
