@@ -717,6 +717,34 @@ function AppContent() {
   );
 }
 
+/**
+ * Screen audit.
+ *
+ * React error #300 ("element type is invalid") reports a minified stack with no
+ * screen name in it. Verify every registered screen is actually renderable at
+ * module load so a broken one is named in the console instead of taking the
+ * whole app down behind the root error boundary.
+ */
+const SCREEN_REGISTRY: Array<[string, any]> = [
+  ['ProfileScreen', ProfileScreen],
+  ['LinkyProfileScreen', LinkyProfileScreen],
+  ['SwipeScreen', SwipeScreen],
+  ['CampaignsScreen', CampaignsScreen],
+  ['ChatScreen', ChatScreen],
+  ['ViewersScreen', ViewersScreen],
+  ['SearchScreen', SearchScreen],
+  ['MessagesScreen', MessagesScreen],
+  ['AlertsScreen', AlertsScreen],
+  ['NewsScreen', NewsScreen],
+  ['RecommendedMatchesScreen', RecommendedMatchesScreen],
+  ['LinkyScreen', LinkyScreen],
+];
+SCREEN_REGISTRY.forEach(([name, component]) => {
+  if (typeof component !== 'function' && !(component && typeof component === 'object')) {
+    console.error(`[App] screen "${name}" resolved to ${typeof component} — it cannot be rendered.`);
+  }
+});
+
 export default function App() {
   const RootView = Platform.OS === 'web'
     ? (({ children }: { children: React.ReactNode }) => <View style={{ flex: 1 }}>{children}</View>)
