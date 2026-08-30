@@ -58,18 +58,6 @@ type RawPhase = {
   recurrenceMode?: number | null;
 };
 
-/**
- * Describe one Play subscription offer (expo-iap `SubscriptionOffer` or the
- * deprecated `subscriptionOfferDetailsAndroid` entry).
- *
- * - recurrenceMode 1 = INFINITE_RECURRING  -> the real price after the trial
- * - any other mode priced at 0             -> the free-trial phase
- *
- * When Play gives us no phases at all (offline, product not cached yet) we
- * assume the shipped configuration (7 days) rather than hiding the trial —
- * the local record is display-only, so guessing wrong can never bill or lock
- * anyone out.
- */
 /** True when an offer carries a $0 free-trial pricing phase. */
 export const hasFreeTrialPhase = (offer: any) => {
   const phases: RawPhase[] = Array.isArray(offer?.pricingPhasesAndroid?.pricingPhaseList)
@@ -105,6 +93,18 @@ export const pickSubscriptionOffer = (product: any) => {
 /** expo-iap names the token differently on the new vs deprecated offer types. */
 export const offerTokenFor = (offer: any) => offer?.offerTokenAndroid || offer?.offerToken || null;
 
+/**
+ * Describe one Play subscription offer (expo-iap `SubscriptionOffer` or the
+ * deprecated `subscriptionOfferDetailsAndroid` entry).
+ *
+ * - recurrenceMode 1 = INFINITE_RECURRING  -> the real price after the trial
+ * - any other mode priced at 0             -> the free-trial phase
+ *
+ * When Play gives us no phases at all (offline, product not cached yet) we
+ * assume the shipped configuration (7 days) rather than hiding the trial —
+ * the local record is display-only, so guessing wrong can never bill or lock
+ * anyone out.
+ */
 export const describeSubscriptionOffer = (
   offer: any,
   fallbackPrice: string,
@@ -192,8 +192,12 @@ export const trialDaysLeft = (record: TrialRecord | null | undefined) =>
 export const trialStatusLabel = (record: TrialRecord | null | undefined) => {
   if (!isTrialActive(record)) return '';
   const days = trialDaysLeft(record);
-  if (days <= 1) return 'FREE TRIAL · ENDS TODAY';
-  if (days === 1) return 'FREE TRIAL · 1 DAY LEFT';
+  // Under a day left, hours are the honest unit — "1 DAY LEFT" reads wrong
+  // when the trial actually ends in forty minutes.
+  if (days <= 1) {
+    const hours = Math.max(1, Math.ceil((record!.endsAt - Date.now()) / (60 * 60 * 1000)));
+    return `FREE TRIAL · ${hours} HOUR${hours === 1 ? '' : 'S'} LEFT`;
+  }
   return `FREE TRIAL · ${days} DAYS LEFT`;
 };
 
