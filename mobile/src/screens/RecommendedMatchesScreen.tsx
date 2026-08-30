@@ -13,7 +13,7 @@ import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
-import { consumeWeeklyUsage, FREE_LIMITS, getCurrentWeekKey, getWeeklyUsage } from '../lib/paywall';
+import { consumeWeeklyUsage, FREE_LIMITS, getCurrentWeekKey, getWeeklyUsage, hasLinkupPro } from '../lib/paywall';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import ProCrownBadge from '../components/ProCrownBadge';
@@ -40,6 +40,8 @@ const sharedSignalsFor = (me: UserProfile | null | undefined, person: UserProfil
 
 export default function RecommendedMatchesScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
+  // PLUS members skip the weekly cap — limits exist to sell PLUS, not tax it.
+  const isProUser = hasLinkupPro(me);
   const { theme } = useTheme();
   const isFocused = useIsFocused();
   const isDark = theme === 'dark';
@@ -149,7 +151,9 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
   }, [isFocused, user?.uid, me?.uid, people.length, lastRankedProfileIds]);
 
   const recommended = useMemo(() => {
-    const limit = lastRecommendationDate === currentWeek ? Math.max(0, FREE_LIMITS.weeklyRecommendations - dailyRecommendationsUsed) : FREE_LIMITS.weeklyRecommendations;
+    const limit = isProUser
+      ? people.length
+      : lastRecommendationDate === currentWeek ? Math.max(0, FREE_LIMITS.weeklyRecommendations - dailyRecommendationsUsed) : FREE_LIMITS.weeklyRecommendations;
     return people
       .map((person) => {
         const score = scores[person.uid]?.score ?? localScores[person.uid]?.score ?? 1;
@@ -160,7 +164,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       .sort((left, right) => right.weight - left.weight)
       .slice(0, limit)
       .map((entry) => entry.person);
-  }, [people, scores, localScores, dailyRecommendationsUsed, lastRecommendationDate, today, currentWeek]);
+  }, [people, scores, localScores, dailyRecommendationsUsed, lastRecommendationDate, today, currentWeek, isProUser]);
 
   const openChat = async (profile: UserProfile) => {
     if (!user?.uid || !profile?.uid) return;
@@ -173,10 +177,14 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       note = drafted;
     }
 
-    const usage = await consumeWeeklyUsage(user.uid, 'recommendations', FREE_LIMITS.weeklyRecommendations);
-    if (!usage.allowed && lastRecommendationDate === currentWeek) {
-      notifyUser('That’s this week’s 3', 'Come back next week for 3 new recommended builders.');
-      return;
+    let usageUsed = dailyRecommendationsUsed;
+    if (!isProUser) {
+      const usage = await consumeWeeklyUsage(user.uid, 'recommendations', FREE_LIMITS.weeklyRecommendations);
+      if (!usage.allowed && lastRecommendationDate === currentWeek) {
+        notifyUser('That’s this week’s 3', 'Come back next week for 3 new recommended builders — or unlock LINKUP PLUS for unlimited picks.');
+        return;
+      }
+      usageUsed = usage.used;
     }
 
     setBusyUserId(profile.uid);
@@ -189,9 +197,11 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         message: note,
         recipientName: displayNameFor(profile),
       });
-      await AsyncStorage.setItem(`linkup:last-recommendation-date:${user.uid}`, currentWeek);
-      setLastRecommendationDate(currentWeek);
-      setDailyRecommendationsUsed(usage.used + 1);
+      if (!isProUser) {
+        await AsyncStorage.setItem(`linkup:last-recommendation-date:${user.uid}`, currentWeek);
+        setLastRecommendationDate(currentWeek);
+        setDailyRecommendationsUsed(usageUsed + 1);
+      }
       if (result.action === 'chat' && result.matchId) {
         navigation.navigate('Chat', { matchId: result.matchId, otherUser: profile });
         return;
@@ -342,9 +352,11 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           Ranked by shared skills, industries, goals, work style, and compatibility so you can find useful people faster.
         </Text>
         <Text style={styles.heroSub}>
-          {lastRecommendationDate === currentWeek
-            ? `${dailyRecommendationsUsed}/${FREE_LIMITS.weeklyRecommendations} weekly recommendations used`
-            : `${FREE_LIMITS.weeklyRecommendations} weekly recommendations available`}
+          {isProUser
+            ? 'PLUS member — unlimited recommendations'
+            : lastRecommendationDate === currentWeek
+              ? `${dailyRecommendationsUsed}/${FREE_LIMITS.weeklyRecommendations} weekly recommendations used`
+              : `${FREE_LIMITS.weeklyRecommendations} weekly recommendations available`}
         </Text>
         <Text style={styles.aiStatus}>{aiLoading ? 'RANKING...' : 'MATCHES READY'}</Text>
       </View>

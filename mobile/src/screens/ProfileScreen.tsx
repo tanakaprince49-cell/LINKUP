@@ -304,13 +304,13 @@ const PreferenceSwitch = ({
   isDark: boolean;
 }) => (
   <View style={[styles.switchWrap, disabled ? { opacity: 0.55 } : null]}>
-    <Text style={[styles.switchState, { color: value ? COLORS.primary : '#777' }]}>{value ? 'ON' : 'OFF'}</Text>
+    <Text style={[styles.switchState, { color: value ? COLORS.primaryStrong : '#777' }]}>{value ? 'ON' : 'OFF'}</Text>
     <Switch
       value={value}
       onValueChange={onValueChange}
       disabled={!!disabled}
-      trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: COLORS.primary }}
-      ios_backgroundColor={isDark ? '#2A2A30' : '#D1D5DB'}
+      trackColor={{ false: isDark ? '#2A2A30' : '#B9BDC7', true: COLORS.primaryStrong }}
+      ios_backgroundColor={isDark ? '#2A2A30' : '#B9BDC7'}
       thumbColor="#FFF"
     />
   </View>
@@ -2133,7 +2133,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Switch
                     value={!!editData?.remoteOnly}
                     onValueChange={(v) => setEditField('remoteOnly', v)}
-                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: COLORS.primary }}
+                    trackColor={{ false: isDark ? '#2A2A30' : '#B9BDC7', true: COLORS.primaryStrong }}
                     thumbColor="#FFF"
                   />
                 </View>
@@ -2145,7 +2145,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   <Switch
                     value={!!editData?.willingToRelocate}
                     onValueChange={(v) => setEditField('willingToRelocate', v)}
-                    trackColor={{ false: isDark ? '#2A2A30' : '#D1D5DB', true: COLORS.primary }}
+                    trackColor={{ false: isDark ? '#2A2A30' : '#B9BDC7', true: COLORS.primaryStrong }}
                     thumbColor="#FFF"
                   />
                 </View>

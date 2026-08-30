@@ -32,13 +32,13 @@ type PaywallModalProps = {
 const LOGO = require('../../assets/logo-square.png');
 
 const PRO_PERKS = [
-  'AI-powered warm intros to start conversations',
-  'Linky AI assistant for smart networking',
-  'Verified blue check badge',
-  'AI startup analyzer',
-  'Priority AI matching',
-  'Early access to new AI tools',
-  'Exclusive founder community',
+  'Unlimited discovery swipes & rewinds',
+  'Who Viewed You — names & profiles of everyone checking you out',
+  'Advanced search, AI ranking & saved search alerts',
+  'Unlimited AI warm intros & Linky assistant',
+  'Turbo Connect visibility boost in Discover & search',
+  'Verified blue check + PLUS crown',
+  'Unlimited Startup Analyzer, idea deck & weekly picks',
 ];
 
 const PRICING_PLANS = [
