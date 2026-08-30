@@ -26,6 +26,9 @@ import { UserProfile } from '../types';
 import { publicProfileLink } from '../lib/profileLinks';
 import { buildLocalProEntitlement, hasLinkupPro, hasPaidLinkupPro, readLocalProEntitlement, saveLocalProEntitlement } from '../lib/paywall';
 import { compactProfileForCache } from '../lib/profilePerformance';
+import { isWebBilling, subscribeWebSubscription, withWebEntitlements } from '../lib/webSubscription';
+import { checkPaynowPayment, takePendingReference } from '../lib/webCheckout';
+import type { WebSubscription } from '../lib/webSubscription';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
 import { signInToFirebaseWithGoogle } from '../lib/googleAuth';
 
@@ -311,6 +314,7 @@ const buildLocalUserProfile = (authUser: User, onboarded: boolean): any => {
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
+  webSubscription: WebSubscription | null;
   loading: boolean;
   authVersion: number;
   isOnboarded: boolean;
@@ -334,7 +338,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [rawProfile, setProfile] = useState<UserProfile | null>(null);
   const profileRef = React.useRef<UserProfile | null>(null);
   const setProfileStable = React.useCallback((next: UserProfile | null) => {
     if (next === profileRef.current) return;
@@ -347,7 +351,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authVersion, setAuthVersion] = useState(0);
   const [completedOnboardingUid, setCompletedOnboardingUid] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  // WEB BILLING: Paynow grants land in webSubscriptions/{uid} (written only by
+  // api/). Fold that entitlement into the profile so every gate downstream —
+  // hasLinkupPro, the free-limit counters, Campaigns — reads ONE answer whether
+  // the user paid through Google Play on Android or Paynow on web. On native this
+  // memo is a pass-through: Play owns billing there.
+  const [webSubscription, setWebSubscription] = useState<WebSubscription | null>(null);
+  const profile = useMemo(
+    () => (isWebBilling() ? withWebEntitlements(rawProfile, webSubscription) : rawProfile),
+    [rawProfile, webSubscription]
+  );
   const isOnboarded = Boolean(user?.uid && (profile?.onboarded || completedOnboardingUid === user.uid));
+
+  useEffect(() => {
+    if (!isWebBilling() || !user?.uid) {
+      setWebSubscription(null);
+      return;
+    }
+    return subscribeWebSubscription(user.uid, setWebSubscription);
+  }, [user?.uid]);
+
+  // RETURNING FROM PAYNOW. Paynow sends the browser to PAYNOW_RETURN_URL, so
+  // the app boots fresh. If a payment was in flight, ask the server to settle
+  // it — the webhook is the primary grant, this is the safety net. The UI
+  // updates itself through the webSubscriptions listener, so no local state
+  // juggling is needed here.
+  useEffect(() => {
+    if (!isWebBilling() || !user?.uid) return;
+    const reference = takePendingReference();
+    if (!reference) return;
+
+    let cancelled = false;
+    (async () => {
+      for (let attempt = 0; attempt < 6 && !cancelled; attempt += 1) {
+        try {
+          const result = await checkPaynowPayment(reference);
+          const status = String(result?.status || '').toLowerCase();
+          if (['paid', 'failed', 'cancelled', 'refunded', 'disputed'].includes(status)) return;
+        } catch {
+          // Transient. The webhook may still land — keep polling quietly.
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!loading) return;
@@ -954,6 +1006,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     () => ({
       user,
       profile,
+      webSubscription,
       loading,
       authVersion,
       isOnboarded,
@@ -973,7 +1026,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       deleteAccount,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [user, profile, loading, authVersion, isOnboarded, authError]
+    [user, profile, webSubscription, loading, authVersion, isOnboarded, authError]
   );
 
   return (

@@ -133,23 +133,77 @@ in **sandbox** (your Visa/Mastercard rows showed as `inactive`). Email
 
 ---
 
-## Still to decide: gating the web app
+## One price list, two billing rails
 
-The plumbing above records and serves entitlements, but **web is still free**.
-`hasLinkupPro()` in `mobile/src/lib/paywall.ts` returns `true` whenever
-`Platform.OS === 'web'`, so web users bypass every gate and every free limit.
+Android bills through **Google Play**. Web bills through **Paynow**. Both read
+the same numbers from **`shared/pricing.js`** — a single file at the repo root,
+imported by `api/_paynow.js` (what we charge) and `mobile/src/lib/pricing.ts`
+(what we display), so the two can never drift.
 
-I have not flipped that, because it changes who gets locked out and deserves
-an explicit call:
+| Tier | Term | Price | Play SKU | Paynow plan key |
+|---|---|---|---|---|
+| PLUS | 1 month | $19.99 | `linkup_plus_monthly` | `plus_1m` |
+| PLUS | 12 months | $149.99 | `linkup_plus_yearly` | `plus_12m` |
+| Campaigns | 1 month | $29.99 | `linkup_campaigns_monthly` | `campaigns_1m` |
+| Campaigns | 12 months | $249.99 | `linkup_campaigns_yearly` | `campaigns_12m` |
 
-1. Load `webSubscriptions/{uid}` into auth state (new hook/context).
-2. Replace the `Platform.OS === 'web' ? true : ...` shortcut with a real check
-   against the web entitlement.
-3. Give web users the same `FREE_LIMITS` as mobile until they have paid.
-4. Point the web paywall at Paynow instead of Google Play.
+`plus_3m` ($49.99) is a web-only bundle — a discount on three separate months,
+with no Play equivalent. Play additionally offers a 7-day free trial; the web
+terms are prepaid, so there is nothing to trial against.
 
-Until step 2 lands, charging web users is not enforceable — someone could just
-use the app without paying. Say the word and I'll wire it.
+**Google Play policy:** the web checkout must never be surfaced inside the
+Android app. Every Paynow call sits behind a `Platform.OS === 'web'` branch and
+native keeps using `expo-iap`. Steering Play users to an external checkout is a
+policy violation; billing web users separately is not.
 
-**Google Play policy:** do not link from inside the Android app to this web
-checkout. Web billing is fine; steering Play users to it is not.
+---
+
+## Web is gated
+
+Web users are no longer automatically Pro. The entitlement is real and enforced:
+
+1. `AuthContext` live-listens to `webSubscriptions/{uid}` (web only) and folds
+   it into the profile with `withWebEntitlements()`.
+2. `hasLinkupPro()` in `mobile/src/lib/paywall.ts` is now a plain call to
+   `hasPaidLinkupPro(profile)` — **no platform bypass**. The same expression is
+   true for a Play subscriber on Android and a paid-up Paynow subscriber on
+   web, and false for everyone else.
+3. The three usage counters (`consumeDailyUsage`, `consumePeriodUsage`,
+   `consumeWindowUsage`) no longer short-circuit on web, so web users get the
+   same `FREE_LIMITS` as mobile until they pay.
+4. The web paywall and Campaigns screen route to `startPaynowCheckout()`
+   instead of showing "free on web".
+
+The merge is **additive only** — a profile that already shows Pro (someone who
+bought on Android and is now on a laptop) keeps it. We never downgrade a paying
+user.
+
+### Document shape
+
+`webSubscriptions/{uid}` is **per tier**, because a user can hold both PLUS and
+Campaigns at once:
+
+```
+webSubscriptions/{uid} = {
+  uid,
+  plus:      { status, planKey, lastReference, lastAmount, startedAt, endsAt, updatedAt },
+  campaigns: { status, planKey, lastReference, lastAmount, startedAt, endsAt, updatedAt },
+  updatedAt
+}
+```
+
+Topping up stacks onto the tier it was bought for. Grants go through
+`grantWebEntitlement()` in `api/_entitlements.js`, used by both the webhook and
+the status endpoint so the two paths cannot disagree.
+
+### Returning from Paynow
+
+Paynow navigates the browser away, so the app boots fresh on the way back. The
+pending reference is parked in `sessionStorage` before we leave, and
+`AuthContext` picks it up on mount and polls `/api/paynowStatus` — the safety net
+for a webhook that never landed. The UI updates itself through the
+`webSubscriptions` listener, so there is no local state to reconcile.
+
+> To revert web to free (e.g. while you finish Play Console setup), restore the
+> `Platform.OS === 'web' ? true : ...` shortcut in `hasLinkupPro()` and the
+> three early-returns in the usage counters. Nothing else depends on them.

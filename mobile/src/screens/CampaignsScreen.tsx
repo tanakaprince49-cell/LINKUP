@@ -56,6 +56,8 @@ import {
   subscribeMyCampaigns,
   subscribePendingCampaigns,
 } from '../lib/campaigns';
+import { startPaynowCheckout, checkPaynowPayment, takePendingReference } from '../lib/webCheckout';
+import { webCampaignsActive } from '../lib/webSubscription';
 import {
   TRIAL_DAYS,
   describeSubscriptionOffer,
@@ -82,6 +84,7 @@ const CAMPAIGNS_PLANS = [
   {
     id: 'monthly',
     productId: LINKUP_CAMPAIGNS_PRODUCT_ID,
+    webPlanKey: 'campaigns_1m',
     label: 'Monthly',
     price: LINKUP_CAMPAIGNS_MONTHLY_PRICE,
     cadence: '/mo',
@@ -91,6 +94,7 @@ const CAMPAIGNS_PLANS = [
   {
     id: 'yearly',
     productId: LINKUP_CAMPAIGNS_YEARLY_PRODUCT_ID,
+    webPlanKey: 'campaigns_12m',
     label: 'Yearly',
     price: LINKUP_CAMPAIGNS_YEARLY_PRICE,
     cadence: '/yr',
@@ -122,7 +126,7 @@ const compactNumber = (value: number) => {
 };
 
 export default function CampaignsScreen({ navigation }: any) {
-  const { user } = useAuth();
+  const { user, webSubscription } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -141,7 +145,7 @@ export default function CampaignsScreen({ navigation }: any) {
   const [selectedPlan, setSelectedPlan] = useState<CampaignsPlan['id']>('monthly');
   const processedPurchases = useRef(new Set<string>());
 
-  const hasPlan = hasCampaignsPlan(account);
+  const hasPlan = hasCampaignsPlan(account, webCampaignsActive(webSubscription));
   const liveCount = countLiveCampaigns(campaigns);
   const totalImpressions = campaigns.reduce((sum, campaign) => sum + (campaign.statsImpressions || 0), 0);
   const totalClicks = campaigns.reduce((sum, campaign) => sum + (campaign.statsClicks || 0), 0);
@@ -303,15 +307,27 @@ export default function CampaignsScreen({ navigation }: any) {
     CAMPAIGNS_PLANS.find((plan) => plan.id === selectedPlan) || CAMPAIGNS_PLANS[0];
 
   const handleStartCampaigns = async () => {
-    if (Platform.OS === 'web') {
-      Alert.alert('Campaigns are free on web 🎉', 'Purchases only happen on the Android app.');
-      return;
-    }
     if (!user?.uid) {
       Alert.alert('Sign in required', 'Sign in first, then start LinkUp Campaigns.');
       return;
     }
     const plan = CAMPAIGNS_PLANS.find((item) => item.id === selectedPlan) || CAMPAIGNS_PLANS[0];
+
+    // WEB BILLING: Paynow, at the same price as Google Play (shared/pricing.js).
+    // Play policy: guarded by Platform.OS, never shown inside the Android app.
+    if (Platform.OS === 'web') {
+      setPurchaseBusy(true);
+      setStoreError('');
+      try {
+        const { redirectUrl } = await startPaynowCheckout(plan.webPlanKey);
+        (window as any)?.location?.assign?.(redirectUrl);
+      } catch (error: any) {
+        setPurchaseBusy(false);
+        Alert.alert('Checkout failed', error?.message || 'Paynow could not start checkout right now.');
+      }
+      return;
+    }
+
     // Buy the TRIAL offer, not the bare base plan — same subscription, $0 for 7 days.
     const offerToken = offerTokenFor(offerForPlan(plan));
     if (Platform.OS === 'android' && !offerToken) {
@@ -344,7 +360,24 @@ export default function CampaignsScreen({ navigation }: any) {
 
   const handleRestore = async () => {
     if (Platform.OS === 'web') {
-      Alert.alert('Nothing to restore', 'Purchases only exist on the mobile apps.');
+      setPurchaseBusy(true);
+      setStoreError('');
+      try {
+        // The entitlement already streams from webSubscriptions/{uid}; all a
+        // restore can do is force the server to reconcile a missed webhook.
+        const pending = takePendingReference();
+        if (pending) await checkPaynowPayment(pending);
+        Alert.alert(
+          'Restore purchases',
+          pending
+            ? 'We checked your latest Paynow payment. If it completed, Campaigns is now active.'
+            : 'Campaigns is tied to your LINKUP account, so it is already active here if you have paid.'
+        );
+      } catch (error: any) {
+        Alert.alert('Restore failed', error?.message || 'We could not check your Paynow payment right now.');
+      } finally {
+        setPurchaseBusy(false);
+      }
       return;
     }
     setPurchaseBusy(true);

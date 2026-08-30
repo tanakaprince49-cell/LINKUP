@@ -9,6 +9,10 @@
 
 const INITIATE_URL = 'https://www.paynow.co.zw/interface/initiatetransaction';
 
+// The price list is shared with the app so the number a web user is shown is
+// the number they are charged — and so Play and Paynow cannot drift apart.
+import { PAYNOW_TERMS, TIERS } from '../shared/pricing.js';
+
 export function paynowConfig() {
   const id = String(process.env.PAYNOW_INTEGRATION_ID || '').trim();
   const key = String(process.env.PAYNOW_INTEGRATION_KEY || '').trim();
@@ -67,16 +71,16 @@ export function verifyHash(values, integrationKey) {
 /**
  * Web plans. Paynow cannot auto-renew, so each entry is a fixed prepaid term.
  * `months` drives the entitlement window written at payment time.
+ *
+ * The catalogue itself lives in shared/pricing.js — the same file the app
+ * renders prices from. Never re-declare an amount here.
  */
 export function paynowPlans() {
-  return {
-    plus_1m: { label: 'LINKUP PLUS — 1 month', amount: 19.99, months: 1, tier: 'plus' },
-    plus_3m: { label: 'LINKUP PLUS — 3 months', amount: 49.99, months: 3, tier: 'plus' },
-    plus_12m: { label: 'LINKUP PLUS — 12 months', amount: 149.99, months: 12, tier: 'plus' },
-    campaigns_1m: { label: 'LINKUP Campaigns — 1 month', amount: 29.99, months: 1, tier: 'campaigns' },
-    campaigns_12m: { label: 'LINKUP Campaigns — 12 months', amount: 249.99, months: 12, tier: 'campaigns' },
-  };
+  return PAYNOW_TERMS;
 }
+
+/** Valid entitlement tiers, re-exported so callers import from one place. */
+export { TIERS };
 
 /** Add whole months to a date, clamping the day (31 Jan + 1 month -> 28/29 Feb). */
 export function addMonths(from, months) {

@@ -25,6 +25,7 @@ import {
   trialThenPrice,
 } from '../lib/trial';
 import { publicProfileLink } from '../lib/profileLinks';
+import { checkPaynowPayment, startPaynowCheckout, takePendingReference } from '../lib/webCheckout';
 
 type PaywallModalProps = {
   visible: boolean;
@@ -53,6 +54,7 @@ const PRICING_PLANS = [
   {
     id: 'monthly',
     productId: LINKUP_PLUS_PRODUCT_ID,
+    webPlanKey: 'plus_1m',
     label: 'Monthly',
     originalPrice: '$25.00',
     price: LINKUP_PLUS_MONTHLY_PRICE,
@@ -63,6 +65,7 @@ const PRICING_PLANS = [
   {
     id: 'yearly',
     productId: LINKUP_PLUS_YEARLY_PRODUCT_ID,
+    webPlanKey: 'plus_12m',
     label: 'Yearly',
     price: LINKUP_PLUS_YEARLY_PRICE,
     cadence: '/yr',
@@ -316,11 +319,6 @@ export default function PaywallModal({
   }, [availablePurchases, visible]);
 
   const handleUpgrade = async () => {
-    if (Platform.OS === 'web') {
-      Alert.alert('LINKUP PLUS is free on web 🎉', 'Every feature is already unlocked on the web app — no purchase needed.');
-      return;
-    }
-
     if (isPro) {
       Alert.alert('LINKUP PLUS active', 'Your account already has LINKUP PLUS.');
       return;
@@ -332,6 +330,25 @@ export default function PaywallModal({
     }
 
     const plan = PRICING_PLANS.find((item) => item.id === selectedPlan) || PRICING_PLANS[0];
+
+    // WEB BILLING: Paynow. Prices are identical to Play (shared/pricing.js).
+    // Play policy: this branch must never be reachable from the Android app —
+    // it is guarded by Platform.OS and native keeps expo-iap below.
+    if (Platform.OS === 'web') {
+      setIsPurchasing(true);
+      setStoreError('');
+      try {
+        const { redirectUrl } = await startPaynowCheckout(plan.webPlanKey);
+        // Full navigation to Paynow's hosted page. We return via
+        // PAYNOW_RETURN_URL and settle up from usePaynowReturn().
+        (window as any)?.location?.assign?.(redirectUrl);
+      } catch (error: any) {
+        setIsPurchasing(false);
+        Alert.alert('Checkout failed', error?.message || 'Paynow could not start checkout right now.');
+      }
+      return;
+    }
+
     // Buy the TRIAL offer, not the bare base plan — same subscription, $0 for 7 days.
     const offerToken = offerTokenFor(offerForPlan(plan));
 
@@ -365,7 +382,25 @@ export default function PaywallModal({
 
   const handleRestore = async () => {
     if (Platform.OS === 'web') {
-      Alert.alert('Nothing to restore', 'Purchases only exist on the mobile apps. LINKUP PLUS is free on web.');
+      if (restoreDisabled) return;
+      setIsRestoring(true);
+      try {
+        // No Play-style restore on web: the entitlement is already streaming
+        // from webSubscriptions/{uid}. All we can do is force the server to
+        // reconcile a payment whose webhook never landed.
+        const pending = takePendingReference();
+        if (pending) await checkPaynowPayment(pending);
+        Alert.alert(
+          'Restore purchases',
+          pending
+            ? 'We checked your latest Paynow payment. If it completed, LINKUP PLUS is now active.'
+            : 'LINKUP PLUS is tied to your LINKUP account, so it is already active here if you have paid.'
+        );
+      } catch (error: any) {
+        Alert.alert('Restore failed', error?.message || 'We could not check your Paynow payment right now.');
+      } finally {
+        setIsRestoring(false);
+      }
       return;
     }
     if (restoreDisabled) return;

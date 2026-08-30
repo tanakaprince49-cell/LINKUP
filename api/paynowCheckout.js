@@ -8,6 +8,7 @@
 import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import { getDb, serverTimestamp, verifyRequestUser } from './_firebaseAdmin.js';
 import { initiateTransaction, paynowConfig, paynowPlans } from './_paynow.js';
+import { CURRENCY } from '../shared/pricing.js';
 
 export default async function handler(req, res) {
   if (handleOptions(req, res)) return;
@@ -96,7 +97,9 @@ export default async function handler(req, res) {
     redirectUrl: response.redirecturl,
     reference,
     amount: plan.amount,
-    currency: 'USD',
+    currency: CURRENCY,
     label: plan.label,
+    tier: plan.tier,
+    months: plan.months,
   });
 }

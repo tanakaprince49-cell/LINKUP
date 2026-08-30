@@ -1,5 +1,5 @@
-import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CAMPAIGNS_PRICES, formatUsd } from './pricing';
 import {
   addDoc,
   collection,
@@ -31,8 +31,8 @@ import { IdeaDeckItem } from './ideas';
 
 export const LINKUP_CAMPAIGNS_PRODUCT_ID = 'linkup_campaigns_monthly';
 export const LINKUP_CAMPAIGNS_YEARLY_PRODUCT_ID = 'linkup_campaigns_yearly';
-export const LINKUP_CAMPAIGNS_MONTHLY_PRICE = '$29.99';
-export const LINKUP_CAMPAIGNS_YEARLY_PRICE = '$249.99';
+export const LINKUP_CAMPAIGNS_MONTHLY_PRICE = formatUsd(CAMPAIGNS_PRICES.monthly);
+export const LINKUP_CAMPAIGNS_YEARLY_PRICE = formatUsd(CAMPAIGNS_PRICES.yearly);
 export const CAMPAIGNS_PRODUCT_IDS = [LINKUP_CAMPAIGNS_PRODUCT_ID, LINKUP_CAMPAIGNS_YEARLY_PRODUCT_ID];
 
 /** Max campaigns a subscriber may have in a live-ish state at once. */
@@ -123,8 +123,18 @@ const seenKey = (uid: string, campaignId: string) => `linkup:campaign-seen:${uid
 const clickedKey = (uid: string, campaignId: string) => `linkup:campaign-clicked:${uid || 'anonymous'}:${campaignId}:${todayStamp()}`;
 const accountCacheKey = (uid: string) => `linkup:campaigns-account:${uid || 'anonymous'}`;
 
-export const hasCampaignsPlan = (account: CampaignsAccount | null | undefined) => {
-  if (Platform.OS === 'web') return true;
+/**
+ * Does this account have an active Campaigns plan?
+ *
+ * No web shortcut: on web the plan is bought through Paynow and lives in
+ * webSubscriptions/{uid}, not campaignAccounts/{uid}. Callers on web pass the
+ * web flag in via `webOverride` (see withWebEntitlements).
+ */
+export const hasCampaignsPlan = (
+  account: CampaignsAccount | null | undefined,
+  webOverride?: boolean
+) => {
+  if (webOverride === true) return true;
   return String(account?.status || '').toLowerCase() === 'active';
 };
 

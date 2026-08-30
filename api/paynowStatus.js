@@ -8,7 +8,8 @@
 // Returns: { "status": "paid" | "pending" | "failed" | ..., "entitlement": {...} | null }
 import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import { getDb, serverTimestamp, verifyRequestUser } from './_firebaseAdmin.js';
-import { extendFrom, paynowConfig, pollTransaction } from './_paynow.js';
+import { paynowConfig, pollTransaction } from './_paynow.js';
+import { grantWebEntitlement, readWebEntitlement } from './_entitlements.js';
 
 export default async function handler(req, res) {
   if (handleOptions(req, res)) return;
@@ -55,36 +56,18 @@ export default async function handler(req, res) {
     if (polled && ['paid', 'awaiting delivery', 'cancelled', 'failed'].includes(paynowStatus)) {
       const isPaid = paynowStatus === 'paid' || paynowStatus === 'awaiting delivery';
       if (isPaid) {
-        const now = new Date();
-        const subRef = db.collection('webSubscriptions').doc(tx.uid);
-        const subSnap = await subRef.get();
-        const existing = subSnap.exists() ? subSnap.data() : null;
-
-        await db.runTransaction(async (t) => {
-          const fresh = await t.get(txRef);
-          if (fresh.data()?.status === 'paid') return;
-          t.set(txRef, {
-            status: 'paid',
+        await grantWebEntitlement(db, {
+          uid: tx.uid,
+          tier: tx.tier,
+          months: tx.months || 1,
+          planKey: tx.planKey,
+          amount: tx.amount,
+          reference,
+          txRef,
+          txPatch: {
             paynowReference: polled.paynowreference || tx.paynowReference || '',
             paidAmount: Number(polled.amount || tx.amount || 0),
-            paidAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          t.set(
-            subRef,
-            {
-              uid: tx.uid,
-              tier: tx.tier,
-              status: 'active',
-              lastPlanKey: tx.planKey,
-              lastReference: reference,
-              lastAmount: tx.amount,
-              startedAt: existing?.startedAt || serverTimestamp(),
-              endsAt: extendFrom(existing?.endsAt, now, tx.months || 1),
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
+          },
         });
         status = 'paid';
       } else {
@@ -94,19 +77,8 @@ export default async function handler(req, res) {
     }
   }
 
-  let entitlement = null;
-  if (status === 'paid') {
-    const subSnap = await db.collection('webSubscriptions').doc(user.uid).get();
-    if (subSnap.exists()) {
-      const sub = subSnap.data();
-      const endsMs = sub.endsAt?.toMillis ? sub.endsAt.toMillis() : Number(sub.endsAt || 0);
-      entitlement = {
-        tier: sub.tier,
-        status: endsMs > Date.now() ? 'active' : 'expired',
-        endsAt: endsMs || null,
-      };
-    }
-  }
+  // Per-tier, so the client can tell PLUS from Campaigns on the same account.
+  const entitlement = await readWebEntitlement(db, user.uid);
 
   res.status(200).json({ reference, status, entitlement });
 }

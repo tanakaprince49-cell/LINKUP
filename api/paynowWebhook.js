@@ -6,7 +6,8 @@
 // touch a single document. Without that check anyone could POST
 // "reference=whatever&status=Paid" and grant themselves PLUS for free.
 import { getDb, serverTimestamp } from './_firebaseAdmin.js';
-import { extendFrom, generateHash, paynowConfig, parsePaynowResponse } from './_paynow.js';
+import { generateHash, paynowConfig, parsePaynowResponse } from './_paynow.js';
+import { grantWebEntitlement } from './_entitlements.js';
 
 /** Paynow posts form-encoded, so we read the raw body ourselves. */
 function readRawBody(req) {
@@ -76,39 +77,19 @@ export default async function handler(req, res) {
         return;
       }
 
-      const now = new Date();
-      const subRef = db.collection('webSubscriptions').doc(tx.uid);
-      const subSnap = await subRef.get();
-      const existing = subSnap.exists() ? subSnap.data() : null;
-
-      const endsAt = extendFrom(existing?.endsAt, now, tx.months || 1);
-
-      await db.runTransaction(async (t) => {
-        const fresh = await t.get(txRef);
-        if (fresh.data()?.status === 'paid') return; // another invocation won
-        t.set(txRef, {
-          status: 'paid',
+      await grantWebEntitlement(db, {
+        uid: tx.uid,
+        tier: tx.tier,
+        months: tx.months || 1,
+        planKey: tx.planKey,
+        amount: tx.amount,
+        reference,
+        txRef,
+        txPatch: {
           paynowReference: payload.paynowreference || tx.paynowReference || '',
           paidAmount: Number(payload.amount || tx.amount || 0),
           paymentMethod: payload.method || '',
-          paidAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        t.set(
-          subRef,
-          {
-            uid: tx.uid,
-            tier: tx.tier,
-            status: 'active',
-            lastPlanKey: tx.planKey,
-            lastReference: reference,
-            lastAmount: tx.amount,
-            startedAt: existing?.startedAt || serverTimestamp(),
-            endsAt,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+        },
       });
     } else if (['cancelled', 'failed', 'disputed', 'refunded'].includes(status)) {
       await txRef.set({ status, updatedAt: serverTimestamp() }, { merge: true });

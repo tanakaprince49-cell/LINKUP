@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PLUS_PRICES, formatUsd } from './pricing';
 
 export const PRO_FEATURES = {
   startupAnalyzer: 'AI Startup Analyzer',
@@ -54,9 +55,6 @@ const getPeriodUsage = async (uid: string, feature: string, period: string) => {
 };
 
 const consumePeriodUsage = async (uid: string, feature: string, limit: number, period: string) => {
-  if (Platform.OS === 'web') {
-    return { allowed: true, used: 0, remaining: limit, limit };
-  }
   const key = periodUsageKey(uid || 'anonymous', feature, period);
   const current = await getPeriodUsage(uid || 'anonymous', feature, period);
   if (current >= limit) {
@@ -86,8 +84,8 @@ const proEntitlementKey = (uid: string) => `linkup:pro-entitlement:${uid || 'ano
 export const GOOGLE_PLAY_PACKAGE_NAME = 'com.tana.linkup';
 export const LINKUP_PLUS_PRODUCT_ID = 'linkup_plus_monthly';
 export const LINKUP_PLUS_YEARLY_PRODUCT_ID = 'linkup_plus_yearly';
-export const LINKUP_PLUS_MONTHLY_PRICE = '$19.99';
-export const LINKUP_PLUS_YEARLY_PRICE = '$149.99';
+export const LINKUP_PLUS_MONTHLY_PRICE = formatUsd(PLUS_PRICES.monthly);
+export const LINKUP_PLUS_YEARLY_PRICE = formatUsd(PLUS_PRICES.yearly);
 export const GOOGLE_PLAY_SUBSCRIPTION_URL =
   `https://play.google.com/store/account/subscriptions?sku=${LINKUP_PLUS_PRODUCT_ID}&package=${GOOGLE_PLAY_PACKAGE_NAME}`;
 export const SWIPE_USAGE_WINDOW_HOURS = 12;
@@ -113,11 +111,15 @@ export const hasPaidLinkupPro = (profile: any) => {
   );
 };
 
-// Feature gates: everything is free on web (expo-iap has no web store), but
-// paid-only identity signals (verification tick, plan) always use
-// hasPaidLinkupPro so web users never receive or persist them for free.
-export const hasLinkupPro = (profile: any) =>
-  Platform.OS === 'web' ? true : hasPaidLinkupPro(profile);
+// Feature gate. There is NO platform bypass any more.
+//
+// Web used to short-circuit to `true` because expo-iap has no web store, which
+// meant nobody on web could ever be charged. Web users are now billed through
+// Paynow instead: AuthContext folds the webSubscriptions/{uid} entitlement into
+// the profile (see withWebEntitlements), so this one expression is true for a
+// Play subscriber on Android AND for a paid-up Paynow subscriber on web — and
+// false for everyone else.
+export const hasLinkupPro = (profile: any) => hasPaidLinkupPro(profile);
 
 export const isAndroidProLocked = (profile: any) => Platform.OS === 'android' && !hasLinkupPro(profile);
 
@@ -235,9 +237,6 @@ export const getDailyUsage = async (uid: string, feature: string) => {
 };
 
 export const consumeDailyUsage = async (uid: string, feature: string, limit: number) => {
-  if (Platform.OS === 'web') {
-    return { allowed: true, used: 0, remaining: limit, limit };
-  }
   const key = usageKey(uid || 'anonymous', feature);
   const current = await getDailyUsage(uid || 'anonymous', feature);
   if (current >= limit) {
@@ -285,9 +284,6 @@ export const getWindowUsage = async (uid: string, feature: string, windowHours: 
 export const consumeWindowUsage = async (uid: string, feature: string, limit: number, windowHours: number) => {
   const windowMs = Math.max(1, windowHours) * 60 * 60 * 1000;
   const now = Date.now();
-  if (Platform.OS === 'web') {
-    return { allowed: true, used: 0, remaining: limit, limit, windowHours, resetAt: now + windowMs };
-  }
   const key = windowUsageKey(uid || 'anonymous', feature);
   const raw = await AsyncStorage.getItem(key);
   const usage = parseWindowUsage(raw, now, windowMs);
