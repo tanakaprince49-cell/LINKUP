@@ -54,6 +54,17 @@ import {
   subscribeMyCampaigns,
   subscribePendingCampaigns,
 } from '../lib/campaigns';
+import {
+  TRIAL_DAYS,
+  describeSubscriptionOffer,
+  offerTokenFor,
+  pickSubscriptionOffer,
+  readActiveTrial,
+  saveTrialStart,
+  trialStatusLabel,
+  trialThenPrice,
+  type TrialRecord,
+} from '../lib/trial';
 
 const CAMPAIGNS_PERKS = [
   'Showcase your product on Idea Deck, Discover, Search, Hub & Linky picks',
@@ -119,6 +130,7 @@ export default function CampaignsScreen({ navigation }: any) {
   const [rejectTarget, setRejectTarget] = useState<Campaign | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [rejectBusy, setRejectBusy] = useState(false);
+  const [campaignsTrial, setCampaignsTrial] = useState<TrialRecord | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<CampaignsPlan['id']>('monthly');
   const processedPurchases = useRef(new Set<string>());
 
@@ -127,25 +139,6 @@ export default function CampaignsScreen({ navigation }: any) {
   const totalImpressions = campaigns.reduce((sum, campaign) => sum + (campaign.statsImpressions || 0), 0);
   const totalClicks = campaigns.reduce((sum, campaign) => sum + (campaign.statsClicks || 0), 0);
   const totalCtr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(1) : '0.0';
-
-  const unlockCampaignsPlan = useCallback(
-    async (purchase: Purchase) => {
-      if (!user?.uid) return;
-      const patch = {
-        plan: 'campaigns',
-        status: 'active',
-        planProductId: getPurchaseProductId(purchase),
-        transactionId: purchase.transactionId || purchase.id || null,
-        purchaseToken: purchase.purchaseToken || null,
-        billingProvider: purchase.store || (Platform.OS === 'android' ? 'google-play' : 'app-store'),
-        unlockedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-      await saveCampaignsAccount(user.uid, patch);
-      setAccount((current) => ({ ...(current || {}), ...patch }));
-    },
-    [user?.uid]
-  );
 
   const { connected, subscriptions, fetchProducts, requestPurchase, restorePurchases, reconnect } = useIAP({
     onPurchaseSuccess: (purchase) => {
@@ -161,6 +154,33 @@ export default function CampaignsScreen({ navigation }: any) {
       setStoreError(error?.message || 'Google Play billing is not ready yet.');
     },
   });
+
+  async function unlockCampaignsPlan(purchase: Purchase) {
+    if (!user?.uid) return;
+    const purchasedProductId = getPurchaseProductId(purchase);
+    const purchasedPlan =
+      CAMPAIGNS_PLANS.find((plan) => plan.productId === purchasedProductId) || CAMPAIGNS_PLANS[0];
+    // Play owns the billing clock; the local record only powers the countdown.
+    const product = subscriptions.find((entry: any) => entry.id === purchasedProductId);
+    const offer = pickSubscriptionOffer(product);
+    const trialDays = describeSubscriptionOffer(offer, purchasedPlan.price, TRIAL_DAYS).trialDays;
+    const trial = await saveTrialStart(user.uid, purchasedProductId, trialDays).catch(() => null);
+    const patch = {
+      plan: 'campaigns',
+      status: 'active',
+      planProductId: purchasedProductId,
+      isTrial: !!trial && trial.endsAt > Date.now(),
+      trialEndsAt: trial?.endsAt || null,
+      transactionId: purchase.transactionId || purchase.id || null,
+      purchaseToken: purchase.purchaseToken || null,
+      billingProvider: purchase.store || (Platform.OS === 'android' ? 'google-play' : 'app-store'),
+      unlockedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    await saveCampaignsAccount(user.uid, patch);
+    setAccount((current) => ({ ...(current || {}), ...patch }));
+    if (trial) setCampaignsTrial(trial);
+  }
 
   async function handlePurchaseSuccess(purchase: Purchase) {
     if (!isCampaignsPurchase(purchase)) return;
@@ -214,6 +234,20 @@ export default function CampaignsScreen({ navigation }: any) {
   }, [user?.uid]);
 
   useEffect(() => {
+    if (!user?.uid) {
+      setCampaignsTrial(null);
+      return;
+    }
+    let cancelled = false;
+    readActiveTrial(user.uid, [...CAMPAIGNS_PRODUCT_IDS]).then((record) => {
+      if (!cancelled) setCampaignsTrial(record);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid, hasPlan]);
+
+  useEffect(() => {
     if (!admin) return;
     const unsubscribePending = subscribePendingCampaigns(
       (rows) => setPending(rows),
@@ -245,6 +279,18 @@ export default function CampaignsScreen({ navigation }: any) {
     [subscriptions]
   );
 
+  /** The offer to actually buy — prefers the free-trial offer over the bare base plan. */
+  const offerForPlan = useCallback(
+    (plan: CampaignsPlan) => pickSubscriptionOffer(productForPlan(plan)),
+    [productForPlan]
+  );
+
+  /** Real trial length + post-trial price straight from Play's pricing phases. */
+  const trialForPlan = useCallback(
+    (plan: CampaignsPlan) => describeSubscriptionOffer(offerForPlan(plan), plan.price, TRIAL_DAYS),
+    [offerForPlan]
+  );
+
   const handleStartCampaigns = async () => {
     if (Platform.OS === 'web') {
       Alert.alert('Campaigns are free on web 🎉', 'Purchases only happen on the Android app.');
@@ -255,8 +301,8 @@ export default function CampaignsScreen({ navigation }: any) {
       return;
     }
     const plan = CAMPAIGNS_PLANS.find((item) => item.id === selectedPlan) || CAMPAIGNS_PLANS[0];
-    const product = productForPlan(plan);
-    const offerToken = product?.subscriptionOffers?.find((offer) => !!offer.offerTokenAndroid)?.offerTokenAndroid;
+    // Buy the TRIAL offer, not the bare base plan — same subscription, $0 for 7 days.
+    const offerToken = offerTokenFor(offerForPlan(plan));
     if (Platform.OS === 'android' && !offerToken) {
       Alert.alert(
         'Google Play product missing',
@@ -347,7 +393,7 @@ export default function CampaignsScreen({ navigation }: any) {
             <Megaphone size={26} color={COLORS.lightTextPrimary} />
           </View>
           <View style={styles.trialRibbon}>
-            <Text style={styles.trialRibbonText}>7 DAYS FREE</Text>
+            <Text style={styles.trialRibbonText}>{`${trialForPlan(CAMPAIGNS_PLANS.find((plan) => plan.id === selectedPlan) || CAMPAIGNS_PLANS[0]).trialDays} DAYS FREE`}</Text>
           </View>
         </View>
         <Text style={styles.heroTitle}>Put your product in front of every founder</Text>
@@ -381,7 +427,9 @@ export default function CampaignsScreen({ navigation }: any) {
                   <Text style={styles.priceValue}>{storePrice}</Text>
                   <Text style={styles.priceCadence}>{plan.cadence}</Text>
                 </View>
-                <Text style={styles.priceHelper}>{plan.helper}</Text>
+                <Text style={styles.priceHelper} numberOfLines={2}>
+                  {trialForPlan(plan).hasTrial ? trialThenPrice(trialForPlan(plan), plan.cadence) : plan.helper}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -407,7 +455,9 @@ export default function CampaignsScreen({ navigation }: any) {
         {purchaseBusy ? (
           <ActivityIndicator color={COLORS.lightTextPrimary} />
         ) : (
-          <Text style={[styles.primaryBtnText, { color: COLORS.lightTextPrimary }]}>START 7-DAY FREE TRIAL</Text>
+          <Text style={[styles.primaryBtnText, { color: COLORS.lightTextPrimary }]}>
+            {`START ${trialForPlan(CAMPAIGNS_PLANS.find((plan) => plan.id === selectedPlan) || CAMPAIGNS_PLANS[0]).trialDays}-DAY FREE TRIAL`}
+          </Text>
         )}
       </TouchableOpacity>
       <TouchableOpacity onPress={handleRestore} style={styles.restoreBtn} activeOpacity={0.8} disabled={purchaseBusy}>
@@ -467,7 +517,7 @@ export default function CampaignsScreen({ navigation }: any) {
         <View style={styles.heroTopRow}>
           <View style={styles.planBadge}>
             <ShieldCheck size={13} color={COLORS.primaryStrong} />
-            <Text style={styles.planBadgeText}>CAMPAIGNS ACTIVE</Text>
+            <Text style={styles.planBadgeText}>{trialStatusLabel(campaignsTrial) || 'CAMPAIGNS ACTIVE'}</Text>
           </View>
           <View style={styles.slotDots}>
             {Array.from({ length: MAX_ACTIVE_CAMPAIGNS }).map((_, index) => (

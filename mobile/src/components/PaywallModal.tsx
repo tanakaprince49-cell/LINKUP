@@ -16,6 +16,14 @@ import {
   hasLinkupPro,
   saveLocalProEntitlement,
 } from '../lib/paywall';
+import {
+  TRIAL_DAYS,
+  describeSubscriptionOffer,
+  offerTokenFor,
+  pickSubscriptionOffer,
+  saveTrialStart,
+  trialThenPrice,
+} from '../lib/trial';
 import { publicProfileLink } from '../lib/profileLinks';
 
 type PaywallModalProps = {
@@ -128,14 +136,24 @@ export default function PaywallModal({
     [subscriptions]
   );
 
-  const getPlanPrice = React.useCallback(
-    (plan: PlusPlan) => {
-      const product = productForPlan(plan);
-      const offerPrice = product?.subscriptionOffers?.find((offer) => !!offer.displayPrice)?.displayPrice;
-      return offerPrice || product?.displayPrice || plan.price;
-    },
+  /** The offer to actually buy — prefers the free-trial offer over the bare base plan. */
+  const offerForPlan = React.useCallback(
+    (plan: PlusPlan) => pickSubscriptionOffer(productForPlan(plan)),
     [productForPlan]
   );
+
+  /** Real trial length + post-trial price straight from Play's pricing phases. */
+  const trialForPlan = React.useCallback(
+    (plan: PlusPlan) => describeSubscriptionOffer(offerForPlan(plan), plan.price, TRIAL_DAYS),
+    [offerForPlan]
+  );
+
+  const getPlanPrice = React.useCallback(
+    (plan: PlusPlan) => trialForPlan(plan).priceLabel,
+    [trialForPlan]
+  );
+
+  const selectedTrial = trialForPlan(selectedPrice);
 
   React.useEffect(() => {
     if (!visible) return;
@@ -183,6 +201,13 @@ export default function PaywallModal({
         ? fallbackDisplayName.slice(0, 100)
         : 'LINKUP Member';
     const unlockedAt = new Date().toISOString();
+    const purchasedProductId = getPurchaseProductId(purchase);
+    const purchasedPlan =
+      PRICING_PLANS.find((plan) => plan.productId === purchasedProductId) || selectedPrice;
+    // Play owns the trial clock; this local record only powers the countdown UI.
+    void saveTrialStart(user.uid, purchasedProductId, trialForPlan(purchasedPlan).trialDays).catch(
+      () => {}
+    );
     const existingSettings =
       profile?.settings && typeof profile.settings === 'object'
         ? profile.settings
@@ -206,7 +231,7 @@ export default function PaywallModal({
     const localProPatch = {
       ...buildLocalProEntitlement(unlockedAt),
       billingProvider: purchase.store || (Platform.OS === 'android' ? 'google-play' : 'app-store'),
-      subscriptionProductId: getPurchaseProductId(purchase),
+      subscriptionProductId: purchasedProductId,
       subscriptionTransactionId: purchase.transactionId || purchase.id || null,
       subscriptionPurchaseToken: purchase.purchaseToken || null,
       settings: proSettings,
@@ -227,7 +252,7 @@ export default function PaywallModal({
           plan: 'plus',
           subscriptionPlan: 'plus',
           subscriptionStatus: 'active',
-          subscriptionProductId: getPurchaseProductId(purchase),
+          subscriptionProductId: purchasedProductId,
           subscriptionTransactionId: purchase.transactionId || purchase.id || null,
           subscriptionPurchaseToken: purchase.purchaseToken || null,
           billingProvider: purchase.store || (Platform.OS === 'android' ? 'google-play' : 'app-store'),
@@ -307,8 +332,8 @@ export default function PaywallModal({
     }
 
     const plan = PRICING_PLANS.find((item) => item.id === selectedPlan) || PRICING_PLANS[0];
-    const product = productForPlan(plan);
-    const offerToken = product?.subscriptionOffers?.find((offer) => !!offer.offerTokenAndroid)?.offerTokenAndroid;
+    // Buy the TRIAL offer, not the bare base plan — same subscription, $0 for 7 days.
+    const offerToken = offerTokenFor(offerForPlan(plan));
 
     if (Platform.OS === 'android' && !offerToken) {
       const message = storeError || 'LINKUP PLUS is not ready in Google Play yet. Check the subscription product IDs and base-plan offers in Play Console.';
@@ -389,9 +414,16 @@ export default function PaywallModal({
               </TouchableOpacity>
             </View>
 
-            <View style={[styles.popularBadge, { backgroundColor: isDark ? 'rgba(223, 251, 63, 0.14)' : COLORS.primaryGlow }]}> 
-              <Crown size={13} color={COLORS.primaryStrong} />
-              <Text style={[styles.popularText, { color: COLORS.lightTextPrimary }]}>FOR FOUNDERS, CREATORS & TEAMS</Text>
+            <View style={styles.badgeRow}>
+              <View style={[styles.popularBadge, { backgroundColor: isDark ? 'rgba(223, 251, 63, 0.14)' : COLORS.primaryGlow }]}> 
+                <Crown size={13} color={COLORS.primaryStrong} />
+                <Text style={[styles.popularText, { color: COLORS.lightTextPrimary }]}>FOR FOUNDERS, CREATORS & TEAMS</Text>
+              </View>
+              {selectedTrial.hasTrial ? (
+                <View style={[styles.trialRibbon, { backgroundColor: COLORS.primary }]}>
+                  <Text style={styles.trialRibbonText}>{`${selectedTrial.trialDays} DAYS FREE`}</Text>
+                </View>
+              ) : null}
             </View>
 
             <Text style={[styles.title, { color: textColor(isDark) }]}>Build your startup faster</Text>
@@ -433,7 +465,9 @@ export default function PaywallModal({
                       <Text style={[styles.priceValue, selected && styles.priceValueSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark) }]}>{storePrice}</Text>
                       <Text style={[styles.priceCadence, selected && styles.priceCadenceSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.cadence}</Text>
                     </View>
-                    <Text style={[styles.priceHelper, selected && styles.priceHelperSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.helper}</Text>
+                    <Text style={[styles.priceHelper, selected && styles.priceHelperSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>
+                      {trialForPlan(plan).hasTrial ? trialThenPrice(trialForPlan(plan), plan.cadence) : plan.helper}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
@@ -464,9 +498,16 @@ export default function PaywallModal({
                 ? 'OPENING GOOGLE PLAY...'
                 : isPro
                   ? 'PLUS ACTIVE'
-                  : 'Build Faster with PLUS'}
+                  : selectedTrial.hasTrial
+                    ? `START ${selectedTrial.trialDays}-DAY FREE TRIAL`
+                    : 'Build Faster with PLUS'}
             </Text>
           </TouchableOpacity>
+          {!isPro && selectedTrial.hasTrial ? (
+            <Text style={[styles.trialLegal, { color: textColor(isDark, 'muted') }]}>
+              {`Nothing is charged for ${selectedTrial.trialDays} days. From day ${selectedTrial.trialDays + 1} it renews at ${selectedTrial.priceLabel}${selectedPrice.cadence} — cancel anytime in Google Play.`}
+            </Text>
+          ) : null}
           <TouchableOpacity
             onPress={handleRestore}
             style={[styles.restoreBtn, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }, (restoreDisabled || isRestoring) && styles.restoreBtnDisabled]}
@@ -549,7 +590,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   popularBadge: {
-    marginTop: 18,
     alignSelf: 'flex-start',
     minHeight: 32,
     borderRadius: 12,
@@ -674,6 +714,32 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   priceHelperSelected: {
+  },
+  badgeRow: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  trialRibbon: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  trialRibbonText: {
+    color: '#000000',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  trialLegal: {
+    marginHorizontal: 18,
+    marginTop: 10,
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   scrollBody: {
     flex: 1,

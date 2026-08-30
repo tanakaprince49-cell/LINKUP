@@ -59,8 +59,11 @@ import {
   GOOGLE_PLAY_SUBSCRIPTION_URL,
   hasLinkupPro,
   isAndroidProLocked,
+  LINKUP_PLUS_PRODUCT_ID,
+  LINKUP_PLUS_YEARLY_PRODUCT_ID,
   PRO_FEATURES,
 } from '../lib/paywall';
+import { readActiveTrial, trialStatusLabel, type TrialRecord } from '../lib/trial';
 import { MAX_FIRESTORE_IMAGE_CHARS } from '../lib/imageUploadLimits';
 import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
@@ -1660,6 +1663,22 @@ export default function ProfileScreen({ navigation, route }: any) {
     ? !!(editData?.isVisible ?? true)
     : localPreferences.isVisible;
   const isProPlanActive = hasLinkupPro(profile);
+  const [plusTrial, setPlusTrial] = useState<TrialRecord | null>(null);
+
+  // Trial countdown for the account pill — Play owns billing, this is display only.
+  useEffect(() => {
+    if (!myProfile?.uid) {
+      setPlusTrial(null);
+      return;
+    }
+    let cancelled = false;
+    readActiveTrial(myProfile.uid, [LINKUP_PLUS_PRODUCT_ID, LINKUP_PLUS_YEARLY_PRODUCT_ID]).then((record) => {
+      if (!cancelled) setPlusTrial(record);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [myProfile?.uid, isProPlanActive]);
   const turboConnectValue = isEditing
     ? !!(editData?.turboConnect ?? false)
     : localPreferences.turboConnect;
@@ -3069,7 +3088,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
             <View style={[styles.subscriptionStatusPill, { backgroundColor: isProPlanActive ? COLORS.primary : (isDark ? COLORS.darkBgSec : COLORS.lightBgSec) }]}>
               <Text style={[styles.subscriptionStatusText, { color: isProPlanActive ? '#000' : (textColor(isDark)) }]}>
-                {isProPlanActive ? 'PLUS ACTIVE' : 'FREE PLAN'}
+                {trialStatusLabel(plusTrial) || (isProPlanActive ? 'PLUS ACTIVE' : 'FREE PLAN')}
               </Text>
             </View>
 
