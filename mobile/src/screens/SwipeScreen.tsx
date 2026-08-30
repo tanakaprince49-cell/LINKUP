@@ -493,12 +493,25 @@ export default function SwipeScreen({ navigation }: any) {
     setAiOrderingDone(false);
     setProgressHydrated(false);
     setLoading(true);
-    readSwipeProgress(user.uid).then((storedIds) => {
+    void (async () => {
+      let storedIds = await readSwipeProgress(user.uid).catch(() => new Set<string>());
+      // Swipe history never forgets: merge device-local progress with the
+      // durable Firestore swipe log (likes + passes) — no repeats from daily
+      // pool rotation, reinstalls, the local-storage cap, or another device.
+      try {
+        const history = await getDocs(
+          query(collection(db, 'swipes'), where('fromId', '==', user.uid), limit(500))
+        );
+        history.forEach((entry) => {
+          const toId = String(entry.data()?.toId || '').trim();
+          if (toId) storedIds.add(toId);
+        });
+      } catch {}
       if (cancelled) return;
       swipedSessionIdsRef.current = storedIds;
       hasUserSwipedRef.current = storedIds.size > 0;
       setProgressHydrated(true);
-    });
+    })();
 
     return () => {
       cancelled = true;
@@ -952,6 +965,15 @@ export default function SwipeScreen({ navigation }: any) {
 
     if (direction === 'right') {
       void handleLike(item);
+    } else if (user?.uid && !isSyntheticProfile(item)) {
+      // Passes count as "seen" too — persist them durably so this person
+      // never comes back, on any device.
+      void addDoc(collection(db, 'swipes'), {
+        fromId: user.uid,
+        toId: item.uid,
+        type: 'skip',
+        timestamp: serverTimestamp(),
+      }).catch(() => {});
     }
 
     if (!isProUser && user?.uid) {

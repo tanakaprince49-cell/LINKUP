@@ -15,7 +15,7 @@ export const FREE_LIMITS = {
   dailyStartupAnalyzer: 3,
   savedProfiles: 5,
   projects: 3,
-  startupIdeas: 3,
+  startupIdeas: 15,
   weeklyRecommendations: 3,
   warmIntrosPerMonth: 1,
 } as const;
