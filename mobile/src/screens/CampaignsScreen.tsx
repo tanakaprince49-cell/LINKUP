@@ -2,10 +2,12 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -114,6 +116,9 @@ export default function CampaignsScreen({ navigation }: any) {
   const [purchaseBusy, setPurchaseBusy] = useState(false);
   const [storeError, setStoreError] = useState('');
   const [moderationBusy, setModerationBusy] = useState('');
+  const [rejectTarget, setRejectTarget] = useState<Campaign | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectBusy, setRejectBusy] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<CampaignsPlan['id']>('monthly');
   const processedPurchases = useRef(new Set<string>());
 
@@ -302,20 +307,28 @@ export default function CampaignsScreen({ navigation }: any) {
     }
   };
 
-  const moderate = async (campaign: Campaign, status: 'active' | 'rejected') => {
+  const moderate = async (campaign: Campaign, status: 'active' | 'rejected', note: string = '') => {
     if (moderationBusy) return;
     setModerationBusy(campaign.id);
     try {
-      await setCampaignStatus(
-        campaign.id,
-        status,
-        status === 'rejected' ? 'Does not meet LinkUp campaign guidelines. Update the creative and resubmit.' : ''
-      );
+      await setCampaignStatus(campaign.id, status, note);
     } catch (error: any) {
       notifyUser('Moderation failed', error?.message || 'Try again.');
     } finally {
       setModerationBusy('');
     }
+  };
+
+  const submitRejection = async () => {
+    if (!rejectTarget) return;
+    const note =
+      rejectReason.trim() ||
+      'Does not meet LinkUp campaign guidelines. Update the creative and resubmit.';
+    setRejectBusy(true);
+    await moderate(rejectTarget, 'rejected', note);
+    setRejectBusy(false);
+    setRejectTarget(null);
+    setRejectReason('');
   };
 
   const placementsLabel = (campaign: Campaign) =>
@@ -556,7 +569,10 @@ export default function CampaignsScreen({ navigation }: any) {
                   {moderationBusy === campaign.id ? <ActivityIndicator size="small" color="#16A34A" /> : <ThumbsUp size={15} color="#16A34A" />}
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => moderate(campaign, 'rejected')}
+                  onPress={() => {
+                    setRejectTarget(campaign);
+                    setRejectReason('');
+                  }}
                   disabled={moderationBusy === campaign.id}
                   style={[styles.adminBtn, { backgroundColor: 'rgba(220,38,38,0.12)' }]}
                 >
@@ -595,6 +611,69 @@ export default function CampaignsScreen({ navigation }: any) {
         )}
         {renderAdmin()}
       </ScrollView>
+
+      <Modal visible={!!rejectTarget} transparent animationType="fade" onRequestClose={() => setRejectTarget(null)}>
+        <View style={styles.modalBackdrop}>
+          <View
+            style={[
+              styles.modalCard,
+              {
+                backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard,
+                borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
+              },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: textColor(isDark) }]}>Reject this campaign?</Text>
+            <Text style={[styles.modalSub, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
+              {rejectTarget?.creative?.productName || rejectTarget?.creative?.title || rejectTarget?.name || 'Untitled product'}
+              {rejectTarget?.ownerName ? ` · ${rejectTarget.ownerName}` : ''}
+            </Text>
+
+            <TextInput
+              value={rejectReason}
+              onChangeText={(value) => setRejectReason(value.slice(0, 280))}
+              placeholder="Why is it rejected? The advertiser sees this note…"
+              placeholderTextColor={textColor(isDark, 'muted')}
+              multiline
+              maxLength={280}
+              style={[
+                styles.rejectInput,
+                {
+                  backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
+                  borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
+                  color: textColor(isDark),
+                },
+              ]}
+            />
+            <Text style={[styles.rejectHint, { color: textColor(isDark, 'muted') }]}>
+              {rejectReason.length}/280 · Leave blank to use the standard guidelines message.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.rejectBtn}
+              activeOpacity={0.86}
+              onPress={submitRejection}
+              disabled={rejectBusy}
+            >
+              {rejectBusy ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.rejectBtnText}>REJECT CAMPAIGN</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setRejectTarget(null);
+                setRejectReason('');
+              }}
+              style={styles.cancelBtn}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.cancelBtnText, { color: textColor(isDark, 'secondary') }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -775,4 +854,45 @@ const styles = StyleSheet.create({
   },
   adminActions: { flexDirection: 'row', gap: 8 },
   adminBtn: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.62)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+  },
+  modalTitle: { fontSize: 19, fontWeight: '900', letterSpacing: -0.3 },
+  modalSub: { marginTop: 6, fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  rejectInput: {
+    marginTop: 16,
+    minHeight: 96,
+    maxHeight: 150,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
+    textAlignVertical: 'top',
+  },
+  rejectHint: { marginTop: 8, fontSize: 10, fontWeight: '800' },
+  rejectBtn: {
+    marginTop: 16,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rejectBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900', letterSpacing: 1.2 },
+  cancelBtn: { marginTop: 12, height: 40, alignItems: 'center', justifyContent: 'center' },
+  cancelBtnText: { fontSize: 12, fontWeight: '900' },
 });
