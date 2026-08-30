@@ -455,6 +455,37 @@ export default function SwipeScreen({ navigation }: any) {
   }, [user?.uid, isProUser]);
   const [progressHydrated, setProgressHydrated] = useState(false);
 
+  // --- Discovery budget: one wall for BOTH modes ---------------------------
+  // Free members get FREE_LIMITS.swipesPer12Hours discoveries per window. That
+  // budget used to be spent only by the swipe deck, so scroll mode never hit
+  // the limit and free members could scroll the whole city forever. Scrolling
+  // now spends the same budget, and the feed locks (paywall) when it runs out.
+  //
+  // Charging is per PROFILE, not per view: scrolling back up a card you have
+  // already paid for — or flipping between modes — must never double-charge.
+  const discoveryPaidUidsRef = useRef<Set<string>>(new Set());
+
+  const hasDiscoveryBudget = (profileUid?: string) => {
+    if (isProUser || !user?.uid) return true; // PLUS is unlimited
+    if (profileUid && discoveryPaidUidsRef.current.has(profileUid)) return true;
+    return (swipeBudgetRef.current ?? Number.POSITIVE_INFINITY) > 0;
+  };
+
+  /**
+   * Spend one discovery. Returns false when the wall has already been hit, so
+   * callers can lock and open the paywall.
+   */
+  const spendDiscoveryBudget = (profileUid?: string) => {
+    if (isProUser || !user?.uid) return true;
+    if (profileUid && discoveryPaidUidsRef.current.has(profileUid)) return true;
+    if ((swipeBudgetRef.current ?? Number.POSITIVE_INFINITY) <= 0) return false;
+    if (profileUid) discoveryPaidUidsRef.current.add(profileUid);
+    swipeBudgetRef.current = Math.max(0, (swipeBudgetRef.current ?? FREE_LIMITS.swipesPer12Hours) - 1);
+    setSwipesLeft(swipeBudgetRef.current);
+    void consumeWindowUsage(user.uid, 'discovery-swipes', FREE_LIMITS.swipesPer12Hours, SWIPE_USAGE_WINDOW_HOURS).catch(() => {});
+    return true;
+  };
+
   const swipedSessionIdsRef = useRef<Set<string>>(new Set());
   const hasUserSwipedRef = useRef(false);
   const allProfilesRef = useRef<UserProfile[]>([]);
@@ -656,11 +687,20 @@ export default function SwipeScreen({ navigation }: any) {
   ).current;
 
   const goToProfile = (dir: 'up' | 'down') => {
-    // A sponsored slot on screen resolves before the feed moves again.
+    // A sponsored slot on screen resolves before the feed moves again. The
+    // sponsored stop is an ad, not a discovery, so it never spends budget.
     if (resolveSponsorRef.current('skip')) return;
     const len = feedRef.current.length;
     const cur = scrollIndexRef.current;
     if (dir === 'up' && cur < len - 1) {
+      // Scroll mode spends the same 12-per-12h discovery budget as the swipe
+      // deck, so the limit locks here too instead of scrolling forever. Cards
+      // already paid for (scrolled back over) stay free.
+      const upcoming = feedRef.current[cur + 1];
+      if (!hasDiscoveryBudget(upcoming?.uid) || !spendDiscoveryBudget(upcoming?.uid)) {
+        openPaywall('Unlimited Discovery');
+        return;
+      }
       isScrollAnimatingRef.current = true;
       scrollPosition.setValue(360);
       setScrollIndex(cur + 1);
@@ -687,6 +727,26 @@ export default function SwipeScreen({ navigation }: any) {
 
   const goToProfileRef = useRef<(dir: 'up' | 'down') => void>(() => {});
   goToProfileRef.current = goToProfile;
+
+  // The feed shrinks under the scroll index whenever a card is liked/passed.
+  // Without this clamp scrollIndex points past the end, renderScrollProfile
+  // falls back to feed[0], and the deck silently loops back to the first
+  // profile — "it just keeps scrolling" instead of stopping at the last card.
+  useEffect(() => {
+    const len = feed.length;
+    if (len === 0) {
+      if (scrollIndexRef.current !== 0) {
+        scrollIndexRef.current = 0;
+        setScrollIndex(0);
+      }
+      return;
+    }
+    if (scrollIndexRef.current > len - 1) {
+      const clamped = len - 1;
+      scrollIndexRef.current = clamped;
+      setScrollIndex(clamped);
+    }
+  }, [feed]);
 
   const scrollPanResponder = useRef(
     PanResponder.create({
@@ -1119,13 +1179,10 @@ export default function SwipeScreen({ navigation }: any) {
       }).catch(() => {});
     }
 
-    // Scroll mode is unlimited, so it must not spend the swipe budget either —
-    // otherwise the badge would count down towards a wall that isn't there.
-    if (!isProUser && user?.uid && mode !== 'scroll') {
-      swipeBudgetRef.current = Math.max(0, (swipeBudgetRef.current ?? FREE_LIMITS.swipesPer12Hours) - 1);
-      setSwipesLeft(swipeBudgetRef.current);
-      void consumeWindowUsage(user.uid, 'discovery-swipes', FREE_LIMITS.swipesPer12Hours, SWIPE_USAGE_WINDOW_HOURS).catch(() => {});
-    }
+    // Card mode AND scroll mode spend the same 12-per-12h discovery budget;
+    // PLUS is unlimited. The gate itself lives in animateSwipeOut/goToProfile,
+    // so anything that reaches here was already allowed through the wall.
+    void spendDiscoveryBudget(item.uid);
 
     trackAction(direction === 'right' ? 'like' : 'swipe');
 
@@ -1173,14 +1230,16 @@ export default function SwipeScreen({ navigation }: any) {
   };
 
   const animateSwipeOut = (direction: 'left' | 'right') => {
-    const swipedItem = profiles[0];
+    // In scroll mode the card on screen is the one at the scroll index, NOT
+    // profiles[0] — without this a like/pass in the feed acted on (and billed)
+    // whichever profile happened to sit at the top of the deck.
+    const swipedItem = mode === 'scroll' ? (feedRef.current[scrollIndexRef.current] || profiles[0]) : profiles[0];
     if (isAnimatingRef.current || (!discoverySponsor && !swipedItem)) return;
-    // Sponsored cards never hit the swipe-budget gate, and neither does scroll
-    // mode: the 12-per-12h budget belongs to the swipe deck. Without this the
-    // Pass/Like buttons in the scroll feed (which route through here) locked
-    // the feed the moment a card-mode budget ran out, even though scrolling
-    // itself never spent any of it.
-    if (!discoverySponsor && !isProUser && mode !== 'scroll' && (swipeBudgetRef.current ?? Number.POSITIVE_INFINITY) <= 0) {
+    // Sponsored cards never hit the discovery gate — they are ads, not
+    // discoveries. Scroll mode DOES: it spends the same 12-per-12h budget as
+    // the swipe deck, so the wall locks this feed too. A card already paid for
+    // (scrolled back over) is never re-charged.
+    if (!discoverySponsor && !hasDiscoveryBudget(swipedItem?.uid)) {
       openPaywall('Unlimited Discovery');
       return;
     }
@@ -1534,20 +1593,32 @@ export default function SwipeScreen({ navigation }: any) {
     );
   };
 
-  /** Scroll-mode sponsored stop: same creative as the swipe interstitial,
-   *  laid out to match the scroll card so the feed never jumps. */
+  /**
+   * Scroll-mode sponsored stop: same creative as the swipe interstitial,
+   * laid out to match the scroll card so the feed never jumps.
+   *
+   * This card carries a THEMED surface, not the always-black photo card. It
+   * used to sit on `#0a0a0a` while the title was painted with the light-theme
+   * ink colour — so in light mode the product name was dark-on-dark and the
+   * card read as completely blank. Every colour here now follows the theme.
+   */
   const renderScrollSponsor = () => {
     if (!discoverySponsor) return null;
+    const sponsorName = discoverySponsor.title || 'Sponsored';
     return (
       <Animated.View
-        style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
+        style={[
+          styles.scrollFeedCard,
+          liquidGlass(isDark, false),
+          { transform: [{ translateY: scrollPosition }] },
+        ]}
         {...scrollPanResponder.panHandlers}
       >
         <View style={styles.sponsorBody}>
           {renderSponsorBadge()}
           {renderSponsorLogo()}
           <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={2}>
-            {discoverySponsor.title}
+            {sponsorName}
           </Text>
           {!!discoverySponsor.description && (
             <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={5}>
@@ -1556,25 +1627,40 @@ export default function SwipeScreen({ navigation }: any) {
           )}
           <TouchableOpacity
             activeOpacity={0.88}
-            style={styles.sponsorCta}
+            style={[
+              styles.sponsorCta,
+              // In the white brand flavour a light-theme CTA is white-on-white;
+              // the hairline keeps the button visible without stealing the
+              // yellow flavour's solid fill.
+              { borderWidth: 1, borderColor: isDark ? 'transparent' : 'rgba(10,11,13,0.14)' },
+            ]}
             onPress={() => resolveSponsor('open')}
           >
             <Globe size={15} color="#000" />
             <Text style={styles.sponsorCtaText}>{discoverySponsor.house ? 'Upgrade to PLUS' : 'Visit Website'}</Text>
           </TouchableOpacity>
-          <Text style={styles.sponsorHint}>Swipe up to skip · tap to open</Text>
+          <Text style={[styles.sponsorHint, { color: textColor(isDark, 'muted') }]}>Swipe up to skip · tap to open</Text>
         </View>
         <View style={styles.scrollBottomActions}>
           <TouchableOpacity
-            style={[styles.scrollBottomBtn, { backgroundColor: 'rgba(0,0,0,0.5)', borderColor: 'rgba(255,255,255,0.2)' }]}
+            style={[
+              styles.scrollBottomBtn,
+              {
+                backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(10,11,13,0.06)',
+                borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(10,11,13,0.12)',
+              },
+            ]}
             onPress={() => resolveSponsor('skip')}
           >
             <X size={20} color="#FF6B6B" />
-            <Text style={styles.scrollBottomLabel}>Skip</Text>
+            <Text style={[styles.scrollBottomLabel, { color: textColor(isDark) }]}>Skip</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.scrollBottomContact} onPress={() => resolveSponsor('open')}>
-            <MessageSquare size={16} color="#000" />
-            <Text style={[styles.scrollBottomLabel, { color: '#000' }]}>Learn more</Text>
+          <TouchableOpacity
+            style={[styles.scrollBottomContact, { backgroundColor: isDark ? '#FFFFFF' : COLORS.inkButton }]}
+            onPress={() => resolveSponsor('open')}
+          >
+            <MessageSquare size={16} color={isDark ? '#000' : '#FFFFFF'} />
+            <Text style={[styles.scrollBottomLabel, { color: isDark ? '#000' : '#FFFFFF' }]}>Learn more</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.scrollBottomBtn, { backgroundColor: '#FF3B5C' }]}
@@ -1596,13 +1682,16 @@ export default function SwipeScreen({ navigation }: any) {
         <View style={styles.scrollFeed}>
           {renderScrollSponsor()}
           <View style={styles.scrollSwipeHint}>
-            <Text style={styles.scrollSwipeHintText}>sponsored · {Math.max(0, feed.length - scrollIndex - 1)} profiles left</Text>
+            <Text style={[styles.scrollSwipeHintText, { color: textColor(isDark, 'muted') }]}>sponsored · {Math.max(0, feed.length - scrollIndex - 1)} profiles left</Text>
           </View>
         </View>
       );
     }
     if (feed.length === 0) return renderEmpty();
-    const profile = feed[scrollIndex] || feed[0];
+    // Never fall back to feed[0]: an out-of-range index must not silently
+    // wrap the deck back around to the first profile.
+    const profile = feed[Math.min(scrollIndex, feed.length - 1)];
+    if (!profile) return renderEmpty();
     const photos = getSwipePhotos(profile);
     const ageText = Number(profile.age) > 0 ? `, ${profile.age}` : '';
     const locationText = [profile.city, profile.country].filter(Boolean).join(', ') || 'Remote';
@@ -1695,8 +1784,14 @@ export default function SwipeScreen({ navigation }: any) {
           </View>
         </Animated.View>
         <View style={styles.scrollSwipeHint}>
-          <Text style={styles.scrollSwipeHintText}>
-            {scrollIndex < feed.length - 1 ? '↑ swipe up for next' : 'last profile'}
+          {/* Sits on the app background, so it follows the theme instead of
+              the fixed white-on-photo palette (invisible in light mode). */}
+          <Text style={[styles.scrollSwipeHintText, { color: textColor(isDark, 'muted') }]}>
+            {!isProUser && swipesLeft === 0
+              ? 'Daily limit reached · go PLUS for unlimited'
+              : scrollIndex < feed.length - 1
+                ? '↑ swipe up for next'
+                : 'last profile'}
           </Text>
         </View>
       </View>
@@ -1762,7 +1857,9 @@ export default function SwipeScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
           <ProCrownBadge />
-          {!isProUser && swipesLeft != null && mode !== 'scroll' ? (
+          {/* Scroll mode spends the same budget as the swipe deck, so the
+              counter belongs on screen in both modes. */}
+          {!isProUser && swipesLeft != null ? (
             <View style={{
               paddingHorizontal: 9,
               paddingVertical: 4,
@@ -2627,8 +2724,6 @@ const styles = StyleSheet.create({
   },
   sponsorCtaText: { color: '#000', fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
   sponsorHint: { marginTop: 8, fontSize: 10, fontWeight: '800', color: '#8A8A93', textAlign: 'center' },
-  // Scroll-mode sponsored card sits on the dark photo card in BOTH themes,
-  // so it carries its own light-on-dark palette instead of theme colours.
   sponsorLogo: { width: '100%', height: '100%', borderRadius: 26 },
   modeToggle: {
     flexDirection: 'row',
