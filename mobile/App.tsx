@@ -379,7 +379,6 @@ function TabNavigator({ navigation }: any) {
       })}
     >
       <Tab.Screen name="Dashboard" component={DiscoveryDashboardScreen} />
-      <Tab.Screen name="Campaigns" component={CampaignsScreen} />
       <Tab.Screen name="Swipe" component={SwipeScreen}
         options={{
           headerShown: false,
@@ -390,6 +389,7 @@ function TabNavigator({ navigation }: any) {
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Inbox" component={MessagesScreen} options={{ headerShown: false }} />
       <Tab.Screen name="News" component={NewsScreen} />
+      <Tab.Screen name="Campaigns" component={CampaignsScreen} />
     </Tab.Navigator>
   );
 }

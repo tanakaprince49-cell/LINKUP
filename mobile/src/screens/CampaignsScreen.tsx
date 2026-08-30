@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { finishTransaction, getAvailablePurchases, type Purchase, useIAP } from 'expo-iap';
 import { serverTimestamp } from 'firebase/firestore';
 import {
+  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -20,7 +21,8 @@ import {
   Lock,
   Megaphone,
   MousePointerClick,
-  Plus,
+  Package,
+  Pencil,
   ShieldCheck,
   ThumbsDown,
   ThumbsUp,
@@ -28,10 +30,11 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+import { COLORS, appBackground, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
 import {
   CAMPAIGNS_PRODUCT_IDS,
+  CAMPAIGN_PLACEMENT_OPTIONS,
   Campaign,
   CampaignsAccount,
   LINKUP_CAMPAIGNS_MONTHLY_PRICE,
@@ -51,12 +54,12 @@ import {
 } from '../lib/campaigns';
 
 const CAMPAIGNS_PERKS = [
-  'Showcase your product on Idea Deck, Search, Hub & Linky picks',
+  'Showcase your product on Idea Deck, Discover, Search, Hub & Linky picks',
   '3 active campaigns at once — swap creatives anytime',
   'Sponsored cards with your website as the call-to-action',
   'Live impressions, clicks & CTR on every campaign',
   'Reach verified founders, builders & early adopters only',
-  'Pause, resume or replace campaigns in one tap',
+  'Edit creatives while in review, pause or resume in one tap',
   'Priority human review — live within 24 hours',
 ];
 
@@ -82,6 +85,11 @@ const CAMPAIGNS_PLANS = [
 ] as const;
 
 type CampaignsPlan = (typeof CAMPAIGNS_PLANS)[number];
+
+const DARK_CARD = '#101116';
+const DARK_LINE = 'rgba(255,255,255,0.08)';
+const DARK_TEXT = '#F4F4F6';
+const DARK_SUB = '#9C9CA6';
 
 const isCampaignsPurchase = (purchase: Purchase) => {
   const productIds = purchase.ids?.length ? purchase.ids : [purchase.productId];
@@ -134,14 +142,7 @@ export default function CampaignsScreen({ navigation }: any) {
     [user?.uid]
   );
 
-  const {
-    connected,
-    subscriptions,
-    fetchProducts,
-    requestPurchase,
-    restorePurchases,
-    reconnect,
-  } = useIAP({
+  const { connected, subscriptions, fetchProducts, requestPurchase, restorePurchases, reconnect } = useIAP({
     onPurchaseSuccess: (purchase) => {
       void handlePurchaseSuccess(purchase);
     },
@@ -317,53 +318,28 @@ export default function CampaignsScreen({ navigation }: any) {
     }
   };
 
-  const renderStatusPill = (status: Campaign['status']) => {
-    const meta = campaignStatusMeta(status);
-    return (
-      <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
-        <Text style={[styles.statusPillText, { color: meta.color }]}>{meta.label}</Text>
-      </View>
-    );
-  };
+  const placementsLabel = (campaign: Campaign) =>
+    (campaign.placements || [])
+      .map((id) => CAMPAIGN_PLACEMENT_OPTIONS.find((option) => option.id === id)?.label || id)
+      .join(' · ');
 
-  const renderCampaignRow = (campaign: Campaign, openDetail: boolean = true) => (
-    <TouchableOpacity
-      key={campaign.id}
-      activeOpacity={0.85}
-      disabled={!openDetail}
-      onPress={() => (openDetail ? navigation.navigate('CampaignDetail', { campaignId: campaign.id }) : null)}
-      style={[styles.campaignRow, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
-    >
-      <View style={[styles.campaignIcon, { backgroundColor: isDark ? 'rgba(223,251,63,0.14)' : COLORS.primaryGlow }]}>
-        <Megaphone size={17} color={COLORS.primaryStrong} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.campaignName, { color: textColor(isDark) }]} numberOfLines={1}>
-          {campaign.name}
-        </Text>
-        <Text style={[styles.campaignMeta, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
-          {campaign.creative?.productName || campaign.creative?.title || 'Untitled product'} · {(campaign.placements || []).length} placement{(campaign.placements || []).length === 1 ? '' : 's'} · 👁 {campaign.statsImpressions || 0} · 👆 {campaign.statsClicks || 0}
-        </Text>
-      </View>
-      {renderStatusPill(campaign.status)}
-      {openDetail ? <ChevronRight size={16} color={textColor(isDark, 'muted')} /> : null}
-    </TouchableOpacity>
-  );
-
+  // ------------------------------------------------------------
+  // Paywall (no plan yet)
+  // ------------------------------------------------------------
   const renderPaywall = () => (
     <View>
-      <View style={[styles.heroCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorderActive : COLORS.lightBorderActive }]}>
+      <View style={styles.heroCard}>
         <View style={styles.heroTopRow}>
-          <View style={[styles.heroIconWrap, { backgroundColor: COLORS.primary }]}>
+          <View style={styles.heroIconWrap}>
             <Megaphone size={26} color={COLORS.lightTextPrimary} />
           </View>
-          <View style={[styles.popularBadge, { backgroundColor: isDark ? 'rgba(223,251,63,0.14)' : COLORS.primaryGlow }]}>
-            <Text style={[styles.popularText, { color: COLORS.lightTextPrimary }]}>LINKUP CAMPAIGNS</Text>
+          <View style={styles.trialRibbon}>
+            <Text style={styles.trialRibbonText}>7 DAYS FREE</Text>
           </View>
         </View>
-        <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Put your product in front of every founder</Text>
-        <Text style={[styles.heroCopy, { color: textColor(isDark, 'secondary') }]}>
-          Sponsored cards with your website as the call-to-action — placed natively across the Idea Deck, Search, the Hub and Linky's picks. No banner blindness, no ad soup: a hand-reviewed, founders-only audience.
+        <Text style={styles.heroTitle}>Put your product in front of every founder</Text>
+        <Text style={styles.heroCopy}>
+          Sponsored cards with your website as the call-to-action — placed natively across the Idea Deck, Discover swipes, Search, the Hub and Linky's picks. No banner blindness, no ad soup.
         </Text>
 
         <View style={styles.pricingGrid}>
@@ -376,23 +352,23 @@ export default function CampaignsScreen({ navigation }: any) {
                 key={plan.id}
                 onPress={() => setSelectedPlan(plan.id)}
                 activeOpacity={0.86}
-                style={[
-                  styles.priceCard,
-                  {
-                    backgroundColor: selected ? (isDark ? 'rgba(223,251,63,0.16)' : COLORS.primaryGlow) : isDark ? COLORS.darkCard : COLORS.lightCard,
-                    borderColor: selected ? COLORS.primary : isDark ? COLORS.darkBorder : COLORS.lightBorder,
-                  },
-                ]}
+                style={[styles.priceCard, selected && styles.priceCardSelected]}
               >
                 <View style={styles.priceTopRow}>
-                  <Text style={[styles.priceLabel, { color: selected ? textColor(isDark) : textColor(isDark, 'secondary') }]}>{plan.label}</Text>
-                  <Text style={[styles.priceBadge, { backgroundColor: COLORS.primary, color: COLORS.lightTextPrimary }]}>{plan.badge}</Text>
+                  <Text style={[styles.priceLabel, { color: selected ? DARK_TEXT : DARK_SUB }]}>{plan.label}</Text>
+                  {selected ? (
+                    <View style={styles.priceSelectedDot}>
+                      <Check size={11} color="#000" />
+                    </View>
+                  ) : (
+                    <Text style={styles.priceBadge}>{plan.badge}</Text>
+                  )}
                 </View>
                 <View style={styles.priceRow}>
-                  <Text style={[styles.priceValue, { color: textColor(isDark) }]}>{storePrice}</Text>
-                  <Text style={[styles.priceCadence, { color: textColor(isDark, 'secondary') }]}>{plan.cadence}</Text>
+                  <Text style={styles.priceValue}>{storePrice}</Text>
+                  <Text style={styles.priceCadence}>{plan.cadence}</Text>
                 </View>
-                <Text style={[styles.priceHelper, { color: textColor(isDark, 'secondary') }]}>{plan.helper}</Text>
+                <Text style={styles.priceHelper}>{plan.helper}</Text>
               </TouchableOpacity>
             );
           })}
@@ -403,7 +379,7 @@ export default function CampaignsScreen({ navigation }: any) {
         <Text style={[styles.perksTitle, { color: textColor(isDark) }]}>Everything included</Text>
         {CAMPAIGNS_PERKS.map((perk) => (
           <View key={perk} style={styles.perkRow}>
-            <CheckCircle2 size={17} color={COLORS.primaryStrong} />
+            <CheckCircle2 size={16} color={COLORS.primaryStrong} />
             <Text style={[styles.perkText, { color: textColor(isDark, 'secondary') }]}>{perk}</Text>
           </View>
         ))}
@@ -421,44 +397,90 @@ export default function CampaignsScreen({ navigation }: any) {
           <Text style={[styles.primaryBtnText, { color: COLORS.lightTextPrimary }]}>START 7-DAY FREE TRIAL</Text>
         )}
       </TouchableOpacity>
-      <TouchableOpacity
-        onPress={handleRestore}
-        style={[styles.restoreBtn, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
-        activeOpacity={0.8}
-        disabled={purchaseBusy}
-      >
-        <Lock size={13} color={COLORS.secondary} />
-        <Text style={styles.restoreText}>RESTORE PURCHASES</Text>
+      <TouchableOpacity onPress={handleRestore} style={styles.restoreBtn} activeOpacity={0.8} disabled={purchaseBusy}>
+        <Lock size={12} color={textColor(isDark, 'muted')} />
+        <Text style={[styles.restoreText, { color: textColor(isDark, 'muted') }]}>Restore purchases</Text>
       </TouchableOpacity>
     </View>
   );
 
+  // ------------------------------------------------------------
+  // Dashboard (plan active)
+  // ------------------------------------------------------------
+  const renderCampaignRow = (campaign: Campaign) => {
+    const meta = campaignStatusMeta(campaign.status);
+    const editable = campaign.status === 'pending_review';
+    return (
+      <TouchableOpacity
+        key={campaign.id}
+        activeOpacity={0.88}
+        onPress={() => navigation.navigate('CampaignDetail', { campaignId: campaign.id })}
+        style={[styles.campaignRow, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+      >
+        <View style={[styles.campaignAccent, { backgroundColor: meta.color }]} />
+        <View style={[styles.campaignIcon, { backgroundColor: isDark ? 'rgba(223,251,63,0.14)' : COLORS.primaryGlow }]}>
+          <Package size={17} color={COLORS.primaryStrong} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.campaignName, { color: textColor(isDark) }]} numberOfLines={1}>
+            {campaign.creative?.productName || campaign.creative?.title || 'Untitled product'}
+          </Text>
+          <Text style={[styles.campaignMeta, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+            {placementsLabel(campaign) || 'Idea Deck'}
+          </Text>
+          <View style={styles.campaignStatRow}>
+            <Text style={[styles.campaignStat, { color: textColor(isDark, 'muted') }]}>👁 {campaign.statsImpressions || 0}</Text>
+            <Text style={[styles.campaignStat, { color: textColor(isDark, 'muted') }]}>👆 {campaign.statsClicks || 0}</Text>
+            <Text style={[styles.campaignStat, { color: meta.color }]}>{meta.label}</Text>
+          </View>
+        </View>
+        {editable && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('CreateCampaign', { editCampaign: campaign })}
+            style={[styles.editBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)' }]}
+            activeOpacity={0.8}
+          >
+            <Pencil size={14} color={textColor(isDark, 'secondary')} />
+          </TouchableOpacity>
+        )}
+        <ChevronRight size={16} color={textColor(isDark, 'muted')} />
+      </TouchableOpacity>
+    );
+  };
+
   const renderDashboard = () => (
     <View>
-      <View style={[styles.planBanner, { backgroundColor: isDark ? 'rgba(223,251,63,0.12)' : COLORS.primaryGlow, borderColor: COLORS.primary }]}>
-        <ShieldCheck size={16} color={COLORS.primaryStrong} />
-        <Text style={[styles.planBannerText, { color: COLORS.lightTextPrimary }]} numberOfLines={1}>
-          Campaigns plan active · {liveCount}/{MAX_ACTIVE_CAMPAIGNS} slots used
-        </Text>
-      </View>
-
-      <View style={styles.statRow}>
-        {[
-          { Icon: Eye, value: totalImpressions, label: 'Views' },
-          { Icon: MousePointerClick, value: totalClicks, label: 'Clicks' },
-          { Icon: TrendingUp, value: `${totalCtr}%`, label: 'CTR' },
-        ].map(({ Icon, value, label }) => (
-          <View
-            key={label}
-            style={[styles.statCard, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
-          >
-            <View style={[styles.statIconWrap, { backgroundColor: isDark ? 'rgba(223,251,63,0.14)' : COLORS.primaryGlow }]}>
-              <Icon size={14} color={COLORS.primaryStrong} />
-            </View>
-            <Text style={[styles.statValue, { color: textColor(isDark) }]}>{value}</Text>
-            <Text style={[styles.statLabel, { color: textColor(isDark, 'muted') }]}>{label}</Text>
+      <View style={styles.heroCard}>
+        <View style={styles.heroTopRow}>
+          <View style={styles.planBadge}>
+            <ShieldCheck size={13} color={COLORS.primaryStrong} />
+            <Text style={styles.planBadgeText}>CAMPAIGNS ACTIVE</Text>
           </View>
-        ))}
+          <View style={styles.slotDots}>
+            {Array.from({ length: MAX_ACTIVE_CAMPAIGNS }).map((_, index) => (
+              <View key={index} style={[styles.slotDot, index < liveCount && styles.slotDotFilled]} />
+            ))}
+          </View>
+        </View>
+        <Text style={styles.heroTitle}>{liveCount === 0 ? 'Ready to get seen?' : `${liveCount} of ${MAX_ACTIVE_CAMPAIGNS} slots live`}</Text>
+        <Text style={styles.heroCopy}>
+          {liveCount === 0
+            ? 'Your dashboards, stats and placements are armed. Launch your first sponsored card in 2 minutes.'
+            : 'Your products are earning attention across LinkUp placements right now.'}
+        </Text>
+        <View style={styles.heroStatGrid}>
+          {[
+            { Icon: Eye, value: totalImpressions, label: 'Views' },
+            { Icon: MousePointerClick, value: totalClicks, label: 'Clicks' },
+            { Icon: TrendingUp, value: `${totalCtr}%`, label: 'CTR' },
+          ].map(({ Icon, value, label }) => (
+            <View key={label} style={styles.heroStat}>
+              <Icon size={14} color={COLORS.primaryStrong} />
+              <Text style={styles.heroStatValue}>{value}</Text>
+              <Text style={styles.heroStatLabel}>{label}</Text>
+            </View>
+          ))}
+        </View>
       </View>
 
       <TouchableOpacity
@@ -467,12 +489,12 @@ export default function CampaignsScreen({ navigation }: any) {
         disabled={liveCount >= MAX_ACTIVE_CAMPAIGNS}
         onPress={() => navigation.navigate('CreateCampaign')}
       >
-        <Plus size={16} color={COLORS.lightTextPrimary} />
+        <Megaphone size={15} color={COLORS.lightTextPrimary} />
         <Text style={[styles.primaryBtnText, { color: COLORS.lightTextPrimary }]}>NEW CAMPAIGN</Text>
       </TouchableOpacity>
       {liveCount >= MAX_ACTIVE_CAMPAIGNS && (
         <Text style={[styles.capHint, { color: textColor(isDark, 'muted') }]}>
-          All {MAX_ACTIVE_CAMPAIGNS} slots in use — end or pause a campaign to free one.
+          All {MAX_ACTIVE_CAMPAIGNS} slots in use — end or pause one to free a slot.
         </Text>
       )}
 
@@ -480,24 +502,32 @@ export default function CampaignsScreen({ navigation }: any) {
       {campaigns.length === 0 ? (
         <View style={[styles.emptyCard, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
           <View style={[styles.emptyIconWrap, { backgroundColor: isDark ? 'rgba(223,251,63,0.14)' : COLORS.primaryGlow }]}>
-            <Megaphone size={26} color={COLORS.primaryStrong} />
+            <Megaphone size={24} color={COLORS.primaryStrong} />
           </View>
           <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No campaigns yet</Text>
           <Text style={[styles.emptyCopy, { color: textColor(isDark, 'secondary') }]}>
-            Put your product in the deck where founders decide what to build next — launch your first campaign in 2 minutes.
+            Put your product in the deck where founders decide what to build next.
           </Text>
         </View>
       ) : (
-        campaigns.map((campaign) => renderCampaignRow(campaign))
+        campaigns.map(renderCampaignRow)
       )}
     </View>
   );
 
+  // ------------------------------------------------------------
+  // Admin review queue (only for uids in config/admins)
+  // ------------------------------------------------------------
   const renderAdmin = () => {
     if (!admin) return null;
     return (
       <View style={styles.adminWrap}>
-        <Text style={[styles.sectionLabel, { color: textColor(isDark, 'muted') }]}>ADMIN · REVIEW QUEUE ({pending.length})</Text>
+        <View style={styles.adminHeaderRow}>
+          <View style={styles.adminDot} />
+          <Text style={[styles.sectionLabel, { color: textColor(isDark, 'muted'), marginTop: 0, marginBottom: 0 }]}>
+            REVIEW QUEUE{pending.length > 0 ? ` · ${pending.length}` : ''}
+          </Text>
+        </View>
         {pending.length === 0 ? (
           <Text style={[styles.adminEmpty, { color: textColor(isDark, 'muted') }]}>Queue is clear ✔</Text>
         ) : (
@@ -508,13 +538,13 @@ export default function CampaignsScreen({ navigation }: any) {
             >
               <View style={{ flex: 1 }}>
                 <Text style={[styles.campaignName, { color: textColor(isDark) }]} numberOfLines={1}>
-                  {campaign.name}
+                  {campaign.creative?.productName || campaign.creative?.title || campaign.name}
                 </Text>
                 <Text style={[styles.campaignMeta, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
-                  {campaign.creative?.productName || campaign.creative?.title} — {campaign.creative?.tagline || campaign.creative?.description}
+                  {campaign.creative?.tagline || campaign.creative?.description}
                 </Text>
                 <Text style={[styles.campaignMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
-                  by {campaign.ownerName} · {(campaign.industries || []).join(', ') || 'no targeting'}
+                  by {campaign.ownerName} · {placementsLabel(campaign)}
                 </Text>
               </View>
               <View style={styles.adminActions}>
@@ -523,18 +553,14 @@ export default function CampaignsScreen({ navigation }: any) {
                   disabled={moderationBusy === campaign.id}
                   style={[styles.adminBtn, { backgroundColor: 'rgba(22,163,74,0.14)' }]}
                 >
-                  {moderationBusy === campaign.id ? (
-                    <ActivityIndicator size="small" color="#16A34A" />
-                  ) : (
-                    <ThumbsUp size={16} color="#16A34A" />
-                  )}
+                  {moderationBusy === campaign.id ? <ActivityIndicator size="small" color="#16A34A" /> : <ThumbsUp size={15} color="#16A34A" />}
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => moderate(campaign, 'rejected')}
                   disabled={moderationBusy === campaign.id}
                   style={[styles.adminBtn, { backgroundColor: 'rgba(220,38,38,0.12)' }]}
                 >
-                  <ThumbsDown size={16} color="#DC2626" />
+                  <ThumbsDown size={15} color="#DC2626" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -552,7 +578,7 @@ export default function CampaignsScreen({ navigation }: any) {
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
           <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Campaigns</Text>
-          <Text style={styles.headerSub}>Founders see you. In the deck.</Text>
+          <Text style={styles.headerSub}>Advertise to every founder</Text>
         </View>
         <View style={styles.headerBtn} />
       </View>
@@ -582,60 +608,122 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  headerBtn: { width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 16, fontWeight: '900', letterSpacing: 4 },
   headerSub: { marginTop: 4, color: '#666', fontSize: 10, fontWeight: '900' },
   center: { paddingVertical: 80, alignItems: 'center', justifyContent: 'center' },
   scroll: { padding: 16, paddingTop: 6, paddingBottom: 48 },
-  heroCard: { borderWidth: 1, borderRadius: 28, padding: 20 },
+
+  heroCard: {
+    backgroundColor: DARK_CARD,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: DARK_LINE,
+    padding: 20,
+    overflow: 'hidden',
+  },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   heroIconWrap: {
-    width: 58,
-    height: 58,
-    borderRadius: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 19,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: COLORS.primary,
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
-  popularBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 12,
+  trialRibbon: {
+    borderRadius: 999,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  trialRibbonText: { color: '#000', fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  planBadge: {
+    borderRadius: 999,
+    backgroundColor: 'rgba(223,251,63,0.14)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: 7,
   },
-  popularText: { fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  heroTitle: { marginTop: 14, fontSize: 26, lineHeight: 32, fontWeight: '900' },
-  heroCopy: { marginTop: 10, fontSize: 13, lineHeight: 20, fontWeight: '700' },
-  pricingGrid: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  priceCard: { flex: 1, minHeight: 108, borderRadius: 18, borderWidth: 1, padding: 14, justifyContent: 'space-between' },
+  planBadgeText: { color: '#DFFB3F', fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  slotDots: { flexDirection: 'row', gap: 6 },
+  slotDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: 'rgba(223,251,63,0.45)',
+    backgroundColor: 'transparent',
+  },
+  slotDotFilled: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  heroTitle: { marginTop: 16, fontSize: 24, lineHeight: 30, fontWeight: '900', color: DARK_TEXT },
+  heroCopy: { marginTop: 8, fontSize: 12, lineHeight: 19, fontWeight: '700', color: DARK_SUB },
+  heroStatGrid: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  heroStat: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: DARK_LINE,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    padding: 12,
+    gap: 5,
+  },
+  heroStatValue: { fontSize: 19, fontWeight: '900', color: DARK_TEXT },
+  heroStatLabel: { fontSize: 8, fontWeight: '900', letterSpacing: 1, color: DARK_SUB, textTransform: 'uppercase' },
+
+  pricingGrid: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  priceCard: {
+    flex: 1,
+    minHeight: 106,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: DARK_LINE,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    padding: 14,
+    justifyContent: 'space-between',
+  },
+  priceCardSelected: { borderColor: COLORS.primary, backgroundColor: 'rgba(223,251,63,0.10)' },
   priceTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
   priceLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase' },
-  priceBadge: { borderRadius: 999, overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 4, fontSize: 9, fontWeight: '900' },
+  priceSelectedDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  priceBadge: {
+    borderRadius: 999,
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    fontSize: 8,
+    fontWeight: '900',
+    backgroundColor: 'rgba(223,251,63,0.16)',
+    color: '#DFFB3F',
+  },
   priceRow: { marginTop: 8, flexDirection: 'row', alignItems: 'flex-end' },
-  priceValue: { fontSize: 22, lineHeight: 26, fontWeight: '900', letterSpacing: -0.5 },
-  priceCadence: { fontSize: 10, fontWeight: '900', marginLeft: 4, marginBottom: 3 },
-  priceHelper: { marginTop: 6, fontSize: 10, lineHeight: 14, fontWeight: '800' },
-  perksSection: { borderWidth: 1, marginTop: 14, borderRadius: 24, padding: 18, gap: 12 },
+  priceValue: { fontSize: 22, lineHeight: 26, fontWeight: '900', letterSpacing: -0.5, color: DARK_TEXT },
+  priceCadence: { fontSize: 10, fontWeight: '900', marginLeft: 4, marginBottom: 3, color: DARK_SUB },
+  priceHelper: { marginTop: 6, fontSize: 9, lineHeight: 13, fontWeight: '800', color: DARK_SUB },
+
+  perksSection: { borderWidth: 1, marginTop: 14, borderRadius: 28, padding: 18, gap: 11 },
   perksTitle: { fontSize: 15, fontWeight: '900' },
   perkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  perkText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: '700' },
+  perkText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: '700' },
+
   primaryBtn: {
     marginTop: 16,
     height: 52,
-    borderRadius: 16,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -643,57 +731,42 @@ const styles = StyleSheet.create({
   },
   primaryBtnDisabled: { opacity: 0.55 },
   primaryBtnText: { fontSize: 13, fontWeight: '900', letterSpacing: 1.2 },
-  restoreBtn: {
-    marginTop: 12,
-    height: 42,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  restoreText: { fontSize: 10, fontWeight: '900', letterSpacing: 1, color: COLORS.secondary },
-  planBanner: {
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  planBannerText: { fontSize: 12, fontWeight: '900', flex: 1 },
-  statRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  statCard: { flex: 1, borderWidth: 1, borderRadius: 20, padding: 14, gap: 7 },
-  statIconWrap: { width: 30, height: 30, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  statValue: { fontSize: 22, fontWeight: '900' },
-  statLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+  restoreBtn: { marginTop: 14, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6 },
+  restoreText: { fontSize: 11, fontWeight: '800' },
   capHint: { marginTop: 8, fontSize: 10, fontWeight: '800', textAlign: 'center' },
+
   sectionLabel: { marginTop: 22, marginBottom: 10, fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
-  emptyCard: { borderWidth: 1, borderRadius: 28, padding: 30, alignItems: 'center', gap: 12 },
-  emptyIconWrap: { width: 56, height: 56, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  emptyCard: { borderWidth: 1, borderRadius: 28, padding: 28, alignItems: 'center', gap: 10 },
+  emptyIconWrap: { width: 54, height: 54, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { fontSize: 16, fontWeight: '900' },
   emptyCopy: { fontSize: 12, lineHeight: 18, fontWeight: '700', textAlign: 'center' },
+
   campaignRow: {
     borderWidth: 1,
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 12,
+    paddingLeft: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     marginBottom: 10,
+    overflow: 'hidden',
   },
-  campaignIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  campaignName: { fontSize: 13, fontWeight: '900' },
-  campaignMeta: { marginTop: 3, fontSize: 10, fontWeight: '800' },
-  statusPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
-  statusPillText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.6 },
-  adminWrap: { marginTop: 10, paddingBottom: 12 },
+  campaignAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
+  campaignIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  campaignName: { fontSize: 14, fontWeight: '900' },
+  campaignMeta: { marginTop: 2, fontSize: 10, fontWeight: '800' },
+  campaignStatRow: { flexDirection: 'row', gap: 12, marginTop: 5 },
+  campaignStat: { fontSize: 10, fontWeight: '900' },
+  editBtn: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+
+  adminWrap: { marginTop: 18, paddingBottom: 12 },
+  adminHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  adminDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#DC2626' },
   adminEmpty: { fontSize: 11, fontWeight: '800' },
   adminCard: {
     borderWidth: 1,
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 12,
     flexDirection: 'row',
     alignItems: 'center',

@@ -34,8 +34,10 @@ import { notifyUser } from '../lib/notify';
 import {
   CAMPAIGN_INDUSTRY_OPTIONS,
   CAMPAIGN_PLACEMENT_OPTIONS,
+  Campaign,
   createCampaign,
   normalizeWebsite,
+  updateCampaignCreative,
   websiteDisplay,
 } from '../lib/campaigns';
 
@@ -50,18 +52,22 @@ const PLACEMENT_ICONS: Record<string, any> = {
   discover: Zap,
 };
 
-export default function CreateCampaignScreen({ navigation }: any) {
+export default function CreateCampaignScreen({ navigation, route }: any) {
   const { user, profile: myProfile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const editCampaign: Campaign | null = route?.params?.editCampaign || null;
+  const isEditing = !!editCampaign && editCampaign.status === 'pending_review';
 
-  const [name, setName] = useState('');
-  const [productName, setProductName] = useState('');
-  const [tagline, setTagline] = useState('');
-  const [description, setDescription] = useState('');
-  const [website, setWebsite] = useState('');
-  const [category, setCategory] = useState<string[]>([]);
-  const [placements, setPlacements] = useState<string[]>(['ideas']);
+  const [name, setName] = useState(editCampaign?.name || '');
+  const [productName, setProductName] = useState(editCampaign?.creative?.productName || editCampaign?.creative?.title || '');
+  const [tagline, setTagline] = useState(editCampaign?.creative?.tagline || editCampaign?.creative?.description || '');
+  const [description, setDescription] = useState(editCampaign?.creative?.source === 'product' ? editCampaign?.creative?.description || '' : '');
+  const [website, setWebsite] = useState(editCampaign?.creative?.website || '');
+  const [category, setCategory] = useState<string[]>(
+    editCampaign?.creative?.category?.length ? editCampaign.creative.category : editCampaign?.industries || []
+  );
+  const [placements, setPlacements] = useState<string[]>(editCampaign?.placements?.length ? editCampaign.placements : ['ideas']);
   const [submitting, setSubmitting] = useState(false);
 
   const cleanWebsite = normalizeWebsite(website);
@@ -92,6 +98,25 @@ export default function CreateCampaignScreen({ navigation }: any) {
 
     setSubmitting(true);
     try {
+      const creativePayload = {
+        source: 'product' as const,
+        productName: productName.trim().slice(0, 60),
+        tagline: tagline.trim().slice(0, 90),
+        description: description.trim().slice(0, 500),
+        website: cleanWebsite,
+        category,
+      };
+      if (isEditing && editCampaign) {
+        await updateCampaignCreative(editCampaign.id, {
+          name: name.trim(),
+          creative: creativePayload,
+          industries: category,
+          placements,
+        });
+        notifyUser('Changes saved ✔', 'Your campaign stays in the review queue with the updated creative.');
+        navigation.goBack();
+        return;
+      }
       await createCampaign({
         ownerId: user.uid,
         ownerName: displayNameFor(myProfile || user),
@@ -101,14 +126,7 @@ export default function CreateCampaignScreen({ navigation }: any) {
         ownerCountry: (myProfile as any)?.country || '',
         ownerVerified: !!(myProfile as any)?.isVerified,
         name: name.trim(),
-        creative: {
-          source: 'product',
-          productName: productName.trim().slice(0, 60),
-          tagline: tagline.trim().slice(0, 90),
-          description: description.trim().slice(0, 500),
-          website: cleanWebsite,
-          category,
-        },
+        creative: creativePayload,
         industries: category,
         placements,
       });
@@ -158,8 +176,8 @@ export default function CreateCampaignScreen({ navigation }: any) {
           <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
-          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>New Campaign</Text>
-          <Text style={styles.headerSub}>Advertise your product to founders</Text>
+          <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>{isEditing ? 'Edit Campaign' : 'New Campaign'}</Text>
+          <Text style={styles.headerSub}>{isEditing ? 'Update while in review' : 'Advertise your product to founders'}</Text>
         </View>
         <View style={styles.headerBtn} />
       </View>
@@ -308,7 +326,7 @@ export default function CreateCampaignScreen({ navigation }: any) {
             ) : (
               <>
                 <Send size={15} color={COLORS.lightTextPrimary} />
-                <Text style={[styles.submitText, { color: COLORS.lightTextPrimary }]}>SUBMIT FOR REVIEW</Text>
+                <Text style={[styles.submitText, { color: COLORS.lightTextPrimary }]}>{isEditing ? 'SAVE CHANGES' : 'SUBMIT FOR REVIEW'}</Text>
               </>
             )}
           </TouchableOpacity>

@@ -232,6 +232,29 @@ export const setCampaignStatus = async (campaignId: string, status: CampaignStat
   });
 };
 
+/** Owner edits while the campaign is still in review — stats, ownership and
+ * the pending status are untouchable (rules enforce it too). */
+export const updateCampaignCreative = async (
+  campaignId: string,
+  patch: {
+    name: string;
+    creative: CampaignCreative;
+    industries: string[];
+    placements: string[];
+  }
+) => {
+  const placements = (patch.placements.length ? patch.placements : ['ideas']).filter((placement) =>
+    CAMPAIGN_PLACEMENT_OPTIONS.some((option) => option.id === placement && option.available)
+  );
+  await updateDoc(doc(db, 'campaigns', campaignId), {
+    name: patch.name.slice(0, 90),
+    creative: patch.creative,
+    industries: patch.industries.slice(0, 6),
+    placements: placements.length ? placements : ['ideas'],
+    updatedAt: serverTimestamp(),
+  });
+};
+
 export const isCampaignAdmin = async (uid: string) => {
   if (!uid) return false;
   try {

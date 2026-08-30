@@ -1292,6 +1292,9 @@ service cloud.firestore {
           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
           incoming().status in ['active', 'paused'] &&
           existing().status in ['active', 'paused']) ||
+        (existing().ownerId == request.auth.uid &&
+          existing().status == 'pending_review' &&
+          !incoming().diff(existing()).affectedKeys().hasAny(['ownerId', 'status', 'statsImpressions', 'statsClicks', 'createdAt', 'reviewNote'])) ||
         (incoming().diff(existing()).affectedKeys().hasOnly(['statsImpressions', 'statsClicks']) &&
           incoming().statsImpressions >= existing().statsImpressions &&
           incoming().statsImpressions <= existing().statsImpressions + 32 &&
