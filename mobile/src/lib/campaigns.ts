@@ -320,6 +320,9 @@ export type SponsoredIdeaDeckItem = IdeaDeckItem & {
   house?: boolean;
   /** Advertiser logo for the sponsored card. Empty for the house promo. */
   logo?: string;
+  /** The advertiser's own one-liner, when they wrote one. Drives every
+   *  sponsored surface through `sponsorOneLiner`. */
+  tagline?: string;
 };
 
 export const normalizeWebsite = (value: string) => {
@@ -331,6 +334,30 @@ export const normalizeWebsite = (value: string) => {
 
 export const websiteDisplay = (value: string) =>
   normalizeWebsite(value).replace(/^https?:\/\//i, '').replace(/\/+$/, '').slice(0, 40);
+
+/**
+ * ONE scannable line: what the product actually does.
+ *
+ * Every sponsored surface — swipe deck, scroll feed, idea deck — shows this
+ * and only this. The creative description is a paragraph, and stopping to
+ * read a paragraph costs the swipe its rhythm, so the card carries a single
+ * line instead.
+ *
+ * The advertiser's own tagline wins when they wrote one; otherwise we take
+ * the first sentence of the description and hard-cap the length so the line
+ * can never wrap into a second one.
+ */
+export const sponsorOneLiner = (
+  item?: { tagline?: string; description?: string } | null,
+  maxChars: number = 92
+): string => {
+  const raw = String(item?.tagline || item?.description || '').replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+  const firstSentence = (raw.split(/[.!?]\s/)[0] || '').trim() || raw;
+  return firstSentence.length > maxChars
+    ? `${firstSentence.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…`
+    : firstSentence;
+};
 
 const campaignViewsToday = async (uid: string, campaignId: string) => {
   const raw = await AsyncStorage.getItem(seenKey(uid, campaignId));
@@ -350,6 +377,7 @@ export const toSponsoredItem = (campaign: Campaign): SponsoredIdeaDeckItem => {
     logo: creative.logoUrl || '',
     title: (isProduct ? creative.productName : creative.title) || 'Sponsored',
     description: (isProduct ? creative.tagline : creative.description) || creative.description || '',
+    tagline: creative.tagline || '',
     stage: isProduct ? 'Product' : creative.stage || 'Idea Stage',
     lookingFor: Array.isArray(creative.lookingFor) ? creative.lookingFor : isProduct ? ['Customers', 'Feedback'] : [],
     tags: Array.isArray(creative.category) && creative.category.length

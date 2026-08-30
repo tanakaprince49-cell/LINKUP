@@ -36,6 +36,7 @@ import {
   injectSponsored,
   recordCampaignClick,
   recordCampaignImpression,
+  sponsorOneLiner,
   sponsoredIdeaCardsForViewer,
   subscribeActiveCampaigns,
 } from '../lib/campaigns';
@@ -148,9 +149,17 @@ export default function IdeaDeckScreen({ navigation }: any) {
       userId: user.uid,
       onData: (profiles) => {
         const users = profiles.filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        organicIdeasRef.current = collectIdeaDeck(users as UserProfile[], user.uid);
-        rebuildDeckRef.current();
+        const next = collectIdeaDeck(users as UserProfile[], user.uid);
+        // Same no-op guard as the swipe deck: the shared discovery listener
+        // re-emits on every write to any profile in the pool, and rebuilding
+        // here re-rendered the visible idea card each time — a flash that had
+        // nothing to do with swiping.
+        const nextKey = next.map((idea) => idea.id).join('|');
+        const prevKey = organicIdeasRef.current.map((idea) => idea.id).join('|');
         setLoading(false);
+        if (nextKey === prevKey) return;
+        organicIdeasRef.current = next;
+        rebuildDeckRef.current();
       },
       onError: (error) => {
         console.warn('Ideas deck unavailable:', error);
@@ -508,7 +517,15 @@ export default function IdeaDeckScreen({ navigation }: any) {
       </View>
 
       <Text style={[styles.ideaTitle, { color: textColor(isDark) }]}>{idea.title}</Text>
-      <Text style={[styles.ideaDescription, { color: textColor(isDark, 'secondary') }]}>{idea.description}</Text>
+      {(idea as any).sponsored ? (
+        // Sponsored cards get one line — what the product does — instead of a
+        // paragraph, matching the swipe and scroll sponsored surfaces.
+        <Text style={[styles.ideaDescription, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+          {sponsorOneLiner(idea as any)}
+        </Text>
+      ) : (
+        <Text style={[styles.ideaDescription, { color: textColor(isDark, 'secondary') }]}>{idea.description}</Text>
+      )}
 
       <View style={styles.signalGrid}>
         <View style={[styles.signalCard, liquidGlass(isDark)]}>

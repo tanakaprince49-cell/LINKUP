@@ -41,6 +41,7 @@ import {
   buildHouseIdeaCard,
   recordCampaignClick,
   recordCampaignImpression,
+  sponsorOneLiner,
   subscribeActiveCampaigns,
   toSponsoredItem,
 } from '../lib/campaigns';
@@ -61,7 +62,18 @@ const { width } = windowSize;
 const SWIPE_THRESHOLD = 0.22 * width;
 const DISCOVERY_LIMIT = 200;
 const FALLBACK_PHOTO = avatarPlaceholderUri('', 512);
-const MAX_SWIPE_DATA_URI_CHARS = 900_000;
+/**
+ * Largest base64 photo a card may render inline.
+ *
+ * A data URI has no URL, so expo-image cannot cache it: every mount decodes
+ * the whole string again on the JS/main thread. At 900k chars that decode was
+ * hundreds of milliseconds of frozen frame, which is a card that appears
+ * blank and then pops — the blink. Anything bigger falls back to the
+ * placeholder and gets a real (hosted, cacheable) photo from the upgrade pass.
+ */
+const MAX_SWIPE_DATA_URI_CHARS = 320_000;
+/** Order-sensitive fingerprint of a deck, used to drop no-op rebuilds. */
+const deckKey = (items: UserProfile[]) => items.map((profile) => profile?.uid).join('|');
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
 const discoveryCacheKey = (uid: string) => `linkup:discovery:v3:${uid}`;
 const swipeProgressKey = (uid: string) => `linkup:swipe-progress:v1:${uid}`;
@@ -500,6 +512,8 @@ export default function SwipeScreen({ navigation }: any) {
   const feed = useMemo(() => profiles.filter(Boolean).slice(0, 100), [profiles]);
   const feedRef = useRef(feed);
   feedRef.current = feed;
+  const profilesRef = useRef<UserProfile[]>(profiles);
+  profilesRef.current = profiles;
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedItem?: UserProfile) => void>(() => {});
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const resetSwipePositionRef = useRef<() => void>(() => {});
@@ -885,7 +899,15 @@ export default function SwipeScreen({ navigation }: any) {
             );
             return additions.length ? [...current, ...additions] : current;
           });
-        } else {
+        } else if (deckKey(remainingUsers) !== deckKey(profilesRef.current)) {
+          // Rebuild only when the visible deck actually changed.
+          //
+          // The discovery listener is shared and re-emits whenever ANY profile
+          // in the pool is written — someone's presence, an updatedAt, a
+          // viewer count. Each of those emissions used to hand React a brand
+          // new array, which re-rendered the deck, re-ran the local sort and,
+          // on Android, read as the whole screen refreshing itself. Identical
+          // uid order = nothing to do.
           setProfiles(remainingUsers);
         }
         setAiOrderingDone(false);
@@ -1038,6 +1060,8 @@ export default function SwipeScreen({ navigation }: any) {
       topProfile,
       nextProfile,
       profiles[2],
+      profiles[3],
+      profiles[4],
       mode === 'scroll' ? feedRef.current[Math.min(scrollIndexRef.current, feedRef.current.length - 1)] : null,
     ]
       .filter(Boolean)
@@ -1370,7 +1394,12 @@ export default function SwipeScreen({ navigation }: any) {
 
     return (
       <Animated.View
-        key={`preview-${nextProfile.uid}`}
+        // Deliberately NOT keyed on the profile uid. A uid key made React
+        // unmount and rebuild this view after every swipe, so expo-image had
+        // to re-attach and re-decode the photo from scratch: one empty frame
+        // per swipe, which is the blink. One stable view, one swap of the
+        // image uri, no remount.
+        key="swipe-preview-card"
         pointerEvents="none"
         style={[
           styles.card,
@@ -1434,6 +1463,8 @@ export default function SwipeScreen({ navigation }: any) {
 
   const renderSponsoredCard = () => {
     if (!discoverySponsor) return null;
+    // One line, not a paragraph: what the product does, at a glance.
+    const sponsorLine = sponsorOneLiner(discoverySponsor);
     return (
       <Animated.View
         key={`sponsor-${discoverySponsor.id}`}
@@ -1462,9 +1493,9 @@ export default function SwipeScreen({ navigation }: any) {
           <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={2}>
             {discoverySponsor.title}
           </Text>
-          {!!discoverySponsor.description && (
-            <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={5}>
-              {discoverySponsor.description}
+          {!!sponsorLine && (
+            <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+              {sponsorLine}
             </Text>
           )}
           <TouchableOpacity
@@ -1545,7 +1576,10 @@ export default function SwipeScreen({ navigation }: any) {
 
     return (
       <Animated.View
-        key={`top-${topProfile.uid}`}
+        // Stable key, same as the preview card: the deck is one persistent
+        // view whose contents change, not a new view per person. Keying on
+        // the uid remounted it on every swipe and flashed an empty card.
+        key="swipe-top-card"
         style={[
           styles.card,
           styles.deckCardLayer,
@@ -1656,6 +1690,8 @@ export default function SwipeScreen({ navigation }: any) {
   const renderScrollSponsor = () => {
     if (!discoverySponsor) return null;
     const sponsorName = discoverySponsor.title || 'Sponsored';
+    // Same rule as the swipe interstitial: one line saying what it does.
+    const sponsorLine = sponsorOneLiner(discoverySponsor);
     return (
       <Animated.View
         style={[
@@ -1671,9 +1707,9 @@ export default function SwipeScreen({ navigation }: any) {
           <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={2}>
             {sponsorName}
           </Text>
-          {!!discoverySponsor.description && (
-            <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={5}>
-              {discoverySponsor.description}
+          {!!sponsorLine && (
+            <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+              {sponsorLine}
             </Text>
           )}
           <TouchableOpacity
