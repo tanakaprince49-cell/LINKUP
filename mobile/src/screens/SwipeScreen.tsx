@@ -1416,7 +1416,7 @@ export default function SwipeScreen({ navigation }: any) {
       toValue: { x: 0, y: 0 },
       tension: 85,
       friction: 9,
-      useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+      useNativeDriver: false,
     }).start(() => {
       isAnimatingRef.current = false;
     });
