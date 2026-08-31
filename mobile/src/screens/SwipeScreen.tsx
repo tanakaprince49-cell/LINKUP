@@ -1117,13 +1117,13 @@ export default function SwipeScreen({ navigation }: any) {
     };
   }, [isFocused, user?.uid, myProfile?.uid, profileIdsKey, aiOrderingDone, profiles.length]);
 
-  // After a swipe the top card is hidden (topCardReveal=0) and re-centred while
-  // the preview card underneath already shows the next person. Reveal only once
-  // React has committed the new topProfile so we never flash the old face.
-  const prevTopUidRef = useRef<string | null>(null);
+  // After a swipe, React commits the new topProfile. Reset position here
+  // (useLayoutEffect = before paint) so the card appears at center with the
+  // new face — never the old one.
+  const prevTopUidRef = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
-    const uid = topProfile?.uid ?? null;
-    if (prevTopUidRef.current !== uid && prevTopUidRef.current !== null) {
+    const uid = topProfile?.uid;
+    if (prevTopUidRef.current !== uid) {
       if (swapCoverTimerRef.current) {
         clearTimeout(swapCoverTimerRef.current);
         swapCoverTimerRef.current = null;
@@ -1430,12 +1430,12 @@ export default function SwipeScreen({ navigation }: any) {
     const finish = () => {
       if (done) return;
       done = true;
-      // Swap profiles FIRST so React queues the new topProfile.
-      // Then reset position — React batches both into one render,
-      // so the old person is NEVER rendered at center.
       swipePosition.stopAnimation();
+      // Do NOT call swipePosition.setValue here — React has not committed the
+      // new profiles[0] yet, so resetting position now would render the OLD
+      // profile at center for one frame.  The useLayoutEffect watching
+      // topProfile?.uid handles the reset AFTER React commits the new card.
       completeSwipe(direction, swipedItem);
-      swipePosition.setValue({ x: 0, y: 0 });
       isAnimatingRef.current = false;
     };
 
