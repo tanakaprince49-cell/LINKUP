@@ -1121,9 +1121,11 @@ export default function SwipeScreen({ navigation }: any) {
   // (useLayoutEffect = before paint) so the card appears at center with the
   // new face — never the old one.
   const prevTopUidRef = useRef<string | undefined>(undefined);
+  const pendingRecenterRef = useRef(false);
   useLayoutEffect(() => {
     const uid = topProfile?.uid;
-    if (prevTopUidRef.current !== uid) {
+    if (prevTopUidRef.current !== uid || pendingRecenterRef.current) {
+      pendingRecenterRef.current = false;
       if (swapCoverTimerRef.current) {
         clearTimeout(swapCoverTimerRef.current);
         swapCoverTimerRef.current = null;
@@ -1133,7 +1135,7 @@ export default function SwipeScreen({ navigation }: any) {
       isAnimatingRef.current = false;
     }
     prevTopUidRef.current = uid;
-  }, [topProfile?.uid]);
+  });
 
   useEffect(() => {
     if (!user?.uid || !isFocused || !topProfile || isSyntheticProfile(topProfile)) return;
@@ -1346,9 +1348,11 @@ export default function SwipeScreen({ navigation }: any) {
     // Sponsored interstitial consumes itself — no profile is touched, no
     // budget is burned, no like/skip is written to Firestore.
     if (discoverySponsor) {
+      // Same rule as a profile swipe: no re-centring from here. The pending
+      // flag is already raised by finish(), and setDiscoverySponsor(null)
+      // below is the commit that re-centres — so the interstitial never
+      // flashes back to the middle on its way out.
       swipePosition.stopAnimation();
-      topCardReveal.setValue(1);
-      swipePosition.setValue({ x: 0, y: 0 });
       hasUserSwipedRef.current = true;
       setActivePhotoIndex(0);
       setInfoExpanded(false);
@@ -1435,8 +1439,22 @@ export default function SwipeScreen({ navigation }: any) {
       // new profiles[0] yet, so resetting position now would render the OLD
       // profile at center for one frame.  The useLayoutEffect watching
       // topProfile?.uid handles the reset AFTER React commits the new card.
+      //
+      // The flag covers the gap that watching the uid alone misses: if the
+      // swap does not change the uid (deck emptied, sponsored slot consumed,
+      // last card), no uid change means no reset and the card would sit parked
+      // off-screen. The layout effect below honours the flag either way.
+      pendingRecenterRef.current = true;
       completeSwipe(direction, swipedItem);
-      isAnimatingRef.current = false;
+      // Nothing may commit if completeSwipe bails out (missing item, empty
+      // deck), so keep a timer as a floor: the card always comes back.
+      if (swapCoverTimerRef.current) clearTimeout(swapCoverTimerRef.current);
+      swapCoverTimerRef.current = setTimeout(() => {
+        swapCoverTimerRef.current = null;
+        topCardReveal.setValue(1);
+        swipePosition.setValue({ x: 0, y: 0 });
+        isAnimatingRef.current = false;
+      }, 260);
     };
 
     Animated.timing(swipePosition, {
