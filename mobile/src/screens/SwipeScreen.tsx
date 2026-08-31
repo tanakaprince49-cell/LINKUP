@@ -534,8 +534,6 @@ export default function SwipeScreen({ navigation }: any) {
   const rankingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRankedProfileIdsRef = useRef('');
   const swipePosition = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const swipeExitProgress = useRef(new Animated.Value(1)).current;
-  const swipedItemRef = useRef<UserProfile | null>(null);
   const swipeThresholdRef = useRef(SWIPE_THRESHOLD);
   const deckExitDistanceRef = useRef(width + 160);
 
@@ -1406,43 +1404,25 @@ export default function SwipeScreen({ navigation }: any) {
     isAnimatingRef.current = true;
     setInfoExpanded(false);
     const exitX = direction === 'right' ? deckExitDistanceRef.current : -deckExitDistanceRef.current;
-    let completed = false;
+    let done = false;
 
-    swipedItemRef.current = swipedItem;
-
-    const finishSwipe = () => {
-      if (completed) return;
-      completed = true;
-      // Remove the OLD card from the deck and reset.
-      completeSwipe(direction, swipedItem);
+    const finish = () => {
+      if (done) return;
+      done = true;
       swipePosition.setValue({ x: 0, y: 0 });
-      swipeExitProgress.setValue(0);
-      swipedItemRef.current = null;
+      completeSwipe(direction, swipedItem);
       isAnimatingRef.current = false;
     };
 
-    // Animate the exit: the OLD card slides off-screen while fading out.
-    // swipePosition drives the exit, then we reset it and update profiles
-    // in the completion callback — the NEW card then appears at center
-    // with a fresh opacity, no "previous person" flash.
     swipePosition.stopAnimation();
-    swipeExitProgress.setValue(1);
-    Animated.parallel([
-      Animated.timing(swipePosition, {
-        toValue: { x: exitX, y: 0 },
-        duration: 200,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
-      }),
-      Animated.spring(swipeExitProgress, {
-        toValue: 0,
-        tension: 120,
-        friction: 8,
-        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
-      }),
-    ]).start(finishSwipe);
+    Animated.timing(swipePosition, {
+      toValue: { x: exitX, y: 0 },
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+    }).start(finish);
 
-    setTimeout(finishSwipe, 300);
+    setTimeout(finish, 250);
   };
 
   const animateSwipeOut = (direction: 'left' | 'right') => {
@@ -1633,7 +1613,7 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            opacity: Animated.multiply(topCardOpacity, swipeExitProgress),
+            opacity: topCardOpacity,
             transform: isWeb
               ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
               : [
@@ -1745,7 +1725,7 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            opacity: Animated.multiply(topCardOpacity, swipeExitProgress),
+            opacity: topCardOpacity,
             transform: isWeb
               ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
               : [
