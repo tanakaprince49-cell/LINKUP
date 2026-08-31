@@ -1404,11 +1404,30 @@ export default function SwipeScreen({ navigation }: any) {
     isAnimatingRef.current = true;
     setInfoExpanded(false);
     const exitX = direction === 'right' ? deckExitDistanceRef.current : -deckExitDistanceRef.current;
+    let completed = false;
 
-    // Complete swipe immediately
-    completeSwipe(direction, swipedItem);
-    swipePosition.setValue({ x: 0, y: 0 });
-    isAnimatingRef.current = false;
+    const finishSwipe = () => {
+      if (completed) return;
+      completed = true;
+      completeSwipe(direction, swipedItem);
+      swipePosition.setValue({ x: 0, y: 0 });
+      isAnimatingRef.current = false;
+    };
+
+    // Animate the card off-screen FIRST, then remove it from the deck.
+    // Without this the card vanishes instantly and the next card pops in
+    // on the following frame — the "blink" users see on every swipe.
+    swipePosition.stopAnimation();
+    Animated.timing(swipePosition, {
+      toValue: { x: exitX, y: 0 },
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+    }).start(finishSwipe);
+
+    // Safety: if the animation callback never fires (backgrounding, etc),
+    // force-reset so the deck is never stuck.
+    setTimeout(finishSwipe, 300);
   };
 
   const animateSwipeOut = (direction: 'left' | 'right') => {
