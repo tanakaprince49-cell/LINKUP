@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleProp, ImageStyle } from 'react-native';
+import { Platform, StyleProp, ImageStyle } from 'react-native';
 import { Image } from 'expo-image';
 
 /**
@@ -38,7 +38,7 @@ export const AppImage = ({ uri, style, contentFit = 'cover', transitionMs = 0, r
       style={style}
       contentFit={contentFit}
       cachePolicy="memory-disk"
-      transition={transitionMs}
+      transition={Platform.OS === 'android' ? 0 : transitionMs}
       recyclingKey={recycle ? uri : undefined}
     />
   );
