@@ -1322,21 +1322,12 @@ export default function SwipeScreen({ navigation }: any) {
     setInfoExpanded(false);
     const exitX = direction === 'right' ? deckExitDistanceRef.current : -deckExitDistanceRef.current;
 
-    Animated.timing(swipePosition, {
-      toValue: { x: exitX, y: direction === 'right' ? 34 : -34 },
-      duration: 150,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
-    }).start(({ finished }) => {
-      if (finished) {
-        completeSwipe(direction, swipedItem);
-        swipePosition.setValue({ x: 0, y: 0 });
-        isAnimatingRef.current = false;
-        return;
-      }
-      swipePosition.setValue({ x: 0, y: 0 });
-      isAnimatingRef.current = false;
-    });
+    // Complete swipe immediately to prevent showing old card
+    completeSwipe(direction, swipedItem);
+
+    // Reset position instantly - no animation to prevent blinking
+    swipePosition.setValue({ x: 0, y: 0 });
+    isAnimatingRef.current = false;
   };
 
   const animateSwipeOut = (direction: 'left' | 'right') => {
