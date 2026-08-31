@@ -1430,11 +1430,12 @@ export default function SwipeScreen({ navigation }: any) {
     const finish = () => {
       if (done) return;
       done = true;
-      // useNativeDriver:false — all updates on JS thread, no timing gap.
-      // Reset position + swap profiles atomically. No hide/reveal needed.
+      // Swap profiles FIRST so React queues the new topProfile.
+      // Then reset position — React batches both into one render,
+      // so the old person is NEVER rendered at center.
       swipePosition.stopAnimation();
-      swipePosition.setValue({ x: 0, y: 0 });
       completeSwipe(direction, swipedItem);
+      swipePosition.setValue({ x: 0, y: 0 });
       isAnimatingRef.current = false;
     };
 
