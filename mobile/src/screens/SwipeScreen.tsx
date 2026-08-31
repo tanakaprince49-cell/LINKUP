@@ -1339,13 +1339,6 @@ export default function SwipeScreen({ navigation }: any) {
     const item = swipedItem || profiles[0];
     if (!item) return;
 
-    // Reset the gesture transform BEFORE the deck updates. The next card
-    // becomes the top card in this very same commit — if it paints while
-    // swipePosition still holds the old exit offset, it renders ~a screen
-    // away for a frame and the user sees "blank … person" (the swipe blink).
-    swipePosition.stopAnimation();
-    swipePosition.setValue({ x: 0, y: 0 });
-
     hasUserSwipedRef.current = true;
     swipedSessionIdsRef.current.add(item.uid);
     lastSwipedProfileRef.current = item;
@@ -1409,20 +1402,30 @@ export default function SwipeScreen({ navigation }: any) {
     const finish = () => {
       if (done) return;
       done = true;
-      swipePosition.setValue({ x: 0, y: 0 });
+      // Swap profiles FIRST — topProfile is now the NEW person.
+      // swipePosition is still at exitX so the new person is off-screen.
       completeSwipe(direction, swipedItem);
-      isAnimatingRef.current = false;
+      // Animate the NEW card sliding in from the exit side.
+      swipePosition.setValue({ x: exitX, y: 0 });
+      Animated.spring(swipePosition, {
+        toValue: { x: 0, y: 0 },
+        tension: 120,
+        friction: 10,
+        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+      }).start(() => {
+        isAnimatingRef.current = false;
+      });
     };
 
     swipePosition.stopAnimation();
     Animated.timing(swipePosition, {
       toValue: { x: exitX, y: 0 },
-      duration: 180,
+      duration: 150,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
     }).start(finish);
 
-    setTimeout(finish, 250);
+    setTimeout(finish, 200);
   };
 
   const animateSwipeOut = (direction: 'left' | 'right') => {
