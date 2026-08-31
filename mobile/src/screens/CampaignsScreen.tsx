@@ -19,8 +19,9 @@ import { serverTimestamp } from 'firebase/firestore';
 import {
   BarChart3,
   Check,
-  CheckCircle2,
+  ChevronLeft,
   Eye,
+  Flame,
   Lock,
   Megaphone,
   MousePointerClick,
@@ -37,11 +38,11 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+import { textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
 import { ikAvatar } from '../lib/ikImage';
+import ProCrownBadge from '../components/ProCrownBadge';
 import { isAdminIdentity } from '../lib/admin';
-import ScreenHeader from '../components/ScreenHeader';
 import {
   CAMPAIGNS_PRODUCT_IDS,
   CAMPAIGN_PLACEMENT_OPTIONS,
@@ -138,12 +139,29 @@ const STATUS_MAP: Record<string, { bg: string; fg: string; icon: typeof Check }>
   rejected: { bg: 'rgba(225,29,72,0.12)', fg: '#E11D48', icon: ThumbsDown },
 };
 
+// Builder League identity — same acid yellow, cream and heat orange the league
+// screen uses. The rest of the app is white monochrome; this page is not.
+const LEAGUE_YELLOW = '#FBE618';
+const INK = '#111111';
+const HEAT = '#FF4D2E';
+
+const medal = (index: number) => {
+  if (index === 0) return { bg: LEAGUE_YELLOW, fg: INK, label: '1ST' };
+  if (index === 1) return { bg: '#D7DCE3', fg: INK, label: '2ND' };
+  if (index === 2) return { bg: '#E08A3A', fg: INK, label: '3RD' };
+  return { bg: 'rgba(251,230,24,0.14)', fg: LEAGUE_YELLOW, label: `#${index + 1}` };
+};
+
 const BAR_PALETTE = ['#16A34A', '#3B82F6', '#8B5CF6', '#F59E0B', '#EC4899'];
 
 export default function CampaignsScreen({ navigation }: any) {
   const { user, profile, webSubscription } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  // League surfaces: cream, not white. Cards are solid, not glass.
+  const bg = isDark ? '#0B0B0B' : '#F6F4EA';
+  const cardBg = isDark ? '#161616' : '#FFFFFF';
+  const border = isDark ? '#2A2A2A' : '#EFEFEF';
 
   const [account, setAccount] = useState<CampaignsAccount | null>(null);
   const [loadingAccount, setLoadingAccount] = useState(true);
@@ -356,80 +374,101 @@ export default function CampaignsScreen({ navigation }: any) {
   // ─── Dashboard ─────────────────────────────────────────────
   const renderDashboard = () => (
     <View>
-      {/* Metrics overview */}
-      <View style={[s.metricsCard, liquidGlass(isDark, false)]}>
-        <View style={s.metricsTop}>
-          <View style={s.livePulse}>
-            <View style={s.liveDot} />
-            <Text style={[s.liveLabel, { color: textColor(isDark) }]}>{trialLabel || 'Campaigns Live'}</Text>
-          </View>
-          <Text style={[s.slotLabel, { color: textColor(isDark, 'muted') }]}>
-            {liveCount}/{MAX_ACTIVE_CAMPAIGNS} slots
-          </Text>
+      {/* The arena — the same acid-yellow hero block the Builder League opens with */}
+      <View style={s.arena}>
+        <View style={s.liveRow}>
+          <View style={s.liveDot} />
+          <Text style={s.liveText}>LIVE CAMPAIGNS</Text>
+          <Megaphone size={12} color={INK} />
         </View>
-        <View style={s.metricsGrid}>
-          <View style={s.metricCell}>
-            <Text style={[s.metricVal, { color: textColor(isDark) }]}>{compactNumber(totalImpressions)}</Text>
-            <Text style={[s.metricLbl, { color: textColor(isDark, 'muted') }]}>Impressions</Text>
+        <Text style={s.arenaTitle}>Your product is in the deck</Text>
+        <Text style={s.arenaSub}>
+          Sponsored cards running across Idea Deck, Discover, Search, Hub and Linky picks.
+        </Text>
+        <View style={s.statRow}>
+          <View style={s.statChip}>
+            <Eye size={13} color={INK} />
+            <Text style={s.statText}>{compactNumber(totalImpressions)} views</Text>
           </View>
-          <View style={[s.metricSep, { backgroundColor: textColor(isDark, 'muted') + '18' }]} />
-          <View style={s.metricCell}>
-            <Text style={[s.metricVal, { color: textColor(isDark) }]}>{compactNumber(totalClicks)}</Text>
-            <Text style={[s.metricLbl, { color: textColor(isDark, 'muted') }]}>Clicks</Text>
-          </View>
-          <View style={[s.metricSep, { backgroundColor: textColor(isDark, 'muted') + '18' }]} />
-          <View style={s.metricCell}>
-            <Text style={[s.metricVal, { color: textColor(isDark) }]}>{totalCtr}</Text>
-            <Text style={[s.metricLbl, { color: textColor(isDark, 'muted') }]}>CTR</Text>
+          <View style={s.statChip}>
+            <MousePointerClick size={13} color={INK} />
+            <Text style={s.statText}>{compactNumber(totalClicks)} clicks</Text>
           </View>
         </View>
-        <View style={[s.capacityTrack, { backgroundColor: textColor(isDark, 'muted') + '18' }]}>
-          <View style={[s.capacityFill, { width: `${capacityPct}%`, backgroundColor: capacityPct >= 100 ? '#E11D48' : capacityPct >= 66 ? '#D97706' : '#16A34A' }]} />
+        <View style={[s.statRow, { marginTop: 8 }]}>
+          <View style={s.statChip}>
+            <TrendingUp size={13} color={INK} />
+            <Text style={s.statText}>{totalCtr} ctr</Text>
+          </View>
+          <View style={s.statChip}>
+            <Flame size={13} color={HEAT} />
+            <Text style={s.statText}>{liveCount}/{MAX_ACTIVE_CAMPAIGNS} slots live</Text>
+          </View>
         </View>
-        <Text style={[s.capacityHint, { color: textColor(isDark, 'muted') }]}>{capacityPct}% capacity used</Text>
       </View>
 
-      {/* Share of voice chart */}
+      {/* Slot capacity — league heat-track styling */}
+      <View style={[s.card, { backgroundColor: cardBg, borderColor: border }]}>
+        <View style={s.cardTop}>
+          <Text style={[s.cardTitle, { color: textColor(isDark) }]}>Slot capacity</Text>
+          <Text style={[s.cardValue, { color: textColor(isDark) }]}>{capacityPct}%</Text>
+        </View>
+        <View style={[s.heatTrack, { backgroundColor: HEAT + '1F' }]}>
+          <View style={[s.heatFill, { width: `${capacityPct}%` }]} />
+        </View>
+        <Text style={[s.cardHint, { color: textColor(isDark, 'muted') }]}>
+          {liveCount} of {MAX_ACTIVE_CAMPAIGNS} slots in use — pause one to free a slot.
+        </Text>
+      </View>
+
+      {/* Share of voice — the league's ranked heat rows */}
       {shareOfVoice.length > 0 && (
-        <View style={[s.chartCard, liquidGlass(isDark, false)]}>
-          <View style={s.chartHeader}>
-            <BarChart3 size={14} color={COLORS.primaryStrong} />
-            <Text style={[s.chartTitle, { color: textColor(isDark) }]}>Share of Voice</Text>
-          </View>
-          {shareOfVoice.map((entry) => (
-            <View key={entry.id} style={s.barRow}>
-              <Text style={[s.barName, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>{entry.name}</Text>
-              <View style={s.barTrack}>
-                <View style={[s.barFill, { width: `${Math.max(3, Math.round((entry.views / shareLead) * 100))}%`, backgroundColor: entry.color }]} />
-              </View>
-              <Text style={[s.barVal, { color: textColor(isDark, 'muted') }]}>{compactNumber(entry.views)}</Text>
-            </View>
-          ))}
+        <View>
+          <Text style={[s.sectionLabel, { color: textColor(isDark) }]}>SHARE OF VOICE</Text>
+          {shareOfVoice.map((entry, index) => {
+            const chip = medal(index);
+            return (
+              <TouchableOpacity
+                key={entry.id}
+                activeOpacity={0.88}
+                onPress={() => navigation.navigate('CampaignDetail', { campaignId: entry.id })}
+                style={[s.row, { backgroundColor: cardBg, borderColor: index === 0 ? LEAGUE_YELLOW : border }]}
+              >
+                <View style={[s.rankBox, { backgroundColor: chip.bg }]}>
+                  <Text style={[s.rankText, { color: chip.fg }]}>{chip.label}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.name, { color: textColor(isDark) }]} numberOfLines={1}>{entry.name}</Text>
+                  <Text style={s.meta} numberOfLines={1}>{compactNumber(entry.views)} impressions</Text>
+                  <View style={[s.heatTrack, { marginTop: 8 }]}>
+                    <View style={[s.heatFill, { width: `${Math.max(3, Math.round((entry.views / shareLead) * 100))}%` }]} />
+                  </View>
+                </View>
+                <View style={s.heatCol}>
+                  <Flame size={14} color={HEAT} />
+                  <Text style={s.heatNum}>{compactNumber(entry.views)}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
 
-      {/* New campaign */}
       <TouchableOpacity
         style={[s.ctaBtn, liveCount >= MAX_ACTIVE_CAMPAIGNS && s.ctaDisabled]}
         activeOpacity={0.86}
         disabled={liveCount >= MAX_ACTIVE_CAMPAIGNS}
         onPress={() => navigation.navigate('CreateCampaign')}
       >
-        <Plus size={16} color="#FFF" />
+        <Plus size={16} color={INK} />
         <Text style={s.ctaText}>New Campaign</Text>
       </TouchableOpacity>
-      {liveCount >= MAX_ACTIVE_CAMPAIGNS && (
-        <Text style={[s.capHint, { color: textColor(isDark, 'muted') }]}>
-          All {MAX_ACTIVE_CAMPAIGNS} slots in use — pause one to free a slot.
-        </Text>
-      )}
 
-      {/* Campaign list */}
-      <Text style={[s.sectionLabel, { color: textColor(isDark, 'muted') }]}>MY CAMPAIGNS</Text>
+      <Text style={[s.sectionLabel, { color: textColor(isDark), marginTop: 18 }]}>MY CAMPAIGNS</Text>
 
       {campaigns.length === 0 ? (
-        <View style={[s.emptyCard, liquidGlass(isDark, false)]}>
-          <Megaphone size={20} color={COLORS.primaryStrong} />
+        <View style={[s.emptyCard, { backgroundColor: cardBg, borderColor: border }]}>
+          <Megaphone size={22} color={LEAGUE_YELLOW} />
           <Text style={[s.emptyTitle, { color: textColor(isDark) }]}>No campaigns yet</Text>
           <Text style={[s.emptySub, { color: textColor(isDark, 'muted') }]}>
             Put your product in the deck where founders decide what to build next.
@@ -442,6 +481,10 @@ export default function CampaignsScreen({ navigation }: any) {
           const StatusIcon = sc.icon;
           const logo = campaign.creative?.logoUrl || '';
           const ctr = ctrFor(campaign.statsImpressions || 0, campaign.statsClicks || 0);
+          const reachPct =
+            totalImpressions > 0
+              ? Math.max(2, Math.min(100, Math.round(((campaign.statsImpressions || 0) / totalImpressions) * 100)))
+              : 0;
 
           const togglePause = () => {
             const next = campaign.status === 'active' ? 'paused' : 'active';
@@ -453,47 +496,36 @@ export default function CampaignsScreen({ navigation }: any) {
           return (
             <TouchableOpacity
               key={campaign.id}
-              activeOpacity={0.86}
+              activeOpacity={0.88}
               onPress={() => navigation.navigate('CampaignDetail', { campaignId: campaign.id })}
-              style={[s.campCard, liquidGlass(isDark, false)]}
+              style={[s.row, { backgroundColor: cardBg, borderColor: campaign.status === 'active' ? LEAGUE_YELLOW : border }]}
             >
-              <View style={s.campTop}>
-                <View style={s.campLogoWrap}>
-                  {logo ? (
-                    <Image source={{ uri: ikAvatar(logo) }} style={s.campLogo} resizeMode="cover" />
-                  ) : (
-                    <Package size={16} color={COLORS.primaryStrong} />
-                  )}
+              <View style={[s.rankBox, { backgroundColor: sc.bg }]}>
+                <StatusIcon size={14} color={sc.fg} />
+              </View>
+              {logo ? (
+                <Image source={{ uri: ikAvatar(logo) }} style={s.avatar} resizeMode="cover" />
+              ) : (
+                <View style={[s.avatar, s.avatarFallback]}>
+                  <Package size={16} color={LEAGUE_YELLOW} />
                 </View>
-                <View style={s.campInfo}>
-                  <Text style={[s.campName, { color: textColor(isDark) }]} numberOfLines={1}>
+              )}
+              <View style={{ flex: 1 }}>
+                <View style={s.nameRow}>
+                  <Text style={[s.name, { color: textColor(isDark) }]} numberOfLines={1}>
                     {campaign.creative?.productName || campaign.creative?.title || campaign.name}
                   </Text>
-                  <Text style={[s.campMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
-                    {placementsLabel(campaign) || 'Idea Deck'}
-                  </Text>
                 </View>
-                <View style={[s.statusChip, { backgroundColor: sc.bg }]}>
-                  <StatusIcon size={9} color={sc.fg} />
-                  <Text style={[s.chipText, { color: sc.fg }]}>{meta.label}</Text>
+                <Text style={s.meta} numberOfLines={1}>
+                  {`${meta.label} · ${placementsLabel(campaign) || 'Idea Deck'}`}
+                </Text>
+                <View style={s.heatTrack}>
+                  <View style={[s.heatFill, { width: `${reachPct}%` }]} />
                 </View>
               </View>
-
-              <View style={s.campBottom}>
-                <View style={s.campStats}>
-                  <Text style={[s.campStatVal, { color: textColor(isDark) }]}>{ctr}</Text>
-                  <Text style={[s.campStatLbl, { color: textColor(isDark, 'muted') }]}>CTR</Text>
-                </View>
-                <View style={[s.campStatSep, { backgroundColor: textColor(isDark, 'muted') + '18' }]} />
-                <View style={s.campStats}>
-                  <Text style={[s.campStatVal, { color: textColor(isDark) }]}>{compactNumber(campaign.statsImpressions || 0)}</Text>
-                  <Text style={[s.campStatLbl, { color: textColor(isDark, 'muted') }]}>views</Text>
-                </View>
-                <View style={[s.campStatSep, { backgroundColor: textColor(isDark, 'muted') + '18' }]} />
-                <View style={s.campStats}>
-                  <Text style={[s.campStatVal, { color: textColor(isDark) }]}>{compactNumber(campaign.statsClicks || 0)}</Text>
-                  <Text style={[s.campStatLbl, { color: textColor(isDark, 'muted') }]}>clicks</Text>
-                </View>
+              <View style={s.statCol}>
+                <Text style={[s.statVal, { color: textColor(isDark) }]}>{ctr}</Text>
+                <Text style={s.statLbl}>CTR</Text>
                 <View style={s.campActions}>
                   {(campaign.status === 'active' || campaign.status === 'paused') && (
                     <TouchableOpacity onPress={togglePause} style={s.campActionBtn} activeOpacity={0.8}>
@@ -522,22 +554,35 @@ export default function CampaignsScreen({ navigation }: any) {
   // ─── Paywall ───────────────────────────────────────────────
   const renderPaywall = () => (
     <View>
-      <View style={s.payHero}>
-        <View style={s.payIconRow}>
-          <View style={s.payIconWrap}>
-            <Megaphone size={20} color="#FFF" />
-          </View>
-          <View style={s.trialBadge}>
-            <Sparkles size={10} color={COLORS.primaryStrong} />
-            <Text style={[s.trialBadgeText, { color: textColor(isDark) }]}>{`${trialForPlan(selectedCampaignsPlan).trialDays} DAYS FREE`}</Text>
-          </View>
+      <View style={s.arena}>
+        <View style={s.liveRow}>
+          <Sparkles size={11} color="#FFF" />
+          <Text style={s.liveText}>{`${trialForPlan(selectedCampaignsPlan).trialDays} DAYS FREE`}</Text>
         </View>
-        <Text style={[s.payTitle, { color: textColor(isDark) }]}>
-          Put your product in front of every founder
-        </Text>
-        <Text style={[s.paySub, { color: textColor(isDark, 'muted') }]}>
+        <Text style={s.arenaTitle}>Put your product in front of every founder</Text>
+        <Text style={s.arenaSub}>
           Sponsored cards placed natively across Idea Deck, Discover, Search, Hub and Linky's picks.
         </Text>
+        <View style={s.statRow}>
+          <View style={s.statChip}>
+            <Megaphone size={13} color={INK} />
+            <Text style={s.statText}>5 placements</Text>
+          </View>
+          <View style={s.statChip}>
+            <Eye size={13} color={INK} />
+            <Text style={s.statText}>Priority review</Text>
+          </View>
+        </View>
+        <View style={[s.statRow, { marginTop: 8 }]}>
+          <View style={s.statChip}>
+            <BarChart3 size={13} color={INK} />
+            <Text style={s.statText}>Live CTR stats</Text>
+          </View>
+          <View style={s.statChip}>
+            <Users size={13} color={INK} />
+            <Text style={s.statText}>Founders only</Text>
+          </View>
+        </View>
       </View>
 
       <View style={s.planRow}>
@@ -551,14 +596,14 @@ export default function CampaignsScreen({ navigation }: any) {
               key={plan.id}
               onPress={() => setSelectedPlan(plan.id)}
               activeOpacity={0.86}
-              style={[s.planCard, liquidGlass(isDark, false), selected && s.planCardSel]}
+              style={[s.planCard, { backgroundColor: cardBg, borderColor: selected ? LEAGUE_YELLOW : border }]}
             >
               <View style={s.planTop}>
                 <Text style={[s.planLabel, { color: textColor(isDark, 'muted') }]}>{plan.label}</Text>
                 {selected ? (
-                  <View style={s.planCheck}><Check size={10} color="#FFF" /></View>
+                  <View style={s.planCheck}><Check size={11} color={INK} /></View>
                 ) : (
-                  <Text style={[s.planBadge, { color: COLORS.primaryStrong }]}>{plan.badge}</Text>
+                  <View style={s.planBadge}><Text style={s.planBadgeText}>{plan.badge}</Text></View>
                 )}
               </View>
               <View style={s.planPriceRow}>
@@ -573,28 +618,26 @@ export default function CampaignsScreen({ navigation }: any) {
         })}
       </View>
 
-      <View style={[s.perksCard, liquidGlass(isDark, false)]}>
-        <Text style={[s.perksTitle, { color: textColor(isDark) }]}>Everything Included</Text>
+      <View style={[s.perksCard, { backgroundColor: cardBg, borderColor: border }]}>
+        <Text style={[s.perksTitle, { color: textColor(isDark) }]}>EVERYTHING INCLUDED</Text>
         {CAMPAIGNS_PERKS.map((perk) => (
           <View key={perk} style={s.perkRow}>
-            <CheckCircle2 size={14} color={COLORS.primaryStrong} />
+            <View style={s.perkDot}><Check size={10} color={INK} /></View>
             <Text style={[s.perkText, { color: textColor(isDark, 'secondary') }]}>{perk}</Text>
           </View>
         ))}
       </View>
 
       <TouchableOpacity
-        style={[s.ctaBtn, { backgroundColor: COLORS.primary }]}
+        style={s.ctaBtn}
         activeOpacity={0.86}
         onPress={handleStartCampaigns}
         disabled={purchaseBusy}
       >
         {purchaseBusy ? (
-          <ActivityIndicator color={COLORS.lightTextPrimary} />
+          <ActivityIndicator color={INK} />
         ) : (
-          <Text style={[s.ctaText, { color: COLORS.lightTextPrimary }]}>
-            {`Start ${trialForPlan(selectedCampaignsPlan).trialDays}-Day Free Trial`}
-          </Text>
+          <Text style={s.ctaText}>{`Start ${trialForPlan(selectedCampaignsPlan).trialDays}-Day Free Trial`}</Text>
         )}
       </TouchableOpacity>
       <TouchableOpacity onPress={handleRestore} style={s.restoreBtn} activeOpacity={0.8} disabled={purchaseBusy}>
@@ -609,39 +652,38 @@ export default function CampaignsScreen({ navigation }: any) {
     if (!admin) return null;
     return (
       <View>
-        <Text style={[s.sectionLabel, { color: textColor(isDark, 'muted'), marginTop: 16 }]}>
+        <Text style={[s.sectionLabel, { color: textColor(isDark), marginTop: 18 }]}>
           REVIEW QUEUE{pending.length > 0 ? ` · ${pending.length}` : ''}
         </Text>
         {pending.length === 0 ? (
           <Text style={[s.adminEmpty, { color: textColor(isDark, 'muted') }]}>Queue is clear</Text>
         ) : (
           pending.map((campaign) => (
-            <View key={campaign.id} style={[s.campCard, liquidGlass(isDark, false), { marginBottom: 8 }]}>
-              <View style={s.campTop}>
-                <View style={s.campLogoWrap}>
-                  {campaign.creative?.logoUrl ? (
-                    <Image source={{ uri: ikAvatar(campaign.creative.logoUrl) }} style={s.campLogo} resizeMode="cover" />
-                  ) : (
-                    <Package size={16} color={COLORS.primaryStrong} />
-                  )}
+            <View key={campaign.id} style={[s.row, { backgroundColor: cardBg, borderColor: border }]}>
+              <View style={[s.rankBox, { backgroundColor: STATUS_MAP.pending_review.bg }]}>
+                <Eye size={14} color={STATUS_MAP.pending_review.fg} />
+              </View>
+              {campaign.creative?.logoUrl ? (
+                <Image source={{ uri: ikAvatar(campaign.creative.logoUrl) }} style={s.avatar} resizeMode="cover" />
+              ) : (
+                <View style={[s.avatar, s.avatarFallback]}>
+                  <Package size={16} color={LEAGUE_YELLOW} />
                 </View>
-                <View style={s.campInfo}>
-                  <Text style={[s.campName, { color: textColor(isDark) }]} numberOfLines={1}>
-                    {campaign.creative?.productName || campaign.creative?.title || campaign.name}
-                  </Text>
-                  <Text style={[s.campMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
-                    {campaign.creative?.tagline || campaign.creative?.description}
-                  </Text>
-                  <Text style={[s.campMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
-                    by {campaign.ownerName}
-                  </Text>
-                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={[s.name, { color: textColor(isDark) }]} numberOfLines={1}>
+                  {campaign.creative?.productName || campaign.creative?.title || campaign.name}
+                </Text>
+                <Text style={s.meta} numberOfLines={1}>
+                  {campaign.creative?.tagline || campaign.creative?.description}
+                </Text>
+                <Text style={s.meta} numberOfLines={1}>{`by ${campaign.ownerName}`}</Text>
               </View>
               <View style={s.adminActions}>
                 <TouchableOpacity
                   onPress={() => moderate(campaign, 'active')}
                   disabled={moderationBusy === campaign.id}
-                  style={[s.adminBtn, { backgroundColor: 'rgba(22,163,74,0.12)' }]}
+                  style={[s.adminBtn, { backgroundColor: 'rgba(22,163,74,0.14)' }]}
                 >
                   {moderationBusy === campaign.id
                     ? <ActivityIndicator size="small" color="#16A34A" />
@@ -650,9 +692,9 @@ export default function CampaignsScreen({ navigation }: any) {
                 <TouchableOpacity
                   onPress={() => { setRejectTarget(campaign); setRejectReason(''); }}
                   disabled={moderationBusy === campaign.id}
-                  style={[s.adminBtn, { backgroundColor: 'rgba(220,38,38,0.10)' }]}
+                  style={[s.adminBtn, { backgroundColor: 'rgba(255,77,46,0.14)' }]}
                 >
-                  <ThumbsDown size={14} color="#DC2626" />
+                  <ThumbsDown size={14} color={HEAT} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -663,22 +705,20 @@ export default function CampaignsScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={[s.container, appBackground(isDark)]}>
-      <ScreenHeader
-        title="Campaigns"
-        subtitle={
-          hasPlan
-            ? `${liveCount} of ${MAX_ACTIVE_CAMPAIGNS} live · ${compactNumber(totalImpressions)} views`
-            : 'Advertise your product to every founder on LinkUp'
-        }
-        onBack={() => navigation.goBack()}
-        isDark={isDark}
-      />
+    <SafeAreaView edges={['top']} style={[s.container, { backgroundColor: bg }]}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backButton}>
+          <ChevronLeft size={22} color={textColor(isDark)} />
+        </TouchableOpacity>
+        <Text style={[s.headerTitle, { color: textColor(isDark) }]}>CAMPAIGNS</Text>
+        <ProCrownBadge />
+        <View style={s.headerSpacer} />
+      </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {loadingAccount ? (
           <View style={s.center}>
-            <ActivityIndicator color={COLORS.primaryStrong} />
+            <ActivityIndicator color={LEAGUE_YELLOW} />
           </View>
         ) : hasPlan ? (
           renderDashboard()
@@ -690,7 +730,7 @@ export default function CampaignsScreen({ navigation }: any) {
 
       <Modal visible={!!rejectTarget} transparent animationType="fade" onRequestClose={() => setRejectTarget(null)}>
         <View style={s.modalBackdrop}>
-          <View style={[s.modalCard, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+          <View style={[s.modalCard, { backgroundColor: cardBg, borderColor: border }]}>
             <Text style={[s.modalTitle, { color: textColor(isDark) }]}>Reject this campaign?</Text>
             <Text style={[s.modalSub, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
               {rejectTarget?.creative?.productName || rejectTarget?.creative?.title || rejectTarget?.name || 'Untitled'}
@@ -703,8 +743,8 @@ export default function CampaignsScreen({ navigation }: any) {
               placeholderTextColor={textColor(isDark, 'muted')}
               multiline maxLength={280}
               style={[s.rejectInput, {
-                backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec,
-                borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder,
+                backgroundColor: isDark ? '#0B0B0B' : '#F6F4EA',
+                borderColor: border,
                 color: textColor(isDark),
               }]}
             />
@@ -725,121 +765,231 @@ export default function CampaignsScreen({ navigation }: any) {
 const s = StyleSheet.create({
   container: { flex: 1 },
   center: { paddingVertical: 80, alignItems: 'center', justifyContent: 'center' },
-  scroll: { paddingHorizontal: 20, paddingBottom: 48, gap: 10 },
+  scroll: { paddingHorizontal: 16, paddingBottom: 60, gap: 10 },
 
-  /* ── Metrics card ──────────────────────── */
-  metricsCard: { borderRadius: 16, padding: 16, gap: 14, marginBottom: 2 },
-  metricsTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  livePulse: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#16A34A' },
-  liveLabel: { fontSize: 13, fontWeight: '700' },
-  slotLabel: { fontSize: 11, fontWeight: '700' },
-  metricsGrid: { flexDirection: 'row', alignItems: 'center' },
-  metricCell: { flex: 1, alignItems: 'center' },
-  metricSep: { width: 1, height: 28 },
-  metricVal: { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
-  metricLbl: { marginTop: 2, fontSize: 10, fontWeight: '600' },
-  capacityTrack: { height: 4, borderRadius: 2, overflow: 'hidden' },
-  capacityFill: { height: 4, borderRadius: 2 },
-  capacityHint: { fontSize: 10, fontWeight: '600' },
+  /* ── Header (Builder League) ───────────── */
+  header: {
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  headerSpacer: { width: 42, height: 42 },
+  headerTitle: { fontSize: 13, fontWeight: '900', letterSpacing: 2 },
 
-  /* ── Chart card ────────────────────────── */
-  chartCard: { borderRadius: 16, padding: 16, gap: 12, marginBottom: 2 },
-  chartHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  chartTitle: { fontSize: 13, fontWeight: '700' },
-  barRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  barName: { width: 80, fontSize: 11, fontWeight: '600' },
-  barTrack: { flex: 1, height: 8, borderRadius: 4, overflow: 'hidden', backgroundColor: 'transparent' },
-  barFill: { height: 8, borderRadius: 4 },
-  barVal: { width: 36, textAlign: 'right', fontSize: 10, fontWeight: '700' },
+  /* ── The arena (acid-yellow hero) ──────── */
+  arena: {
+    marginTop: 4,
+    borderRadius: 22,
+    backgroundColor: LEAGUE_YELLOW,
+    padding: 18,
+  },
+  liveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#111',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FF3B30' },
+  liveText: { color: '#FFF', fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
+  arenaTitle: {
+    marginTop: 14,
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#111',
+    letterSpacing: -0.8,
+    lineHeight: 30,
+  },
+  arenaSub: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#3A3A3A',
+    lineHeight: 18,
+  },
+  statRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  statChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  statText: { fontSize: 11, fontWeight: '800', color: '#111' },
+
+  /* ── Plain card ────────────────────────── */
+  card: { borderRadius: 18, borderWidth: 1, padding: 14, gap: 10 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardTitle: { fontSize: 13, fontWeight: '900', letterSpacing: -0.2 },
+  cardValue: { fontSize: 13, fontWeight: '900' },
+  cardHint: { fontSize: 11, fontWeight: '700', lineHeight: 16 },
+
+  /* ── Heat track (league bar) ───────────── */
+  heatTrack: {
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,77,46,0.12)',
+    overflow: 'hidden',
+  },
+  heatFill: { height: '100%', backgroundColor: HEAT, borderRadius: 999 },
+  heatCol: { alignItems: 'center', width: 40 },
+  heatNum: { marginTop: 2, fontSize: 12, fontWeight: '900', color: HEAT },
 
   /* ── Section labels ────────────────────── */
-  sectionLabel: { marginTop: 12, marginBottom: 4, fontSize: 10, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' },
+  sectionLabel: { marginTop: 12, marginBottom: 8, fontSize: 11, fontWeight: '900', letterSpacing: 1.6 },
 
-  /* ── Campaign cards ────────────────────── */
-  campCard: { borderRadius: 14, padding: 14, gap: 12, marginBottom: 8 },
-  campTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  campLogoWrap: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: COLORS.primaryGlow,
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  /* ── Ranked rows ───────────────────────── */
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 10,
   },
-  campLogo: { width: '100%', height: '100%' },
-  campInfo: { flex: 1, minWidth: 0 },
-  campName: { fontSize: 13, fontWeight: '700', letterSpacing: -0.1 },
-  campMeta: { marginTop: 1, fontSize: 11, fontWeight: '500' },
-  statusChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999 },
-  chipText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase' },
-  campBottom: { flexDirection: 'row', alignItems: 'center' },
-  campStats: { flex: 1, alignItems: 'center' },
-  campStatVal: { fontSize: 13, fontWeight: '800' },
-  campStatLbl: { marginTop: 1, fontSize: 9, fontWeight: '600' },
-  campStatSep: { width: 1, height: 16 },
-  campActions: { flexDirection: 'row', gap: 6 },
-  campActionBtn: { width: 30, height: 30, borderRadius: 9, backgroundColor: COLORS.primaryGlow, alignItems: 'center', justifyContent: 'center' },
+  rankBox: {
+    minWidth: 46,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  rankText: { fontSize: 11, fontWeight: '900' },
+  avatar: { width: 48, height: 48, borderRadius: 16, borderWidth: 2, borderColor: LEAGUE_YELLOW },
+  avatarFallback: {
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  name: { fontSize: 14, fontWeight: '900', flexShrink: 1 },
+  meta: { marginTop: 2, fontSize: 11, fontWeight: '700', color: '#777' },
+  statCol: { alignItems: 'center', width: 52 },
+  statVal: { fontSize: 13, fontWeight: '900' },
+  statLbl: { marginTop: 1, fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
+  campActions: { flexDirection: 'row', gap: 4, marginTop: 8 },
+  campActionBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   /* ── Empty ─────────────────────────────── */
-  emptyCard: { borderRadius: 16, padding: 28, alignItems: 'center', gap: 6 },
-  emptyTitle: { fontSize: 14, fontWeight: '700' },
-  emptySub: { fontSize: 12, fontWeight: '500', textAlign: 'center', lineHeight: 18 },
-
-  /* ── Paywall ───────────────────────────── */
-  payHero: { borderRadius: 16, padding: 18, marginBottom: 2 },
-  payIconRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  payIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.primaryStrong, alignItems: 'center', justifyContent: 'center' },
-  trialBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
-    backgroundColor: COLORS.primaryGlow, borderWidth: 1, borderColor: textColor(false, 'muted') + '20',
+  emptyCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 28,
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
   },
-  trialBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
-  payTitle: { marginTop: 14, fontSize: 20, lineHeight: 26, fontWeight: '800', letterSpacing: -0.3 },
-  paySub: { marginTop: 6, fontSize: 12, lineHeight: 18, fontWeight: '500' },
+  emptyTitle: { fontSize: 14, fontWeight: '900' },
+  emptySub: { fontSize: 12, fontWeight: '700', textAlign: 'center', lineHeight: 18 },
 
-  planRow: { flexDirection: 'row', gap: 8, marginBottom: 2 },
-  planCard: { flex: 1, borderRadius: 14, padding: 12, gap: 6, borderWidth: 1, borderColor: 'transparent' },
-  planCardSel: { borderColor: COLORS.primaryStrong, backgroundColor: COLORS.primaryGlow },
+  /* ── Plans ─────────────────────────────── */
+  planRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  planCard: { flex: 1, borderRadius: 18, borderWidth: 2, padding: 12, gap: 6 },
   planTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  planLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
-  planCheck: { width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.primaryStrong, alignItems: 'center', justifyContent: 'center' },
-  planBadge: { fontSize: 8, fontWeight: '800', letterSpacing: 0.4 },
+  planLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
+  planCheck: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: LEAGUE_YELLOW,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planBadge: {
+    backgroundColor: 'rgba(251,230,24,0.18)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  planBadgeText: { fontSize: 8, fontWeight: '900', color: LEAGUE_YELLOW, letterSpacing: 0.4 },
   planPriceRow: { flexDirection: 'row', alignItems: 'flex-end' },
-  planPrice: { fontSize: 20, lineHeight: 24, fontWeight: '800', letterSpacing: -0.5 },
-  planCadence: { fontSize: 10, fontWeight: '700', marginLeft: 2, marginBottom: 2 },
-  planHelper: { fontSize: 9, lineHeight: 13, fontWeight: '600' },
+  planPrice: { fontSize: 22, lineHeight: 26, fontWeight: '900', letterSpacing: -0.6 },
+  planCadence: { fontSize: 10, fontWeight: '800', marginLeft: 2, marginBottom: 3 },
+  planHelper: { fontSize: 9, lineHeight: 13, fontWeight: '700' },
 
-  perksCard: { borderRadius: 16, padding: 16, gap: 10, marginBottom: 2 },
-  perksTitle: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  /* ── Perks ─────────────────────────────── */
+  perksCard: { borderRadius: 18, borderWidth: 1, padding: 16, gap: 10, marginTop: 4 },
+  perksTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 1.6, marginBottom: 2 },
   perkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  perkText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: '500' },
+  perkDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 6,
+    marginTop: 2,
+    backgroundColor: LEAGUE_YELLOW,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  perkText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: '600' },
 
   /* ── CTA ───────────────────────────────── */
   ctaBtn: {
-    marginTop: 12, height: 48, borderRadius: 14,
-    backgroundColor: COLORS.inkButton,
-    alignItems: 'center', justifyContent: 'center',
-    flexDirection: 'row', gap: 8,
+    marginTop: 14,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: LEAGUE_YELLOW,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
-  ctaDisabled: { opacity: 0.5 },
-  ctaText: { fontSize: 13, fontWeight: '700', color: COLORS.inkButtonText },
-  capHint: { marginTop: 6, fontSize: 10, fontWeight: '600', textAlign: 'center' },
-  restoreBtn: { marginTop: 8, height: 36, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center' },
-  restoreText: { fontSize: 10, fontWeight: '700' },
+  ctaDisabled: { opacity: 0.4 },
+  ctaText: { fontSize: 13, fontWeight: '900', color: INK },
+  restoreBtn: { marginTop: 10, height: 36, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center' },
+  restoreText: { fontSize: 10, fontWeight: '800' },
 
   /* ── Admin ─────────────────────────────── */
-  adminEmpty: { fontSize: 11, fontWeight: '600' },
-  adminActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  adminBtn: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  adminEmpty: { fontSize: 11, fontWeight: '700', marginBottom: 10 },
+  adminActions: { flexDirection: 'row', gap: 6 },
+  adminBtn: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 
   /* ── Modal ─────────────────────────────── */
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  modalCard: { width: '100%', maxWidth: 400, borderRadius: 20, borderWidth: 1, padding: 20 },
-  modalTitle: { fontSize: 17, fontWeight: '800', letterSpacing: -0.2 },
-  modalSub: { marginTop: 4, fontSize: 12, lineHeight: 18, fontWeight: '600' },
-  rejectInput: { marginTop: 14, minHeight: 80, maxHeight: 140, borderRadius: 12, borderWidth: 1, padding: 12, fontSize: 13, lineHeight: 19, fontWeight: '500', textAlignVertical: 'top' },
-  rejectHint: { marginTop: 6, fontSize: 10, fontWeight: '700' },
-  rejectBtn: { marginTop: 14, height: 44, borderRadius: 12, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center' },
-  rejectBtnText: { color: '#FFF', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
+  modalCard: { width: '100%', maxWidth: 400, borderRadius: 22, borderWidth: 1, padding: 20 },
+  modalTitle: { fontSize: 18, fontWeight: '900', letterSpacing: -0.3 },
+  modalSub: { marginTop: 4, fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  rejectInput: {
+    marginTop: 14,
+    minHeight: 80,
+    maxHeight: 140,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
+    textAlignVertical: 'top',
+  },
+  rejectHint: { marginTop: 6, fontSize: 10, fontWeight: '800' },
+  rejectBtn: { marginTop: 14, height: 46, borderRadius: 14, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center' },
+  rejectBtnText: { color: '#FFF', fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
   cancelBtn: { marginTop: 10, height: 36, alignItems: 'center', justifyContent: 'center' },
-  cancelBtnText: { fontSize: 12, fontWeight: '700' },
+  cancelBtnText: { fontSize: 12, fontWeight: '800' },
 });
