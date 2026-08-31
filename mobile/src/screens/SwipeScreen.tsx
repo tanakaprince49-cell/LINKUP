@@ -1449,7 +1449,7 @@ export default function SwipeScreen({ navigation }: any) {
       toValue: { x: direction === 'right' ? deckExitDistanceRef.current : -deckExitDistanceRef.current, y: 0 },
       duration: 180,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
+      useNativeDriver: false,
     }).start(finish);
 
     setTimeout(finish, 220);
