@@ -14,9 +14,9 @@ contains the trial code.
 | Product ID | Name shown to user | Base plan | Price (USD) | Trial |
 |---|---|---|---|---|
 | `linkup_plus_monthly` | LINKUP PLUS Monthly | `plusmonthly` (auto-renew, **1 month**) | **$19.99** | 7 days |
-| `linkup_plus_yearly` | LINKUP PLUS Yearly | `plusyearly` (auto-renew, **1 year**) | **$149.99** | 7 days |
-| `linkup_campaigns_monthly` | LINKUP Campaigns Monthly | `campaignsmonthly` (auto-renew, **1 month**) | **$29.99** | 7 days |
-| `linkup_campaigns_yearly` | LINKUP Campaigns Yearly | `campaignsyearly` (auto-renew, **1 year**) | **$249.99** | 7 days |
+| `linkup_plus_yearly_2` | LINKUP PLUS Yearly | `plusyearly2` (auto-renew, **1 year**) | **$149.99** | 7 days |
+| `linkup_campaigns_monthly_2` | LINKUP Campaigns Monthly | `campaignsmonthly2` (auto-renew, **1 month**) | **$29.99** | 7 days |
+| `linkup_campaigns_yearly_2` | LINKUP Campaigns Yearly | `campaignsyearly2` (auto-renew, **1 year**) | **$249.99** | 7 days |
 
 > ### ⚠️ ID rules — read before you type anything
 >

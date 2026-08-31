@@ -31,7 +31,7 @@ import { IdeaDeckItem } from './ideas';
 // advertiser volume can never degrade the organic deck.
 // ---------------------------------------------------------------------------
 
-export const LINKUP_CAMPAIGNS_PRODUCT_ID = 'linkup_campaigns_monthly';
+export const LINKUP_CAMPAIGNS_PRODUCT_ID = 'linkup_campaigns_monthly_2';
 export const LINKUP_CAMPAIGNS_YEARLY_PRODUCT_ID = 'linkup_campaigns_yearly_2';
 export const LINKUP_CAMPAIGNS_MONTHLY_PRICE = formatUsd(CAMPAIGNS_PRICES.monthly);
 export const LINKUP_CAMPAIGNS_YEARLY_PRICE = formatUsd(CAMPAIGNS_PRICES.yearly);
