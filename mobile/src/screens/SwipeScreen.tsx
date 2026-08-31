@@ -1434,11 +1434,11 @@ export default function SwipeScreen({ navigation }: any) {
         easing: Easing.out(Easing.cubic),
         useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
       }),
-      Animated.timing(swipeExitProgress, {
+      Animated.spring(swipeExitProgress, {
         toValue: 0,
-        duration: 200,
-        easing: Easing.in(Easing.cubic),
-        useNativeDriver: false,
+        tension: 120,
+        friction: 8,
+        useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
       }),
     ]).start(finishSwipe);
 
