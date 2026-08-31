@@ -743,10 +743,20 @@ export default function SwipeScreen({ navigation }: any) {
     settleScroll();
     isScrollAnimatingRef.current = true;
     scrollPosition.setValue(from);
-    Animated.spring(scrollPosition, {
-      toValue: 0, friction: 9, useNativeDriver: false,
-    }).start(() => settleScroll());
-    scrollAnimTimerRef.current = setTimeout(settleScroll, SCROLL_STEP_MS);
+    Animated.timing(scrollPosition, {
+      toValue: 0,
+      duration: 250,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start(() => {
+      scrollPosition.setValue(0);
+      isScrollAnimatingRef.current = false;
+    });
+    // Force reset after animation completes to prevent stuck position
+    setTimeout(() => {
+      scrollPosition.setValue(0);
+      isScrollAnimatingRef.current = false;
+    }, 300);
   };
 
   const springScrollBack = () => {
@@ -1840,7 +1850,7 @@ export default function SwipeScreen({ navigation }: any) {
           style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
           {...scrollPanResponder.panHandlers}
         >
-          <AppImage uri={ikCard(photos[0]) || FALLBACK_PHOTO} style={styles.scrollCardImg} />
+          <AppImage uri={ikCard(photos[0]) || FALLBACK_PHOTO} style={styles.scrollCardImg} transitionMs={0} />
           <View style={styles.scrollCardOverlay} />
           <View style={styles.scrollCardBody}>
             <View style={styles.scrollCardMeta}>
