@@ -52,6 +52,7 @@ import PaywallModal from '../components/PaywallModal';
 import { consumeWindowUsage, FREE_LIMITS, getWindowUsage, hasLinkupPro, PRO_FEATURES, SWIPE_USAGE_WINDOW_HOURS } from '../lib/paywall';
 import { compactProfileForList, storedProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
+import { Image as ExpoImage } from 'expo-image';
 import { ikAvatar, ikCard } from '../lib/ikImage';
 import { avatarPlaceholderUri } from '../lib/defaultAvatar';
 import ProCrownBadge from '../components/ProCrownBadge';
@@ -523,6 +524,28 @@ export default function SwipeScreen({ navigation }: any) {
   const scrollIndexRef = useRef(0);
   const feed = useMemo(() => profiles.filter(Boolean).slice(0, 100), [profiles]);
   const feedRef = useRef(feed);
+
+  // Push the next few faces into expo-image's cache the moment the deck
+  // changes. The deck deliberately reuses ONE card view (keying it on the uid
+  // made expo-image re-decode every photo and that was the old blink), and
+  // expo-image keeps painting the PREVIOUS photo until the new one is ready —
+  // so on a reused card the swap frame showed the person you just swiped,
+  // parked in the middle of the screen. That is the "Person A flashes at
+  // centre" report, and no amount of transform reordering can fix it, because
+  // the transform was never what was late.
+  //
+  // With the next photo already decoded, the card can blank its stale frame
+  // (recycle, below) and have the new face on screen immediately.
+  useEffect(() => {
+    const urls: string[] = [];
+    profiles.slice(0, 6).forEach((profile) => {
+      const first = getSwipePhotos(profile)[0];
+      if (!first) return;
+      const uri = ikCard(String(first));
+      if (uri) urls.push(uri);
+    });
+    if (urls.length) void ExpoImage.prefetch(urls).catch(() => {});
+  }, [profiles]);
   feedRef.current = feed;
   const profilesRef = useRef<UserProfile[]>(profiles);
   profilesRef.current = profiles;
@@ -741,7 +764,12 @@ export default function SwipeScreen({ navigation }: any) {
         else if (gestureState.dx < -swipeThresholdRef.current) animateSwipeOutRef.current('left');
         else resetSwipePositionRef.current();
       },
-      onPanResponderTerminate: () => resetSwipePositionRef.current(),
+      // A swipe-out in flight must never be re-centred by a termination —
+      // that springs the outgoing person back to the middle of the screen.
+      onPanResponderTerminate: () => {
+        if (isAnimatingRef.current) return;
+        resetSwipePositionRef.current();
+      },
       onPanResponderTerminationRequest: () => false,
     })
   ).current;
@@ -1435,6 +1463,15 @@ export default function SwipeScreen({ navigation }: any) {
       if (done) return;
       done = true;
       swipePosition.stopAnimation();
+      // Hide the card for the duration of the swap as well. Two independent
+      // guards, because the flash survived each one alone:
+      //   1. no re-centring outside a React commit (the useLayoutEffect below
+      //      does it in the same commit as the new profile), and
+      //   2. the card is invisible from here until that commit lands, so even
+      //      if a frame sneaks through it cannot show the outgoing person.
+      // While it is hidden the preview underneath is boosted to full opacity
+      // (previewCoverBoost), so the next face is on screen the whole time.
+      topCardReveal.setValue(0);
       // Do NOT call swipePosition.setValue here — React has not committed the
       // new profiles[0] yet, so resetting position now would render the OLD
       // profile at center for one frame.  The useLayoutEffect watching
@@ -1597,7 +1634,7 @@ export default function SwipeScreen({ navigation }: any) {
           },
         ]}
       >
-        <AppImage uri={ikCard(photos[0]) || FALLBACK_PHOTO} style={[styles.cardImg, styles.faceFocusedImg]} transitionMs={0} />
+        <AppImage uri={ikCard(photos[0]) || FALLBACK_PHOTO} style={[styles.cardImg, styles.faceFocusedImg]} transitionMs={0} recycle />
         <View style={styles.previewOverlay} pointerEvents="none" />
         <View style={styles.previewInfo}>
           <Text style={styles.previewEyebrow}>Up next</Text>
@@ -1810,7 +1847,7 @@ export default function SwipeScreen({ navigation }: any) {
           <Text style={[styles.badgeText, { color: '#FF4444' }]}>NOPE</Text>
         </Animated.View>
 
-        <AppImage uri={ikCard(photos[safeIndex]) || FALLBACK_PHOTO} style={[styles.cardImg, styles.faceFocusedImg]} transitionMs={0} />
+        <AppImage uri={ikCard(photos[safeIndex]) || FALLBACK_PHOTO} style={[styles.cardImg, styles.faceFocusedImg]} transitionMs={0} recycle />
         <View style={[styles.cardOverlay, infoExpanded && styles.cardOverlayExpanded]} pointerEvents="none" />
 
         <View style={[styles.cardInfo, isCompactWeb && styles.compactCardInfo]}>
@@ -1981,7 +2018,7 @@ export default function SwipeScreen({ navigation }: any) {
           style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
           {...scrollPanResponder.panHandlers}
         >
-          <AppImage uri={ikCard(photos[0]) || FALLBACK_PHOTO} style={styles.scrollCardImg} transitionMs={0} />
+          <AppImage uri={ikCard(photos[0]) || FALLBACK_PHOTO} style={styles.scrollCardImg} transitionMs={0} recycle />
           <View style={styles.scrollCardOverlay} />
           <View style={styles.scrollCardBody}>
             <View style={styles.scrollCardMeta}>
