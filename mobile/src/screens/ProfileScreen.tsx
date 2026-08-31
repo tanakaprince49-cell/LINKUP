@@ -27,7 +27,24 @@ import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import * as Icons from 'lucide-react-native';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { deleteDoc, deleteField, doc, getDoc, getDocFromCache, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  deleteDoc,
+  deleteField,
+  doc,
+  FieldPath,
+  getCountFromServer,
+  getDoc,
+  getDocFromCache,
+  getDocs,
+  limit,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import { trackProfileClick, trackProfileSave, trackProfileView } from '../lib/analytics';
 import { resolveConnectionGate, startTalkOrRequest, subscribeToConnectionGate, type ConnectionGate } from '../lib/connectionRequests';
 import { useConnectionNote } from '../components/ConnectionNoteModal';
@@ -92,6 +109,36 @@ const Badge = ({ name, iconName, color = COLORS.primaryStrong }: { name: string,
 };
 
 const clampScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
+
+/**
+ * Chats you have answered, as a percentage: of every conversation that has a
+ * message in it at all, the ones you are not sitting on unread.
+ *
+ * Returns -1 when there is nothing to sample (no conversations), so the caller
+ * can fall back to the reputation estimate instead of reporting that you
+ * ignore 100% of the people who write to you.
+ */
+const sampleResponseRate = async (uid: string) => {
+  try {
+    const snapshot = await getDocs(
+      query(collection(db, 'matches'), where(new FieldPath('participants', uid), '==', true), limit(200))
+    );
+    let asked = 0;
+    let answered = 0;
+    snapshot.forEach((matchDoc) => {
+      const data = matchDoc.data() as any;
+      if (!data.lastMessage && !data.lastMessageTime) return;
+      asked += 1;
+      if (Number(data.unreadBy?.[uid] || 0) <= 0) answered += 1;
+    });
+    return asked > 0 ? Math.round((answered / asked) * 100) : -1;
+  } catch (error) {
+    if (!isPermissionDenied(error)) {
+      console.warn('Founder dashboard: response rate unavailable:', error);
+    }
+    return -1;
+  }
+};
 
 const earnedReputation = (profile: any) => {
   const skills = Array.isArray(profile?.skills) ? profile.skills : [];
@@ -352,6 +399,15 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [profileClickCount, setProfileClickCount] = useState(0);
   const [profileSaveCount, setProfileSaveCount] = useState(0);
   const [profileResponseRate, setProfileResponseRate] = useState(0);
+  // Live tallies counted from the very collections the Viewers screen reads.
+  // The counters stored on the profile doc (profileClicks / profileSaves / …)
+  // were never kept in step with those collections, so the founder dashboard
+  // sat on 0 while tapping through listed everybody. -1 on response rate means
+  // "nothing to sample yet", so the reputation estimate can stand in.
+  const [liveViewCount, setLiveViewCount] = useState(0);
+  const [liveClickCount, setLiveClickCount] = useState(0);
+  const [liveSaveCount, setLiveSaveCount] = useState(0);
+  const [liveResponseRate, setLiveResponseRate] = useState(-1);
   const [newAccountEmail, setNewAccountEmail] = useState('');
   const [accountActionBusy, setAccountActionBusy] = useState('');
   const [subscriptionActionBusy, setSubscriptionActionBusy] = useState('');
@@ -619,6 +675,43 @@ export default function ProfileScreen({ navigation, route }: any) {
   ]);
 
   useEffect(() => {
+    if (isViewingOther || !isFocused || !myProfile?.uid) return;
+
+    let cancelled = false;
+    const uid = myProfile.uid;
+
+    const countWhere = async (collectionName: string, field: string) => {
+      try {
+        const snapshot = await getCountFromServer(query(collection(db, collectionName), where(field, '==', uid)));
+        return Number(snapshot.data()?.count || 0) || 0;
+      } catch (error) {
+        if (!isPermissionDenied(error)) {
+          console.warn(`Founder dashboard: ${collectionName} count unavailable:`, error);
+        }
+        return 0;
+      }
+    };
+
+    void (async () => {
+      const [views, clicks, saves, response] = await Promise.all([
+        countWhere('profileViews', 'profileId'),
+        countWhere('profileClicks', 'profileId'),
+        countWhere('savedProfiles', 'profileId'),
+        sampleResponseRate(uid),
+      ]);
+      if (cancelled) return;
+      setLiveViewCount(views);
+      setLiveClickCount(clicks);
+      setLiveSaveCount(saves);
+      setLiveResponseRate(response);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isFocused, isViewingOther, myProfile?.uid]);
+
+  useEffect(() => {
     if (!isFocused || !isViewingOther || !myProfile?.uid || !targetUserId) {
       setIsProfileSaved(false);
       return;
@@ -661,22 +754,30 @@ export default function ProfileScreen({ navigation, route }: any) {
     : {};
   const visibleProfileViewCount = Math.max(
     profileViewCount,
+    liveViewCount,
     Array.isArray((profile as any)?.viewedBy) ? (profile as any)?.viewedBy.length : 0,
     Number((profile as any)?.profileViews || profileAnalytics.views || 0) || 0
   );
   const visibleProfileClickCount = Math.max(
     profileClickCount,
+    liveClickCount,
     Number((profile as any)?.profileClicks || (profile as any)?.clicks || profileAnalytics.clicks || 0) || 0
   );
   const visibleProfileSaveCount = Math.max(
     profileSaveCount,
+    liveSaveCount,
     Number((profile as any)?.profileSaves || (profile as any)?.saves || profileAnalytics.saves || 0) || 0
   );
   const fallbackResponseRate = clampScore(Math.max(
     earnedRep.responseRate,
     Number((profile as any)?.responseRate || profileAnalytics.responseRate || 0) || 0
   ));
-  const visibleResponseRate = clampScore(Math.max(profileResponseRate, fallbackResponseRate));
+  // A real sample beats the reputation estimate; with no conversations at all
+  // there is nothing to sample, so the estimate stands in rather than claiming
+  // you ignore everybody.
+  const visibleResponseRate = clampScore(
+    liveResponseRate >= 0 ? liveResponseRate : Math.max(profileResponseRate, fallbackResponseRate)
+  );
   const firestoreSettings = ((profile as any)?.settings && typeof (profile as any)?.settings === 'object') ? (profile as any)?.settings : {};
 
   useEffect(() => {
