@@ -83,7 +83,7 @@ const windowUsageKey = (uid: string, feature: string) => `linkup:free-window-usa
 const proEntitlementKey = (uid: string) => `linkup:pro-entitlement:${uid || 'anonymous'}`;
 export const GOOGLE_PLAY_PACKAGE_NAME = 'com.tana.linkup';
 export const LINKUP_PLUS_PRODUCT_ID = 'linkup_plus_monthly';
-export const LINKUP_PLUS_YEARLY_PRODUCT_ID = 'linkup_plus_yearly_2';
+export const LINKUP_PLUS_YEARLY_PRODUCT_ID = 'linkup_plus_yearly';
 export const LINKUP_PLUS_MONTHLY_PRICE = formatUsd(PLUS_PRICES.monthly);
 export const LINKUP_PLUS_YEARLY_PRICE = formatUsd(PLUS_PRICES.yearly);
 export const GOOGLE_PLAY_SUBSCRIPTION_URL =
