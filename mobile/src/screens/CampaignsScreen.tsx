@@ -550,11 +550,11 @@ export default function CampaignsScreen({ navigation }: any) {
         <View style={s.payHeroGlow} />
         <View style={s.payIconRow}>
           <View style={s.payIconWrap}>
-            <Megaphone size={24} color={COLORS.primaryStrong} />
+            <Megaphone size={24} color="#FFF" />
           </View>
           <View style={s.trialBadge}>
             <Sparkles size={10} color={COLORS.primaryStrong} />
-            <Text style={s.trialBadgeText}>{`${trialForPlan(selectedCampaignsPlan).trialDays} DAYS FREE`}</Text>
+            <Text style={[s.trialBadgeText, { color: textColor(isDark) }]}>{`${trialForPlan(selectedCampaignsPlan).trialDays} DAYS FREE`}</Text>
           </View>
         </View>
         <Text style={[s.payTitle, { color: textColor(isDark) }]}>
