@@ -518,6 +518,13 @@ export default function SwipeScreen({ navigation }: any) {
   const lastSwipedProfileRef = useRef<UserProfile | null>(null);
   const [mode, setMode] = useState<'swipe' | 'scroll'>('swipe');
   const [scrollIndex, setScrollIndex] = useState(0);
+  // Which of the card's two photo layers is on screen. A swipe flips it, so
+  // the layer that becomes visible was already rendering the incoming
+  // person's photo — see the photo stack in renderCard. This is the only way
+  // to beat the flash: a reused image view with a changed uri either holds
+  // the old pixels (wrong face) or blanks them (white), and prefetching only
+  // shortens that, it never removes it.
+  const [photoSlot, setPhotoSlot] = useState(0);
   const [cardVisible, setCardVisible] = useState(true);
   const scrollPosition = useRef(new Animated.Value(0)).current;
   const isScrollAnimatingRef = useRef(false);
@@ -1413,6 +1420,10 @@ export default function SwipeScreen({ navigation }: any) {
       if (current[0]?.uid === item.uid) return current.slice(1);
       return current.filter((profile) => profile.uid !== item.uid);
     });
+    // Same commit as the deck advance, so the new face is already on screen
+    // in the layer that was underneath. Never flip on the sponsored path:
+    // no profile moves there, so the visible layer keeps its own uri.
+    setPhotoSlot((slot) => (slot === 0 ? 1 : 0));
 
     if (direction === 'right') {
       void handleLike(item);
@@ -1634,7 +1645,7 @@ export default function SwipeScreen({ navigation }: any) {
           },
         ]}
       >
-        <AppImage uri={ikCard(photos[0]) || FALLBACK_PHOTO} style={[styles.cardImg, styles.faceFocusedImg]} transitionMs={0} recycle />
+        <AppImage uri={ikCard(photos[0]) || FALLBACK_PHOTO} style={[styles.cardImg, styles.faceFocusedImg]} transitionMs={0} />
         <View style={styles.previewOverlay} pointerEvents="none" />
         <View style={styles.previewInfo}>
           <Text style={styles.previewEyebrow}>Up next</Text>
@@ -1743,6 +1754,11 @@ export default function SwipeScreen({ navigation }: any) {
 
     const photos = getSwipePhotos(topProfile);
     const safeIndex = Math.min(activePhotoIndex, Math.max(0, photos.length - 1));
+    // The face on screen, and the face that is about to be — already mounted,
+    // already decoded, in the layer underneath.
+    const topPhotoUri = ikCard(photos[safeIndex]) || FALLBACK_PHOTO;
+    const nextPhotos = nextProfile ? getSwipePhotos(nextProfile) : [];
+    const nextPhotoUri = nextPhotos.length ? ikCard(nextPhotos[0]) || FALLBACK_PHOTO : FALLBACK_PHOTO;
     const ageText = Number(topProfile.age) > 0 ? `, ${topProfile.age}` : '';
     const locationText = [topProfile.city, topProfile.country].filter(Boolean).join(', ') || 'Remote';
     const roleText = [
@@ -1847,7 +1863,23 @@ export default function SwipeScreen({ navigation }: any) {
           <Text style={[styles.badgeText, { color: '#FF4444' }]}>NOPE</Text>
         </Animated.View>
 
-        <AppImage uri={ikCard(photos[safeIndex]) || FALLBACK_PHOTO} style={[styles.cardImg, styles.faceFocusedImg]} transitionMs={0} recycle />
+        {/* Two photo layers: one on screen, one preloaded directly beneath
+            it. A swipe flips which layer is visible — and the layer coming up
+            was already rendering the next person, so it has no uri to change
+            and nothing to load. The frame that used to go white (or show the
+            person you just swiped) now just changes which layer is opaque. */}
+        <View style={styles.photoStack} pointerEvents="none">
+          <AppImage
+            uri={photoSlot === 0 ? topPhotoUri : nextPhotoUri}
+            style={[styles.cardImg, styles.faceFocusedImg, styles.photoLayer, photoSlot === 0 ? styles.photoShown : styles.photoBuried]}
+            transitionMs={0}
+          />
+          <AppImage
+            uri={photoSlot === 1 ? topPhotoUri : nextPhotoUri}
+            style={[styles.cardImg, styles.faceFocusedImg, styles.photoLayer, photoSlot === 1 ? styles.photoShown : styles.photoBuried]}
+            transitionMs={0}
+          />
+        </View>
         <View style={[styles.cardOverlay, infoExpanded && styles.cardOverlayExpanded]} pointerEvents="none" />
 
         <View style={[styles.cardInfo, isCompactWeb && styles.compactCardInfo]}>
@@ -2001,6 +2033,14 @@ export default function SwipeScreen({ navigation }: any) {
     const profile = feed[Math.min(scrollIndex, feed.length - 1)];
     if (!profile) return renderEmpty();
     const photos = getSwipePhotos(profile);
+    // Same two-layer trick as the swipe card: the face that is coming up is
+    // already mounted and decoded in the buried layer, so advancing the feed
+    // never paints a blank. Scroll index parity picks the layer on top.
+    const scrollSlot = scrollIndex % 2;
+    const nextScrollProfile = feed[Math.min(scrollIndex + 1, feed.length - 1)];
+    const nextScrollPhotos = nextScrollProfile ? getSwipePhotos(nextScrollProfile) : [];
+    const curScrollUri = ikCard(photos[0]) || FALLBACK_PHOTO;
+    const nextScrollUri = nextScrollPhotos.length ? ikCard(nextScrollPhotos[0]) || FALLBACK_PHOTO : FALLBACK_PHOTO;
     const ageText = Number(profile.age) > 0 ? `, ${profile.age}` : '';
     const locationText = [profile.city, profile.country].filter(Boolean).join(', ') || 'Remote';
     const roleText = [
@@ -2018,7 +2058,18 @@ export default function SwipeScreen({ navigation }: any) {
           style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
           {...scrollPanResponder.panHandlers}
         >
-          <AppImage uri={ikCard(photos[0]) || FALLBACK_PHOTO} style={styles.scrollCardImg} transitionMs={0} recycle />
+          <View style={styles.photoStack} pointerEvents="none">
+            <AppImage
+              uri={scrollSlot === 0 ? curScrollUri : nextScrollUri}
+              style={[styles.scrollCardImg, scrollSlot === 0 ? styles.photoShown : styles.photoBuried]}
+              transitionMs={0}
+            />
+            <AppImage
+              uri={scrollSlot === 1 ? curScrollUri : nextScrollUri}
+              style={[styles.scrollCardImg, scrollSlot === 1 ? styles.photoShown : styles.photoBuried]}
+              transitionMs={0}
+            />
+          </View>
           <View style={styles.scrollCardOverlay} />
           <View style={styles.scrollCardBody}>
             <View style={styles.scrollCardMeta}>
@@ -2367,6 +2418,13 @@ const styles = StyleSheet.create({
     height: '100%',
     resizeMode: 'cover',
   },
+  // Two photo layers stacked, one opaque at a time. The buried one still
+  // mounts and decodes — that is the whole point: the incoming face is ready
+  // before it is needed, so flipping opacity needs no load and paints no gap.
+  photoStack: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  photoLayer: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
+  photoShown: { opacity: 1 },
+  photoBuried: { opacity: 0 },
   faceFocusedImg: {
     ...(Platform.OS === 'web' ? ({ objectPosition: 'center 18%' } as any) : null),
   },
