@@ -1430,19 +1430,12 @@ export default function SwipeScreen({ navigation }: any) {
     const finish = () => {
       if (done) return;
       done = true;
-      // 1) Hide top card instantly (native thread).
-      // 2) Re-centre while hidden — preview card already shows the next person.
-      // 3) Swap profiles in React; useLayoutEffect reveals once the new uid commits.
-      topCardReveal.setValue(0);
+      // useNativeDriver:false — all updates on JS thread, no timing gap.
+      // Reset position + swap profiles atomically. No hide/reveal needed.
       swipePosition.stopAnimation();
       swipePosition.setValue({ x: 0, y: 0 });
       completeSwipe(direction, swipedItem);
-      if (swapCoverTimerRef.current) clearTimeout(swapCoverTimerRef.current);
-      swapCoverTimerRef.current = setTimeout(() => {
-        topCardReveal.setValue(1);
-        isAnimatingRef.current = false;
-        swapCoverTimerRef.current = null;
-      }, 480);
+      isAnimatingRef.current = false;
     };
 
     Animated.timing(swipePosition, {
