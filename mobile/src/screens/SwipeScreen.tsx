@@ -1107,6 +1107,18 @@ export default function SwipeScreen({ navigation }: any) {
     };
   }, [isFocused, user?.uid, myProfile?.uid, profileIdsKey, aiOrderingDone, profiles.length]);
 
+  // After a swipe, the card is off-screen (old person invisible).
+  // Once React commits the new topProfile, reset position to center.
+  // The card is still off-screen when this fires, so user never sees old person.
+  const prevTopUidRef = useRef<string | null>(null);
+  useEffect(() => {
+    const uid = topProfile?.uid ?? null;
+    if (prevTopUidRef.current !== uid && prevTopUidRef.current !== null) {
+      swipePosition.setValue({ x: 0, y: 0 });
+    }
+    prevTopUidRef.current = uid;
+  }, [topProfile?.uid]);
+
   useEffect(() => {
     if (!user?.uid || !isFocused || !topProfile || isSyntheticProfile(topProfile)) return;
 
@@ -1348,9 +1360,6 @@ export default function SwipeScreen({ navigation }: any) {
 
     setActivePhotoIndex(0);
     setInfoExpanded(false);
-    // Reset position BEFORE profiles change so React only paints once
-    // with the new profile already at center. One synchronous block = one frame.
-    swipePosition.setValue({ x: 0, y: 0 });
     setProfiles((current) => {
       if (current[0]?.uid === item.uid) return current.slice(1);
       return current.filter((profile) => profile.uid !== item.uid);
