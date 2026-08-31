@@ -1393,39 +1393,38 @@ export default function SwipeScreen({ navigation }: any) {
     });
   };
 
+  const cardOpacityRef = useRef(new Animated.Value(1)).current;
+
   const startSwipeAnimation = (direction: 'left' | 'right', swipedItem: UserProfile) => {
     isAnimatingRef.current = true;
     setInfoExpanded(false);
-    const exitX = direction === 'right' ? deckExitDistanceRef.current : -deckExitDistanceRef.current;
     let done = false;
 
     const finish = () => {
       if (done) return;
       done = true;
-      // Swap profiles FIRST — topProfile is now the NEW person.
-      // swipePosition is still at exitX so the new person is off-screen.
+      // Swap profiles — new person is now topProfile.
       completeSwipe(direction, swipedItem);
-      // Animate the NEW card sliding in from the exit side.
-      swipePosition.setValue({ x: exitX, y: 0 });
-      Animated.spring(swipePosition, {
-        toValue: { x: 0, y: 0 },
-        tension: 120,
-        friction: 10,
+      // Fade the new card in.
+      cardOpacityRef.setValue(0);
+      Animated.timing(cardOpacityRef, {
+        toValue: 1,
+        duration: 120,
         useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
       }).start(() => {
         isAnimatingRef.current = false;
       });
     };
 
-    swipePosition.stopAnimation();
-    Animated.timing(swipePosition, {
-      toValue: { x: exitX, y: 0 },
-      duration: 150,
-      easing: Easing.out(Easing.cubic),
+    // Fade the old card out, then swap.
+    cardOpacityRef.setValue(1);
+    Animated.timing(cardOpacityRef, {
+      toValue: 0,
+      duration: 100,
       useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
     }).start(finish);
 
-    setTimeout(finish, 200);
+    setTimeout(finish, 150);
   };
 
   const animateSwipeOut = (direction: 'left' | 'right') => {
@@ -1616,7 +1615,7 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            opacity: topCardOpacity,
+            opacity: Animated.multiply(topCardOpacity, cardOpacityRef),
             transform: isWeb
               ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
               : [
@@ -1728,7 +1727,7 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            opacity: topCardOpacity,
+            opacity: Animated.multiply(topCardOpacity, cardOpacityRef),
             transform: isWeb
               ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
               : [
