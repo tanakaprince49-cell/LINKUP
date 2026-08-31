@@ -517,6 +517,7 @@ export default function SwipeScreen({ navigation }: any) {
   const lastSwipedProfileRef = useRef<UserProfile | null>(null);
   const [mode, setMode] = useState<'swipe' | 'scroll'>('swipe');
   const [scrollIndex, setScrollIndex] = useState(0);
+  const [cardVisible, setCardVisible] = useState(true);
   const scrollPosition = useRef(new Animated.Value(0)).current;
   const isScrollAnimatingRef = useRef(false);
   const scrollIndexRef = useRef(0);
@@ -1322,12 +1323,17 @@ export default function SwipeScreen({ navigation }: any) {
     setInfoExpanded(false);
     const exitX = direction === 'right' ? deckExitDistanceRef.current : -deckExitDistanceRef.current;
 
-    // Complete swipe immediately to prevent showing old card
-    completeSwipe(direction, swipedItem);
+    // Hide card first
+    setCardVisible(false);
 
-    // Reset position instantly - no animation to prevent blinking
-    swipePosition.setValue({ x: 0, y: 0 });
-    isAnimatingRef.current = false;
+    // Complete swipe after a brief delay
+    setTimeout(() => {
+      completeSwipe(direction, swipedItem);
+      swipePosition.setValue({ x: 0, y: 0 });
+      // Show card again
+      setCardVisible(true);
+      isAnimatingRef.current = false;
+    }, 16);
   };
 
   const animateSwipeOut = (direction: 'left' | 'right') => {
@@ -1630,7 +1636,7 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            opacity: topCardOpacity,
+            opacity: cardVisible ? topCardOpacity : 0,
             transform: isWeb
               ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
               : [
