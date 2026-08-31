@@ -4,11 +4,17 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
+    "start:lan": "expo start --host lan",
+    "start:tunnel": "expo start --tunnel",
+    "start:clear": "expo start --clear",
+    "dev:android": "expo start --dev-client --host lan",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build": "expo export --platform web && node scripts/postexport-web.js",
     "build:web": "expo export --platform web && node scripts/postexport-web.js",
+    "deps:check": "npx expo install --check",
+    "doctor": "npx expo-doctor",
     "typecheck": "node --stack_size=8192 ./node_modules/typescript/lib/tsc.js --noEmit --pretty false"
   },
   "engines": {

@@ -17,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notifyUser } from '../lib/notify';
 import { useIsFocused } from '@react-navigation/native';
 import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
@@ -34,8 +35,11 @@ import PaywallModal from '../components/PaywallModal';
 import { IDEA_DECK_FREE_FOREVER, PRO_FEATURES, hasLinkupPro } from '../lib/paywall';
 import {
   injectSponsored,
+  isSponsoredHiddenForViewer,
+  SPONSORED_INTERVAL,
   recordCampaignClick,
   recordCampaignImpression,
+  sponsorOneLiner,
   sponsoredIdeaCardsForViewer,
   subscribeActiveCampaigns,
 } from '../lib/campaigns';
@@ -53,6 +57,10 @@ const IDEA_FIELD_OPTIONS = ['SaaS', 'AI', 'Fintech', 'Healthtech', 'EdTech', 'Ga
 
 const toggleValue = (values: string[], value: string) =>
   values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
+
+/** Durable record of every idea this account has already swiped. */
+const ideaSwipeKey = (uid: string) => `linkup:idea-swipes:v1:${uid}`;
+const MAX_STORED_SWIPED_IDEAS = 2000;
 
 export default function IdeaDeckScreen({ navigation }: any) {
   const { user, profile: myProfile } = useAuth();
@@ -78,6 +86,9 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const swipedIdeasRef = useRef<Set<string>>(new Set());
   const organicIdeasRef = useRef<IdeaDeckItem[]>([]);
   const sponsoredIdeasRef = useRef<IdeaDeckItem[]>([]);
+  const swipesSinceSponsorRef = useRef(0);
+  const [seenHydrated, setSeenHydrated] = useState(false);
+  const [seenCount, setSeenCount] = useState(0);
   const position = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const animateSwipeRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedIdea?: IdeaDeckItem) => void>(() => {});
@@ -129,11 +140,59 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const rebuildDeckRef = useRef<() => void>(() => {});
   rebuildDeckRef.current = () => {
     const organic = organicIdeasRef.current.filter((idea) => !swipedIdeasRef.current.has(idea.id));
-    const merged = injectSponsored(organic, sponsoredIdeasRef.current);
     // Real ideas always come first; demo ideas only top the deck up so a fresh
     // install never lands on an empty screen.
-    const filled = fillWithDemoIdeas(merged, swipedIdeasRef.current);
-    setIdeas((current) => (filled.length > 0 || current.length === 0 ? filled : current));
+    const filled = fillWithDemoIdeas(organic, swipedIdeasRef.current);
+    // Sponsored is injected AFTER the demo fill, on purpose. Injecting first
+    // put the ad at index 3 of the *organic* deck — and when the network has
+    // few real ideas, the demo filler pushed it to card #1 or buried it. The
+    // slot is a promise about what the viewer sees, so it is placed in the
+    // deck they actually get: the 4th card.
+    const merged = injectSponsored(filled, sponsoredIdeasRef.current);
+    // `merged`, not `filled` — this line used to drop the sponsored card on
+    // the floor, so the deck that reached the screen never contained an ad at
+    // all. That is why no sponsored card ever appeared, at any interval.
+    setIdeas((current) => (merged.length > 0 || current.length === 0 ? merged : current));
+  };
+
+  // Ideas you have already swiped stay swiped.
+  //
+  // `swipedIdeasRef` used to live only in memory, so a restart handed back
+  // every idea you had ever seen. Same contract as the profile deck: the seen
+  // set is persisted per account and re-applied before the deck is built.
+  useEffect(() => {
+    if (!user?.uid) {
+      swipedIdeasRef.current = new Set();
+      setSeenCount(0);
+      setSeenHydrated(true);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const raw = await AsyncStorage.getItem(ideaSwipeKey(user.uid)).catch(() => null);
+      let ids: string[] = [];
+      try {
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(parsed)) ids = parsed.filter((entry): entry is string => typeof entry === 'string' && !!entry);
+      } catch {
+        ids = [];
+      }
+      if (cancelled) return;
+      swipedIdeasRef.current = new Set(ids);
+      setSeenCount(ids.length);
+      setSeenHydrated(true);
+      rebuildDeckRef.current();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid]);
+
+  const resetSeenIdeas = () => {
+    swipedIdeasRef.current = new Set();
+    setSeenCount(0);
+    if (user?.uid) AsyncStorage.removeItem(ideaSwipeKey(user.uid)).catch(() => {});
+    rebuildDeckRef.current();
   };
 
   useEffect(() => {
@@ -148,9 +207,17 @@ export default function IdeaDeckScreen({ navigation }: any) {
       userId: user.uid,
       onData: (profiles) => {
         const users = profiles.filter((profile: any) => profile.uid !== user.uid && isDiscoverableProfile(profile));
-        organicIdeasRef.current = collectIdeaDeck(users as UserProfile[], user.uid);
-        rebuildDeckRef.current();
+        const next = collectIdeaDeck(users as UserProfile[], user.uid);
+        // Same no-op guard as the swipe deck: the shared discovery listener
+        // re-emits on every write to any profile in the pool, and rebuilding
+        // here re-rendered the visible idea card each time — a flash that had
+        // nothing to do with swiping.
+        const nextKey = next.map((idea) => idea.id).join('|');
+        const prevKey = organicIdeasRef.current.map((idea) => idea.id).join('|');
         setLoading(false);
+        if (nextKey === prevKey) return;
+        organicIdeasRef.current = next;
+        rebuildDeckRef.current();
       },
       onError: (error) => {
         console.warn('Ideas deck unavailable:', error);
@@ -161,12 +228,16 @@ export default function IdeaDeckScreen({ navigation }: any) {
     return () => unsubscribe();
   }, [isFocused, user?.uid]);
 
-  // Sponsored cards: PLUS members are ad-free; everyone else sees at most
-  // 1 sponsored card per SPONSORED_INTERVAL organic cards.
-  const viewerIsPlus = hasLinkupPro(myProfile);
+  // Sponsored cards: PLUS members are ad-free — except founder/admin accounts,
+  // who need to see the placements to review and QA them. Everyone else sees
+  // at most 1 sponsored card per SPONSORED_INTERVAL organic cards.
+  const adsHiddenForViewer = isSponsoredHiddenForViewer(myProfile, {
+    email: user?.email,
+    isAdmin: (myProfile as any)?.isAdmin,
+  });
   useEffect(() => {
     if (!user?.uid || !isFocused) return;
-    if (Platform.OS !== 'web' && viewerIsPlus) {
+    if (Platform.OS !== 'web' && adsHiddenForViewer) {
       sponsoredIdeasRef.current = [];
       rebuildDeckRef.current();
       return;
@@ -174,7 +245,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
     let cancelled = false;
     const unsubscribeSponsored = subscribeActiveCampaigns(async (campaigns) => {
       try {
-        const items = await sponsoredIdeaCardsForViewer(campaigns, user.uid);
+        const items = await sponsoredIdeaCardsForViewer(campaigns, user.uid, hasLinkupPro(myProfile));
         if (cancelled) return;
         sponsoredIdeasRef.current = items;
         rebuildDeckRef.current();
@@ -186,7 +257,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
       cancelled = true;
       unsubscribeSponsored();
     };
-  }, [isFocused, user?.uid, viewerIsPlus]);
+  }, [isFocused, user?.uid, adsHiddenForViewer]);
 
   // Impression bookkeeping: one counted view per render of a sponsored top card,
   // capped per viewer per day inside recordCampaignImpression.
@@ -288,10 +359,29 @@ export default function IdeaDeckScreen({ navigation }: any) {
     const idea = swipedIdea || ideas[0];
     if (!idea || busy) return;
     swipedIdeasRef.current.add(idea.id);
+    setSeenCount(swipedIdeasRef.current.size);
+    if (user?.uid) {
+      AsyncStorage.setItem(
+        ideaSwipeKey(user.uid),
+        JSON.stringify(Array.from(swipedIdeasRef.current).slice(-MAX_STORED_SWIPED_IDEAS))
+      ).catch(() => {});
+    }
     setIdeas((current) => {
       if (current[0]?.id === idea.id) return current.slice(1);
       return current.filter((item) => item.id !== idea.id);
     });
+    // Sponsored cadence: the ad is a recurring slot, not a one-off insert.
+    // Injecting only when the deck was built meant it appeared once and never
+    // again until fresh data arrived.
+    swipesSinceSponsorRef.current += 1;
+    if (sponsoredIdeasRef.current.length && swipesSinceSponsorRef.current >= SPONSORED_INTERVAL) {
+      swipesSinceSponsorRef.current = 0;
+      setIdeas((current) =>
+        current.some((entry) => (entry as any).sponsored)
+          ? current
+          : injectSponsored(current, sponsoredIdeasRef.current, SPONSORED_INTERVAL)
+      );
+    }
     requestAnimationFrame(() => position.setValue({ x: 0, y: 0 }));
     if (direction !== 'right') return;
     const sponsoredMeta = idea as any;
@@ -408,6 +498,12 @@ export default function IdeaDeckScreen({ navigation }: any) {
     if ((idea as any).sponsored && (idea as any).campaignId) {
       void recordCampaignClick((idea as any).campaignId, user?.uid || '');
     }
+    // Demo ideas are seeded content attributed to Linky — there is no inbox
+    // behind them, so the invite composer must never open for one.
+    if ((idea as any).demo) {
+      notifyUser('Sample idea', 'This is a demo idea from Linky — swipe on to the next one.');
+      return;
+    }
     setInviteIdea(idea);
     setInviteMessage(`I like this idea. I can help with ${String((myProfile as any)?.occupation || 'building it')}.`);
   };
@@ -502,7 +598,15 @@ export default function IdeaDeckScreen({ navigation }: any) {
       </View>
 
       <Text style={[styles.ideaTitle, { color: textColor(isDark) }]}>{idea.title}</Text>
-      <Text style={[styles.ideaDescription, { color: textColor(isDark, 'secondary') }]}>{idea.description}</Text>
+      {(idea as any).sponsored ? (
+        // Sponsored cards get one line — what the product does — instead of a
+        // paragraph, matching the swipe and scroll sponsored surfaces.
+        <Text style={[styles.ideaDescription, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+          {sponsorOneLiner(idea as any)}
+        </Text>
+      ) : (
+        <Text style={[styles.ideaDescription, { color: textColor(isDark, 'secondary') }]}>{idea.description}</Text>
+      )}
 
       <View style={styles.signalGrid}>
         <View style={[styles.signalCard, liquidGlass(isDark)]}>
@@ -723,8 +827,20 @@ export default function IdeaDeckScreen({ navigation }: any) {
       ) : (
         <View style={styles.emptyWrap}>
           <Zap size={48} color={COLORS.primaryStrong} fill={COLORS.primary} />
-          <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No Ideas Yet</Text>
-          <Text style={styles.emptyText}>Post an idea here so builders can swipe into it.</Text>
+          <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>
+            {seenCount > 0 ? "You've Seen Them All" : 'No Ideas Yet'}
+          </Text>
+          <Text style={styles.emptyText}>
+            {seenCount > 0
+              ? 'You have swiped every idea in the network right now. New ones appear as builders post them.'
+              : 'Post an idea here so builders can swipe into it.'}
+          </Text>
+          {seenCount > 0 ? (
+            <TouchableOpacity onPress={resetSeenIdeas} style={styles.emptyButton}>
+              <RefreshCw size={16} color="#000" />
+              <Text style={styles.emptyButtonText}>Show These Again</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity onPress={() => setComposerOpen(true)} style={styles.emptyButton}>
             <Plus size={16} color="#000" />
             <Text style={styles.emptyButtonText}>Add an Idea</Text>

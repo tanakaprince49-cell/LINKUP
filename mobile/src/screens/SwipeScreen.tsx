@@ -39,12 +39,15 @@ import {
   Campaign,
   SponsoredIdeaDeckItem,
   buildHouseIdeaCard,
+  isSponsoredHiddenForViewer,
   recordCampaignClick,
   recordCampaignImpression,
+  sponsorOneLiner,
   subscribeActiveCampaigns,
   toSponsoredItem,
 } from '../lib/campaigns';
 import VerifiedBadge from '../components/VerifiedBadge';
+import ErrorBoundary from '../components/ErrorBoundary';
 import PaywallModal from '../components/PaywallModal';
 import { consumeWindowUsage, FREE_LIMITS, getWindowUsage, hasLinkupPro, PRO_FEATURES, SWIPE_USAGE_WINDOW_HOURS } from '../lib/paywall';
 import { compactProfileForList, storedProfileImageUri } from '../lib/profilePerformance';
@@ -61,7 +64,18 @@ const { width } = windowSize;
 const SWIPE_THRESHOLD = 0.22 * width;
 const DISCOVERY_LIMIT = 200;
 const FALLBACK_PHOTO = avatarPlaceholderUri('', 512);
-const MAX_SWIPE_DATA_URI_CHARS = 900_000;
+/**
+ * Largest base64 photo a card may render inline.
+ *
+ * A data URI has no URL, so expo-image cannot cache it: every mount decodes
+ * the whole string again on the JS/main thread. At 900k chars that decode was
+ * hundreds of milliseconds of frozen frame, which is a card that appears
+ * blank and then pops — the blink. Anything bigger falls back to the
+ * placeholder and gets a real (hosted, cacheable) photo from the upgrade pass.
+ */
+const MAX_SWIPE_DATA_URI_CHARS = 320_000;
+/** Order-sensitive fingerprint of a deck, used to drop no-op rebuilds. */
+const deckKey = (items: UserProfile[]) => items.map((profile) => profile?.uid).join('|');
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
 const discoveryCacheKey = (uid: string) => `linkup:discovery:v3:${uid}`;
 const swipeProgressKey = (uid: string) => `linkup:swipe-progress:v1:${uid}`;
@@ -333,6 +347,13 @@ export default function SwipeScreen({ navigation }: any) {
 
   // Free discovery budget: 12 profiles per 12 hours. PLUS = unlimited.
   const isProUser = hasLinkupPro(myProfile);
+  // Ad visibility is its own switch: PLUS is ad-free, but founder/admin
+  // accounts still see the placements so they can review and QA them. This
+  // NEVER gates entitlement — budget, paywall and features read isProUser.
+  const adsHiddenForViewer = isSponsoredHiddenForViewer(myProfile, {
+    email: user?.email,
+    isAdmin: (myProfile as any)?.isAdmin,
+  });
 
   // --- Discover boost (sponsored interstitial) ----------------------------
   // A sponsored product card shows as an interstitial every
@@ -354,7 +375,7 @@ export default function SwipeScreen({ navigation }: any) {
   const swipesSinceSponsorRef = useRef(0);
 
   useEffect(() => {
-    if (!user?.uid || isProUser) {
+    if (!user?.uid || adsHiddenForViewer) {
       sponsorInventoryRef.current = [];
       setDiscoverySponsor(null);
       return;
@@ -374,7 +395,7 @@ export default function SwipeScreen({ navigation }: any) {
       cancelled = true;
       unsubscribeSponsored();
     };
-  }, [user?.uid, isProUser]);
+  }, [user?.uid, adsHiddenForViewer]);
 
   /**
    * Choose the next sponsored card.
@@ -386,7 +407,9 @@ export default function SwipeScreen({ navigation }: any) {
    */
   const pickNextSponsor = (): SponsoredIdeaDeckItem | null => {
     const inventory = sponsorInventoryRef.current;
-    if (!inventory.length) return buildHouseIdeaCard();
+    // No paid inventory: promote PLUS — but never to someone who already has
+    // it. A premium viewer gets no card rather than a "Go PLUS" upsell.
+    if (!inventory.length) return isProUser ? null : buildHouseIdeaCard();
 
     const shown = sponsorShownRef.current;
     const ranked = [...inventory].sort((a, b) => {
@@ -404,7 +427,7 @@ export default function SwipeScreen({ navigation }: any) {
   };
 
   const maybeShowDiscoverySponsor = () => {
-    if (isProUser || !user?.uid) return;
+    if (adsHiddenForViewer || !user?.uid) return;
     const next = pickNextSponsor();
     if (!next) return;
     setDiscoverySponsor(next);
@@ -500,6 +523,9 @@ export default function SwipeScreen({ navigation }: any) {
   const feed = useMemo(() => profiles.filter(Boolean).slice(0, 100), [profiles]);
   const feedRef = useRef(feed);
   feedRef.current = feed;
+  const profilesRef = useRef<UserProfile[]>(profiles);
+  profilesRef.current = profiles;
+  const lastCacheSignatureRef = useRef('');
   const completeSwipeRef = useRef<(direction: 'left' | 'right', swipedItem?: UserProfile) => void>(() => {});
   const animateSwipeOutRef = useRef<(direction: 'left' | 'right') => void>(() => {});
   const resetSwipePositionRef = useRef<() => void>(() => {});
@@ -686,6 +712,50 @@ export default function SwipeScreen({ navigation }: any) {
     })
   ).current;
 
+  // --- Scroll step animation ---------------------------------------------
+  // The scroll feed is ONE card translated by `scrollPosition`. That makes it
+  // fragile in a specific way: if a spring is ever interrupted — mode switch,
+  // the card unmounting mid-animation, the app backgrounded — React Native
+  // never fires its completion callback, so `isScrollAnimatingRef` stays true
+  // forever, the card stays parked ~a screen away, and every further gesture
+  // is ignored. That is the "scroll mode goes blank after a few swipes" bug:
+  // not a crash, a card translated off-screen with a dead gesture handler.
+  //
+  // So every scroll animation goes through these three rules:
+  //   1. stop whatever is already running before starting a new one;
+  //   2. settle through ONE function that clears the flag AND re-centres the
+  //      card, so the two can never disagree;
+  //   3. keep a timer safety net, in case the spring never reports back.
+  const SCROLL_STEP_MS = 900;
+  const scrollAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const settleScroll = () => {
+    if (scrollAnimTimerRef.current) {
+      clearTimeout(scrollAnimTimerRef.current);
+      scrollAnimTimerRef.current = null;
+    }
+    isScrollAnimatingRef.current = false;
+    scrollPosition.stopAnimation();
+    scrollPosition.setValue(0);
+  };
+
+  const animateScrollStep = (from: number) => {
+    settleScroll();
+    isScrollAnimatingRef.current = true;
+    scrollPosition.setValue(from);
+    Animated.spring(scrollPosition, {
+      toValue: 0, friction: 9, useNativeDriver: false,
+    }).start(() => settleScroll());
+    scrollAnimTimerRef.current = setTimeout(settleScroll, SCROLL_STEP_MS);
+  };
+
+  const springScrollBack = () => {
+    scrollPosition.stopAnimation();
+    Animated.spring(scrollPosition, {
+      toValue: 0, friction: 7, useNativeDriver: false,
+    }).start();
+  };
+
   const goToProfile = (dir: 'up' | 'down') => {
     // A sponsored slot on screen resolves before the feed moves again. The
     // sponsored stop is an ad, not a discovery, so it never spends budget.
@@ -698,13 +768,9 @@ export default function SwipeScreen({ navigation }: any) {
       // looking, so swiping up must never open the paywall. The feed still
       // locks at the last card (see the scrollIndex clamp below) instead of
       // running past the end and looping back to the first profile.
-      isScrollAnimatingRef.current = true;
-      scrollPosition.setValue(360);
       setScrollIndex(cur + 1);
       scrollIndexRef.current = cur + 1;
-      Animated.spring(scrollPosition, {
-        toValue: 0, friction: 9, useNativeDriver: false,
-      }).start(() => { isScrollAnimatingRef.current = false; });
+      animateScrollStep(360);
       // Every DISCOVER_SPONSORED_EVERY advances, queue the sponsored slot.
       swipesSinceSponsorRef.current += 1;
       if (swipesSinceSponsorRef.current >= DISCOVER_SPONSORED_EVERY) {
@@ -712,18 +778,28 @@ export default function SwipeScreen({ navigation }: any) {
         maybeShowSponsorRef.current();
       }
     } else if (dir === 'down' && cur > 0) {
-      isScrollAnimatingRef.current = true;
-      scrollPosition.setValue(-360);
       setScrollIndex(cur - 1);
       scrollIndexRef.current = cur - 1;
-      Animated.spring(scrollPosition, {
-        toValue: 0, friction: 9, useNativeDriver: false,
-      }).start(() => { isScrollAnimatingRef.current = false; });
+      animateScrollStep(-360);
     }
   };
 
   const goToProfileRef = useRef<(dir: 'up' | 'down') => void>(() => {});
   goToProfileRef.current = goToProfile;
+
+  // Switching modes must never leave the feed parked off-centre by a step
+  // animation that was still in flight when the card unmounted.
+  useEffect(() => {
+    settleScroll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  useEffect(
+    () => () => {
+      if (scrollAnimTimerRef.current) clearTimeout(scrollAnimTimerRef.current);
+    },
+    []
+  );
 
   // The feed shrinks under the scroll index whenever a card is liked/passed.
   // Without this clamp scrollIndex points past the end, renderScrollProfile
@@ -761,20 +837,17 @@ export default function SwipeScreen({ navigation }: any) {
       },
       onPanResponderRelease: (_evt, gs) => {
         if (isScrollAnimatingRef.current) return;
+        // Scrolling up (browsing) is always free - never triggers paywall
         if (gs.dy < -70) {
           goToProfileRef.current('up');
         } else if (gs.dy > 70) {
           goToProfileRef.current('down');
         } else {
-          Animated.spring(scrollPosition, {
-            toValue: 0, friction: 7, useNativeDriver: false,
-          }).start();
+          springScrollBack();
         }
       },
       onPanResponderTerminate: () => {
-        Animated.spring(scrollPosition, {
-          toValue: 0, friction: 7, useNativeDriver: false,
-        }).start();
+        springScrollBack();
       },
       onPanResponderTerminationRequest: () => false,
     })
@@ -821,7 +894,20 @@ export default function SwipeScreen({ navigation }: any) {
         }
 
         allProfilesRef.current = orderedUsers;
-        writeCachedDiscovery(user.uid, orderedUsers.filter((profile) => !isSyntheticProfile(profile))).catch(() => {});
+        // Cold-start cache write, guarded by a signature check.
+        //
+        // This listener re-emits on every write to any profile in the pool
+        // (presence, updatedAt, view tracking), and each emission used to
+        // serialise the whole deck to AsyncStorage — a multi-hundred-KB JSON
+        // write on the JS thread, on Android, several times per swipe. That
+        // is a long main-thread stall, which is what "it goes blank while I
+        // keep swiping" looks like from the outside. The cache only needs to
+        // change when the actual roster changes.
+        const cacheSignature = `${orderedUsers.length}:${deckKey(orderedUsers)}`;
+        if (cacheSignature !== lastCacheSignatureRef.current) {
+          lastCacheSignatureRef.current = cacheSignature;
+          writeCachedDiscovery(user.uid, orderedUsers.filter((profile) => !isSyntheticProfile(profile))).catch(() => {});
+        }
         const remainingUsers = unswipedProfiles(orderedUsers);
         if (remainingUsers.length === 0 && orderedUsers.length > 0) {
           swipedSessionIdsRef.current.clear();
@@ -839,7 +925,15 @@ export default function SwipeScreen({ navigation }: any) {
             );
             return additions.length ? [...current, ...additions] : current;
           });
-        } else {
+        } else if (deckKey(remainingUsers) !== deckKey(profilesRef.current)) {
+          // Rebuild only when the visible deck actually changed.
+          //
+          // The discovery listener is shared and re-emits whenever ANY profile
+          // in the pool is written — someone's presence, an updatedAt, a
+          // viewer count. Each of those emissions used to hand React a brand
+          // new array, which re-rendered the deck, re-ran the local sort and,
+          // on Android, read as the whole screen refreshing itself. Identical
+          // uid order = nothing to do.
           setProfiles(remainingUsers);
         }
         setAiOrderingDone(false);
@@ -985,7 +1079,17 @@ export default function SwipeScreen({ navigation }: any) {
     // a card can arrive faceless. For the visible top cards with no renderable
     // pic, pull their single users doc ONCE per session and patch real photos
     // in place. Bounded, cached, and silent.
-    [topProfile, nextProfile, profiles[2]]
+    // Scroll mode shows the card at the scroll index, which can sit far from
+    // the top of the deck, so that card is upgraded too — otherwise deep cards
+    // are the only ones that stay faceless.
+    [
+      topProfile,
+      nextProfile,
+      profiles[2],
+      profiles[3],
+      profiles[4],
+      mode === 'scroll' ? feedRef.current[Math.min(scrollIndexRef.current, feedRef.current.length - 1)] : null,
+    ]
       .filter(Boolean)
       .forEach((target: any) => {
         if (!target?.uid || photoUpgradedRef.current.has(target.uid)) return;
@@ -1016,7 +1120,7 @@ export default function SwipeScreen({ navigation }: any) {
           })
           .catch(() => {});
       });
-  }, [topProfile?.uid, nextProfile?.uid, profiles.length]);
+  }, [topProfile?.uid, nextProfile?.uid, profiles.length, mode, scrollIndex]);
 
   useEffect(() => {
     setInfoExpanded(false);
@@ -1285,25 +1389,43 @@ export default function SwipeScreen({ navigation }: any) {
     setInfoExpanded(true);
   }, [topProfile]);
 
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <View style={styles.emptyIcon}>
-        <Target size={26} color="#111" />
+  const renderEmpty = () => {
+    if (mode === 'scroll' && !isProUser && swipesLeft === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIcon}>
+            <Zap size={26} color={COLORS.primary} />
+          </View>
+          <Text style={[styles.emptyText, { color: textColor(isDark) }]}>Daily limit reached</Text>
+          <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
+            You've used your free discovery quota. Upgrade to PLUS for unlimited swipes.
+          </Text>
+          <TouchableOpacity style={styles.resetBtn} onPress={() => openPaywall('Unlimited Discovery')}>
+            <Text style={styles.resetText}>Go PLUS</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyIcon}>
+          <Target size={26} color="#111" />
+        </View>
+        <Text style={[styles.emptyText, { color: textColor(isDark) }]}>No one left to meet</Text>
+        <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
+          {allProfilesRef.current.length === 0
+            ? 'The network is still small. Invite people you know, then refresh.'
+            : "You've seen everyone here. Invite more builders or refresh the deck."}
+        </Text>
+        <TouchableOpacity style={styles.resetBtn} onPress={() => void shareLinkupInvite()}>
+          <Text style={styles.resetText}>Invite builders</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.resetBtn, styles.resetGhost]} onPress={resetDeck}>
+          <Text style={[styles.resetText, { color: textColor(isDark) }]}>Refresh</Text>
+        </TouchableOpacity>
       </View>
-      <Text style={[styles.emptyText, { color: textColor(isDark) }]}>No one left to meet</Text>
-      <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
-        {allProfilesRef.current.length === 0
-          ? 'The network is still small. Invite people you know, then refresh.'
-          : 'You’ve seen everyone here. Invite more builders or refresh the deck.'}
-      </Text>
-      <TouchableOpacity style={styles.resetBtn} onPress={() => void shareLinkupInvite()}>
-        <Text style={styles.resetText}>Invite builders</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.resetBtn, styles.resetGhost]} onPress={resetDeck}>
-        <Text style={[styles.resetText, { color: textColor(isDark) }]}>Refresh</Text>
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   const renderPreviewCard = () => {
     if (!nextProfile || infoExpanded) return null;
@@ -1316,7 +1438,12 @@ export default function SwipeScreen({ navigation }: any) {
 
     return (
       <Animated.View
-        key={`preview-${nextProfile.uid}`}
+        // Deliberately NOT keyed on the profile uid. A uid key made React
+        // unmount and rebuild this view after every swipe, so expo-image had
+        // to re-attach and re-decode the photo from scratch: one empty frame
+        // per swipe, which is the blink. One stable view, one swap of the
+        // image uri, no remount.
+        key="swipe-preview-card"
         pointerEvents="none"
         style={[
           styles.card,
@@ -1380,6 +1507,8 @@ export default function SwipeScreen({ navigation }: any) {
 
   const renderSponsoredCard = () => {
     if (!discoverySponsor) return null;
+    // One line, not a paragraph: what the product does, at a glance.
+    const sponsorLine = sponsorOneLiner(discoverySponsor);
     return (
       <Animated.View
         key={`sponsor-${discoverySponsor.id}`}
@@ -1408,9 +1537,9 @@ export default function SwipeScreen({ navigation }: any) {
           <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={2}>
             {discoverySponsor.title}
           </Text>
-          {!!discoverySponsor.description && (
-            <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={5}>
-              {discoverySponsor.description}
+          {!!sponsorLine && (
+            <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+              {sponsorLine}
             </Text>
           )}
           <TouchableOpacity
@@ -1491,7 +1620,10 @@ export default function SwipeScreen({ navigation }: any) {
 
     return (
       <Animated.View
-        key={`top-${topProfile.uid}`}
+        // Stable key, same as the preview card: the deck is one persistent
+        // view whose contents change, not a new view per person. Keying on
+        // the uid remounted it on every swipe and flashed an empty card.
+        key="swipe-top-card"
         style={[
           styles.card,
           styles.deckCardLayer,
@@ -1602,6 +1734,8 @@ export default function SwipeScreen({ navigation }: any) {
   const renderScrollSponsor = () => {
     if (!discoverySponsor) return null;
     const sponsorName = discoverySponsor.title || 'Sponsored';
+    // Same rule as the swipe interstitial: one line saying what it does.
+    const sponsorLine = sponsorOneLiner(discoverySponsor);
     return (
       <Animated.View
         style={[
@@ -1617,9 +1751,9 @@ export default function SwipeScreen({ navigation }: any) {
           <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={2}>
             {sponsorName}
           </Text>
-          {!!discoverySponsor.description && (
-            <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={5}>
-              {discoverySponsor.description}
+          {!!sponsorLine && (
+            <Text style={[styles.sponsorTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+              {sponsorLine}
             </Text>
           )}
           <TouchableOpacity
@@ -1876,14 +2010,19 @@ export default function SwipeScreen({ navigation }: any) {
         </View>
 
         <View style={[styles.stackArea, webDeckStyle, isCompactWeb && styles.compactStackArea]}>
-          {mode === 'swipe' ? (
-            <>
-              {renderPreviewCard()}
-              {renderCard()}
-            </>
-          ) : (
-            renderScrollProfile()
-          )}
+          {/* If a card ever throws, show a labelled retry inside the deck
+              instead of an empty gap. A blank deck is indistinguishable from
+              "the app died", and gives nobody anything to report. */}
+          <ErrorBoundary screenName="Discovery deck" inline>
+            {mode === 'swipe' ? (
+              <>
+                {renderPreviewCard()}
+                {renderCard()}
+              </>
+            ) : (
+              renderScrollProfile()
+            )}
+          </ErrorBoundary>
         </View>
       </View>
       {connectionNote.modal}

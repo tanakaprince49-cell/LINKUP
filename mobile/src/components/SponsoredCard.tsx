@@ -10,6 +10,7 @@ import {
   fetchAnyActiveCampaigns,
   recordCampaignClick,
   recordCampaignImpression,
+  sponsorOneLiner,
 } from '../lib/campaigns';
 
 type Props = {
@@ -30,7 +31,9 @@ export function SponsoredCard({ campaign, viewerUid }: Props) {
 
   const creative = campaign.creative;
   const name = creative?.productName || creative?.title || campaign.name || 'Sponsored';
-  const blurb = creative?.tagline || creative?.description || '';
+  // One line describing what it does — same rule as every other sponsored
+  // surface, so an ad reads identically wherever it appears.
+  const blurb = sponsorOneLiner(creative);
   const logo = creative?.logoUrl || '';
   const website = creative?.website || '';
 
@@ -63,7 +66,7 @@ export function SponsoredCard({ campaign, viewerUid }: Props) {
             {name}
           </Text>
           {!!blurb && (
-            <Text style={[styles.blurb, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
+            <Text style={[styles.blurb, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
               {blurb}
             </Text>
           )}

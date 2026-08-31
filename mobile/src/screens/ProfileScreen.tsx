@@ -386,23 +386,6 @@ export default function ProfileScreen({ navigation, route }: any) {
     return subscribeToConnectionGate(myProfile.uid, targetUserId, setConnectionGate);
   }, [isViewingOther, myProfile?.uid, targetUserId]);
   const profile = isViewingOther ? viewedProfile : myProfile;
-  const isProPlanActive = hasLinkupPro(profile);
-  const [plusTrial, setPlusTrial] = useState<TrialRecord | null>(null);
-
-  // Trial countdown for the account pill — Play owns billing, this is display only.
-  useEffect(() => {
-    if (!myProfile?.uid) {
-      setPlusTrial(null);
-      return;
-    }
-    let cancelled = false;
-    readActiveTrial(myProfile.uid, [LINKUP_PLUS_PRODUCT_ID, LINKUP_PLUS_YEARLY_PRODUCT_ID]).then((record) => {
-      if (!cancelled) setPlusTrial(record);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [myProfile?.uid, isProPlanActive]);
   const proLocked = isAndroidProLocked(myProfile);
   const openPaywall = (feature: string) => setPaywallFeature(feature);
 
@@ -742,6 +725,32 @@ export default function ProfileScreen({ navigation, route }: any) {
     if (notificationStatus === 'unavailable') return 'UNAVAILABLE';
     return 'CHECKING';
   }, [notificationStatus]);
+
+  // Trial countdown for the account pill — Play owns billing, this is display
+  // only.
+  //
+  // Hooks MUST stay above the two early returns below (unavailable / busy).
+  // These two used to sit ~900 lines further down, after them: opening
+  // someone else's profile rendered once with `isBusy` true (61 hooks, early
+  // return) and again once the profile arrived (63 hooks, past the return) —
+  // "Rendered more hooks than during the previous render", which surfaced to
+  // users as the profile screen crashing.
+  const isProPlanActive = hasLinkupPro(profile);
+  const [plusTrial, setPlusTrial] = useState<TrialRecord | null>(null);
+
+  useEffect(() => {
+    if (!myProfile?.uid) {
+      setPlusTrial(null);
+      return;
+    }
+    let cancelled = false;
+    readActiveTrial(myProfile.uid, [LINKUP_PLUS_PRODUCT_ID, LINKUP_PLUS_YEARLY_PRODUCT_ID]).then((record) => {
+      if (!cancelled) setPlusTrial(record);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [myProfile?.uid, isProPlanActive]);
 
   if (viewedError && isViewingOther) {
     return (
@@ -1681,7 +1690,6 @@ export default function ProfileScreen({ navigation, route }: any) {
   const publicDiscoveryValue = isEditing
     ? !!(editData?.isVisible ?? true)
     : localPreferences.isVisible;
-
   const turboConnectValue = isEditing
     ? !!(editData?.turboConnect ?? false)
     : localPreferences.turboConnect;

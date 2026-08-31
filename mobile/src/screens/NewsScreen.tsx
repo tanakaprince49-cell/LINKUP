@@ -10,7 +10,7 @@ import { NewsArticle, fetchAINews } from '../lib/newsService';
 import { db } from '../lib/firebase';
 import { COLORS, liquidGlass, textColor } from '../theme/theme';
 import { SponsoredCard, useSponsoredSlot } from '../components/SponsoredCard';
-import { hasLinkupPro } from '../lib/paywall';
+import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 
 const CATEGORIES = ['all', 'startup', 'tech', 'company', 'research'] as const;
 
@@ -27,9 +27,13 @@ export default function NewsScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
   const isDark = theme === 'dark';
-  const isPro = hasLinkupPro(profile);
-  // One sponsored card at a time, and never for PLUS members.
-  const sponsored = useSponsoredSlot('news', user?.uid, !isPro);
+  // One sponsored card at a time. PLUS members are ad-free, except
+  // founder/admin accounts, who need to see the placement to review it.
+  const adsHidden = isSponsoredHiddenForViewer(profile, {
+    email: user?.email,
+    isAdmin: (profile as any)?.isAdmin,
+  });
+  const sponsored = useSponsoredSlot('news', user?.uid, !adsHidden);
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
