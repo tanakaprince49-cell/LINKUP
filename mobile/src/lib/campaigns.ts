@@ -32,7 +32,7 @@ import { IdeaDeckItem } from './ideas';
 // ---------------------------------------------------------------------------
 
 export const LINKUP_CAMPAIGNS_PRODUCT_ID = 'linkup_campaigns_monthly';
-export const LINKUP_CAMPAIGNS_YEARLY_PRODUCT_ID = 'linkup_campaigns_yearly';
+export const LINKUP_CAMPAIGNS_YEARLY_PRODUCT_ID = 'linkup_campaigns_yearly_2';
 export const LINKUP_CAMPAIGNS_MONTHLY_PRICE = formatUsd(CAMPAIGNS_PRICES.monthly);
 export const LINKUP_CAMPAIGNS_YEARLY_PRICE = formatUsd(CAMPAIGNS_PRICES.yearly);
 export const CAMPAIGNS_PRODUCT_IDS = [LINKUP_CAMPAIGNS_PRODUCT_ID, LINKUP_CAMPAIGNS_YEARLY_PRODUCT_ID];
