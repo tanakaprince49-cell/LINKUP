@@ -1,5 +1,31 @@
 # LINKUP Release Notes
 
+## 13.3.1 (versionCode 17)
+
+**Play Console (paste into "What's new in this release"):**
+
+```
+What's new in 13.3.1:
+
+🔧 Bug fixes & stability
+⚡ Swipe animations completely fixed — no more old-person flash or blank frames
+📊 Campaigns dashboard redesigned — clean professional layout with metrics, charts & analytics
+🎯 New yearly product IDs — fixed Play Console billing bug that charged yearly price monthly
+💊 Paywall logo and trial badge now visible in white and yellow themes
+🔍 Founder dashboard stats corrected
+📱 7-day free trial support added for Campaigns monthly subscription
+```
+
+### Full changelog (internal)
+
+- **Swipe blink fixed (final):** root cause was `topCardReveal` never set to 0 (always 1), and `finish()` calling `swipePosition.setValue({x:0,y:0})` synchronously before React committed new `profiles[0]`. Fixed by removing `swipePosition.setValue` from `finish()` entirely, and fixing `useLayoutEffect` to fire on first swipe by changing `prevTopUidRef` from `null` to `undefined` and removing `!== null` guard. Position reset now happens ONLY in `useLayoutEffect` watching `topProfile?.uid`, which runs before paint after React commits the new face.
+- **Swipe blank frame eliminated:** two photo layers (outgoing + incoming) with opacity swap — no gap between cards during animation.
+- **CampaignsScreen redesigned:** clean professional dashboard with metrics card (Impressions/Clicks/CTR + capacity bar), Share of Voice chart with color-coded bars, minimal campaign cards with logo/status/stats, clean paywall with plan cards and perks.
+- **Paywall fixes:** megaphone icon changed from `COLORS.primaryStrong` (same as background = invisible) to `#FFF`; trial badge text changed to `textColor(isDark)` for visibility in both themes.
+- **Yearly product IDs:** created `linkup_plus_yearly_2` and `linkup_campaigns_yearly_2` to replace broken Play Console products that billed yearly price monthly.
+- **Campaigns monthly product ID:** changed to `linkup_campaigns_monthly_2` for 7-day trial support.
+- **Founder dashboard:** fixed incorrect stat counting.
+
 ## 13.0.0 (versionCode 13)
 
 **Play Console (paste into "What's new in this release"):**
