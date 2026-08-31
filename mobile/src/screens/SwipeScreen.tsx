@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -534,6 +534,10 @@ export default function SwipeScreen({ navigation }: any) {
   const rankingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRankedProfileIdsRef = useRef('');
   const swipePosition = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  // Hides the top card during the profile swap so setValue(0,0) never paints
+  // the old person at center while React is still committing the next profile.
+  const topCardReveal = useRef(new Animated.Value(1)).current;
+  const swapCoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const swipeThresholdRef = useRef(SWIPE_THRESHOLD);
   const deckExitDistanceRef = useRef(width + 160);
 
@@ -597,6 +601,7 @@ export default function SwipeScreen({ navigation }: any) {
     outputRange: [0.88, 1, 0.88],
     extrapolate: 'clamp',
   });
+  const topCardCombinedOpacity = Animated.multiply(topCardOpacity, topCardReveal);
   const nextCardScale = swipePosition.x.interpolate({
     inputRange: [-swipeThreshold, 0, swipeThreshold],
     outputRange: [1, 0.94, 1],
@@ -612,6 +617,11 @@ export default function SwipeScreen({ navigation }: any) {
     outputRange: [1, 0.72, 1],
     extrapolate: 'clamp',
   });
+  const previewCoverBoost = topCardReveal.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.28, 0],
+  });
+  const nextCardCombinedOpacity = Animated.add(nextCardOpacity, previewCoverBoost);
   const likeOpacity = swipePosition.x.interpolate({
     inputRange: [0, swipeThreshold],
     outputRange: [0, 1],
@@ -1107,14 +1117,20 @@ export default function SwipeScreen({ navigation }: any) {
     };
   }, [isFocused, user?.uid, myProfile?.uid, profileIdsKey, aiOrderingDone, profiles.length]);
 
-  // After a swipe, the card is off-screen (old person invisible).
-  // Once React commits the new topProfile, reset position to center.
-  // The card is still off-screen when this fires, so user never sees old person.
+  // After a swipe the top card is hidden (topCardReveal=0) and re-centred while
+  // the preview card underneath already shows the next person. Reveal only once
+  // React has committed the new topProfile so we never flash the old face.
   const prevTopUidRef = useRef<string | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const uid = topProfile?.uid ?? null;
     if (prevTopUidRef.current !== uid && prevTopUidRef.current !== null) {
+      if (swapCoverTimerRef.current) {
+        clearTimeout(swapCoverTimerRef.current);
+        swapCoverTimerRef.current = null;
+      }
+      topCardReveal.setValue(1);
       swipePosition.setValue({ x: 0, y: 0 });
+      isAnimatingRef.current = false;
     }
     prevTopUidRef.current = uid;
   }, [topProfile?.uid]);
@@ -1331,6 +1347,7 @@ export default function SwipeScreen({ navigation }: any) {
     // budget is burned, no like/skip is written to Firestore.
     if (discoverySponsor) {
       swipePosition.stopAnimation();
+      topCardReveal.setValue(1);
       swipePosition.setValue({ x: 0, y: 0 });
       hasUserSwipedRef.current = true;
       setActivePhotoIndex(0);
@@ -1413,8 +1430,19 @@ export default function SwipeScreen({ navigation }: any) {
     const finish = () => {
       if (done) return;
       done = true;
+      // 1) Hide top card instantly (native thread).
+      // 2) Re-centre while hidden — preview card already shows the next person.
+      // 3) Swap profiles in React; useLayoutEffect reveals once the new uid commits.
+      topCardReveal.setValue(0);
+      swipePosition.stopAnimation();
+      swipePosition.setValue({ x: 0, y: 0 });
       completeSwipe(direction, swipedItem);
-      isAnimatingRef.current = false;
+      if (swapCoverTimerRef.current) clearTimeout(swapCoverTimerRef.current);
+      swapCoverTimerRef.current = setTimeout(() => {
+        topCardReveal.setValue(1);
+        isAnimatingRef.current = false;
+        swapCoverTimerRef.current = null;
+      }, 480);
     };
 
     Animated.timing(swipePosition, {
@@ -1458,6 +1486,7 @@ export default function SwipeScreen({ navigation }: any) {
       return;
     }
     lastSwipedProfileRef.current = null;
+    topCardReveal.setValue(1);
     swipePosition.setValue({ x: 0, y: 0 });
     isAnimatingRef.current = false;
     setInfoExpanded(false);
@@ -1474,6 +1503,7 @@ export default function SwipeScreen({ navigation }: any) {
     setActivePhotoIndex(0);
     setInfoExpanded(false);
     setAiOrderingDone(false);
+    topCardReveal.setValue(1);
     swipePosition.setValue({ x: 0, y: 0 });
     isAnimatingRef.current = false;
     setProfiles(allProfilesRef.current);
@@ -1482,6 +1512,7 @@ export default function SwipeScreen({ navigation }: any) {
   const openInfoPanel = React.useCallback(() => {
     if (isAnimatingRef.current || !topProfile) return;
     swipePosition.stopAnimation();
+    topCardReveal.setValue(1);
     swipePosition.setValue({ x: 0, y: 0 });
     setInfoExpanded(true);
   }, [topProfile]);
@@ -1549,7 +1580,7 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            opacity: nextCardOpacity,
+            opacity: nextCardCombinedOpacity,
             transform: [{ translateY: nextCardTranslateY }, { scale: nextCardScale }],
           },
         ]}
@@ -1615,7 +1646,7 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            opacity: topCardOpacity,
+            opacity: topCardCombinedOpacity,
             transform: isWeb
               ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
               : [
@@ -1727,7 +1758,7 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            opacity: topCardOpacity,
+            opacity: topCardCombinedOpacity,
             transform: isWeb
               ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
               : [
