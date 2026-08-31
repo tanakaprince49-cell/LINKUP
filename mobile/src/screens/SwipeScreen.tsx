@@ -1348,6 +1348,9 @@ export default function SwipeScreen({ navigation }: any) {
 
     setActivePhotoIndex(0);
     setInfoExpanded(false);
+    // Reset position BEFORE profiles change so React only paints once
+    // with the new profile already at center. One synchronous block = one frame.
+    swipePosition.setValue({ x: 0, y: 0 });
     setProfiles((current) => {
       if (current[0]?.uid === item.uid) return current.slice(1);
       return current.filter((profile) => profile.uid !== item.uid);
@@ -1393,8 +1396,6 @@ export default function SwipeScreen({ navigation }: any) {
     });
   };
 
-  const [swipeVisible, setSwipeVisible] = useState(true);
-
   const startSwipeAnimation = (direction: 'left' | 'right', swipedItem: UserProfile) => {
     isAnimatingRef.current = true;
     setInfoExpanded(false);
@@ -1403,10 +1404,6 @@ export default function SwipeScreen({ navigation }: any) {
     const finish = () => {
       if (done) return;
       done = true;
-      // Hide card, swap profiles, reset position — all in one sync block.
-      // Card is invisible so no frame shows old person at center.
-      setSwipeVisible(false);
-      swipePosition.setValue({ x: 0, y: 0 });
       completeSwipe(direction, swipedItem);
       isAnimatingRef.current = false;
     };
@@ -1420,14 +1417,6 @@ export default function SwipeScreen({ navigation }: any) {
 
     setTimeout(finish, 220);
   };
-
-  // Show card after React commits the new profiles + position reset.
-  useEffect(() => {
-    if (swipeVisible) return;
-    requestAnimationFrame(() => {
-      setSwipeVisible(true);
-    });
-  }, [swipeVisible]);
 
   const animateSwipeOut = (direction: 'left' | 'right') => {
     // In scroll mode the card on screen is the one at the scroll index, NOT
@@ -1617,7 +1606,7 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            opacity: swipeVisible ? topCardOpacity : 0,
+            opacity: topCardOpacity,
             transform: isWeb
               ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
               : [
@@ -1729,7 +1718,7 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            opacity: swipeVisible ? topCardOpacity : 0,
+            opacity: topCardOpacity,
             transform: isWeb
               ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
               : [
