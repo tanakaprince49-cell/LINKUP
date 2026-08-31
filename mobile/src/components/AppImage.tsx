@@ -1,6 +1,7 @@
 import React from 'react';
 import { Platform, StyleProp, ImageStyle } from 'react-native';
 import { Image } from 'expo-image';
+import { avatarPlaceholderUri } from '../lib/defaultAvatar';
 
 /**
  * AppImage — expo-image wrapper with DISK cache (memory-disk). RN's stock
@@ -38,8 +39,10 @@ export const AppImage = ({ uri, style, contentFit = 'cover', transitionMs = 0, r
       style={style}
       contentFit={contentFit}
       cachePolicy="memory-disk"
-      transition={Platform.OS === 'android' ? 0 : transitionMs}
+      transition={0}
       recyclingKey={recycle ? uri : undefined}
+      placeholder={avatarPlaceholderUri('', 512)}
+      placeholderContentFit={contentFit}
     />
   );
 };

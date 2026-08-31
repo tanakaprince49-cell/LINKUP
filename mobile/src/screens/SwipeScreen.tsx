@@ -76,7 +76,7 @@ const FALLBACK_PHOTO = avatarPlaceholderUri('', 512);
 const MAX_SWIPE_DATA_URI_CHARS = 320_000;
 /** Order-sensitive fingerprint of a deck, used to drop no-op rebuilds. */
 const deckKey = (items: UserProfile[]) => items.map((profile) => profile?.uid).join('|');
-const USE_NATIVE_ANIMATION_DRIVER = false;
+const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
 const discoveryCacheKey = (uid: string) => `linkup:discovery:v3:${uid}`;
 const swipeProgressKey = (uid: string) => `linkup:swipe-progress:v1:${uid}`;
 const MAX_STORED_SWIPED_IDS = 500;
@@ -1314,14 +1314,13 @@ export default function SwipeScreen({ navigation }: any) {
 
     Animated.timing(swipePosition, {
       toValue: { x: exitX, y: direction === 'right' ? 34 : -34 },
-      duration: 280,
+      duration: 150,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: USE_NATIVE_ANIMATION_DRIVER,
     }).start(({ finished }) => {
       if (finished) {
-        // completeSwipe resets swipePosition synchronously before swapping the
-        // deck, so no stale-offset frame can paint between exit and next card.
         completeSwipe(direction, swipedItem);
+        swipePosition.setValue({ x: 0, y: 0 });
         isAnimatingRef.current = false;
         return;
       }
