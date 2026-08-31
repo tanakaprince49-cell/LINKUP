@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { collection, query, where, addDoc, limit, serverTimestamp, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, addDoc, limit, serverTimestamp, getDocs, getDocsFromCache, doc, getDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../lib/firebase';
 import { displayNameFor, earnedScore, isDiscoverableProfile, isSyntheticProfile } from '../lib/discovery';
@@ -34,7 +34,7 @@ import { useGamification } from '../contexts/GamificationContext';
 import { UserProfile } from '../types';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { roleInfoFor } from '../lib/roles';
-import { X, Heart, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare, Globe, Package, Zap } from 'lucide-react-native';
+import { X, Heart, RotateCcw, Target, ChevronDown, ChevronLeft, MapPin, Briefcase, MessageSquare, Globe, Package, Zap, Lock } from 'lucide-react-native';
 import {
   Campaign,
   SponsoredIdeaDeckItem,
@@ -79,7 +79,7 @@ const deckKey = (items: UserProfile[]) => items.map((profile) => profile?.uid).j
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
 const discoveryCacheKey = (uid: string) => `linkup:discovery:v3:${uid}`;
 const swipeProgressKey = (uid: string) => `linkup:swipe-progress:v1:${uid}`;
-const MAX_STORED_SWIPED_IDS = 500;
+const MAX_STORED_SWIPED_IDS = 2000;
 
 const getWebRuntimeFlags = () => {
   if (Platform.OS !== 'web') {
@@ -664,22 +664,45 @@ export default function SwipeScreen({ navigation }: any) {
     setLoading(true);
     void (async () => {
       let storedIds = await readSwipeProgress(user.uid).catch(() => new Set<string>());
-      // Swipe history never forgets: merge device-local progress with the
-      // durable Firestore swipe log (likes + passes) — no repeats from daily
-      // pool rotation, reinstalls, the local-storage cap, or another device.
-      try {
-        const history = await getDocs(
-          query(collection(db, 'swipes'), where('fromId', '==', user.uid), limit(500))
-        );
-        history.forEach((entry) => {
-          const toId = String(entry.data()?.toId || '').trim();
-          if (toId) storedIds.add(toId);
-        });
-      } catch {}
-      if (cancelled) return;
-      swipedSessionIdsRef.current = storedIds;
-      hasUserSwipedRef.current = storedIds.size > 0;
-      setProgressHydrated(true);
+
+      // Instant paint from local cache — avoids the Firestore round-trip on
+      // repeat opens. The background merge below keeps it durable.
+      if (storedIds.size > 0) {
+        swipedSessionIdsRef.current = storedIds;
+        hasUserSwipedRef.current = true;
+        setProgressHydrated(true);
+      }
+
+      // Merge device-local progress with the durable Firestore swipe log.
+      // Use getDocsFromCache first for instant paint, then refresh from
+      // server in the background so the deck is never blocked on network.
+      const mergeFirestoreHistory = async (useCache: boolean) => {
+        try {
+          const baseQuery = query(
+            collection(db, 'swipes'),
+            where('fromId', '==', user.uid),
+            limit(2000)
+          );
+          const history = useCache
+            ? await getDocsFromCache(baseQuery).catch(() => null)
+            : await getDocs(baseQuery).catch(() => null);
+          if (!history || cancelled) return;
+          history.forEach((entry) => {
+            const toId = String(entry.data()?.toId || '').trim();
+            if (toId) storedIds.add(toId);
+          });
+          if (!cancelled) {
+            swipedSessionIdsRef.current = storedIds;
+            hasUserSwipedRef.current = storedIds.size > 0;
+            setProgressHydrated(true);
+          }
+        } catch {}
+      };
+
+      // Lane 1: try local Firestore cache for instant paint
+      await mergeFirestoreHistory(true);
+      // Lane 2: refresh from server in background
+      void mergeFirestoreHistory(false);
     })();
 
     return () => {
@@ -743,6 +766,7 @@ export default function SwipeScreen({ navigation }: any) {
   const animateScrollStep = (from: number) => {
     settleScroll();
     isScrollAnimatingRef.current = true;
+    scrollAnimStartedAtRef.current = Date.now();
     scrollPosition.setValue(from);
     Animated.timing(scrollPosition, {
       toValue: 0,
@@ -753,24 +777,32 @@ export default function SwipeScreen({ navigation }: any) {
       scrollPosition.setValue(0);
       isScrollAnimatingRef.current = false;
     });
-    // Force reset after animation completes to prevent stuck position
-    setTimeout(() => {
+    // Safety net: if the JS thread stalls or the animation callback never
+    // fires (mode switch, backgrounding), force-reset after a generous
+    // window so the next gesture is never permanently blocked.
+    if (scrollAnimTimerRef.current) clearTimeout(scrollAnimTimerRef.current);
+    scrollAnimTimerRef.current = setTimeout(() => {
       scrollPosition.setValue(0);
       isScrollAnimatingRef.current = false;
-    }, 300);
+      scrollAnimTimerRef.current = null;
+    }, 400);
   };
 
   const springScrollBack = () => {
-    scrollPosition.stopAnimation();
-    Animated.spring(scrollPosition, {
-      toValue: 0, friction: 7, useNativeDriver: false,
-    }).start();
+    settleScroll();
+    scrollPosition.setValue(0);
   };
 
   const goToProfile = (dir: 'up' | 'down') => {
     // A sponsored slot on screen resolves before the feed moves again. The
     // sponsored stop is an ad, not a discovery, so it never spends budget.
     if (resolveSponsorRef.current('skip')) return;
+    // If the previous scroll animation is stuck (e.g. the app was backgrounded
+    // mid-animation), force-reset so the next gesture is never permanently
+    // blocked — the "blank screen after a few swipes" bug.
+    if (isScrollAnimatingRef.current) {
+      settleScroll();
+    }
     const len = feedRef.current.length;
     const cur = scrollIndexRef.current;
     if (dir === 'up' && cur < len - 1) {
@@ -805,6 +837,15 @@ export default function SwipeScreen({ navigation }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
+  // Non-Plus users can never enter scroll mode. If they somehow land here
+  // (stale state, deep link), force them back to swipe.
+  useEffect(() => {
+    if (mode === 'scroll' && !isProUser) {
+      setMode('swipe');
+      settleScroll();
+    }
+  }, [mode, isProUser]);
+
   useEffect(
     () => () => {
       if (scrollAnimTimerRef.current) clearTimeout(scrollAnimTimerRef.current);
@@ -832,13 +873,25 @@ export default function SwipeScreen({ navigation }: any) {
     }
   }, [feed]);
 
+  const scrollAnimStartedAtRef = useRef(0);
+
   const scrollPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponderCapture: (_evt, gs) =>
-        !isScrollAnimatingRef.current && Math.abs(gs.dy) > 12 && Math.abs(gs.dy) > Math.abs(gs.dx) * 1.5,
-      onMoveShouldSetPanResponder: (_evt, gs) =>
-        !isScrollAnimatingRef.current && Math.abs(gs.dy) > 12 && Math.abs(gs.dy) > Math.abs(gs.dx) * 1.5,
+      onMoveShouldSetPanResponderCapture: (_evt, gs) => {
+        // If animation has been running for too long (>400ms), it is stuck.
+        // Force-reset so the user is never locked out of the feed.
+        if (isScrollAnimatingRef.current && Date.now() - scrollAnimStartedAtRef.current > 400) {
+          settleScroll();
+        }
+        return !isScrollAnimatingRef.current && Math.abs(gs.dy) > 12 && Math.abs(gs.dy) > Math.abs(gs.dx) * 1.5;
+      },
+      onMoveShouldSetPanResponder: (_evt, gs) => {
+        if (isScrollAnimatingRef.current && Date.now() - scrollAnimStartedAtRef.current > 400) {
+          settleScroll();
+        }
+        return !isScrollAnimatingRef.current && Math.abs(gs.dy) > 12 && Math.abs(gs.dy) > Math.abs(gs.dx) * 1.5;
+      },
       onPanResponderGrant: () => {
         scrollPosition.setValue(0);
       },
@@ -848,7 +901,6 @@ export default function SwipeScreen({ navigation }: any) {
       },
       onPanResponderRelease: (_evt, gs) => {
         if (isScrollAnimatingRef.current) return;
-        // Scrolling up (browsing) is always free - never triggers paywall
         if (gs.dy < -70) {
           goToProfileRef.current('up');
         } else if (gs.dy > 70) {
@@ -921,6 +973,36 @@ export default function SwipeScreen({ navigation }: any) {
         }
         const remainingUsers = unswipedProfiles(orderedUsers);
         if (remainingUsers.length === 0 && orderedUsers.length > 0) {
+          // Pool exhausted — try to load more profiles from pagination
+          // before resorting to a full reset that causes duplicates.
+          if (!allLoadedRef.current && !loadingMoreRef.current) {
+            void (async () => {
+              try {
+                const moreProfiles = await loadMoreDiscoveryProfiles();
+                if (moreProfiles.length > 0) {
+                  const existingIds = new Set(orderedUsers.map((p) => p.uid));
+                  const freshProfiles = moreProfiles.filter(
+                    (p) => !existingIds.has(p.uid) && !swipedSessionIdsRef.current.has(p.uid)
+                  );
+                  if (freshProfiles.length > 0) {
+                    allProfilesRef.current = [...orderedUsers, ...freshProfiles];
+                    setProfiles(freshProfiles);
+                    setLoading(false);
+                    return;
+                  }
+                }
+                allLoadedRef.current = true;
+              } catch {}
+              // No more profiles anywhere — safe to reset the seen set.
+              swipedSessionIdsRef.current.clear();
+              hasUserSwipedRef.current = false;
+              if (user?.uid) void clearSwipeProgress(user.uid);
+              setProfiles(orderedUsers);
+              setLoading(false);
+            })();
+            return;
+          }
+          // Already tried pagination — reset.
           swipedSessionIdsRef.current.clear();
           hasUserSwipedRef.current = false;
           if (user?.uid) void clearSwipeProgress(user.uid);
@@ -1323,17 +1405,10 @@ export default function SwipeScreen({ navigation }: any) {
     setInfoExpanded(false);
     const exitX = direction === 'right' ? deckExitDistanceRef.current : -deckExitDistanceRef.current;
 
-    // Hide card first
-    setCardVisible(false);
-
-    // Complete swipe after a brief delay
-    setTimeout(() => {
-      completeSwipe(direction, swipedItem);
-      swipePosition.setValue({ x: 0, y: 0 });
-      // Show card again
-      setCardVisible(true);
-      isAnimatingRef.current = false;
-    }, 16);
+    // Complete swipe immediately
+    completeSwipe(direction, swipedItem);
+    swipePosition.setValue({ x: 0, y: 0 });
+    isAnimatingRef.current = false;
   };
 
   const animateSwipeOut = (direction: 'left' | 'right') => {
@@ -1636,7 +1711,7 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
-            opacity: cardVisible ? topCardOpacity : 0,
+            opacity: topCardOpacity,
             transform: isWeb
               ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
               : [
@@ -1986,10 +2061,17 @@ export default function SwipeScreen({ navigation }: any) {
               <Text style={[styles.modeChipText, mode === 'swipe' && styles.modeChipTextOn]}>Swipe</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => setMode('scroll')}
+              onPress={() => {
+                if (!isProUser) {
+                  openPaywall('Scroll Mode');
+                  return;
+                }
+                setMode('scroll');
+              }}
               style={[styles.modeChip, mode === 'scroll' && styles.modeChipOn]}
               activeOpacity={0.88}
             >
+              {!isProUser && <Lock size={10} color={textColor(isDark, 'muted')} style={{ marginRight: 3 }} />}
               <Text style={[styles.modeChipText, mode === 'scroll' && styles.modeChipTextOn]}>Scroll</Text>
             </TouchableOpacity>
           </View>
