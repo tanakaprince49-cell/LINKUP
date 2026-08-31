@@ -4,7 +4,7 @@ import { collection, query, where, orderBy, onSnapshot, updateDoc, doc, limit } 
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { AppNotification } from '../types';
-import { Bell, Heart, Users, MessageCircle, Star, Sparkles, Loader2 } from 'lucide-react';
+import { Bell, Heart, Users, MessageCircle, Star, Sparkles, Loader2, Megaphone, CheckCircle, XCircle } from 'lucide-react';
 
 const NotificationRow = ({ notification }: { notification: AppNotification }) => {
   const getIcon = () => {
@@ -13,6 +13,9 @@ const NotificationRow = ({ notification }: { notification: AppNotification }) =>
       case 'match': return <Users size={16} className="text-green-500" />;
       case 'message': return <MessageCircle size={16} className="text-blue-500" />;
       case 'ai_pick': return <Sparkles size={16} className="text-orange-500" />;
+      case 'campaign_review': return <Megaphone size={16} className="text-blue-400" />;
+      case 'campaign_approved': return <CheckCircle size={16} className="text-green-500" />;
+      case 'campaign_rejected': return <XCircle size={16} className="text-red-500" />;
       default: return <Bell size={16} className="text-white/40" />;
     }
   };

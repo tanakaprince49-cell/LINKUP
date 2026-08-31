@@ -96,6 +96,9 @@ function notificationBody(data: any) {
   if (data?.type === 'connection_rejected') return `${data.fromName || 'Someone'} responded to your contact request.`;
   if (data?.type === 'view') return `${data.fromName || 'Someone'} viewed your profile.`;
   if (data?.type === 'game_challenge') return (data?.body || data?.title || `${data.fromName || 'Someone'} challenged you!`);
+  if (data?.type === 'campaign_review') return `${data.fromName || 'An advertiser'} ${content || 'submitted a campaign for review.'}`;
+  if (data?.type === 'campaign_approved') return content || 'Your campaign has been approved!';
+  if (data?.type === 'campaign_rejected') return content || 'Your campaign was not approved.';
   return content || 'Open LINKUP for the latest update.';
 }
 
@@ -109,6 +112,9 @@ function notificationTargetUrl(data: any) {
     };
     const screen = gameMap[String(data?.gameType || '')];
     if (screen) return `/${screen}`;
+  }
+  if (data?.type === 'campaign_review' || data?.type === 'campaign_approved' || data?.type === 'campaign_rejected') {
+    return '/campaigns';
   }
   if (
     data?.fromId &&
@@ -148,6 +154,9 @@ export async function playInAppNotificationSound(type?: string) {
       game_challenge: [880, 1180, 1480],
       system: [640, 860],
       comment: [680, 900],
+      campaign_review: [540, 720, 960],
+      campaign_approved: [620, 880, 1180],
+      campaign_rejected: [420, 540],
     };
     const tones = frequencies[String(type || '')] || [660, 880];
     const startTime = webAudioContext.currentTime;

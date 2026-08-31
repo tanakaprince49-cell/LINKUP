@@ -1026,7 +1026,7 @@ service cloud.firestore {
       function validNotification(data) {
         return data.keys().hasOnly([
           'userId', 'fromId', 'fromName', 'fromPic',
-          'type', 'content', 'matchId', 'requestId',
+          'type', 'content', 'matchId', 'requestId', 'campaignId',
           'isRead', 'timestamp'
         ]) &&
         data.userId is string &&
@@ -1037,7 +1037,8 @@ service cloud.firestore {
         data.type in [
           'like', 'match', 'view', 'message', 'comment', 'system',
           'connection_request', 'connection_approved', 'connection_rejected',
-          'game_challenge'
+          'game_challenge',
+          'campaign_review', 'campaign_approved', 'campaign_rejected'
         ] &&
         data.timestamp == request.time &&
         (!data.keys().hasAny(['fromId']) || isValidId(data.fromId)) &&
@@ -1045,7 +1046,8 @@ service cloud.firestore {
         (!data.keys().hasAny(['requestId']) || isValidId(data.requestId)) &&
         (
           data.userId == request.auth.uid ||
-          (data.keys().hasAny(['fromId']) && data.fromId == request.auth.uid)
+          (data.keys().hasAny(['fromId']) && data.fromId == request.auth.uid) ||
+          data.type in ['campaign_review', 'campaign_approved', 'campaign_rejected']
         );
       }
 

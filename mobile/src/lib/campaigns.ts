@@ -206,6 +206,58 @@ export const subscribePendingCampaigns = (onData: (campaigns: Campaign[]) => voi
 export const countLiveCampaigns = (campaigns: Campaign[]) =>
   campaigns.filter((campaign) => ['pending_review', 'active', 'paused'].includes(campaign.status)).length;
 
+const notifyCampaignAdmins = async (campaignId: string, ownerName: string, productName: string) => {
+  try {
+    const adminsSnap = await getDoc(doc(db, 'config', 'admins'));
+    const adminUids: string[] = adminsSnap.data()?.uids || [];
+    const campaignName = productName || 'Untitled';
+    for (const adminUid of adminUids) {
+      await addDoc(collection(db, 'notifications'), {
+        userId: adminUid,
+        fromId: campaignId,
+        fromName: ownerName || 'An advertiser',
+        fromPic: '',
+        type: 'campaign_review',
+        content: `submitted "${campaignName}" for review.`,
+        campaignId,
+        isRead: false,
+        timestamp: serverTimestamp(),
+      }).catch(() => {});
+    }
+  } catch {
+    // config/admins may not exist — non-critical.
+  }
+};
+
+const notifyCampaignOwner = async (
+  ownerId: string,
+  campaignId: string,
+  status: 'active' | 'rejected',
+  reviewNote: string = ''
+) => {
+  try {
+    const campaignSnap = await getDoc(doc(db, 'campaigns', campaignId));
+    const campaignName = campaignSnap.data()?.creative?.productName || campaignSnap.data()?.creative?.title || 'Your campaign';
+    const content =
+      status === 'active'
+        ? `Your campaign "${campaignName}" has been approved and is now live!`
+        : `Your campaign "${campaignName}" was not approved.${reviewNote ? ` Reason: ${reviewNote}` : ''}`;
+    await addDoc(collection(db, 'notifications'), {
+      userId: ownerId,
+      fromId: 'linkup_admin',
+      fromName: 'LINKUP',
+      fromPic: '',
+      type: status === 'active' ? 'campaign_approved' : 'campaign_rejected',
+      content,
+      campaignId,
+      isRead: false,
+      timestamp: serverTimestamp(),
+    }).catch(() => {});
+  } catch {
+    // Notification failure must not block the status update.
+  }
+};
+
 export const createCampaign = async (input: {
   ownerId: string;
   ownerName: string;
@@ -243,6 +295,22 @@ export const createCampaign = async (input: {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  // Notify admins and confirm to the sender.
+  const productName = input.creative?.productName || input.creative?.title || input.name;
+  await notifyCampaignAdmins(ref.id, input.ownerName, productName).catch(() => {});
+  await addDoc(collection(db, 'notifications'), {
+    userId: input.ownerId,
+    fromId: 'linkup_admin',
+    fromName: 'LINKUP',
+    fromPic: '',
+    type: 'system',
+    content: `Your campaign "${productName}" was submitted for review. We'll notify you once it's approved.`,
+    campaignId: ref.id,
+    isRead: false,
+    timestamp: serverTimestamp(),
+  }).catch(() => {});
+
   return ref.id;
 };
 
@@ -252,6 +320,19 @@ export const setCampaignStatus = async (campaignId: string, status: CampaignStat
     ...(reviewNote ? { reviewNote: reviewNote.slice(0, 280) } : {}),
     updatedAt: serverTimestamp(),
   });
+
+  // Notify the campaign owner on accept/reject.
+  if (status === 'active' || status === 'rejected') {
+    try {
+      const campaignSnap = await getDoc(doc(db, 'campaigns', campaignId));
+      const ownerId = campaignSnap.data()?.ownerId;
+      if (ownerId) {
+        await notifyCampaignOwner(ownerId, campaignId, status, reviewNote);
+      }
+    } catch {
+      // Best-effort — owner notification must not block moderation.
+    }
+  }
 };
 
 /** Owner edits while the campaign is still in review — stats, ownership and

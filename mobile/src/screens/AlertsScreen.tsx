@@ -15,7 +15,7 @@ import { respondToConnectionRequest } from '../lib/connectionRequests';
 import { notifyUser } from '../lib/notify';
 import { challengeId as makeChallengeId } from '../lib/gameChallenges';
 import { MOBILE_LIST_IMAGE_LIMIT, MOBILE_NOTIFICATION_QUERY_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
-import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X, Sparkles } from 'lucide-react-native';
+import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X, Sparkles, Megaphone } from 'lucide-react-native';
 import ScreenHeader from '../components/ScreenHeader';
 
 const formatTimeAgo = (timestamp: any) => {
@@ -75,6 +75,12 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         return { Icon: X, color: '#EF4444', bg: 'rgba(239,68,68,0.12)', fill: 'transparent' };
       case 'view':
         return { Icon: Eye, color: '#7C3AED', bg: 'rgba(124,58,237,0.12)', fill: 'transparent' };
+      case 'campaign_review':
+        return { Icon: Megaphone, color: '#2563EB', bg: 'rgba(37,99,235,0.12)', fill: 'transparent' };
+      case 'campaign_approved':
+        return { Icon: Check, color: '#16A34A', bg: 'rgba(22,163,74,0.14)', fill: 'transparent' };
+      case 'campaign_rejected':
+        return { Icon: X, color: '#DC2626', bg: 'rgba(220,38,38,0.12)', fill: 'transparent' };
       default:
         return { Icon: Bell, color: textColor(isDark, 'muted'), bg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', fill: 'transparent' };
     }

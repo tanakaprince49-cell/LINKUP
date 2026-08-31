@@ -179,7 +179,10 @@ export interface AppNotification {
     | 'connection_request'
     | 'connection_approved'
     | 'connection_rejected'
-    | 'game_challenge';
+    | 'game_challenge'
+    | 'campaign_review'
+    | 'campaign_approved'
+    | 'campaign_rejected';
   content: string;
   timestamp: Timestamp | FieldValue;
   isRead: boolean;
@@ -188,6 +191,7 @@ export interface AppNotification {
   fromPic?: string;
   matchId?: string;
   requestId?: string;
+  campaignId?: string;
   note?: string;
   gameType?: string;
 }

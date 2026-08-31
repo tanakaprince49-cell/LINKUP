@@ -62,6 +62,7 @@ type LinkupNotification = {
   type?: string;
   content?: string;
   matchId?: string;
+  campaignId?: string;
 };
 
 function normalize(v: unknown) {
@@ -175,11 +176,17 @@ function notificationBody(data: LinkupNotification) {
   if (data.type === 'message') return `${data.fromName || 'Someone'} ${content || 'sent you a message.'}`;
   if (data.type === 'like') return `${data.fromName || 'Someone'} ${content || 'liked your profile.'}`;
   if (data.type === 'view') return `${data.fromName || 'Someone'} viewed your profile.`;
+  if (data.type === 'campaign_review') return `${data.fromName || 'An advertiser'} ${content || 'submitted a campaign for review.'}`;
+  if (data.type === 'campaign_approved') return content || 'Your campaign has been approved!';
+  if (data.type === 'campaign_rejected') return content || 'Your campaign was not approved.';
   return content || 'Open LINKUP for the latest update.';
 }
 
 function notificationUrl(data: LinkupNotification) {
   if (data.matchId) return `/chat/${data.matchId}`;
+  if (['campaign_review', 'campaign_approved', 'campaign_rejected'].includes(String(data.type || ''))) {
+    return '/campaigns';
+  }
   if (
     data.fromId &&
     (String(data.content || '').startsWith('AI Opportunity') ||
