@@ -13,21 +13,43 @@ contains the trial code.
 
 | Product ID | Name shown to user | Base plan | Price (USD) | Trial |
 |---|---|---|---|---|
-| `linkup_plus_monthly` | LINKUP PLUS Monthly | `plus-monthly` (auto-renew, 1 month) | **$19.99** | 7 days |
-| `linkup_plus_yearly` | LINKUP PLUS Yearly | `plus-yearly` (auto-renew, 1 year) | **$149.99** | 7 days |
-| `linkup_campaigns_monthly` | LINKUP Campaigns Monthly | `campaigns-monthly` (auto-renew, 1 month) | **$29.99** | 7 days |
-| `linkup_campaigns_yearly` | LINKUP Campaigns Yearly | `campaigns-yearly` (auto-renew, 1 year) | **$249.99** | 7 days |
+| `linkup_plus_monthly` | LINKUP PLUS Monthly | `plusmonthly` (auto-renew, **1 month**) | **$19.99** | 7 days |
+| `linkup_plus_yearly` | LINKUP PLUS Yearly | `plusyearly` (auto-renew, **1 year**) | **$149.99** | 7 days |
+| `linkup_campaigns_monthly` | LINKUP Campaigns Monthly | `campaignsmonthly` (auto-renew, **1 month**) | **$29.99** | 7 days |
+| `linkup_campaigns_yearly` | LINKUP Campaigns Yearly | `campaignsyearly` (auto-renew, **1 year**) | **$249.99** | 7 days |
+
+> ### ⚠️ ID rules — read before you type anything
+>
+> Play enforces **different** character sets on the three kinds of ID, and
+> the error you get back is the one for the field you are in:
+>
+> | Field | Allowed characters | Hyphens? |
+> |---|---|---|
+> | **Product ID** (the subscription itself) | start with a number or lowercase letter; then `a-z`, `0-9`, `_`, `.` (max 40) | **NO** — this is the field that rejects hyphens |
+> | **Base plan ID** | start with a number or lowercase letter; then `a-z`, `0-9`, `-` | yes, allowed |
+> | **Offer ID** | start with a number or lowercase letter; then `a-z`, `0-9`, `-` | yes, allowed |
+>
+> Product IDs are also **permanent** — they cannot be changed or reused once
+> created, and they are the strings hardcoded in
+> `mobile/src/lib/paywall.ts` (`LINKUP_PLUS_PRODUCT_ID`,
+> `LINKUP_PLUS_YEARLY_PRODUCT_ID`) and `mobile/src/lib/campaigns.ts`
+> (`LINKUP_CAMPAIGNS_PRODUCT_ID`, `LINKUP_CAMPAIGNS_YEARLY_PRODUCT_ID`).
+>
+> To dodge this entirely, every **base plan** and **offer** ID below is plain
+> lowercase letters and numbers — the only character set Play accepts in all
+> three fields. **Product IDs** are dictated by the app code and use
+> underscores, which is legal for that field.
 
 Two rules that shape the whole thing:
 
-- **The product ID is permanent.** It lives in
-  `mobile/src/lib/paywall.ts` (`LINKUP_PLUS_PRODUCT_ID`,
-  `LINKUP_PLUS_YEARLY_PRODUCT_ID`) and `mobile/src/lib/campaigns.ts`
-  (`LINKUP_CAMPAIGNS_PRODUCT_ID`, `LINKUP_CAMPAIGNS_YEARLY_PRODUCT_ID`).
-  Type them exactly — lowercase, underscores. You cannot rename them later.
+- **The product ID is permanent.** Type them exactly — lowercase,
+  underscores, no hyphens. You cannot rename them later.
 - **A free trial is an *offer* attached to a base plan**, not a field on the
   subscription. The base plan carries the real price; the offer carries the
   7 free days.
+- **A base plan's billing period is immutable.** It cannot be edited after
+  creation — if a yearly plan was created with a 1-month period, you must
+  create a new base plan and deactivate the wrong one (see the warning under the base plan table in Part 2).
 
 ---
 
@@ -67,6 +89,19 @@ Fill in, for **each** of the four rows in the table above:
 
 1. **Product ID** — e.g. `linkup_plus_monthly`. ⚠️ Permanent, can't be changed
    or reused once activated.
+
+> **ID character rules — these are different per field, and Play rejects them
+> without explaining why.**
+>
+> | Field | Allowed characters | Rejected |
+> |---|---|---|
+> | Product ID (the subscription) | lowercase `a-z`, `0-9`, underscores `_`, periods `.` | **hyphens `-`**, uppercase, spaces |
+> | Base plan ID | lowercase `a-z`, `0-9`, **hyphens `-`** | underscores, uppercase |
+> | Offer ID | lowercase `a-z`, `0-9`, **hyphens `-`** | underscores, uppercase |
+>
+> All three must start with a lowercase letter or a number, and are immutable
+> once activated. If a field still refuses your ID, strip it to plain lowercase
+> letters and numbers — `plusyearly12m` is valid in every field.
 2. **Name** — how users see it in emails and the subscription centre:
    - `LINKUP PLUS Monthly`
    - `LINKUP PLUS Yearly`
@@ -95,10 +130,16 @@ Click the **→ arrow** on the subscription you just created → **Add base plan
 
 | Field | PLUS monthly | PLUS yearly | Campaigns monthly | Campaigns yearly |
 |---|---|---|---|---|
-| **Base plan ID** | `plus-monthly` | `plus-yearly` | `campaigns-monthly` | `campaigns-yearly` |
+| **Base plan ID** | `plusmonthly` | `plusyearly` | `campaignsmonthly` | `campaignsyearly` |
 | **Renewal type** | Auto-renewing | Auto-renewing | Auto-renewing | Auto-renewing |
-| **Billing period** | 1 month | 1 year | 1 month | 1 year |
+| **Billing period** ⚠️ | 1 month | **1 year** | 1 month | **1 year** |
 | **Price** | $19.99 | $149.99 | $29.99 | $249.99 |
+
+⚠️ **Billing period is the field that silently costs you money.** It is
+immutable once the base plan exists, and Play never questions a "$149.99
+monthly plan" — it just charges it, every month. Open each base plan after
+saving and confirm the summary reads `Auto-renewing · Yearly` for the two
+yearly rows.
 
 Then:
 
@@ -121,14 +162,41 @@ Then:
 
 ---
 
+## Part 2.5 — If a yearly base plan was created with a 1-month period
+
+Symptom: the yearly plan charges the **yearly** price **every month**
+($149.99/mo instead of $149.99/yr).
+
+`billingPeriodDuration` is immutable — it cannot be edited. Create a
+replacement instead:
+
+1. **Add base plan** on the same subscription:
+   - PLUS → `plusyearly12m` · Auto-renewing · **Yearly** · $149.99 · grace 7 days
+   - Campaigns → `campaignsyearly12m` · Auto-renewing · **Yearly** · $249.99 · grace 7 days
+   - **Save → Activate**, then ⋮ → *Use for deprecated billing methods*.
+2. **Add offer** on the **new** base plan: `plusyearly12mtrial7` /
+   `campaignsyearly12mtrial7` · free trial · **7 days** → Save → **Activate**.
+3. **Deactivate** the old base plan *and* its old offer (top right → Deactivate).
+   Deactivating stops NEW purchases only.
+4. **Refund + cancel** anyone already on the broken plan — they keep being
+   charged monthly until you do.
+5. **No app change, no rebuild.** The app buys the **product ID** and picks
+   whichever offer carries a free-trial phase; it never references base plan
+   IDs, so it picks up the new plan on its own once Play propagates.
+
+The `12m` suffix exists only because a new ID must be unique within the
+subscription — the old ID stays reserved forever.
+
+---
+
 ## Part 3 — Add the 7-day free trial offer
 
 Still inside the subscription → **Base plans and offers** → **Add offer**.
 
-1. **Select base plan** → pick the one you just made (e.g. `plus-monthly`) →
+1. **Select base plan** → pick the one you just made (e.g. `plusyearly`) →
    **Add offer**.
-2. **Offer ID** — `plus-monthly-trial7` (and `plus-yearly-trial7`,
-   `campaigns-monthly-trial7`, `campaigns-yearly-trial7`).
+2. **Offer ID** — `plusmonthlytrial7`, `plusyearlytrial7`,
+   `campaignsmonthlytrial7`, `campaignsyearlytrial7`.
 3. **Eligibility criteria** — this is the one real decision. See the table
    below.
 4. **Phases** → **Add phase**:
