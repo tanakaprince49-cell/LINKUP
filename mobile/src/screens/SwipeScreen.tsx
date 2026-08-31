@@ -837,6 +837,7 @@ export default function SwipeScreen({ navigation }: any) {
       },
       onPanResponderRelease: (_evt, gs) => {
         if (isScrollAnimatingRef.current) return;
+        // Scrolling up (browsing) is always free - never triggers paywall
         if (gs.dy < -70) {
           goToProfileRef.current('up');
         } else if (gs.dy > 70) {
@@ -1388,25 +1389,43 @@ export default function SwipeScreen({ navigation }: any) {
     setInfoExpanded(true);
   }, [topProfile]);
 
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <View style={styles.emptyIcon}>
-        <Target size={26} color="#111" />
+  const renderEmpty = () => {
+    if (mode === 'scroll' && !isProUser && swipesLeft === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIcon}>
+            <Zap size={26} color={COLORS.primary} />
+          </View>
+          <Text style={[styles.emptyText, { color: textColor(isDark) }]}>Daily limit reached</Text>
+          <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
+            You've used your free discovery quota. Upgrade to PLUS for unlimited swipes.
+          </Text>
+          <TouchableOpacity style={styles.resetBtn} onPress={() => openPaywall('Unlimited Discovery')}>
+            <Text style={styles.resetText}>Go PLUS</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyIcon}>
+          <Target size={26} color="#111" />
+        </View>
+        <Text style={[styles.emptyText, { color: textColor(isDark) }]}>No one left to meet</Text>
+        <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
+          {allProfilesRef.current.length === 0
+            ? 'The network is still small. Invite people you know, then refresh.'
+            : "You've seen everyone here. Invite more builders or refresh the deck."}
+        </Text>
+        <TouchableOpacity style={styles.resetBtn} onPress={() => void shareLinkupInvite()}>
+          <Text style={styles.resetText}>Invite builders</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.resetBtn, styles.resetGhost]} onPress={resetDeck}>
+          <Text style={[styles.resetText, { color: textColor(isDark) }]}>Refresh</Text>
+        </TouchableOpacity>
       </View>
-      <Text style={[styles.emptyText, { color: textColor(isDark) }]}>No one left to meet</Text>
-      <Text style={[styles.emptySubtext, { color: textColor(isDark, 'muted') }]}>
-        {allProfilesRef.current.length === 0
-          ? 'The network is still small. Invite people you know, then refresh.'
-          : 'You’ve seen everyone here. Invite more builders or refresh the deck.'}
-      </Text>
-      <TouchableOpacity style={styles.resetBtn} onPress={() => void shareLinkupInvite()}>
-        <Text style={styles.resetText}>Invite builders</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.resetBtn, styles.resetGhost]} onPress={resetDeck}>
-        <Text style={[styles.resetText, { color: textColor(isDark) }]}>Refresh</Text>
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   const renderPreviewCard = () => {
     if (!nextProfile || infoExpanded) return null;
