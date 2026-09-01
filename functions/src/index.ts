@@ -1064,3 +1064,8 @@ export const webhookReceive = onRequest({ region: 'us-central1', cors: true }, a
 });
 
 export { healProfileImages } from "./profileImageDoctor";
+export {
+  stampCampaignExpiry,
+  refreshCampaignExpiryOnApproval,
+  endLapsedCampaigns,
+} from "./campaignExpiry";

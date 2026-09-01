@@ -112,6 +112,10 @@ export type Campaign = {
   creative: CampaignCreative;
   industries: string[];
   planProductId?: string;
+  /** Server-stamped stop date. Written by functions/src/campaignExpiry.ts. */
+  expiresAt?: any;
+  /** Which entitlement the stamp came from — 'web', 'play-trial', … */
+  expiresAtSource?: string;
   statsImpressions: number;
   statsClicks: number;
   reviewNote?: string;
@@ -192,7 +196,7 @@ export const subscribeMyCampaigns = (uid: string, onData: (campaigns: Campaign[]
 export const subscribeActiveCampaigns = (onData: (campaigns: Campaign[]) => void, onError?: (error: any) => void) =>
   onSnapshot(
     query(collection(db, 'campaigns'), where('status', '==', 'active'), limit(12)),
-    (snap) => onData(snapshotToCampaigns(snap)),
+    (snap) => onData(snapshotToCampaigns(snap).filter((campaign) => isCampaignServable(campaign))),
     (error) => onError?.(error)
   );
 
@@ -205,6 +209,43 @@ export const subscribePendingCampaigns = (onData: (campaigns: Campaign[]) => voi
 
 export const countLiveCampaigns = (campaigns: Campaign[]) =>
   campaigns.filter((campaign) => ['pending_review', 'active', 'paused'].includes(campaign.status)).length;
+
+/** Firestore Timestamp | epoch millis | Date -> millis, or null if unusable. */
+const toEpochMillis = (value: any): number | null => {
+  if (value == null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value?.toMillis === 'function') {
+    const ms = value.toMillis();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (value instanceof Date) return value.getTime();
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/**
+ * May this campaign serve right now?
+ *
+ * `status: 'active'` alone is not enough, and that was the whole loophole:
+ * status was set once at approval and never cleared, so a campaign bought on
+ * a 7-day trial ran forever after the trial ended or the advertiser cancelled.
+ *
+ * Expiry is the authority. The scheduled sweep stamps expiresAt and flips
+ * lapsed campaigns to 'ended'; this check keeps a lapsed ad out of rotation in
+ * the hours between sweeps, on every surface that serves one.
+ *
+ * Fails CLOSED: a campaign with no stamp does not serve. An unstamped campaign
+ * is precisely the shape the loophole took, so the safe default is off. Run
+ * functions/backfill-campaign-expiry.mjs once when this ships to stamp the
+ * campaigns that predate it.
+ */
+export const isCampaignServable = (campaign: Campaign | null | undefined, now: number = Date.now()): boolean => {
+  if (!campaign) return false;
+  if (campaign.status !== 'active') return false;
+  const expiresAt = toEpochMillis(campaign.expiresAt);
+  if (expiresAt == null) return false;
+  return expiresAt > now;
+};
 
 const notifyCampaignAdmins = async (campaignId: string, ownerName: string, productName: string) => {
   try {
@@ -554,7 +595,10 @@ export const sponsoredIdeaCardsForViewer = async (
 export const fetchAnyActiveCampaigns = async (max: number = 1): Promise<Campaign[]> => {
   try {
     const snap = await getDocs(query(collection(db, 'campaigns'), where('status', '==', 'active'), limit(12)));
-    return snap.docs.map((entry) => ({ id: entry.id, ...entry.data() }) as Campaign).slice(0, max);
+    return snap.docs
+      .map((entry) => ({ id: entry.id, ...entry.data() }) as Campaign)
+      .filter((campaign) => isCampaignServable(campaign))
+      .slice(0, max);
   } catch {
     return [];
   }
@@ -566,6 +610,7 @@ export const fetchActiveCampaignsForPlacement = async (placement: string, max: n
     const snap = await getDocs(query(collection(db, 'campaigns'), where('status', '==', 'active'), limit(12)));
     return snap.docs
       .map((entry) => ({ id: entry.id, ...entry.data() }) as Campaign)
+      .filter((campaign) => isCampaignServable(campaign))
       .filter((campaign) => Array.isArray(campaign.placements) && campaign.placements.includes(placement))
       .slice(0, max);
   } catch {
