@@ -2893,15 +2893,26 @@ export default function ProfileScreen({ navigation, route }: any) {
                 How people find and reply to you
               </Text>
               {[
-                { icon: 'Eye', label: 'Profile views', value: visibleProfileViewCount, hint: 'Opens of your profile', mode: 'views' },
-                { icon: 'MousePointerClick', label: 'Clicks', value: visibleProfileClickCount, hint: 'Taps on your actions', mode: 'clicks' },
-                { icon: 'Bookmark', label: 'Saves', value: visibleProfileSaveCount, hint: 'People who bookmarked you', mode: 'saves' },
-                { icon: 'MessageSquare', label: 'Response rate', value: `${visibleResponseRate}%`, hint: 'Chats you’ve answered', mode: 'response' },
+                { icon: 'Eye', label: 'Profile views', value: visibleProfileViewCount, hint: 'Opens of your profile', mode: 'views', paywall: 'Who Viewed You' },
+                { icon: 'MousePointerClick', label: 'Clicks', value: visibleProfileClickCount, hint: 'Taps on your actions', mode: 'clicks', paywall: 'Who Clicked You' },
+                { icon: 'Bookmark', label: 'Saves', value: visibleProfileSaveCount, hint: 'People who bookmarked you', mode: 'saves', paywall: 'Who Saved You' },
+                { icon: 'MessageSquare', label: 'Response rate', value: `${visibleResponseRate}%`, hint: 'Chats you’ve answered', mode: 'response', paywall: 'Your Conversations' },
               ].map((metric: any, index: number) => (
                 <TouchableOpacity
                   key={String(metric.label)}
                   activeOpacity={0.82}
-                  onPress={() => navigation.navigate('Viewers', { mode: metric.mode })}
+                  onPress={() => {
+                    // The counts are free for everyone — that is the teaser.
+                    // The people behind them are a PLUS superpower. Tapping
+                    // pays the wall right here instead of navigating: the
+                    // list screen locks itself too, but a non-PLUS tap should
+                    // never even leave this screen.
+                    if (!isProPlanActive) {
+                      openPaywall(String(metric.paywall || 'Who Viewed You'));
+                      return;
+                    }
+                    navigation.navigate('Viewers', { mode: metric.mode });
+                  }}
                   style={[
                     styles.dashRow,
                     index > 0 && { borderTopColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, borderTopWidth: 1 },
@@ -2915,6 +2926,11 @@ export default function ProfileScreen({ navigation, route }: any) {
                     <Text style={[styles.dashHint, { color: textColor(isDark, 'muted') }]}>{metric.hint}</Text>
                   </View>
                   <Text style={[styles.dashValue, { color: textColor(isDark) }]}>{metric.value}</Text>
+                  {!isProPlanActive && (
+                    <View style={[styles.analyticsLockedChip, { marginLeft: 6 }]}>
+                      <Text style={styles.analyticsLockedChipText}>PLUS</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               ))}
             </View>
