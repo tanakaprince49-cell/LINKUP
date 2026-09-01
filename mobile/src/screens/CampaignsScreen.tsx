@@ -348,7 +348,7 @@ export default function CampaignsScreen({ navigation }: any) {
 
   const moderate = async (campaign: Campaign, status: 'active' | 'rejected', note: string = '') => {
     if (moderationBusy) return; setModerationBusy(campaign.id);
-    try { await setCampaignStatus(campaign.id, status, note); }
+    try { await setCampaignStatus(campaign.id, status, note, { revalidateExpiry: status === 'active' }); }
     catch (e: any) { notifyUser('Moderation failed', e?.message || 'Try again.'); }
     finally { setModerationBusy(''); }
   };

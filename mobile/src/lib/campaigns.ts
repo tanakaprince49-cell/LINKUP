@@ -73,6 +73,13 @@ export const CAMPAIGN_PLACEMENT_OPTIONS: { id: string; label: string; desc: stri
   { id: 'play', label: 'Play tab', desc: 'Sponsored card on the Play screen', available: true },
 ];
 
+/**
+ * How long a campaign runs when the advertiser's plan has no published end
+ * date - a paid Play subscription, before RTDN tells us the renewal date.
+ * Mirrors CAMPAIGN_WINDOW_DAYS in functions/src/campaignExpiry.ts.
+ */
+export const CAMPAIGN_WINDOW_DAYS = 30;
+
 /** House ads fill empty inventory: when no advertiser campaign is eligible we
  * promote PLUS ourselves instead of wasting the slot. */
 export const HOUSE_PLUS_CAMPAIGN_ID = 'house_plus';
@@ -239,6 +246,55 @@ const toEpochMillis = (value: any): number | null => {
  * functions/backfill-campaign-expiry.mjs once when this ships to stamp the
  * campaigns that predate it.
  */
+/**
+ * When should this advertiser's campaign stop serving?
+ *
+ * This is a CLIENT-side estimate and is not trusted: the hourly sweep
+ * re-clamps expiresAt back onto the real entitlement, and the create rule
+ * bounds how far out it may be set at all. Its only job is to let a new
+ * campaign serve straight away instead of waiting up to an hour for the
+ * sweep to notice it exists.
+ *
+ * Mirrors the entitlement order in functions/src/campaignExpiry.ts.
+ */
+export const computeCampaignExpiryMs = async (uid: string): Promise<number> => {
+  const now = Date.now();
+  const fallback = now + CAMPAIGN_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  if (!uid) return fallback;
+
+  // Web / ContiPay: a prepaid term with a real end date.
+  try {
+    const web = await getDoc(doc(db, 'webSubscriptions', uid));
+    if (web.exists()) {
+      const campaigns = (web.data() as any)?.campaigns || {};
+      const endsAt = toEpochMillis(campaigns.endsAt);
+      if (String(campaigns.status || '').toLowerCase() === 'active' && endsAt != null && endsAt > now) {
+        return endsAt;
+      }
+    }
+  } catch {
+    // Fall through to Play.
+  }
+
+  try {
+    const account = await getDoc(doc(db, 'campaignAccounts', uid));
+    if (account.exists()) {
+      const data = account.data() as any;
+      const known = toEpochMillis(data?.expiresAt ?? data?.entitlementEndsAt);
+      if (known != null && known > now) return known;
+      const trialEndsAt = toEpochMillis(data?.trialEndsAt);
+      if (trialEndsAt != null && trialEndsAt > now) return trialEndsAt;
+      if (String(data?.status || '').toLowerCase() === 'active') return fallback;
+      // No plan at all: nothing to run on. The sweep ends it within the hour.
+      return now;
+    }
+  } catch {
+    // Fall through.
+  }
+
+  return fallback;
+};
+
 export const isCampaignServable = (campaign: Campaign | null | undefined, now: number = Date.now()): boolean => {
   if (!campaign) return false;
   if (campaign.status !== 'active') return false;
@@ -333,6 +389,10 @@ export const createCampaign = async (input: {
     statsImpressions: 0,
     statsClicks: 0,
     reviewNote: '',
+    // Stamped here so the campaign serves the moment it is approved rather
+    // than waiting for the sweep. Not trusted - see computeCampaignExpiryMs.
+    expiresAt: new Date(await computeCampaignExpiryMs(input.ownerId)),
+    expiresAtSource: 'client',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -355,10 +415,36 @@ export const createCampaign = async (input: {
   return ref.id;
 };
 
-export const setCampaignStatus = async (campaignId: string, status: CampaignStatus, reviewNote: string = '') => {
+export const setCampaignStatus = async (
+  campaignId: string,
+  status: CampaignStatus,
+  reviewNote: string = '',
+  options: { revalidateExpiry?: boolean } = {}
+) => {
+  // Only admins may write expiresAt - the owner pause/resume path is limited
+  // to status and updatedAt by the Firestore rules, so revalidation is opt-in
+  // and only the moderation screen asks for it.
+  let expiryPatch: Record<string, unknown> = {};
+  if (options.revalidateExpiry) {
+    try {
+      const snap = await getDoc(doc(db, 'campaigns', campaignId));
+      const ownerId = String(snap.data()?.ownerId || '');
+      if (ownerId) {
+        expiryPatch = {
+          expiresAt: new Date(await computeCampaignExpiryMs(ownerId)),
+          expiresAtSource: 'client',
+        };
+      }
+    } catch {
+      // Approval must not fail because the stamp could not be computed; the
+      // sweep will set it within the hour.
+    }
+  }
+
   await updateDoc(doc(db, 'campaigns', campaignId), {
     status,
     ...(reviewNote ? { reviewNote: reviewNote.slice(0, 280) } : {}),
+    ...expiryPatch,
     updatedAt: serverTimestamp(),
   });
 

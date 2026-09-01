@@ -24,6 +24,21 @@ service cloud.firestore {
       return resource.data;
     }
 
+    // A campaign's stop date, stamped client-side so a new ad serves the
+    // moment it is approved instead of waiting for the hourly sweep.
+    //
+    // That stamp is NOT the authority - the sweep re-clamps it onto the real
+    // entitlement every hour - but it must at least be sane: a future
+    // timestamp, and not absurdly far out. Absent is tolerated only so an
+    // older client can still create while a deploy is mid-flight.
+    function isSaneExpiry() {
+      return incoming().get('expiresAt', null) == null || (
+        incoming().expiresAt is timestamp &&
+        incoming().expiresAt > request.time &&
+        incoming().expiresAt < request.time + duration.value(366, 'd')
+      );
+    }
+
     function isParticipant(userIds) {
       return isSignedIn() && userIds is list && request.auth.uid in userIds;
     }
@@ -1330,7 +1345,8 @@ service cloud.firestore {
         incoming().name is string &&
         incoming().name.size() <= 90 &&
         incoming().statsImpressions == 0 &&
-        incoming().statsClicks == 0;
+        incoming().statsClicks == 0 &&
+        isSaneExpiry();
       allow update: if isSignedIn() && (
         isCampaignAdmin() ||
         (existing().ownerId == request.auth.uid &&
@@ -1339,6 +1355,7 @@ service cloud.firestore {
           existing().status in ['active', 'paused']) ||
         (existing().ownerId == request.auth.uid &&
           existing().status == 'pending_review' &&
+          isSaneExpiry() &&
           !incoming().diff(existing()).affectedKeys().hasAny(['ownerId', 'status', 'statsImpressions', 'statsClicks', 'createdAt', 'reviewNote'])) ||
         (incoming().diff(existing()).affectedKeys().hasOnly(['statsImpressions', 'statsClicks']) &&
           incoming().statsImpressions >= existing().statsImpressions &&
