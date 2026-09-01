@@ -22,9 +22,9 @@ import {
   ChevronLeft,
   Eye,
   Flame,
+  Layers,
   Lock,
   Megaphone,
-  Mic,
   MousePointerClick,
   Package,
   Pause,
@@ -34,7 +34,6 @@ import {
   ThumbsDown,
   ThumbsUp,
   TrendingUp,
-  Users,
 } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -558,7 +557,7 @@ export default function CampaignsScreen({ navigation }: any) {
         {/* No black pill and no sparkle here — just a microphone and the
             words, in ink so they read against the yellow arena. */}
         <View style={s.trialRow}>
-          <Mic size={14} color={INK} strokeWidth={2.5} />
+          <Megaphone size={14} color={INK} strokeWidth={2.5} />
           <Text style={s.trialText}>{`${trialForPlan(selectedCampaignsPlan).trialDays} DAYS FREE`}</Text>
         </View>
         <Text style={s.arenaTitle}>Put your product in front of every founder</Text>
@@ -567,8 +566,8 @@ export default function CampaignsScreen({ navigation }: any) {
         </Text>
         <View style={s.statRow}>
           <View style={s.statChip}>
-            <Megaphone size={13} color={INK} />
-            <Text style={s.statText}>5 placements</Text>
+            <Layers size={13} color={INK} />
+            <Text style={s.statText}>3 placements</Text>
           </View>
           <View style={s.statChip}>
             <Eye size={13} color={INK} />
@@ -581,8 +580,8 @@ export default function CampaignsScreen({ navigation }: any) {
             <Text style={s.statText}>Live CTR stats</Text>
           </View>
           <View style={s.statChip}>
-            <Users size={13} color={INK} />
-            <Text style={s.statText}>Founders only</Text>
+            <Pause size={13} color={INK} />
+            <Text style={s.statText}>Pause anytime</Text>
           </View>
         </View>
       </View>
