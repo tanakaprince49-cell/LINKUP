@@ -2321,7 +2321,11 @@ export default function SwipeScreen({ navigation }: any) {
           <ErrorBoundary screenName="Discovery deck" inline>
             {mode === 'swipe' ? (
               <>
-                {renderPreviewCard()}
+                {/* Ads-only: no profile peeking out from behind the ad — the
+                    deck is genuinely ads and nothing else until the 12 come
+                    back. Mid-session every-4th ads keep the normal stacked
+                    look, because there the next person is the point. */}
+                {!(outOfSwipes && discoverySponsor) ? renderPreviewCard() : null}
                 {renderCard()}
               </>
             ) : (
