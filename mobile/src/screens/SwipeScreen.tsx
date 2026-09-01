@@ -452,6 +452,12 @@ export default function SwipeScreen({ navigation }: any) {
       else if (sponsor.website) Linking.openURL(sponsor.website).catch(() => {});
     }
     setDiscoverySponsor(null);
+    // Out of swipes the ad IS the feed — dismissing one has to put another
+    // in its place, in the same commit. Without this, skipping an ad left a
+    // slot with nothing behind it: in scroll mode that painted an empty
+    // (black) card, because every caller returns early once a slot resolves
+    // and never reaches the code that queues the next ad.
+    if (outOfSwipes) showLimitAd();
     return true;
   };
   const resolveSponsorRef = useRef<(action: 'open' | 'skip') => boolean>(() => false);
