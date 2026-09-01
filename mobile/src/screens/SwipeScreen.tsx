@@ -1798,6 +1798,11 @@ export default function SwipeScreen({ navigation }: any) {
           liquidGlass(isDark, false),
           isWeb && (isCompactWeb ? styles.compactWebCard : styles.webCard),
           {
+            // styles.card is a hardcoded near-black (#0a0a0a) ground. Profile
+            // cards never show it because a photo covers the whole card; the
+            // sponsored card has no photo, so in light mode it painted dark
+            // text on a dark ground and read as an empty black card.
+            backgroundColor: isDark ? '#0a0a0a' : '#FFFFFF',
             opacity: topCardCombinedOpacity,
             transform: isWeb
               ? [{ translateX: swipePosition.x }, { translateY: swipePosition.y }]
@@ -2043,7 +2048,13 @@ export default function SwipeScreen({ navigation }: any) {
         style={[
           styles.scrollFeedCard,
           liquidGlass(isDark, false),
-          { transform: [{ translateY: scrollPosition }] },
+          {
+            // Same fix as the deck card: the feed card's ground is hardcoded
+            // #0a0a0a, which is invisible-as-black once there is no photo on
+            // top of it — i.e. as soon as an ad is the card.
+            backgroundColor: isDark ? '#0a0a0a' : '#FFFFFF',
+            transform: [{ translateY: scrollPosition }],
+          },
         ]}
         {...scrollPanResponder.panHandlers}
       >
