@@ -13,39 +13,58 @@
 const SANDBOX_BASE = 'https://api-uat.contipay.net';
 const LIVE_BASE = 'https://api.contipay.net';
 
-/** ContiPay status codes we care about (from the webhook payload). */
+/**
+ * ContiPay status codes.
+ *
+ *   1        PAID              final success
+ *   3, 4     ERROR / DECLINED  final failure
+ *   0, 6     PENDING / QUEUED  delayed — not final, keep the order open
+ */
 export const CONTIPAY_STATUS = {
+  PENDING: 0,
   PAID: 1,
+  ERROR: 3,
   DECLINED: 4,
+  QUEUED: 6,
 };
 
 /**
  * Read config fresh on every call.
  *
  * Required in the host environment:
- *   CONTIPAY_API_KEY        — issued API key (Basic auth user)
- *   CONTIPAY_API_SECRET     — issued API secret (Basic auth password)
- *   CONTIPAY_MERCHANT_ID    — numeric merchant id, e.g. 1234
- *   CONTIPAY_WEBHOOK_URL    — absolute URL ContiPay POSTs payment updates to
+ *   CONTIPAY_AUTH_KEY        — issued Auth Key (Basic auth user)
+ *   CONTIPAY_AUTH_SECRET     — issued Auth Secret (Basic auth password)
+ *   CONTIPAY_MERCHANT_ID     — numeric merchant id, e.g. 1234
+ *   CONTIPAY_WEBHOOK_URL     — absolute URL ContiPay POSTs payment updates to
  *
  * Optional:
- *   CONTIPAY_WEBHOOK_TOKEN  — shared secret appended to the webhook URL.
- *                             STRONGLY RECOMMENDED: ContiPay's webhook payload
- *                             carries no signature, so this token is the only
- *                             real authentication on that endpoint.
- *   CONTIPAY_SUCCESS_URL    — where ContiPay sends the browser on success
- *   CONTIPAY_CANCEL_URL     — where ContiPay sends the browser on cancel
- *   CONTIPAY_ENV            — 'sandbox' (default) | 'live'
+ *   CONTIPAY_WEBHOOK_TOKEN   — webhook auth token. ContiPay sends it as
+ *                              `Authorization: Bearer <token>`. Configure it in
+ *                              the ContiPay workspace, NOT in the URL — their
+ *                              guidance is explicit that secrets must never
+ *                              ride in a webhook URL.
+ *   CONTIPAY_BASE_URL        — overrides the sandbox/live base URL
+ *   CONTIPAY_SUCCESS_URL     — where ContiPay sends the browser on success
+ *   CONTIPAY_CANCEL_URL      — where ContiPay sends the browser on cancel
+ *   CONTIPAY_ENV             — 'sandbox' (default) | 'live'
+ *
+ * The legacy CONTIPAY_API_KEY / CONTIPAY_API_SECRET names are still accepted so
+ * an existing Vercel project does not break on deploy.
  */
 export function contipayConfig() {
-  const apiKey = String(process.env.CONTIPAY_API_KEY || '').trim();
-  const apiSecret = String(process.env.CONTIPAY_API_SECRET || '').trim();
+  const apiKey = (
+    String(process.env.CONTIPAY_AUTH_KEY || process.env.CONTIPAY_API_KEY || '')
+  ).trim();
+  const apiSecret = (
+    String(process.env.CONTIPAY_AUTH_SECRET || process.env.CONTIPAY_API_SECRET || '')
+  ).trim();
   const merchantId = Number(String(process.env.CONTIPAY_MERCHANT_ID || '').trim());
   const webhookUrl = String(process.env.CONTIPAY_WEBHOOK_URL || '').trim();
   const successUrl = String(process.env.CONTIPAY_SUCCESS_URL || '').trim();
   const cancelUrl = String(process.env.CONTIPAY_CANCEL_URL || '').trim();
   const webhookToken = String(process.env.CONTIPAY_WEBHOOK_TOKEN || '').trim();
   const live = String(process.env.CONTIPAY_ENV || 'sandbox').toLowerCase() === 'live';
+  const override = String(process.env.CONTIPAY_BASE_URL || '').trim().replace(/\/$/, '');
 
   return {
     apiKey,
@@ -56,7 +75,7 @@ export function contipayConfig() {
     cancelUrl,
     webhookToken,
     live,
-    baseUrl: live ? LIVE_BASE : SANDBOX_BASE,
+    baseUrl: override || (live ? LIVE_BASE : SANDBOX_BASE),
     ready: !!apiKey && !!apiSecret && !!merchantId && !!webhookUrl,
   };
 }
@@ -114,19 +133,102 @@ export async function withRetry(fn, opts = {}) {
 }
 
 /**
- * The webhook URL ContiPay should call, with the shared secret attached.
+ * The webhook URL ContiPay should call.
  *
- * ContiPay's webhook body carries no signature — only a `clientKey`, which is
- * just our own API key echoed back. Anyone who observes one webhook could
- * otherwise replay it. Appending a secret token gives the endpoint something
- * genuinely unguessable to check.
+ * Deliberately carries NO secret. ContiPay authenticate webhook delivery with
+ * a token they send in the `Authorization: Bearer` header, and their guidance
+ * is explicit: never put tokens, passwords or API keys in the webhook URL.
+ * URLs end up in logs, proxy headers and referrers.
  */
-export function webhookUrlWithToken() {
-  const { webhookUrl, webhookToken } = contipayConfig();
-  if (!webhookUrl) return '';
-  if (!webhookToken) return webhookUrl;
-  const sep = webhookUrl.includes('?') ? '&' : '?';
-  return `${webhookUrl}${sep}token=${encodeURIComponent(webhookToken)}`;
+export function webhookUrl() {
+  return contipayConfig().webhookUrl;
+}
+
+/** Pull the token out of an `Authorization: Bearer <token>` header. */
+export function bearerToken(header) {
+  const raw = String(header || header?.authorization || '').trim();
+  const match = /^Bearer\s+(.+)$/i.exec(raw);
+  return match ? match[1].trim() : '';
+}
+
+/**
+ * Classify a webhook status using ContiPay's published codes.
+ *
+ *   1        PAID              final success
+ *   3, 4     ERROR / DECLINED  final failure
+ *   0, 6     PENDING / QUEUED  delayed — keep the order open
+ *   anything else               review — treat as not final
+ *
+ * Only 'paid' and 'failed' are FINAL. Never settle on a delayed or review
+ * status; wait for the callback or use the status inquiry endpoint.
+ */
+export function classifyStatus(statusCode, statusText) {
+  const code = Number(statusCode);
+  if (code === 1) return 'paid';
+  if (code === 3 || code === 4) return 'failed';
+  if (code === 0 || code === 6) return 'delayed';
+  const text = String(statusText || '').toLowerCase();
+  if (['paid', 'completed', 'success', 'successful'].includes(text)) return 'paid';
+  if (['declined', 'error', 'failed', 'cancelled', 'refunded', 'expired'].includes(text)) return 'failed';
+  if (['pending', 'queued', 'submitted', 'processing', 'in_progress'].includes(text)) return 'delayed';
+  return 'review';
+}
+
+/**
+ * Fields safe to log.
+ *
+ * The webhook body carries `clientKey`, which is our own Auth Key echoed back,
+ * and customer names/email/cell. Never dump the raw body or the Authorization
+ * header into a log.
+ */
+export function redactWebhook(body) {
+  const b = body || {};
+  return {
+    contiPayRef: b.contiPayRef ?? null,
+    merchantRef: b.merchantRef ?? null,
+    correlator: b.correlator ?? null,
+    statusCode: b.statusCode ?? null,
+    status: b.status ?? null,
+    amount: b.amount ?? null,
+    currencyCode: b.currencyCode ?? null,
+  };
+}
+
+/**
+ * Ask ContiPay for the status of a transaction.
+ *
+ * Their docs reference a "transaction status inquiry endpoint" for delayed
+ * webhooks and reconciliation, but do not publish its path in the guides we
+ * have. Rather than invent a URL that would 404 in production, this stays
+ * dormant until you set CONTIPAY_STATUS_PATH (e.g. "/acquire/status").
+ *
+ * Returns null when it is not configured or the call fails — callers must treat
+ * null as "unknown", never as "not paid".
+ */
+export async function inquireTransaction(reference) {
+  const cfg = contipayConfig();
+  const path = String(process.env.CONTIPAY_STATUS_PATH || '').trim();
+  if (!path || !reference || !cfg.apiKey) return null;
+
+  try {
+    const res = await withRetry(
+      () =>
+        fetch(`${cfg.baseUrl}${path}`, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: basicAuthHeader(),
+          },
+          body: JSON.stringify({ merchantId: cfg.merchantId, reference: String(reference) }),
+        }),
+      { attempts: 2, baseDelayMs: 300 }
+    );
+    if (!res.ok) return null;
+    return await res.json().catch(() => null);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -160,7 +262,7 @@ export async function initiatePayment({ reference, amount, description, customer
   }
 
   const payload = {
-    webhookUrl: webhookUrlWithToken(),
+    webhookUrl: webhookUrl(),
     description: String(description || 'LINKUP').slice(0, 120),
     amount: Number(Number(amount).toFixed(2)),
     reference: String(reference),
@@ -223,18 +325,19 @@ export async function initiatePayment({ reference, amount, description, customer
 /**
  * Is this webhook from ContiPay, for us?
  *
- * Two independent checks, because the payload carries no signature:
- *   1. the shared secret token in the query string
- *   2. clientKey === our API key, and merchantId === ours
+ * ContiPay sends the configured webhook token as `Authorization: Bearer <t>`.
+ * That header is the primary authentication; the body is only corroboration,
+ * because `clientKey` is simply our own Auth Key echoed back.
  *
- * Failing either is a hard reject — we never touch a document.
+ * Failing the header check is a hard reject — we never touch a document.
  */
-export function verifyWebhook({ query, body }) {
+export function verifyWebhook({ headers, body }) {
   const cfg = contipayConfig();
 
   if (cfg.webhookToken) {
-    if (!safeEqual(String(query?.token || ''), cfg.webhookToken)) {
-      return { ok: false, reason: 'bad-token' };
+    const presented = bearerToken(headers?.authorization || headers?.Authorization);
+    if (!safeEqual(presented, cfg.webhookToken)) {
+      return { ok: false, reason: 'bad-bearer-token' };
     }
   }
 

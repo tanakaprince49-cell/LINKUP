@@ -23,14 +23,19 @@ never in git.
 
 | Variable | Required | Notes |
 |---|---|---|
-| `CONTIPAY_API_KEY` | ✅ | Issued API key. Basic-auth user. |
-| `CONTIPAY_API_SECRET` | ✅ | Issued API secret. Basic-auth password. |
+| `CONTIPAY_AUTH_KEY` | ✅ | Issued Auth Key. Basic-auth user. |
+| `CONTIPAY_AUTH_SECRET` | ✅ | Issued Auth Secret. Basic-auth password. |
 | `CONTIPAY_MERCHANT_ID` | ✅ | Numeric merchant id, e.g. `1234`. |
-| `CONTIPAY_WEBHOOK_URL` | ✅ | `https://<host>/api/contipayWebhook` |
-| `CONTIPAY_WEBHOOK_TOKEN` | ⚠️ strongly recommended | See "Webhook security" below. |
+| `CONTIPAY_WEBHOOK_URL` | ✅ | `https://<host>/api/contipayWebhook` — no secret in the URL. |
+| `CONTIPAY_WEBHOOK_TOKEN` | ✅ | See "Webhook security". Configure the same value in ContiPay. |
 | `CONTIPAY_SUCCESS_URL` | optional | Where ContiPay sends the browser on success. |
 | `CONTIPAY_CANCEL_URL` | optional | Where ContiPay sends the browser on cancel. |
 | `CONTIPAY_ENV` | optional | `sandbox` (default) \| `live` |
+| `CONTIPAY_BASE_URL` | optional | Overrides the sandbox/live base URL entirely. |
+| `CONTIPAY_STATUS_PATH` | optional | Path of the status inquiry endpoint; dormant until set. |
+
+`CONTIPAY_API_KEY` / `CONTIPAY_API_SECRET` are still accepted as aliases so an
+existing Vercel project does not break on deploy.
 
 Restart/redeploy after changing any of these — they are read per request, but a
 running function keeps its old process env until redeployed.
@@ -52,31 +57,77 @@ running function keeps its old process env until redeployed.
 
 ## 3. Webhook security — read this
 
-**ContiPay's webhook payload contains no signature.** The only identity in the
-body is `clientKey`, which is our own API key echoed back.
+**ContiPay's webhook payload contains no signature.** `clientKey` in the body is
+just our own Auth Key echoed back, so it is corroboration, never proof.
 
-So the endpoint authenticates on:
+ContiPay authenticate delivery with a token in the **`Authorization` header**:
 
-1. **`CONTIPAY_WEBHOOK_TOKEN`** — a shared secret appended to the webhook URL
-   server-side when we build the payload (`webhookUrlWithToken()` in
-   `api/_contipay.js`). This is a genuinely unguessable check.
-2. **`clientKey` + `merchantId`** — must match ours.
-3. **The reference must already exist** in `webTransactions`, created by a
-   signed-in user at checkout. A forged webhook cannot invent a reference.
+```
+Authorization: Bearer <CONTIPAY_WEBHOOK_TOKEN>
+```
 
-Without (1), anyone who observed a single webhook could replay it and grant
-themselves PLUS for free. **Keep the token set.**
+Configure that same token **in the ContiPay workspace**. Their guidance is
+explicit that it must never go in the webhook URL — URLs leak into logs, proxy
+headers and referrers — so `webhookUrl()` sends the bare URL and nothing else.
+
+The endpoint checks, in order, before touching a single document:
+
+1. the `Authorization: Bearer` header matches `CONTIPAY_WEBHOOK_TOKEN` (constant-time)
+2. `clientKey` matches our Auth Key, and `merchantId` matches ours
+3. `merchantRef` already exists in `webTransactions`, created by a signed-in
+   checkout — a forged webhook cannot invent a reference
+4. `currencyCode` matches what we recorded
+5. `amount` is not less than what we recorded
 
 Rejections are logged as `[contipayWebhook] rejected: <reason>`.
 
+**Never log the raw body** (it carries `clientKey`, plus the customer's name,
+email and cell) **or the `Authorization` header**. Use `redactWebhook()`, which
+emits only `contiPayRef`, `merchantRef`, `correlator`, `statusCode`, `status`,
+`amount` and `currencyCode` — the fields ContiPay themselves say to log.
+
+## 3b. Status codes
+
+| Code | Meaning | Final? | We do |
+|---|---|---|---|
+| `1` | PAID | ✅ | Grant the entitlement |
+| `3` | ERROR | ✅ | Mark failed |
+| `4` | DECLINED | ✅ | Mark failed |
+| `0` | PENDING | ❌ | Keep open, wait |
+| `6` | QUEUED / SUBMITTED | ❌ | Keep open, wait |
+| other | — | ❌ | Record as `review`, never settle |
+
+Only `1`, `3` and `4` settle an order. Treating `0` or `6` as final is the
+classic way to mark a real payment as failed while the customer is still
+approving a USSD prompt.
+
 ## 4. Idempotency
 
-A retried webhook cannot extend a term twice. `grantWebEntitlement` re-reads the
-transaction document **inside** a Firestore transaction and bails if it is
-already `paid`. Top-ups stack (5 months left + 12 purchased = 17).
+ContiPay retry failed deliveries **up to 10 times over ~24 hours** with
+exponential backoff, and may deliver the same transaction more than once.
 
-The webhook also refuses to grant if the paid amount is **less** than the amount
-we recorded at checkout (`amount_mismatch`), so a $1 payment cannot buy a year.
+Two independent guards:
+
+1. **`contipayWebhookEvents/{contiPayRef}`** — claimed inside a Firestore
+   transaction, so a replayed delivery is acknowledged and dropped. Keyed on
+   ContiPay's own reference, which is what their docs recommend.
+2. **`grantWebEntitlement`** re-reads the transaction document inside its own
+   Firestore transaction and bails if it is already `paid`.
+
+Top-ups stack (5 months left + 12 purchased = 17). A $1 payment cannot buy a
+year (`amount_mismatch`), and a payment in the wrong currency is rejected
+(`currency_mismatch`).
+
+Respond **2xx within 10 seconds**, always — including for duplicates. Anything
+else triggers another 10 retries of something we already handled.
+
+## 4b. Reconciliation
+
+A webhook can still be delayed even with retries. ContiPay point at a
+**transaction status inquiry endpoint** for that; they do not publish its path
+in the guides we have, so it is wired through `CONTIPAY_STATUS_PATH` and stays
+dormant until you set it. `inquireTransaction()` returns `null` when
+unconfigured, and **null means unknown, never "not paid"**.
 
 ## 5. Amounts
 
@@ -95,11 +146,38 @@ Checklist:
 - [ ] Webhook arrives; `webTransactions/{ref}` flips to `paid`
 - [ ] `webSubscriptions/{uid}` gains/extends the right tier
 - [ ] Replaying the same webhook does **not** extend the term again
-- [ ] A webhook with a wrong token is rejected (check Vercel logs)
+- [ ] A webhook with a wrong **Bearer token** is rejected (Vercel logs show
+      `rejected: bad-bearer-token`)
+- [ ] A `statusCode: 0` webhook leaves the order `pending`, not `failed`
+- [ ] Endpoint responds in under 10 seconds
+
+Sandbox mobile-money test numbers (provider codes in their docs):
+
+| Method | Code | Success | Insufficient | Timeout |
+|---|---|---|---|---|
+| EcoCash | `EC` | 0771234567 | 0771234568 | 0771234569 |
+| TeleCash | `TC` | 0731234567 | 0731234568 | 0731234569 |
+| OneMoney | `OM` | 0711234567 | 0711234568 | 0711234569 |
+| InnBucks | `IB` | ends 7 | ends 8 | ends 9 |
+| Omari | `OC` | OTP `000000` | `111111` | `222222` |
+
+Replay a webhook by hand (note the Bearer header):
+
+```
+curl -i -X POST "https://<host>/api/contipayWebhook" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $CONTIPAY_WEBHOOK_TOKEN" \
+  --data '{"account":"263712123123","amount":19.99,"merchantId":<id>,
+    "clientKey":"<your_auth_key>","contiPayRef":1000001,"firstName":"Jane",
+    "lastName":"Smith","email":"jane@mail.com","merchantRef":"LKP-...",
+    "message":"Payment Success","methodCode":"acquire","currencyCode":"USD",
+    "providerCode":"EC","providerName":"EcoCash","correlator":"OC08...",
+    "statusCode":1,"status":"paid"}'
+```
 
 ## 7. Going live
 
-1. Swap in the **live** API key + secret + merchant id in Vercel.
+1. Swap in the **live** Auth Key + Auth Secret + merchant id in Vercel.
 2. Set `CONTIPAY_ENV=live`.
 3. Confirm the webhook URL is live and publicly reachable.
 4. Run one real card through, then refund it.

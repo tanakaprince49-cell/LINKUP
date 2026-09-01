@@ -1310,6 +1310,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Dedupe ledger for ContiPay webhook retries (up to 10 over ~24 hours).
+    // Server-write only; nothing here is useful to a client, so it is not
+    // readable by anyone.
+    match /contipayWebhookEvents/{contiPayRef} {
+      allow read, write: if false;
+    }
+
     match /webSubscriptions/{uid} {
       allow read: if isOwner(uid) || isCampaignAdmin();
       allow write: if false;

@@ -10,7 +10,7 @@
 // Replaces the retired /api/paynowCheckout and /api/dodoCheckout.
 import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import { getDb, serverTimestamp, verifyRequestUser } from './_firebaseAdmin.js';
-import { contipayConfig, initiatePayment, splitName } from './_contipay.js';
+import { contipayConfig, initiatePayment, splitName, webhookUrl } from './_contipay.js';
 import { CURRENCY, WEB_TERMS } from '../shared/pricing.js';
 
 const TX = 'webTransactions';
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     sendError(
       res,
       500,
-      'ContiPay is not configured on the server (missing CONTIPAY_API_KEY / API_SECRET / MERCHANT_ID / WEBHOOK_URL).'
+      'ContiPay is not configured on the server (missing CONTIPAY_AUTH_KEY / AUTH_SECRET / MERCHANT_ID / WEBHOOK_URL).'
     );
     return;
   }
