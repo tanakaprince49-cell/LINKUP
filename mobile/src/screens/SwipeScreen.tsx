@@ -2149,13 +2149,15 @@ export default function SwipeScreen({ navigation }: any) {
   // line off the top of the card and the branch tells us exactly which path
   // produced the empty frame. Removed once this is closed.
   const debugBranchRef = useRef('init');
+  const debugInfoRef = useRef('');
   const renderDebugStrip = () => {
     const d = discoverySponsor;
     const txt =
       `DBG branch=${debugBranchRef.current} ad=${d ? 'yes' : 'no'} ` +
       `title=${d ? String(d.title || '?').slice(0, 14) : '-'} ` +
       `feed=${feed.length} idx=${scrollIndex} left=${swipesLeft} ` +
-      `budget=${swipeBudgetRef.current} oos=${outOfSwipes ? 1 : 0} mode=${mode}`;
+      `budget=${swipeBudgetRef.current} oos=${outOfSwipes ? 1 : 0} mode=${mode} ` +
+      debugInfoRef.current;
     console.log('[LINKUP DBG]', txt);
     return (
       <View
@@ -2220,12 +2222,24 @@ export default function SwipeScreen({ navigation }: any) {
     const existingScore = scoreByIdRef.current.get(profile.uid);
     const matchRank = existingScore != null ? { score: existingScore, reason: '' } : (myProfile ? localCommonalityRank(myProfile, [profile], 1)[0] : null);
     const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
+    const dbgOffset = (scrollPosition as any).__getValue ? Math.round((scrollPosition as any).__getValue()) : -1;
+    debugInfoRef.current =
+      `name=${displayNameFor(profile)} photos=${photos.length} ` +
+      `uri=${String(curScrollUri).slice(0, 30)} off=${dbgOffset} ` +
+      `anim=${isScrollAnimatingRef.current ? 1 : 0} slot=${scrollSlot}`;
     const skills = Array.isArray(profile.skills) ? profile.skills.slice(0, 6) : [];
 
     return (
       <View style={styles.scrollFeed}>
         <Animated.View
-          style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
+          style={[
+            styles.scrollFeedCard,
+            // TEMPORARY DIAGNOSTIC. If the blank area turns magenta the card
+            // is on screen and only the photo is missing. If it stays black,
+            // the card itself is not painting and this is a layout problem.
+            ...(__DEV__ ? [{ backgroundColor: 'magenta' as const }] : []),
+            { transform: [{ translateY: scrollPosition }] },
+          ]}
           {...scrollPanResponder.panHandlers}
         >
           <View style={styles.photoStack} pointerEvents="none">
