@@ -2198,7 +2198,7 @@ export default function SwipeScreen({ navigation }: any) {
     // empty with nothing behind it.
     if (discoverySponsor) {
       return (
-        <View style={styles.scrollFeed}>
+        <View key="scroll-ad" style={styles.scrollFeed}>
           {renderScrollSponsor()}
           <View style={styles.scrollSwipeHint}>
             <Text style={[styles.scrollSwipeHintText, { color: textColor(isDark, 'muted') }]}>
@@ -2239,7 +2239,7 @@ export default function SwipeScreen({ navigation }: any) {
     const skills = Array.isArray(profile.skills) ? profile.skills.slice(0, 6) : [];
 
     return (
-      <View style={styles.scrollFeed} onLayout={dbgMeasure('feed')}>
+      <View key="scroll-profile" style={styles.scrollFeed} onLayout={dbgMeasure('feed')}>
         <Animated.View
           style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
           onLayout={dbgMeasure('card')}
