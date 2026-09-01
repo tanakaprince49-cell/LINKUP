@@ -888,11 +888,21 @@ export default function SwipeScreen({ navigation }: any) {
     const len = feedRef.current.length;
     const cur = scrollIndexRef.current;
     if (dir === 'up' && cur < len - 1) {
-      // SCROLLING IS BROWSING — always free, never paywalled. The 12-per-12h
-      // discovery budget is spent by ACTIONS (like/pass/request), not by
-      // looking, so swiping up must never open the paywall. The feed still
-      // locks at the last card (see the scrollIndex clamp below) instead of
-      // running past the end and looping back to the first profile.
+      // Reaching a NEW profile costs one discovery, in either mode — the
+      // 12-per-12h budget is one budget. Without this, opening scroll mode to
+      // everyone (it used to be PLUS-only) handed free members the whole city:
+      // browsing never spent anything, so the limit only ever applied to the
+      // deck. Scrolling back down over someone you already paid for is never
+      // re-charged.
+      //
+      // Running out never opens a paywall mid-scroll — it serves an ad, the
+      // same as the deck. The feed also stays clamped at the last card rather
+      // than running past the end and looping back to the first profile.
+      const nextProfile = feedRef.current[cur + 1];
+      if (!spendDiscoveryBudget(nextProfile?.uid)) {
+        showLimitAd();
+        return;
+      }
       setScrollIndex(cur + 1);
       scrollIndexRef.current = cur + 1;
       animateScrollStep(360);
@@ -2298,18 +2308,16 @@ export default function SwipeScreen({ navigation }: any) {
             >
               <Text style={[styles.modeChipText, mode === 'swipe' && styles.modeChipTextOn]}>Swipe</Text>
             </TouchableOpacity>
+            {/* Scroll mode is open to everyone now. It earns its keep the
+                same way the deck does: reaching a NEW profile spends one
+                discovery, and when the 12 are gone the feed serves ads. The
+                mode used to be PLUS-only with a paywall on the chip, which
+                made the whole screen feel paywalled to a free member. */}
             <TouchableOpacity
-              onPress={() => {
-                if (!isProUser) {
-                  openPaywall('Scroll Mode');
-                  return;
-                }
-                setMode('scroll');
-              }}
+              onPress={() => setMode('scroll')}
               style={[styles.modeChip, mode === 'scroll' && styles.modeChipOn]}
               activeOpacity={0.88}
             >
-              {!isProUser && <Lock size={10} color={textColor(isDark, 'muted')} style={{ marginRight: 3 }} />}
               <Text style={[styles.modeChipText, mode === 'scroll' && styles.modeChipTextOn]}>Scroll</Text>
             </TouchableOpacity>
           </View>
