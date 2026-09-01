@@ -468,15 +468,52 @@ export default function SwipeScreen({ navigation }: any) {
       setSwipesLeft(null);
       return;
     }
-    (async () => {
+    const load = async () => {
       const usage = await getWindowUsage(user.uid, 'discovery-swipes', SWIPE_USAGE_WINDOW_HOURS);
       if (cancelled) return;
       const left = Math.max(0, FREE_LIMITS.swipesPer12Hours - usage.used);
       swipeBudgetRef.current = left;
       setSwipesLeft(left);
-    })();
-    return () => { cancelled = true; };
+    };
+    void load();
+    // Re-check every minute. Without this the count only refreshed on mount,
+    // so a member who ran out sat in ads-only mode until they restarted the
+    // app — the window could roll over and their swipes would never come back.
+    const timer = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [user?.uid, isProUser]);
+
+  // --- Ads-only mode ------------------------------------------------------
+  // Running out of discoveries used to be a wall: the gesture did nothing and
+  // a paywall modal took over the screen. Now the deck keeps moving — it just
+  // serves sponsored cards instead of people until the window resets. The
+  // member keeps swiping (and the ads keep earning), and PLUS stays one tap
+  // away on the bar above the deck and on the house card itself.
+  const outOfSwipes = !isProUser && swipesLeft === 0;
+  const adsOnlyAdRef = useRef(false);
+
+  const showLimitAd = () => {
+    adsOnlyAdRef.current = true;
+    maybeShowSponsorRef.current();
+  };
+
+  // Out of swipes with nothing on screen: put an ad there.
+  useEffect(() => {
+    if (!outOfSwipes || discoverySponsor) return;
+    showLimitAd();
+  }, [outOfSwipes, discoverySponsor]);
+
+  // The window rolled over and the swipes are back: drop the ad we put up
+  // because of the limit, so the profiles return. An every-4th ad that happened
+  // to be showing keeps its slot — only limit ads are cleared here.
+  useEffect(() => {
+    if (outOfSwipes || !adsOnlyAdRef.current) return;
+    adsOnlyAdRef.current = false;
+    setDiscoverySponsor(null);
+  }, [outOfSwipes]);
   const [progressHydrated, setProgressHydrated] = useState(false);
 
   // --- Discovery budget: one wall for BOTH modes ---------------------------
@@ -1400,6 +1437,9 @@ export default function SwipeScreen({ navigation }: any) {
         }
       }
       setDiscoverySponsor(null);
+      // Same commit, so the deck never falls through to the locked profiles
+      // underneath: with the limit still on, the next card is another ad.
+      if (outOfSwipes) showLimitAd();
       trackAction('swipe');
       return;
     }
@@ -1446,6 +1486,12 @@ export default function SwipeScreen({ navigation }: any) {
     trackAction(direction === 'right' ? 'like' : 'swipe');
 
     // Every DISCOVER_SPONSORED_EVERY real swipes, queue the sponsored slot.
+    //
+    // "Real" is the whole point: this only runs on the profile path. The
+    // sponsored branch above returns before we get here, so an ad swipe never
+    // increments the counter and never reaches spendDiscoveryBudget — the
+    // every-4th ad is free, on top of the 12, and does not shorten the window
+    // or shift the cadence.
     swipesSinceSponsorRef.current += 1;
     if (swipesSinceSponsorRef.current >= DISCOVER_SPONSORED_EVERY) {
       swipesSinceSponsorRef.current = 0;
@@ -1526,7 +1572,10 @@ export default function SwipeScreen({ navigation }: any) {
     // the swipe deck, so the wall locks this feed too. A card already paid for
     // (scrolled back over) is never re-charged.
     if (!discoverySponsor && !hasDiscoveryBudget(swipedItem?.uid)) {
-      openPaywall('Unlimited Discovery');
+      // Out of discoveries — serve an ad rather than walling the session off.
+      // PLUS members never reach here (their budget is unlimited), and
+      // pickNextSponsor always has at least the house card for everyone else.
+      showLimitAd();
       return;
     }
 
@@ -2244,6 +2293,27 @@ export default function SwipeScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
+        {outOfSwipes && mode === 'swipe' ? (
+          <View
+            style={[
+              styles.adsOnlyBar,
+              { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' },
+            ]}
+          >
+            <Zap size={13} color={COLORS.primaryStrong} />
+            <Text style={[styles.adsOnlyText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
+              Out of free discoveries — you’re swiping ads until your next 12.
+            </Text>
+            <TouchableOpacity
+              onPress={() => openPaywall('Unlimited Discovery')}
+              activeOpacity={0.85}
+              style={styles.adsOnlyBtn}
+            >
+              <Text style={styles.adsOnlyBtnText}>Unlock</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <View style={[styles.stackArea, webDeckStyle, isCompactWeb && styles.compactStackArea]}>
           {/* If a card ever throws, show a labelled retry inside the deck
               instead of an empty gap. A blank deck is indistinguishable from
@@ -2298,6 +2368,21 @@ export default function SwipeScreen({ navigation }: any) {
 const SparkleDot = () => <View style={styles.sparkleDot} />;
 
 const styles = StyleSheet.create({
+  // Shown only while the discovery budget is spent: it says why the deck is
+  // full of ads, and keeps the way out one tap away.
+  adsOnlyBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 14,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 14,
+  },
+  adsOnlyText: { flex: 1, fontSize: 11, fontWeight: '700', lineHeight: 15 },
+  adsOnlyBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: COLORS.primary },
+  adsOnlyBtnText: { fontSize: 11, fontWeight: '900', color: '#111' },
   container: {
     flex: 1,
   },
