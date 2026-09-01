@@ -6,7 +6,7 @@
       "codex/**": false
     }
   },
-  "installCommand": "cd mobile && npm ci",
+  "installCommand": "npm ci --no-audit --no-fund && cd mobile && npm ci",
   "buildCommand": "cd mobile && npm run build:web",
   "outputDirectory": "mobile/dist",
   "headers": [
