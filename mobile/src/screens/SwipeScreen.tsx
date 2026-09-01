@@ -54,7 +54,7 @@ import { compactProfileForList, storedProfileImageUri } from '../lib/profilePerf
 import { AppImage } from '../components/AppImage';
 import { Image as ExpoImage } from 'expo-image';
 import { ikAvatar, ikCard } from '../lib/ikImage';
-import { avatarPlaceholderUri } from '../lib/defaultAvatar';
+import { avatarPlaceholderUri, LOCAL_PLACEHOLDER_URI } from '../lib/defaultAvatar';
 import ProCrownBadge from '../components/ProCrownBadge';
 import { notifyUser } from '../lib/notify';
 import { subscribeToDiscoveryProfiles, loadMoreDiscoveryProfiles } from '../lib/discoveryProfiles';
@@ -64,7 +64,10 @@ const windowSize = Dimensions.get('window');
 const { width } = windowSize;
 const SWIPE_THRESHOLD = 0.22 * width;
 const DISCOVERY_LIMIT = 200;
-const FALLBACK_PHOTO = avatarPlaceholderUri('', 512);
+// Local, not the old remote ui-avatars url: a fallback that is itself a
+// network request can fail the same way the photo did, which is how a card
+// ended up with nothing on it at all.
+const FALLBACK_PHOTO = LOCAL_PLACEHOLDER_URI;
 /**
  * Largest base64 photo a card may render inline.
  *
@@ -2232,14 +2235,7 @@ export default function SwipeScreen({ navigation }: any) {
     return (
       <View style={styles.scrollFeed}>
         <Animated.View
-          style={[
-            styles.scrollFeedCard,
-            // TEMPORARY DIAGNOSTIC. If the blank area turns magenta the card
-            // is on screen and only the photo is missing. If it stays black,
-            // the card itself is not painting and this is a layout problem.
-            ...(__DEV__ ? [{ backgroundColor: 'magenta' as const }] : []),
-            { transform: [{ translateY: scrollPosition }] },
-          ]}
+          style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
           {...scrollPanResponder.panHandlers}
         >
           <View style={styles.photoStack} pointerEvents="none">
@@ -3343,8 +3339,6 @@ const styles = StyleSheet.create({
   },
   scrollCardImg: {
     ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
     resizeMode: 'cover',
   },
   scrollCardOverlay: {

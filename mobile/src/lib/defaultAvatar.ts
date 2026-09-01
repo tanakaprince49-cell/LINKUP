@@ -24,3 +24,14 @@ export const DEFAULT_AVATAR_URI = avatarPlaceholderUri();
 
 /** Larger blank tile for full-card fallbacks (swipe deck etc). */
 export const DEFAULT_CARD_PHOTO_URI = avatarPlaceholderUri('', 512);
+
+
+/**
+ * A placeholder that cannot fail. Both avatarPlaceholderUri and the card
+ * fallback are REMOTE (ui-avatars.com), so when a photo 404s the thing
+ * standing in for it is another network request that can fail too — and then
+ * the layer paints nothing at all, which is how a profile card turned into an
+ * empty rectangle. This is an inlined PNG: no request, always decodes.
+ */
+export const LOCAL_PLACEHOLDER_URI =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PQQkAAAgEsOvfU3xYwgi+hcEKLNXzWgQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQELgs6xXKGx+MAIQAAAABJRU5ErkJggg==';
