@@ -2238,6 +2238,16 @@ export default function SwipeScreen({ navigation }: any) {
           style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
           {...scrollPanResponder.panHandlers}
         >
+          {/* TEMPORARY DIAGNOSTIC. RED is the first child of the card, BLUE is
+              the last. RED visible -> children render and are then covered by
+              later siblings. Only BLUE -> same. NEITHER -> no child renders.
+              Both, with black between them -> the photo layers paint opaque. */}
+          {__DEV__ ? (
+            <View
+              pointerEvents="none"
+              style={{ position: 'absolute', top: 0, left: 0, width: 48, height: 48, backgroundColor: 'red', zIndex: 9998 }}
+            />
+          ) : null}
           <View
             style={[
               styles.photoStack,
@@ -2339,6 +2349,12 @@ export default function SwipeScreen({ navigation }: any) {
               <Text style={styles.scrollBottomLabel}>Like</Text>
             </TouchableOpacity>
           </View>
+          {__DEV__ ? (
+            <View
+              pointerEvents="none"
+              style={{ position: 'absolute', bottom: 0, right: 0, width: 48, height: 48, backgroundColor: 'blue', zIndex: 9998 }}
+            />
+          ) : null}
         </Animated.View>
         <View style={styles.scrollSwipeHint}>
           {/* Sits on the app background, so it follows the theme instead of
