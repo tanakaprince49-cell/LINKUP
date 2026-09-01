@@ -884,7 +884,17 @@ export default function SwipeScreen({ navigation }: any) {
   const goToProfile = (dir: 'up' | 'down') => {
     // A sponsored slot on screen resolves before the feed moves again. The
     // sponsored stop is an ad, not a discovery, so it never spends budget.
-    if (resolveSponsorRef.current('skip')) return;
+    //
+    // The drag left the card sitting at gs.dy * 0.5, and only the branches
+    // that actually move the feed ever re-centre it. Skipping an ad resolves
+    // the slot and returns without moving, so the replacement card stayed
+    // translated out of frame — the feed area behind it was empty, which is
+    // what "everything goes blank" looked like. Snap back on every exit
+    // that does not move the feed.
+    if (resolveSponsorRef.current('skip')) {
+      springScrollBack();
+      return;
+    }
     // If the previous scroll animation is stuck (e.g. the app was backgrounded
     // mid-animation), force-reset so the next gesture is never permanently
     // blocked — the "blank screen after a few swipes" bug.
