@@ -453,11 +453,11 @@ export default function SwipeScreen({ navigation }: any) {
     }
     setDiscoverySponsor(null);
     // Out of swipes the ad IS the feed — dismissing one has to put another
-    // in its place, in the same commit. Without this, skipping an ad left a
-    // slot with nothing behind it: in scroll mode that painted an empty
-    // (black) card, because every caller returns early once a slot resolves
-    // and never reaches the code that queues the next ad.
-    if (outOfSwipes) showLimitAd();
+    // in its place, in the same commit. Checked against the live budget ref
+    // as well as the derived outOfSwipes flag: the flag is React state and
+    // lags the ref by a commit, so the instant the last discovery is spent
+    // the flag can still read false and the slot stays empty.
+    if (outOfSwipes || budgetSpent()) showLimitAd();
     return true;
   };
   const resolveSponsorRef = useRef<(action: 'open' | 'skip') => boolean>(() => false);
@@ -499,6 +499,14 @@ export default function SwipeScreen({ navigation }: any) {
   // member keeps swiping (and the ads keep earning), and PLUS stays one tap
   // away on the bar above the deck and on the house card itself.
   const outOfSwipes = !isProUser && swipesLeft === 0;
+  /**
+   * Live read of the budget, for the moment between spending the last
+   * discovery and React committing swipesLeft. outOfSwipes is derived state
+   * and is one commit behind; anything deciding whether to refill the ad
+   * slot has to use this instead, or the slot can end up empty.
+   */
+  const budgetSpent = () =>
+    !isProUser && swipeBudgetRef.current != null && swipeBudgetRef.current <= 0;
   const adsOnlyAdRef = useRef(false);
 
   const showLimitAd = () => {
@@ -1467,7 +1475,7 @@ export default function SwipeScreen({ navigation }: any) {
       setDiscoverySponsor(null);
       // Same commit, so the deck never falls through to the locked profiles
       // underneath: with the limit still on, the next card is another ad.
-      if (outOfSwipes) showLimitAd();
+      if (outOfSwipes || budgetSpent()) showLimitAd();
       trackAction('swipe');
       return;
     }
@@ -2135,7 +2143,43 @@ export default function SwipeScreen({ navigation }: any) {
     );
   };
 
+  // ---- TEMPORARY DIAGNOSTIC, dev builds only ---------------------------
+  // Three reports of "blank after the ad" and none of the fixes landed, so
+  // stop guessing: paint the live state onto the deck and log it. Read the
+  // line off the top of the card and the branch tells us exactly which path
+  // produced the empty frame. Removed once this is closed.
+  const debugBranchRef = useRef('init');
+  const renderDebugStrip = () => {
+    const d = discoverySponsor;
+    const txt =
+      `DBG branch=${debugBranchRef.current} ad=${d ? 'yes' : 'no'} ` +
+      `title=${d ? String(d.title || '?').slice(0, 14) : '-'} ` +
+      `feed=${feed.length} idx=${scrollIndex} left=${swipesLeft} ` +
+      `budget=${swipeBudgetRef.current} oos=${outOfSwipes ? 1 : 0} mode=${mode}`;
+    console.log('[LINKUP DBG]', txt);
+    return (
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9999,
+          backgroundColor: 'rgba(0,0,0,0.78)',
+          paddingHorizontal: 6,
+          paddingVertical: 2,
+        }}
+      >
+        <Text style={{ color: '#00FF9C', fontSize: 9, fontWeight: '800' }} numberOfLines={3}>
+          {txt}
+        </Text>
+      </View>
+    );
+  };
+
   const renderScrollProfile = () => {
+    debugBranchRef.current = discoverySponsor ? 'ad' : feed.length === 0 ? 'empty' : 'profile';
     // The sponsored slot wins the frame it owns, but never when the deck is
     // empty with nothing behind it.
     if (discoverySponsor) {
@@ -2153,6 +2197,7 @@ export default function SwipeScreen({ navigation }: any) {
       );
     }
     if (feed.length === 0) return renderEmpty();
+    if (!(feed[Math.min(scrollIndex, feed.length - 1)])) debugBranchRef.current = 'empty';
     // Never fall back to feed[0]: an out-of-range index must not silently
     // wrap the deck back around to the first profile.
     const profile = feed[Math.min(scrollIndex, feed.length - 1)];
@@ -2387,6 +2432,7 @@ export default function SwipeScreen({ navigation }: any) {
               renderScrollProfile()
             )}
           </ErrorBoundary>
+          {__DEV__ ? renderDebugStrip() : null}
         </View>
       </View>
       {connectionNote.modal}
