@@ -2146,54 +2146,7 @@ export default function SwipeScreen({ navigation }: any) {
     );
   };
 
-  // ---- TEMPORARY DIAGNOSTIC, dev builds only ---------------------------
-  // Three reports of "blank after the ad" and none of the fixes landed, so
-  // stop guessing: paint the live state onto the deck and log it. Read the
-  // line off the top of the card and the branch tells us exactly which path
-  // produced the empty frame. Removed once this is closed.
-  const debugBranchRef = useRef('init');
-  const debugInfoRef = useRef('');
-  const debugLayoutRef = useRef('feed=? card=?');
-  const dbgMeasure = (which: 'feed' | 'card') => (e: any) => {
-    const l = e?.nativeEvent?.layout;
-    if (!l) return;
-    const box = `${Math.round(l.x)},${Math.round(l.y)} ${Math.round(l.width)}x${Math.round(l.height)}`;
-    debugLayoutRef.current =
-      which === 'feed' ? `feed=${box} ${debugLayoutRef.current.split(' card=')[1] || '?'}` : `feed=${debugLayoutRef.current.split('feed=')[1]?.split(' ')[0] || '?'} card=${box}`;
-  };
-  const renderDebugStrip = () => {
-    const d = discoverySponsor;
-    const txt =
-      `DBG branch=${debugBranchRef.current} ad=${d ? 'yes' : 'no'} ` +
-      `title=${d ? String(d.title || '?').slice(0, 14) : '-'} ` +
-      `feed=${feed.length} idx=${scrollIndex} left=${swipesLeft} ` +
-      `budget=${swipeBudgetRef.current} oos=${outOfSwipes ? 1 : 0} mode=${mode} ` +
-      debugInfoRef.current +
-      ` | ${debugLayoutRef.current}`;
-    console.log('[LINKUP DBG]', txt);
-    return (
-      <View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 9999,
-          backgroundColor: 'rgba(0,0,0,0.78)',
-          paddingHorizontal: 6,
-          paddingVertical: 2,
-        }}
-      >
-        <Text style={{ color: '#00FF9C', fontSize: 9, fontWeight: '800' }} numberOfLines={3}>
-          {txt}
-        </Text>
-      </View>
-    );
-  };
-
   const renderScrollProfile = () => {
-    debugBranchRef.current = discoverySponsor ? 'ad' : feed.length === 0 ? 'empty' : 'profile';
     // The sponsored slot wins the frame it owns, but never when the deck is
     // empty with nothing behind it.
     if (discoverySponsor) {
@@ -2211,16 +2164,14 @@ export default function SwipeScreen({ navigation }: any) {
       );
     }
     if (feed.length === 0) return renderEmpty();
-    if (!(feed[Math.min(scrollIndex, feed.length - 1)])) debugBranchRef.current = 'empty';
     // Never fall back to feed[0]: an out-of-range index must not silently
     // wrap the deck back around to the first profile.
     const profile = feed[Math.min(scrollIndex, feed.length - 1)];
     if (!profile) return renderEmpty();
     const photos = getSwipePhotos(profile);
-    // Same two-layer trick as the swipe card: the face that is coming up is
-    // already mounted and decoded in the buried layer, so advancing the feed
-    // never paints a blank. Scroll index parity picks the layer on top.
-    const scrollSlot = scrollIndex % 2;
+    // One photo layer, not the deck's two: the swap-by-parity trick belongs
+    // to the deck, where the reused card view would otherwise flash. Here the
+    // card is keyed per branch, so a straight uri change is safe.
     const curScrollUri = ikCard(photos[0]) || FALLBACK_PHOTO;
     const ageText = Number(profile.age) > 0 ? `, ${profile.age}` : '';
     const locationText = [profile.city, profile.country].filter(Boolean).join(', ') || 'Remote';
@@ -2231,46 +2182,19 @@ export default function SwipeScreen({ navigation }: any) {
     const existingScore = scoreByIdRef.current.get(profile.uid);
     const matchRank = existingScore != null ? { score: existingScore, reason: '' } : (myProfile ? localCommonalityRank(myProfile, [profile], 1)[0] : null);
     const compatibility = Math.max(1, Math.min(100, Math.round(matchRank?.score || 50)));
-    const dbgOffset = (scrollPosition as any).__getValue ? Math.round((scrollPosition as any).__getValue()) : -1;
-    debugInfoRef.current =
-      `name=${displayNameFor(profile)} photos=${photos.length} ` +
-      `uri=${String(curScrollUri).slice(0, 30)} off=${dbgOffset} ` +
-      `anim=${isScrollAnimatingRef.current ? 1 : 0} slot=${scrollSlot}`;
     const skills = Array.isArray(profile.skills) ? profile.skills.slice(0, 6) : [];
 
     return (
-      <View key="scroll-profile" style={styles.scrollFeed} onLayout={dbgMeasure('feed')}>
+      <View key="scroll-profile" style={styles.scrollFeed}>
         <Animated.View
           style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
-          onLayout={dbgMeasure('card')}
           {...scrollPanResponder.panHandlers}
         >
-          {/* TEMPORARY DIAGNOSTIC. RED is the first child of the card, BLUE is
-              the last. RED visible -> children render and are then covered by
-              later siblings. Only BLUE -> same. NEITHER -> no child renders.
-              Both, with black between them -> the photo layers paint opaque. */}
-          {__DEV__ ? (
-            <View
-              pointerEvents="none"
-              style={{ position: 'absolute', top: 0, left: 0, width: 48, height: 48, backgroundColor: 'red', zIndex: 9998 }}
-            />
-          ) : null}
-          <View
-            style={[
-              styles.photoStack,
-              ...(__DEV__ ? [{ backgroundColor: 'lime' as const }] : []),
-            ]}
-            pointerEvents="none"
-          >
+          <View style={styles.photoStack} pointerEvents="none">
             <AppImage uri={curScrollUri} style={styles.scrollCardImg} transitionMs={0} />
           </View>
           <View style={styles.scrollCardOverlay} />
-          <View
-            style={[
-              styles.scrollCardBody,
-              ...(__DEV__ ? [{ borderWidth: 2, borderColor: 'orange' }] : []),
-            ]}
-          >
+          <View style={styles.scrollCardBody}>
             <View style={styles.scrollCardMeta}>
               <View style={styles.scrollCardNameRow}>
                 <Text style={styles.scrollCardName} numberOfLines={1}>{displayNameFor(profile)}{ageText}</Text>
@@ -2340,12 +2264,6 @@ export default function SwipeScreen({ navigation }: any) {
               <Text style={styles.scrollBottomLabel}>Like</Text>
             </TouchableOpacity>
           </View>
-          {__DEV__ ? (
-            <View
-              pointerEvents="none"
-              style={{ position: 'absolute', bottom: 0, right: 0, width: 48, height: 48, backgroundColor: 'blue', zIndex: 9998 }}
-            />
-          ) : null}
         </Animated.View>
         <View style={styles.scrollSwipeHint}>
           {/* Sits on the app background, so it follows the theme instead of
@@ -2467,7 +2385,6 @@ export default function SwipeScreen({ navigation }: any) {
               renderScrollProfile()
             )}
           </ErrorBoundary>
-          {__DEV__ ? renderDebugStrip() : null}
         </View>
       </View>
       {connectionNote.modal}
