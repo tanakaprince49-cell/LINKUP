@@ -46,7 +46,8 @@ const toMillis = (value) => {
 
 async function readCampaignsEntitlement(uid) {
   const now = Date.now();
-  if (!uid) return { active: false, endsAt: null, source: 'none' };
+  if (!uid) return { active: false, endsAt: null, source: 'no-owner', reliable: true };
+  let readFailed = false;
 
   try {
     const web = await db.doc(`webSubscriptions/${uid}`).get();
@@ -56,11 +57,12 @@ async function readCampaignsEntitlement(uid) {
       const endsAt = toMillis(campaigns.endsAt);
       if (status === 'active' && endsAt != null) {
         return endsAt > now
-          ? { active: true, endsAt, source: 'web' }
-          : { active: false, endsAt, source: 'web-lapsed' };
+          ? { active: true, endsAt, source: 'web', reliable: true }
+          : { active: false, endsAt, source: 'web-lapsed', reliable: true };
       }
     }
   } catch (error) {
+    readFailed = true;
     console.warn(`  ! webSubscriptions read failed for ${uid}: ${error?.message || error}`);
   }
 
@@ -71,25 +73,29 @@ async function readCampaignsEntitlement(uid) {
       const known = toMillis(data.expiresAt ?? data.entitlementEndsAt);
       if (known != null) {
         return known > now
-          ? { active: true, endsAt: known, source: 'play' }
-          : { active: false, endsAt: known, source: 'play-lapsed' };
+          ? { active: true, endsAt: known, source: 'play', reliable: true }
+          : { active: false, endsAt: known, source: 'play-lapsed', reliable: true };
       }
       const trialEndsAt = toMillis(data.trialEndsAt);
       if (trialEndsAt != null) {
         return trialEndsAt > now
-          ? { active: true, endsAt: trialEndsAt, source: 'play-trial' }
-          : { active: false, endsAt: trialEndsAt, source: 'play-trial-ended' };
+          ? { active: true, endsAt: trialEndsAt, source: 'play-trial', reliable: true }
+          : { active: false, endsAt: trialEndsAt, source: 'play-trial-ended', reliable: true };
       }
       if (String(data.status || '').toLowerCase() === 'active') {
-        return { active: true, endsAt: now + CAMPAIGN_WINDOW_DAYS * DAY_MS, source: 'play-window' };
+        return { active: true, endsAt: now + CAMPAIGN_WINDOW_DAYS * DAY_MS, source: 'play-window', reliable: true };
       }
-      return { active: false, endsAt: null, source: 'play-inactive' };
+      return { active: false, endsAt: null, source: 'play-inactive', reliable: true };
     }
   } catch (error) {
+    readFailed = true;
     console.warn(`  ! campaignAccounts read failed for ${uid}: ${error?.message || error}`);
   }
 
-  return { active: false, endsAt: null, source: 'none' };
+  // A failed read is not proof they have no plan. Mark it unreliable so the
+  // caller leaves the campaign alone instead of ending it. Ending a paid ad
+  // over a transient network error is far worse than leaving it up an hour.
+  return { active: false, endsAt: null, source: readFailed ? 'read-failed' : 'none', reliable: !readFailed };
 }
 
 const snap = await db.collection('campaigns').where('status', '==', 'active').limit(300).get();
@@ -114,6 +120,12 @@ for (const docSnap of snap.docs) {
   }
 
   const entitlement = await readCampaignsEntitlement(ownerId);
+
+  if (entitlement.reliable === false) {
+    console.log(`  skip  ${label}  - entitlement unreadable (${entitlement.source}), leaving alone`);
+    skipped += 1;
+    continue;
+  }
 
   if (!entitlement.active) {
     // No plan behind it. This is exactly the loophole: end it rather than

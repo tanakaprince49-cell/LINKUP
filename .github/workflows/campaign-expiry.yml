@@ -1,0 +1,62 @@
+# Campaign expiry sweep.
+#
+# Ends campaigns whose advertiser no longer holds a Campaigns plan, and stamps
+# expiresAt on those that do. Without this a campaign bought on a 7-day trial
+# serves forever: nothing else clears status, and Google never tells us a
+# subscription lapsed.
+#
+# This stands in for the Cloud Functions version in
+# functions/src/campaignExpiry.ts, which needs the Blaze plan to deploy. When
+# billing is enabled, deploy that and delete this file.
+#
+# Hourly, because a newly created campaign has no expiresAt until something
+# stamps it, and the client refuses to serve an unstamped one. An hour is the
+# longest a new ad stays invisible.
+#
+# Requires one repository secret:
+#   FIREBASE_SERVICE_ACCOUNT  - the service account JSON, on a single line
+name: Campaign expiry sweep
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      write:
+        description: 'Apply changes. Leave unchecked for a dry run.'
+        type: boolean
+        default: false
+
+concurrency:
+  group: campaign-expiry-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: functions
+        run: npm ci --no-audit --no-fund
+
+      - name: Write the service account key
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/linkup-sa.json"
+
+      - name: Run the sweep
+        working-directory: functions
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/linkup-sa.json
+        run: node backfill-campaign-expiry.mjs ${{ inputs.write && '--write' || '' }}
+
+      - name: Remove the service account key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/linkup-sa.json"

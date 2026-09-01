@@ -53,9 +53,15 @@ type Entitlement = {
   /** Known end of that plan, or null when the provider will not tell us. */
   endsAt: number | null;
   source: string;
+  /**
+   * False when a read threw, so we could not determine entitlement either
+   * way. Callers must leave the campaign alone: ending a paid ad over a
+   * transient Firestore error is far worse than leaving it up another pass.
+   */
+  reliable: boolean;
 };
 
-const NO_ENTITLEMENT: Entitlement = { active: false, endsAt: null, source: 'none' };
+const NO_ENTITLEMENT: Entitlement = { active: false, endsAt: null, source: 'none', reliable: true };
 
 /** Firestore Timestamp | epoch millis | Date | ISO string -> millis, else null. */
 function toMillis(value: any): number | null {
@@ -79,6 +85,7 @@ function toMillis(value: any): number | null {
 async function readCampaignsEntitlement(uid: string): Promise<Entitlement> {
   if (!uid) return NO_ENTITLEMENT;
   const now = Date.now();
+  let readFailed = false;
 
   try {
     const web = await db().doc(`webSubscriptions/${uid}`).get();
@@ -88,11 +95,12 @@ async function readCampaignsEntitlement(uid: string): Promise<Entitlement> {
       const endsAt = toMillis(campaigns.endsAt);
       if (status === 'active' && endsAt != null) {
         return endsAt > now
-          ? { active: true, endsAt, source: 'web' }
-          : { active: false, endsAt, source: 'web-lapsed' };
+          ? { active: true, endsAt, source: 'web', reliable: true }
+          : { active: false, endsAt, source: 'web-lapsed', reliable: true };
       }
     }
   } catch (error) {
+    readFailed = true;
     logger.warn('campaignExpiry: webSubscriptions read failed', { uid, error: String(error) });
   }
 
@@ -106,16 +114,16 @@ async function readCampaignsEntitlement(uid: string): Promise<Entitlement> {
       const known = toMillis(data.expiresAt ?? data.entitlementEndsAt);
       if (known != null) {
         return known > now
-          ? { active: true, endsAt: known, source: 'play' }
-          : { active: false, endsAt: known, source: 'play-lapsed' };
+          ? { active: true, endsAt: known, source: 'play', reliable: true }
+          : { active: false, endsAt: known, source: 'play-lapsed', reliable: true };
       }
 
       // A trial has a real, exact end date.
       const trialEndsAt = toMillis(data.trialEndsAt);
       if (trialEndsAt != null) {
         return trialEndsAt > now
-          ? { active: true, endsAt: trialEndsAt, source: 'play-trial' }
-          : { active: false, endsAt: trialEndsAt, source: 'play-trial-ended' };
+          ? { active: true, endsAt: trialEndsAt, source: 'play-trial', reliable: true }
+          : { active: false, endsAt: trialEndsAt, source: 'play-trial-ended', reliable: true };
       }
 
       if (String(data.status || '').toLowerCase() === 'active') {
@@ -126,15 +134,20 @@ async function readCampaignsEntitlement(uid: string): Promise<Entitlement> {
           active: true,
           endsAt: now + CAMPAIGN_WINDOW_DAYS * DAY_MS,
           source: 'play-window',
+          reliable: true,
         };
       }
 
-      return { active: false, endsAt: null, source: 'play-inactive' };
+      return { active: false, endsAt: null, source: 'play-inactive', reliable: true };
     }
   } catch (error) {
+    readFailed = true;
     logger.warn('campaignExpiry: campaignAccounts read failed', { uid, error: String(error) });
   }
 
+  if (readFailed) {
+    return { active: false, endsAt: null, source: 'read-failed', reliable: false };
+  }
   return NO_ENTITLEMENT;
 }
 
@@ -248,6 +261,7 @@ export const endLapsedCampaigns = onSchedule(
     let markingLapsed = 0;
     let tightened = 0;
     let stamped = 0;
+    let skipped = 0;
 
     for (const docSnap of snap.docs) {
       const data: any = docSnap.data() || {};
@@ -256,6 +270,13 @@ export const endLapsedCampaigns = onSchedule(
 
       const entitlement = await readCampaignsEntitlement(ownerId);
       const current = toMillis(data.expiresAt);
+
+      if (!entitlement.reliable) {
+        // Could not determine entitlement. Leave the campaign exactly as it
+        // is; the next pass will look again.
+        skipped += 1;
+        continue;
+      }
 
       if (!entitlement.active) {
         const lapsedAt = toMillis(data.entitlementLapsedAt);
@@ -319,6 +340,7 @@ export const endLapsedCampaigns = onSchedule(
       markingLapsed,
       tightened,
       stamped,
+      skipped,
     });
   }
 );
