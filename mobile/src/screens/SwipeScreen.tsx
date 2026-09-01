@@ -902,6 +902,11 @@ export default function SwipeScreen({ navigation }: any) {
         swipesSinceSponsorRef.current = 0;
         maybeShowSponsorRef.current();
       }
+      // Out of discoveries: scroll mode serves ads too. Browsing here never
+      // spends budget — it was free — which made the feed a loophole: burn
+      // the 12 in the deck, switch modes, and read the whole city for
+      // nothing. The deck keeps moving, it just moves through ads.
+      if (outOfSwipes) showLimitAd();
     } else if (dir === 'down' && cur > 0) {
       setScrollIndex(cur - 1);
       scrollIndexRef.current = cur - 1;
@@ -1724,6 +1729,37 @@ export default function SwipeScreen({ navigation }: any) {
   const sponsorTileBg = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(10, 11, 13, 0.06)';
   const sponsorIconInk = isDark ? '#FFFFFF' : COLORS.inkButton;
 
+  /**
+   * "You're out of free swipes."
+   *
+   * This used to be a bar above the deck, where the flex layout squeezed it
+   * to nothing and it never showed. It now renders INSIDE the ad card, which
+   * is the thing the member is actually staring at — in both modes.
+   */
+  const renderLimitStrip = () => {
+    if (!outOfSwipes) return null;
+    return (
+      <View
+        style={[
+          styles.limitStrip,
+          { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' },
+        ]}
+      >
+        <Zap size={13} color={COLORS.primaryStrong} />
+        <Text style={[styles.limitStripText, { color: textColor(isDark) }]} numberOfLines={2}>
+          Out of free swipes — ads only until your 12 return.
+        </Text>
+        <TouchableOpacity
+          onPress={() => openPaywall('Unlimited Discovery')}
+          activeOpacity={0.85}
+          style={styles.limitStripBtn}
+        >
+          <Text style={styles.limitStripBtnText}>Unlock</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const renderSponsorBadge = () => (
     <View style={[styles.sponsorPill, { backgroundColor: sponsorPillBg }]}>
       <Text style={[styles.sponsorPillText, { color: sponsorPillInk }]}>SPONSORED</Text>
@@ -1769,6 +1805,7 @@ export default function SwipeScreen({ navigation }: any) {
         {...(infoExpanded ? {} : panResponder.panHandlers)}
       >
         <View style={styles.sponsorBody}>
+          {renderLimitStrip()}
           {renderSponsorBadge()}
           {renderSponsorLogo()}
           <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={2}>
@@ -2004,6 +2041,7 @@ export default function SwipeScreen({ navigation }: any) {
         {...scrollPanResponder.panHandlers}
       >
         <View style={styles.sponsorBody}>
+          {renderLimitStrip()}
           {renderSponsorBadge()}
           {renderSponsorLogo()}
           <Text style={[styles.sponsorTitle, { color: textColor(isDark) }]} numberOfLines={2}>
@@ -2071,7 +2109,11 @@ export default function SwipeScreen({ navigation }: any) {
         <View style={styles.scrollFeed}>
           {renderScrollSponsor()}
           <View style={styles.scrollSwipeHint}>
-            <Text style={[styles.scrollSwipeHintText, { color: textColor(isDark, 'muted') }]}>sponsored · {Math.max(0, feed.length - scrollIndex - 1)} profiles left</Text>
+            <Text style={[styles.scrollSwipeHintText, { color: textColor(isDark, 'muted') }]}>
+              {outOfSwipes
+                ? 'Out of free swipes — ads only until your 12 return'
+                : `sponsored · ${Math.max(0, feed.length - scrollIndex - 1)} profiles left`}
+            </Text>
           </View>
         </View>
       );
@@ -2293,27 +2335,6 @@ export default function SwipeScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        {outOfSwipes && mode === 'swipe' ? (
-          <View
-            style={[
-              styles.adsOnlyBar,
-              { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' },
-            ]}
-          >
-            <Zap size={13} color={COLORS.primaryStrong} />
-            <Text style={[styles.adsOnlyText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
-              Out of free discoveries — you’re swiping ads until your next 12.
-            </Text>
-            <TouchableOpacity
-              onPress={() => openPaywall('Unlimited Discovery')}
-              activeOpacity={0.85}
-              style={styles.adsOnlyBtn}
-            >
-              <Text style={styles.adsOnlyBtnText}>Unlock</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-
         <View style={[styles.stackArea, webDeckStyle, isCompactWeb && styles.compactStackArea]}>
           {/* If a card ever throws, show a labelled retry inside the deck
               instead of an empty gap. A blank deck is indistinguishable from
@@ -2372,21 +2393,19 @@ export default function SwipeScreen({ navigation }: any) {
 const SparkleDot = () => <View style={styles.sparkleDot} />;
 
 const styles = StyleSheet.create({
-  // Shown only while the discovery budget is spent: it says why the deck is
-  // full of ads, and keeps the way out one tap away.
-  adsOnlyBar: {
+  // The out-of-swipes notice lives inside the ad card, not above the deck.
+  limitStrip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginHorizontal: 14,
-    marginBottom: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 12,
   },
-  adsOnlyText: { flex: 1, fontSize: 11, fontWeight: '700', lineHeight: 15 },
-  adsOnlyBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: COLORS.primary },
-  adsOnlyBtnText: { fontSize: 11, fontWeight: '900', color: '#111' },
+  limitStripText: { flex: 1, fontSize: 11, fontWeight: '800', lineHeight: 15 },
+  limitStripBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: COLORS.primary },
+  limitStripBtnText: { fontSize: 11, fontWeight: '900', color: '#111' },
   container: {
     flex: 1,
   },
