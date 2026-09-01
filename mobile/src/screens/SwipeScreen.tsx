@@ -894,19 +894,17 @@ export default function SwipeScreen({ navigation }: any) {
     const len = feedRef.current.length;
     const cur = scrollIndexRef.current;
     if (dir === 'up' && cur < len - 1) {
-      // Reaching a NEW profile costs one discovery, in either mode — the
-      // 12-per-12h budget is one budget. Without this, opening scroll mode to
-      // everyone (it used to be PLUS-only) handed free members the whole city:
-      // browsing never spent anything, so the limit only ever applied to the
-      // deck. Scrolling back down over someone you already paid for is never
-      // re-charged.
+      // Paging up through the feed is PLUS. Free members were using scroll
+      // mode as an endless feed: spendDiscoveryBudget treats a profile you
+      // have ALREADY paid for as free, so once the 12 were gone they could
+      // page back down and swipe up over the people they had already seen —
+      // forever, with no ad and no spend. Charging a discovery per advance
+      // does not close it, because the recharge is what makes it free.
       //
-      // Running out never opens a paywall mid-scroll — it serves an ad, the
-      // same as the deck. The feed also stays clamped at the last card rather
-      // than running past the end and looping back to the first profile.
-      const nextProfile = feedRef.current[cur + 1];
-      if (!spendDiscoveryBudget(nextProfile?.uid)) {
-        showLimitAd();
+      // So: instant paywall, and the card springs back to where it was.
+      if (!isProUser) {
+        openPaywall('Scroll Mode');
+        springScrollBack();
         return;
       }
       setScrollIndex(cur + 1);
@@ -2255,8 +2253,10 @@ export default function SwipeScreen({ navigation }: any) {
           {/* Sits on the app background, so it follows the theme instead of
               the fixed white-on-photo palette (invisible in light mode). */}
           <Text style={[styles.scrollSwipeHintText, { color: textColor(isDark, 'muted') }]}>
-            {!isProUser && swipesLeft === 0
-              ? 'Daily limit reached · go PLUS for unlimited'
+            {!isProUser
+              ? swipesLeft === 0
+                ? 'Daily limit reached · go PLUS for unlimited'
+                : '↑ swipe up is PLUS'
               : scrollIndex < feed.length - 1
                 ? '↑ swipe up for next'
                 : 'last profile'}
