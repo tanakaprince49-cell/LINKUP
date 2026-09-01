@@ -1523,8 +1523,8 @@ export default function OnboardingScreen({ navigation }: any) {
       },
       {
         key: 'photos',
-        title: 'Add a face photo?',
-        subtitle: 'Optional. Profiles with a photo get more replies.',
+        title: 'Add a face photo',
+        subtitle: 'Required. LINKUP is a face-to-face network — every surface, from the deck to the league, is a face.',
         body: (
           <View style={{ alignItems: 'center' }}>
             <PhotoSlot
@@ -1534,9 +1534,23 @@ export default function OnboardingScreen({ navigation }: any) {
               isDark={isDark}
               circular
             />
+            <Text
+              style={{
+                marginTop: 14,
+                fontSize: 12,
+                fontWeight: '800',
+                lineHeight: 17,
+                textAlign: 'center',
+                color: profilePicUri ? '#16A34A' : textColor(isDark, 'muted'),
+              }}
+            >
+              {profilePicUri
+                ? 'Photo added. You can change it any time from your profile.'
+                : 'Tap the circle above to choose one. You cannot continue without it.'}
+            </Text>
           </View>
         ),
-        canNext: true,
+        canNext: !!profilePicUri,
       },
       ...(profileNoticeSeen !== false
         ? []
@@ -1595,6 +1609,16 @@ export default function OnboardingScreen({ navigation }: any) {
 
   const finish = async () => {
     if (!user) return;
+    // A face photo is mandatory for every new account. The photos step gates
+    // Next, but this is the real lock: every completion path — Finish, Finish
+    // now, I'll do it later — funnels through here, so no route can land
+    // someone in the app with a faceless profile.
+    if (!profilePicUri) {
+      notifyUser('Photo required', 'Add a profile photo to finish setting up your account.');
+      const photoStep = steps.findIndex((entry) => entry.key === 'photos');
+      if (photoStep >= 0) setStep(photoStep);
+      return;
+    }
     setSaving(true);
     try {
       const finalName = displayName.trim();
