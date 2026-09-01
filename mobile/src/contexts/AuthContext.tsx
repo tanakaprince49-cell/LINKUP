@@ -28,7 +28,7 @@ import { buildLocalProEntitlement, hasLinkupPro, hasPaidLinkupPro, readLocalProE
 import { compactProfileForCache } from '../lib/profilePerformance';
 import { isWebBilling, subscribeWebSubscription, withWebEntitlements } from '../lib/webSubscription';
 import { withAdminEntitlements } from '../lib/admin';
-import { checkPaynowPayment, takePendingReference } from '../lib/webCheckout';
+import { checkContipayPayment, takePendingReference } from '../lib/webCheckout';
 import type { WebSubscription } from '../lib/webSubscription';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
 import { signInToFirebaseWithGoogle } from '../lib/googleAuth';
@@ -353,10 +353,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [completedOnboardingUid, setCompletedOnboardingUid] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // WEB BILLING: Paynow grants land in webSubscriptions/{uid} (written only by
+  // WEB BILLING: ContiPay grants land in webSubscriptions/{uid} (written only by
   // api/). Fold that entitlement into the profile so every gate downstream —
   // hasLinkupPro, the free-limit counters, Campaigns — reads ONE answer whether
-  // the user paid through Google Play on Android or Paynow on web. On native this
+  // the user paid through Google Play on Android or ContiPay on web. On native this
   // memo is a pass-through: Play owns billing there.
   const [webSubscription, setWebSubscription] = useState<WebSubscription | null>(null);
   const profile = useMemo(() => {
@@ -377,7 +377,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return subscribeWebSubscription(user.uid, setWebSubscription);
   }, [user?.uid]);
 
-  // RETURNING FROM PAYNOW. Paynow sends the browser to PAYNOW_RETURN_URL, so
+  // RETURNING FROM CONTIPAY. ContiPay sends the browser to CONTIPAY_SUCCESS_URL, so
   // the app boots fresh. If a payment was in flight, ask the server to settle
   // it — the webhook is the primary grant, this is the safety net. The UI
   // updates itself through the webSubscriptions listener, so no local state
@@ -391,7 +391,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (async () => {
       for (let attempt = 0; attempt < 6 && !cancelled; attempt += 1) {
         try {
-          const result = await checkPaynowPayment(reference);
+          const result = await checkContipayPayment(reference);
           const status = String(result?.status || '').toLowerCase();
           if (['paid', 'failed', 'cancelled', 'refunded', 'disputed'].includes(status)) return;
         } catch {

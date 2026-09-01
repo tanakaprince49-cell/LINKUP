@@ -2,15 +2,15 @@
 // Vercel functions share an origin, so there is nothing to CORS-configure and
 // nothing hard-coded to localhost.
 //
-// GOOGLE PLAY POLICY: this module is web-only. Never render a Paynow button or
-// deep-link to these endpoints from inside the Android app — Play forbids
+// GOOGLE PLAY POLICY: this module is web-only. Never render a ContiPay button
+// or deep-link to these endpoints from inside the Android app — Play forbids
 // steering its users to an external checkout. Callers must branch on
 // Platform.OS and keep the native path on expo-iap.
 import { auth } from './firebase';
 
-const PENDING_KEY = 'linkup:paynow:pending-ref';
+const PENDING_KEY = 'linkup:contipay:pending-ref';
 
-export type PaynowStartResult = {
+export type ContipayStartResult = {
   redirectUrl: string;
   reference: string;
   amount: number;
@@ -20,7 +20,7 @@ export type PaynowStartResult = {
   months: number;
 };
 
-export type PaynowStatusResult = {
+export type ContipayStatusResult = {
   reference: string;
   status: string;
   entitlement: {
@@ -38,46 +38,46 @@ async function authHeaders(): Promise<Record<string, string>> {
 }
 
 /**
- * Start a Paynow payment. Resolves with the URL to send the browser to; the
+ * Start a ContiPay payment. Resolves with the URL to send the browser to; the
  * caller is responsible for navigating there.
  *
- * @param planKey one of PAYNOW_TERMS in shared/pricing.js
+ * @param planKey one of WEB_TERMS in shared/pricing.js
  */
-export async function startPaynowCheckout(planKey: string): Promise<PaynowStartResult> {
+export async function startContipayCheckout(planKey: string): Promise<ContipayStartResult> {
   const headers = await authHeaders();
-  const res = await fetch('/api/paynowCheckout', {
+  const res = await fetch('/api/contipayCheckout', {
     method: 'POST',
     headers,
     body: JSON.stringify({ plan: planKey }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data?.redirectUrl) {
-    throw new Error(data?.error || `Paynow could not start checkout (${res.status}).`);
+    throw new Error(data?.error || `ContiPay could not start checkout (${res.status}).`);
   }
   rememberPendingReference(data.reference);
-  return data as PaynowStartResult;
+  return data as ContipayStartResult;
 }
 
 /**
  * Ask the server whether a payment landed. This is the safety net for a missed
- * webhook: the server polls Paynow itself and grants the entitlement if so.
+ * webhook — the server reports the state its webhook wrote.
  */
-export async function checkPaynowPayment(reference: string): Promise<PaynowStatusResult> {
+export async function checkContipayPayment(reference: string): Promise<ContipayStatusResult> {
   const headers = await authHeaders();
-  const res = await fetch('/api/paynowStatus', {
+  const res = await fetch('/api/contipayStatus', {
     method: 'POST',
     headers,
     body: JSON.stringify({ reference }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error || `Could not check payment (${res.status}).`);
-  return data as PaynowStatusResult;
+  return data as ContipayStatusResult;
 }
 
 // ---------------------------------------------------------------------------
-// The browser leaves the app entirely for Paynow, so the pending reference is
-// parked in sessionStorage and picked up again on return. Paynow's own return
-// query params are not relied on — they vary by payment method.
+// The browser leaves the app entirely for ContiPay's hosted page, so the
+// pending reference is parked in sessionStorage and picked up again on return.
+// ContiPay's own return query params are not relied on — they vary by method.
 // ---------------------------------------------------------------------------
 
 function storage(): Storage | null {

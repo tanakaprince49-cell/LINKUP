@@ -62,7 +62,7 @@ import {
   subscribeMyCampaigns,
   subscribePendingCampaigns,
 } from '../lib/campaigns';
-import { startPaynowCheckout, checkPaynowPayment, takePendingReference } from '../lib/webCheckout';
+import { startContipayCheckout, checkContipayPayment, takePendingReference } from '../lib/webCheckout';
 import { webCampaignsActive } from '../lib/webSubscription';
 import {
   TRIAL_DAYS,
@@ -300,7 +300,7 @@ export default function CampaignsScreen({ navigation }: any) {
     if (Platform.OS === 'web') {
       setPurchaseBusy(true); setStoreError('');
       try {
-        const { redirectUrl } = await startPaynowCheckout(plan.webPlanKey);
+        const { redirectUrl } = await startContipayCheckout(plan.webPlanKey);
         (window as any)?.location?.assign?.(redirectUrl);
       } catch (e: any) { setPurchaseBusy(false); Alert.alert('Checkout failed', e?.message || 'Could not start checkout.'); }
       return;
@@ -330,7 +330,7 @@ export default function CampaignsScreen({ navigation }: any) {
       setPurchaseBusy(true); setStoreError('');
       try {
         const p = takePendingReference();
-        if (p) await checkPaynowPayment(p);
+        if (p) await checkContipayPayment(p);
         Alert.alert('Restore', p ? 'We checked your latest payment.' : 'Campaigns is tied to your account.');
       } catch (e: any) { Alert.alert('Restore failed', e?.message || 'Could not check payment.'); }
       finally { setPurchaseBusy(false); }

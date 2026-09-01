@@ -3,13 +3,13 @@
  *
  * One table, two billing rails:
  *   - Android  -> Google Play Billing (auto-renewing subscriptions)
- *   - Web      -> Paynow (prepaid terms; Paynow has no recurring API)
+ *   - Web      -> ContiPay (prepaid terms; ContiPay has no recurring API)
  *
  * Same numbers on both. A user must never see $19.99 on one surface and be
  * charged something else on another.
  *
  * Imported by:
- *   - api/_paynow.js        (server — decides what the customer is charged)
+ *   - api/_contipay.js     (server — decides what the customer is charged)
  *   - mobile/src/lib/pricing.ts (client — decides what the customer is shown)
  *
  * Plain JS so both the Vercel functions and Metro can consume it without a
@@ -31,14 +31,14 @@ export const CAMPAIGNS_PRICES = {
 };
 
 /**
- * Paynow web terms.
+ * Web terms (ContiPay).
  *
- * Paynow cannot auto-renew, so web sells a fixed prepaid window instead of a
- * subscription. `monthly` and `yearly` are priced IDENTICALLY to the Google
+ * ContiPay cannot auto-renew, so web sells a fixed prepaid window instead of
+ * a subscription. `monthly` and `yearly` are priced IDENTICALLY to the Google
  * Play plans so the two rails never disagree. `plus_3m` is a web-only bundle
  * priced as a discount on three separate months (3 x 19.99 = 59.97).
  */
-export const PAYNOW_TERMS = {
+export const WEB_TERMS = {
   plus_1m: { label: 'LINKUP PLUS — 1 month', amount: PLUS_PRICES.monthly, months: 1, tier: 'plus' },
   plus_3m: { label: 'LINKUP PLUS — 3 months', amount: 49.99, months: 3, tier: 'plus' },
   plus_12m: { label: 'LINKUP PLUS — 12 months', amount: PLUS_PRICES.yearly, months: 12, tier: 'plus' },

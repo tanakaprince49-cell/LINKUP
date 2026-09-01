@@ -115,9 +115,9 @@ export const hasPaidLinkupPro = (profile: any) => {
 //
 // Web used to short-circuit to `true` because expo-iap has no web store, which
 // meant nobody on web could ever be charged. Web users are now billed through
-// Paynow instead: AuthContext folds the webSubscriptions/{uid} entitlement into
+// ContiPay instead: AuthContext folds the webSubscriptions/{uid} entitlement into
 // the profile (see withWebEntitlements), so this one expression is true for a
-// Play subscriber on Android AND for a paid-up Paynow subscriber on web — and
+// Play subscriber on Android AND for a paid-up ContiPay subscriber on web — and
 // false for everyone else.
 export const hasLinkupPro = (profile: any) => hasPaidLinkupPro(profile);
 

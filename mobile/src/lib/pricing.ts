@@ -5,7 +5,7 @@ export {
   CURRENCY,
   PLUS_PRICES,
   CAMPAIGNS_PRICES,
-  PAYNOW_TERMS,
+  WEB_TERMS,
   TIERS,
   formatUsd,
 } from '../../../shared/pricing';

@@ -13,7 +13,28 @@
 //
 // Only the server writes this collection (firestore.rules: `allow write: if false`).
 import { serverTimestamp } from './_firebaseAdmin.js';
-import { extendFrom } from './_paynow.js';
+
+// Date maths used to live in _paynow.js; it has nothing to do with any
+// particular gateway, so it belongs with the entitlement logic that uses it.
+// (Paynow has been retired in favour of ContiPay.)
+
+/** Add whole months to a date, clamping the day (31 Jan + 1 month -> 28/29 Feb). */
+export function addMonths(from, months) {
+  const d = new Date(from);
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + Number(months || 0));
+  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, lastDay));
+  return d;
+}
+
+/** Extend an existing paid-through date so topping up stacks instead of resetting. */
+export function extendFrom(currentEndsAt, now, months) {
+  const baseMs = currentEndsAt?.toMillis ? currentEndsAt.toMillis() : Number(currentEndsAt || 0);
+  const base = baseMs && baseMs > now.getTime() ? new Date(baseMs) : now;
+  return addMonths(base, months);
+}
 
 /** Tiers a web user can hold. Mirrors TIERS in shared/pricing.js. */
 export const WEB_TIERS = ['plus', 'campaigns'];
@@ -46,7 +67,7 @@ export function toMillis(value) {
  * @param {number} args.months      prepaid term length
  * @param {string} args.planKey     e.g. 'plus_12m'
  * @param {number} args.amount
- * @param {string} args.reference   our reference (paynowTransactions doc id)
+ * @param {string} args.reference   our reference (webTransactions doc id)
  * @param {FirebaseFirestore.DocumentReference} [args.txRef]   marked paid atomically
  * @param {object} [args.txPatch]   extra fields to merge onto the transaction
  * @returns {Promise<{ granted: boolean, endsAt: Date | null }>}

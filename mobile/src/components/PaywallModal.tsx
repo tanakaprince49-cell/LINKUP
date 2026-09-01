@@ -25,7 +25,7 @@ import {
   trialThenPrice,
 } from '../lib/trial';
 import { publicProfileLink } from '../lib/profileLinks';
-import { checkPaynowPayment, startPaynowCheckout, takePendingReference } from '../lib/webCheckout';
+import { checkContipayPayment, startContipayCheckout, takePendingReference } from '../lib/webCheckout';
 
 type PaywallModalProps = {
   visible: boolean;
@@ -331,20 +331,20 @@ export default function PaywallModal({
 
     const plan = PRICING_PLANS.find((item) => item.id === selectedPlan) || PRICING_PLANS[0];
 
-    // WEB BILLING: Paynow. Prices are identical to Play (shared/pricing.js).
+    // WEB BILLING: ContiPay. Prices are identical to Play (shared/pricing.js).
     // Play policy: this branch must never be reachable from the Android app —
     // it is guarded by Platform.OS and native keeps expo-iap below.
     if (Platform.OS === 'web') {
       setIsPurchasing(true);
       setStoreError('');
       try {
-        const { redirectUrl } = await startPaynowCheckout(plan.webPlanKey);
-        // Full navigation to Paynow's hosted page. We return via
-        // PAYNOW_RETURN_URL and settle up from usePaynowReturn().
+        const { redirectUrl } = await startContipayCheckout(plan.webPlanKey);
+        // Full navigation to ContiPay's hosted page. We return via
+        // CONTIPAY_SUCCESS_URL and settle up from useContipayReturn().
         (window as any)?.location?.assign?.(redirectUrl);
       } catch (error: any) {
         setIsPurchasing(false);
-        Alert.alert('Checkout failed', error?.message || 'Paynow could not start checkout right now.');
+        Alert.alert('Checkout failed', error?.message || 'ContiPay could not start checkout right now.');
       }
       return;
     }
@@ -389,15 +389,15 @@ export default function PaywallModal({
         // from webSubscriptions/{uid}. All we can do is force the server to
         // reconcile a payment whose webhook never landed.
         const pending = takePendingReference();
-        if (pending) await checkPaynowPayment(pending);
+        if (pending) await checkContipayPayment(pending);
         Alert.alert(
           'Restore purchases',
           pending
-            ? 'We checked your latest Paynow payment. If it completed, LINKUP PLUS is now active.'
+            ? 'We checked your latest payment. If it completed, LINKUP PLUS is now active.'
             : 'LINKUP PLUS is tied to your LINKUP account, so it is already active here if you have paid.'
         );
       } catch (error: any) {
-        Alert.alert('Restore failed', error?.message || 'We could not check your Paynow payment right now.');
+        Alert.alert('Restore failed', error?.message || 'We could not check your payment right now.');
       } finally {
         setIsRestoring(false);
       }

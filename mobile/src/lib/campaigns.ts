@@ -136,7 +136,7 @@ const accountCacheKey = (uid: string) => `linkup:campaigns-account:${uid || 'ano
 /**
  * Does this account have an active Campaigns plan?
  *
- * No web shortcut: on web the plan is bought through Paynow and lives in
+ * No web shortcut: on web the plan is bought through ContiPay and lives in
  * webSubscriptions/{uid}, not campaignAccounts/{uid}. Callers on web pass the
  * web flag in via `webOverride` (see withWebEntitlements).
  */
