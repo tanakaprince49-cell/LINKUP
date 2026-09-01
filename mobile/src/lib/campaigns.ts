@@ -257,10 +257,23 @@ const toEpochMillis = (value: any): number | null => {
  *
  * Mirrors the entitlement order in functions/src/campaignExpiry.ts.
  */
-export const computeCampaignExpiryMs = async (uid: string): Promise<number> => {
+export const computeCampaignExpiryMs = async (
+  uid: string,
+  options: { isAdmin?: boolean } = {}
+): Promise<number> => {
   const now = Date.now();
   const fallback = now + CAMPAIGN_WINDOW_DAYS * 24 * 60 * 60 * 1000;
   if (!uid) return fallback;
+
+  // Admins run campaigns for free and hold no billing document, so the
+  // entitlement lookups below would find nothing and read as "cancelled".
+  if (options.isAdmin) return fallback;
+  try {
+    const ownerDoc = await getDoc(doc(db, 'users', uid));
+    if (ownerDoc.exists() && (ownerDoc.data() as any)?.isAdmin === true) return fallback;
+  } catch {
+    // Fall through to the entitlement lookups.
+  }
 
   // Web / ContiPay: a prepaid term with a real end date.
   try {
@@ -368,6 +381,8 @@ export const createCampaign = async (input: {
   industries: string[];
   placements: string[];
   planProductId?: string;
+  /** Admins hold campaigns for free, with no billing document behind them. */
+  isAdmin?: boolean;
 }) => {
   const placements = (input.placements.length ? input.placements : ['ideas']).filter((placement) =>
     CAMPAIGN_PLACEMENT_OPTIONS.some((option) => option.id === placement && option.available)
@@ -391,7 +406,7 @@ export const createCampaign = async (input: {
     reviewNote: '',
     // Stamped here so the campaign serves the moment it is approved rather
     // than waiting for the sweep. Not trusted - see computeCampaignExpiryMs.
-    expiresAt: new Date(await computeCampaignExpiryMs(input.ownerId)),
+    expiresAt: new Date(await computeCampaignExpiryMs(input.ownerId, { isAdmin: !!input.isAdmin })),
     expiresAtSource: 'client',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

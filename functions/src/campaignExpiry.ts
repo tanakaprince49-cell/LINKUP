@@ -47,6 +47,29 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const db = () => admin.firestore();
 
+/**
+ * Admins run campaigns for free - see ADMIN_EMAILS in mobile/src/lib/admin.ts.
+ * They hold no billing document, so "no entitlement" is indistinguishable from
+ * "cancelled". Without this the sweep ends an admin's own campaign.
+ */
+const ADMIN_EMAILS = ['tanakaprince49@gmail.com'];
+
+async function isAdminUid(uid: string): Promise<boolean> {
+  if (!uid) return false;
+  try {
+    const snap = await db().doc(`users/${uid}`).get();
+    if (snap.exists && snap.data()?.isAdmin === true) return true;
+  } catch {
+    // Fall through to the Auth lookup.
+  }
+  try {
+    const record = await admin.auth().getUser(uid);
+    return ADMIN_EMAILS.includes(String(record.email || '').toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 type Entitlement = {
   /** Does the advertiser hold a campaigns plan right now? */
   active: boolean;
@@ -148,6 +171,11 @@ async function readCampaignsEntitlement(uid: string): Promise<Entitlement> {
   if (readFailed) {
     return { active: false, endsAt: null, source: 'read-failed', reliable: false };
   }
+
+  if (await isAdminUid(uid)) {
+    return { active: true, endsAt: null, source: 'admin', reliable: true };
+  }
+
   return NO_ENTITLEMENT;
 }
 

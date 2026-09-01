@@ -21,10 +21,32 @@
  */
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
 initializeApp({ credential: applicationDefault(), projectId: 'linkup-e0906' });
 
 const db = getFirestore();
+
+// Admins run campaigns for free - see ADMIN_EMAILS in mobile/src/lib/admin.ts.
+// They hold no billing document, so "no entitlement" is indistinguishable from
+// "cancelled". Without this the sweep ends an admin's own campaign.
+const ADMIN_EMAILS = ['tanakaprince49@gmail.com'];
+
+const isAdminUid = async (uid) => {
+  if (!uid) return false;
+  try {
+    const doc = await db.doc(`users/${uid}`).get();
+    if (doc.exists && doc.data()?.isAdmin === true) return true;
+  } catch {
+    // Fall through to the Auth lookup.
+  }
+  try {
+    const record = await getAuth().getUser(uid);
+    return ADMIN_EMAILS.includes(String(record.email || '').toLowerCase());
+  } catch {
+    return false;
+  }
+};
 
 const WRITE = process.argv.includes('--write');
 
@@ -95,7 +117,16 @@ async function readCampaignsEntitlement(uid) {
   // A failed read is not proof they have no plan. Mark it unreliable so the
   // caller leaves the campaign alone instead of ending it. Ending a paid ad
   // over a transient network error is far worse than leaving it up an hour.
-  return { active: false, endsAt: null, source: readFailed ? 'read-failed' : 'none', reliable: !readFailed };
+  if (readFailed) {
+    return { active: false, endsAt: null, source: 'read-failed', reliable: false };
+  }
+
+  // An admin holds no billing document - that is expected, not a lapse.
+  if (await isAdminUid(uid)) {
+    return { active: true, endsAt: null, source: 'admin', reliable: true };
+  }
+
+  return { active: false, endsAt: null, source: 'none', reliable: true };
 }
 
 const snap = await db.collection('campaigns').where('status', '==', 'active').limit(300).get();

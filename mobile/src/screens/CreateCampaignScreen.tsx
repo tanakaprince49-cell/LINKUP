@@ -31,6 +31,7 @@ import {
   Zap,
 } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
+import { isAdminEmail } from '../lib/admin';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { displayNameFor } from '../lib/discovery';
@@ -171,6 +172,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
         creative: creativePayload,
         industries: category,
         placements,
+        isAdmin: isAdminEmail(user?.email) || (myProfile as any)?.isAdmin === true,
       });
       notifyUser('Campaign submitted 🎉', 'Our team reviews every campaign by hand — yours goes live within 24 hours.');
       navigation.goBack();
