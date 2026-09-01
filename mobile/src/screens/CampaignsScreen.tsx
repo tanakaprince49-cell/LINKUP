@@ -24,13 +24,13 @@ import {
   Flame,
   Lock,
   Megaphone,
+  Mic,
   MousePointerClick,
   Package,
   Pause,
   Play,
   Pencil,
   Plus,
-  Sparkles,
   ThumbsDown,
   ThumbsUp,
   TrendingUp,
@@ -555,9 +555,11 @@ export default function CampaignsScreen({ navigation }: any) {
   const renderPaywall = () => (
     <View>
       <View style={s.arena}>
-        <View style={s.liveRow}>
-          <Sparkles size={11} color="#FFF" />
-          <Text style={s.liveText}>{`${trialForPlan(selectedCampaignsPlan).trialDays} DAYS FREE`}</Text>
+        {/* No black pill and no sparkle here — just a microphone and the
+            words, in ink so they read against the yellow arena. */}
+        <View style={s.trialRow}>
+          <Mic size={14} color={INK} strokeWidth={2.5} />
+          <Text style={s.trialText}>{`${trialForPlan(selectedCampaignsPlan).trialDays} DAYS FREE`}</Text>
         </View>
         <Text style={s.arenaTitle}>Put your product in front of every founder</Text>
         <Text style={s.arenaSub}>
@@ -821,6 +823,10 @@ const s = StyleSheet.create({
     color: '#3A3A3A',
     lineHeight: 18,
   },
+  // The paywall trial line. Deliberately not the black pill: ink on the
+  // yellow arena is the highest-contrast pairing on this screen.
+  trialRow: { flexDirection: 'row', alignItems: 'center', gap: 7, alignSelf: 'flex-start' },
+  trialText: { fontSize: 12, fontWeight: '900', letterSpacing: 1.8, color: INK },
   statRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
   statChip: {
     flex: 1,
