@@ -2238,7 +2238,20 @@ export default function SwipeScreen({ navigation }: any) {
           style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
           {...scrollPanResponder.panHandlers}
         >
-          <View style={styles.photoStack} pointerEvents="none">
+          <View
+            style={[
+              styles.photoStack,
+              // TEMPORARY DIAGNOSTIC.
+              //   LIME visible   -> the photo stack renders and ONLY the image
+              //                     is failing to paint.
+              //   ORANGE border  -> the text block is laid out, so the name
+              //                     should be readable.
+              //   NEITHER        -> children are not rendering at all and
+              //                     this is a layout problem, not an image one.
+              ...(__DEV__ ? [{ backgroundColor: 'lime' as const }] : []),
+            ]}
+            pointerEvents="none"
+          >
             <AppImage
               uri={scrollSlot === 0 ? curScrollUri : nextScrollUri}
               style={[styles.scrollCardImg, scrollSlot === 0 ? styles.photoShown : styles.photoBuried]}
@@ -2251,7 +2264,12 @@ export default function SwipeScreen({ navigation }: any) {
             />
           </View>
           <View style={styles.scrollCardOverlay} />
-          <View style={styles.scrollCardBody}>
+          <View
+            style={[
+              styles.scrollCardBody,
+              ...(__DEV__ ? [{ borderWidth: 2, borderColor: 'orange' }] : []),
+            ]}
+          >
             <View style={styles.scrollCardMeta}>
               <View style={styles.scrollCardNameRow}>
                 <Text style={styles.scrollCardName} numberOfLines={1}>{displayNameFor(profile)}{ageText}</Text>
