@@ -894,16 +894,14 @@ export default function SwipeScreen({ navigation }: any) {
     const len = feedRef.current.length;
     const cur = scrollIndexRef.current;
     if (dir === 'up' && cur < len - 1) {
-      // Paging up through the feed is PLUS. Free members were using scroll
-      // mode as an endless feed: spendDiscoveryBudget treats a profile you
-      // have ALREADY paid for as free, so once the 12 were gone they could
-      // page back down and swipe up over the people they had already seen —
-      // forever, with no ad and no spend. Charging a discovery per advance
-      // does not close it, because the recharge is what makes it free.
-      //
-      // So: instant paywall, and the card springs back to where it was.
-      if (!isProUser) {
-        openPaywall('Scroll Mode');
+      // Swiping up moves FORWARD, and forward costs a discovery — the same
+      // budget the deck spends, so the 12-per-12h limit holds in both modes.
+      // Running out never opens a paywall mid-scroll; it serves an ad and
+      // the card springs back. Never advance on a spent budget: that is how
+      // a free member reads the city for nothing.
+      const nextProfile = feedRef.current[cur + 1];
+      if (!spendDiscoveryBudget(nextProfile?.uid)) {
+        showLimitAd();
         springScrollBack();
         return;
       }
@@ -922,6 +920,16 @@ export default function SwipeScreen({ navigation }: any) {
       // nothing. The deck keeps moving, it just moves through ads.
       if (outOfSwipes) showLimitAd();
     } else if (dir === 'down' && cur > 0) {
+      // Swiping down pages BACK over people you have already seen, and that
+      // is the loophole: spendDiscoveryBudget treats an already-paid profile
+      // as free even at zero budget, so a free member could walk back over
+      // everyone they had paid for, then forward again, forever — no spend,
+      // no ad. Going back is PLUS. Instant paywall, card springs back.
+      if (!isProUser) {
+        openPaywall('Scroll Mode');
+        springScrollBack();
+        return;
+      }
       setScrollIndex(cur - 1);
       scrollIndexRef.current = cur - 1;
       animateScrollStep(-360);
@@ -2256,7 +2264,7 @@ export default function SwipeScreen({ navigation }: any) {
             {!isProUser
               ? swipesLeft === 0
                 ? 'Daily limit reached · go PLUS for unlimited'
-                : '↑ swipe up is PLUS'
+                : '↑ swipe up for next · going back is PLUS'
               : scrollIndex < feed.length - 1
                 ? '↑ swipe up for next'
                 : 'last profile'}
