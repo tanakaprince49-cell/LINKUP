@@ -2153,6 +2153,14 @@ export default function SwipeScreen({ navigation }: any) {
   // produced the empty frame. Removed once this is closed.
   const debugBranchRef = useRef('init');
   const debugInfoRef = useRef('');
+  const debugLayoutRef = useRef('feed=? card=?');
+  const dbgMeasure = (which: 'feed' | 'card') => (e: any) => {
+    const l = e?.nativeEvent?.layout;
+    if (!l) return;
+    const box = `${Math.round(l.x)},${Math.round(l.y)} ${Math.round(l.width)}x${Math.round(l.height)}`;
+    debugLayoutRef.current =
+      which === 'feed' ? `feed=${box} ${debugLayoutRef.current.split(' card=')[1] || '?'}` : `feed=${debugLayoutRef.current.split('feed=')[1]?.split(' ')[0] || '?'} card=${box}`;
+  };
   const renderDebugStrip = () => {
     const d = discoverySponsor;
     const txt =
@@ -2160,7 +2168,8 @@ export default function SwipeScreen({ navigation }: any) {
       `title=${d ? String(d.title || '?').slice(0, 14) : '-'} ` +
       `feed=${feed.length} idx=${scrollIndex} left=${swipesLeft} ` +
       `budget=${swipeBudgetRef.current} oos=${outOfSwipes ? 1 : 0} mode=${mode} ` +
-      debugInfoRef.current;
+      debugInfoRef.current +
+      ` | ${debugLayoutRef.current}`;
     console.log('[LINKUP DBG]', txt);
     return (
       <View
@@ -2212,10 +2221,7 @@ export default function SwipeScreen({ navigation }: any) {
     // already mounted and decoded in the buried layer, so advancing the feed
     // never paints a blank. Scroll index parity picks the layer on top.
     const scrollSlot = scrollIndex % 2;
-    const nextScrollProfile = feed[Math.min(scrollIndex + 1, feed.length - 1)];
-    const nextScrollPhotos = nextScrollProfile ? getSwipePhotos(nextScrollProfile) : [];
     const curScrollUri = ikCard(photos[0]) || FALLBACK_PHOTO;
-    const nextScrollUri = nextScrollPhotos.length ? ikCard(nextScrollPhotos[0]) || FALLBACK_PHOTO : FALLBACK_PHOTO;
     const ageText = Number(profile.age) > 0 ? `, ${profile.age}` : '';
     const locationText = [profile.city, profile.country].filter(Boolean).join(', ') || 'Remote';
     const roleText = [
@@ -2233,9 +2239,10 @@ export default function SwipeScreen({ navigation }: any) {
     const skills = Array.isArray(profile.skills) ? profile.skills.slice(0, 6) : [];
 
     return (
-      <View style={styles.scrollFeed}>
+      <View style={styles.scrollFeed} onLayout={dbgMeasure('feed')}>
         <Animated.View
           style={[styles.scrollFeedCard, { transform: [{ translateY: scrollPosition }] }]}
+          onLayout={dbgMeasure('card')}
           {...scrollPanResponder.panHandlers}
         >
           {/* TEMPORARY DIAGNOSTIC. RED is the first child of the card, BLUE is
@@ -2251,27 +2258,11 @@ export default function SwipeScreen({ navigation }: any) {
           <View
             style={[
               styles.photoStack,
-              // TEMPORARY DIAGNOSTIC.
-              //   LIME visible   -> the photo stack renders and ONLY the image
-              //                     is failing to paint.
-              //   ORANGE border  -> the text block is laid out, so the name
-              //                     should be readable.
-              //   NEITHER        -> children are not rendering at all and
-              //                     this is a layout problem, not an image one.
               ...(__DEV__ ? [{ backgroundColor: 'lime' as const }] : []),
             ]}
             pointerEvents="none"
           >
-            <AppImage
-              uri={scrollSlot === 0 ? curScrollUri : nextScrollUri}
-              style={[styles.scrollCardImg, scrollSlot === 0 ? styles.photoShown : styles.photoBuried]}
-              transitionMs={0}
-            />
-            <AppImage
-              uri={scrollSlot === 1 ? curScrollUri : nextScrollUri}
-              style={[styles.scrollCardImg, scrollSlot === 1 ? styles.photoShown : styles.photoBuried]}
-              transitionMs={0}
-            />
+            <AppImage uri={curScrollUri} style={styles.scrollCardImg} transitionMs={0} />
           </View>
           <View style={styles.scrollCardOverlay} />
           <View
