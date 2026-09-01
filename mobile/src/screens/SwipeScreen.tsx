@@ -934,15 +934,6 @@ export default function SwipeScreen({ navigation }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  // Non-Plus users can never enter scroll mode. If they somehow land here
-  // (stale state, deep link), force them back to swipe.
-  useEffect(() => {
-    if (mode === 'scroll' && !isProUser) {
-      setMode('swipe');
-      settleScroll();
-    }
-  }, [mode, isProUser]);
-
   useEffect(
     () => () => {
       if (scrollAnimTimerRef.current) clearTimeout(scrollAnimTimerRef.current);
