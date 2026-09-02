@@ -51,11 +51,16 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/linkup-sa.json"
 
+      # The hourly schedule must WRITE - that is the whole point of the job.
+      # `inputs.write` is only defined for manual (workflow_dispatch) runs; on a
+      # schedule it is empty, so the old expression silently turned every
+      # hourly run into a dry run and no campaign ever got its expiresAt
+      # stamp. Manual runs still default to a dry run unless the box is ticked.
       - name: Run the sweep
         working-directory: functions
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/linkup-sa.json
-        run: node backfill-campaign-expiry.mjs ${{ inputs.write && '--write' || '' }}
+        run: node backfill-campaign-expiry.mjs ${{ (github.event_name == 'schedule' || inputs.write) && '--write' || '' }}
 
       - name: Remove the service account key
         if: always()
