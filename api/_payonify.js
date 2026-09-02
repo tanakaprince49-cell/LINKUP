@@ -10,6 +10,8 @@
 // never logged as part of a config dump, and never sent to the client. The
 // only thing the browser ever sees is the checkout URL Payonify hands back.
 
+import { createHmac, timingSafeEqual } from 'crypto';
+
 const SANDBOX_BASE = 'https://api.payonify.com';
 const LIVE_BASE = 'https://api.payonify.com';
 
@@ -115,8 +117,6 @@ export function verifyWebhookSignature(payload, signatureHeader) {
     return { ok: false, reason: 'missing-signature' };
   }
 
-  const crypto = require('crypto');
-
   const parts = {};
   for (const part of String(signatureHeader).split(',')) {
     const [key, value] = part.split('=');
@@ -138,13 +138,12 @@ export function verifyWebhookSignature(payload, signatureHeader) {
 
   // Compute expected signature
   const signedPayload = `${timestamp}.${payload}`;
-  const expectedSignature = crypto
-    .createHmac('sha256', cfg.webhookSecret)
+  const expectedSignature = createHmac('sha256', cfg.webhookSecret)
     .update(signedPayload)
     .digest('hex');
 
   // Timing-safe compare
-  if (!crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(receivedSignature))) {
+  if (!timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(receivedSignature))) {
     return { ok: false, reason: 'invalid-signature' };
   }
 
