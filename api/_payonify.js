@@ -104,7 +104,7 @@ export async function withRetry(fn, opts = {}) {
  * @param {string} signatureHeader — the Payonify-Signature header value
  * @returns {{ ok: boolean, reason?: string, event?: object }}
  */
-export function verifyWebhookSignature(payload, signatureHeader) {
+export async function verifyWebhookSignature(payload, signatureHeader) {
   const cfg = payonifyConfig();
   if (!cfg.webhookSecret) {
     // No webhook secret configured — skip verification (dev mode only).

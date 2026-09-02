@@ -112,7 +112,7 @@ export default async function handler(req, res) {
 
   // Verify webhook signature BEFORE any state change.
   const signature = req.headers?.['payonify-signature'] || req.headers?.['Payonify-Signature'] || '';
-  const sigCheck = verifyWebhookSignature(rawBody, signature);
+  const sigCheck = await verifyWebhookSignature(rawBody, signature);
   if (!sigCheck.ok && sigCheck.reason !== 'no-secret-configured') {
     console.error('[payonifyWebhook] signature verification failed:', sigCheck.reason);
     res.status(200).send('OK');
