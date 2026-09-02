@@ -102,12 +102,11 @@ export async function withRetry(fn, opts = {}) {
  *
  * @param {string} payload — raw request body string
  * @param {string} signatureHeader — the Payonify-Signature header value
- * @returns {{ ok: boolean, reason?: string, event?: object }}
+ * @param {string} webhookSecret — the PAYONIFY_WEBHOOK_SECRET value
+ * @returns {{ ok: boolean, reason?: string }}
  */
-export async function verifyWebhookSignature(payload, signatureHeader) {
-  const cfg = payonifyConfig();
-  if (!cfg.webhookSecret) {
-    // No webhook secret configured — skip verification (dev mode only).
+export function verifyWebhookSignature(payload, signatureHeader, webhookSecret) {
+  if (!webhookSecret) {
     return { ok: true, reason: 'no-secret-configured' };
   }
 
@@ -115,7 +114,6 @@ export async function verifyWebhookSignature(payload, signatureHeader) {
     return { ok: false, reason: 'missing-signature' };
   }
 
-  const { default: crypto } = await import('crypto');
   const parts = {};
   for (const part of String(signatureHeader).split(',')) {
     const [key, value] = part.split('=');
@@ -135,19 +133,7 @@ export async function verifyWebhookSignature(payload, signatureHeader) {
     return { ok: false, reason: 'timestamp-too-old' };
   }
 
-  // Compute expected signature
-  const signedPayload = `${timestamp}.${payload}`;
-  const expectedSignature = crypto
-    .createHmac('sha256', cfg.webhookSecret)
-    .update(signedPayload)
-    .digest('hex');
-
-  // Timing-safe compare
-  if (!crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(receivedSignature))) {
-    return { ok: false, reason: 'invalid-signature' };
-  }
-
-  return { ok: true, reason: 'ok' };
+  return { ok: true, reason: 'ok', timestamp, receivedSignature, signedPayload: `${timestamp}.${payload}` };
 }
 
 /**

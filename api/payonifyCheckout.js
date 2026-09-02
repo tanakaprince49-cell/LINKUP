@@ -6,14 +6,25 @@
 // Headers: Authorization: Bearer <Firebase ID token>
 // Returns: { "checkoutUrl": "https://checkout.payonify.com/c/...",
 //            "sessionId": "cs_...", "amount": 19.99, "currency": "USD", ... }
+
+console.log('[payonifyCheckout] Starting module load');
+
 import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
+console.log('[payonifyCheckout] Imported _gemini');
+
 import { getDb, serverTimestamp, verifyRequestUser } from './_firebaseAdmin.js';
+console.log('[payonifyCheckout] Imported _firebaseAdmin');
+
 import { CURRENCY, WEB_TERMS } from '../shared/pricing.js';
+console.log('[payonifyCheckout] Imported pricing');
 
 const TX = 'webTransactions';
 const BASE_URL = 'https://api.payonify.com';
 
+console.log('[payonifyCheckout] Constants defined');
+
 function getConfig() {
+  console.log('[payonifyCheckout] getConfig called');
   const publishableKey = String(process.env.PAYONIFY_PUBLISHABLE_KEY || '').trim();
   const secretKey = String(process.env.PAYONIFY_SECRET_KEY || '').trim();
   const successUrl = String(process.env.PAYONIFY_SUCCESS_URL || '').trim();
@@ -28,13 +39,17 @@ function getConfig() {
 }
 
 function getAuthHeader() {
+  console.log('[payonifyCheckout] getAuthHeader called');
   const cfg = getConfig();
   return 'Basic ' + Buffer.from(cfg.publishableKey + ':' + cfg.secretKey, 'utf8').toString('base64');
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+console.log('[payonifyCheckout] Helper functions defined');
+
 async function withRetry(fn, attempts) {
+  console.log('[payonifyCheckout] withRetry called');
   let lastError;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -47,7 +62,10 @@ async function withRetry(fn, attempts) {
   throw lastError;
 }
 
+console.log('[payonifyCheckout] Handler function defined');
+
 export default async function handler(req, res) {
+  console.log('[payonifyCheckout] Handler called');
   try {
     if (handleOptions(req, res)) return;
     setCors(res);
