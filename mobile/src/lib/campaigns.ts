@@ -71,7 +71,11 @@ export const CAMPAIGN_PLACEMENT_OPTIONS: { id: string; label: string; desc: stri
   { id: 'discover', label: 'Discover boost', desc: 'Sponsored card shows every 4th swipe in the people deck', available: true },
   { id: 'news', label: 'News feed', desc: 'Sponsored card inside the AI news feed', available: true },
   { id: 'play', label: 'Play tab', desc: 'Sponsored card on the Play screen', available: true },
+  { id: 'picks', label: "Today's picks", desc: 'Sponsored card above the recommended-people list', available: true },
+  { id: 'projects', label: 'Project matches', desc: 'Sponsored card at the top of project & opportunity lists', available: true },
+  { id: 'daily', label: 'Daily 5', desc: 'Sponsored card on the Daily 5 loop screen', available: true },
 ];
+
 
 /**
  * How long a campaign runs when the advertiser's plan has no published end
@@ -135,6 +139,11 @@ export type CampaignsAccount = {
   plan?: string;
   status?: string;
   planProductId?: string;
+  billingProvider?: string;
+  /** Exact end of the entitlement when known (Play re-verify, RTDN, web). */
+  expiresAt?: any;
+  trialEndsAt?: any;
+  storeVerifiedAt?: any;
   unlockedAt?: any;
   updatedAt?: any;
 };
@@ -177,6 +186,53 @@ export const fetchCampaignsAccount = async (uid: string): Promise<CampaignsAccou
   } catch {
     return null;
   }
+};
+
+/**
+ * Play-side lapse detection.
+ *
+ * Google never tells this app when a subscription ends (no RTDN), so the
+ * campaignAccounts doc stayed `status: 'active'` forever and the hourly
+ * sweep kept re-extending the 30-day window: a cancelled subscriber's ad
+ * could run indefinitely. The Campaigns screen now re-checks the store on
+ * every open and calls this with what Google actually says.
+ *
+ *   still owned   -> `status: 'active'`, `verifiedAt` refreshed
+ *   not owned     -> `status: 'expired'`, `expiresAt: now`
+ *
+ * The sweep reads `expiresAt` first, so a lapsed owner's campaigns are
+ * ended on the next hourly pass. Between passes the client filter
+ * (isCampaignServable) already hides anything past its stamp.
+ */
+export const syncCampaignsAccountFromStore = async (
+  uid: string,
+  owned: boolean,
+  options: { productId?: string; autoRenewing?: boolean | null } = {}
+) => {
+  if (!uid) return;
+  const now = Date.now();
+  if (owned) {
+    // Still paying. Clear any earlier lapse stamp and a finished trial date,
+    // otherwise the sweep reads the stale past date first and ends the ads
+    // of someone who converted from trial to paid.
+    await saveCampaignsAccount(uid, {
+      status: 'active',
+      ...(options.productId ? { planProductId: options.productId } : {}),
+      autoRenewing: options.autoRenewing ?? null,
+      expiresAt: null,
+      trialEndsAt: null,
+      isTrial: false,
+      storeVerifiedAt: now,
+      updatedAt: serverTimestamp(),
+    });
+    return;
+  }
+  await saveCampaignsAccount(uid, {
+    status: 'expired',
+    expiresAt: now,
+    storeVerifiedAt: now,
+    updatedAt: serverTimestamp(),
+  });
 };
 
 export const saveCampaignsAccount = async (uid: string, patch: Record<string, unknown>) => {
@@ -632,7 +688,13 @@ export const toSponsoredItem = (campaign: Campaign): SponsoredIdeaDeckItem => {
   };
 };
 
-/** Our own PLUS promo, drawn when paid inventory is empty. */
+/**
+ * Our own promo, drawn when paid inventory is empty.
+ *
+ * Linky is the face of it. "Go PLUS" sold a feature list; this sells the
+ * character - a first-person line from the assistant free members cannot
+ * talk to yet. Tapping it opens the paywall (see the `house` flag).
+ */
 export const buildHouseIdeaCard = (): SponsoredIdeaDeckItem => ({
   id: `sponsored_${HOUSE_PLUS_CAMPAIGN_ID}`,
   campaignId: HOUSE_PLUS_CAMPAIGN_ID,
@@ -640,15 +702,16 @@ export const buildHouseIdeaCard = (): SponsoredIdeaDeckItem => ({
   house: true,
   website: '',
   logo: '',
-  title: 'Go PLUS',
-  description: 'Unlimited swipes & rewinds, Who Viewed You, advanced search and zero sponsored cards.',
+  title: 'Linky found people for you',
+  description: "I've read every builder here. Unlock me and I'll introduce you to the ones who fit.",
+  tagline: "I've read every builder here. Unlock me and I'll introduce you to the ones who fit.",
   stage: 'PLUS',
   lookingFor: [],
-  tags: ['PLUS', 'UNLIMITED'],
+  tags: ['LINKY', 'PLUS'],
   ownerId: 'linkup',
-  ownerName: 'LinkUp',
+  ownerName: 'Linky AI',
   ownerPic: '',
-  ownerOccupation: 'Membership',
+  ownerOccupation: 'Your AI networking assistant',
   ownerCity: '',
   ownerCountry: '',
   ownerVerified: true,
@@ -660,14 +723,15 @@ export const sponsoredIdeaCardsForViewer = async (
   viewerUid: string,
   viewerIsPlus: boolean = false
 ): Promise<SponsoredIdeaDeckItem[]> => {
-  const eligible: Campaign[] = [];
-  for (const campaign of campaigns) {
-    if (!campaign?.creative) continue;
-    if (campaign.ownerId === viewerUid) continue; // never advertise to yourself
-    const views = await campaignViewsToday(viewerUid, campaign.id).catch(() => 0);
-    if (views >= CAMPAIGN_IMPRESSION_DAILY_CAP) continue;
-    eligible.push(campaign);
-  }
+  // NOT pre-filtered by the daily impression cap. Recording an impression
+  // writes to the campaign doc, which re-fires the listener, which rebuilt
+  // this list with the cap applied - so after two views of each campaign
+  // every paid ad dropped out and the deck only ever showed the house promo.
+  // That is the "only one ad" symptom. The cap still throttles impression
+  // STATS inside recordCampaignImpression; it no longer decides what you see.
+  const eligible = campaigns.filter(
+    (campaign) => !!campaign?.creative && campaign.ownerId !== viewerUid // never advertise to yourself
+  );
   if (!eligible.length) {
     // House ads fill unsold inventory — but ONLY for people who have not
     // already bought PLUS. Showing "Go PLUS — unlimited swipes" to someone
@@ -676,12 +740,126 @@ export const sponsoredIdeaCardsForViewer = async (
     if (viewerIsPlus) return [];
     return [buildHouseIdeaCard()];
   }
-  if (eligible.length > 1) {
-    // Daily rotation gives every active campaign a fair share of first slot.
-    const dayIndex = Math.floor(Date.now() / 86400000) % eligible.length;
-    return [...eligible.slice(dayIndex), ...eligible.slice(0, dayIndex)].map(toSponsoredItem);
+  // Per-viewer rotation: each rebuild of the deck starts one campaign further
+  // round, so the 4th card is a different ad each time. The old "daily"
+  // rotation was a single index derived from the date - every viewer saw the
+  // same first ad all day, and with two campaigns that read as "only one ad".
+  const rotated = await rotateCampaignsForViewer(eligible, viewerUid, 'ideas');
+  return rotated.map(toSponsoredItem);
+};
+
+// ---------------------------------------------------------------------------
+// Rotation.
+//
+// THE BUG THIS REPLACES: every single-slot surface (search, hub, news, play)
+// asked for `limit 1` of an equality query with no orderBy. Firestore answers
+// that in document-id order, so with two live campaigns the same doc came
+// back first on every fetch, on every screen, for every viewer, forever. The
+// second ad was live, stamped and eligible - and never got a single slot.
+//
+// Now every fetch walks a shared, persisted rotation cursor. Each surface
+// asks for the NEXT campaign, so the ad changes every time a slot is filled:
+// open Search -> ad A, open Hub -> ad B, back to Search -> ad A, and so on.
+// The cursor lives in AsyncStorage so it survives restarts, and it is per
+// viewer so two people on one device do not share a position.
+// ---------------------------------------------------------------------------
+
+const rotationKey = (uid: string, scope: string) => `linkup:campaign-rotation:${uid || 'anonymous'}:${scope}`;
+
+/** In-memory mirror of the cursor so back-to-back fills never race the disk. */
+const rotationMemo: Record<string, number> = {};
+
+const readRotationCursor = async (key: string): Promise<number> => {
+  if (rotationMemo[key] != null) return rotationMemo[key];
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    const parsed = Number.parseInt(String(raw || '0'), 10);
+    const value = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    rotationMemo[key] = value;
+    return value;
+  } catch {
+    return rotationMemo[key] || 0;
   }
-  return eligible.map(toSponsoredItem);
+};
+
+const writeRotationCursor = (key: string, value: number) => {
+  rotationMemo[key] = value;
+  AsyncStorage.setItem(key, String(value)).catch(() => {});
+};
+
+/**
+ * Cursor reads and advances are serialised. Home mounts three slots at once
+ * (hub strip, picks, projects); without this they all read the same cursor
+ * before any of them advanced it and showed the same ad three times.
+ */
+let rotationChain: Promise<unknown> = Promise.resolve();
+const withRotationLock = <T,>(fn: () => Promise<T>): Promise<T> => {
+  const run = rotationChain.then(fn, fn);
+  rotationChain = run.catch(() => undefined);
+  return run;
+};
+
+/** Stable order for the pool so the cursor means the same thing every time. */
+const sortForRotation = (campaigns: Campaign[]) => [...campaigns].sort((a, b) => a.id.localeCompare(b.id));
+
+/**
+ * Rotate `campaigns` so the viewer's next ad comes first and advance the
+ * cursor by `advanceBy` (default: one). Every eligible campaign therefore
+ * heads the list in turn; a surface that shows one ad shows a different one
+ * each time it loads, and a surface that shows several starts each load one
+ * step further round.
+ *
+ * `scope` separates cursors that should not interfere - the discover deck
+ * cycles on its own so a Search visit does not skip the deck ahead.
+ */
+export const rotateCampaignsForViewer = (
+  campaigns: Campaign[],
+  viewerUid: string,
+  scope: string = 'global',
+  advanceBy: number = 1
+): Promise<Campaign[]> =>
+  withRotationLock(async () => {
+    const pool = sortForRotation(campaigns);
+    if (pool.length <= 1) return pool;
+    const key = rotationKey(viewerUid, scope);
+    const cursor = (await readRotationCursor(key)) % pool.length;
+    writeRotationCursor(key, (cursor + Math.max(1, advanceBy)) % pool.length);
+    return [...pool.slice(cursor), ...pool.slice(0, cursor)];
+  });
+
+/** Peek at the rotation without advancing it (for previews / stable re-renders). */
+export const peekRotatedCampaigns = async (
+  campaigns: Campaign[],
+  viewerUid: string,
+  scope: string = 'global'
+): Promise<Campaign[]> => {
+  const pool = sortForRotation(campaigns);
+  if (pool.length <= 1) return pool;
+  const cursor = (await readRotationCursor(rotationKey(viewerUid, scope))) % pool.length;
+  return [...pool.slice(cursor), ...pool.slice(0, cursor)];
+};
+
+/** Several slots mount together; share one read for a few seconds. */
+const SERVABLE_CACHE_MS = 15_000;
+let servableCache: { at: number; rows: Campaign[] } | null = null;
+
+/** Every servable campaign, unfiltered by placement. One Firestore read. */
+export const fetchServableCampaigns = async (): Promise<Campaign[]> => {
+  const now = Date.now();
+  if (servableCache && now - servableCache.at < SERVABLE_CACHE_MS) {
+    // Re-check expiry on the cached rows: a campaign can lapse mid-cache.
+    return servableCache.rows.filter((campaign) => isCampaignServable(campaign, now));
+  }
+  try {
+    const snap = await getDocs(query(collection(db, 'campaigns'), where('status', '==', 'active'), limit(24)));
+    const rows = snap.docs
+      .map((entry) => ({ id: entry.id, ...entry.data() }) as Campaign)
+      .filter((campaign) => isCampaignServable(campaign, now) && !!campaign.creative);
+    servableCache = { at: now, rows };
+    return rows;
+  } catch {
+    return servableCache?.rows.filter((campaign) => isCampaignServable(campaign, now)) || [];
+  }
 };
 
 /**
@@ -692,32 +870,59 @@ export const sponsoredIdeaCardsForViewer = async (
  * slot — otherwise a new placement (news, play) looks broken until someone
  * happens to tick that box. It is never used to pad a surface that does have
  * targeted inventory, and it should be deleted once inventory is healthy.
+ *
+ * Rotates: pass `viewerUid` and each call starts one campaign further round.
  */
-export const fetchAnyActiveCampaigns = async (max: number = 1): Promise<Campaign[]> => {
-  try {
-    const snap = await getDocs(query(collection(db, 'campaigns'), where('status', '==', 'active'), limit(12)));
-    return snap.docs
-      .map((entry) => ({ id: entry.id, ...entry.data() }) as Campaign)
-      .filter((campaign) => isCampaignServable(campaign))
-      .slice(0, max);
-  } catch {
-    return [];
-  }
+export const fetchAnyActiveCampaigns = async (max: number = 1, viewerUid: string = ''): Promise<Campaign[]> => {
+  const pool = await fetchServableCampaigns();
+  const rotated = await rotateCampaignsForViewer(pool, viewerUid, 'global');
+  return rotated.slice(0, max);
 };
 
-/** One-shot fetch of active campaigns serving a given placement (search, hub, linky). */
-export const fetchActiveCampaignsForPlacement = async (placement: string, max: number = 3): Promise<Campaign[]> => {
-  try {
-    const snap = await getDocs(query(collection(db, 'campaigns'), where('status', '==', 'active'), limit(12)));
-    return snap.docs
-      .map((entry) => ({ id: entry.id, ...entry.data() }) as Campaign)
-      .filter((campaign) => isCampaignServable(campaign))
-      .filter((campaign) => Array.isArray(campaign.placements) && campaign.placements.includes(placement))
-      .slice(0, max);
-  } catch {
-    return [];
-  }
+/**
+ * One-shot fetch of active campaigns serving a given placement (search, hub,
+ * linky, news, play). Rotates per viewer so a single-slot surface shows a
+ * different campaign on each load rather than the first document forever.
+ */
+export const fetchActiveCampaignsForPlacement = async (
+  placement: string,
+  max: number = 3,
+  viewerUid: string = ''
+): Promise<Campaign[]> => {
+  const pool = (await fetchServableCampaigns()).filter(
+    (campaign) => Array.isArray(campaign.placements) && campaign.placements.includes(placement)
+  );
+  const rotated = await rotateCampaignsForViewer(pool, viewerUid, 'global');
+  return rotated.slice(0, max);
 };
+
+/**
+ * The one call every single-slot surface should make.
+ *
+ * Targeted inventory first, thin-inventory fallback second, never the
+ * viewer's own campaign, always the next one in rotation. Returns null when
+ * there is genuinely nothing to show. Records the impression for you.
+ */
+export const pickSponsoredCampaign = async (
+  placement: string,
+  viewerUid: string,
+  options: { recordImpression?: boolean } = {}
+): Promise<Campaign | null> => {
+  if (!viewerUid) return null;
+  const all = await fetchServableCampaigns();
+  const notMine = all.filter((campaign) => campaign.ownerId !== viewerUid);
+  const targeted = notMine.filter(
+    (campaign) => Array.isArray(campaign.placements) && campaign.placements.includes(placement)
+  );
+  const pool = targeted.length ? targeted : notMine;
+  if (!pool.length) return null;
+  const [next] = await rotateCampaignsForViewer(pool, viewerUid, 'global');
+  if (next && options.recordImpression !== false) void recordCampaignImpression(next.id, viewerUid);
+  return next || null;
+};
+
+/** How often a mounted single-slot surface swaps to the next campaign. */
+export const SPONSORED_SLOT_ROTATE_MS = 45_000;
 
 export const injectSponsored = (organic: IdeaDeckItem[], sponsored: IdeaDeckItem[], interval: number = SPONSORED_INTERVAL): IdeaDeckItem[] => {
   if (!sponsored.length) return organic;

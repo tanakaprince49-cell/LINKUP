@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Linking, Platform } from 'react-native';
+import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,9 +13,10 @@ import { rankLeague } from '../lib/builderLeague';
 import { loadLeaguePool } from '../lib/leaguePool';
 import { getBestOpportunityAlerts, getRotatedOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, getRotatedProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, ArrowLeftRight, UserCheck, Megaphone, Globe } from 'lucide-react-native';
+import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, ArrowLeftRight, UserCheck, Megaphone, Globe, Lock, Sparkles } from 'lucide-react-native';
 import { hasLinkupPro } from '../lib/paywall';
-import { Campaign, fetchActiveCampaignsForPlacement, recordCampaignClick, recordCampaignImpression, websiteDisplay } from '../lib/campaigns';
+import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS, websiteDisplay } from '../lib/campaigns';
+import { SponsoredSlot } from '../components/SponsoredCard';
 import { shareLinkupInvite } from '../lib/activation';
 import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
@@ -105,24 +106,34 @@ function DiscoveryDashboardScreen({ navigation }: any) {
   // Hub ad strip: one sponsored slot for free members; PLUS members never see it.
   const [hubSponsor, setHubSponsor] = useState<Campaign | null>(null);
   const viewerIsPro = hasLinkupPro(me);
+  // PLUS is ad-free; founder/admin accounts still see placements to QA them.
+  const adsHiddenForViewer = isSponsoredHiddenForViewer(me, { email: user?.email, isAdmin: (me as any)?.isAdmin });
+  const { theme } = useTheme();
+  const isFocused = useIsFocused();
+  // Rotates: next campaign on every focus, on foreground, and on a timer.
+  // Home is the tab that stays mounted longest, so a fetch-once slot here
+  // pinned one ad to the top of the app for the whole session.
   useEffect(() => {
-    if (viewerIsPro || !user?.uid) {
-      setHubSponsor(null);
+    if (adsHiddenForViewer || !user?.uid || !isFocused) {
+      if (adsHiddenForViewer || !user?.uid) setHubSponsor(null);
       return;
     }
     let cancelled = false;
-    fetchActiveCampaignsForPlacement('hub', 1).then((campaigns) => {
-      if (cancelled) return;
-      const pick = campaigns.find((campaign) => campaign.ownerId !== user.uid) || null;
-      setHubSponsor(pick);
-      if (pick) void recordCampaignImpression(pick.id, user.uid);
+    const load = async () => {
+      const pick = await pickSponsoredCampaign('hub', user.uid).catch(() => null);
+      if (!cancelled) setHubSponsor(pick);
+    };
+    void load();
+    const timer = setInterval(load, SPONSORED_SLOT_ROTATE_MS);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load();
     });
     return () => {
       cancelled = true;
+      clearInterval(timer);
+      sub.remove();
     };
-  }, [viewerIsPro, user?.uid]);
-  const { theme } = useTheme();
-  const isFocused = useIsFocused();
+  }, [adsHiddenForViewer, user?.uid, isFocused]);
   const isDark = theme === 'dark';
   const remoteRankTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const peopleRankKeyRef = useRef<string>('');
@@ -624,6 +635,9 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             </View>
           </View>
 
+          {/* Linky is the main character. Free members see what he would do
+              for them right now and that he is one tap (and one plan) away;
+              PLUS members get straight into the chat. */}
           <TouchableOpacity
             activeOpacity={0.9}
             onPress={() => navigation.navigate('Linky')}
@@ -637,15 +651,21 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 <View style={styles.nameRow}>
                   <Text style={[styles.name, { color: textColor(isDark) }]}>Linky AI</Text>
                   <VerifiedBadge size={18} />
+                  {!viewerIsPro && <Lock size={12} color={textColor(isDark, 'muted')} />}
                 </View>
                 <Text style={[styles.handle, { color: HOME_GOLD_DEEP }]}>@linky</Text>
-                <Text style={[styles.meta, { color: textColor(isDark, 'muted') }]}>AI Assistant</Text>
+                <Text style={[styles.meta, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>
+                  {viewerIsPro
+                    ? 'Ask me for a co-founder, an investor or a warm intro — I already know who fits you.'
+                    : `Hey ${displayNameFor(me).split(' ')[0] || 'there'} — I found people who fit what you're building. Unlock me and I'll introduce you.`}
+                </Text>
               </View>
             </View>
             <View style={[styles.linkyChip, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
     borderColor: HOME_LINE }]}>
-              <Text style={styles.linkyChipText}>Chat</Text>
+              {!viewerIsPro && <Sparkles size={10} color="#000" />}
+              <Text style={styles.linkyChipText}>{viewerIsPro ? 'Chat' : 'Unlock'}</Text>
             </View>
           </TouchableOpacity>
 
@@ -656,7 +676,11 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             showScore
             onViewAll={() => navigation.navigate('RecommendedMatches')}
           />
-          <View style={{ marginTop: 24 }}>
+          {/* Free plan: rotating sponsored card under Today's picks. */}
+          <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
+            <SponsoredSlot placement="picks" viewerUid={user?.uid} enabled={!adsHiddenForViewer} />
+          </View>
+          <View style={{ marginTop: 12 }}>
             <TouchableOpacity style={styles.sectionHeader} onPress={() => navigation.navigate('ActiveOpportunities')} activeOpacity={0.8}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Rocket size={17} color={HOME_INK} />
@@ -666,6 +690,10 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 <ChevronRight size={16} color={textColor(isDark, 'muted')} />
               </View>
             </TouchableOpacity>
+            {/* Free plan: rotating sponsored card at the top of Project Matches. */}
+            <View style={{ paddingHorizontal: 16, marginTop: 10 }}>
+              <SponsoredSlot placement="projects" viewerUid={user?.uid} enabled={!adsHiddenForViewer} />
+            </View>
             <FlatList
               data={projectRecommendations}
               keyExtractor={(item) => item.id}

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AppState,
   View,
   Text,
   StyleSheet,
@@ -33,10 +34,9 @@ import PaywallModal from '../components/PaywallModal';
 import { hasLinkupPro, PRO_FEATURES } from '../lib/paywall';
 import {
   Campaign,
-  fetchActiveCampaignsForPlacement,
-  fetchAnyActiveCampaigns,
+  pickSponsoredCampaign,
   recordCampaignClick,
-  recordCampaignImpression,
+  SPONSORED_SLOT_ROTATE_MS,
   websiteDisplay,
 } from '../lib/campaigns';
 import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, MOBILE_SEARCH_RENDER_LIMIT, safeProfileImageUri, compactProfileForList } from '../lib/profilePerformance';
@@ -186,26 +186,29 @@ export default function SearchScreen({ navigation, route }: any) {
   // Sponsored search slot: single campaign pinned above results for free
   // members; PLUS members never see campaigns.
   const [searchSponsor, setSearchSponsor] = useState<Campaign | null>(null);
+  // Rotates: next campaign on every focus, on foreground, and on a timer.
+  // Fetching once on mount kept the first ad up for the life of the tab.
   useEffect(() => {
-    if (isPro || !user?.uid) {
-      setSearchSponsor(null);
+    if (isPro || !user?.uid || !isFocused) {
+      if (isPro || !user?.uid) setSearchSponsor(null);
       return;
     }
     let cancelled = false;
-    (async () => {
-      const targeted = await fetchActiveCampaignsForPlacement('search', 1).catch(() => []);
-      // Thin-inventory fallback: no advertiser bought Search boost, so show
-      // any live campaign rather than nothing. See fetchAnyActiveCampaigns.
-      const pool = targeted.length ? targeted : await fetchAnyActiveCampaigns(1).catch(() => []);
-      if (cancelled) return;
-      const pick = pool.find((campaign) => campaign.ownerId !== user.uid && campaign.creative) || null;
-      setSearchSponsor(pick);
-      if (pick) void recordCampaignImpression(pick.id, user.uid);
-    })();
+    const load = async () => {
+      const pick = await pickSponsoredCampaign('search', user.uid).catch(() => null);
+      if (!cancelled) setSearchSponsor(pick);
+    };
+    void load();
+    const timer = setInterval(load, SPONSORED_SLOT_ROTATE_MS);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load();
+    });
     return () => {
       cancelled = true;
+      clearInterval(timer);
+      sub.remove();
     };
-  }, [isPro, user?.uid]);
+  }, [isPro, user?.uid, isFocused]);
   const guardAdvancedSearch = () => {
     if (isPro) return true;
     openPaywall('Advanced Search Filters');

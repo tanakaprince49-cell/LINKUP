@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Image, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { Globe, Package } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, RADIUS, liquidGlass, textColor } from '../theme/theme';
 import { ikAvatar } from '../lib/ikImage';
 import {
   Campaign,
-  fetchActiveCampaignsForPlacement,
-  fetchAnyActiveCampaigns,
+  pickSponsoredCampaign,
   recordCampaignClick,
-  recordCampaignImpression,
+  SPONSORED_SLOT_ROTATE_MS,
   sponsorOneLiner,
 } from '../lib/campaigns';
 
@@ -107,30 +107,40 @@ export function SponsoredSlot({
   return <SponsoredCard campaign={campaign} viewerUid={viewerUid} />;
 }
 
-/** Hook form, for screens that need to weave the card into their own data. */
+/**
+ * Hook form, for screens that need to weave the card into their own data.
+ *
+ * Rotation is built in: the slot takes the NEXT campaign in the viewer's
+ * rotation on mount, every time the screen regains focus, every time the app
+ * comes back to the foreground, and on a timer while it stays on screen. The
+ * old version fetched once on mount and kept it - on a tab screen that meant
+ * the first ad it ever loaded stayed up until the app was killed.
+ */
 export function useSponsoredSlot(placement: string, viewerUid?: string, enabled = true) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    if (!enabled || !viewerUid) {
-      setCampaign(null);
+    if (!enabled || !viewerUid || !isFocused) {
+      if (!enabled || !viewerUid) setCampaign(null);
       return;
     }
     let cancelled = false;
-    (async () => {
-      const targeted = await fetchActiveCampaignsForPlacement(placement, 1).catch(() => []);
-      // No advertiser bought this placement? Fall back to any live campaign
-      // rather than showing nothing. See fetchAnyActiveCampaigns.
-      const pool = targeted.length ? targeted : await fetchAnyActiveCampaigns(1).catch(() => []);
-      if (cancelled) return;
-      const pick = pool.find((entry) => entry.ownerId !== viewerUid && entry.creative) || null;
-      setCampaign(pick);
-      if (pick) void recordCampaignImpression(pick.id, viewerUid);
-    })();
+    const load = async () => {
+      const pick = await pickSponsoredCampaign(placement, viewerUid).catch(() => null);
+      if (!cancelled) setCampaign(pick);
+    };
+    void load();
+    const timer = setInterval(load, SPONSORED_SLOT_ROTATE_MS);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load();
+    });
     return () => {
       cancelled = true;
+      clearInterval(timer);
+      sub.remove();
     };
-  }, [placement, viewerUid, enabled]);
+  }, [placement, viewerUid, enabled, isFocused]);
 
   return campaign;
 }
