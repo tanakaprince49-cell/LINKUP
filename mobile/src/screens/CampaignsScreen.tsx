@@ -61,6 +61,7 @@ import {
   setCampaignStatus,
   subscribeMyCampaigns,
   subscribePendingCampaigns,
+  syncCampaignsAccountFromStore,
 } from '../lib/campaigns';
 import { startPayonifyCheckout, checkPayonifyPayment, takePendingReference } from '../lib/webCheckout';
 import { webCampaignsActive } from '../lib/webSubscription';
@@ -259,6 +260,44 @@ export default function CampaignsScreen({ navigation }: any) {
     }, () => {});
     return () => { mounted = false; unsub(); };
   }, [user?.uid]);
+
+  // Re-verify the Play subscription every time the screen opens.
+  //
+  // Google does not push lapses to this app, so without this a cancelled
+  // subscriber's campaignAccounts doc read `active` forever and the sweep
+  // kept extending their campaigns. Now the store is the authority: if Play
+  // no longer lists a Campaigns purchase we stamp the account expired, and
+  // the hourly sweep ends the ads on its next pass. Admins are exempt (they
+  // hold no purchase), and a store error changes nothing - we only write
+  // when Play answered.
+  useEffect(() => {
+    if (Platform.OS === 'web' || !user?.uid || !connected) return;
+    if (isAdminIdentity({ email: user?.email, isAdmin: (profile as any)?.isAdmin })) return;
+    let cancelled = false;
+    (async () => {
+      let purchases: Purchase[];
+      try {
+        purchases = await getAvailablePurchases();
+      } catch {
+        return; // store unreachable: leave the account exactly as it is
+      }
+      if (cancelled) return;
+      const cp = purchases.find(isCampaignsPurchase);
+      const current = await fetchCampaignsAccount(user.uid).catch(() => null);
+      if (cancelled) return;
+      const wasActive = String(current?.status || '').toLowerCase() === 'active';
+      if (cp) {
+        await syncCampaignsAccountFromStore(user.uid, true, {
+          productId: getPurchaseProductId(cp),
+          autoRenewing: (cp as any).autoRenewingAndroid ?? (cp as any).isAutoRenewing ?? null,
+        }).catch(() => {});
+      } else if (wasActive && current?.billingProvider !== 'web') {
+        await syncCampaignsAccountFromStore(user.uid, false).catch(() => {});
+        if (!cancelled) setAccount((prev) => ({ ...(prev || {}), status: 'expired' }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.uid, connected]);
 
   useEffect(() => {
     if (!user?.uid) { setCampaignsTrial(null); return; }
