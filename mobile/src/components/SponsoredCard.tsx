@@ -8,6 +8,7 @@ import { ikAvatar } from '../lib/ikImage';
 import {
   Campaign,
   pickSponsoredCampaign,
+  pickSponsoredCampaigns,
   recordCampaignClick,
   SPONSORED_SLOT_ROTATE_MS,
   sponsorOneLiner,
@@ -143,6 +144,41 @@ export function useSponsoredSlot(placement: string, viewerUid?: string, enabled 
   }, [placement, viewerUid, enabled, isFocused]);
 
   return campaign;
+}
+
+/**
+ * Multi-slot form for feeds that weave several ads through a list (News).
+ * Same rotation rules as useSponsoredSlot - refreshes on mount, on focus, on
+ * foreground and on a timer - but returns `count` campaigns, cycling the
+ * inventory so every slot is filled even with one or two live campaigns.
+ */
+export function useSponsoredSlots(placement: string, viewerUid: string | undefined, count: number, enabled = true) {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (!enabled || !viewerUid || count <= 0 || !isFocused) {
+      if (!enabled || !viewerUid || count <= 0) setCampaigns([]);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      const picks = await pickSponsoredCampaigns(placement, viewerUid, count).catch(() => [] as Campaign[]);
+      if (!cancelled) setCampaigns(picks);
+    };
+    void load();
+    const timer = setInterval(load, SPONSORED_SLOT_ROTATE_MS);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load();
+    });
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [placement, viewerUid, count, enabled, isFocused]);
+
+  return campaigns;
 }
 
 const styles = StyleSheet.create({

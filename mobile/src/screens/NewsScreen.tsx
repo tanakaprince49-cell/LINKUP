@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, Linking, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ExternalLink, RefreshCw, Bell } from 'lucide-react-native';
+import { ExternalLink, RefreshCw, Bell, Sparkles } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useTheme } from '../contexts/ThemeContext';
@@ -9,10 +9,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { NewsArticle, fetchAINews } from '../lib/newsService';
 import { db } from '../lib/firebase';
 import { COLORS, liquidGlass, textColor } from '../theme/theme';
-import { SponsoredCard, useSponsoredSlot } from '../components/SponsoredCard';
-import { isSponsoredHiddenForViewer } from '../lib/campaigns';
+import { SponsoredCard, useSponsoredSlots } from '../components/SponsoredCard';
+import { Campaign, interleaveSponsored, isSponsoredHiddenForViewer } from '../lib/campaigns';
+import PaywallModal from '../components/PaywallModal';
 
 const CATEGORIES = ['all', 'startup', 'tech', 'company', 'research'] as const;
+
+/** Ad density for the News feed: first card after this many stories... */
+const NEWS_FIRST_AD_AFTER = 1;
+/** ...then one after every N stories to the bottom of the list. */
+const NEWS_AD_EVERY = 2;
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -27,14 +33,16 @@ export default function NewsScreen() {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
   const isDark = theme === 'dark';
-  // One sponsored card at a time. PLUS members are ad-free, except
-  // founder/admin accounts, who need to see the placement to review it.
+  // News is the heaviest ad surface in the app: a sponsored card after the
+  // first story and then after every NEWS_AD_EVERY stories, all the way down
+  // the feed. PLUS members are ad-free, except founder/admin accounts, who
+  // need to see the placement to review it.
   const adsHidden = isSponsoredHiddenForViewer(profile, {
     email: user?.email,
     isAdmin: (profile as any)?.isAdmin,
   });
-  const sponsored = useSponsoredSlot('news', user?.uid, !adsHidden);
   const [articles, setArticles] = useState<NewsArticle[]>([]);
+  const [paywallOpen, setPaywallOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [category, setCategory] = useState<string>('all');
@@ -76,22 +84,36 @@ export default function NewsScreen() {
 
   const filtered = category === 'all' ? articles : articles.filter(a => a.category === category);
 
-  // One sponsored card woven into the feed a few stories down, so it reads as
-  // part of the list rather than an ad bolted onto the top.
-  const feedData = React.useMemo<Array<{ kind: 'article'; article: NewsArticle } | { kind: 'sponsored' }>>(() => {
-    const rows: Array<{ kind: 'article'; article: NewsArticle } | { kind: 'sponsored' }> = filtered.map((article) => ({
-      kind: 'article',
-      article,
-    }));
-    if (sponsored) rows.splice(Math.min(3, rows.length), 0, { kind: 'sponsored' });
-    return rows;
-  }, [filtered, sponsored]);
+  // How many ad slots this feed has: one after the first story, then one
+  // after every NEWS_AD_EVERY stories. Sized from the article count so the
+  // list never ends on a run of ads, and at least one so a short feed still
+  // carries a card.
+  const adSlotCount = filtered.length
+    ? 1 + Math.floor(Math.max(0, filtered.length - NEWS_FIRST_AD_AFTER) / NEWS_AD_EVERY)
+    : 0;
+  const sponsoredAds = useSponsoredSlots('news', user?.uid, adSlotCount, !adsHidden);
 
-  const renderRow = ({ item }: { item: (typeof feedData)[number] }) => {
-    if (item.kind === 'sponsored') {
-      return sponsored ? <SponsoredCard campaign={sponsored} viewerUid={user?.uid} /> : null;
+  type FeedRow = { kind: 'row'; row: NewsArticle } | { kind: 'ad'; ad: Campaign | null; slot: number };
+  const feedData = React.useMemo<FeedRow[]>(() => {
+    if (adsHidden || !adSlotCount) return filtered.map((row) => ({ kind: 'row', row }));
+    // No paid inventory at all: every slot becomes a Linky house card so the
+    // cadence (and the upgrade prompt) is the same whether or not an
+    // advertiser is live. `null` marks a house slot.
+    const ads: Array<Campaign | null> = sponsoredAds.length
+      ? sponsoredAds
+      : Array.from({ length: adSlotCount }, () => null);
+    return interleaveSponsored(filtered, ads, NEWS_AD_EVERY, NEWS_FIRST_AD_AFTER);
+  }, [filtered, sponsoredAds, adsHidden, adSlotCount]);
+
+  const renderRow = ({ item }: { item: FeedRow }) => {
+    if (item.kind === 'ad') {
+      return item.ad ? (
+        <SponsoredCard campaign={item.ad} viewerUid={user?.uid} />
+      ) : (
+        <LinkyHouseCard isDark={isDark} onPress={() => setPaywallOpen(true)} />
+      );
     }
-    return renderArticle({ item: item.article });
+    return renderArticle({ item: item.row });
   };
 
   const renderArticle = ({ item }: { item: NewsArticle }) => (
@@ -153,7 +175,7 @@ export default function NewsScreen() {
       ) : (
         <FlatList
           data={feedData}
-          keyExtractor={(item, index) => (item.kind === 'sponsored' ? `sponsored-${sponsored?.id}` : item.article.id || String(index))}
+          keyExtractor={(item, index) => (item.kind === 'ad' ? `ad-${item.slot}-${item.ad?.id || 'house'}` : item.row.id || String(index))}
           renderItem={renderRow}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
@@ -167,12 +189,59 @@ export default function NewsScreen() {
           }
         />
       )}
+      <PaywallModal
+        visible={paywallOpen}
+        onClose={() => setPaywallOpen(false)}
+        feature="Linky AI Assistant"
+        description="Unlock Linky and he finds your co-founder, your investor or your next teammate, then writes the intro for you. Unlimited discovery and warm intros included — and no more sponsored cards."
+      />
     </SafeAreaView>
+  );
+}
+
+/**
+ * House card for News when no advertiser is live. Linky in first person,
+ * matching the house promo in the decks; tapping opens the PLUS paywall.
+ */
+function LinkyHouseCard({ isDark, onPress }: { isDark: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={[styles.houseCard, liquidGlass(isDark)]}>
+      <View style={styles.housePill}>
+        <Text style={styles.housePillText}>SPONSORED · LINKY</Text>
+      </View>
+      <View style={styles.houseBody}>
+        <View style={styles.houseAvatar}>
+          <Text style={styles.houseAvatarText}>AI</Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+          <Text style={[styles.houseTitle, { color: textColor(isDark) }]} numberOfLines={2}>
+            Linky found people for you
+          </Text>
+          <Text style={[styles.houseBlurb, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
+            I've read every builder here. Unlock me and I'll introduce you to the ones who fit.
+          </Text>
+          <View style={styles.houseCtaRow}>
+            <Sparkles size={12} color={COLORS.primaryStrong} />
+            <Text style={[styles.houseCta, { color: COLORS.primaryStrong }]}>Unlock Linky</Text>
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  houseCard: { borderRadius: 16, padding: 14, marginBottom: 16, gap: 10 },
+  housePill: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: 'rgba(128,128,128,0.14)' },
+  housePillText: { fontSize: 8, fontWeight: '900', letterSpacing: 1.1, color: '#8A8A93' },
+  houseBody: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  houseAvatar: { width: 52, height: 52, borderRadius: 14, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  houseAvatarText: { fontSize: 18, fontWeight: '900', color: '#000', letterSpacing: 1 },
+  houseTitle: { fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
+  houseBlurb: { fontSize: 12, lineHeight: 17, fontWeight: '600' },
+  houseCtaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  houseCta: { fontSize: 10, fontWeight: '800' },
   filterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
