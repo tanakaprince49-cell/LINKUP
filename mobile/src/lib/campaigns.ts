@@ -924,6 +924,68 @@ export const pickSponsoredCampaign = async (
 /** How often a mounted single-slot surface swaps to the next campaign. */
 export const SPONSORED_SLOT_ROTATE_MS = 45_000;
 
+/**
+ * Several campaigns for a multi-slot surface - the News feed weaves one in
+ * every few stories. Rotated per viewer exactly like pickSponsoredCampaign,
+ * then cycled so all `count` slots are filled even when inventory is thin:
+ * two live campaigns fill ten slots as A, B, A, B, ... and the next load
+ * starts one step further round. Impressions are recorded once per distinct
+ * campaign (and are still capped per viewer per day inside
+ * recordCampaignImpression).
+ */
+export const pickSponsoredCampaigns = async (
+  placement: string,
+  viewerUid: string,
+  count: number,
+  options: { recordImpression?: boolean } = {}
+): Promise<Campaign[]> => {
+  if (!viewerUid || count <= 0) return [];
+  const all = await fetchServableCampaigns();
+  const notMine = all.filter((campaign) => campaign.ownerId !== viewerUid);
+  const targeted = notMine.filter(
+    (campaign) => Array.isArray(campaign.placements) && campaign.placements.includes(placement)
+  );
+  const pool = targeted.length ? targeted : notMine;
+  if (!pool.length) return [];
+  const rotated = await rotateCampaignsForViewer(pool, viewerUid, 'global');
+  const out: Campaign[] = [];
+  for (let i = 0; i < count; i++) out.push(rotated[i % rotated.length]);
+  if (options.recordImpression !== false) {
+    rotated.slice(0, Math.min(rotated.length, count)).forEach((campaign) => {
+      void recordCampaignImpression(campaign.id, viewerUid);
+    });
+  }
+  return out;
+};
+
+/**
+ * Weave `ads` into `rows`: the first ad after `firstAfter` rows, then one
+ * after every `every` rows, until the ads run out. Pure, so the News feed's
+ * layout can be tested without React.
+ */
+export const interleaveSponsored = <R, A>(
+  rows: R[],
+  ads: A[],
+  every: number,
+  firstAfter: number = every
+): Array<{ kind: 'row'; row: R } | { kind: 'ad'; ad: A; slot: number }> => {
+  const out: Array<{ kind: 'row'; row: R } | { kind: 'ad'; ad: A; slot: number }> = [];
+  let adIndex = 0;
+  let sinceAd = 0;
+  let nextAt = Math.max(1, firstAfter);
+  rows.forEach((row) => {
+    out.push({ kind: 'row', row });
+    sinceAd += 1;
+    if (sinceAd >= nextAt && adIndex < ads.length) {
+      out.push({ kind: 'ad', ad: ads[adIndex], slot: adIndex });
+      adIndex += 1;
+      sinceAd = 0;
+      nextAt = Math.max(1, every);
+    }
+  });
+  return out;
+};
+
 export const injectSponsored = (organic: IdeaDeckItem[], sponsored: IdeaDeckItem[], interval: number = SPONSORED_INTERVAL): IdeaDeckItem[] => {
   if (!sponsored.length) return organic;
   const merged = [...organic];
