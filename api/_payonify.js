@@ -10,8 +10,6 @@
 // never logged as part of a config dump, and never sent to the client. The
 // only thing the browser ever sees is the checkout URL Payonify hands back.
 
-import crypto from 'crypto';
-
 const SANDBOX_BASE = 'https://api.payonify.com';
 const LIVE_BASE = 'https://api.payonify.com';
 
@@ -117,6 +115,7 @@ export function verifyWebhookSignature(payload, signatureHeader) {
     return { ok: false, reason: 'missing-signature' };
   }
 
+  const { default: crypto } = await import('crypto');
   const parts = {};
   for (const part of String(signatureHeader).split(',')) {
     const [key, value] = part.split('=');
