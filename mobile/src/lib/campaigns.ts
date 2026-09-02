@@ -147,7 +147,7 @@ const accountCacheKey = (uid: string) => `linkup:campaigns-account:${uid || 'ano
 /**
  * Does this account have an active Campaigns plan?
  *
- * No web shortcut: on web the plan is bought through ContiPay and lives in
+ * No web shortcut: on web the plan is bought through Payonify and lives in
  * webSubscriptions/{uid}, not campaignAccounts/{uid}. Callers on web pass the
  * web flag in via `webOverride` (see withWebEntitlements).
  */
@@ -275,7 +275,7 @@ export const computeCampaignExpiryMs = async (
     // Fall through to the entitlement lookups.
   }
 
-  // Web / ContiPay: a prepaid term with a real end date.
+  // Web / Payonify: a prepaid term with a real end date.
   try {
     const web = await getDoc(doc(db, 'webSubscriptions', uid));
     if (web.exists()) {

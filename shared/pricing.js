@@ -3,13 +3,13 @@
  *
  * One table, two billing rails:
  *   - Android  -> Google Play Billing (auto-renewing subscriptions)
- *   - Web      -> ContiPay (prepaid terms; ContiPay has no recurring API)
+ *   - Web      -> Payonify (prepaid terms; Payonify has no recurring API)
  *
  * Same numbers on both. A user must never see $19.99 on one surface and be
  * charged something else on another.
  *
  * Imported by:
- *   - api/_contipay.js     (server — decides what the customer is charged)
+ *   - api/_payonify.js     (server — decides what the customer is charged)
  *   - mobile/src/lib/pricing.ts (client — decides what the customer is shown)
  *
  * Plain JS so both the Vercel functions and Metro can consume it without a
@@ -31,9 +31,9 @@ export const CAMPAIGNS_PRICES = {
 };
 
 /**
- * Web terms (ContiPay).
+ * Web terms (Payonify).
  *
- * ContiPay cannot auto-renew, so web sells a fixed prepaid window instead of
+ * Payonify cannot auto-renew, so web sells a fixed prepaid window instead of
  * a subscription. `monthly` and `yearly` are priced IDENTICALLY to the Google
  * Play plans so the two rails never disagree. `plus_3m` is a web-only bundle
  * priced as a discount on three separate months (3 x 19.99 = 59.97).

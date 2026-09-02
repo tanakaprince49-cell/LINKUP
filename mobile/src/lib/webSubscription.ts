@@ -1,6 +1,6 @@
 // Web billing state.
 //
-// Android keeps Google Play Billing. Web uses ContiPay, which cannot auto-renew,
+// Android keeps Google Play Billing. Web uses Payonify, which cannot auto-renew,
 // so a web purchase is a PREPAID TERM: the server writes an `endsAt` date onto
 // webSubscriptions/{uid} and this module turns that document into the same
 // "do you have PLUS?" answer the Play path produces.
@@ -30,7 +30,7 @@ export type WebSubscription = {
   campaigns?: WebTierState | null;
 };
 
-/** Web is the only surface that bills through ContiPay. */
+/** Web is the only surface that bills through Payonify. */
 export const isWebBilling = () => Platform.OS === 'web';
 
 /** Firestore Timestamp / {seconds} / epoch millis -> millis. */

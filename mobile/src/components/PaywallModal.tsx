@@ -25,7 +25,7 @@ import {
   trialThenPrice,
 } from '../lib/trial';
 import { publicProfileLink } from '../lib/profileLinks';
-import { checkContipayPayment, startContipayCheckout, takePendingReference } from '../lib/webCheckout';
+import { checkPayonifyPayment, startPayonifyCheckout, takePendingReference } from '../lib/webCheckout';
 
 type PaywallModalProps = {
   visible: boolean;
@@ -331,20 +331,20 @@ export default function PaywallModal({
 
     const plan = PRICING_PLANS.find((item) => item.id === selectedPlan) || PRICING_PLANS[0];
 
-    // WEB BILLING: ContiPay. Prices are identical to Play (shared/pricing.js).
+    // WEB BILLING: Payonify. Prices are identical to Play (shared/pricing.js).
     // Play policy: this branch must never be reachable from the Android app —
     // it is guarded by Platform.OS and native keeps expo-iap below.
     if (Platform.OS === 'web') {
       setIsPurchasing(true);
       setStoreError('');
       try {
-        const { redirectUrl } = await startContipayCheckout(plan.webPlanKey);
-        // Full navigation to ContiPay's hosted page. We return via
-        // CONTIPAY_SUCCESS_URL and settle up from useContipayReturn().
-        (window as any)?.location?.assign?.(redirectUrl);
+        const { checkoutUrl } = await startPayonifyCheckout(plan.webPlanKey);
+        // Full navigation to Payonify's hosted page. We return via
+        // PAYONIFY_SUCCESS_URL and settle up from usePayonifyReturn().
+        (window as any)?.location?.assign?.(checkoutUrl);
       } catch (error: any) {
         setIsPurchasing(false);
-        Alert.alert('Checkout failed', error?.message || 'ContiPay could not start checkout right now.');
+        Alert.alert('Checkout failed', error?.message || 'Payonify could not start checkout right now.');
       }
       return;
     }
@@ -389,7 +389,7 @@ export default function PaywallModal({
         // from webSubscriptions/{uid}. All we can do is force the server to
         // reconcile a payment whose webhook never landed.
         const pending = takePendingReference();
-        if (pending) await checkContipayPayment(pending);
+        if (pending) await checkPayonifyPayment(pending);
         Alert.alert(
           'Restore purchases',
           pending

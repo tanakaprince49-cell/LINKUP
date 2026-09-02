@@ -16,7 +16,7 @@ import { serverTimestamp } from './_firebaseAdmin.js';
 
 // Date maths used to live in _paynow.js; it has nothing to do with any
 // particular gateway, so it belongs with the entitlement logic that uses it.
-// (Paynow has been retired in favour of ContiPay.)
+// (Paynow and ContiPay have been retired in favour of Payonify.)
 
 /** Add whole months to a date, clamping the day (31 Jan + 1 month -> 28/29 Feb). */
 export function addMonths(from, months) {
