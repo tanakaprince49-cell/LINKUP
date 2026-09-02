@@ -48,10 +48,10 @@ export function payonifyConfig() {
   };
 }
 
-/** Payonify authenticates with Bearer token using the secret key. */
+/** Payonify authenticates with Basic auth using publishable_key:secret_key. */
 export function authHeader() {
-  const { secretKey } = payonifyConfig();
-  return `Bearer ${secretKey}`;
+  const { publishableKey, secretKey } = payonifyConfig();
+  return `Basic ${Buffer.from(`${publishableKey}:${secretKey}`, 'utf8').toString('base64')}`;
 }
 
 /** Constant-time compare, so a timing oracle cannot walk the secret. */
