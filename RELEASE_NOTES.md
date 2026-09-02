@@ -1,5 +1,28 @@
 # LINKUP Release Notes
 
+## 13.4.0 (versionCode 18)
+
+**Play Console (paste into "What's new in this release"):**
+
+```
+What's new in 13.4.0:
+
+📣 Sponsored campaigns now rotate — every live ad gets its turn across the whole app
+📰 More sponsored placements in News, Today's picks, Project Matches and Daily 5
+🤖 Meet Linky — your AI networking assistant now introduces himself on the home screen
+🔧 Campaign expiry fixes — ads end on time when a plan lapses
+⚡ Stability and performance improvements
+```
+
+### Full changelog (internal)
+
+- **Ad rotation fixed (three root causes):** (1) single-slot surfaces fetched `where status == active, limit 1` with no orderBy, so Firestore's document-id order returned the same campaign first every time; (2) slots fetched once on mount and tab screens stay mounted all session; (3) the Idea Deck filtered inventory by the per-day impression cap before choosing, so after two views of each paid ad only the house promo remained. Every slot now walks a per-viewer rotation cursor persisted in AsyncStorage, refreshes on focus / foreground / 45s timer, and the cap throttles stats only.
+- **News is the heaviest ad surface:** a sponsored card after the first story and then after every 2 stories (`NEWS_FIRST_AD_AFTER`, `NEWS_AD_EVERY` in `NewsScreen.tsx`). Slots cycle the inventory so all are filled with thin inventory; with no paid inventory every slot is a Linky house card that opens the paywall.
+- **New free-plan placements:** `picks` (Today's picks / Recommended matches), `projects` (Project Matches / Active Opportunities), `daily` (Daily 5). Surfaces with no targeted inventory fall back to any live campaign, so existing campaigns serve there without editing.
+- **Linky as the main character:** locked Linky screen is now a first-person sales page (teaser chips open the paywall, three promises, "Unlock Linky"); Home card greets free members by name with an Unlock chip; house ad and Linky paywall copy are in Linky's voice.
+- **Play-side lapse detection:** the Campaigns screen re-verifies the Play subscription on every open and stamps `campaignAccounts.expiresAt = now` / `status: expired` when the purchase is gone, so the hourly sweep ends the owner's campaigns on its next pass. Trial→paid converts have stale stamps cleared. Web (Payonify) already had an exact prepaid end date.
+- **Hourly campaign sweep fixed:** the scheduled GitHub Actions run passed `inputs.write` (only defined for manual runs), so every hourly sweep was a dry run and never stamped `expiresAt`; schedule runs now always write. The `FIREBASE_SERVICE_ACCOUNT` secret was also re-saved (the private key's `\n` had been mangled).
+
 ## 13.3.1 (versionCode 17)
 
 **Play Console (paste into "What's new in this release"):**
