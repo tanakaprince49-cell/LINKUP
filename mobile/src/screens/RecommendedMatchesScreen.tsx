@@ -17,6 +17,8 @@ import { consumeWeeklyUsage, FREE_LIMITS, getCurrentWeekKey, getWeeklyUsage, has
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import ProCrownBadge from '../components/ProCrownBadge';
+import { SponsoredSlot } from '../components/SponsoredCard';
+import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 import { notifyUser } from '../lib/notify';
 
 type MatchScore = {
@@ -374,6 +376,15 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           updateCellsBatchingPeriod={80}
           windowSize={6}
           contentContainerStyle={styles.listContent}
+          // Free plan sees a rotating sponsored card above the picks.
+          // PLUS is ad-free (founder/admin accounts excepted, for QA).
+          ListHeaderComponent={
+            <SponsoredSlot
+              placement="picks"
+              viewerUid={user?.uid}
+              enabled={!isSponsoredHiddenForViewer(me, { email: user?.email, isAdmin: (me as any)?.isAdmin })}
+            />
+          }
           ListEmptyComponent={
             <View style={[styles.emptyCard, liquidGlass(isDark)]}>
               <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No recommendations yet</Text>

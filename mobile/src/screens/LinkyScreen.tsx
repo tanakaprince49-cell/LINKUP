@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Keyboard,
   Animated,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -76,21 +77,75 @@ const LinkyDashboard = ({ onSuggestion, streak, score }: { onSuggestion: (t: str
   );
 };
 
-const ProOnlyScreen = ({ onUpgrade }: { onUpgrade: () => void }) => {
+/**
+ * The locked Linky screen is a sales page, not a wall.
+ *
+ * Free members used to land on a padlock and one line of text. Now Linky
+ * talks to them in first person, shows exactly what he would do the second
+ * they upgrade, and every chip they would have tapped is right there -
+ * greyed, tapping any of them opens the paywall. The point is to make them
+ * want HIM, not a feature list.
+ */
+const ProOnlyScreen = ({ onUpgrade, firstName }: { onUpgrade: () => void; firstName: string }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const hello = firstName ? `Hey ${firstName}.` : 'Hey.';
+  const teasers = [
+    'Find me a technical co-founder in my city',
+    'Which investors here back fintech?',
+    'Write a warm intro to a designer for my project',
+    'Who should I talk to this week?',
+  ];
+  const promises = [
+    { title: 'I know everyone here', body: 'I read every builder profile on LINKUP so you never cold-search again.' },
+    { title: 'I make the intro', body: 'Say who you need and I draft the message and send it for you.' },
+    { title: 'I pick your people', body: 'Every week I hand you the few people actually worth your time.' },
+  ];
   return (
-    <View style={styles.proContainer}>
-      <LinkyAvatar size={28} />
-      <Text style={[styles.proTitle, { color: textColor(isDark) }]}>Linky AI</Text>
-      <Text style={[styles.proSub, { color: textColor(isDark, 'muted') }]}>Your AI networking assistant</Text>
-      <View style={styles.proDivider} />
-      <Lock size={32} color={textColor(isDark, 'muted')} />
-      <Text style={[styles.proLocked, { color: textColor(isDark, 'muted') }]}>Linky AI is a LINKUP PLUS feature</Text>
-      <TouchableOpacity style={styles.proBtn} onPress={onUpgrade}>
-        <Text style={styles.proBtnText}>Upgrade to Plus</Text>
+    <ScrollView contentContainerStyle={styles.proScroll} showsVerticalScrollIndicator={false}>
+      <View style={styles.proHero}>
+        <LinkyAvatar size={64} />
+        <View style={styles.proBadge}>
+          <Lock size={10} color="#000" />
+          <Text style={styles.proBadgeText}>PLUS</Text>
+        </View>
+      </View>
+      <Text style={[styles.proTitle, { color: textColor(isDark) }]}>{hello} I'm Linky.</Text>
+      <Text style={[styles.proSub, { color: textColor(isDark, 'secondary') }]}>
+        I've already looked at who's on LINKUP for you. There are people here who fit what you're building — I just can't introduce you until you unlock me.
+      </Text>
+
+      <View style={[styles.proChat, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
+        <View style={styles.proChatRow}>
+          <LinkyAvatar size={22} />
+          <Text style={[styles.proChatText, { color: textColor(isDark) }]}>
+            Tell me what you're building and who you're missing. I'll find them, rank them, and write the first message.
+          </Text>
+        </View>
+        <Text style={[styles.proChatHint, { color: textColor(isDark, 'muted') }]}>Try asking me:</Text>
+        {teasers.map((t) => (
+          <TouchableOpacity key={t} style={[styles.proChip, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]} onPress={onUpgrade} activeOpacity={0.7}>
+            <Text style={[styles.proChipText, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>{t}</Text>
+            <Lock size={11} color={textColor(isDark, 'muted')} />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {promises.map((p) => (
+        <View key={p.title} style={styles.proPromise}>
+          <View style={styles.proPromiseDot} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.proPromiseTitle, { color: textColor(isDark) }]}>{p.title}</Text>
+            <Text style={[styles.proPromiseBody, { color: textColor(isDark, 'muted') }]}>{p.body}</Text>
+          </View>
+        </View>
+      ))}
+
+      <TouchableOpacity style={styles.proBtn} onPress={onUpgrade} activeOpacity={0.85}>
+        <Text style={styles.proBtnText}>Unlock Linky</Text>
       </TouchableOpacity>
-    </View>
+      <Text style={[styles.proFine, { color: textColor(isDark, 'muted') }]}>Comes with LINKUP PLUS · unlimited discovery, warm intros and no sponsored cards.</Text>
+    </ScrollView>
   );
 };
 
@@ -410,7 +465,7 @@ export default function LinkyScreen({ navigation }: any) {
       </SafeAreaView>
 
       {!isPro ? (
-        <ProOnlyScreen onUpgrade={() => setPaywallFeature('Linky AI Assistant')} />
+        <ProOnlyScreen onUpgrade={() => setPaywallFeature('Linky AI Assistant')} firstName={String((profile as any)?.displayName || (profile as any)?.fullName || '').trim().split(' ')[0] || ''} />
       ) : (
         <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
           <FlatList
@@ -531,7 +586,7 @@ export default function LinkyScreen({ navigation }: any) {
         visible={!!paywallFeature}
         onClose={() => setPaywallFeature(null)}
         feature={paywallFeature || 'Linky AI Assistant'}
-        description={'Linky AI Assistant and AI Warm Intros are LINKUP PLUS features. Unlock unlimited AI-powered networking.'}
+        description={"Unlock Linky and he finds your co-founder, your investor or your next teammate, then writes the intro for you. Unlimited discovery and warm intros included — and no more sponsored cards."}
       />
 
     </View>
@@ -577,13 +632,25 @@ const styles = StyleSheet.create({
   dashChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, marginBottom: 6, alignSelf: 'flex-start' },
   dashChipDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
   dashChipText: { fontSize: 13, fontWeight: '600', color: '#555' },
-  proContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  proTitle: { fontSize: 18, fontWeight: '900', color: '#000', marginTop: 8, letterSpacing: 0 },
-  proSub: { fontSize: 11, fontWeight: '600', color: '#999', marginTop: 2 },
-  proDivider: { width: 40, height: 2, backgroundColor: COLORS.primary, marginVertical: 16, borderRadius: 1 },
-  proLocked: { fontSize: 13, fontWeight: '600', color: '#999', marginTop: 8, textAlign: 'center' },
-  proBtn: { backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, marginTop: 16 },
-  proBtnText: { fontSize: 14, fontWeight: '900', color: '#000' },
+  proScroll: { paddingHorizontal: 22, paddingTop: 18, paddingBottom: 40 },
+  proHero: { alignItems: 'center', marginBottom: 14 },
+  proBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.primary, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, marginTop: -10 },
+  proBadgeText: { fontSize: 9, fontWeight: '900', color: '#000', letterSpacing: 1 },
+  proTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.4, textAlign: 'center' },
+  proSub: { fontSize: 14, lineHeight: 20, fontWeight: '600', marginTop: 8, textAlign: 'center' },
+  proChat: { borderRadius: 18, padding: 14, marginTop: 18, gap: 8 },
+  proChatRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  proChatText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: '600' },
+  proChatHint: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', marginTop: 4 },
+  proChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9 },
+  proChipText: { flex: 1, fontSize: 12, fontWeight: '700' },
+  proPromise: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', marginTop: 14 },
+  proPromiseDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary, marginTop: 5 },
+  proPromiseTitle: { fontSize: 14, fontWeight: '900', letterSpacing: -0.2 },
+  proPromiseBody: { fontSize: 12, lineHeight: 17, fontWeight: '600', marginTop: 2 },
+  proBtn: { backgroundColor: COLORS.primary, paddingVertical: 15, borderRadius: 14, marginTop: 22, alignItems: 'center' },
+  proBtnText: { fontSize: 15, fontWeight: '900', color: '#000', letterSpacing: 0.2 },
+  proFine: { fontSize: 11, fontWeight: '600', textAlign: 'center', marginTop: 10, lineHeight: 16 },
   draftBanner: { flex: 1, borderRadius: 16, padding: 10 },
   draftRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
   draftTo: { flex: 1, fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },

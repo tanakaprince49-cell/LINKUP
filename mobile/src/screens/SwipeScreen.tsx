@@ -377,6 +377,10 @@ export default function SwipeScreen({ navigation }: any) {
   const sponsorShownRef = useRef<Record<string, number>>({});
   const lastSponsorIdRef = useRef<string>('');
   const swipesSinceSponsorRef = useRef(0);
+  // Persisted rotation cursor for this deck. Without it every fresh mount
+  // started from the same campaign, so a viewer who only ever saw one
+  // interstitial per session saw the same advertiser every session.
+  const sponsorCursorRef = useRef(0);
 
   useEffect(() => {
     if (!user?.uid || adsHiddenForViewer) {
@@ -385,6 +389,12 @@ export default function SwipeScreen({ navigation }: any) {
       return;
     }
     let cancelled = false;
+    AsyncStorage.getItem(`linkup:campaign-rotation:${user.uid}:discover`)
+      .then((raw) => {
+        const parsed = Number.parseInt(String(raw || '0'), 10);
+        if (!cancelled && Number.isFinite(parsed) && parsed >= 0) sponsorCursorRef.current = parsed;
+      })
+      .catch(() => {});
     const unsubscribeSponsored = subscribeActiveCampaigns((campaigns) => {
       if (cancelled) return;
       sponsorInventoryRef.current = campaigns.filter(
@@ -416,10 +426,13 @@ export default function SwipeScreen({ navigation }: any) {
     if (!inventory.length) return isProUser ? null : buildHouseIdeaCard();
 
     const shown = sponsorShownRef.current;
-    const ranked = [...inventory].sort((a, b) => {
-      const diff = (shown[a.id] || 0) - (shown[b.id] || 0);
-      return diff !== 0 ? diff : Math.random() - 0.5;
-    });
+    // Fewest-shows-first; ties broken by a stable id order rather than a
+    // shuffle, offset by the persisted rotation cursor so the first ad after
+    // reopening the deck continues the cycle instead of restarting it.
+    const ordered = [...inventory].sort((a, b) => a.id.localeCompare(b.id));
+    const offset = ordered.length ? sponsorCursorRef.current % ordered.length : 0;
+    const rotatedInventory = [...ordered.slice(offset), ...ordered.slice(0, offset)];
+    const ranked = rotatedInventory.sort((a, b) => (shown[a.id] || 0) - (shown[b.id] || 0));
     const next =
       ranked.length > 1
         ? ranked.find((campaign) => campaign.id !== lastSponsorIdRef.current) || ranked[0]
@@ -427,6 +440,10 @@ export default function SwipeScreen({ navigation }: any) {
 
     lastSponsorIdRef.current = next.id;
     shown[next.id] = (shown[next.id] || 0) + 1;
+    sponsorCursorRef.current += 1;
+    if (user?.uid) {
+      AsyncStorage.setItem(`linkup:campaign-rotation:${user.uid}:discover`, String(sponsorCursorRef.current)).catch(() => {});
+    }
     return toSponsoredItem(next);
   };
 

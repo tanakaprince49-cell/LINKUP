@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Check } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
+import { SponsoredSlot } from '../components/SponsoredCard';
+import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 import { useTheme } from '../contexts/ThemeContext';
 import { useGamification } from '../contexts/GamificationContext';
 import { COLORS, appBackground, hairline, liquidGlass, textColor } from '../theme/theme';
@@ -81,6 +83,13 @@ export default function DailyFiveScreen({ navigation }: any) {
         <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 40 }} />
       ) : (
         <View style={styles.list}>
+          {/* Free plan sees a rotating sponsored card above the loop.
+              PLUS is ad-free (founder/admin accounts excepted, for QA). */}
+          <SponsoredSlot
+            placement="daily"
+            viewerUid={user?.uid}
+            enabled={!isSponsoredHiddenForViewer(profile, { email: user?.email, isAdmin: (profile as any)?.isAdmin })}
+          />
           {cards.map((card, index) => {
             const done = doneIds.includes(card.id);
             return (

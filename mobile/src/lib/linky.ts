@@ -1,4 +1,4 @@
-import { db } from './firebase';
+import { auth, db } from './firebase';
 import { fetchActiveCampaignsForPlacement } from './campaigns';
 import { collection, query, getDocs, limit as firestoreLimit, doc, getDoc } from 'firebase/firestore';
 import { requestGeminiText } from './aiDiagnostics';
@@ -314,7 +314,9 @@ export const sendMessage = async (
   // strict disclosure rules travel with the context every time.
   try {
     if (hasSearchIntent(userMessage)) {
-      const sponsoredCampaigns = await fetchActiveCampaignsForPlacement('linky', 3);
+      // Rotated per viewer, so Linky's "sponsored pick" is not the same
+      // product in every single conversation.
+      const sponsoredCampaigns = await fetchActiveCampaignsForPlacement('linky', 3, auth.currentUser?.uid || '');
       if (sponsoredCampaigns.length > 0) {
         messages.push({
           role: 'user',

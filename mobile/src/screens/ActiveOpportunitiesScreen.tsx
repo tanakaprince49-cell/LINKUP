@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { ChevronLeft, Briefcase, MapPin, Search, Target, Users } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
+import { SponsoredSlot } from '../components/SponsoredCard';
+import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { activeOpportunityScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
@@ -157,6 +159,15 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
           updateCellsBatchingPeriod={80}
           windowSize={6}
           contentContainerStyle={styles.listContent}
+          // Free plan sees a rotating sponsored card above the opportunities.
+          // PLUS is ad-free (founder/admin accounts excepted, for QA).
+          ListHeaderComponent={
+            <SponsoredSlot
+              placement="projects"
+              viewerUid={user?.uid}
+              enabled={!isSponsoredHiddenForViewer(me, { email: user?.email, isAdmin: (me as any)?.isAdmin })}
+            />
+          }
           ListEmptyComponent={
             <View style={[styles.emptyCard, liquidGlass(isDark)]}>
               <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No active opportunities yet</Text>
