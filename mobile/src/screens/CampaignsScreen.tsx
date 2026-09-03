@@ -386,10 +386,11 @@ export default function CampaignsScreen({ navigation }: any) {
     if (Platform.OS === 'web') {
       setPurchaseBusy(true); setStoreError('');
       try {
-        const p = takePendingReference();
-        if (p) await checkPayonifyPayment(p);
-        Alert.alert('Restore', p ? 'We checked your latest payment.' : 'Campaigns is tied to your account.');
-      } catch (e: any) { Alert.alert('Restore failed', e?.message || 'Could not check payment.'); }
+        const result = await checkPayonifyPayment(takePendingReference());
+        const c = result?.entitlement?.campaigns;
+        const active = c?.status === 'active' && Number(c?.endsAt || 0) > Date.now();
+        notifyUser('Restore', active ? 'Campaigns is active on this account.' : result?.status === 'pending' ? 'Your latest payment is still being confirmed. Try again in a moment.' : 'No completed Campaigns payment found on this account.');
+      } catch (e: any) { notifyUser('Restore failed', e?.message || 'Could not check payment.'); }
       finally { setPurchaseBusy(false); }
       return;
     }

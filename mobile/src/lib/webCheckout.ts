@@ -13,7 +13,7 @@ const PENDING_KEY = 'linkup:payonify:pending-ref';
 export type PayonifyStartResult = {
   checkoutUrl: string;
   sessionId: string;
-  reference: string;
+  reference: string | null;
   amount: number;
   currency: string;
   label: string;
@@ -22,7 +22,7 @@ export type PayonifyStartResult = {
 };
 
 export type PayonifyStatusResult = {
-  reference: string;
+  reference: string | null;
   status: string;
   entitlement: {
     uid: string;
@@ -63,12 +63,14 @@ export async function startPayonifyCheckout(planKey: string): Promise<PayonifySt
  * Ask the server whether a payment landed. This is the safety net for a missed
  * webhook — the server reports the state its webhook wrote.
  */
-export async function checkPayonifyPayment(reference: string): Promise<PayonifyStatusResult> {
+export async function checkPayonifyPayment(reference?: string | null): Promise<PayonifyStatusResult> {
   const headers = await authHeaders();
+  // No reference => the server reconciles this account's recent unsettled
+  // payments itself (used by "Restore purchases").
   const res = await fetch('/api/payonifyStatus', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ reference }),
+    body: JSON.stringify(reference ? { reference } : {}),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error || `Could not check payment (${res.status}).`);
