@@ -26,6 +26,9 @@ import {
 } from '../lib/trial';
 import { publicProfileLink } from '../lib/profileLinks';
 import { checkPayonifyPayment, startPayonifyCheckout, takePendingReference } from '../lib/webCheckout';
+import { notifyUser } from '../lib/notify';
+
+const IS_WEB = Platform.OS === 'web';
 
 type PaywallModalProps = {
   visible: boolean;
@@ -145,9 +148,16 @@ export default function PaywallModal({
     [productForPlan]
   );
 
-  /** Real trial length + post-trial price straight from Play's pricing phases. */
+  /**
+   * Real trial length + post-trial price straight from Play's pricing phases.
+   * On web there is no Play offer and no trial: Payonify sells a prepaid
+   * term, so the paywall must show the plain price, never "7 days free".
+   */
   const trialForPlan = React.useCallback(
-    (plan: PlusPlan) => describeSubscriptionOffer(offerForPlan(plan), plan.price, TRIAL_DAYS),
+    (plan: PlusPlan) =>
+      IS_WEB
+        ? { hasTrial: false, trialDays: 0, priceLabel: plan.price }
+        : describeSubscriptionOffer(offerForPlan(plan), plan.price, TRIAL_DAYS),
     [offerForPlan]
   );
 
@@ -323,12 +333,12 @@ export default function PaywallModal({
 
   const handleUpgrade = async () => {
     if (isPro) {
-      Alert.alert('LINKUP PLUS active', 'Your account already has LINKUP PLUS.');
+      notifyUser('LINKUP PLUS active', 'Your account already has LINKUP PLUS.');
       return;
     }
 
     if (!user?.uid) {
-      Alert.alert('Sign in required', 'Sign in first, then unlock LINKUP PLUS.');
+      notifyUser('Sign in required', 'Sign in first, then unlock LINKUP PLUS.');
       return;
     }
 
@@ -337,17 +347,24 @@ export default function PaywallModal({
     // WEB BILLING: Payonify. Prices are identical to Play (shared/pricing.js).
     // Play policy: this branch must never be reachable from the Android app —
     // it is guarded by Platform.OS and native keeps expo-iap below.
-    if (Platform.OS === 'web') {
+    if (IS_WEB) {
       setIsPurchasing(true);
       setStoreError('');
       try {
         const { checkoutUrl } = await startPayonifyCheckout(plan.webPlanKey);
         // Full navigation to Payonify's hosted page. We return via
-        // PAYONIFY_SUCCESS_URL and settle up from usePayonifyReturn().
-        (window as any)?.location?.assign?.(checkoutUrl);
+        // PAYONIFY_SUCCESS_URL and settle up from the pending reference.
+        if (typeof window !== 'undefined') {
+          window.location.href = checkoutUrl;
+        }
+        return;
       } catch (error: any) {
         setIsPurchasing(false);
-        Alert.alert('Checkout failed', error?.message || 'Payonify could not start checkout right now.');
+        const message = error?.message || 'Payonify could not start checkout right now.';
+        // Alert.alert is a silent no-op on react-native-web; the user must
+        // actually see why nothing happened.
+        setStoreError(message);
+        notifyUser('Checkout failed', message);
       }
       return;
     }
@@ -533,17 +550,29 @@ export default function PaywallModal({
           >
             <Text style={[styles.planText, { color: COLORS.lightTextPrimary }]}>
               {isPurchasing || isUnlocking
-                ? 'OPENING GOOGLE PLAY...'
+                ? IS_WEB
+                  ? 'OPENING SECURE CHECKOUT...'
+                  : 'OPENING GOOGLE PLAY...'
                 : isPro
                   ? 'PLUS ACTIVE'
                   : selectedTrial.hasTrial
                     ? `START ${selectedTrial.trialDays}-DAY FREE TRIAL`
-                    : 'Build Faster with PLUS'}
+                    : IS_WEB
+                      ? `GET PLUS — ${selectedPrice.price}${selectedPrice.cadence}`
+                      : 'Build Faster with PLUS'}
             </Text>
           </TouchableOpacity>
+          {!isPro && storeError ? (
+            <Text style={[styles.trialLegal, { color: COLORS.danger }]}>{storeError}</Text>
+          ) : null}
           {!isPro && selectedTrial.hasTrial ? (
             <Text style={[styles.trialLegal, { color: textColor(isDark, 'muted') }]}>
               {`Nothing is charged for ${selectedTrial.trialDays} days. From day ${selectedTrial.trialDays + 1} it renews at ${selectedTrial.priceLabel}${selectedPrice.cadence} — cancel anytime in Google Play.`}
+            </Text>
+          ) : null}
+          {!isPro && IS_WEB ? (
+            <Text style={[styles.trialLegal, { color: textColor(isDark, 'muted') }]}>
+              {`One-time payment of ${selectedPrice.price} for ${selectedPrice.id === 'yearly' ? '12 months' : '1 month'} of LINKUP PLUS. Pay securely with EcoCash, OneMoney or card via Payonify. No auto-renewal.`}
             </Text>
           ) : null}
           <TouchableOpacity
