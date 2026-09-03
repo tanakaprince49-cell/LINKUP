@@ -576,7 +576,7 @@ service cloud.firestore {
       function validPublicProfile(data) {
         return data.uid == userId &&
           data.keys().hasOnly([
-            'uid', 'displayName', 'username', 'bio', 'profilePic',
+            'uid', 'displayName', 'username', 'searchName', 'searchUsername', 'bio', 'profilePic',
             'occupation', 'company', 'country', 'city', 'age',
             'skills', 'interests', 'industries', 'lookingFor',
             'goals', 'experience', 'personalityType', 'commitmentLevel',
@@ -593,6 +593,8 @@ service cloud.firestore {
           ]) &&
           validPublicString(data, 'displayName', 100) &&
           validPublicString(data, 'username', 40) &&
+          validPublicString(data, 'searchName', 100) &&
+          validPublicString(data, 'searchUsername', 40) &&
           validPublicString(data, 'bio', 700) &&
           validPublicString(data, 'profilePic', 900000) &&
           validPublicString(data, 'occupation', 100) &&
@@ -1041,9 +1043,10 @@ service cloud.firestore {
       function validNotification(data) {
         return data.keys().hasOnly([
           'userId', 'fromId', 'fromName', 'fromPic',
-          'type', 'content', 'matchId', 'requestId', 'campaignId',
+          'type', 'content', 'note', 'matchId', 'requestId', 'campaignId',
           'isRead', 'timestamp'
         ]) &&
+        (!data.keys().hasAny(['note']) || (data.note is string && data.note.size() <= 600)) &&
         data.userId is string &&
         isValidId(data.userId) &&
         data.isRead == false &&
@@ -1053,7 +1056,8 @@ service cloud.firestore {
           'like', 'match', 'view', 'message', 'comment', 'system',
           'connection_request', 'connection_approved', 'connection_rejected',
           'game_challenge',
-          'campaign_review', 'campaign_approved', 'campaign_rejected'
+          'campaign_review', 'campaign_approved', 'campaign_rejected',
+          'plus_expiring'
         ] &&
         data.timestamp == request.time &&
         (!data.keys().hasAny(['fromId']) || isValidId(data.fromId)) &&

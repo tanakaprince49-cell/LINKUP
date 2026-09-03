@@ -99,6 +99,7 @@ function notificationBody(data: any) {
   if (data?.type === 'campaign_review') return `${data.fromName || 'An advertiser'} ${content || 'submitted a campaign for review.'}`;
   if (data?.type === 'campaign_approved') return content || 'Your campaign has been approved!';
   if (data?.type === 'campaign_rejected') return content || 'Your campaign was not approved.';
+  if (data?.type === 'plus_expiring') return content || 'Your LINKUP PLUS term is ending soon.';
   return content || 'Open LINKUP for the latest update.';
 }
 
@@ -115,6 +116,11 @@ function notificationTargetUrl(data: any) {
   }
   if (data?.type === 'campaign_review' || data?.type === 'campaign_approved' || data?.type === 'campaign_rejected') {
     return '/campaigns';
+  }
+  if (data?.type === 'plus_expiring') {
+    // '/profile/:userId' needs an id we do not have here; the Alerts list
+    // itself routes a tap to the right tab, so land there.
+    return '/alerts';
   }
   if (
     data?.fromId &&

@@ -62,6 +62,15 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/linkup-sa.json
         run: node backfill-campaign-expiry.mjs ${{ (github.event_name == 'schedule' || inputs.write) && '--write' || '' }}
 
+      # Renewal reminders for web (Payonify) PLUS / Campaigns terms: 3 days,
+      # 1 day, day-of, and "has ended". Idempotent per term, so hourly is safe.
+      - name: Send PLUS / Campaigns renewal reminders
+        if: always()
+        working-directory: functions
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/linkup-sa.json
+        run: node plus-expiry-reminders.mjs ${{ (github.event_name == 'schedule' || inputs.write) && '--write' || '' }}
+
       - name: Remove the service account key
         if: always()
         run: rm -f "$RUNNER_TEMP/linkup-sa.json"
