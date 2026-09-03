@@ -182,7 +182,8 @@ export interface AppNotification {
     | 'game_challenge'
     | 'campaign_review'
     | 'campaign_approved'
-    | 'campaign_rejected';
+    | 'campaign_rejected'
+    | 'plus_expiring';
   content: string;
   timestamp: Timestamp | FieldValue;
   isRead: boolean;

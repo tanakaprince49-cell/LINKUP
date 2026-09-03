@@ -1,0 +1,53 @@
+# Deploy Firestore security rules + indexes whenever they change.
+#
+# The rules file has drifted from the client more than once (publicProfiles
+# searchName/searchUsername, notifications.note) and every drift is invisible:
+# the client swallows PERMISSION_DENIED, the write silently never happens, and
+# a person "just isn't showing up". Deploying from CI on every change closes
+# that gap without anyone remembering to run `firebase deploy` by hand.
+#
+# Reuses the same FIREBASE_SERVICE_ACCOUNT secret as the campaign sweep. The
+# service account needs the "Firebase Rules Admin" role (or Editor/Owner) to
+# release rules.
+name: Firestore rules deploy
+
+on:
+  push:
+    branches:
+      - main
+      - codex/mobile-port
+    paths:
+      - firestore.rules
+      - firestore.indexes.json
+      - firebase.json
+      - .github/workflows/firestore-rules.yml
+  workflow_dispatch:
+
+concurrency:
+  group: firestore-rules-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Write the service account key
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/linkup-sa.json"
+
+      - name: Deploy rules and indexes
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/linkup-sa.json
+        run: npx --yes firebase-tools@13 deploy --only firestore:rules,firestore:indexes --project linkup-e0906 --non-interactive --force
+
+      - name: Remove the service account key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/linkup-sa.json"
