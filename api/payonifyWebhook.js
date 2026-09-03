@@ -196,6 +196,13 @@ export default async function handler(req, res) {
     }
     const tx = snap.data();
 
+    // Leave a delivery receipt on the transaction whatever happens next, so
+    // "did Payonify's webhook reach us?" is answerable from Firestore alone.
+    await txRef.set(
+      { lastWebhook: { id: String(body?.id || ''), type: eventType, status: paymentStatus, at: serverTimestamp() } },
+      { merge: true }
+    );
+
     // Record the update, but never let a non-final status settle the order.
     if (verdict === 'delayed') {
       await txRef.set(

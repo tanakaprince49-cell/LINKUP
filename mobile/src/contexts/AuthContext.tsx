@@ -385,10 +385,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!isWebBilling() || !user?.uid) return;
     const reference = takePendingReference();
-    if (!reference) return;
 
     let cancelled = false;
     (async () => {
+      // No pending reference: one silent, uid-scoped reconcile. The server
+      // re-checks this account's unsettled Payonify payments and grants any
+      // that completed - this is what unlocks PLUS for someone whose webhook
+      // never landed, without them having to find "Restore purchases".
+      if (!reference) {
+        try {
+          await checkPayonifyPayment();
+        } catch {
+          // Best effort only.
+        }
+        return;
+      }
       for (let attempt = 0; attempt < 6 && !cancelled; attempt += 1) {
         try {
           const result = await checkPayonifyPayment(reference);
