@@ -160,6 +160,9 @@ export default function PaywallModal({
 
   React.useEffect(() => {
     if (!visible) return;
+    // Web buys through Payonify; expo-iap has no web module and throws on
+    // reconnect()/fetchProducts(). Native keeps the Play flow below.
+    if (Platform.OS === 'web') return;
     let cancelled = false;
     const loadProducts = async () => {
       setStoreError('');

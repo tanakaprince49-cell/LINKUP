@@ -44,10 +44,27 @@ const isCallableMissing = (error: unknown) => {
 const directGeminiRankingEnabled = () =>
   String(process.env.EXPO_PUBLIC_ENABLE_DIRECT_GEMINI_RANKING || 'true').toLowerCase() !== 'false';
 
+/**
+ * The Vercel route (/api/rankCandidates) is the server ranker on web. It is
+ * on by default: it used to hide behind EXPO_PUBLIC_ENABLE_SERVER_AI, which
+ * was never set, so web skipped a working endpoint and fell through to the
+ * Firebase callable below - which is not deployed (the project is not on
+ * Blaze) and answers 404 with no CORS headers, spraying a red
+ * "blocked by CORS policy" error on every Home load.
+ */
 const serverAIRankingEnabled = () =>
-  String(process.env.EXPO_PUBLIC_ENABLE_SERVER_AI || '').toLowerCase() === 'true';
+  String(process.env.EXPO_PUBLIC_ENABLE_SERVER_AI || 'true').toLowerCase() !== 'false';
+
+/**
+ * The Firebase callable is opt-in. It only exists once functions/ is
+ * deployed (Blaze plan); until then calling it is guaranteed to fail and,
+ * on web, guaranteed to log a CORS error the browser will not let us catch.
+ */
+const cloudFunctionRankingEnabled = () =>
+  String(process.env.EXPO_PUBLIC_ENABLE_CLOUD_FUNCTIONS || '').toLowerCase() === 'true';
 
 export async function rankCandidatesWithAI(candidateIds: string[], maxCandidates = 20): Promise<RankedCandidate[]> {
+  if (!cloudFunctionRankingEnabled()) return [];
   try {
     const callable = httpsCallable(functions, 'rankCandidates');
     const res = await callable({ candidateIds, maxCandidates });

@@ -312,6 +312,11 @@ export default function CampaignsScreen({ navigation }: any) {
   }, [admin]);
 
   useEffect(() => {
+    // Web buys through Payonify, not Google Play. expo-iap has no web
+    // module, so reconnect()/fetchProducts() on web throw "Cannot find
+    // native module 'ExpoIap'" and "Unsupported platform: web" straight into
+    // the console every time this screen opens.
+    if (Platform.OS === 'web') return;
     if (hasPlan || loadingAccount || !user?.uid) return;
     let c = false;
     (async () => {
