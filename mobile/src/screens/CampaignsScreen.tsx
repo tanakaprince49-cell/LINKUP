@@ -333,20 +333,33 @@ export default function CampaignsScreen({ navigation }: any) {
     (plan: CampaignsPlan) => subscriptions.find((product) => product.id === plan.productId), [subscriptions]);
   const offerForPlan = useCallback(
     (plan: CampaignsPlan) => pickSubscriptionOffer(productForPlan(plan)), [productForPlan]);
+  // Web sells prepaid terms through Payonify: no Play offer, no free trial.
   const trialForPlan = useCallback(
-    (plan: CampaignsPlan) => describeSubscriptionOffer(offerForPlan(plan), plan.price, TRIAL_DAYS), [offerForPlan]);
+    (plan: CampaignsPlan) =>
+      Platform.OS === 'web'
+        ? { hasTrial: false, trialDays: 0, priceLabel: plan.price }
+        : describeSubscriptionOffer(offerForPlan(plan), plan.price, TRIAL_DAYS),
+    [offerForPlan]
+  );
 
   const selectedCampaignsPlan = CAMPAIGNS_PLANS.find((plan) => plan.id === selectedPlan) || CAMPAIGNS_PLANS[0];
 
   const handleStartCampaigns = async () => {
-    if (!user?.uid) { Alert.alert('Sign in required', 'Sign in first.'); return; }
+    if (!user?.uid) { notifyUser('Sign in required', 'Sign in first.'); return; }
     const plan = CAMPAIGNS_PLANS.find((item) => item.id === selectedPlan) || CAMPAIGNS_PLANS[0];
     if (Platform.OS === 'web') {
       setPurchaseBusy(true); setStoreError('');
       try {
         const { checkoutUrl } = await startPayonifyCheckout(plan.webPlanKey);
-        (window as any)?.location?.assign?.(checkoutUrl);
-      } catch (e: any) { setPurchaseBusy(false); Alert.alert('Checkout failed', e?.message || 'Could not start checkout.'); }
+        if (typeof window !== 'undefined') window.location.href = checkoutUrl;
+        return;
+      } catch (e: any) {
+        setPurchaseBusy(false);
+        const message = e?.message || 'Could not start checkout.';
+        // Alert.alert is a no-op on react-native-web - show the reason inline too.
+        setStoreError(message);
+        notifyUser('Checkout failed', message);
+      }
       return;
     }
     const offerToken = offerTokenFor(offerForPlan(plan));
@@ -602,7 +615,9 @@ export default function CampaignsScreen({ navigation }: any) {
             words, in ink so they read against the yellow arena. */}
         <View style={s.trialRow}>
           <Megaphone size={14} color={INK} strokeWidth={2.5} />
-          <Text style={s.trialText}>{`${trialForPlan(selectedCampaignsPlan).trialDays} DAYS FREE`}</Text>
+          <Text style={s.trialText}>
+            {Platform.OS === 'web' ? 'PAY ONCE · NO AUTO-RENEWAL' : `${trialForPlan(selectedCampaignsPlan).trialDays} DAYS FREE`}
+          </Text>
         </View>
         <Text style={s.arenaTitle}>Put your product in front of every founder</Text>
         <Text style={s.arenaSub}>
@@ -682,7 +697,11 @@ export default function CampaignsScreen({ navigation }: any) {
         {purchaseBusy ? (
           <ActivityIndicator color={INK} />
         ) : (
-          <Text style={s.ctaText}>{`Start ${trialForPlan(selectedCampaignsPlan).trialDays}-Day Free Trial`}</Text>
+          <Text style={s.ctaText}>
+            {Platform.OS === 'web'
+              ? `Start Campaigns — ${selectedCampaignsPlan.price}${selectedCampaignsPlan.cadence}`
+              : `Start ${trialForPlan(selectedCampaignsPlan).trialDays}-Day Free Trial`}
+          </Text>
         )}
       </TouchableOpacity>
       <TouchableOpacity onPress={handleRestore} style={s.restoreBtn} activeOpacity={0.8} disabled={purchaseBusy}>
