@@ -158,7 +158,8 @@ async function aiText(task: string, payload: Record<string, unknown>) {
   }
 
   try {
-    attemptedAI = attemptedAI || serverAIEnabled();
+    // vercelAiText only runs on web; on native it returns null without trying.
+    attemptedAI = attemptedAI || (serverAIEnabled() && Platform.OS === 'web');
     const server = await vercelAiText(task, payload);
     if (server) return server;
   } catch (error) {
