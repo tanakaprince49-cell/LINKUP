@@ -73,7 +73,7 @@ export function toMillis(value) {
  * @returns {Promise<{ granted: boolean, endsAt: Date | null }>}
  */
 export async function grantWebEntitlement(db, args) {
-  const { uid, months, planKey, amount, reference, txRef, txPatch } = args || {};
+  const { uid, months, planKey, amount, reference, txRef, txPatch, force } = args || {};
 
   const tier = normalizeTier(args?.tier);
   if (!uid || !tier) {
@@ -84,9 +84,16 @@ export async function grantWebEntitlement(db, args) {
 
   return db.runTransaction(async (t) => {
     // Re-read inside the transaction so a retried webhook cannot double-grant.
+    // `paidAt` is written ONLY here, so it is the exact "already granted"
+    // marker. `force` lets the status endpoint heal a legacy transaction that
+    // was marked 'paid' by the old status poll without ever being granted
+    // (status === 'paid' but no paidAt); even then a concurrent grant is
+    // caught by the paidAt check.
     if (txRef) {
       const fresh = await t.get(txRef);
-      if (fresh.exists && String(fresh.data()?.status || '').toLowerCase() === 'paid') {
+      const data = fresh.exists ? fresh.data() || {} : {};
+      const alreadyPaid = String(data.status || '').toLowerCase() === 'paid';
+      if (data.paidAt || (alreadyPaid && !force)) {
         return { granted: false, endsAt: null };
       }
     }
@@ -104,7 +111,7 @@ export async function grantWebEntitlement(db, args) {
         {
           ...(txPatch || {}),
           status: 'paid',
-          paidAt: current.paidAt || serverTimestamp(),
+          paidAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         },
         { merge: true }

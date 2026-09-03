@@ -28,9 +28,32 @@ const TX = 'webTransactions';
  * Returns the new status ('paid' | 'failed' | 'amount_mismatch' |
  * 'currency_mismatch') or null when nothing changed.
  */
+const FINAL = ['paid', 'failed', 'declined', 'cancelled', 'expired', 'amount_mismatch', 'currency_mismatch'];
+
+/**
+ * A transaction the OLD status poll marked 'paid' without granting anything
+ * (before Sep 3 2026 only the webhook granted, and it never fired). `paidAt`
+ * is written exclusively by grantWebEntitlement, so 'paid' without it means
+ * "customer paid, nothing granted" - exactly the state we must heal.
+ */
+function paidButNeverGranted(tx) {
+  return (
+    String(tx?.status || '').toLowerCase() === 'paid' &&
+    !tx?.paidAt &&
+    String(tx?.gateway || '') === 'payonify' &&
+    String(tx?.payonifySessionId || '').startsWith('cs_')
+  );
+}
+
+function needsReconcile(tx) {
+  const status = String(tx?.status || 'pending').toLowerCase();
+  return !FINAL.includes(status) || paidButNeverGranted(tx);
+}
+
 async function reconcileTransaction(db, reference, tx) {
   const sessionId = String(tx?.payonifySessionId || '').trim();
   if (!sessionId) return null;
+  const heal = paidButNeverGranted(tx);
   const session = await retrieveCheckoutSession(sessionId);
   if (!session?.payment_status) return null;
   const verdict = classifyStatus(session.payment_status);
@@ -54,6 +77,7 @@ async function reconcileTransaction(db, reference, tx) {
 
   const meta = session?.metadata || {};
   await grantWebEntitlement(db, {
+    force: heal,
     uid: tx.uid,
     tier: meta.tier || tx.tier,
     months: Number(meta.months) || tx.months || 1,
@@ -66,7 +90,7 @@ async function reconcileTransaction(db, reference, tx) {
       paidAmount: Number.isFinite(paidAmount) ? paidAmount : tx.amount,
       paidCurrency,
       paymentMethod: session?.payment_method || '',
-      grantedVia: 'status-poll',
+      grantedVia: heal ? 'status-poll-heal' : 'status-poll',
     },
   });
   return 'paid';
@@ -101,7 +125,7 @@ export default async function handler(req, res) {
     const candidates = (recent?.docs || [])
       .map((d) => ({ id: d.id, ...(d.data() || {}) }))
       .filter((t) => String(t.gateway || '') === 'payonify')
-      .filter((t) => !['paid', 'failed', 'declined', 'cancelled', 'expired', 'amount_mismatch', 'currency_mismatch'].includes(String(t.status || '').toLowerCase()))
+      .filter(needsReconcile)
       .sort((a, b) => (a.id < b.id ? 1 : -1))
       .slice(0, 5);
     let reconciled = null;
@@ -134,7 +158,7 @@ export default async function handler(req, res) {
 
   let status = String(tx.status || 'pending').toLowerCase();
 
-  if (!['paid', 'failed', 'declined', 'cancelled', 'expired'].includes(status)) {
+  if (needsReconcile(tx)) {
     const outcome = await reconcileTransaction(db, reference, tx);
     if (outcome) status = outcome;
   }
