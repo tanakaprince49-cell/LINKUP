@@ -63,11 +63,20 @@ function siteOrigin(req) {
   return DEFAULT_SITE;
 }
 
-/** Only ever put a real absolute URL in the request; Payonify validates it. */
+/**
+ * Only ever put a real, plain absolute URL in the request; Payonify validates
+ * it strictly. Anything with a query string, fragment, whitespace or braces
+ * is normalised down to its origin + path so it cannot be rejected.
+ */
 function absoluteUrl(candidate, fallback) {
   const value = String(candidate || '').trim();
-  if (/^https?:\/\/\S+$/i.test(value)) return value;
-  return fallback;
+  try {
+    const u = new URL(value);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return fallback;
+    return u.origin + u.pathname.replace(/\/+$/, '') || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -152,12 +161,17 @@ export default async function handler(req, res) {
     });
 
     // Both return URLs are REQUIRED by Payonify. Never send undefined.
+    //
+    // Sent as PLAIN URLs. Payonify's validator rejected the query-string form
+    // (`?session_id={CHECKOUT_SESSION_ID}&reference=...`) with
+    // `422 parameter_invalid: success URL is invalid` - the braces in the
+    // placeholder do not survive their URI check. Nothing needs the query
+    // anyway: the client parks the reference in sessionStorage before it
+    // leaves for Payonify and reads it back on return (webCheckout.ts), and
+    // the webhook carries the reference in session.metadata.
     const origin = siteOrigin(req);
-    const successBase = absoluteUrl(config.successUrl, origin + '/paynow/return');
+    const successUrl = absoluteUrl(config.successUrl, origin + '/paynow/return');
     const cancelUrl = absoluteUrl(config.cancelUrl, origin + '/paynow/cancel');
-    const successUrl =
-      successBase + (successBase.includes('?') ? '&' : '?') +
-      'session_id={CHECKOUT_SESSION_ID}&reference=' + encodeURIComponent(reference);
 
     const amountInCents = Math.round(plan.amount * 100);
     const payload = {
