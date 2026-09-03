@@ -70,8 +70,21 @@ const parseSearchFilterText = (text: string, input: string): GeminiFilterResult 
 const directAIEnabled = () =>
   String(process.env.EXPO_PUBLIC_ENABLE_DIRECT_AI || 'true').toLowerCase() !== 'false';
 
+/**
+ * Vercel /api/aiAssist is the server AI on web - on by default. (It used to
+ * hide behind EXPO_PUBLIC_ENABLE_SERVER_AI, which was never set anywhere.)
+ */
 const serverAIEnabled = () =>
-  String(process.env.EXPO_PUBLIC_ENABLE_SERVER_AI || '').toLowerCase() === 'true';
+  String(process.env.EXPO_PUBLIC_ENABLE_SERVER_AI || 'true').toLowerCase() !== 'false';
+
+/**
+ * The Firebase callable (aiAssist) is opt-in: functions/ is not deployed
+ * (no Blaze plan), so the call can only 404 - and on web that surfaces as an
+ * uncatchable CORS error in the console. Flip EXPO_PUBLIC_ENABLE_CLOUD_FUNCTIONS
+ * to 'true' once the functions are actually deployed.
+ */
+const cloudFunctionsEnabled = () =>
+  String(process.env.EXPO_PUBLIC_ENABLE_CLOUD_FUNCTIONS || '').toLowerCase() === 'true';
 
 async function directGeminiText(prompt: string, maxOutputTokens = 220) {
   if (!directAIEnabled() || !hasDirectAIKey()) return null;
@@ -166,7 +179,7 @@ async function aiText(task: string, payload: Record<string, unknown>) {
     recordAIError(error, 'Smart server fallback unavailable');
   }
 
-  if (serverAIEnabled()) {
+  if (cloudFunctionsEnabled()) {
     try {
       attemptedAI = true;
       const callable = httpsCallable(functions, 'aiAssist');
