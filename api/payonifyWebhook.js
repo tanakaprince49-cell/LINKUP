@@ -122,28 +122,67 @@ export default async function handler(req, res) {
   const body = await readJson(req);
   const eventType = String(body?.type || '');
 
-  // We only care about checkout.session.completed and checkout.session.failed
-  if (!eventType.startsWith('checkout.session.')) {
+  // Payonify's event names (docs.payonify.com/webhooks):
+  //   checkout.succeeded / checkout.failed   - hosted checkout session
+  //   charge.succeeded  / charge.failed      - the underlying charge
+  // This used to filter on `checkout.session.*`, which Payonify never sends,
+  // so every real event was acknowledged with 200 and dropped - the customer
+  // paid, Payonify showed "successful", and nothing was ever granted.
+  // Accept both spellings plus the Stripe-style one in case it ever appears.
+  if (!/^(checkout|charge)(\.session)?\.(succeeded|failed|completed|expired|cancelled|canceled)$/.test(eventType)) {
+    console.log('[payonifyWebhook] ignoring event type', eventType);
     res.status(200).send('OK');
     return;
   }
 
-  const session = body?.data?.object;
+  let session = body?.data?.object;
   if (!session) {
-    console.error('[payonifyWebhook] no session in event');
+    console.error('[payonifyWebhook] no object in event');
     res.status(200).send('OK');
     return;
   }
 
-  const reference = String(session?.metadata?.reference || '').trim();
+  // Our reference lives in the checkout session's metadata. A charge event
+  // carries the charge, not the session, and its metadata may be empty - so
+  // if the reference is missing, resolve the session from whatever id we have
+  // (checkout session id, or the charge's checkout reference) and read it
+  // from there.
+  let reference = String(session?.metadata?.reference || '').trim();
   if (!reference) {
-    console.error('[payonifyWebhook] no reference in session metadata', JSON.stringify(redactWebhook(body)));
+    const sessionId = String(
+      (String(session?.id || '').startsWith('cs_') ? session.id : '') ||
+      session?.checkout_session ||
+      session?.checkout_session_id ||
+      session?.checkout_reference ||
+      ''
+    ).trim();
+    const retrieved = sessionId ? await retrieveCheckoutSession(sessionId) : null;
+    if (retrieved?.metadata?.reference) {
+      session = { ...retrieved, ...session, metadata: retrieved.metadata, payment_status: retrieved.payment_status || session.payment_status };
+      reference = String(retrieved.metadata.reference).trim();
+    }
+  }
+  if (!reference) {
+    // Last resort: client_reference_id is set to our reference at creation.
+    reference = String(session?.client_reference_id || '').trim();
+  }
+  if (!reference) {
+    console.error('[payonifyWebhook] no reference in event', JSON.stringify(redactWebhook(body)));
     res.status(200).send('OK');
     return;
   }
 
-  const paymentStatus = String(session?.payment_status || session?.status || '');
-  const verdict = classifyStatus(paymentStatus);
+  // A *.succeeded / *.failed event type is itself the verdict; the object's
+  // payment_status is the tie-breaker when the type is neutral.
+  const typeVerdict = /\.succeeded$|\.completed$/.test(eventType)
+    ? 'succeeded'
+    : /\.failed$|\.expired$|\.cancell?ed$/.test(eventType)
+      ? 'failed'
+      : '';
+  const paymentStatus = String(session?.payment_status || typeVerdict || session?.status || '');
+  const verdict = classifyStatus(paymentStatus) === 'delayed' && typeVerdict
+    ? classifyStatus(typeVerdict)
+    : classifyStatus(paymentStatus);
   const db = getDb();
   const txRef = db.collection(TX).doc(reference);
   const safe = redactWebhook(body);
@@ -185,7 +224,9 @@ export default async function handler(req, res) {
       const txMonths = Number(fullSession?.metadata?.months) || tx.months || 1;
 
       // Currency guard
-      const paidCurrency = String(session?.currency || tx.currency || '').toUpperCase();
+      const paidCurrency = String(
+        session?.currency || (typeof session?.amount === 'object' ? session?.amount?.currency : '') || tx.currency || ''
+      ).toUpperCase();
       if (tx.currency && paidCurrency && paidCurrency !== String(tx.currency).toUpperCase()) {
         console.error('[payonifyWebhook] currency mismatch', reference, paidCurrency, 'vs', tx.currency);
         await txRef.set({ status: 'currency_mismatch', paidCurrency, updatedAt: serverTimestamp() }, { merge: true });
@@ -194,7 +235,11 @@ export default async function handler(req, res) {
       }
 
       // Amount guard: never grant a 12-month term off a $1 payment.
-      const paidAmount = Number(session?.amount_total || session?.amount) / 100;
+      // Sessions carry amount_total (cents); charges carry amount.value (cents).
+      const rawAmount =
+        session?.amount_total ??
+        (typeof session?.amount === 'object' ? session?.amount?.value : session?.amount);
+      const paidAmount = Number(rawAmount) / 100;
       if (Number.isFinite(paidAmount) && tx.amount && paidAmount + 0.01 < Number(tx.amount)) {
         console.error('[payonifyWebhook] amount mismatch', reference, paidAmount, 'vs', tx.amount);
         await txRef.set({ status: 'amount_mismatch', paidAmount, updatedAt: serverTimestamp() }, { merge: true });
@@ -219,7 +264,10 @@ export default async function handler(req, res) {
         reference,
         txRef,
         txPatch: {
-          payonifySessionId: session?.id || '',
+          // Keep the checkout session id (cs_...); a charge event's object id
+          // is the charge (ch_...), which the status endpoint cannot retrieve.
+          payonifySessionId: String(session?.id || '').startsWith('cs_') ? session.id : tx.payonifySessionId || '',
+          payonifyChargeId: String(session?.id || '').startsWith('ch_') ? session.id : tx.payonifyChargeId || '',
           paidAmount: Number.isFinite(paidAmount) ? paidAmount : tx.amount,
           paidCurrency: paidCurrency || tx.currency || '',
           paymentMethod: session?.payment_method || '',

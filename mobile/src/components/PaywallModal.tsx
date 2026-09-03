@@ -405,19 +405,22 @@ export default function PaywallModal({
       if (restoreDisabled) return;
       setIsRestoring(true);
       try {
-        // No Play-style restore on web: the entitlement is already streaming
-        // from webSubscriptions/{uid}. All we can do is force the server to
-        // reconcile a payment whose webhook never landed.
-        const pending = takePendingReference();
-        if (pending) await checkPayonifyPayment(pending);
-        Alert.alert(
+        // No Play-style restore on web: the entitlement streams from
+        // webSubscriptions/{uid}. What we can do is make the server reconcile
+        // this account's payments with Payonify (a webhook that never landed).
+        const result = await checkPayonifyPayment(takePendingReference());
+        const plus = result?.entitlement?.plus;
+        const active = plus?.status === 'active' && Number(plus?.endsAt || 0) > Date.now();
+        notifyUser(
           'Restore purchases',
-          pending
-            ? 'We checked your latest payment. If it completed, LINKUP PLUS is now active.'
-            : 'LINKUP PLUS is tied to your LINKUP account, so it is already active here if you have paid.'
+          active
+            ? 'LINKUP PLUS is active on this account.'
+            : result?.status === 'pending'
+              ? 'Your latest payment is still being confirmed. Give it a moment and try again.'
+              : 'We could not find a completed PLUS payment on this account.'
         );
       } catch (error: any) {
-        Alert.alert('Restore failed', error?.message || 'We could not check your payment right now.');
+        notifyUser('Restore failed', error?.message || 'We could not check your payment right now.');
       } finally {
         setIsRestoring(false);
       }
