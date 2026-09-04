@@ -13,11 +13,23 @@
  * Idempotent: it only writes when the index doc is missing or older than the
  * user doc, so the hourly sweep can run it safely.
  *
+ * PHOTOS. The index is hosted-URLs-only (base64 never enters publicProfiles),
+ * but onboarding stores the picked photo as base64 in users/{uid}.profilePic
+ * and never uploads it; the profile screen uploads to ImageKit opportunistically
+ * and a killed app / dead network loses the hosted URL. Either way the person
+ * ends up with profilePic '' in the index: a blank avatar for everyone else.
+ * This job hosts such photos on ImageKit through the SAME public lane the app
+ * uses (Vercel signer + public key - no private key, no new secret) and writes
+ * users/{uid}.profilePicUrl, which both this script and the client index
+ * prefer, so the phone's own next re-sync agrees with the server.
+ *
  *   cd C:\Users\hp\LINKUP\functions
  *   $env:GOOGLE_APPLICATION_CREDENTIALS = "C:\Users\hp\linkup-sa.json"
- *   node backfill-public-profiles.mjs           (dry run)
- *   node backfill-public-profiles.mjs --write   (applies)
+ *   node backfill-public-profiles.mjs               (dry run)
+ *   node backfill-public-profiles.mjs --write       (applies)
+ *   node backfill-public-profiles.mjs --write --no-upload   (index only)
  */
+import { createHash } from 'node:crypto';
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -27,6 +39,36 @@ if (!getApps().length) {
 const db = getFirestore();
 const WRITE = process.argv.includes('--write');
 const FORCE = process.argv.includes('--all');
+const NO_UPLOAD = process.argv.includes('--no-upload');
+
+// Same constants as mobile/src/lib/imagekitUpload.ts (public key + signer).
+const IMAGEKIT_PUBLIC_KEY = process.env.IMAGEKIT_PUBLIC_KEY || 'public_nCVzK4bEGR6VH/FGJHDvjqB5urQ=';
+const IMAGEKIT_AUTH_ENDPOINT = process.env.IMAGEKIT_AUTH_ENDPOINT || 'https://linkup-muqu.vercel.app/api/imagekitAuth';
+const IMAGEKIT_AVATAR_FOLDER = '/linkup-avatars';
+const MAX_UPLOADS_PER_RUN = Number(process.env.MAX_AVATAR_UPLOADS || 40);
+
+const sha1 = (value) => createHash('sha1').update(value).digest('hex');
+
+/** Upload a base64 avatar exactly like the phone does; returns the hosted URL. */
+async function hostAvatar(uid, dataUri) {
+  const authRes = await fetch(IMAGEKIT_AUTH_ENDPOINT);
+  if (!authRes.ok) throw new Error(`signer responded ${authRes.status}`);
+  const { token, expire, signature } = await authRes.json();
+  if (!token || !expire || !signature) throw new Error('signer returned no signature');
+  const form = new FormData();
+  form.append('file', dataUri);
+  form.append('fileName', `${uid}.jpg`);
+  form.append('folder', IMAGEKIT_AVATAR_FOLDER);
+  form.append('useUniqueFileName', 'false');
+  form.append('publicKey', IMAGEKIT_PUBLIC_KEY);
+  form.append('signature', signature);
+  form.append('expire', String(expire));
+  form.append('token', token);
+  const res = await fetch('https://upload.imagekit.io/api/v1/files/upload', { method: 'POST', body: form });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.url) throw new Error(`upload responded ${res.status} ${data?.message || ''}`.trim());
+  return String(data.url);
+}
 
 const text = (value, max = 240) => String(value ?? '').trim().slice(0, max);
 const list = (value, maxItems = 16, maxChars = 80) =>
@@ -142,15 +184,15 @@ function buildIndex(uid, p) {
 }
 
 const users = await db.collection('users').get();
-console.log(`${WRITE ? 'WRITE' : 'DRY RUN'} - ${users.size} user document(s)\n`);
-let created = 0, refreshed = 0, hidden = 0, current = 0;
+console.log(`${WRITE ? 'WRITE' : 'DRY RUN'} - ${users.size} user document(s)${NO_UPLOAD ? ' (uploads off)' : ''}\n`);
+let created = 0, refreshed = 0, hidden = 0, current = 0, uploaded = 0, uploadFailed = 0;
 let batch = db.batch(), pending = 0;
 const flush = async () => { if (pending) { await batch.commit(); batch = db.batch(); pending = 0; } };
 
 for (const userDoc of users.docs) {
   const uid = userDoc.id;
   const p = userDoc.data() || {};
-  const index = buildIndex(uid, p);
+  let index = buildIndex(uid, p);
   const pubRef = db.collection('publicProfiles').doc(uid);
   const pub = await pubRef.get();
 
@@ -165,15 +207,48 @@ for (const userDoc of users.docs) {
     continue;
   }
 
+  // Host a base64-only (or changed) photo so the index can carry a URL.
+  // profilePicHash remembers which photo the hosted copy was made from, so a
+  // later photo change whose own upload failed is re-hosted automatically.
+  let userPatch = null;
+  const rawPic = typeof p.profilePic === 'string' ? p.profilePic : '';
+  if (rawPic.startsWith('data:image') && rawPic.length <= 1_400_000) {
+    const hash = sha1(rawPic);
+    const hostedNow = hostedUri(p.profilePicUrl);
+    // No recorded hash means we cannot know whether an existing hosted URL is
+    // this photo or an older one (a changed photo whose upload died leaves
+    // the old URL behind), so host it once and record the hash.
+    if (!hostedNow || p.profilePicHash !== hash) {
+      if (NO_UPLOAD || uploaded >= MAX_UPLOADS_PER_RUN) {
+        console.log(`  photo   ${uid}  ${index.displayName}  base64 only - upload skipped this run`);
+      } else {
+        try {
+          const url = WRITE ? await hostAvatar(uid, rawPic) : `${'https://ik.imagekit.io/vjkzaxrro'}${IMAGEKIT_AVATAR_FOLDER}/${uid}.jpg`;
+          // ?v= busts the CDN cache when the same file name gets a new photo.
+          const versioned = `${url}?v=${hash.slice(0, 10)}`;
+          userPatch = { profilePicUrl: versioned, profilePicHash: hash };
+          index = buildIndex(uid, { ...p, ...userPatch });
+          uploaded += 1;
+          console.log(`  photo   ${uid}  ${index.displayName}  ${Math.round(rawPic.length / 1024)}KB base64 -> ${versioned}`);
+        } catch (error) {
+          uploadFailed += 1;
+          console.log(`  photo   ${uid}  ${index.displayName}  upload FAILED: ${error?.message || error}`);
+        }
+      }
+    }
+  }
+  if (userPatch && WRITE) { batch.set(userDoc.ref, userPatch, { merge: true }); pending += 1; }
+
   const userUpdated = toMillis(userDoc.updateTime?.toDate?.() || userDoc.updateTime);
   const pubUpdated = pub.exists ? toMillis(pub.data()?.updatedAt) : 0;
-  const stale = !pub.exists || FORCE || (userUpdated && pubUpdated && userUpdated > pubUpdated + 60_000) || !pub.data()?.searchName;
+  const photoChanged = pub.exists && (pub.data()?.profilePic || '') !== index.profilePic;
+  const stale = !pub.exists || FORCE || photoChanged || (userUpdated && pubUpdated && userUpdated > pubUpdated + 60_000) || !pub.data()?.searchName;
   if (!stale) { current += 1; continue; }
 
-  console.log(`  ${pub.exists ? 'refresh' : 'CREATE '} ${uid}  ${index.displayName}  @${index.username || '-'}  ${index.city || ''}`);
+  console.log(`  ${pub.exists ? 'refresh' : 'CREATE '} ${uid}  ${index.displayName}  @${index.username || '-'}  ${index.city || ''}${photoChanged ? '  (photo)' : ''}`);
   if (WRITE) { batch.set(pubRef, index, { merge: true }); pending += 1; }
   if (pub.exists) refreshed += 1; else created += 1;
   if (pending >= 400) await flush();
 }
 await flush();
-console.log(`\n${WRITE ? 'Done' : 'Would do'}: create ${created}, refresh ${refreshed}, hide ${hidden}; ${current} already current.`);
+console.log(`\n${WRITE ? 'Done' : 'Would do'}: create ${created}, refresh ${refreshed}, hide ${hidden}, photos hosted ${uploaded}${uploadFailed ? ` (${uploadFailed} failed)` : ''}; ${current} already current.`);
