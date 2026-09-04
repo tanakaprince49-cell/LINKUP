@@ -62,6 +62,16 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/linkup-sa.json
         run: node backfill-campaign-expiry.mjs ${{ (github.event_name == 'schedule' || inputs.write) && '--write' || '' }}
 
+      # Keep the discovery index complete: anyone whose client could not
+      # write publicProfiles (offline, old build, the Aug-Sep rules outage)
+      # becomes searchable within the hour instead of on their next launch.
+      - name: Backfill publicProfiles index
+        if: always()
+        working-directory: functions
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/linkup-sa.json
+        run: node backfill-public-profiles.mjs ${{ (github.event_name == 'schedule' || inputs.write) && '--write' || '' }}
+
       # Renewal reminders for web (Payonify) PLUS / Campaigns terms: 3 days,
       # 1 day, day-of, and "has ended". Idempotent per term, so hourly is safe.
       - name: Send PLUS / Campaigns renewal reminders

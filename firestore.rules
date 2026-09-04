@@ -530,52 +530,20 @@ service cloud.firestore {
     // Lightweight discovery index. The app reads this instead of the heavy users/{uid}
     // documents so Android does not download large profile photo/gallery payloads.
     match /publicProfiles/{userId} {
-      function validPublicString(data, field, maxSize) {
-        return !data.keys().hasAny([field]) ||
-          (data[field] is string && data[field].size() <= maxSize);
-      }
-
-      function validPublicList(data, field, maxSize) {
-        return !data.keys().hasAny([field]) ||
-          (data[field] is list && data[field].size() <= maxSize);
-      }
-
-      function validPublicBool(data, field) {
-        return !data.keys().hasAny([field]) || data[field] is bool;
-      }
-
-      function validPublicNumber(data, field, maxValue) {
-        return !data.keys().hasAny([field]) ||
-          (data[field] is int && data[field] >= 0 && data[field] <= maxValue);
-      }
-
-      function validPublicTimestampish(data, field) {
-        return !data.keys().hasAny([field]) ||
-          data[field] == null ||
-          data[field] is timestamp ||
-          (data[field] is string && data[field].size() <= 80);
-      }
-
-      function validSocialValue(data, key) {
-        return !data.socialLinks.keys().hasAny([key]) ||
-          (data.socialLinks[key] is string && data.socialLinks[key].size() <= 240);
-      }
-
-      function validPublicSocials(data) {
-        return !data.keys().hasAny(['socialLinks']) ||
-          (data.socialLinks is map &&
-            data.socialLinks.keys().hasOnly(['linkedin', 'github', 'tiktok', 'instagram', 'twitter', 'portfolio']) &&
-            validSocialValue(data, 'linkedin') &&
-            validSocialValue(data, 'github') &&
-            validSocialValue(data, 'tiktok') &&
-            validSocialValue(data, 'instagram') &&
-            validSocialValue(data, 'twitter') &&
-            validSocialValue(data, 'portfolio'));
-      }
-
-      function validPublicProfile(data) {
-        return data.uid == userId &&
-          data.keys().hasOnly([
+      // COST MATTERS HERE. Firestore evaluates at most 1,000 expressions per
+      // request and a full index write carries ~53 fields. The old validator
+      // spent ~20 expressions per field (a function call, keys().hasAny(),
+      // a type test and a size test each), so any complete payload hit
+      // "maximum of 1000 expressions" and was rejected as PERMISSION_DENIED:
+      // every profile-index write since 30 Aug failed and new accounts never
+      // appeared in search or discovery. This validator is deliberately
+      // flat: one hasOnly() for the shape, one `is <type>` per field via
+      // get(field, default), and size caps only where a field can carry
+      // real bulk (strings that render, the lists). Verified against the
+      // emulator at ~half the budget. Do not reintroduce per-field helpers.
+      function validPublicProfile(d) {
+        return d.uid == userId &&
+          d.keys().hasOnly([
             'uid', 'displayName', 'username', 'searchName', 'searchUsername', 'bio', 'profilePic',
             'occupation', 'company', 'country', 'city', 'age',
             'skills', 'interests', 'industries', 'lookingFor',
@@ -591,58 +559,59 @@ service cloud.firestore {
             'socialLinks',
             'onboarded', 'deleted', 'lastActiveAt', 'updatedAt'
           ]) &&
-          validPublicString(data, 'displayName', 100) &&
-          validPublicString(data, 'username', 40) &&
-          validPublicString(data, 'searchName', 100) &&
-          validPublicString(data, 'searchUsername', 40) &&
-          validPublicString(data, 'bio', 700) &&
-          validPublicString(data, 'profilePic', 900000) &&
-          validPublicString(data, 'occupation', 100) &&
-          validPublicString(data, 'company', 120) &&
-          validPublicString(data, 'country', 80) &&
-          validPublicString(data, 'city', 80) &&
-          validPublicString(data, 'goals', 420) &&
-          validPublicString(data, 'experience', 80) &&
-          validPublicString(data, 'personalityType', 80) &&
-          validPublicString(data, 'commitmentLevel', 80) &&
-          validPublicString(data, 'startupStage', 80) &&
-          validPublicString(data, 'fundingStage', 80) &&
-          validPublicString(data, 'availability', 80) &&
-          validPublicString(data, 'timezone', 80) &&
-          validPublicString(data, 'workStyle', 80) &&
-          validPublicString(data, 'education', 80) &&
-          validPublicString(data, 'networkingIntent', 120) &&
-          validPublicString(data, 'ambition', 120) &&
-          validPublicString(data, 'teamSizePreference', 80) &&
-          validPublicString(data, 'verificationProgram', 80) &&
-          validPublicString(data, 'plan', 40) &&
-          validPublicString(data, 'subscriptionPlan', 40) &&
-          validPublicString(data, 'subscriptionStatus', 40) &&
-          validPublicString(data, 'updatedAt', 80) &&
-          validPublicList(data, 'skills', 20) &&
-          validPublicList(data, 'interests', 20) &&
-          validPublicList(data, 'industries', 16) &&
-          validPublicList(data, 'lookingFor', 16) &&
-          validPublicList(data, 'languages', 12) &&
-          validPublicList(data, 'projects', 5) &&
-          validPublicList(data, 'startupIdeas', 8) &&
-          validPublicBool(data, 'remoteOnly') &&
-          validPublicBool(data, 'willingToRelocate') &&
-          validPublicBool(data, 'isVisible') &&
-          validPublicBool(data, 'isStealthMode') &&
-          validPublicBool(data, 'turboConnect') &&
-          validPublicBool(data, 'hideOnlineStatus') &&
-          validPublicBool(data, 'isVerified') &&
-          validPublicBool(data, 'isPro') &&
-          validPublicBool(data, 'onboarded') &&
-          validPublicBool(data, 'deleted') &&
-          validPublicNumber(data, 'age', 120) &&
-          validPublicNumber(data, 'profileViews', 1000000) &&
-          validPublicNumber(data, 'profileClicks', 1000000) &&
-          validPublicNumber(data, 'profileSaves', 1000000) &&
-          validPublicNumber(data, 'responseRate', 100) &&
-          validPublicTimestampish(data, 'lastActiveAt') &&
-          validPublicSocials(data);
+          d.get('displayName', '') is string && d.get('displayName', '').size() <= 100 &&
+          d.get('username', '') is string && d.get('username', '').size() <= 40 &&
+          d.get('searchName', '') is string && d.get('searchName', '').size() <= 100 &&
+          d.get('searchUsername', '') is string && d.get('searchUsername', '').size() <= 40 &&
+          d.get('bio', '') is string && d.get('bio', '').size() <= 700 &&
+          d.get('profilePic', '') is string && d.get('profilePic', '').size() <= 2048 &&
+          d.get('goals', '') is string && d.get('goals', '').size() <= 420 &&
+          d.get('occupation', '') is string &&
+          d.get('company', '') is string &&
+          d.get('country', '') is string &&
+          d.get('city', '') is string &&
+          d.get('experience', '') is string &&
+          d.get('personalityType', '') is string &&
+          d.get('commitmentLevel', '') is string &&
+          d.get('startupStage', '') is string &&
+          d.get('fundingStage', '') is string &&
+          d.get('availability', '') is string &&
+          d.get('timezone', '') is string &&
+          d.get('workStyle', '') is string &&
+          d.get('education', '') is string &&
+          d.get('networkingIntent', '') is string &&
+          d.get('ambition', '') is string &&
+          d.get('teamSizePreference', '') is string &&
+          d.get('verificationProgram', '') is string &&
+          d.get('plan', '') is string &&
+          d.get('subscriptionPlan', '') is string &&
+          d.get('subscriptionStatus', '') is string &&
+          d.get('updatedAt', '') is string &&
+          d.get('skills', []) is list && d.get('skills', []).size() <= 20 &&
+          d.get('interests', []) is list && d.get('interests', []).size() <= 20 &&
+          d.get('industries', []) is list && d.get('industries', []).size() <= 16 &&
+          d.get('lookingFor', []) is list && d.get('lookingFor', []).size() <= 16 &&
+          d.get('languages', []) is list && d.get('languages', []).size() <= 12 &&
+          d.get('projects', []) is list && d.get('projects', []).size() <= 5 &&
+          d.get('startupIdeas', []) is list && d.get('startupIdeas', []).size() <= 8 &&
+          d.get('remoteOnly', false) is bool &&
+          d.get('willingToRelocate', false) is bool &&
+          d.get('isVisible', false) is bool &&
+          d.get('isStealthMode', false) is bool &&
+          d.get('turboConnect', false) is bool &&
+          d.get('hideOnlineStatus', false) is bool &&
+          d.get('isVerified', false) is bool &&
+          d.get('isPro', false) is bool &&
+          d.get('onboarded', false) is bool &&
+          d.get('deleted', false) is bool &&
+          d.get('age', 0) is int && d.get('age', 0) <= 120 &&
+          d.get('profileViews', 0) is int &&
+          d.get('profileClicks', 0) is int &&
+          d.get('profileSaves', 0) is int &&
+          d.get('responseRate', 0) is int &&
+          d.get('socialLinks', {}) is map &&
+          d.get('socialLinks', {}).keys().hasOnly(['linkedin', 'github', 'tiktok', 'instagram', 'twitter', 'portfolio']) &&
+          (d.get('lastActiveAt', null) == null || d.lastActiveAt is timestamp || d.lastActiveAt is string);
       }
 
       // Single shared profile links must open for people who are not signed
