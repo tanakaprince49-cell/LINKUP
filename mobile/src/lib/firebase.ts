@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, initializeAuth } from 'firebase/auth';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -39,7 +39,17 @@ export const db = initializeFirestore(app, {
         experimentalAutoDetectLongPolling: true,
         // Persist Firestore docs in IndexedDB on web so repeat visits render
         // profiles instantly from cache while the network copy refreshes.
-        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+        //
+        // SINGLE-tab manager on purpose. The multi-tab manager mirrors every
+        // pending write into localStorage ("firestore_mutations_...") so other
+        // tabs can see it; localStorage is capped at ~5MB for the whole site,
+        // and one large profile save (a users doc with photos) blew that cap
+        // with QuotaExceededError, which the SDK turns into an INTERNAL
+        // ASSERTION FAILED (ID: b815) uncaught error - the web app crashed.
+        // Single-tab keeps everything in IndexedDB (no localStorage mirror).
+        // forceOwnership keeps the cache usable if two tabs are open instead of
+        // throwing "failed-precondition" in the second one.
+        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({ forceOwnership: true }) }),
       }
     : {
         // React Native / Expo Go: WebChannel listen streams flap roughly every

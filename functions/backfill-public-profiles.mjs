@@ -28,6 +28,13 @@
  *   node backfill-public-profiles.mjs               (dry run)
  *   node backfill-public-profiles.mjs --write       (applies)
  *   node backfill-public-profiles.mjs --write --no-upload   (index only)
+ *
+ * GALLERY PHOTOS. users/{uid}.photos (up to 3) could still hold base64 from
+ * before the purge - one such doc was 300KB. Every profile save re-sends the
+ * whole thing as one mutation; on web the SDK mirrored pending writes into
+ * localStorage (5MB cap) and a QuotaExceededError crashed the app. Those are
+ * hosted the same way (<uid>-photo-<n>.jpg) and the array rewritten as URLs,
+ * so the docs shrink 10-100x and the crash cannot come back from old data.
  */
 import { createHash } from 'node:crypto';
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
@@ -49,15 +56,15 @@ const MAX_UPLOADS_PER_RUN = Number(process.env.MAX_AVATAR_UPLOADS || 40);
 
 const sha1 = (value) => createHash('sha1').update(value).digest('hex');
 
-/** Upload a base64 avatar exactly like the phone does; returns the hosted URL. */
-async function hostAvatar(uid, dataUri) {
+/** Upload a base64 image exactly like the phone does; returns the hosted URL. */
+async function hostImage(fileName, dataUri) {
   const authRes = await fetch(IMAGEKIT_AUTH_ENDPOINT);
   if (!authRes.ok) throw new Error(`signer responded ${authRes.status}`);
   const { token, expire, signature } = await authRes.json();
   if (!token || !expire || !signature) throw new Error('signer returned no signature');
   const form = new FormData();
   form.append('file', dataUri);
-  form.append('fileName', `${uid}.jpg`);
+  form.append('fileName', fileName);
   form.append('folder', IMAGEKIT_AVATAR_FOLDER);
   form.append('useUniqueFileName', 'false');
   form.append('publicKey', IMAGEKIT_PUBLIC_KEY);
@@ -223,7 +230,7 @@ for (const userDoc of users.docs) {
         console.log(`  photo   ${uid}  ${index.displayName}  base64 only - upload skipped this run`);
       } else {
         try {
-          const url = WRITE ? await hostAvatar(uid, rawPic) : `${'https://ik.imagekit.io/vjkzaxrro'}${IMAGEKIT_AVATAR_FOLDER}/${uid}.jpg`;
+          const url = WRITE ? await hostImage(`${uid}.jpg`, rawPic) : `${'https://ik.imagekit.io/vjkzaxrro'}${IMAGEKIT_AVATAR_FOLDER}/${uid}.jpg`;
           // ?v= busts the CDN cache when the same file name gets a new photo.
           const versioned = `${url}?v=${hash.slice(0, 10)}`;
           userPatch = { profilePicUrl: versioned, profilePicHash: hash };
@@ -234,6 +241,38 @@ for (const userDoc of users.docs) {
           uploadFailed += 1;
           console.log(`  photo   ${uid}  ${index.displayName}  upload FAILED: ${error?.message || error}`);
         }
+      }
+    }
+  }
+  // Gallery photos: host every base64 entry, keep hosted URLs as they are,
+  // drop anything else. A partial failure leaves the array untouched so the
+  // person never loses a photo; the next hourly run retries.
+  const gallery = Array.isArray(p.photos) ? p.photos : [];
+  if (gallery.some((v) => typeof v === 'string' && v.startsWith('data:image'))) {
+    if (NO_UPLOAD || uploaded >= MAX_UPLOADS_PER_RUN) {
+      console.log(`  photos  ${uid}  ${index.displayName}  ${gallery.length} base64 gallery photo(s) - upload skipped this run`);
+    } else {
+      const hosted = [];
+      let failed = false;
+      for (let i = 0; i < Math.min(gallery.length, 3); i += 1) {
+        const entry = typeof gallery[i] === 'string' ? gallery[i] : '';
+        if (!entry.startsWith('data:image')) { const kept = hostedUri(entry); if (kept) hosted.push(kept); continue; }
+        if (entry.length > 1_400_000) continue; // over the app's own limit; drop
+        try {
+          const url = WRITE ? await hostImage(`${uid}-photo-${i + 1}.jpg`, entry) : `https://ik.imagekit.io/vjkzaxrro${IMAGEKIT_AVATAR_FOLDER}/${uid}-photo-${i + 1}.jpg`;
+          hosted.push(`${url}?v=${sha1(entry).slice(0, 10)}`);
+          uploaded += 1;
+        } catch (error) {
+          failed = true; uploadFailed += 1;
+          console.log(`  photos  ${uid}  ${index.displayName}  photo ${i + 1} upload FAILED: ${error?.message || error}`);
+          break;
+        }
+      }
+      if (!failed) {
+        const before = gallery.reduce((n, v) => n + String(v || '').length, 0);
+        console.log(`  photos  ${uid}  ${index.displayName}  ${Math.round(before / 1024)}KB base64 gallery -> ${hosted.length} hosted URL(s)`);
+        userPatch = { ...(userPatch || {}), photos: hosted };
+        index = buildIndex(uid, { ...p, ...userPatch });
       }
     }
   }
