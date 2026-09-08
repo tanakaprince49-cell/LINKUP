@@ -468,30 +468,36 @@ async function geminiRerank(q, requester, shortlist) {
   return Array.isArray(parsed?.picks) ? parsed.picks : [];
 }
 
+// Why a member is left out of someone's results ('' = eligible). Shared by the
+// matcher and by name lookups, so "fred" can say exactly why Fred is not shown.
+function exclusionReason(p, uid, myState, ctx, latestByTarget, q, now = Date.now()) {
+  if (p.uid === uid) return 'self';
+  if (myState?.muted && myState.muted[p.uid]) return 'muted';
+  const prev = latestByTarget.get(p.uid);
+  if (prev && prev.status === 'declined') return 'declined';
+  if (prev && prev.status === 'skip' && now - toMillis(prev.updatedAt || prev.createdAt) < LIMITS.skipDays * DAY_MS) return 'skipped';
+  const st = ctx.states[p.uid] || {};
+  if (st.muted && st.muted[uid]) return 'theyMuted';
+  if (q.offer && Array.isArray(st.openTo) && st.openTo.length && !st.openTo.includes(q.offer)) return 'openTo';
+  const cap = Number.isFinite(Number(st.inboundCap)) ? Number(st.inboundCap) : LIMITS.inboundPerWeek;
+  if (cap <= 0) return 'closed';
+  if (st.inbound?.week === ctx.week && Number(st.inbound?.count || 0) >= cap) return 'inboundCap';
+  return '';
+}
+
 // Who on LINKUP fits this ask, right now. Returns ranked picks (with cited
 // "why"), the nearest people when nobody fits, and how many members were checked.
 export async function findPeople(uid, q, ctx, { user, state, existingCards = [] } = {}) {
   const owner = user || (await loadUser(uid));
   const myState = state || ctx.states[uid] || {};
   const me = mergedFacts(owner, myState) || { uid, name: 'Member', skills: [], industries: [], lookingFor: [], bio: '', notes: '' };
-  const muted = myState.muted || {};
   const now = Date.now();
   const latestByTarget = new Map();
   existingCards.forEach((c) => latestByTarget.set(c.targetUid, c));
   const eligible = [];
   for (const p of ctx.candidates) {
-    if (p.uid === uid) continue;
-    if (muted[p.uid]) continue;
-    const prev = latestByTarget.get(p.uid);
-    if (prev && prev.status === 'declined') continue;
-    if (prev && prev.status === 'skip' && now - toMillis(prev.updatedAt || prev.createdAt) < LIMITS.skipDays * DAY_MS) continue;
-    const st = ctx.states[p.uid] || {};
-    if (st.muted && st.muted[uid]) continue;
-    if (q.offer && Array.isArray(st.openTo) && st.openTo.length && !st.openTo.includes(q.offer)) continue;
-    const cap = Number.isFinite(Number(st.inboundCap)) ? Number(st.inboundCap) : LIMITS.inboundPerWeek;
-    if (cap <= 0) continue;
-    if (st.inbound?.week === ctx.week && Number(st.inbound?.count || 0) >= cap) continue;
-    eligible.push(candidateFacts(p, st));
+    if (exclusionReason(p, uid, myState, ctx, latestByTarget, q, now)) continue;
+    eligible.push(candidateFacts(p, ctx.states[p.uid] || {}));
   }
   const checked = ctx.candidates.filter((p) => p.uid !== uid).length;
   const scan = (terms, related) => {
@@ -574,7 +580,10 @@ export async function findPeople(uid, q, ctx, { user, state, existingCards = [] 
 function nearestPeople(me, q, eligible) {
   const askLoc = String(q.location || '').toLowerCase();
   const askLocKnown = !!askLoc && eligible.some((c) => c.city && askLoc.includes(c.city.toLowerCase()));
-  const loc = askLocKnown ? askLoc : String(me.city || '').toLowerCase();
+  // No city in the ask = nothing honest to call "nearest" (it used to be the
+  // same three same-city people for every miss). Only same-city-as-the-ask.
+  if (!askLocKnown) return [];
+  const loc = askLoc;
   const compat = new Map(localRank(compactProfile({ uid: me.uid, role: me.role, skills: me.skills, industries: me.industries, goals: me.lookingFor }), eligible.map((c) => compactProfile({ ...c, occupation: c.role })), eligible.length).map((r) => [r.uid, r.score]));
   return eligible
     .map((c) => ({ c, s: (loc && c.city && loc.includes(c.city.toLowerCase()) ? 3 : 0) + ((compat.get(c.uid) || 40) - 40) / 10 + (c.pic ? 0.25 : 0) + (c.role ? 0.25 : 0) }))
@@ -584,26 +593,163 @@ function nearestPeople(me, q, eligible) {
     .map(({ c }) => ({ uid: c.uid, name: c.name, pic: c.pic, role: c.role, city: [c.city, c.country].filter(Boolean).join(', ') }));
 }
 
-// ---------------------------------------------------------------- ask (the whole flow, one request)
-const COACH = 'Tell me who you need in one message and I answer right away - for example "a Flutter developer in Harare for a paid fintech MVP", "a co-founder with sales experience, equity", or "someone who has raised from local angels".';
+// ---------------------------------------------------------------- personality (zero tokens)
+const rotate = (arr, seed = Math.floor(Date.now() / 900)) => arr[Math.abs(Number(seed) || 0) % arr.length];
+const offerLabel = (o) => ({ paid: 'paid work', equity: 'equity', advisory: 'advisory', coffee: 'a coffee' }[o] || o);
 
-function askReply(q, picks, nearest, checked, source = 'app', expansion = 'none', relatedTo = '') {
+// Greetings, thanks, "who are you", banter: answered in Linky's voice without a
+// model call and without touching the ask budget. Returns '' when the message
+// is a real ask.
+export function smallTalk(message, name = '', { source = 'app' } = {}) {
+  const m = String(message || '').toLowerCase().replace(/[^a-z0-9'?!\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!m) return '';
+  const words = m.split(' ');
+  if (words.length > 9) return '';
+  const first = firstName(name);
+  const who = first === 'there' ? '' : `, ${first}`;
+  const is = (re) => re.test(m);
+  if (is(/^(hi|hii+|hello|helo|hey|heyy+|yo|yoh|sup|wassup|whats up|what's up|howdy|hola|mhoro|makadii|mangwanani|masikati|manheru|good (morning|afternoon|evening|day)|greetings|morning|evening)( there| linky| bro| man| bot| guys| team)?[!?.]*$/)) {
+    return rotate([
+      `Hey${who}. Who do you need? Give me a role and a city and I will pull the people on LINKUP who actually fit.`,
+      `Hi${who}. I am the connector around here - tell me who you need and I will find them, or tell you straight that nobody fits yet.`,
+      `Yo${who}. A name, a skill or a role - say who you need and I get to work.`,
+    ]);
+  }
+  if (is(/^(how are you|how r u|how are u|how is it going|how's it going|hows it going|how are things|you good|u good|are you (ok|okay|good|fine)|how you doing|how are you doing)\b/)) {
+    return rotate([
+      `Good - I have been reading profiles all day, which is my idea of fun. Who can I find for you${who}?`,
+      `Never better. Someone joined LINKUP this week that someone else needs - maybe you. Who do you need?`,
+    ]);
+  }
+  if (is(/^(thanks|thank you|thankyou|thx|tnx|ty|cheers|appreciate it|appreciated|much appreciated|ndatenda|maita basa)\b/) || (words.length <= 4 && is(/\b(thanks|thank you)\b/))) {
+    return rotate([`Anytime${who}. Come back when you need the next person.`, `That is what I am here for. Next intro?`, `No stress. Say the word when you need someone else.`]);
+  }
+  if (is(/\b(who are you|what are you|are you (a |an )?(bot|human|ai|robot|person|real)|your name|what is linky|who is linky|what's linky)\b/)) {
+    return `I am Linky - LINKUP's connector. I read every member profile, and when you ask for someone I answer with the people I can cite a real reason for. No guessing, no filler matches. Try me: "a fintech lawyer in Harare", or just a name.`;
+  }
+  if (is(/\b(what can you do|what do you do|how do you work|how does this work|how do i use|how to use|what is this|what can i ask|help me out|show me how)\b/) || m === 'help' || m === '?') {
+    return `Three things. 1) Ask for a person by role, skill or name - "a Flutter developer in Harare", "someone who understands math", "Luke Tembani" - and I answer right away with cards I can cite. 2) ${source === 'app' ? 'Tap Meet' : 'Reply "meet 1"'} and I ask them for you (double opt-in, they can say no). 3) If nobody on LINKUP fits, ${source === 'app' ? 'tap "Search outside LINKUP"' : 'reply OUTSIDE'} and I pull real public profiles from the open web.`;
+  }
+  if (is(/^(ok|okay|k|kk|cool|nice|great|good|alright|aight|fine|sure|lol|lmao|haha|hahaha|wow|noted|got it|i see|makes sense|sharp|sweet|perfect|awesome)( then| thanks| linky| bro| cool)?[!.]*$/)) {
+    return rotate([`Cool. Who is next?`, `Good. I am here when you need a person.`, `Noted. A role and a city, whenever you are ready.`]);
+  }
+  if (is(/\b(no personality|boring|useless|dumb|stupid|robotic|you suck|rubbish|trash|annoying|not helpful|bad bot)\b/)) {
+    return rotate([
+      `Fair hit${who}. I would rather be useful than charming - give me a real ask and I will show you which one I am.`,
+      `Ouch. Taken on the chin. Now tell me who you need and let me redeem myself.`,
+    ]);
+  }
+  if (is(/^(bye|goodbye|good night|goodnight|see you|see ya|later|cya|ttyl|gtg)\b/)) return rotate([`Later${who}. I will keep an eye on who joins.`, `Bye. Ping me the moment you need someone.`]);
+  if (is(/\b(tell me a joke|a joke|joke|make me laugh|something funny)\b/)) return `A founder walks into a room of builders and asks for "someone technical". That is not a joke, that is my Tuesday. Be specific and I am very good.`;
+  if (is(/^(yes|yeah|yep|yup|no|nope|nah|maybe)[!.]*$/)) return `To what${who}? Give me a name or a role and I will move.`;
+  if (is(/\b(i love you|love you|marry me|you are (the best|amazing|great|awesome))\b/)) return `Careful, I fall fast. Now - who do you need?`;
+  return '';
+}
+
+// "send a message to fred" / "who is luke tembani" / "@tanaka" -> ["fred"] etc.
+const NAME_STOP = new Set([...STOP, 'send', 'message', 'msg', 'text', 'dm', 'ping', 'contact', 'reach', 'talk', 'speak', 'chat', 'meet', 'meeting', 'intro', 'introduce', 'introduction', 'connect', 'connection', 'link', 'find', 'look', 'search', 'show', 'open', 'profile', 'tell', 'about', 'info', 'details', 'pls', 'plz', 'want', 'wanna', 'need', 'know', 'does', 'do', 'whats', 'what', 'where', 'when', 'call', 'him', 'her', 'them', 'guy', 'lady', 'person', 'member', 'user', 'account', 'linkup', 'named', 'called', 'name', 'someone', 'somebody', 'one', 'the', 'please', 'mr', 'mrs', 'ms', 'dr']);
+export function nameQueryWords(message) {
+  const raw = String(message || '').toLowerCase().replace(/[^a-z0-9@'\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+  const all = raw.split(' ').filter(Boolean);
+  if (!all.length || all.length > 8) return [];
+  const words = all.map((w) => w.replace(/^@/, '')).filter((w) => w.length >= 2 && !NAME_STOP.has(w) && !/^\d+$/.test(w));
+  if (!words.length || words.length > 4) return [];
+  return words;
+}
+const nameParts = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9'\s-]/g, ' ').split(/\s+/).filter(Boolean);
+const isNamed = (words, name) => words.length > 0 && words.every((w) => nameParts(name).some((pt) => pt === w || (w.length >= 4 && pt.startsWith(w))));
+export function nameMatches(words, candidates, uid) {
+  if (!words.length) return [];
+  const phrase = words.join(' ');
+  const out = [];
+  for (const p of candidates) {
+    if (p.uid === uid) continue;
+    const name = displayNameOf(p);
+    const parts = nameParts(name);
+    if (!parts.length || name === 'Builder') continue;
+    const full = parts.join(' ');
+    const handle = String(p.username || '').toLowerCase();
+    let score = 0;
+    if (phrase === full) score = 10;
+    else if (words.length >= 2 && full.includes(phrase)) score = 8;
+    else if (isNamed(words, name)) score = 6 + words.length;
+    if (handle && words.includes(handle)) score = Math.max(score, 9);
+    if (score >= 6) out.push({ p, score, name });
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, 5);
+}
+
+const personLine = (c) => `${c.name}${c.role ? ` is ${/^[aeiou]/i.test(c.role) ? 'an' : 'a'} ${c.role}` : ' is on LINKUP'}${c.company ? ` at ${c.company}` : ''}${c.city ? ` in ${c.city}` : c.country ? ` in ${c.country}` : ''}.`;
+const nameOpener = (c) => `Hi ${firstName(c.name)}, Linky pointed me to you on LINKUP. Open to a quick chat this week?`;
+
+function excludedLine(c, reason, prev, q, now) {
+  const base = `${c.name} is on LINKUP${c.role ? ` (${c.role})` : ''}, but `;
+  switch (reason) {
+    case 'skipped': {
+      const days = Math.max(1, Math.round((now - toMillis(prev?.updatedAt || prev?.createdAt)) / DAY_MS));
+      return `${base}you skipped their card ${days === 1 ? 'yesterday' : `${days} days ago`}, so I keep them out of your results. Say "unskip ${firstName(c.name)}" and they are back.`;
+    }
+    case 'declined': return `${base}they declined your intro earlier, and I never push twice. Their profile is still open to you.`;
+    case 'theyMuted': return `${base}they are not taking intros from you right now, so I will not ask them again.`;
+    case 'muted': return `${base}you declined their intro request earlier, so I keep you two apart. Their profile is still there if you change your mind.`;
+    case 'openTo': return `${base}they are not open to ${offerLabel(q.offer)} at the moment. Ask without the "${q.offer}" angle and I can still introduce you.`;
+    case 'closed': return `${base}they have switched intros off for now.`;
+    case 'inboundCap': return `${base}their intro inbox is full this week (members cap it). Ask me again next week, or open their profile now.`;
+    default: return `${base}I cannot reach them for you right now.`;
+  }
+}
+
+function nameReply(open, blocked, q, source, now) {
+  const lines = [];
+  if (open.length === 1) {
+    const c = open[0].facts;
+    const bits = [c.role, c.company ? `at ${c.company}` : '', c.city || c.country ? `in ${c.city || c.country}` : ''].filter(Boolean).join(' ');
+    const skills = c.skills.slice(0, 3).join(', ');
+    lines.push(`${firstName(c.name)}? Yes - ${c.name} is on LINKUP${bits ? `: ${bits}` : ''}${skills ? `. Skills: ${skills}` : ''}. ${source === 'app' ? 'Tap Meet and I will ask them for you, or tap the card for the full profile.' : 'Reply "meet 1" and I will ask them for you.'}`);
+  } else if (open.length > 1) {
+    lines.push(`${open.length} people on LINKUP answer to that - which one did you mean? ${source === 'app' ? 'The cards are below.' : 'Reply "meet 1", 2 or 3 once you know.'}`);
+  }
+  for (const b of blocked) lines.push(excludedLine(b.facts, b.reason, b.prev, q, now));
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------- ask (the whole flow, one request)
+const COACH = 'Give me a person, a role or a skill and I will get to work - "a Flutter developer in Harare, paid", "a co-founder with sales experience", "someone who understands math", or just a name like "Luke Tembani".';
+
+function askReply(q, picks, nearest, checked, source = 'app', expansion = 'none', relatedTo = '', seq = 0) {
+  const need = q.need;
   if (picks.length) {
     const loc = q.location.toLowerCase();
     const inLoc = !loc || picks.some((p) => `${p.facts.city} ${p.facts.country}`.toLowerCase().includes(loc));
     const where = inLoc ? '' : ` None of them is in ${q.location}, so these are people who could work with you remotely.`;
-    const cta = source === 'app' ? ' Tap Meet and I will ask them for you.' : '';
-    const count = picks.length === 1 ? 'One person' : `${picks.length} people`;
+    const cta = source === 'app' ? ' Tap Meet and I will ask them for you.' : ' Reply "meet 1" (or 2, 3...) and I will ask them.';
+    const n = picks.length;
+    const count = n === 1 ? 'one person' : `${n} people`;
     if (expansion !== 'none') {
-      return `Nobody on LINKUP lists "${relatedTo || q.need}" word for word, but ${count.toLowerCase()} ${picks.length === 1 ? 'is' : 'are'} close - each card says exactly which skill or role I matched.${where}${cta}`;
+      return `Nobody lists "${relatedTo || need}" word for word, but ${count} ${n === 1 ? 'is' : 'are'} close - each card names the real skill or role I matched.${where}${cta}`;
     }
-    return `${count} on LINKUP I can actually cite for "${q.need}".${where}${cta}`;
+    if (n === 1) {
+      return rotate([
+        `Found one person for "${need}" - the card says exactly why.${where}${cta}`,
+        `One person on LINKUP fits "${need}", and I can cite why.${where}${cta}`,
+        `Here is who I have for "${need}": one person, reason on the card.${where}${cta}`,
+      ], seq);
+    }
+    return rotate([
+      `Found ${count} for "${need}" - each card says exactly why.${where}${cta}`,
+      `${n} people on LINKUP fit "${need}", and I can cite why for each.${where}${cta}`,
+      `Here is who I have for "${need}": ${count}, reasons on the cards.${where}${cta}`,
+    ], seq);
   }
-  const near = nearest.length
-    ? ` Closest right now: ${nearest.map((n) => `${n.name}${n.role || n.city ? ` (${[n.role, n.city].filter(Boolean).join(', ')})` : ''}`).join(' · ')}.`
-    : '';
-  const outside = source === 'app' ? ' Tap "Where to look outside LINKUP" and I will point you to places that usually have this person.' : ' Reply MORE and I will point you to places outside LINKUP that usually have this person.';
-  return `Nobody on LINKUP fits "${q.need}" yet - I checked all ${checked} visible members and their related skills, and I will not guess.${near}${outside}`;
+  const nearCity = nearest.length ? String(nearest[0].city || q.location).split(',')[0] : '';
+  const near = nearest.length ? ` In ${nearCity} I do have ${nearest.map((x) => x.name).join(', ')} - different skills, but they may know who.` : '';
+  const outside = source === 'app' ? ' Tap "Search outside LINKUP" and I will pull real public profiles for this.' : ' Reply OUTSIDE and I will search the open web for real profiles.';
+  return rotate([
+    `Nobody on LINKUP does "${need}" yet - and I would rather say that than guess. I read all ${checked} member profiles, related skills included.${near}${outside}`,
+    `Straight answer: no one on LINKUP fits "${need}" right now. ${checked} profiles checked, related skills too.${near}${outside}`,
+    `"${need}" - not on LINKUP yet. I went through all ${checked} members and the skills next to that one.${near}${outside}`,
+    `I came up empty for "${need}", and I do not pad results. That is after ${checked} profiles and their related skills.${near}${outside}`,
+  ], seq);
 }
 
 // Where to look when LINKUP does not have the person: one small Gemini call,
@@ -642,48 +788,10 @@ export async function pointers(uid, need, { userDoc } = {}) {
   return { text: out, cached: false };
 }
 
-export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
-  const user = userDoc || (await loadUser(uid));
-  if (!user) throw new Error('Finish your LINKUP profile first.');
-  const msg = text(message, 600);
-  if (!msg) throw new Error('Say something first.');
-  const q = parseAsk(msg);
-  const now = Date.now();
-  const state = await loadState(uid);
-  const plus = await isPlusUser(uid, user);
-  const limits = plus ? LIMITS.plus : LIMITS.free;
-  const today = dayKey(now);
-  const used = state.asks?.day === today ? Number(state.asks.count || 0) : 0;
-  const asksLeft = () => Math.max(0, limits.asksPerDay - (state.asks?.day === today ? Number(state.asks.count || 0) : 0));
+const newAskId = (now) => `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
 
-  // Greeting / nothing to search on: coach, no tokens, no budget.
-  if (!q.tokens.length) {
-    return { id: '', need: q.need, reply: COACH, cards: [], nearest: [], none: true, checked: 0, expansion: 'none', createdAt: now, cached: false, usedAi: false, asksLeft: asksLeft() };
-  }
-  // Same ask again within the cache window (any of the last few asks): same
-  // answer, no tokens, no budget.
-  const recent = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])].filter(Boolean);
-  const hit = recent.find((a) => a.norm === q.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000);
-  if (hit) {
-    const cards = (await loadCards(uid)).filter((c) => (hit.cardIds || []).includes(c.id));
-    const ordered = (hit.cardIds || []).map((id) => cards.find((c) => c.id === id)).filter(Boolean);
-    if (hit !== state.lastAsk) await patchState(uid, { lastAsk: hit });
-    return { ...publicAsk(hit), cards: ordered, cached: true, asksLeft: asksLeft() };
-  }
-  if (used >= limits.asksPerDay) {
-    const err = new Error(plus
-      ? `You have used today's ${limits.asksPerDay} asks. Tomorrow resets it.`
-      : `Free members get ${LIMITS.free.asksPerDay} asks a day (you have used them). PLUS gets ${LIMITS.plus.asksPerDay} a day and unlimited Meets.`);
-    err.code = 'ask_limit';
-    throw err;
-  }
-
-  const existing = await loadCards(uid);
-  const ctx = await buildMatchContext();
-  const { picks, nearest, checked, usedAi, expansion = 'none', relatedTo = '' } = await findPeople(uid, q, ctx, { user, state, existingCards: existing });
-
-  // Persist cards (reuse a live card for the same person instead of duplicating it).
-  const askId = `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
+// Persist cards (reuse a live card for the same person instead of duplicating it).
+async function persistCards(uid, existing, picks, q, now, askId) {
   const latestByTarget = new Map();
   existing.forEach((c) => latestByTarget.set(c.targetUid, c));
   const resultCards = [];
@@ -723,18 +831,115 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   if (created.length || updatedIds.size) {
     await db().collection('introSuggestions').doc(uid).set({ cards: [...keep, ...created], updatedAt: nowTs(), newSince: now }, { merge: true });
   }
+  return resultCards;
+}
 
-  const reply = askReply(q, picks, nearest, checked, source, expansion, relatedTo);
+export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
+  const user = userDoc || (await loadUser(uid));
+  if (!user) throw new Error('Finish your LINKUP profile first.');
+  const msg = text(message, 600);
+  if (!msg) throw new Error('Say something first.');
+  const me = profileFacts(user) || {};
+  const now = Date.now();
+  const state = await loadState(uid);
+  const plus = await isPlusUser(uid, user);
+  const limits = plus ? LIMITS.plus : LIMITS.free;
+  const today = dayKey(now);
+  const used = state.asks?.day === today ? Number(state.asks.count || 0) : 0;
+  const left = Math.max(0, limits.asksPerDay - used);
+  const quick = (reply, kind, extra = {}) => ({ id: '', need: msg, reply, cards: [], nearest: [], none: true, checked: 0, expansion: 'none', kind, createdAt: now, cached: false, usedAi: false, asksLeft: left, ...extra });
+
+  // 1. Small talk, thanks, "who are you": in character, zero tokens, no budget.
+  const chat = smallTalk(msg, me.name, { source });
+  if (chat) return quick(chat, 'chat');
+
+  // 2. "unskip fred": bring a skipped person back into results.
+  const un = msg.match(/^(?:unskip|un-skip|bring back|restore)\s+(.{2,60})$/i);
+  if (un) {
+    const words = nameQueryWords(un[1]);
+    const cards = await loadCards(uid);
+    const hitIds = cards.filter((c) => c.status === 'skip' && isNamed(words, c.targetName)).map((c) => c.id);
+    if (!hitIds.length) return quick(`Nothing to unskip for "${un[1]}" - I have no skipped card with that name.`, 'chat');
+    const next = cards.map((c) => (hitIds.includes(c.id) ? { ...c, status: 'new', updatedAt: now } : c));
+    await db().collection('introSuggestions').doc(uid).set({ cards: next, updatedAt: nowTs() }, { merge: true });
+    const names = uniq(cards.filter((c) => hitIds.includes(c.id)).map((c) => c.targetName)).join(', ');
+    return quick(`Done - ${names} ${hitIds.length === 1 ? 'is' : 'are'} back in your results. Ask for them again whenever.`, 'chat');
+  }
+
+  const q = parseAsk(msg);
+  let ctx = null;
+  let existing = null;
+
+  // 3. A person by name: "fred", "Luke Tembani", "send a message to fred", "who is tanaka".
+  //    Free (no budget, no tokens); says exactly why someone is hidden.
+  const words = nameQueryWords(msg);
+  if (words.length) {
+    if (isNamed(words, me.name)) return quick(`That is you, ${firstName(me.name)}. I know you already - tell me who you need and I will find them.`, 'chat');
+    ctx = await buildMatchContext();
+    const named = nameMatches(words, ctx.candidates, uid);
+    if (named.length) {
+      existing = await loadCards(uid);
+      const latestByTarget = new Map();
+      existing.forEach((c) => latestByTarget.set(c.targetUid, c));
+      const open = [];
+      const blocked = [];
+      for (const n of named) {
+        const reason = exclusionReason(n.p, uid, state, ctx, latestByTarget, q, now);
+        const facts = candidateFacts(n.p, ctx.states[n.p.uid] || {});
+        if (reason) blocked.push({ facts, reason, prev: latestByTarget.get(n.p.uid) });
+        else open.push({ facts, score: 90, why: personLine(facts), opener: nameOpener(facts) });
+      }
+      const reply = nameReply(open, blocked, q, source, now);
+      if (!open.length) {
+        return quick(reply, 'name', { nearest: blocked.map(({ facts: c }) => ({ uid: c.uid, name: c.name, pic: c.pic, role: c.role, city: [c.city, c.country].filter(Boolean).join(', ') })) });
+      }
+      const id = newAskId(now);
+      const cards = await persistCards(uid, existing, open, q, now, id);
+      const record = { id, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply, cardIds: cards.map((c) => c.id), none: false, nearest: [], checked: ctx.candidates.length, usedAi: false, expansion: 'none', kind: 'name', source, createdAt: now };
+      await patchState(uid, { lastAsk: record });
+      return { ...publicAsk(record), cards, cached: false, usedAi: false, asksLeft: left };
+    }
+  }
+
+  // 4. Nothing to search on: coach, no tokens, no budget.
+  if (!q.tokens.length) return quick(COACH, 'coach');
+
+  // 5. Same ask again within the cache window (any of the last few asks): same
+  //    answer, no tokens, no budget.
+  const recent = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])].filter(Boolean);
+  const hit = recent.find((a) => a.norm === q.norm && a.kind !== 'name' && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000);
+  if (hit) {
+    const cards = (await loadCards(uid)).filter((c) => (hit.cardIds || []).includes(c.id));
+    const ordered = (hit.cardIds || []).map((id) => cards.find((c) => c.id === id)).filter(Boolean);
+    if (hit !== state.lastAsk) await patchState(uid, { lastAsk: hit });
+    return { ...publicAsk(hit), cards: ordered, cached: true, asksLeft: left };
+  }
+  if (used >= limits.asksPerDay) {
+    const err = new Error(plus
+      ? `You have used today's ${limits.asksPerDay} asks. Tomorrow resets it.`
+      : `Free members get ${LIMITS.free.asksPerDay} asks a day (you have used them). PLUS gets ${LIMITS.plus.asksPerDay} a day and unlimited Meets.`);
+    err.code = 'ask_limit';
+    throw err;
+  }
+
+  // 6. The real search.
+  existing = existing || (await loadCards(uid));
+  ctx = ctx || (await buildMatchContext());
+  const { picks, nearest, checked, usedAi, expansion = 'none', relatedTo = '' } = await findPeople(uid, q, ctx, { user, state, existingCards: existing });
+  const id = newAskId(now);
+  const cards = await persistCards(uid, existing, picks, q, now, id);
+  const seq = (Array.isArray(state.askHistory) ? state.askHistory.length : 0) + used;
+  const reply = askReply(q, picks, nearest, checked, source, expansion, relatedTo, seq);
   const record = {
-    id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote,
-    reply, cardIds: resultCards.map((c) => c.id), none: !picks.length, nearest, checked, usedAi, expansion, source, createdAt: now,
+    id, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote,
+    reply, cardIds: cards.map((c) => c.id), none: !picks.length, nearest, checked, usedAi, expansion, kind: picks.length ? 'people' : 'none', source, createdAt: now,
   };
   const history = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
-  history.push({ id: askId, need: q.need, cards: picks.length, none: !picks.length, source, createdAt: now });
+  history.push({ id, need: q.need, cards: picks.length, none: !picks.length, source, createdAt: now });
   const recentAsks = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])]
     .filter((a) => a && a.norm !== q.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5);
   await patchState(uid, { lastAsk: record, recentAsks, askHistory: history, asks: { day: today, count: used + 1 } });
-  return { ...publicAsk(record), cards: resultCards, cached: false, usedAi, asksLeft: Math.max(0, limits.asksPerDay - used - 1) };
+  return { ...publicAsk(record), cards, cached: false, usedAi, asksLeft: Math.max(0, left - 1) };
 }
 
 const publicAsk = (a) => (a ? {
@@ -746,6 +951,7 @@ const publicAsk = (a) => (a ? {
   nearest: Array.isArray(a.nearest) ? a.nearest : [],
   checked: Number(a.checked || 0),
   expansion: a.expansion || 'none',
+  kind: a.kind || (a.cardIds && a.cardIds.length ? 'people' : 'none'),
   createdAt: toMillis(a.createdAt),
 } : null);
 

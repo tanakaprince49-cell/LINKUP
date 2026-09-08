@@ -78,3 +78,31 @@ Linking: app → Linky tab → Preferences & bots → Connect → send the 6-cha
 - Telegram: message the bot → it asks for a link code.
 
 Native: version 13.5.0 / versionCode 19 — rebuild the APK whenever you like; the web is live now.
+
+
+## Personality + names (task 24)
+
+Linky answers in character without a model call and without spending an ask for:
+greetings, thanks, "who are you", "what can you do", "ok", "bye", banter (`smallTalk` in `api/_linky.js`).
+A person by name ("fred", "Luke Tembani", "send a message to fred", "who is @handle", surname alone)
+resolves against visible members (`nameMatches`) and returns that person's card with a human reply.
+If the member is hidden from you, Linky says exactly why (you skipped them / they declined / intro inbox
+full / not open to paid...) and offers `unskip <name>`. No-match replies rotate (4 variants) and only list
+"nearest" people when the ask names a city we have members in.
+
+## Outside search (SerpApi) - `api/_scout.js`
+
+* Env: `SERPAPI_KEY` on Vercel. The GitHub Action syncs it from the GitHub secret `SERPAPI_KEY` on every deploy.
+  Missing key -> Linky says outside search is off; nothing breaks.
+* App: after a no-match, "Search outside LINKUP" (action `scout`). Bot: `outside` (or `outside <ask>`).
+* Every call: `engine=google`, `num=100`, strict operators, e.g.
+  `site:linkedin.com/in ("Founder") AND "Fintech" "Zimbabwe"` (built deterministically by `buildQuery`).
+  Note: since Sept 2025 Google ignores `num` and returns 10 organic rows per call; we still send `num=100`.
+* Raw organic results are stored once in `linkyScout/{sha1(query)}` for 30 days and shared by all members;
+  evaluation happens in memory on title + snippet. Never a per-person lookup.
+* Regex pre-filter first (core topic words / role words / place), then at most ONE Gemini call over <= 20
+  rows returning `{"picks":[{"i":n,"fit":true}]}`. No key or failure -> keyword ranking only.
+* Budget: `linkyMeta/serpapi` monthly counter capped at 200 (free tier is 250) + 4 fresh searches per member
+  per day; both fail soft with a plain message. Cached answers never count.
+* Results are external cards (name, headline, LinkedIn URL, Google snippet, "Copy first line", "Open profile").
+  No Meet: they are not members.

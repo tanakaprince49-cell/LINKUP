@@ -56,8 +56,11 @@ export type LinkyAsk = {
   nearest: LinkyNearest[];
   checked: number;
   expansion: 'none' | 'local' | 'ai';
+  kind?: 'chat' | 'coach' | 'name' | 'people' | 'none';
   createdAt: number;
 };
+export type LinkyScoutPerson = { name: string; headline: string; url: string; snippet: string; matched: string[]; opener: string };
+export type LinkyScout = { configured: boolean; people: LinkyScoutPerson[]; query: string; cached: boolean; usedAi?: boolean; raw?: number; filtered?: number; reply: string; budget?: string | { monthUsed: number; cap: number } };
 
 export type LinkyAskResult = LinkyAsk & { cards: LinkyCard[]; cached: boolean; usedAi?: boolean; asksLeft: number };
 
@@ -120,6 +123,7 @@ export const linkyCard = (cardId: string, status: 'skip' | 'saved') => linkyCall
 export const linkyRespond = (introId: string, decision: 'accept' | 'decline' | 'later') => linkyCall<{ status: string; matchId?: string }>('respond', { introId, decision });
 export const linkyPrefs = (prefs: { openTo?: IntentOffer[]; inboundCap?: number }) => linkyCall<{ ok: boolean }>('prefs', prefs);
 export const linkyPointers = (need: string) => linkyCall<{ text: string; cached: boolean }>('pointers', { need });
+export const linkyScout = (need: string) => linkyCall<LinkyScout>('scout', { need });
 export const linkyFacts = (facts: { notes: string; skills: string[]; lookingFor: string[] }) => linkyCall<{ ok: boolean; facts: LinkyToldFacts }>('facts', facts);
 export const linkyAudit = () => linkyCall<LinkyAudit>('audit');
 export const linkyForget = () => linkyCall<{ ok: boolean }>('forget');

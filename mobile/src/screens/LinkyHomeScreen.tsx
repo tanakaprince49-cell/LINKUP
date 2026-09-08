@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
+  Linking,
   Platform,
   RefreshControl,
   ScrollView,
@@ -20,7 +21,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, X } from 'lucide-react-native';
+import { ArrowUp, Check, Clock, Compass, ExternalLink, Globe, Send, Settings2, ShieldCheck, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
@@ -32,12 +33,14 @@ import {
   LinkyCard,
   LinkyHome,
   LinkyIntro,
+  LinkyScout,
   linkyAsk,
   linkyCard,
   linkyHome,
   linkyMeet,
   linkyPointers,
   linkyRespond,
+  linkyScout,
 } from '../lib/linkyApi';
 
 const FALLBACK_AVATAR = 'https://ui-avatars.com/api/?name=U&background=DFFB3F&color=000&size=80';
@@ -172,6 +175,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const [answer, setAnswer] = useState<LinkyAsk | null>(null);
   const [pointerText, setPointerText] = useState('');
   const [pointerBusy, setPointerBusy] = useState(false);
+  const [scoutResult, setScoutResult] = useState<LinkyScout | null>(null);
+  const [scoutBusy, setScoutBusy] = useState(false);
   const [paywall, setPaywall] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const mounted = useRef(true);
@@ -264,6 +269,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
       const out = await linkyAsk(msg);
       setAnswer(out);
       setPointerText('');
+      setScoutResult(null);
       setHome((h) => {
         if (!h) return h;
         const byId = new Map(out.cards.map((c) => [c.id, c]));
@@ -278,6 +284,26 @@ export default function LinkyHomeScreen({ navigation }: any) {
       setThinking(false);
       setPendingAsk('');
     }
+  };
+
+  const searchOutside = async () => {
+    if (!answer?.need || scoutBusy) return;
+    setScoutBusy(true);
+    try {
+      const r = await linkyScout(answer.need);
+      setScoutResult(r);
+    } catch (err) {
+      notifyUser('Outside search failed', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setScoutBusy(false);
+    }
+  };
+
+  const copyLine = async (line: string) => {
+    try {
+      const Clipboard = await import('expo-clipboard').catch(() => null);
+      if (Clipboard?.setStringAsync) { await Clipboard.setStringAsync(line); notifyUser('Copied', 'First line copied - paste it into your message.'); }
+    } catch {}
   };
 
   const askOutside = async () => {
@@ -318,7 +344,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
             <View style={{ flex: 1 }}>
               <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>{firstName ? `Hey ${firstName}.` : 'Hey.'} I'm Linky.</Text>
               <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
-                Tell me who you need and I answer right away with the people on LINKUP I can cite a reason for. No guessing, no waiting.
+                A role, a skill or just a name - I answer right away with the people on LINKUP I can cite a reason for, and I search the open web when nobody here fits.
               </Text>
             </View>
           </View>
@@ -372,7 +398,20 @@ export default function LinkyHomeScreen({ navigation }: any) {
                       </Text>
                     </View>
                   ) : null}
-                  {!thinking && answer?.none && answer.need ? (
+                  {!thinking && answer?.none && answer.need && answer.kind !== 'chat' && answer.kind !== 'coach' ? (
+                    scoutResult ? (
+                      <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
+                        <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>OUTSIDE LINKUP{scoutResult.cached ? ' · FROM MY NOTES' : ''}</Text>
+                        <Text style={[styles.whyText, { color: textColor(isDark) }]}>{scoutResult.reply}</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity style={[styles.ghostBtn, { borderColor: border, alignSelf: 'flex-start', marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={searchOutside} disabled={scoutBusy}>
+                        {scoutBusy ? <ActivityIndicator size="small" color={textColor(isDark, 'muted')} /> : <Globe size={13} color={textColor(isDark, 'secondary')} />}
+                        <Text style={[styles.ghostBtnText, { color: textColor(isDark, 'secondary') }]}>{scoutBusy ? 'Searching the open web…' : 'Search outside LINKUP'}</Text>
+                      </TouchableOpacity>
+                    )
+                  ) : null}
+                  {!thinking && answer?.none && answer.need && answer.kind !== 'chat' && answer.kind !== 'coach' && answer.kind !== 'name' ? (
                     pointerText ? (
                       <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
                         <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>OUTSIDE LINKUP</Text>
@@ -381,7 +420,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
                     ) : (
                       <TouchableOpacity style={[styles.ghostBtn, { borderColor: border, alignSelf: 'flex-start', marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={askOutside} disabled={pointerBusy}>
                         {pointerBusy ? <ActivityIndicator size="small" color={textColor(isDark, 'muted')} /> : <Compass size={13} color={textColor(isDark, 'secondary')} />}
-                        <Text style={[styles.ghostBtnText, { color: textColor(isDark, 'secondary') }]}>Where to look outside LINKUP</Text>
+                        <Text style={[styles.ghostBtnText, { color: textColor(isDark, 'secondary') }]}>Where else to look</Text>
                       </TouchableOpacity>
                     )
                   ) : null}
@@ -399,6 +438,34 @@ export default function LinkyHomeScreen({ navigation }: any) {
                     </View>
                   ) : null}
                 </View>
+                {!thinking && scoutResult?.people?.length ? scoutResult.people.map((p) => (
+                  <View key={p.url} style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
+                    <View style={styles.cardTop}>
+                      <View style={[styles.extBadge, { borderColor: border }]}><Globe size={16} color={textColor(isDark, 'secondary')} /></View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.cardName, { color: textColor(isDark) }]} numberOfLines={1}>{p.name}</Text>
+                        {p.headline ? <Text style={[styles.cardRole, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{p.headline}</Text> : null}
+                        <Text style={[styles.cardMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{p.url.replace(/^https?:\/\//, '')}</Text>
+                      </View>
+                      <Text style={[styles.pill, { color: textColor(isDark, 'muted'), borderColor: border }]}>Not a member</Text>
+                    </View>
+                    {p.snippet ? (
+                      <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
+                        <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>WHAT GOOGLE SHOWS{p.matched?.length ? ` · matched: ${p.matched.slice(0, 3).join(', ')}` : ''}</Text>
+                        <Text style={[styles.whyText, { color: textColor(isDark) }]} numberOfLines={4}>{p.snippet}</Text>
+                      </View>
+                    ) : null}
+                    <View style={styles.actions}>
+                      <TouchableOpacity style={[styles.ghostBtn, { borderColor: border }]} onPress={() => copyLine(p.opener)}>
+                        <Text style={[styles.ghostBtnText, { color: textColor(isDark) }]}>Copy first line</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: COLORS.primary, borderColor: isDark ? 'transparent' : 'rgba(0,0,0,0.12)' }]} onPress={() => Linking.openURL(p.url).catch(() => {})}>
+                        <ExternalLink size={14} color="#000" />
+                        <Text style={styles.primaryBtnText}>Open profile</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )) : null}
                 {!thinking ? answerCards.map((card) => (
                   <CardView
                     key={card.id}
@@ -448,7 +515,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
             {!pendingAsk && !answer && !otherCards.length ? (
               <View style={styles.chips}>
                 <Text style={[styles.emptyLine, { color: textColor(isDark, 'muted') }]}>Try one of these, or type your own below.</Text>
-                {['A Flutter developer in Harare for a paid fintech MVP', 'A co-founder with sales experience, equity', 'Someone who has raised from local angels, coffee'].map((s) => (
+                {['A Flutter developer in Harare for a paid fintech MVP', 'Someone who understands math', 'A co-founder with sales experience, equity'].map((s) => (
                   <TouchableOpacity key={s} style={[styles.chip, { borderColor: border, backgroundColor: surface }]} onPress={() => send(s)} activeOpacity={0.75}>
                     <Text style={[styles.chipText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{s}</Text>
                   </TouchableOpacity>
@@ -463,7 +530,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
         <View style={[styles.composer, { backgroundColor: surface, borderColor: border }]}>
           <TextInput
             style={[styles.input, { color: textColor(isDark) }]}
-            placeholder="Who do you need? Ask Linky…"
+            placeholder="Who do you need? A role, a skill or a name…"
             placeholderTextColor="#999"
             value={input}
             onChangeText={setInput}
@@ -511,6 +578,7 @@ const styles = StyleSheet.create({
   cardRole: { fontSize: 12, fontWeight: '600', marginTop: 1 },
   cardMeta: { fontSize: 11, fontWeight: '600', marginTop: 1 },
   pill: { fontSize: 10, fontWeight: '800', borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  extBadge: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   whyBox: { borderRadius: 12, padding: 10, marginTop: 12 },
   whyLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   whyText: { fontSize: 13, lineHeight: 19, fontWeight: '600', marginTop: 3 },
