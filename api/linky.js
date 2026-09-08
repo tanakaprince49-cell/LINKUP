@@ -18,6 +18,7 @@ import {
   loadCards, loadState, loadUser, meet, orderedCards, pointers, respond, runCron, sendTelegram,
   sendWhatsApp, setCardStatus, setFacts, setPrefs, unlinkBot, profileFacts, telegramWebhookSecret,
 } from './_linky.js';
+import { scout } from './_scout.js';
 
 
 // ---------------------------------------------------------------- cron auth
@@ -80,14 +81,16 @@ function readRawBody(req) {
 
 // ---------------------------------------------------------------- bot brain (shared by Telegram + WhatsApp)
 const HELP = [
-  'I am Linky, LINKUP\'s connector. Tell me who you need and I answer right away with the people on LINKUP I can actually cite.',
+  'I am Linky, LINKUP\'s connector. Tell me who you need - a role, a skill or just a name - and I answer right away with the people I can actually cite.',
   '',
-  'Just type who you need, e.g. "a Flutter developer in Harare, paid"',
+  'Try: "a Flutter developer in Harare, paid", "someone who understands math", "Luke Tembani"',
   'cards               - your current cards',
   'meet [n]            - ask for the intro on card n (default 1)',
   'skip [n] / save [n] - clear or keep a card',
+  'unskip <name>       - bring a skipped person back',
   'accept / decline / later - answer an intro request',
-  'more                - where to look outside LINKUP when nobody fits',
+  'outside             - search the open web when nobody on LINKUP fits',
+  'more                - where else to look, offline',
   'prefs               - what you are open to',
   'unlink              - disconnect this chat',
   'help                - this list',
@@ -113,7 +116,7 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
       if (uid) {
         const user = await loadUser(uid);
         const name = profileFacts(user)?.name?.split(' ')[0] || 'there';
-        return { text: `Linked. Hi ${name}, this chat is now your Linky line. Tell me who you need and I answer right away.\n\n${HELP}` };
+        return { text: `Linked. Hi ${name} - this chat is now your Linky line. Tell me who you need (a role, a skill or a name) and I answer right away.\n\n${HELP}` };
       }
       if (!lower.startsWith('/start')) return { text: 'That code did not work (codes last 15 minutes). Open LINKUP, go to the Linky tab, tap Connect Telegram / WhatsApp and send me the new code.' };
     }
@@ -189,8 +192,24 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
     return { text: r.status === 'accepted' ? `Done - you and ${pending.requesterName} are connected. Chat: ${APP_URL}/chat/${r.matchId}` : r.status === 'snoozed' ? 'Parked for 2 weeks.' : 'Declined. They will not be suggested to you again.' };
   }
 
-  // ---- "more" after a no-match: where to look outside LINKUP
-  if (cmd === 'more' || cmd === 'outside' || cmd === 'where') {
+  // ---- "outside" after a no-match: real public profiles from the open web (SerpApi, budgeted)
+  if (/^(outside|search outside|web|internet|google)( .*)?$/.test(cmd)) {
+    const state = await loadState(uid);
+    const explicit = cmd.replace(/^(outside|search outside|web|internet|google)\s*/, '').trim();
+    const need = explicit || state.lastAsk?.need || '';
+    if (!need) return { text: 'Ask me who you need first, then say OUTSIDE.' };
+    try {
+      const me = profileFacts(user) || {};
+      const r = await scout(uid, need, { place: state.lastAsk?.location || me.city || me.country || '' });
+      if (!r.people?.length) return { text: r.reply };
+      const lines = r.people.slice(0, 8).map((p, i) => `${i + 1}. ${p.name}${p.headline ? ` - ${p.headline}` : ''}\n   ${p.url}`);
+      return { text: `${r.reply}\n\n${lines.join('\n')}${r.people.length > 8 ? `\n(+${r.people.length - 8} more in the app)` : ''}\n\nFirst line you could send: "${r.people[0].opener}"` };
+    } catch (err) {
+      return { text: `Outside search hit a snag: ${String(err?.message || err)}` };
+    }
+  }
+  // ---- "more": where to look offline when nobody fits
+  if (cmd === 'more' || cmd === 'where') {
     const state = await loadState(uid);
     const last = state.lastAsk;
     if (!last?.need) return { text: 'Ask me who you need first.' };
@@ -207,7 +226,7 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
   try {
     const out = await ask(uid, message, { userDoc: user, source: channel });
     if (!out.cards.length) return { text: out.reply };
-    return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n')}\n\nReply "meet 1" (or 2, 3...) and I will ask them.`, cards: out.cards };
+    return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n')}${/meet 1/.test(out.reply) ? '' : '\n\nReply "meet 1" (or 2, 3...) and I will ask them.'}`, cards: out.cards };
   } catch (err) {
     return { text: String(err?.message || 'That did not work.') };
   }
@@ -341,6 +360,14 @@ async function handleApp(req, res) {
       case 'ask': out = await ask(uid, body.message, { source: 'app' }); break;
       case 'facts': out = await setFacts(uid, { notes: body.notes, skills: body.skills, lookingFor: body.lookingFor }); break;
       case 'pointers': out = await pointers(uid, String(body.need || '')); break;
+      case 'scout': {
+        const u = await loadUser(uid);
+        const me = profileFacts(u) || {};
+        const state = await loadState(uid);
+        const need = String(body.need || state.lastAsk?.need || '');
+        out = await scout(uid, need, { place: String(body.place || state.lastAsk?.location || me.city || me.country || '') });
+        break;
+      }
       case 'meet': out = await meet(uid, String(body.cardId || '')); break;
       case 'card': {
         const status = ['skip', 'saved', 'new'].includes(body.status) ? body.status : 'skip';

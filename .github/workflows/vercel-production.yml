@@ -41,6 +41,17 @@ jobs:
           done
           exit "$missing"
 
+      - name: Sync server secrets to Vercel (only the ones set in GitHub)
+        env:
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+        shell: bash
+        run: |
+          if [ -n "$SERPAPI_KEY" ]; then
+            npx vercel@latest env add SERPAPI_KEY production --value="$SERPAPI_KEY" --force --yes --token="$VERCEL_TOKEN" && echo "SERPAPI_KEY synced"
+          else
+            echo "SERPAPI_KEY not set in GitHub secrets - skipping"
+          fi
+
       - name: Pull Vercel production environment
         run: npx vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
 
