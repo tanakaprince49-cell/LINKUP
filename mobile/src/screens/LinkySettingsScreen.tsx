@@ -138,7 +138,7 @@ export default function LinkySettingsScreen({ navigation }: any) {
         />
 
         <Text style={[styles.section, { color: textColor(isDark, 'muted') }]}>LINKY ON TELEGRAM & WHATSAPP</Text>
-        <Text style={[styles.fine, { color: textColor(isDark, 'muted'), marginBottom: 8 }]}>Same Linky, in your chat app: new intents, the daily brief, Meet / Accept with one tap. Link with a 6-character code (valid 15 minutes).</Text>
+        <Text style={[styles.fine, { color: textColor(isDark, 'muted'), marginBottom: 8 }]}>Same Linky, in your chat app: ask who you need and get the answer right there, Meet / Accept with one tap. Link with a 6-character code (valid 15 minutes).</Text>
         {(['telegram', 'whatsapp'] as const).map((channel) => {
           const linked = !!home?.channels?.[channel];
           return (

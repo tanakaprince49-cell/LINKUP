@@ -1,32 +1,15 @@
-// Client for /api/linky (intents, intro cards, double opt-in intros, brief,
-// audit, bot linking). Server-side only writes: the app never touches the
-// intents / introSuggestions / intros collections directly.
+// Client for /api/linky (ask -> immediate cited answer, intro cards, double
+// opt-in intros, audit, editable facts, bot linking). Server-side only writes:
+// the app never touches the introSuggestions / intros collections directly.
 import { Platform } from 'react-native';
 import { auth } from './firebase';
 import { linkupWebBaseUrl } from './profileLinks';
 
 export type IntentOffer = 'paid' | 'equity' | 'advisory' | 'coffee';
-export type IntentUrgency = 'this_week' | 'this_month' | 'whenever';
-
-export type LinkyIntent = {
-  id: string;
-  need: string;
-  constraints: string[];
-  offer: IntentOffer;
-  location: string;
-  remote: boolean;
-  urgency: IntentUrgency;
-  status: 'active' | 'closed' | 'expired';
-  source: string;
-  matchCount: number;
-  createdAt: number;
-  expiresAt: number;
-  lastMatchedAt: number | null;
-};
 
 export type LinkyCard = {
   id: string;
-  intentId: string;
+  askId: string;
   need: string;
   targetUid: string;
   targetName: string;
@@ -41,6 +24,7 @@ export type LinkyCard = {
   status: 'new' | 'saved' | 'skip' | 'meet' | 'declined';
   introId?: string;
   createdAt: number;
+  updatedAt?: number;
 };
 
 export type LinkyIntro = {
@@ -61,30 +45,45 @@ export type LinkyIntro = {
   createdAt: number;
 };
 
+export type LinkyNearest = { uid: string; name: string; pic: string; role: string; city: string };
+
+export type LinkyAsk = {
+  id: string;
+  need: string;
+  reply: string;
+  cardIds: string[];
+  none: boolean;
+  nearest: LinkyNearest[];
+  checked: number;
+  createdAt: number;
+};
+
+export type LinkyAskResult = LinkyAsk & { cards: LinkyCard[]; cached: boolean; asksLeft: number };
+
+export type LinkyToldFacts = { notes: string; skills: string[]; lookingFor: string[]; updatedAt: number | null };
+
 export type LinkyHome = {
   name: string;
   plus: boolean;
-  limits: { activeIntents: number; meetsPerDay: number | null; meetsUsedToday: number };
-  intents: LinkyIntent[];
+  limits: { meetsPerDay: number | null; meetsUsedToday: number; asksPerDay: number; asksUsedToday: number };
   cards: LinkyCard[];
   inbound: LinkyIntro[];
   sent: LinkyIntro[];
   prefs: { openTo: IntentOffer[]; inboundCap: number };
   channels: { telegram: boolean; whatsapp: boolean };
-  intake: { history: Array<{ role: 'user' | 'assistant'; content: string }>; draft: Partial<LinkyIntent> | null } | null;
+  lastAsk: LinkyAsk | null;
+  facts: LinkyToldFacts;
   brief: string;
 };
 
-export type IntakeResult = { reply: string; ready: boolean; intent?: Partial<LinkyIntent> | null };
-
 export type LinkyAudit = {
   facts: Record<string, any>;
+  told: LinkyToldFacts;
   signals: Record<string, any>;
-  intents: LinkyIntent[];
+  asks: Array<{ id: string; need: string; cards: number; none: boolean; source: string; createdAt: number }>;
   cards: Array<{ id: string; targetName: string; why: string; status: string; createdAt: number }>;
   introsSent: LinkyIntro[];
   introsReceived: LinkyIntro[];
-  intakeTurns: number;
   sources: string[];
   notUsed: string[];
 };
@@ -114,14 +113,12 @@ export async function linkyCall<T = any>(action: string, payload: Record<string,
 }
 
 export const linkyHome = () => linkyCall<LinkyHome>('home');
-export const linkyIntake = (message: string) => linkyCall<IntakeResult>('intake', { message });
-export const linkyIntakeReset = () => linkyCall<{ ok: boolean }>('intakeReset');
-export const linkySaveIntent = (intent: Partial<LinkyIntent>) => linkyCall<{ intent: LinkyIntent; cards: LinkyCard[] }>('saveIntent', { intent });
-export const linkyCloseIntent = (intentId: string) => linkyCall<{ ok: boolean }>('closeIntent', { intentId });
+export const linkyAsk = (message: string) => linkyCall<LinkyAskResult>('ask', { message });
 export const linkyMeet = (cardId: string) => linkyCall<{ introId?: string; matchId?: string; pending?: boolean; opener?: string; meetsLeft?: number | null; alreadyRequested?: boolean }>('meet', { cardId });
 export const linkyCard = (cardId: string, status: 'skip' | 'saved') => linkyCall<LinkyCard>('card', { cardId, status });
 export const linkyRespond = (introId: string, decision: 'accept' | 'decline' | 'later') => linkyCall<{ status: string; matchId?: string }>('respond', { introId, decision });
 export const linkyPrefs = (prefs: { openTo?: IntentOffer[]; inboundCap?: number }) => linkyCall<{ ok: boolean }>('prefs', prefs);
+export const linkyFacts = (facts: { notes: string; skills: string[]; lookingFor: string[] }) => linkyCall<{ ok: boolean; facts: LinkyToldFacts }>('facts', facts);
 export const linkyAudit = () => linkyCall<LinkyAudit>('audit');
 export const linkyForget = () => linkyCall<{ ok: boolean }>('forget');
 export const linkyLinkCode = () => linkyCall<{ code: string; expiresInMinutes: number }>('linkCode');
@@ -132,9 +129,4 @@ export const OFFER_LABELS: Record<IntentOffer, string> = {
   equity: 'Equity',
   advisory: 'Advisory',
   coffee: 'Coffee',
-};
-export const URGENCY_LABELS: Record<IntentUrgency, string> = {
-  this_week: 'This week',
-  this_month: 'This month',
-  whenever: 'Whenever',
 };

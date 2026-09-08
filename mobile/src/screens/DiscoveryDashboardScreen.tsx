@@ -13,8 +13,7 @@ import { rankLeague } from '../lib/builderLeague';
 import { loadLeaguePool } from '../lib/leaguePool';
 import { getBestOpportunityAlerts, getRotatedOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, getRotatedProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, UserCheck, Megaphone, Globe, Lock, Sparkles } from 'lucide-react-native';
-import { hasLinkupPro } from '../lib/paywall';
+import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, UserCheck, Megaphone, Globe } from 'lucide-react-native';
 import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS, websiteDisplay } from '../lib/campaigns';
 import { SponsoredSlot } from '../components/SponsoredCard';
 import { shareLinkupInvite } from '../lib/activation';
@@ -105,7 +104,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
   // Hub ad strip: one sponsored slot for free members; PLUS members never see it.
   const [hubSponsor, setHubSponsor] = useState<Campaign | null>(null);
-  const viewerIsPro = hasLinkupPro(me);
   // PLUS is ad-free; founder/admin accounts still see placements to QA them.
   const adsHiddenForViewer = isSponsoredHiddenForViewer(me, { email: user?.email, isAdmin: (me as any)?.isAdmin });
   const { theme } = useTheme();
@@ -530,13 +528,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   <Flame size={14} color="#000" />
                   <Text style={[styles.heroBtnText, { color: '#000' }]}>Daily 5</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate('LinkyHome')}
-                  style={[styles.heroBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
-                >
-                  <Sparkles size={14} color={textColor(isDark)} />
-                  <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>Linky</Text>
-                </TouchableOpacity>
                 <View style={[styles.heroStatus, { backgroundColor: HOME_GOLD_TINT }]}>
                   <Star size={12} color={HOME_INK} />
                   <Text style={styles.heroStatusText}>{aiLoading ? 'UPDATING...' : 'READY'}</Text>
@@ -634,40 +625,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               )}
             </View>
           </View>
-
-          {/* Linky is the main character. Free members see what he would do
-              for them right now and that he is one tap (and one plan) away;
-              PLUS members get straight into the chat. */}
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate('Linky')}
-            style={[styles.linkyCard, { backgroundColor: isDark ? 'rgba(34,197,94,0.08)' : '#F0FDF4' }]}
-          >
-            <View style={styles.linkyCardLeft}>
-              <View style={styles.linkyCardAvatar}>
-                <Text style={styles.linkyCardAvatarText}>AI</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.nameRow}>
-                  <Text style={[styles.name, { color: textColor(isDark) }]}>Linky AI</Text>
-                  <VerifiedBadge size={18} />
-                  {!viewerIsPro && <Lock size={12} color={textColor(isDark, 'muted')} />}
-                </View>
-                <Text style={[styles.handle, { color: HOME_GOLD_DEEP }]}>@linky</Text>
-                <Text style={[styles.meta, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>
-                  {viewerIsPro
-                    ? 'Ask me for a co-founder, an investor or a warm intro — I already know who fits you.'
-                    : `Hey ${displayNameFor(me).split(' ')[0] || 'there'} — I found people who fit what you're building. Unlock me and I'll introduce you.`}
-                </Text>
-              </View>
-            </View>
-            <View style={[styles.linkyChip, { backgroundColor: HOME_GOLD,
-    borderWidth: 1,
-    borderColor: HOME_LINE }]}>
-              {!viewerIsPro && <Sparkles size={10} color="#000" />}
-              <Text style={styles.linkyChipText}>{viewerIsPro ? 'Chat' : 'Unlock'}</Text>
-            </View>
-          </TouchableOpacity>
 
           <Section
             title="Today’s 2 picks"
@@ -1147,61 +1104,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0,
-    color: '#000',
-  },
-  linkyCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginTop: 8,
-    borderRadius: 16,
-    padding: 14,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.2)',
-    shadowColor: '#22C55E',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  linkyCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  linkyCardAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: '#22C55E',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#22C55E',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  linkyCardAvatarText: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#FFF',
-    letterSpacing: 1,
-  },
-  linkyChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  linkyChipText: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1,
     color: '#000',
   },
   rankBadge: {

@@ -2,9 +2,13 @@
 // (any RSA key; project_id linkup-e0906) at FAKE_SA_JSON, then from repo root:
 //   node functions/tests/linky-e2e.mjs
 // End-to-end exercise of api/_linky.js + api/linky.js against the emulator.
+// No Gemini key is set, so every path below is the zero-token path.
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8089';
 process.env.FIREBASE_SERVICE_ACCOUNT = (await import('node:fs')).readFileSync(process.env.FAKE_SA_JSON || '/tmp/fake-sa.json','utf8');
 process.env.TELEGRAM_BOT_TOKEN = '';
+process.env.GEMINI_API_KEY = '';
+process.env.EXPO_PUBLIC_GEMINI_API_KEY = '';
+process.env.GOOGLE_API_KEY = '';
 const L = await import('../../api/_linky.js');
 const handler = (await import('../../api/linky.js')).default;
 await fetch('http://127.0.0.1:8089/emulator/v1/projects/linkup-e0906/databases/(default)/documents', { method: 'DELETE' });
@@ -15,6 +19,7 @@ const users = {
   bob: { displayName: 'Bob Chikwanha', occupation: 'Flutter developer', company: 'Freelance', city: 'Harare', country: 'Zimbabwe', skills: ['flutter', 'dart', 'firebase'], industries: ['fintech', 'mobile'], bio: 'Ship Flutter apps for African fintechs', onboarded: true, isVisible: true },
   cara: { displayName: 'Cara Dube', occupation: 'Designer', city: 'Bulawayo', country: 'Zimbabwe', skills: ['figma', 'branding'], industries: ['retail'], bio: 'Brand design for shops', onboarded: true, isVisible: true },
   dan: { displayName: 'Dan Ncube', occupation: 'Backend engineer', city: 'Harare', country: 'Zimbabwe', skills: ['node', 'flutter'], industries: ['fintech'], bio: 'APIs and payments', onboarded: true, isVisible: true },
+  eve: { displayName: 'Eve Mutasa', occupation: '', city: 'Harare', country: 'Zimbabwe', skills: [], industries: [], bio: '', onboarded: true, isVisible: true },
 };
 for (const [uid, u] of Object.entries(users)) {
   await db.collection('users').doc(uid).set({ uid, ...u });
@@ -23,25 +28,38 @@ for (const [uid, u] of Object.entries(users)) {
 await db.collection('userPrivate').doc('bob').set({ pushTokens: [] });
 const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exit(1); } console.log('ok  -', m); };
 
-// intake (no Gemini key -> heuristic)
-let r = await L.intake('alice', 'I need a developer', { source: 'app' });
-assert(!r.ready && /vague/i.test(r.reply), 'pushback on vague intent: ' + r.reply);
-r = await L.intake('alice', 'A Flutter developer to build a fintech MVP in Harare, paid, this month');
+// ---- ask: greeting -> coach, no budget, no cards
+let r = await L.ask('alice', 'hi linky');
+assert(r.none && !r.cards.length && /Tell me who you need/.test(r.reply) && r.asksLeft === 10, 'greeting -> coaching reply, no budget used');
+// ---- ask: immediate cited answer
+r = await L.ask('alice', 'I need a Flutter developer in Harare for a paid fintech MVP');
 console.log('    reply:', r.reply);
-assert(r.ready && r.intent && r.intent.offer === 'paid', 'intake ready with paid offer');
-// save -> immediate match pass (heuristic, no Gemini)
-const saved = await L.saveIntent('alice', r.intent, { source: 'app' });
-console.log('    cards:', saved.cards.map((c) => `${c.targetName} :: ${c.why}`));
-assert(saved.cards.length >= 1 && saved.cards.some((c) => c.targetUid === 'bob'), 'bob (flutter, Harare, fintech) is a cited card');
-assert(!saved.cards.some((c) => c.targetUid === 'cara'), 'cara (designer, no overlap) not a card');
-assert(!saved.cards.some((c) => c.targetUid === 'alice'), 'never matches yourself');
-// free limit = 1 active intent
-let limited = null; try { await L.saveIntent('alice', r.intent); } catch (e) { limited = e; }
-assert(limited && limited.code === 'intent_limit', 'free tier blocked at 2nd intent: ' + limited?.message);
-// home
+console.log('    cards:', r.cards.map((c) => `${c.targetName} :: ${c.why}`));
+assert(!r.cached && r.cards.length >= 1 && r.cards[0].targetUid === 'bob', 'bob (flutter, Harare, fintech) is the first cited card, immediately');
+assert(r.cards.every((c) => c.why.length > 12 && c.opener.length > 10), 'every card has a cited why and an opener');
+assert(!r.cards.some((c) => c.targetUid === 'cara'), 'cara (designer, no overlap) not a card');
+assert(!r.cards.some((c) => c.targetUid === 'alice'), 'never matches yourself');
+assert(!r.cards.some((c) => c.targetUid === 'eve'), 'eve (empty profile) is never cited');
+assert(r.asksLeft === 9, 'one ask consumed');
+const firstAskCards = r.cards.map((c) => c.id);
+// ---- same ask again -> cached, no budget
+const again = await L.ask('alice', 'I need a Flutter developer in Harare for a paid fintech MVP');
+assert(again.cached && again.cards.map((c) => c.id).join() === firstAskCards.join() && again.asksLeft === 9, 'repeat ask is served from cache with the same cards');
+// ---- nobody fits -> graceful, no error, nearest people, budget consumed
+r = await L.ask('alice', 'a quantum cryptography professor from Oslo');
+console.log('    reply:', r.reply);
+assert(r.none && !r.cards.length && /Nobody on LINKUP fits/.test(r.reply) && r.checked === 4, 'no-match ask answers gracefully with member count');
+assert(Array.isArray(r.nearest) && r.nearest.length >= 1 && !r.nearest.some((n) => n.uid === 'alice'), 'nearest people offered instead of an error: ' + r.nearest.map((n) => n.name).join(', '));
+assert(r.asksLeft === 8, 'no-match ask still counts');
+// ---- name lookup
+r = await L.ask('alice', 'connect me with Cara Dube');
+assert(r.cards.length === 1 && r.cards[0].targetUid === 'cara' && /Cara Dube/.test(r.cards[0].why), 'asking for a person by name finds them: ' + r.cards[0].why);
+// ---- home
 let h = await L.home('alice');
-assert(h.intents.length === 1 && h.cards.length === saved.cards.length && h.limits.meetsPerDay === 3, 'home shows intent, cards, 3 meets/day');
-// meet -> intro pending + notification to bob
+assert(h.limits.meetsPerDay === 3 && h.limits.asksPerDay === 10 && h.limits.asksUsedToday === 3 && h.lastAsk && h.lastAsk.need === 'connect me with Cara Dube', 'home shows limits + last ask');
+assert(!('intents' in h), 'home has no intents');
+assert(h.cards.some((c) => c.targetUid === 'bob') && h.cards.some((c) => c.targetUid === 'cara'), 'cards persist across asks');
+// ---- meet -> intro pending + notification to bob
 const bobCard = h.cards.find((c) => c.targetUid === 'bob');
 const m = await L.meet('alice', bobCard.id);
 assert(m.pending && m.introId === 'alice_bob' && m.meetsLeft === 2, 'meet creates pending intro, 2 meets left');
@@ -49,13 +67,12 @@ let notes = await db.collection('notifications').where('userId', '==', 'bob').ge
 assert(notes.size === 1 && notes.docs[0].data().type === 'intro_request' && notes.docs[0].data().requestId === 'alice_bob', 'bob got intro_request notification');
 h = await L.home('bob');
 assert(h.inbound.length === 1 && h.inbound[0].requesterName === 'Alice Moyo', 'bob sees inbound intro');
-// meet budget: 3/day
-const other = h.cards; // none
-await db.collection('linkyState').doc('alice').set({ meets: { day: L.dayKey(), count: 3 } }, { merge: true });
-let mb = null; try { await L.meet('alice', bobCard.id); } catch (e) { mb = e; }
-assert(mb === null, 'already-requested card returns early instead of consuming budget');
-const danCard = h2cards(); function h2cards() { return null; }
-// accept -> match + approved connectionRequest + opener message + notification to alice
+// ---- re-asking keeps the requested card (status meet) instead of duplicating bob
+await db.collection('linkyState').doc('alice').set({ lastAsk: null }, { merge: true });
+r = await L.ask('alice', 'Flutter developer Harare fintech');
+const bobAgain = r.cards.filter((c) => c.targetUid === 'bob');
+assert(bobAgain.length === 1 && bobAgain[0].id === bobCard.id && bobAgain[0].status === 'meet', 'same person reuses the live card (no duplicates)');
+// ---- accept -> match + approved connectionRequest + opener message + notification to alice
 const acc = await L.respond('bob', 'alice_bob', 'accept');
 assert(acc.status === 'accepted' && acc.matchId === 'alice_bob', 'accept -> matchId alice_bob');
 const match = await db.collection('matches').doc('alice_bob').get();
@@ -63,13 +80,12 @@ assert(match.exists && match.data().userIds.join() === 'alice,bob' && match.data
 const cr = await db.collection('connectionRequests').doc('alice_bob').get();
 assert(cr.exists && cr.data().status === 'approved', 'approved connectionRequest unlocks chat gate');
 const msgs = await db.collection('matches').doc('alice_bob').collection('messages').get();
-assert(msgs.size === 1 && /Linky here/.test(msgs.docs[0].data().content), 'opener message from Linky: ' + msgs.docs[0].data().content);
+assert(msgs.size === 1 && /Linky here/.test(msgs.docs[0].data().content), 'opener message from Linky');
 notes = await db.collection('notifications').where('userId', '==', 'alice').get();
 assert(notes.docs.some((d) => d.data().type === 'intro_accepted' && d.data().matchId === 'alice_bob'), 'alice got intro_accepted with matchId');
-// decline path (dan asks bob; bob declines -> mute both ways)
-await db.collection('linkyState').doc('alice').delete();
-const danIntent = await L.saveIntent('dan', { need: 'Flutter developer for payments app in Harare', offer: 'paid', location: 'Harare', urgency: 'this_week' });
-const bobFromDan = danIntent.cards.find((c) => c.targetUid === 'bob');
+// ---- decline path (dan asks bob; bob declines -> mute both ways)
+const danAsk = await L.ask('dan', 'Flutter developer for a payments app in Harare, paid');
+const bobFromDan = danAsk.cards.find((c) => c.targetUid === 'bob');
 assert(bobFromDan, 'dan gets bob card');
 await L.meet('dan', bobFromDan.id);
 const dec = await L.respond('bob', 'dan_bob', 'decline');
@@ -78,45 +94,65 @@ const bobState = await L.loadState('bob');
 assert(bobState.muted && bobState.muted.dan, 'bob muted dan');
 const danHome = await L.home('dan');
 assert(danHome.cards.find((c) => c.id === bobFromDan.id).status === 'declined', 'dan card shows declined');
-// inbound cap: bob cap -> 0 excludes him from new matching
+r = await L.ask('dan', 'Flutter developer in Harare');
+assert(!r.cards.some((c) => c.targetUid === 'bob'), 'declined person never comes back for dan');
+// ---- inbound cap 0 excludes from matching; openTo filter
 await L.setPrefs('bob', { inboundCap: 0 });
 await db.collection('introSuggestions').doc('alice').delete();
-await db.collection('intents').doc(saved.intent.id).set({ lastMatchedAt: null }, { merge: true });
-const ctx = await L.buildMatchContext();
-const again = await L.matchIntent({ id: saved.intent.id, ...saved.intent, ownerId: 'alice' }, ctx);
-assert(!again.some((c) => c.targetUid === 'bob'), 'bob excluded when inbound cap is 0 (cards: ' + again.map((c) => c.targetName) + ')');
-// openTo filter: dan only open to equity -> paid intents skip him
+await db.collection('linkyState').doc('alice').set({ lastAsk: null }, { merge: true });
+r = await L.ask('alice', 'Flutter developer Harare');
+assert(!r.cards.some((c) => c.targetUid === 'bob') && r.cards.some((c) => c.targetUid === 'dan'), 'bob excluded when inbound cap is 0, dan still cited');
 await L.setPrefs('dan', { openTo: ['equity'] });
-await db.collection('introSuggestions').doc('alice').delete();
-const ctx2 = await L.buildMatchContext();
-const again2 = await L.matchIntent({ id: saved.intent.id, ...saved.intent, ownerId: 'alice' }, ctx2);
-assert(!again2.some((c) => c.targetUid === 'dan'), 'dan excluded by openTo=[equity] for a paid intent');
-// audit + forget
-const a = await L.audit('alice');
-assert(a.facts.name === 'Alice Moyo' && a.intents.length === 1 && a.introsSent.length === 1, 'audit lists facts, intents, intros');
-// bot linking
-const { code } = await L.createLinkCode('bob');
+await db.collection('linkyState').doc('alice').set({ lastAsk: null }, { merge: true });
+r = await L.ask('alice', 'Flutter developer Harare, paid work');
+assert(!r.cards.some((c) => c.targetUid === 'dan'), 'dan excluded by openTo=[equity] for a paid ask');
+// ---- editable facts: what you tell Linky is matched and cited
+await L.setFacts('eve', { notes: 'I run growth for a solar startup', skills: ['solar', 'growth marketing'], lookingFor: ['angel investors'] });
+const evTold = L.toldFacts(await L.loadState('eve'));
+assert(evTold.skills.length === 2 && evTold.notes.startsWith('I run growth'), 'facts saved');
+r = await L.ask('alice', 'someone who knows solar and growth marketing');
+assert(r.cards.length === 1 && r.cards[0].targetUid === 'eve' && /solar|growth/i.test(r.cards[0].why), 'told facts make eve matchable + cited: ' + r.cards[0].why);
+const a = await L.audit('eve');
+assert(a.told.skills.includes('solar') && a.facts.name === 'Eve Mutasa' && Array.isArray(a.asks), 'audit returns told facts + profile facts + asks');
+const aliceAudit = await L.audit('alice');
+assert(aliceAudit.asks.length >= 5 && aliceAudit.asks[0].need === 'someone who knows solar and growth marketing', 'audit lists asks newest first');
+// ---- ask budget: free 10/day -> 402 code
+await db.collection('linkyState').doc('alice').set({ asks: { day: L.dayKey(), count: 10 }, lastAsk: null }, { merge: true });
+let lim = null; try { await L.ask('alice', 'designer in Bulawayo'); } catch (e) { lim = e; }
+assert(lim && lim.code === 'ask_limit', 'free tier blocked at 11th ask: ' + lim?.message);
+await db.collection('linkyState').doc('alice').set({ asks: { day: L.dayKey(), count: 0 } }, { merge: true });
+// ---- bot linking + bot brain (ask answered inline)
+const { code } = await L.createLinkCode('alice');
 const linkedUid = await L.consumeLinkCode(code.toLowerCase(), 'telegram', '12345');
-assert(linkedUid === 'bob', 'link code (case-insensitive) links telegram chat to bob');
-assert((await L.botUserFor('telegram', '12345')).uid === 'bob', 'botUsers row exists');
-assert((await L.loadState('bob')).channels.telegram === '12345', 'linkyState.channels.telegram set');
+assert(linkedUid === 'alice', 'link code (case-insensitive) links telegram chat to alice');
+assert((await L.botUserFor('telegram', '12345')).uid === 'alice', 'botUsers row exists');
 assert((await L.consumeLinkCode(code, 'telegram', '999')) === null, 'code is single-use');
-// cron: expiry + brief
-await db.collection('intents').doc(saved.intent.id).set({ expiresAt: new Date(Date.now() - 1000), lastMatchedAt: null }, { merge: true });
-const cron = await L.runCron({ batch: 3 });
+const { botReplyForTest } = await import('../../api/linky.js');
+let br = await botReplyForTest('telegram', '12345', 'designer in Bulawayo');
+console.log('    bot:', br.text.split('\n')[0]);
+assert(br.cards?.length === 1 && br.cards[0].targetUid === 'cara' && /meet 1/.test(br.text), 'bot answers an ask inline with numbered cards');
+br = await botReplyForTest('telegram', '12345', 'meet 1');
+assert(/Asked Cara Dube/.test(br.text), 'bot "meet 1" targets the first card of the last answer: ' + br.text);
+br = await botReplyForTest('telegram', '12345', 'a blockchain lawyer in Lagos');
+assert(!br.cards && /Nobody on LINKUP fits/.test(br.text), 'bot no-match is graceful');
+br = await botReplyForTest('telegram', '12345', 'cards');
+assert(/Your cards/.test(br.text), 'bot "cards" lists live cards');
+// ---- cron: housekeeping only
+await db.collection('intros').doc('alice_cara').set({ expiresAt: new Date(Date.now() - 1000) }, { merge: true });
+const cron = await L.runCron();
 console.log('    cron:', JSON.stringify(cron));
-assert(cron.expiredIntents === 1, 'expired alice intent');
-// handler-level: cron auth + app auth
+assert(cron.expiredIntros === 1 && !('activeIntents' in cron), 'cron expires stale intros and matches nothing');
+// ---- handler-level: cron auth + app auth
 const mkRes = () => { const r = { code: 0, body: null, headers: {} }; r.setHeader = (k, v) => { r.headers[k] = v; }; r.status = (c) => { r.code = c; return r; }; r.json = (b) => { r.body = b; return r; }; r.end = () => r; r.send = (b) => { r.body = b; return r; }; return r; };
 let res = mkRes();
 await handler({ method: 'POST', query: { action: 'cron' }, headers: {}, body: {} }, res);
 assert(res.code === 401, 'cron without token -> 401');
 const { cronToken } = await import('../../api/linky.js');
 res = mkRes();
-await handler({ method: 'POST', query: { action: 'cron', batch: '2' }, headers: { 'x-linky-cron': cronToken() }, body: {} }, res);
-assert(res.code === 200 && 'activeIntents' in res.body, 'cron with derived token -> 200');
+await handler({ method: 'POST', query: { action: 'cron' }, headers: { 'x-linky-cron': cronToken() }, body: {} }, res);
+assert(res.code === 200 && 'expiredIntros' in res.body, 'cron with derived token -> 200');
 res = mkRes();
-await handler({ method: 'POST', query: {}, headers: {}, body: { action: 'home' } }, res);
+await handler({ method: 'POST', query: {}, headers: {}, body: { action: 'ask', message: 'x' } }, res);
 assert(res.code === 401, 'app action without idToken -> 401');
 res = mkRes();
 await handler({ method: 'POST', query: { channel: 'telegram' }, headers: {}, body: { message: { chat: { id: 1 }, text: 'hi' } } }, res);
@@ -128,5 +164,8 @@ process.env.WHATSAPP_VERIFY_TOKEN = 'secret1';
 res = mkRes();
 await handler({ method: 'GET', query: { channel: 'whatsapp', 'hub.mode': 'subscribe', 'hub.verify_token': 'secret1', 'hub.challenge': '42' }, headers: {} }, res);
 assert(res.code === 200 && res.body === '42', 'whatsapp verify handshake echoes challenge');
+// ---- forget
+const f = await L.forget('alice');
+assert(f.ok && !(await db.collection('linkyState').doc('alice').get()).exists && !(await db.collection('botUsers').doc('telegram_12345').get()).exists, 'forget wipes state, cards, bot link');
 console.log('\nALL PASSED');
 process.exit(0);

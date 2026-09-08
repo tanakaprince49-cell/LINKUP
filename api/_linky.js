@@ -1,12 +1,18 @@
-// Linky core: intents, hourly intro matching, double opt-in intros, daily brief,
-// audit, bot linking. Shared by api/linky.js (app + Telegram + WhatsApp).
+// Linky core: ask -> immediate cited answer, double opt-in intros, audit,
+// editable "what Linky knows", bot linking. Shared by api/linky.js
+// (app + Telegram + WhatsApp).
+//
+// No intents, no waiting: every ask is answered in the same request from the
+// members who are on LINKUP right now. Gemini is only called when there are
+// at least two plausible candidates to rank (never for greetings, vague asks,
+// zero-candidate asks, repeats of the same ask, or over-budget asks), and a
+// Gemini failure degrades to the cited template path instead of an error.
 //
 // Every write in here happens with the Admin SDK, so the client never needs
 // rules for these collections (they stay server-only):
-//   intents/{id}            one "who I need" record, expires after 30 days
 //   introSuggestions/{uid}  Linky's cards for a member (cite-or-skip "why")
 //   intros/{id}             double opt-in: requester Meet -> target Accept
-//   linkyState/{uid}        budgets, mutes, prefs, intake session, channels
+//   linkyState/{uid}        budgets, mutes, prefs, facts you told Linky, last ask, channels
 //   botUsers/{channel_chat} Telegram / WhatsApp chat -> uid
 //   botLinks/{code}         short-lived codes that link a chat to an account
 import crypto from 'node:crypto';
@@ -14,18 +20,19 @@ import { getAdmin, getDb } from './_firebaseAdmin.js';
 import { geminiText, getGeminiKey, localRank, compactProfile } from './_gemini.js';
 
 export const LIMITS = {
-  free: { activeIntents: 1, meetsPerDay: 3, newCardsPerDay: 3 },
-  plus: { activeIntents: 3, meetsPerDay: 100000, newCardsPerDay: 5 },
+  free: { asksPerDay: 10, meetsPerDay: 3 },
+  plus: { asksPerDay: 60, meetsPerDay: 100000 },
   inboundPerWeek: 5,
-  intentDays: 30,
   introDays: 7,
   snoozeDays: 14,
-  rematchHours: 23,
-  shortlist: 10,
+  skipDays: 14,
+  shortlist: 8,
+  cardsPerAsk: 5,
+  askCacheHours: 12,
 };
 export const OFFERS = ['paid', 'equity', 'advisory', 'coffee'];
-export const URGENCIES = ['this_week', 'this_month', 'whenever'];
 export const CRON_UID = 'linky-cron';
+export const APP_URL = 'https://linkup-muqu.vercel.app';
 const LINKY_FROM = { fromId: 'linky-ai', fromName: 'Linky', fromPic: '' };
 const DAY_MS = 86400000;
 
@@ -48,9 +55,10 @@ const list = (v, max, each = 60) => (Array.isArray(v) ? v : typeof v === 'string
   .map((x) => text(x, each)).filter(Boolean).slice(0, max);
 const hosted = (v) => { const s = text(v, 2048); return /^https?:\/\//i.test(s) && !s.startsWith('data:') ? s : ''; };
 const uniq = (arr) => Array.from(new Set(arr));
+const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || 'there';
 export const isValidId = (id) => /^[a-zA-Z0-9_-]{1,128}$/.test(String(id || ''));
 
-const STOP = new Set('me for up in a an the with and or to of is i my by on at who someone who can that this need want looking find help build some any people person good great experienced strong senior junior based from about into been are was be it its as'.split(' '));
+const STOP = new Set('me for up in a an the with and or to of is i my by on at who someone who can that this need want looking find help build some any people person good great experienced strong senior junior based from about into been are was be it its as please hi hey hello linky you your get give show connect introduce intro know anyone anybody there here have has do does would could should like want wants needs'.split(' '));
 const tokens = (s) => uniq(String(s || '').toLowerCase().replace(/[^a-z0-9+#.\s-]/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)));
 
 // ---------------------------------------------------------------- users
@@ -90,6 +98,26 @@ export function profileFacts(p) {
   };
 }
 
+// What the member told Linky directly (editable on "What Linky knows about you").
+export function toldFacts(state) {
+  const f = state?.facts || {};
+  return { notes: text(f.notes, 800), skills: list(f.skills, 20, 40), lookingFor: list(f.lookingFor, 10, 80), updatedAt: toMillis(f.updatedAt) || null };
+}
+
+// Profile facts + told facts, merged the way the matcher sees them.
+function mergedFacts(p, state) {
+  const base = profileFacts(p);
+  if (!base) return null;
+  const told = toldFacts(state);
+  return {
+    ...base,
+    skills: uniq([...base.skills, ...told.skills]).slice(0, 24),
+    lookingFor: uniq([...base.lookingFor, ...told.lookingFor]).slice(0, 12),
+    bio: [base.bio, told.notes].filter(Boolean).join(' ').slice(0, 1200),
+    notes: told.notes,
+  };
+}
+
 const plusFromUserDoc = (u) => {
   const status = String(u?.subscriptionStatus || '').toLowerCase();
   if (['inactive', 'canceled', 'cancelled', 'expired', 'free'].includes(status)) return false;
@@ -120,48 +148,42 @@ async function sendExpoPush(uid, { title, body, data }) {
     if (!tokens.length) return;
     await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(tokens.map((to) => ({ to, sound: 'default', priority: 'high', channelId: 'default', title, body: String(body).slice(0, 180), data }))),
-      signal: AbortSignal.timeout(6000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tokens.map((to) => ({ to, title, body: String(body).slice(0, 180), data, sound: 'default', priority: 'high' }))),
+      signal: AbortSignal.timeout(8000),
     });
   } catch (err) {
-    console.warn('[linky] push skipped', err?.message || err);
+    console.warn('[linky] push failed', err?.message || err);
   }
 }
 
-// Telegram webhook secret: explicit env, else derived from the bot token so
-// no second secret has to be configured anywhere.
 export function telegramWebhookSecret() {
-  const explicit = String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
-  if (explicit) return explicit;
   const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
   if (!token) return '';
-  return crypto.createHash('sha256').update(`linky-tg:${token}`).digest('hex').slice(0, 48);
+  const explicit = String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
+  return explicit || crypto.createHash('sha256').update(`linky-telegram:${token}`).digest('hex').slice(0, 48);
 }
 
-// Idempotent: points the bot at our webhook every cron run, so adding
-// TELEGRAM_BOT_TOKEN in Vercel is the only setup step.
+// Idempotent: Telegram returns the current webhook, we only set it when it differs.
 export async function ensureTelegramWebhook(baseUrl) {
   const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
   if (!token) return { configured: false };
   const url = `${baseUrl}/api/telegram`;
   const info = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`, { signal: AbortSignal.timeout(8000) }).then((r) => r.json()).catch(() => null);
-  if (info?.result?.url === url && !info?.result?.last_error_date) return { configured: true, url, unchanged: true };
+  if (info?.result?.url === url) return { configured: true, url, changed: false };
   const set = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, secret_token: telegramWebhookSecret(), allowed_updates: ['message', 'callback_query'], drop_pending_updates: false }),
     signal: AbortSignal.timeout(8000),
   }).then((r) => r.json()).catch((e) => ({ ok: false, description: String(e?.message || e) }));
-  return { configured: true, url, set: !!set?.ok, description: set?.description || '' };
+  return { configured: true, url, changed: true, ok: !!set?.ok, description: set?.description || '' };
 }
 
 export async function sendTelegram(chatId, message) {
   const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
   if (!token || !chatId) return false;
   const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: chatId, text: String(message).slice(0, 4000), disable_web_page_preview: true }),
     signal: AbortSignal.timeout(8000),
   }).catch(() => null);
@@ -215,91 +237,22 @@ export async function notifyUser(uid, { type, content, from, requestId, matchId,
   return ref.id;
 }
 
-// ---------------------------------------------------------------- intents
-export function normalizeIntent(input) {
-  const need = text(input?.need, 240);
-  if (need.length < 8) throw new Error('Describe who you need in at least a few words.');
-  const offer = OFFERS.includes(String(input?.offer || '').toLowerCase()) ? String(input.offer).toLowerCase() : 'coffee';
-  const urgency = URGENCIES.includes(String(input?.urgency || '')) ? String(input.urgency) : 'this_month';
-  return {
-    need,
-    constraints: list(input?.constraints, 6, 80),
-    offer,
-    location: text(input?.location, 80),
-    remote: input?.remote !== false,
-    urgency,
-  };
+// ---------------------------------------------------------------- ask parsing (no AI)
+export function parseAsk(message) {
+  const need = text(message, 300);
+  const all = need.toLowerCase();
+  let offer = '';
+  if (/\b(pay|paid|paying|budget|\$|usd|salary|rate|hire|hiring|freelance|contract)\b/.test(all)) offer = 'paid';
+  else if (/\b(equity|co-?founder|cofounder|shares|stake|partner)\b/.test(all)) offer = 'equity';
+  else if (/\b(advis\w*|mentor\w*|guidance|coach\w*)\b/.test(all)) offer = 'advisory';
+  else if (/\b(coffee|chat|casual|meet up|catch up|20 minutes|call)\b/.test(all)) offer = 'coffee';
+  let location = '';
+  const loc = all.match(/\b(?:in|from|based in|around|near)\s+([a-z][a-z\s]{2,30})\b/);
+  if (loc) location = text(loc[1].split(/\s+(?:and|or|who|that|with|for|to|on|at|doing|building)\b/)[0], 60);
+  const remote = !/\b(in person|in-person|local only|must be in|physically)\b/.test(all);
+  const kws = tokens(need).filter((t) => !location || !location.toLowerCase().split(/\s+/).includes(t));
+  return { need, offer, location, remote, tokens: kws, norm: kws.slice().sort().join(' ') };
 }
-
-export async function activeIntentsFor(uid) {
-  const snap = await db().collection('intents').where('ownerId', '==', uid).where('status', '==', 'active').get();
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((i) => toMillis(i.expiresAt) > Date.now());
-}
-
-export async function saveIntent(uid, input, { source = 'app', userDoc } = {}) {
-  const user = userDoc || (await loadUser(uid));
-  if (!user) throw new Error('Finish your LINKUP profile first.');
-  const intent = normalizeIntent(input);
-  const plus = await isPlusUser(uid, user);
-  const limits = plus ? LIMITS.plus : LIMITS.free;
-  const active = await activeIntentsFor(uid);
-  if (active.length >= limits.activeIntents) {
-    const err = new Error(plus
-      ? `You already have ${limits.activeIntents} open intents. Close one first.`
-      : 'Free members run 1 open intent at a time. Close it, or go PLUS for 3.');
-    err.code = 'intent_limit';
-    throw err;
-  }
-  const ref = db().collection('intents').doc();
-  const doc = {
-    ...intent,
-    ownerId: uid,
-    status: 'active',
-    source,
-    matchCount: 0,
-    createdAt: nowTs(),
-    updatedAt: nowTs(),
-    expiresAt: getAdmin().firestore.Timestamp.fromMillis(Date.now() + LIMITS.intentDays * DAY_MS),
-    lastMatchedAt: null,
-  };
-  await ref.set(doc);
-  await patchState(uid, { intake: FieldValue().delete() });
-  const saved = { id: ref.id, ...doc, createdAt: Date.now(), updatedAt: Date.now(), expiresAt: Date.now() + LIMITS.intentDays * DAY_MS };
-  // First pass right away so the member sees cards within seconds.
-  let cards = [];
-  try {
-    const ctx = await buildMatchContext();
-    cards = await matchIntent(saved, ctx, { user, plus });
-  } catch (err) {
-    console.warn('[linky] immediate match failed', err?.message || err);
-  }
-  return { intent: publicIntent(saved), cards };
-}
-
-export async function closeIntent(uid, intentId) {
-  if (!isValidId(intentId)) throw new Error('Unknown intent.');
-  const ref = db().collection('intents').doc(intentId);
-  const snap = await ref.get();
-  if (!snap.exists || snap.data().ownerId !== uid) throw new Error('Unknown intent.');
-  await ref.set({ status: 'closed', updatedAt: nowTs() }, { merge: true });
-  return { ok: true };
-}
-
-const publicIntent = (i) => ({
-  id: i.id,
-  need: i.need,
-  constraints: i.constraints || [],
-  offer: i.offer,
-  location: i.location || '',
-  remote: i.remote !== false,
-  urgency: i.urgency,
-  status: i.status,
-  source: i.source || 'app',
-  matchCount: Number(i.matchCount || 0),
-  createdAt: toMillis(i.createdAt),
-  expiresAt: toMillis(i.expiresAt),
-  lastMatchedAt: toMillis(i.lastMatchedAt) || null,
-});
 
 // ---------------------------------------------------------------- matching
 export async function buildMatchContext() {
@@ -315,7 +268,8 @@ export async function buildMatchContext() {
   return { candidates, states, week: weekKey(), day: dayKey() };
 }
 
-function candidateFacts(p) {
+function candidateFacts(p, st) {
+  const told = toldFacts(st);
   return {
     uid: p.uid,
     name: displayNameOf(p),
@@ -324,179 +278,303 @@ function candidateFacts(p) {
     company: text(p.company, 120),
     city: text(p.city, 80),
     country: text(p.country, 80),
-    skills: list(p.skills, 12),
+    skills: uniq([...list(p.skills, 12), ...told.skills]).slice(0, 20),
     industries: list(p.industries, 8),
-    lookingFor: list(p.lookingFor, 6),
-    bio: text(p.bio, 240),
+    lookingFor: uniq([...list(p.lookingFor, 6), ...told.lookingFor]).slice(0, 10),
+    bio: [text(p.bio, 240), told.notes].filter(Boolean).join(' ').slice(0, 700),
     remoteOnly: !!p.remoteOnly,
   };
 }
 
 // Cite-or-skip guard: the "why" must name something that is actually on the
-// candidate's profile, otherwise the card is dropped.
+// candidate's profile (or what they told Linky), otherwise the card is dropped.
 function whyIsCited(why, c) {
   const w = String(why || '').toLowerCase();
   if (w.length < 12) return false;
-  const facts = [...c.skills, ...c.industries, ...c.lookingFor, c.role, c.company, c.city, c.country]
+  const facts = [c.name, ...c.skills, ...c.industries, ...c.lookingFor, c.role, c.company, c.city, c.country]
     .flatMap((f) => tokens(f)).filter((t) => t.length >= 3);
   const bioHits = tokens(c.bio).filter((t) => t.length >= 6);
   return [...facts, ...bioHits].some((t) => w.includes(t));
 }
 
-function keywordScore(intent, c) {
-  const kws = tokens(`${intent.need} ${(intent.constraints || []).join(' ')}`);
+function keywordScore(q, c) {
   const skills = c.skills.map((s) => s.toLowerCase());
   const inds = c.industries.map((s) => s.toLowerCase());
   const role = c.role.toLowerCase();
+  const company = c.company.toLowerCase();
+  const name = c.name.toLowerCase();
   const bio = c.bio.toLowerCase();
   const lf = c.lookingFor.map((s) => s.toLowerCase());
   let score = 0;
   const hits = [];
-  for (const kw of kws) {
+  for (const kw of q.tokens) {
+    if (name.includes(kw)) { score += 5; hits.push(kw); }
     if (skills.some((s) => s.includes(kw))) { score += 4; hits.push(kw); }
     if (role.includes(kw)) { score += 3; hits.push(kw); }
+    if (company.includes(kw)) { score += 2; hits.push(kw); }
     if (inds.some((s) => s.includes(kw))) { score += 2; hits.push(kw); }
     if (lf.some((s) => s.includes(kw))) { score += 1; }
     if (bio.includes(kw)) { score += 1; hits.push(kw); }
   }
-  const loc = String(intent.location || '').toLowerCase();
+  const loc = String(q.location || '').toLowerCase();
   if (loc) {
     if (c.city && loc.includes(c.city.toLowerCase())) score += 3;
     else if (c.country && loc.includes(c.country.toLowerCase())) score += 1;
-    else if (!intent.remote) score -= 4;
+    else if (!q.remote) score -= 4;
   }
   if (c.pic) score += 0.5;
   return { score, hits: uniq(hits) };
 }
 
-function templateWhy(intent, c, hits) {
-  const skillHit = c.skills.find((s) => hits.some((h) => s.toLowerCase().includes(h)));
+function templateWhy(c, hits) {
   const where = c.city ? ` in ${c.city}` : '';
-  if (skillHit) return `${c.name} lists ${skillHit}${c.role ? ` and works as ${c.role}` : ''}${where}.`;
-  if (c.role && hits.some((h) => c.role.toLowerCase().includes(h))) return `${c.name} is a ${c.role}${where}${c.company ? ` at ${c.company}` : ''}.`;
+  const role = c.role ? `${/^[aeiou]/i.test(c.role) ? 'an' : 'a'} ${c.role}` : '';
+  const has = (s) => hits.some((h) => String(s || '').toLowerCase().includes(h));
+  if (hits.length && has(c.name)) return `${c.name}${role ? ` is ${role}` : ' is on LINKUP'}${where}${c.company ? ` at ${c.company}` : ''}.`;
+  const skillHit = c.skills.find(has);
+  if (skillHit) return `${c.name} lists ${skillHit}${role ? ` and works as ${role}` : ''}${where}.`;
+  if (c.role && has(c.role)) return `${c.name} is ${role}${where}${c.company ? ` at ${c.company}` : ''}.`;
+  if (c.company && has(c.company)) return `${c.name} works at ${c.company}${role ? ` as ${role}` : ''}${where}.`;
+  const indHit = c.industries.find(has);
+  if (indHit) return `${c.name} works in ${indHit}${role ? ` as ${role}` : ''}${where}.`;
+  const bioHit = hits.find((h) => c.bio.toLowerCase().includes(h));
+  if (bioHit) return `${c.name}'s profile mentions "${bioHit}"${role ? ` - ${role}` : ''}${where}.`;
   return '';
 }
 
-async function geminiRerank(intent, ownerFacts, shortlist) {
+const templateOpener = (c, need) => `Hi ${firstName(c.name)} - Linky pointed me to you. I am looking for ${need}. Open to a quick chat?`;
+
+// The only Gemini call in the ask flow. Compact on purpose.
+async function geminiRerank(q, requester, shortlist) {
   if (!getGeminiKey()) return null;
   const prompt = [
-    'You are Linky, the connector for LINKUP (a network of builders, founders and operators, Harare-first).',
-    'Pick which candidates are genuinely worth an introduction for this intent. Cite-or-skip: every "why" must quote a concrete fact that appears in that candidate\'s profile (a skill, role, company, city or bio detail). If you cannot cite evidence, leave the candidate out. Return an empty list rather than guess. Never invent facts.',
-    'Return STRICT JSON only: {"picks":[{"uid":"...","score":0-100,"why":"one plain sentence, under 26 words, citing the evidence","opener":"one friendly sentence the requester could send, under 30 words"}]}',
-    `Return at most ${Math.min(5, shortlist.length)} picks, best first. Scores under 55 mean "not worth it" - omit them.`,
-    `Intent: ${JSON.stringify(intent)}`,
-    `Requester: ${JSON.stringify(ownerFacts)}`,
-    `Candidates: ${JSON.stringify(shortlist)}`,
+    'You are Linky, the connector for LINKUP (builders, founders and operators, Harare-first).',
+    `A member asked: "${q.need}"${q.offer ? ` (offer: ${q.offer})` : ''}${q.location ? ` (location: ${q.location}${q.remote ? ', remote fine' : ', in person'})` : ''}.`,
+    'Pick which candidates are genuinely worth an introduction for that ask. Cite-or-skip: every "why" must quote a concrete fact from that candidate\'s record (a skill, role, company, city or bio detail). No evidence = leave them out. Never invent facts. Return an empty list rather than guess.',
+    'Return STRICT JSON only: {"picks":[{"uid":"...","score":0-100,"why":"one plain sentence, under 26 words, citing the evidence","opener":"one friendly sentence the member could send, under 30 words"}]}',
+    `At most ${Math.min(LIMITS.cardsPerAsk, shortlist.length)} picks, best first. Omit scores under 55.`,
+    `Member: ${JSON.stringify(requester)}`,
+    `Candidates: ${JSON.stringify(shortlist.map((c) => ({ uid: c.uid, name: c.name, role: c.role, company: c.company, city: c.city, skills: c.skills.slice(0, 8), industries: c.industries.slice(0, 5), lookingFor: c.lookingFor.slice(0, 4), bio: c.bio.slice(0, 160) })))}`,
   ].join('\n');
-  const raw = await geminiText(prompt, { temperature: 0.2, maxOutputTokens: 900, responseMimeType: 'application/json' });
+  const raw = await geminiText(prompt, { temperature: 0.2, maxOutputTokens: 700, responseMimeType: 'application/json' });
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
   const parsed = JSON.parse(raw.slice(start, end + 1));
   return Array.isArray(parsed?.picks) ? parsed.picks : [];
 }
 
-export async function matchIntent(intent, ctx, { user, plus } = {}) {
-  const uid = intent.ownerId;
+// Who on LINKUP fits this ask, right now. Returns ranked picks (with cited
+// "why"), the nearest people when nobody fits, and how many members were checked.
+export async function findPeople(uid, q, ctx, { user, state, existingCards = [] } = {}) {
   const owner = user || (await loadUser(uid));
-  const ownerFacts = profileFacts(owner) || { uid, name: 'Member', skills: [], industries: [], lookingFor: [] };
-  const isPlus = typeof plus === 'boolean' ? plus : await isPlusUser(uid, owner);
-  const limits = isPlus ? LIMITS.plus : LIMITS.free;
-  const myState = ctx.states[uid] || {};
-  const sugRef = db().collection('introSuggestions').doc(uid);
-  const sugSnap = await sugRef.get();
-  const sug = sugSnap.exists ? sugSnap.data() : {};
-  const cards = Array.isArray(sug.cards) ? sug.cards : [];
-  const seen = sug.seen && typeof sug.seen === 'object' ? sug.seen : {};
-  const today = ctx.day;
-  const newToday = cards.filter((c) => dayKey(c.createdAt) === today).length;
-  const room = Math.max(0, limits.newCardsPerDay - newToday);
-  const stamp = { lastMatchedAt: nowTs(), updatedAt: nowTs() };
-  if (room === 0) {
-    await db().collection('intents').doc(intent.id).set(stamp, { merge: true });
-    return [];
-  }
+  const myState = state || ctx.states[uid] || {};
+  const me = mergedFacts(owner, myState) || { uid, name: 'Member', skills: [], industries: [], lookingFor: [], bio: '', notes: '' };
   const muted = myState.muted || {};
-  const pool = [];
+  const now = Date.now();
+  const latestByTarget = new Map();
+  existingCards.forEach((c) => latestByTarget.set(c.targetUid, c));
+  const eligible = [];
   for (const p of ctx.candidates) {
     if (p.uid === uid) continue;
     if (muted[p.uid]) continue;
-    if (seen[p.uid] && Date.now() - toMillis(seen[p.uid]) < LIMITS.intentDays * DAY_MS) continue;
+    const prev = latestByTarget.get(p.uid);
+    if (prev && prev.status === 'declined') continue;
+    if (prev && prev.status === 'skip' && now - toMillis(prev.updatedAt || prev.createdAt) < LIMITS.skipDays * DAY_MS) continue;
     const st = ctx.states[p.uid] || {};
     if (st.muted && st.muted[uid]) continue;
-    if (Array.isArray(st.openTo) && st.openTo.length && !st.openTo.includes(intent.offer)) continue;
+    if (q.offer && Array.isArray(st.openTo) && st.openTo.length && !st.openTo.includes(q.offer)) continue;
     const cap = Number.isFinite(Number(st.inboundCap)) ? Number(st.inboundCap) : LIMITS.inboundPerWeek;
     if (cap <= 0) continue;
     if (st.inbound?.week === ctx.week && Number(st.inbound?.count || 0) >= cap) continue;
-    const facts = candidateFacts(p);
-    const { score, hits } = keywordScore(intent, facts);
-    if (score <= 0) continue;
+    eligible.push(candidateFacts(p, st));
+  }
+  const checked = ctx.candidates.filter((p) => p.uid !== uid).length;
+  const pool = [];
+  for (const facts of eligible) {
+    const { score, hits } = keywordScore(q, facts);
+    if (score <= 0 || !hits.length) continue;
     pool.push({ facts, score, hits });
   }
-  if (!pool.length) {
-    await db().collection('intents').doc(intent.id).set(stamp, { merge: true });
-    return [];
-  }
+  if (!pool.length) return { picks: [], nearest: nearestPeople(me, q, eligible), checked, usedAi: false };
+
   // Blend keyword fit with profile compatibility, then shortlist.
-  const compat = new Map(localRank(compactProfile({ ...owner, uid }), pool.map((x) => compactProfile({ ...x.facts, occupation: x.facts.role })), pool.length).map((r) => [r.uid, r.score]));
+  const compat = new Map(localRank(compactProfile({ ...owner, uid, skills: me.skills }), pool.map((x) => compactProfile({ ...x.facts, occupation: x.facts.role })), pool.length).map((r) => [r.uid, r.score]));
   pool.forEach((x) => { x.blend = x.score * 10 + ((compat.get(x.facts.uid) || 40) - 40) * 0.5; });
   pool.sort((a, b) => b.blend - a.blend);
   const shortlist = pool.slice(0, LIMITS.shortlist);
   const byUid = new Map(shortlist.map((x) => [x.facts.uid, x]));
 
   let picks = null;
-  try {
-    picks = await geminiRerank(
-      { need: intent.need, constraints: intent.constraints || [], offer: intent.offer, location: intent.location, remote: intent.remote, urgency: intent.urgency },
-      { role: ownerFacts.role, company: ownerFacts.company, city: ownerFacts.city, skills: ownerFacts.skills, bio: ownerFacts.bio.slice(0, 200) },
-      shortlist.map((x) => x.facts),
-    );
-  } catch (err) {
-    console.warn('[linky] gemini rerank failed, using local ranking', err?.message || err);
+  let usedAi = false;
+  if (shortlist.length >= 2) {
+    try {
+      picks = await geminiRerank(q, { role: me.role, company: me.company, city: me.city, skills: me.skills.slice(0, 8), notes: (me.notes || me.bio || '').slice(0, 160) }, shortlist.map((x) => x.facts));
+      usedAi = Array.isArray(picks);
+    } catch (err) {
+      console.warn('[linky] gemini rerank failed, using cited template path', err?.message || err);
+      picks = null;
+    }
   }
-  let chosen = [];
+  const chosen = [];
   if (Array.isArray(picks)) {
     for (const p of picks) {
       const x = byUid.get(String(p?.uid || ''));
-      if (!x) continue;
+      if (!x || chosen.some((c) => c.facts.uid === x.facts.uid)) continue;
       const score = Math.round(Number(p?.score || 0));
       const why = text(p?.why, 220);
       if (score < 55 || !whyIsCited(why, x.facts)) continue;
-      chosen.push({ x, score, why, opener: text(p?.opener, 240) });
+      chosen.push({ facts: x.facts, score, why, opener: text(p?.opener, 240) || templateOpener(x.facts, q.need) });
     }
-  } else {
+  }
+  if (!chosen.length) {
+    // Template path: no key, Gemini down/over quota, one candidate, or AI cited nothing.
     for (const x of shortlist) {
-      const why = templateWhy(intent, x.facts, x.hits);
-      if (!why || x.score < 4) continue;
-      chosen.push({ x, score: Math.min(95, 50 + Math.round(x.blend)), why, opener: '' });
+      const why = templateWhy(x.facts, x.hits);
+      if (!why || x.score < 3) continue;
+      chosen.push({ facts: x.facts, score: Math.max(55, Math.min(95, 50 + Math.round(x.blend))), why, opener: templateOpener(x.facts, q.need) });
     }
   }
-  chosen = chosen.slice(0, room);
-  const created = Date.now();
-  const newCards = chosen.map(({ x, score, why, opener }, i) => ({
-    id: `${intent.id.slice(0, 6)}_${x.facts.uid.slice(0, 8)}_${created.toString(36)}${i}`,
-    intentId: intent.id,
-    need: intent.need,
-    targetUid: x.facts.uid,
-    targetName: x.facts.name,
-    targetPic: x.facts.pic,
-    targetRole: x.facts.role,
-    targetCompany: x.facts.company,
-    targetCity: [x.facts.city, x.facts.country].filter(Boolean).join(', '),
-    targetSkills: x.facts.skills.slice(0, 5),
-    why,
-    opener,
-    score,
-    status: 'new',
-    createdAt: created,
-  }));
-  if (newCards.length) {
-    const nextSeen = { ...seen };
-    newCards.forEach((c) => { nextSeen[c.targetUid] = created; });
-    const keep = cards.filter((c) => created - toMillis(c.createdAt) < 30 * DAY_MS).slice(-40);
-    await sugRef.set({ cards: [...keep, ...newCards], seen: nextSeen, updatedAt: nowTs(), newSince: created }, { merge: true });
+  return { picks: chosen.slice(0, LIMITS.cardsPerAsk), nearest: [], checked, usedAi };
+}
+
+// When nobody fits: the 3 most adjacent people (same city as the ask or the
+// member, shared skills / industries). Shown as profiles, never as intros.
+function nearestPeople(me, q, eligible) {
+  const loc = String(q.location || me.city || '').toLowerCase();
+  const compat = new Map(localRank(compactProfile({ uid: me.uid, role: me.role, skills: me.skills, industries: me.industries, goals: me.lookingFor }), eligible.map((c) => compactProfile({ ...c, occupation: c.role })), eligible.length).map((r) => [r.uid, r.score]));
+  return eligible
+    .map((c) => ({ c, s: (loc && c.city && loc.includes(c.city.toLowerCase()) ? 3 : 0) + ((compat.get(c.uid) || 40) - 40) / 10 + (c.pic ? 0.25 : 0) + (c.role ? 0.25 : 0) }))
+    .filter((x) => x.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 3)
+    .map(({ c }) => ({ uid: c.uid, name: c.name, pic: c.pic, role: c.role, city: [c.city, c.country].filter(Boolean).join(', ') }));
+}
+
+// ---------------------------------------------------------------- ask (the whole flow, one request)
+const COACH = 'Tell me who you need in one message and I answer right away - for example "a Flutter developer in Harare for a paid fintech MVP", "a co-founder with sales experience, equity", or "someone who has raised from local angels".';
+
+function askReply(q, picks, nearest, checked, source = 'app') {
+  if (picks.length) {
+    const loc = q.location.toLowerCase();
+    const inLoc = !loc || picks.some((p) => `${p.facts.city} ${p.facts.country}`.toLowerCase().includes(loc));
+    const where = inLoc ? '' : ` None of them is in ${q.location}, so these are people who could work with you remotely.`;
+    const cta = source === 'app' ? ' Tap Meet and I will ask them for you.' : '';
+    return `${picks.length === 1 ? 'One person' : `${picks.length} people`} on LINKUP I can actually cite for "${q.need}".${where}${cta}`;
   }
-  await db().collection('intents').doc(intent.id).set({ ...stamp, matchCount: FieldValue().increment(newCards.length) }, { merge: true });
-  return newCards;
+  const near = nearest.length
+    ? ` Closest right now: ${nearest.map((n) => `${n.name}${n.role || n.city ? ` (${[n.role, n.city].filter(Boolean).join(', ')})` : ''}`).join(' · ')}.`
+    : '';
+  return `Nobody on LINKUP fits "${q.need}" yet - I checked all ${checked} visible members and I will not guess.${near} Try a broader ask (a skill or role instead of a niche), or invite the person you have in mind to LINKUP (${APP_URL}) and ask me again.`;
+}
+
+export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
+  const user = userDoc || (await loadUser(uid));
+  if (!user) throw new Error('Finish your LINKUP profile first.');
+  const msg = text(message, 600);
+  if (!msg) throw new Error('Say something first.');
+  const q = parseAsk(msg);
+  const now = Date.now();
+  const state = await loadState(uid);
+  const plus = await isPlusUser(uid, user);
+  const limits = plus ? LIMITS.plus : LIMITS.free;
+  const today = dayKey(now);
+  const used = state.asks?.day === today ? Number(state.asks.count || 0) : 0;
+  const asksLeft = () => Math.max(0, limits.asksPerDay - (state.asks?.day === today ? Number(state.asks.count || 0) : 0));
+
+  // Greeting / nothing to search on: coach, no tokens, no budget.
+  if (!q.tokens.length) {
+    return { id: '', need: q.need, reply: COACH, cards: [], nearest: [], none: true, checked: 0, createdAt: now, cached: false, asksLeft: asksLeft() };
+  }
+  // Same ask again within the cache window: same answer, no tokens, no budget.
+  const last = state.lastAsk;
+  if (last && last.norm === q.norm && now - toMillis(last.createdAt) < LIMITS.askCacheHours * 3600000) {
+    const cards = (await loadCards(uid)).filter((c) => (last.cardIds || []).includes(c.id));
+    const ordered = (last.cardIds || []).map((id) => cards.find((c) => c.id === id)).filter(Boolean);
+    return { ...publicAsk(last), cards: ordered, cached: true, asksLeft: asksLeft() };
+  }
+  if (used >= limits.asksPerDay) {
+    const err = new Error(plus
+      ? `You have used today's ${limits.asksPerDay} asks. Tomorrow resets it.`
+      : `Free members get ${LIMITS.free.asksPerDay} asks a day (you have used them). PLUS gets ${LIMITS.plus.asksPerDay} a day and unlimited Meets.`);
+    err.code = 'ask_limit';
+    throw err;
+  }
+
+  const existing = await loadCards(uid);
+  const ctx = await buildMatchContext();
+  const { picks, nearest, checked, usedAi } = await findPeople(uid, q, ctx, { user, state, existingCards: existing });
+
+  // Persist cards (reuse a live card for the same person instead of duplicating it).
+  const askId = `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
+  const latestByTarget = new Map();
+  existing.forEach((c) => latestByTarget.set(c.targetUid, c));
+  const resultCards = [];
+  const updatedIds = new Set();
+  const created = [];
+  picks.forEach(({ facts, score, why, opener }, i) => {
+    const prev = latestByTarget.get(facts.uid);
+    if (prev && ['new', 'saved', 'meet'].includes(prev.status)) {
+      const next = { ...prev, askId, need: q.need, why: prev.status === 'meet' ? prev.why : why, opener: prev.opener || opener, score, updatedAt: now };
+      updatedIds.add(prev.id);
+      resultCards.push(next);
+      return;
+    }
+    const card = {
+      id: `${askId.slice(0, 6)}_${facts.uid.slice(0, 8)}_${i}`,
+      askId,
+      need: q.need,
+      targetUid: facts.uid,
+      targetName: facts.name,
+      targetPic: facts.pic,
+      targetRole: facts.role,
+      targetCompany: facts.company,
+      targetCity: [facts.city, facts.country].filter(Boolean).join(', '),
+      targetSkills: facts.skills.slice(0, 5),
+      why,
+      opener,
+      score,
+      status: 'new',
+      createdAt: now,
+      updatedAt: now,
+    };
+    created.push(card);
+    resultCards.push(card);
+  });
+  const updatedById = new Map(resultCards.filter((c) => updatedIds.has(c.id)).map((c) => [c.id, c]));
+  const keep = existing.map((c) => updatedById.get(c.id) || c).filter((c) => now - toMillis(c.createdAt) < 30 * DAY_MS).slice(-60);
+  if (created.length || updatedIds.size) {
+    await db().collection('introSuggestions').doc(uid).set({ cards: [...keep, ...created], updatedAt: nowTs(), newSince: now }, { merge: true });
+  }
+
+  const reply = askReply(q, picks, nearest, checked, source);
+  const record = {
+    id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote,
+    reply, cardIds: resultCards.map((c) => c.id), none: !picks.length, nearest, checked, usedAi, source, createdAt: now,
+  };
+  const history = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
+  history.push({ id: askId, need: q.need, cards: picks.length, none: !picks.length, source, createdAt: now });
+  await patchState(uid, { lastAsk: record, askHistory: history, asks: { day: today, count: used + 1 } });
+  return { ...publicAsk(record), cards: resultCards, cached: false, asksLeft: Math.max(0, limits.asksPerDay - used - 1) };
+}
+
+const publicAsk = (a) => (a ? {
+  id: a.id || '',
+  need: a.need || '',
+  reply: a.reply || '',
+  cardIds: Array.isArray(a.cardIds) ? a.cardIds : [],
+  none: !!a.none,
+  nearest: Array.isArray(a.nearest) ? a.nearest : [],
+  checked: Number(a.checked || 0),
+  createdAt: toMillis(a.createdAt),
+} : null);
+
+// Cards in the order the member sees / numbers them: latest ask first, then
+// the other live cards, newest first. Bots use the same order for "meet 2".
+export function orderedCards(cards, state) {
+  const firstIds = Array.isArray(state?.lastAsk?.cardIds) ? state.lastAsk.cardIds : [];
+  const first = firstIds.map((id) => cards.find((c) => c.id === id && ['new', 'saved', 'meet'].includes(c.status))).filter(Boolean);
+  const rest = cards.filter((c) => !firstIds.includes(c.id) && (c.status === 'new' || c.status === 'saved')).sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+  return [...first, ...rest];
 }
 
 // ---------------------------------------------------------------- cards
@@ -559,12 +637,12 @@ export async function meet(uid, cardId, { userDoc } = {}) {
   const inboundCount = targetState.inbound?.week === week ? Number(targetState.inbound.count || 0) : 0;
   const cap = Number.isFinite(Number(targetState.inboundCap)) ? Number(targetState.inboundCap) : LIMITS.inboundPerWeek;
   if (inboundCount >= cap) {
-    throw new Error('They have hit their weekly intro cap. Linky will keep the card for next week.');
+    throw new Error('They have hit their weekly intro cap. Ask me again next week.');
   }
   const intro = {
     requesterId: uid,
     targetId: target,
-    intentId: card.intentId,
+    askId: card.askId || '',
     need: card.need,
     why: card.why,
     opener: card.opener || '',
@@ -657,7 +735,7 @@ export async function respond(uid, introId, decision) {
       requestId: introId,
       matchId,
       pushTitle: 'Intro accepted',
-      channelText: `${me.name} accepted your intro (${intro.need}). Open LINKUP to chat: https://linkup-muqu.vercel.app/chat/${matchId}`,
+      channelText: `${me.name} accepted your intro (${intro.need}). Open LINKUP to chat: ${APP_URL}/chat/${matchId}`,
     });
     return { status: 'accepted', matchId };
   }
@@ -677,88 +755,7 @@ export async function respond(uid, introId, decision) {
   return { status: 'declined' };
 }
 
-// ---------------------------------------------------------------- intake
-const INTAKE_KEYS = ['need', 'offer', 'location', 'urgency'];
-
-function heuristicIntake(history, message) {
-  const draft = {};
-  const asked = history.filter((m) => m.role === 'assistant').length;
-  const userTurns = history.filter((m) => m.role === 'user').map((m) => m.content).concat(message);
-  const all = userTurns.join(' ').toLowerCase();
-  // The most detailed thing they said is the need (answers to follow-ups
-  // are usually one word, the re-stated ask after a pushback is the fullest).
-  draft.need = userTurns.slice().sort((a, b) => b.length - a.length)[0] || message;
-  if (/\b(pay|paid|budget|\$|usd|salary|rate|hire)\b/.test(all)) draft.offer = 'paid';
-  else if (/\bequity|co-?founder|shares|stake\b/.test(all)) draft.offer = 'equity';
-  else if (/\badvis|mentor|guidance\b/.test(all)) draft.offer = 'advisory';
-  else if (/\bcoffee|chat|casual|meet up\b/.test(all)) draft.offer = 'coffee';
-  const loc = all.match(/\b(in|from|based in|around)\s+([a-z][a-z\s]{2,30})\b/);
-  if (loc) draft.location = loc[2].trim().split(/\s+(and|or|who|that|with)\b/)[0].trim();
-  draft.remote = !/\b(in person|in-person|local only|must be in)\b/.test(all);
-  if (/\b(this week|asap|urgent|today|tomorrow)\b/.test(all)) draft.urgency = 'this_week';
-  else if (/\b(this month|soon|few weeks)\b/.test(all)) draft.urgency = 'this_month';
-  else if (/\b(whenever|no rush|eventually|someday)\b/.test(all)) draft.urgency = 'whenever';
-  const missing = INTAKE_KEYS.filter((k) => !draft[k]);
-  if (draft.need && draft.need.length < 20 && asked === 0) {
-    return { reply: `"${draft.need}" is too vague for me to match well. Which skills or stack, for what project, and what would they actually do?`, ready: false };
-  }
-  if (!missing.length || asked >= 4) {
-    const intent = { need: draft.need, constraints: [], offer: draft.offer || 'coffee', location: draft.location || '', remote: draft.remote !== false, urgency: draft.urgency || 'this_month' };
-    return { reply: `Got it. I will look for: ${intent.need}${intent.location ? ` (${intent.location}${intent.remote ? ' or remote' : ''})` : ''}, ${intent.offer}, ${intent.urgency.replace('_', ' ')}. Save this intent?`, ready: true, intent };
-  }
-  const q = {
-    need: 'Who exactly do you need, and for what?',
-    offer: 'What is on the table for them - paid work, equity, advisory, or just a coffee?',
-    location: 'Which city should they be in, or is remote fine?',
-    urgency: 'How soon - this week, this month, or whenever?',
-  };
-  return { reply: q[missing[0]], ready: false };
-}
-
-export async function intake(uid, message, { userDoc, source = 'app' } = {}) {
-  const user = userDoc || (await loadUser(uid));
-  const facts = profileFacts(user) || {};
-  const msg = text(message, 600);
-  if (!msg) throw new Error('Say something first.');
-  const state = await loadState(uid);
-  const history = Array.isArray(state.intake?.history) ? state.intake.history.slice(-12) : [];
-  let out = null;
-  if (getGeminiKey()) {
-    const prompt = [
-      'You are Linky, the connector for LINKUP (builders, founders and operators, Harare-first). You are interviewing a member to turn a vague wish into a precise INTENT that other members can be matched against.',
-      'Rules: ONE question per turn, at most 2 short sentences, plain text (no markdown). Push back on vague asks (e.g. "a developer" -> which stack, for which project, doing what). Never invent people. Never promise a match. Be warm but direct.',
-      'Collect: need (who they need and for what, concrete, under 200 chars), constraints (up to 4 short must-haves), offer (paid|equity|advisory|coffee), location (city) and whether remote is fine, urgency (this_week|this_month|whenever).',
-      'Once you have need + offer + urgency and (location or remote), STOP asking and return the intent.',
-      'Return STRICT JSON only: {"reply":"what you say","ready":false} or {"reply":"one-line summary asking them to confirm","ready":true,"intent":{"need":"...","constraints":["..."],"offer":"paid","location":"Harare","remote":false,"urgency":"this_month"}}',
-      `Member profile: ${JSON.stringify({ name: facts.name, role: facts.role, company: facts.company, city: facts.city, skills: facts.skills, bio: (facts.bio || '').slice(0, 200) })}`,
-      `Conversation so far:\n${history.map((m) => `${m.role === 'user' ? 'Member' : 'Linky'}: ${m.content}`).join('\n') || '(none)'}`,
-      `Member: ${msg}`,
-    ].join('\n');
-    try {
-      const raw = await geminiText(prompt, { temperature: 0.3, maxOutputTokens: 500, responseMimeType: 'application/json' });
-      const parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
-      if (parsed && typeof parsed.reply === 'string') {
-        out = { reply: text(parsed.reply, 600), ready: !!parsed.ready && !!parsed.intent, intent: parsed.intent || null };
-        if (out.ready) {
-          try { out.intent = normalizeIntent(out.intent); } catch { out.ready = false; out.intent = null; }
-        }
-      }
-    } catch (err) {
-      console.warn('[linky] intake gemini failed', err?.message || err);
-    }
-  }
-  if (!out) out = heuristicIntake(history, msg);
-  const nextHistory = [...history, { role: 'user', content: msg }, { role: 'assistant', content: out.reply }].slice(-12);
-  await patchState(uid, { intake: { history: nextHistory, draft: out.intent || null, source, updatedAt: Date.now() } });
-  return out;
-}
-
-export async function resetIntake(uid) {
-  await patchState(uid, { intake: FieldValue().delete() });
-  return { ok: true };
-}
-
-// ---------------------------------------------------------------- home / brief / audit
+// ---------------------------------------------------------------- home / brief / audit / facts
 const publicIntro = (id, i) => ({
   id,
   requesterId: i.requesterId,
@@ -789,8 +786,7 @@ export function briefText(cards, name) {
 
 export async function home(uid, { userDoc } = {}) {
   const user = userDoc || (await loadUser(uid));
-  const [intents, cards, inboundSnap, sentSnap, state, plus] = await Promise.all([
-    activeIntentsFor(uid),
+  const [cards, inboundSnap, sentSnap, state, plus] = await Promise.all([
     loadCards(uid),
     db().collection('intros').where('targetId', '==', uid).where('status', '==', 'pending').get(),
     db().collection('intros').where('requesterId', '==', uid).limit(40).get(),
@@ -801,19 +797,21 @@ export async function home(uid, { userDoc } = {}) {
   const limits = plus ? LIMITS.plus : LIMITS.free;
   const liveCards = cards
     .filter((c) => ['new', 'saved', 'meet', 'declined'].includes(c.status) && now - toMillis(c.createdAt) < 14 * DAY_MS)
-    .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
-  const used = state.meets?.day === dayKey() ? Number(state.meets.count || 0) : 0;
+    .sort((a, b) => toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt));
+  const today = dayKey(now);
+  const meetsUsed = state.meets?.day === today ? Number(state.meets.count || 0) : 0;
+  const asksUsed = state.asks?.day === today ? Number(state.asks.count || 0) : 0;
   return {
     name: profileFacts(user)?.name || '',
     plus,
-    limits: { activeIntents: limits.activeIntents, meetsPerDay: plus ? null : limits.meetsPerDay, meetsUsedToday: used },
-    intents: intents.map(publicIntent),
+    limits: { meetsPerDay: plus ? null : limits.meetsPerDay, meetsUsedToday: meetsUsed, asksPerDay: limits.asksPerDay, asksUsedToday: asksUsed },
     cards: liveCards,
     inbound: inboundSnap.docs.map((d) => publicIntro(d.id, d.data())).filter((i) => now - i.createdAt < LIMITS.introDays * DAY_MS),
     sent: sentSnap.docs.map((d) => publicIntro(d.id, d.data())).sort((a, b) => b.createdAt - a.createdAt).slice(0, 10),
     prefs: { openTo: Array.isArray(state.openTo) ? state.openTo : OFFERS, inboundCap: Number.isFinite(Number(state.inboundCap)) ? Number(state.inboundCap) : LIMITS.inboundPerWeek },
     channels: { telegram: !!state.channels?.telegram, whatsapp: !!state.channels?.whatsapp },
-    intake: state.intake?.history?.length ? { history: state.intake.history, draft: state.intake.draft || null } : null,
+    lastAsk: state.lastAsk && now - toMillis(state.lastAsk.createdAt) < 14 * DAY_MS ? publicAsk(state.lastAsk) : null,
+    facts: toldFacts(state),
     brief: briefText(liveCards, ''),
   };
 }
@@ -826,48 +824,58 @@ export async function setPrefs(uid, { openTo, inboundCap }) {
   return { ok: true, ...patch };
 }
 
+// "What Linky knows about you" is editable: free-text notes plus extra skills
+// and looking-for tags. They are merged into matching on both sides (when you
+// ask, and when someone else's ask is checked against you) from the next request.
+export async function setFacts(uid, input) {
+  const facts = {
+    notes: text(input?.notes, 800),
+    skills: list(input?.skills, 20, 40),
+    lookingFor: list(input?.lookingFor, 10, 80),
+    updatedAt: Date.now(),
+  };
+  await patchState(uid, { facts, lastAsk: FieldValue().delete() });
+  return { ok: true, facts: { ...facts } };
+}
+
 export async function audit(uid, { userDoc } = {}) {
   const user = userDoc || (await loadUser(uid));
-  const [state, allIntentsSnap, cards, introsOut, introsIn] = await Promise.all([
+  const [state, cards, introsOut, introsIn] = await Promise.all([
     loadState(uid),
-    db().collection('intents').where('ownerId', '==', uid).limit(30).get(),
     loadCards(uid),
     db().collection('intros').where('requesterId', '==', uid).limit(30).get(),
     db().collection('intros').where('targetId', '==', uid).limit(30).get(),
   ]);
   const facts = profileFacts(user) || {};
+  const told = toldFacts(state);
   return {
     facts: {
       name: facts.name, role: facts.role, company: facts.company, city: facts.city, country: facts.country,
       skills: facts.skills, industries: facts.industries, lookingFor: facts.lookingFor, goals: facts.goals, bio: facts.bio,
     },
+    told,
     signals: {
       plus: await isPlusUser(uid, user),
+      asksUsedToday: state.asks?.day === dayKey() ? Number(state.asks.count || 0) : 0,
       meetsUsedToday: state.meets?.day === dayKey() ? Number(state.meets.count || 0) : 0,
       inboundThisWeek: state.inbound?.week === weekKey() ? Number(state.inbound.count || 0) : 0,
       mutedCount: Object.keys(state.muted || {}).length,
-      lastBriefDay: state.lastBriefDay || null,
       channels: { telegram: !!state.channels?.telegram, whatsapp: !!state.channels?.whatsapp },
       openTo: Array.isArray(state.openTo) ? state.openTo : OFFERS,
       inboundCap: Number.isFinite(Number(state.inboundCap)) ? Number(state.inboundCap) : LIMITS.inboundPerWeek,
     },
-    intents: allIntentsSnap.docs.map((d) => publicIntent({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt),
+    asks: (Array.isArray(state.askHistory) ? state.askHistory : []).map((a) => ({ id: a.id, need: a.need, cards: Number(a.cards || 0), none: !!a.none, source: a.source || 'app', createdAt: toMillis(a.createdAt) })).sort((a, b) => b.createdAt - a.createdAt),
     cards: cards.map((c) => ({ id: c.id, targetName: c.targetName, why: c.why, status: c.status, createdAt: toMillis(c.createdAt) })).sort((a, b) => b.createdAt - a.createdAt),
     introsSent: introsOut.docs.map((d) => publicIntro(d.id, d.data())),
     introsReceived: introsIn.docs.map((d) => publicIntro(d.id, d.data())),
-    intakeTurns: Array.isArray(state.intake?.history) ? state.intake.history.length : 0,
-    sources: ['Your LINKUP profile (users/{you})', 'Intents you told Linky', 'Cards you met / skipped / saved', 'Intros you accepted or declined', 'Push tokens (only to deliver the brief)'],
+    sources: ['Your LINKUP profile (users/{you})', 'What you told Linky on this page', 'Things you asked Linky (last 20)', 'Cards you met / skipped / saved', 'Intros you accepted or declined', 'Push tokens (only to deliver intro alerts)'],
     notUsed: ['Your private messages', 'Your contacts', 'Your location beyond the city on your profile', 'Anything from Telegram / WhatsApp other than the messages you send Linky'],
   };
 }
 
 export async function forget(uid) {
   const batch = db().batch();
-  const [intentsSnap, out] = await Promise.all([
-    db().collection('intents').where('ownerId', '==', uid).get(),
-    db().collection('intros').where('requesterId', '==', uid).where('status', '==', 'pending').get(),
-  ]);
-  intentsSnap.docs.forEach((d) => batch.set(d.ref, { status: 'closed', updatedAt: nowTs() }, { merge: true }));
+  const out = await db().collection('intros').where('requesterId', '==', uid).where('status', '==', 'pending').get();
   out.docs.forEach((d) => batch.set(d.ref, { status: 'expired', respondedAt: nowTs() }, { merge: true }));
   batch.delete(db().collection('introSuggestions').doc(uid));
   const state = await loadState(uid);
@@ -877,7 +885,7 @@ export async function forget(uid) {
   }
   batch.delete(db().collection('linkyState').doc(uid));
   await batch.commit();
-  return { ok: true, closedIntents: intentsSnap.size };
+  return { ok: true, expiredIntros: out.size };
 }
 
 // ---------------------------------------------------------------- bot linking
@@ -921,67 +929,17 @@ export async function unlinkBot(channel, chatId) {
   return true;
 }
 
-// ---------------------------------------------------------------- cron
-export async function runCron({ batch = 3 } = {}) {
+// ---------------------------------------------------------------- cron (housekeeping only: nothing waits on it)
+export async function runCron() {
   const now = Date.now();
-  const activeSnap = await db().collection('intents').where('status', '==', 'active').get();
-  const active = activeSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  const writes = db().batch();
-  let expired = 0;
-  const live = [];
-  for (const i of active) {
-    if (toMillis(i.expiresAt) && toMillis(i.expiresAt) < now) { writes.set(db().collection('intents').doc(i.id), { status: 'expired', updatedAt: nowTs() }, { merge: true }); expired += 1; }
-    else live.push(i);
-  }
   const pendingSnap = await db().collection('intros').where('status', '==', 'pending').get();
+  const writes = db().batch();
   let expiredIntros = 0;
   pendingSnap.docs.forEach((d) => {
     const i = d.data();
     if (toMillis(i.expiresAt) && toMillis(i.expiresAt) < now) { writes.set(d.ref, { status: 'expired', respondedAt: nowTs() }, { merge: true }); expiredIntros += 1; }
   });
-  if (expired || expiredIntros) await writes.commit();
-
-  const due = live
-    .filter((i) => !i.lastMatchedAt || now - toMillis(i.lastMatchedAt) > LIMITS.rematchHours * 3600000)
-    .sort((a, b) => toMillis(a.lastMatchedAt) - toMillis(b.lastMatchedAt))
-    .slice(0, batch);
-  const remaining = Math.max(0, live.filter((i) => !i.lastMatchedAt || now - toMillis(i.lastMatchedAt) > LIMITS.rematchHours * 3600000).length - due.length);
-  const results = [];
-  if (due.length) {
-    const ctx = await buildMatchContext();
-    const userCache = new Map();
-    for (const intent of due) {
-      try {
-        if (!userCache.has(intent.ownerId)) userCache.set(intent.ownerId, await loadUser(intent.ownerId));
-        const user = userCache.get(intent.ownerId);
-        if (!user) { await db().collection('intents').doc(intent.id).set({ status: 'closed', updatedAt: nowTs() }, { merge: true }); continue; }
-        const cards = await matchIntent(intent, ctx, { user });
-        results.push({ intentId: intent.id, ownerId: intent.ownerId, cards: cards.length });
-      } catch (err) {
-        console.warn('[linky] match failed', intent.id, err?.message || err);
-        results.push({ intentId: intent.id, error: String(err?.message || err) });
-      }
-    }
-    // Daily brief: once per day, only for members who got something today.
-    const today = dayKey();
-    const owners = uniq(results.filter((r) => r.cards > 0).map((r) => r.ownerId));
-    for (const uid of owners) {
-      const state = ctx.states[uid] || (await loadState(uid));
-      if (state.lastBriefDay === today) continue;
-      const cards = (await loadCards(uid)).filter((c) => c.status === 'new' && dayKey(c.createdAt) === today);
-      const name = profileFacts(userCache.get(uid))?.name?.split(' ')[0] || '';
-      const brief = briefText(cards, name);
-      if (!brief) continue;
-      await notifyUser(uid, {
-        type: 'daily_brief',
-        content: brief.split('\n').slice(0, 2).join(' '),
-        pushTitle: cards.length === 1 ? 'Linky found 1 person worth your time' : `Linky found ${cards.length} people worth your time`,
-        channelText: `${brief}\n\nReply MEET to ask for the intro, or open the Linky tab.`,
-        state,
-      });
-      await patchState(uid, { lastBriefDay: today });
-    }
-  }
-  const telegram = await ensureTelegramWebhook('https://linkup-muqu.vercel.app').catch((e) => ({ error: String(e?.message || e) }));
-  return { activeIntents: live.length, expiredIntents: expired, expiredIntros, processed: results, remaining, telegram };
+  if (expiredIntros) await writes.commit();
+  const telegram = await ensureTelegramWebhook(APP_URL).catch((e) => ({ error: String(e?.message || e) }));
+  return { pendingIntros: pendingSnap.size - expiredIntros, expiredIntros, telegram };
 }

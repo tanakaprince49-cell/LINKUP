@@ -81,11 +81,11 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/linkup-sa.json
         run: node plus-expiry-reminders.mjs ${{ (github.event_name == 'schedule' || inputs.write) && '--write' || '' }}
 
-      # Linky: expire old intents/intros, run the hourly matching pass and
-      # send the daily brief. The endpoint lives on Vercel (it needs Gemini
-      # and the bot tokens); this step just triggers it, authenticated with a
-      # short-lived Google access token minted from the same service account.
-      - name: Linky hourly matching pass
+      # Linky housekeeping: expire stale intro requests and keep the Telegram
+      # webhook registered. Asks are answered in-request, nothing waits on
+      # this. The endpoint lives on Vercel; this step just triggers it,
+      # authenticated with a short-lived Google access token from the same SA.
+      - name: Linky housekeeping
         if: always()
         working-directory: functions
         env:
