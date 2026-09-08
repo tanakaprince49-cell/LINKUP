@@ -49,8 +49,11 @@ assert(again.cached && again.cards.map((c) => c.id).join() === firstAskCards.joi
 r = await L.ask('alice', 'a quantum cryptography professor from Oslo');
 console.log('    reply:', r.reply);
 assert(r.none && !r.cards.length && /Nobody on LINKUP fits/.test(r.reply) && r.checked === 4, 'no-match ask answers gracefully with member count');
-assert(Array.isArray(r.nearest) && r.nearest.length >= 1 && !r.nearest.some((n) => n.uid === 'alice'), 'nearest people offered instead of an error: ' + r.nearest.map((n) => n.name).join(', '));
+assert(Array.isArray(r.nearest) && r.nearest.length >= 1 && !r.nearest.some((n) => n.uid === 'alice') && /Harare/.test(r.nearest[0].city), 'nearest people offered instead of an error, own city first: ' + r.nearest.map((n) => n.name).join(', '));
 assert(r.asksLeft === 8, 'no-match ask still counts');
+// ---- interleaved repeat (an unrelated ask in between) is still cached
+r = await L.ask('alice', 'I need a Flutter developer in Harare for a paid fintech MVP');
+assert(r.cached && r.cards.map((c) => c.id).join() === firstAskCards.join() && r.asksLeft === 8, 'repeat after another ask is still served from cache');
 // ---- name lookup
 r = await L.ask('alice', 'connect me with Cara Dube');
 assert(r.cards.length === 1 && r.cards[0].targetUid === 'cara' && /Cara Dube/.test(r.cards[0].why), 'asking for a person by name finds them: ' + r.cards[0].why);
