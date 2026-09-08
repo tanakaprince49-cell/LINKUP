@@ -55,10 +55,11 @@ export type LinkyAsk = {
   none: boolean;
   nearest: LinkyNearest[];
   checked: number;
+  expansion: 'none' | 'local' | 'ai';
   createdAt: number;
 };
 
-export type LinkyAskResult = LinkyAsk & { cards: LinkyCard[]; cached: boolean; asksLeft: number };
+export type LinkyAskResult = LinkyAsk & { cards: LinkyCard[]; cached: boolean; usedAi?: boolean; asksLeft: number };
 
 export type LinkyToldFacts = { notes: string; skills: string[]; lookingFor: string[]; updatedAt: number | null };
 
@@ -118,6 +119,7 @@ export const linkyMeet = (cardId: string) => linkyCall<{ introId?: string; match
 export const linkyCard = (cardId: string, status: 'skip' | 'saved') => linkyCall<LinkyCard>('card', { cardId, status });
 export const linkyRespond = (introId: string, decision: 'accept' | 'decline' | 'later') => linkyCall<{ status: string; matchId?: string }>('respond', { introId, decision });
 export const linkyPrefs = (prefs: { openTo?: IntentOffer[]; inboundCap?: number }) => linkyCall<{ ok: boolean }>('prefs', prefs);
+export const linkyPointers = (need: string) => linkyCall<{ text: string; cached: boolean }>('pointers', { need });
 export const linkyFacts = (facts: { notes: string; skills: string[]; lookingFor: string[] }) => linkyCall<{ ok: boolean; facts: LinkyToldFacts }>('facts', facts);
 export const linkyAudit = () => linkyCall<LinkyAudit>('audit');
 export const linkyForget = () => linkyCall<{ ok: boolean }>('forget');

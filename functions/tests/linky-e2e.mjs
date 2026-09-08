@@ -20,6 +20,8 @@ const users = {
   cara: { displayName: 'Cara Dube', occupation: 'Designer', city: 'Bulawayo', country: 'Zimbabwe', skills: ['figma', 'branding'], industries: ['retail'], bio: 'Brand design for shops', onboarded: true, isVisible: true },
   dan: { displayName: 'Dan Ncube', occupation: 'Backend engineer', city: 'Harare', country: 'Zimbabwe', skills: ['node', 'flutter'], industries: ['fintech'], bio: 'APIs and payments', onboarded: true, isVisible: true },
   eve: { displayName: 'Eve Mutasa', occupation: '', city: 'Harare', country: 'Zimbabwe', skills: [], industries: [], bio: '', onboarded: true, isVisible: true },
+  fadzi: { displayName: 'Fadzi Moyo', occupation: 'Data analyst', company: 'Econet', city: 'Harare', country: 'Zimbabwe', skills: ['excel', 'power bi', 'statistics'], industries: ['telecoms'], bio: 'Numbers person. Dashboards and forecasting.', onboarded: true, isVisible: true },
+  gift: { displayName: 'Gift Sibanda', occupation: 'Accountant', company: 'KPMG', city: 'Harare', country: 'Zimbabwe', skills: ['tax', 'audit'], industries: ['finance'], bio: '', onboarded: true, isVisible: true },
 };
 for (const [uid, u] of Object.entries(users)) {
   await db.collection('users').doc(uid).set({ uid, ...u });
@@ -48,18 +50,37 @@ assert(again.cached && again.cards.map((c) => c.id).join() === firstAskCards.joi
 // ---- nobody fits -> graceful, no error, nearest people, budget consumed
 r = await L.ask('alice', 'a quantum cryptography professor from Oslo');
 console.log('    reply:', r.reply);
-assert(r.none && !r.cards.length && /Nobody on LINKUP fits/.test(r.reply) && r.checked === 4, 'no-match ask answers gracefully with member count');
+assert(r.none && !r.cards.length && /Nobody on LINKUP fits/.test(r.reply) && r.checked === 6, 'no-match ask answers gracefully with member count');
 assert(Array.isArray(r.nearest) && r.nearest.length >= 1 && !r.nearest.some((n) => n.uid === 'alice') && /Harare/.test(r.nearest[0].city), 'nearest people offered instead of an error, own city first: ' + r.nearest.map((n) => n.name).join(', '));
 assert(r.asksLeft === 8, 'no-match ask still counts');
+// ---- related-concept expansion (zero tokens): "math" is on nobody's profile
+r = await L.ask('alice', 'find me a person who understands math');
+console.log('    reply:', r.reply);
+console.log('    cards:', r.cards.map((c) => `${c.targetName} :: ${c.why}`));
+assert(!r.none && r.cards.length >= 1 && r.cards[0].targetUid === 'fadzi', 'math -> Fadzi (statistics / data analyst) via related concepts, immediately');
+assert(/statistic|analy|Data analyst/i.test(r.cards[0].why) && /close to/.test(r.cards[0].why), 'related card says which real fact matched: ' + r.cards[0].why);
+assert(/word for word/.test(r.reply) && r.expansion === 'local', 'reply is honest that it is a related match');
+assert(!r.cards.some((c) => c.targetUid === 'eve'), 'empty profiles are never cited even in expansion');
+assert(r.usedAi === false, 'no Gemini call for a local expansion');
+// ---- plural / verb forms match without expansion
+r = await L.ask('alice', 'developers');
+assert(!r.none && r.cards.some((c) => c.targetUid === 'bob') && r.expansion === 'none', 'plural "developers" matches "developer" word for word');
+// ---- pointers: only for an ask that was made; static text without a key
+let pt = null; try { await L.pointers('alice', 'a blockchain lawyer in Lagos'); } catch (e) { pt = e; }
+assert(pt && /Ask me that first/.test(pt.message), 'pointers refuse asks that were never made (budget guard)');
+const pointer = await L.pointers('alice', 'a quantum cryptography professor from Oslo');
+assert(/Outside LINKUP/.test(pointer.text) && /Oslo|Harare/.test(pointer.text) && !pointer.cached, 'pointers give outside-LINKUP routes without Gemini: ' + pointer.text.slice(0, 80));
+const pointer2 = await L.pointers('alice', 'a quantum cryptography professor from Oslo');
+assert(pointer2.cached, 'pointers are cached per ask');
 // ---- interleaved repeat (an unrelated ask in between) is still cached
 r = await L.ask('alice', 'I need a Flutter developer in Harare for a paid fintech MVP');
-assert(r.cached && r.cards.map((c) => c.id).join() === firstAskCards.join() && r.asksLeft === 8, 'repeat after another ask is still served from cache');
+assert(r.cached && r.cards.map((c) => c.id).join() === firstAskCards.join() && r.asksLeft === 6, 'repeat after another ask is still served from cache');
 // ---- name lookup
 r = await L.ask('alice', 'connect me with Cara Dube');
 assert(r.cards.length === 1 && r.cards[0].targetUid === 'cara' && /Cara Dube/.test(r.cards[0].why), 'asking for a person by name finds them: ' + r.cards[0].why);
 // ---- home
 let h = await L.home('alice');
-assert(h.limits.meetsPerDay === 3 && h.limits.asksPerDay === 10 && h.limits.asksUsedToday === 3 && h.lastAsk && h.lastAsk.need === 'connect me with Cara Dube', 'home shows limits + last ask');
+assert(h.limits.meetsPerDay === 3 && h.limits.asksPerDay === 10 && h.limits.asksUsedToday === 5 && h.lastAsk && h.lastAsk.need === 'connect me with Cara Dube', 'home shows limits + last ask');
 assert(!('intents' in h), 'home has no intents');
 assert(h.cards.some((c) => c.targetUid === 'bob') && h.cards.some((c) => c.targetUid === 'cara'), 'cards persist across asks');
 // ---- meet -> intro pending + notification to bob
@@ -138,6 +159,8 @@ br = await botReplyForTest('telegram', '12345', 'meet 1');
 assert(/Asked Cara Dube/.test(br.text), 'bot "meet 1" targets the first card of the last answer: ' + br.text);
 br = await botReplyForTest('telegram', '12345', 'a blockchain lawyer in Lagos');
 assert(!br.cards && /Nobody on LINKUP fits/.test(br.text), 'bot no-match is graceful');
+br = await botReplyForTest('telegram', '12345', 'more');
+assert(/Outside LINKUP/.test(br.text), 'bot "more" gives outside-LINKUP pointers for the last ask');
 br = await botReplyForTest('telegram', '12345', 'cards');
 assert(/Your cards/.test(br.text), 'bot "cards" lists live cards');
 // ---- cron: housekeeping only
