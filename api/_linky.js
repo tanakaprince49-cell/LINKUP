@@ -440,7 +440,9 @@ export async function findPeople(uid, q, ctx, { user, state, existingCards = [] 
 // When nobody fits: the 3 most adjacent people (same city as the ask or the
 // member, shared skills / industries). Shown as profiles, never as intros.
 function nearestPeople(me, q, eligible) {
-  const loc = String(q.location || me.city || '').toLowerCase();
+  const askLoc = String(q.location || '').toLowerCase();
+  const askLocKnown = !!askLoc && eligible.some((c) => c.city && askLoc.includes(c.city.toLowerCase()));
+  const loc = askLocKnown ? askLoc : String(me.city || '').toLowerCase();
   const compat = new Map(localRank(compactProfile({ uid: me.uid, role: me.role, skills: me.skills, industries: me.industries, goals: me.lookingFor }), eligible.map((c) => compactProfile({ ...c, occupation: c.role })), eligible.length).map((r) => [r.uid, r.score]));
   return eligible
     .map((c) => ({ c, s: (loc && c.city && loc.includes(c.city.toLowerCase()) ? 3 : 0) + ((compat.get(c.uid) || 40) - 40) / 10 + (c.pic ? 0.25 : 0) + (c.role ? 0.25 : 0) }))
@@ -485,12 +487,15 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   if (!q.tokens.length) {
     return { id: '', need: q.need, reply: COACH, cards: [], nearest: [], none: true, checked: 0, createdAt: now, cached: false, asksLeft: asksLeft() };
   }
-  // Same ask again within the cache window: same answer, no tokens, no budget.
-  const last = state.lastAsk;
-  if (last && last.norm === q.norm && now - toMillis(last.createdAt) < LIMITS.askCacheHours * 3600000) {
-    const cards = (await loadCards(uid)).filter((c) => (last.cardIds || []).includes(c.id));
-    const ordered = (last.cardIds || []).map((id) => cards.find((c) => c.id === id)).filter(Boolean);
-    return { ...publicAsk(last), cards: ordered, cached: true, asksLeft: asksLeft() };
+  // Same ask again within the cache window (any of the last few asks): same
+  // answer, no tokens, no budget.
+  const recent = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])].filter(Boolean);
+  const hit = recent.find((a) => a.norm === q.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000);
+  if (hit) {
+    const cards = (await loadCards(uid)).filter((c) => (hit.cardIds || []).includes(c.id));
+    const ordered = (hit.cardIds || []).map((id) => cards.find((c) => c.id === id)).filter(Boolean);
+    if (hit !== state.lastAsk) await patchState(uid, { lastAsk: hit });
+    return { ...publicAsk(hit), cards: ordered, cached: true, asksLeft: asksLeft() };
   }
   if (used >= limits.asksPerDay) {
     const err = new Error(plus
@@ -553,7 +558,9 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   };
   const history = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
   history.push({ id: askId, need: q.need, cards: picks.length, none: !picks.length, source, createdAt: now });
-  await patchState(uid, { lastAsk: record, askHistory: history, asks: { day: today, count: used + 1 } });
+  const recentAsks = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])]
+    .filter((a) => a && a.norm !== q.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5);
+  await patchState(uid, { lastAsk: record, recentAsks, askHistory: history, asks: { day: today, count: used + 1 } });
   return { ...publicAsk(record), cards: resultCards, cached: false, asksLeft: Math.max(0, limits.asksPerDay - used - 1) };
 }
 
@@ -834,7 +841,7 @@ export async function setFacts(uid, input) {
     lookingFor: list(input?.lookingFor, 10, 80),
     updatedAt: Date.now(),
   };
-  await patchState(uid, { facts, lastAsk: FieldValue().delete() });
+  await patchState(uid, { facts, lastAsk: FieldValue().delete(), recentAsks: FieldValue().delete() });
   return { ok: true, facts: { ...facts } };
 }
 
