@@ -11,11 +11,11 @@
 //   WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, WHATSAPP_APP_SECRET (optional),
 //   LINKY_CRON_SECRET (optional; otherwise derived from the service-account key so no new secret is needed).
 import crypto from 'node:crypto';
-import { verifyRequestUser } from './_firebaseAdmin.js';
+import { getDb, verifyRequestUser } from './_firebaseAdmin.js';
 import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import {
   APP_URL, LIMITS, OFFERS, ask, audit, botUserFor, consumeLinkCode, createLinkCode, forget, home,
-  loadCards, loadState, loadUser, meet, orderedCards, pointers, respond, runCron, sendTelegram,
+  loadCards, loadState, loadUser, meet, orderedCards, pickPerson, pointers, respond, runCron, sendTelegram,
   sendWhatsApp, setCardStatus, setFacts, setPrefs, unlinkBot, profileFacts, telegramWebhookSecret,
 } from './_linky.js';
 
@@ -79,19 +79,42 @@ function readRawBody(req) {
 }
 
 // ---------------------------------------------------------------- bot brain (shared by Telegram + WhatsApp)
+// What the bot actually answers, as a slash menu. `group` = worth showing inside
+// a group chat, where Linky only wakes when called. Adding an entry here without a
+// matching branch in botReply() is the bug this list exists to prevent.
+export const BOT_COMMANDS = [
+  { command: 'start', description: 'Link this chat to your LINKUP account', group: true },
+  { command: 'help', description: 'How Linky works, in one screen', group: true },
+  { command: 'cards', description: 'Your current cards' },
+  { command: 'meet', description: 'Ask for the intro - "meet 1"' },
+  { command: 'skip', description: 'Clear a card - "skip 1"' },
+  { command: 'save', description: 'Keep a card for later - "save 1"' },
+  { command: 'accept', description: 'Answer an intro waiting on you' },
+  { command: 'decline', description: 'Say no, quietly, both ways' },
+  { command: 'later', description: 'Park an intro for two weeks' },
+  { command: 'draft', description: 'Write the first message for your top card' },
+  { command: 'more', description: 'Where to look outside LINKUP' },
+  { command: 'prefs', description: 'What you are open to' },
+  { command: 'audit', description: 'What Linky knows about you' },
+  { command: 'unlink', description: 'Disconnect this chat' },
+];
+
 const HELP = [
-  'I am Linky, LINKUP\'s connector. Tell me who you need and I answer right away with the people on LINKUP I can actually cite.',
+  'Just type who you need - a role, a skill, a city, or somebody by name. e.g. "a Flutter developer in Harare, paid" or "fred".',
   '',
-  'Just type who you need, e.g. "a Flutter developer in Harare, paid"',
-  'cards               - your current cards',
-  'meet [n]            - ask for the intro on card n (default 1)',
-  'skip [n] / save [n] - clear or keep a card',
-  'accept / decline / later - answer an intro request',
-  'more                - where to look outside LINKUP when nobody fits',
-  'prefs               - what you are open to',
-  'unlink              - disconnect this chat',
-  'help                - this list',
+  'cards      your current cards',
+  'meet 1     ask for the intro on card 1',
+  'skip 1     clear a card   |   save 1   keep it',
+  'accept     answer an intro waiting on you (decline / later too)',
+  'more       where to look outside LINKUP when nobody fits',
+  'prefs      what you are open to',
+  'unlink     disconnect this chat',
+  '',
+  'I only say things I can point at on a real profile. If nobody fits, I say that instead of guessing.',
 ].join('\n');
+
+// The bot's own short lines, so it reads like a person and not a receipt.
+
 
 const offerLabel = (o) => ({ paid: 'paid work', equity: 'equity', advisory: 'advisory', coffee: 'a coffee' }[o] || o);
 
@@ -106,14 +129,16 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
 
   // ---- not linked yet
   if (!bu) {
-    const codeMatch = raw.match(/\b([A-Za-z2-9]{6})\b/);
-    const startCode = lower.startsWith('/start ') ? raw.slice(7).trim() : lower.startsWith('/link ') ? raw.slice(6).trim() : codeMatch ? codeMatch[1] : '';
+    // Only ever treat the whole message as a code. The old pattern matched any
+    // six-letter word, so "hey people" came back as "that code did not work".
+    const bare = raw.replace(/[\s.,;:]/g, '').toUpperCase();
+    const startCode = lower.startsWith('/start ') ? raw.slice(7).trim() : lower.startsWith('/link ') ? raw.slice(6).trim() : (/^[A-HJ-NP-Z2-9]{6}$/.test(bare) ? bare : '');
     if (startCode) {
       const uid = await consumeLinkCode(startCode, channel, chatId);
       if (uid) {
         const user = await loadUser(uid);
         const name = profileFacts(user)?.name?.split(' ')[0] || 'there';
-        return { text: `Linked. Hi ${name}, this chat is now your Linky line. Tell me who you need and I answer right away.\n\n${HELP}` };
+        return { text: `That's you linked, ${name}. This chat is your Linky line now - I answer in here the same way I do in the app.\n\n${HELP}` };
       }
       if (!lower.startsWith('/start')) return { text: 'That code did not work (codes last 15 minutes). Open LINKUP, go to the Linky tab, tap Connect Telegram / WhatsApp and send me the new code.' };
     }
@@ -131,19 +156,38 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
   if (callback) {
     const [kind, a, b] = String(callback).split(':');
     try {
-      if (kind === 'm') { const r = await meet(uid, a, { userDoc: user }); return { text: r.matchId ? `You are already connected. Open the chat: ${APP_URL}/chat/${r.matchId}` : `Asked. I will tell you when they answer.${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today)` : ''}` }; }
-      if (kind === 's') { await setCardStatus(uid, a, 'skip'); return { text: 'Skipped.' }; }
-      if (kind === 'v') { await setCardStatus(uid, a, 'saved'); return { text: 'Saved.' }; }
-      if (kind === 'r') { const r = await respond(uid, b, a); return { text: r.status === 'accepted' ? `Done - you two are connected. Chat: ${APP_URL}/chat/${r.matchId}` : r.status === 'snoozed' ? 'Parked for 2 weeks.' : 'Declined. They will not be suggested to you again.' }; }
+      if (kind === 'm') { const r = await meet(uid, a, { userDoc: user }); return { text: r.matchId ? `You two are already connected, so no intro needed. Chat: ${APP_URL}/chat/${r.matchId}` : `On it. I will ask them politely and tell you the moment they answer.${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today)` : ''}` }; }
+      if (kind === 's') { await setCardStatus(uid, a, 'skip'); return { text: 'Done, they will not come up again for a while.' }; }
+      if (kind === 'v') { await setCardStatus(uid, a, 'saved'); return { text: 'Kept. They will wait for you in cards.' }; }
+      if (kind === 'p') { const r = await pointers(uid, String(a || ''), { userDoc: user }); return { text: pointerText(r) }; }
+      // A tapped chip on WhatsApp arrives as an id like c:0:cards - re-run it as
+      // though the member had typed it.
+      if (kind === 'c') return await botReply(channel, chatId, [a, b].filter(Boolean).join(':').replace(/^\d+:/, ''));
+      if (kind === 'r') { const r = await respond(uid, b, a); return { text: r.status === 'accepted' ? `Done - you and ${await nameOf(uid, b)} are connected. Chat: ${APP_URL}/chat/${r.matchId}` : r.status === 'snoozed' ? 'Parked for 2 weeks, no pressure on either side.' : 'Declined quietly. They will not be suggested to you again.' }; }
     } catch (err) {
       return { text: String(err?.message || 'That did not work.') };
     }
   }
 
-  const cmd = lower.replace(/^\//, '');
+  let cmd = lower.replace(/^\//, '');
+  // Tapping the chip Linky offered ("Where to look outside LINKUP") must not be
+  // treated as a fresh search. Chips are commands wearing a sentence.
+  if (/outside linkup|search the web|look outside/.test(cmd) && !/^(meet|skip|save)\b/.test(cmd)) cmd = 'more';
   const num = (s, d = 1) => { const m = s.match(/\b(\d{1,2})\b/); return m ? Math.max(1, Number(m[1])) : d; };
 
-  if (cmd === 'start' || cmd === 'help') return { text: HELP };
+  if (cmd === 'start' || cmd === 'help') return { text: `Hi ${profileFacts(user)?.name?.split(' ')[0] || 'there'} - here is how I work.\n\n${HELP}` };
+
+  // "Fred? I have two of those - which one?" -> "1" should just work.
+  const last = await loadState(uid).then((st) => st.lastAsk).catch(() => null);
+  if (last?.kind === 'ambiguous' && /^\d{1,2}$/.test(cmd.trim()) && Array.isArray(last.nearest) && last.nearest.length) {
+    const picked = last.nearest[Number(cmd.trim()) - 1];
+    if (picked?.uid) {
+      const card = await pickPersonCard(uid, picked);
+      if (card && card.id) return { text: `${picked.name}, yes. Card is in front of you - ${card.why}`, cards: [card] };
+      if (card?.error) return { text: `${picked.name} - ${card.error}` };
+    }
+  }
+  if (last?.kind === 'ambiguous' && /^\d{1,2}$/.test(cmd.trim())) return { text: 'I lost that one. Say "cards" and pick by name, or ask again.' };
   if (cmd === 'unlink') { await unlinkBot(channel, chatId); return { text: 'Unlinked. Your LINKUP account is untouched.' }; }
   if (cmd === 'forget') { await forget(uid); return { text: 'Forgotten: cards deleted, what you told me cleared, chat unlinked.' }; }
 
@@ -160,6 +204,23 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
   if (cmd === 'prefs') {
     const h = await home(uid, { userDoc: user });
     return { text: `Open to: ${h.prefs.openTo.map(offerLabel).join(', ')}. Weekly inbound cap: ${h.prefs.inboundCap}.\nChange these in the app: Linky tab > Preferences.` };
+  }
+  // Linky reads the audit page out loud, because "what do you know about me" is a
+  // question people ask and making them open the app to answer it is a shrug.
+  if (cmd === 'audit' || cmd.startsWith('audit ')) {
+    const a = await audit(uid, { userDoc: user });
+    const line = (label, value) => (value ? `${label}: ${value}\n` : '');
+    const top = (a.asks || []).slice(0, 3).map((x) => `  - ${x.need}${x.none ? ' (nobody yet)' : ` (${x.cards} cards)`}`).join('\n');
+    return {
+      text: `Here is everything I have on you.\n\n${line('Role', a.facts.role)}${line('Company', a.facts.company)}${line('City', a.facts.city)}${line('Skills', (a.facts.skills || []).slice(0, 6).join(', '))}${line('Open to', a.signals.openTo.map(offerLabel).join(', '))}${line('Your notes', (a.told.notes || '').slice(0, 180))}Used today: ${a.signals.asksUsedToday} asks, ${a.signals.meetsUsedToday} Meets. People you asked me not to suggest again: ${a.signals.mutedCount}.\n\n${top ? `Last asks:\n${top}` : 'No asks yet.'}\n\nSay "forget" any time and I delete all of it.`,
+    };
+  }
+  // "draft" is a real intent the app has; on the bot it drafted nothing and simply
+  // became a search for the word "draft".
+  if (cmd === 'draft' || cmd.startsWith('draft ')) {
+    const rest = cmd.replace(/^draft\s*/, '').trim();
+    const r = await ask(uid, rest ? `write me a message to ${rest}` : 'write the first message', { source: channel, userDoc: user });
+    return { text: r.reply, chips: (r.suggest || []).slice(0, 3) };
   }
 
   // ---- card decisions by number
@@ -193,10 +254,10 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
   if (cmd === 'more' || cmd === 'outside' || cmd === 'where') {
     const state = await loadState(uid);
     const last = state.lastAsk;
-    if (!last?.need) return { text: 'Ask me who you need first.' };
+    if (!last?.need) return { text: 'Ask me who you need first, then I can go looking outside LINKUP.' };
     try {
       const r = await pointers(uid, last.need, { userDoc: user });
-      return { text: r.text };
+      return { text: pointerText(r), buttons: r.leads?.length ? leadsKeyboard(r.leads) : undefined };
     } catch (err) {
       return { text: String(err?.message || 'That did not work.') };
     }
@@ -206,11 +267,43 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
   const message = cmd.startsWith('new') ? raw.replace(/^\/?new\b[\s:,-]*/i, '').trim() : raw;
   try {
     const out = await ask(uid, message, { userDoc: user, source: channel });
-    if (!out.cards.length) return { text: out.reply };
-    return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n')}\n\nReply "meet 1" (or 2, 3...) and I will ask them.`, cards: out.cards };
+    if (!out.cards.length) {
+      return { text: out.reply, chips: (out.suggest || []).filter((c) => !/outside LINKUP/i.test(c)).slice(0, 3) };
+    }
+    return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n')}`, cards: out.cards, chips: out.suggest };
   } catch (err) {
     return { text: String(err?.message || 'That did not work.') };
   }
+}
+
+// Outside-LINKUP answer, formatted once for both bots.
+function pointerText(r) {
+  const leads = Array.isArray(r?.leads) ? r.leads : [];
+  const body = String(r?.text || '').trim();
+  if (!leads.length) return body;
+  const list = leads.map((l, i) => `${i + 1}. ${l.name}${l.title ? ` - ${l.title}` : ''}${l.why ? ` (${l.why})` : ''}\n   ${l.url}`).join('\n');
+  return `${body}\n\nHere are ${leads.length} public ${leads.length === 1 ? 'profile' : 'profiles'} I found just now - no contact details, just the public page:\n${list}\n\nMessage them yourself from your own account - or say DRAFT and I will write the first line for you.`;
+}
+
+function leadsKeyboard(leads) {
+  return leads.slice(0, 3).map((l, i) => ([{ text: `${i + 1}. ${String(l.name).slice(0, 22)}`, url: l.url }]));
+}
+
+// "1" after an ambiguous name: the server turns that person into a real card.
+async function pickPersonCard(uid, picked) {
+  try {
+    return await pickPerson(uid, picked.uid);
+  } catch (err) {
+    return { error: String(err?.message || 'That did not work.'), picked };
+  }
+}
+
+async function nameOf(uid, introId) {
+  try {
+    const L = await import('./_linky.js');
+    const h = await L.home(uid);
+    return (h.inbound.find((i) => i.id === introId) || {}).requesterName || 'them';
+  } catch { return 'them'; }
 }
 
 // Exposed for the emulator E2E only.
@@ -233,11 +326,29 @@ function telegramCardButtons(cards) {
   ]));
 }
 
+// The chips Linky suggested become real buttons, so a member taps instead of
+// typing. Free-text chips become reply keys; a card list becomes inline buttons.
+function telegramChips(chips) {
+  const out = (chips || []).filter(Boolean).slice(0, 3);
+  if (!out.length) return undefined;
+  return { keyboard: [out.slice(0, 3).map((t) => ({ text: String(t).slice(0, 32) }))], resize_keyboard: false, one_time_keyboard: true };
+}
+
 async function handleTelegram(req, res) {
   const secret = telegramWebhookSecret();
   if (!secret) { res.status(503).json({ ok: false, error: 'TELEGRAM_BOT_TOKEN not configured' }); return; }
   if (!safeEqual(req.headers['x-telegram-bot-api-secret-token'], secret)) { res.status(401).json({ ok: false }); return; }
   const update = readJsonBody(req);
+  // Telegram retries anything it does not get a 200 for in 60s, and a retried
+  // "meet 2" is a second request to a real person. Skip what we already did.
+  const updateId = Number(update?.update_id || 0);
+  if (updateId) {
+    try {
+      const seen = await getDb().collection('linkyOutreach').doc(`tg_${updateId}`).get();
+      if (seen.exists) { res.status(200).json({ ok: true, duplicate: true }); return; }
+      await getDb().collection('linkyOutreach').doc(`tg_${updateId}`).set({ at: Date.now() });
+    } catch { /* if the guard breaks, answer the member anyway */ }
+  }
   try {
     if (update?.callback_query) {
       const cq = update.callback_query;
@@ -247,12 +358,18 @@ async function handleTelegram(req, res) {
       await sendTelegram(chatId, r.text);
     } else if (update?.message?.text) {
       const chatId = update.message.chat.id;
+      // An ask can take a few seconds; "typing…" is the difference between a
+      // chatbot and a voicemail box.
+      await telegramApi('sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => null);
       const r = await botReply('telegram', String(chatId), update.message.text);
-      if (r.cards?.length) {
-        await telegramApi('sendMessage', { chat_id: chatId, text: r.text, disable_web_page_preview: true, reply_markup: { inline_keyboard: telegramCardButtons(r.cards) } });
-      } else {
-        await sendTelegram(chatId, r.text);
-      }
+      const markup = r.cards?.length
+        ? { inline_keyboard: telegramCardButtons(r.cards) }
+        : telegramChips(r.chips);
+      await telegramApi('sendMessage', { chat_id: chatId, text: r.text, disable_web_page_preview: true, ...(markup ? { reply_markup: markup } : {}) });
+    } else if (update?.message?.chat?.id && !update?.message?.text) {
+      // Voice notes, photos, stickers: no transcription here, so say so like a
+      // person instead of leaving them on read.
+      await sendTelegram(update.message.chat.id, 'I only get text, I am afraid - pictures and voice notes go straight past me. Type who you need and I will go looking.');
     }
   } catch (err) {
     console.error('[linky] telegram error', err);
@@ -292,8 +409,15 @@ async function handleWhatsApp(req, res) {
             r = await botReply('whatsapp', from, '', { callback: msg.interactive.button_reply.id });
           } else if (msg.type === 'text') {
             r = await botReply('whatsapp', from, msg.text?.body || '');
+          } else if (['audio', 'voice', 'image', 'sticker', 'document'].includes(msg.type)) {
+            await sendWhatsApp(from, 'I only get text on this number - voice notes and pictures go straight past me. Type who you need and I will go looking.');
+            continue;
           } else continue;
-          await sendWhatsApp(from, r.text);
+          if (!r.cards?.length && r.chips?.length) {
+            await sendWhatsAppButtons(from, r.text, r.chips.slice(0, 3).map((c, i) => ({ id: `c:${i}:${String(c).slice(0, 60)}`, title: String(c).slice(0, 20) })));
+          } else {
+            await sendWhatsApp(from, r.text);
+          }
           if (r.cards?.length) {
             // WhatsApp allows 3 reply buttons per message: one message per card.
             for (const c of r.cards.slice(0, 3)) {
@@ -342,6 +466,7 @@ async function handleApp(req, res) {
       case 'facts': out = await setFacts(uid, { notes: body.notes, skills: body.skills, lookingFor: body.lookingFor }); break;
       case 'pointers': out = await pointers(uid, String(body.need || '')); break;
       case 'meet': out = await meet(uid, String(body.cardId || '')); break;
+      case 'pickPerson': out = await pickPerson(uid, String(body.targetUid || '')); break;
       case 'card': {
         const status = ['skip', 'saved', 'new'].includes(body.status) ? body.status : 'skip';
         out = await setCardStatus(uid, String(body.cardId || ''), status); break;

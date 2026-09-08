@@ -71,7 +71,7 @@ export default function LinkyProfileScreen({ navigation }: any) {
         </View>
 
         <TouchableOpacity
-          onPress={() => navigation.replace('Linky')}
+          onPress={() => navigation.navigate('Main', { screen: 'LinkyHome' })}
           style={styles.chatBtn}
         >
           <MessageSquare size={18} color="#000" />

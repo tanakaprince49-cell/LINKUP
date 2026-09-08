@@ -32,7 +32,8 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exit(1);
 
 // ---- ask: greeting -> coach, no budget, no cards
 let r = await L.ask('alice', 'hi linky');
-assert(r.none && !r.cards.length && /Tell me who you need/.test(r.reply) && r.asksLeft === 10, 'greeting -> coaching reply, no budget used');
+assert(r.none && !r.cards.length && /tell me who you need/i.test(r.reply) && r.asksLeft === 10, 'greeting -> coaching reply, no budget used');
+assert(r.kind === 'chat' && r.free === true && Array.isArray(r.suggest) && r.suggest.length === 3, 'chit-chat is tagged as chat, is free, and comes with tappable chips');
 // ---- ask: immediate cited answer
 r = await L.ask('alice', 'I need a Flutter developer in Harare for a paid fintech MVP');
 console.log('    reply:', r.reply);
@@ -80,7 +81,9 @@ r = await L.ask('alice', 'connect me with Cara Dube');
 assert(r.cards.length === 1 && r.cards[0].targetUid === 'cara' && /Cara Dube/.test(r.cards[0].why), 'asking for a person by name finds them: ' + r.cards[0].why);
 // ---- home
 let h = await L.home('alice');
-assert(h.limits.meetsPerDay === 3 && h.limits.asksPerDay === 10 && h.limits.asksUsedToday === 5 && h.lastAsk && h.lastAsk.need === 'connect me with Cara Dube', 'home shows limits + last ask');
+assert(h.limits.meetsPerDay === 3 && h.limits.asksPerDay === 10 && h.limits.asksUsedToday === 4 && h.lastAsk && h.lastAsk.need === 'connect me with Cara Dube', 'home shows limits + last ask (a name lookup cost nothing: 4 of 5 asks)');
+assert(Array.isArray(h.thread) && h.thread.length >= 10 && h.thread.every((t) => t.text && ['user', 'linky'].includes(t.role)), 'home returns the whole thread, oldest first, both sides');
+assert(h.thread.filter((t) => t.role === 'linky').every((t) => !/[*_#]|^>/.test(t.text)), 'Linky never sends markdown into a chat bubble');
 assert(!('intents' in h), 'home has no intents');
 assert(h.cards.some((c) => c.targetUid === 'bob') && h.cards.some((c) => c.targetUid === 'cara'), 'cards persist across asks');
 // ---- meet -> intro pending + notification to bob

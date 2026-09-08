@@ -51,6 +51,8 @@ export type LinkyAsk = {
   id: string;
   need: string;
   reply: string;
+  /** What the answer was, so the UI can dress it: search, a name, chit-chat. */
+  kind?: 'found' | 'close' | 'none' | 'person' | 'ambiguous' | 'chat' | 'draft';
   cardIds: string[];
   none: boolean;
   nearest: LinkyNearest[];
@@ -59,7 +61,43 @@ export type LinkyAsk = {
   createdAt: number;
 };
 
-export type LinkyAskResult = LinkyAsk & { cards: LinkyCard[]; cached: boolean; usedAi?: boolean; asksLeft: number };
+/** One message in the Linky thread - both directions. */
+export type LinkyTurn = {
+  id: string;
+  role: 'user' | 'linky';
+  text: string;
+  kind?: string;
+  cardIds?: string[];
+  at: number;
+};
+
+/** Anything the member can tap instead of typing. */
+export type LinkySuggestion = string;
+
+export type LinkyLead = {
+  name: string;
+  title?: string;
+  url: string;
+  why?: string;
+  fit?: number;
+  resolved?: boolean;
+};
+
+export type LinkyAskResult = LinkyAsk & {
+  cards: LinkyCard[];
+  cached: boolean;
+  usedAi?: boolean;
+  asksLeft: number;
+  /** Free / instant: a name lookup, chit-chat, a drafted message. */
+  free?: boolean;
+  /** Quick replies to render as chips under Linky's bubble. */
+  suggest?: LinkySuggestion[];
+  /** Newest whole thread, so the app can swap in one round trip. */
+  thread?: LinkyTurn[];
+  /** Set when the member asked for somebody they are already connected to. */
+  matchId?: string;
+  blocked?: string;
+};
 
 export type LinkyToldFacts = { notes: string; skills: string[]; lookingFor: string[]; updatedAt: number | null };
 
@@ -73,6 +111,7 @@ export type LinkyHome = {
   prefs: { openTo: IntentOffer[]; inboundCap: number };
   channels: { telegram: boolean; whatsapp: boolean };
   lastAsk: LinkyAsk | null;
+  thread?: LinkyTurn[];
   facts: LinkyToldFacts;
   brief: string;
 };
@@ -119,7 +158,9 @@ export const linkyMeet = (cardId: string) => linkyCall<{ introId?: string; match
 export const linkyCard = (cardId: string, status: 'skip' | 'saved') => linkyCall<LinkyCard>('card', { cardId, status });
 export const linkyRespond = (introId: string, decision: 'accept' | 'decline' | 'later') => linkyCall<{ status: string; matchId?: string }>('respond', { introId, decision });
 export const linkyPrefs = (prefs: { openTo?: IntentOffer[]; inboundCap?: number }) => linkyCall<{ ok: boolean }>('prefs', prefs);
-export const linkyPointers = (need: string) => linkyCall<{ text: string; cached: boolean }>('pointers', { need });
+export const linkyPointers = (need: string) => linkyCall<{ text: string; cached: boolean; leads?: LinkyLead[]; searches?: number; note?: string }>('pointers', { need });
+/** "Which Fred?" -> "the first one". Turns a picked member into a real card. */
+export const linkyPickPerson = (targetUid: string) => linkyCall<LinkyCard>('pickPerson', { targetUid });
 export const linkyFacts = (facts: { notes: string; skills: string[]; lookingFor: string[] }) => linkyCall<{ ok: boolean; facts: LinkyToldFacts }>('facts', facts);
 export const linkyAudit = () => linkyCall<LinkyAudit>('audit');
 export const linkyForget = () => linkyCall<{ ok: boolean }>('forget');
