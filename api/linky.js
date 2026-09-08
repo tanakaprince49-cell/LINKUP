@@ -1,8 +1,8 @@
-// Linky endpoint: app actions, hourly cron, Telegram + WhatsApp webhooks.
+// Linky endpoint: app actions, housekeeping cron, Telegram + WhatsApp webhooks.
 // One function on purpose (Vercel Hobby caps a deployment at 12).
 //
 //   POST /api/linky            {action, ...}  Bearer <Firebase idToken>
-//   POST /api/linky?action=cron               x-linky-cron: <token>   (GitHub Actions, hourly)
+//   POST /api/linky?action=cron               x-linky-cron: <token>   (GitHub Actions, hourly housekeeping)
 //   POST /api/telegram  -> rewrite -> /api/linky?channel=telegram      (Telegram setWebhook URL)
 //   GET|POST /api/whatsapp -> rewrite -> /api/linky?channel=whatsapp   (Meta Cloud API webhook)
 //
@@ -14,12 +14,11 @@ import crypto from 'node:crypto';
 import { verifyRequestUser } from './_firebaseAdmin.js';
 import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import {
-  LIMITS, OFFERS, audit, botUserFor, closeIntent, consumeLinkCode, createLinkCode, forget, home,
-  intake, loadCards, loadState, loadUser, meet, resetIntake, respond, runCron, saveIntent, sendTelegram,
-  sendWhatsApp, setCardStatus, setPrefs, unlinkBot, activeIntentsFor, profileFacts, telegramWebhookSecret,
+  APP_URL, LIMITS, OFFERS, ask, audit, botUserFor, consumeLinkCode, createLinkCode, forget, home,
+  loadCards, loadState, loadUser, meet, orderedCards, respond, runCron, sendTelegram,
+  sendWhatsApp, setCardStatus, setFacts, setPrefs, unlinkBot, profileFacts, telegramWebhookSecret,
 } from './_linky.js';
 
-const APP_URL = 'https://linkup-muqu.vercel.app';
 
 // ---------------------------------------------------------------- cron auth
 export function cronToken() {
@@ -81,14 +80,13 @@ function readRawBody(req) {
 
 // ---------------------------------------------------------------- bot brain (shared by Telegram + WhatsApp)
 const HELP = [
-  'I am Linky, LINKUP\'s connector. Tell me who you need and I will find the few people worth your time.',
+  'I am Linky, LINKUP\'s connector. Tell me who you need and I answer right away with the people on LINKUP I can actually cite.',
   '',
-  'new <who you need>  - start a new intent',
-  'brief               - today\'s intro cards',
+  'Just type who you need, e.g. "a Flutter developer in Harare, paid"',
+  'cards               - your current cards',
   'meet [n]            - ask for the intro on card n (default 1)',
   'skip [n] / save [n] - clear or keep a card',
   'accept / decline / later - answer an intro request',
-  'intents             - your open intents (close <n> to close one)',
   'prefs               - what you are open to',
   'unlink              - disconnect this chat',
   'help                - this list',
@@ -100,7 +98,7 @@ function cardLine(c, n) {
   return `${n}. ${c.targetName}${c.targetRole ? ` - ${c.targetRole}` : ''}${c.targetCity ? ` (${c.targetCity})` : ''}\n   Why: ${c.why}`;
 }
 
-async function botReply(channel, chatId, textIn, { callback } = {}) {
+export async function botReply(channel, chatId, textIn, { callback } = {}) {
   const raw = String(textIn || '').trim();
   const lower = raw.toLowerCase();
   const bu = await botUserFor(channel, chatId);
@@ -114,7 +112,7 @@ async function botReply(channel, chatId, textIn, { callback } = {}) {
       if (uid) {
         const user = await loadUser(uid);
         const name = profileFacts(user)?.name?.split(' ')[0] || 'there';
-        return { text: `Linked. Hi ${name}, this chat is now your Linky line. Say "new" followed by who you need, or "brief" for today's cards.\n\n${HELP}` };
+        return { text: `Linked. Hi ${name}, this chat is now your Linky line. Tell me who you need and I answer right away.\n\n${HELP}` };
       }
       if (!lower.startsWith('/start')) return { text: 'That code did not work (codes last 15 minutes). Open LINKUP, go to the Linky tab, tap Connect Telegram / WhatsApp and send me the new code.' };
     }
@@ -146,28 +144,17 @@ async function botReply(channel, chatId, textIn, { callback } = {}) {
 
   if (cmd === 'start' || cmd === 'help') return { text: HELP };
   if (cmd === 'unlink') { await unlinkBot(channel, chatId); return { text: 'Unlinked. Your LINKUP account is untouched.' }; }
-  if (cmd === 'forget') { await forget(uid); return { text: 'Forgotten: intents closed, cards deleted, chat unlinked.' }; }
+  if (cmd === 'forget') { await forget(uid); return { text: 'Forgotten: cards deleted, what you told me cleared, chat unlinked.' }; }
+
+  const numbered = async () => orderedCards(await loadCards(uid), await loadState(uid)).slice(0, 5);
 
   if (cmd === 'brief' || cmd === 'cards' || cmd === 'today') {
-    const cards = (await loadCards(uid)).filter((c) => c.status === 'new' || c.status === 'saved').slice(-5).reverse();
-    if (!cards.length) return { text: 'No cards yet. I match hourly against your open intents; say "new" followed by who you need to open one.' };
+    const cards = await numbered();
+    if (!cards.length) return { text: 'No cards right now. Tell me who you need and I answer straight away.' };
     return {
       text: `Your cards:\n${cards.map((c, i) => cardLine(c, i + 1)).join('\n')}\n\nReply "meet 1" (or 2, 3...) and I will ask them.`,
       cards,
     };
-  }
-
-  if (cmd === 'intents' || cmd === 'intent') {
-    const intents = await activeIntentsFor(uid);
-    if (!intents.length) return { text: 'No open intents. Say "new" followed by who you need.' };
-    return { text: `Open intents:\n${intents.map((i, n) => `${n + 1}. ${i.need} - ${offerLabel(i.offer)}, ${i.urgency.replace('_', ' ')}${i.location ? `, ${i.location}` : ''}`).join('\n')}\n\n"close 1" closes one.` };
-  }
-  if (cmd.startsWith('close')) {
-    const intents = await activeIntentsFor(uid);
-    const target = intents[num(cmd) - 1];
-    if (!target) return { text: 'No intent with that number. Say "intents" to list them.' };
-    await closeIntent(uid, target.id);
-    return { text: `Closed: ${target.need}` };
   }
   if (cmd === 'prefs') {
     const h = await home(uid, { userDoc: user });
@@ -176,9 +163,9 @@ async function botReply(channel, chatId, textIn, { callback } = {}) {
 
   // ---- card decisions by number
   if (/^(meet|skip|save)\b/.test(cmd)) {
-    const cards = (await loadCards(uid)).filter((c) => c.status === 'new' || c.status === 'saved').slice(-5).reverse();
+    const cards = await numbered();
     const card = cards[num(cmd) - 1];
-    if (!card) return { text: 'No card with that number. Say "brief" to see them.' };
+    if (!card) return { text: 'No card with that number. Say "cards" to see them.' };
     try {
       if (cmd.startsWith('meet')) {
         const r = await meet(uid, card.id, { userDoc: user });
@@ -195,32 +182,25 @@ async function botReply(channel, chatId, textIn, { callback } = {}) {
   if (/^(accept|decline|later|not now|yes please)\b/.test(cmd)) {
     const h = await home(uid, { userDoc: user });
     const pending = h.inbound[0];
-    if (!pending) {
-      if (!/^accept|yes/.test(cmd)) return { text: 'Nothing to answer right now.' };
-    } else {
-      const decision = cmd.startsWith('accept') || cmd.startsWith('yes') ? 'accept' : cmd.startsWith('decline') ? 'decline' : 'later';
-      const r = await respond(uid, pending.id, decision);
-      return { text: r.status === 'accepted' ? `Done - you and ${pending.requesterName} are connected. Chat: ${APP_URL}/chat/${r.matchId}` : r.status === 'snoozed' ? 'Parked for 2 weeks.' : 'Declined. They will not be suggested to you again.' };
-    }
+    if (!pending) return { text: 'Nothing to answer right now.' };
+    const decision = cmd.startsWith('accept') || cmd.startsWith('yes') ? 'accept' : cmd.startsWith('decline') ? 'decline' : 'later';
+    const r = await respond(uid, pending.id, decision);
+    return { text: r.status === 'accepted' ? `Done - you and ${pending.requesterName} are connected. Chat: ${APP_URL}/chat/${r.matchId}` : r.status === 'snoozed' ? 'Parked for 2 weeks.' : 'Declined. They will not be suggested to you again.' };
   }
 
-  // ---- intent intake (interview)
-  if (cmd === 'cancel' || cmd === 'stop') { await resetIntake(uid); return { text: 'Cancelled.' }; }
-  const h = await home(uid, { userDoc: user });
-  const draft = h.intake?.draft;
-  if (draft && /^(yes|save|confirm|ok|okay|yep|go)\b/.test(cmd)) {
-    try {
-      const r = await saveIntent(uid, draft, { source: channel, userDoc: user });
-      const first = r.cards.length ? `\n\nFirst pass:\n${r.cards.map((c, i) => cardLine(c, i + 1)).join('\n')}\n\nReply "meet 1" to ask for the intro.` : '\n\nNothing cited yet - I will keep looking every hour and message you when someone fits.';
-      return { text: `Saved: ${r.intent.need}${first}`, cards: r.cards };
-    } catch (err) {
-      return { text: String(err?.message || 'Could not save that intent.') };
-    }
+  // ---- everything else is an ask: answered right now
+  const message = cmd.startsWith('new') ? raw.replace(/^\/?new\b[\s:,-]*/i, '').trim() : raw;
+  try {
+    const out = await ask(uid, message, { userDoc: user, source: channel });
+    if (!out.cards.length) return { text: out.reply };
+    return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n')}\n\nReply "meet 1" (or 2, 3...) and I will ask them.`, cards: out.cards };
+  } catch (err) {
+    return { text: String(err?.message || 'That did not work.') };
   }
-  const message = cmd.startsWith('new') ? raw.replace(/^\/?new\b[\s:,-]*/i, '').trim() || 'I need someone' : raw;
-  const out = await intake(uid, message, { userDoc: user, source: channel });
-  return { text: out.ready ? `${out.reply}\n\nReply YES to save it.` : out.reply };
 }
+
+// Exposed for the emulator E2E only.
+export const botReplyForTest = botReply;
 
 // ---------------------------------------------------------------- Telegram
 async function telegramApi(method, payload) {
@@ -344,10 +324,8 @@ async function handleApp(req, res) {
     let out;
     switch (action) {
       case 'home': out = await home(uid); break;
-      case 'intake': out = await intake(uid, body.message, { source: 'app' }); break;
-      case 'intakeReset': out = await resetIntake(uid); break;
-      case 'saveIntent': out = await saveIntent(uid, body.intent || {}, { source: 'app' }); break;
-      case 'closeIntent': out = await closeIntent(uid, body.intentId); break;
+      case 'ask': out = await ask(uid, body.message, { source: 'app' }); break;
+      case 'facts': out = await setFacts(uid, { notes: body.notes, skills: body.skills, lookingFor: body.lookingFor }); break;
       case 'meet': out = await meet(uid, String(body.cardId || '')); break;
       case 'card': {
         const status = ['skip', 'saved', 'new'].includes(body.status) ? body.status : 'skip';
@@ -375,7 +353,7 @@ async function handleApp(req, res) {
     res.status(200).json(out);
   } catch (err) {
     const message = String(err?.message || 'Linky hit a snag.');
-    sendError(res, err?.code === 'intent_limit' || err?.code === 'meet_limit' ? 402 : 400, message, message);
+    sendError(res, err?.code === 'ask_limit' || err?.code === 'meet_limit' ? 402 : 400, message, message);
   }
 }
 
@@ -389,8 +367,7 @@ export default async function handler(req, res) {
   if (wantsCron) {
     if (!(await cronAuthorized(req))) { sendError(res, 401, 'Bad cron token.'); return; }
     try {
-      const batch = Math.max(1, Math.min(8, Number(req.query?.batch || 4)));
-      const out = await runCron({ batch });
+      const out = await runCron();
       setCors(res);
       res.status(200).json(out);
     } catch (err) {

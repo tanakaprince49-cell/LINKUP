@@ -44,7 +44,7 @@ type PaywallModalProps = {
 const LOGO = require('../../assets/logo-square.png');
 
 const PRO_PERKS = [
-  '3 open Linky intents & unlimited Meets',
+  '60 Linky asks a day & unlimited Meets',
   'Who Viewed You — names & profiles of everyone checking you out',
   'Advanced search, AI ranking & saved search alerts',
   'Unlimited AI warm intros & Linky assistant',

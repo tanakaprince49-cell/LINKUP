@@ -1,10 +1,10 @@
 // Linky tab — replaces the swipe deck.
 //
-// Home = today's intro cards (Meet / Skip / Save), intro requests waiting on
-// you (Accept / Decline / Not now), your open intents, and a composer that
-// either interviews you into a new intent or hands off to the Linky chat.
-// Everything here goes through /api/linky; the app never writes the intent /
-// intro collections itself.
+// Ask Linky who you need and he answers in the same request with the people
+// on LINKUP he can cite a reason for (Meet / Skip / Save), or says plainly
+// that nobody fits yet. Intro requests waiting on you sit at the top
+// (Accept / Decline / Not now). Everything goes through /api/linky; the app
+// never writes the intro collections itself.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { ArrowUp, Check, Clock, MessageSquare, Plus, Send, Settings2, ShieldCheck, X } from 'lucide-react-native';
+import { ArrowUp, Check, Clock, Send, Settings2, ShieldCheck, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
@@ -28,24 +28,18 @@ import { notifyUser } from '../lib/notify';
 import PaywallModal from '../components/PaywallModal';
 import {
   LinkyApiError,
+  LinkyAsk,
   LinkyCard,
   LinkyHome,
   LinkyIntro,
-  OFFER_LABELS,
-  URGENCY_LABELS,
+  linkyAsk,
   linkyCard,
-  linkyCloseIntent,
   linkyHome,
-  linkyIntake,
-  linkyIntakeReset,
   linkyMeet,
   linkyRespond,
-  linkySaveIntent,
 } from '../lib/linkyApi';
 
 const FALLBACK_AVATAR = 'https://ui-avatars.com/api/?name=U&background=DFFB3F&color=000&size=80';
-
-type IntakeTurn = { role: 'user' | 'assistant'; content: string };
 
 const Avatar = ({ uri, size = 44 }: { uri?: string; size?: number }) => (
   <Image source={{ uri: uri || FALLBACK_AVATAR }} style={{ width: size, height: size, borderRadius: size / 3.2, backgroundColor: '#E0E0E0' }} />
@@ -173,9 +167,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
-  const [turns, setTurns] = useState<IntakeTurn[]>([]);
-  const [draft, setDraft] = useState<any>(null);
-  const [saving, setSaving] = useState(false);
+  const [pendingAsk, setPendingAsk] = useState('');
+  const [answer, setAnswer] = useState<LinkyAsk | null>(null);
   const [paywall, setPaywall] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const mounted = useRef(true);
@@ -190,13 +183,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
       if (!mounted.current) return;
       setHome(h);
       setError('');
-      if (h.intake?.history?.length) {
-        setTurns(h.intake.history);
-        setDraft(h.intake.draft || null);
-      } else {
-        setTurns([]);
-        setDraft(null);
-      }
+      setAnswer((a) => a || h.lastAsk);
     } catch (err) {
       if (!mounted.current) return;
       setError(err instanceof Error ? err.message : 'Linky is unavailable right now.');
@@ -263,57 +250,36 @@ export default function LinkyHomeScreen({ navigation }: any) {
     }
   };
 
-  const onCloseIntent = (intentId: string, need: string) => {
-    notifyUser('Close this intent?', need, [
-      { text: 'Keep', style: 'cancel' },
-      { text: 'Close', style: 'destructive', onPress: async () => { try { await linkyCloseIntent(intentId); await load(true); } catch (err) { fail(err, 'Could not close'); } } },
-    ]);
-  };
-
   const send = async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg || thinking) return;
     setInput('');
-    setTurns((t) => [...t, { role: 'user', content: msg }]);
+    setPendingAsk(msg);
     setThinking(true);
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+    setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 60);
     try {
-      const out = await linkyIntake(msg);
-      setTurns((t) => [...t, { role: 'assistant', content: out.reply }]);
-      setDraft(out.ready ? out.intent : null);
+      const out = await linkyAsk(msg);
+      setAnswer(out);
+      setHome((h) => {
+        if (!h) return h;
+        const byId = new Map(out.cards.map((c) => [c.id, c]));
+        const merged = h.cards.map((c) => byId.get(c.id) || c);
+        out.cards.forEach((c) => { if (!merged.some((m) => m.id === c.id)) merged.push(c); });
+        return { ...h, cards: merged, lastAsk: out, limits: { ...h.limits, asksUsedToday: Math.max(h.limits.asksUsedToday, h.limits.asksPerDay - out.asksLeft) } };
+      });
     } catch (err) {
       if (err instanceof LinkyApiError && err.status === 402) setPaywall(err.message);
-      setTurns((t) => [...t, { role: 'assistant', content: err instanceof Error ? err.message : 'I am offline right now. Try again in a moment.' }]);
+      else notifyUser('Linky could not answer', err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setThinking(false);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+      setPendingAsk('');
     }
   };
 
-  const saveDraft = async () => {
-    if (!draft || saving) return;
-    setSaving(true);
-    try {
-      const r = await linkySaveIntent(draft);
-      setTurns([]);
-      setDraft(null);
-      await load(true);
-      notifyUser('Intent saved', r.cards.length ? `Linky already found ${r.cards.length} ${r.cards.length === 1 ? 'person' : 'people'} with a cited reason. Cards are below.` : 'Nothing cited yet. Linky checks every hour and sends you one brief a day when someone fits.');
-    } catch (err) {
-      fail(err, 'Could not save intent');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const cancelIntake = async () => {
-    setTurns([]);
-    setDraft(null);
-    try { await linkyIntakeReset(); } catch {}
-  };
-
-  const fresh = useMemo(() => (home?.cards || []).filter((c) => c.status === 'new' || c.status === 'saved'), [home?.cards]);
-  const asked = useMemo(() => (home?.cards || []).filter((c) => c.status === 'meet' || c.status === 'declined'), [home?.cards]);
+  const answerIds = useMemo(() => new Set(answer?.cardIds || []), [answer?.cardIds]);
+  const answerCards = useMemo(() => (answer?.cardIds || []).map((id) => (home?.cards || []).find((c) => c.id === id)).filter((c): c is LinkyCard => !!c && c.status !== 'skip'), [answer?.cardIds, home?.cards]);
+  const otherCards = useMemo(() => (home?.cards || []).filter((c) => !answerIds.has(c.id) && (c.status === 'new' || c.status === 'saved')), [home?.cards, answerIds]);
+  const asked = useMemo(() => (home?.cards || []).filter((c) => !answerIds.has(c.id) && (c.status === 'meet' || c.status === 'declined')), [home?.cards, answerIds]);
   const firstName = (home?.name || '').split(' ')[0];
   const surface = isDark ? COLORS.darkBgSec : '#FFFFFF';
   const border = isDark ? COLORS.darkBorder : COLORS.lightBorder;
@@ -335,15 +301,11 @@ export default function LinkyHomeScreen({ navigation }: any) {
             <View style={{ flex: 1 }}>
               <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>{firstName ? `Hey ${firstName}.` : 'Hey.'} I'm Linky.</Text>
               <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
-                Tell me who you need. I check the network every hour and only bring you people I can cite a reason for.
+                Tell me who you need and I answer right away with the people on LINKUP I can cite a reason for. No guessing, no waiting.
               </Text>
             </View>
           </View>
           <View style={styles.heroLinks}>
-            <TouchableOpacity style={[styles.heroLink, { borderColor: border }]} onPress={() => navigation.navigate('Linky')}>
-              <MessageSquare size={13} color={textColor(isDark, 'secondary')} />
-              <Text style={[styles.heroLinkText, { color: textColor(isDark, 'secondary') }]}>Ask Linky</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={[styles.heroLink, { borderColor: border }]} onPress={() => navigation.navigate('LinkySettings')}>
               <Settings2 size={13} color={textColor(isDark, 'secondary')} />
               <Text style={[styles.heroLinkText, { color: textColor(isDark, 'secondary') }]}>Preferences & bots</Text>
@@ -375,31 +337,74 @@ export default function LinkyHomeScreen({ navigation }: any) {
               </>
             ) : null}
 
-            <SectionTitle
-              title="Today's intros"
-              hint={home.limits.meetsPerDay == null ? 'Unlimited Meets · PLUS' : `${Math.max(0, home.limits.meetsPerDay - home.limits.meetsUsedToday)} of ${home.limits.meetsPerDay} Meets left today`}
-              isDark={isDark}
-            />
-            {fresh.length ? fresh.map((card) => (
-              <CardView
-                key={card.id}
-                card={card}
-                isDark={isDark}
-                busy={busyId === card.id}
-                onMeet={() => onMeet(card)}
-                onSkip={() => onCardStatus(card, 'skip')}
-                onSave={() => onCardStatus(card, 'saved')}
-                onOpen={() => navigation.navigate('Profile', { userId: card.targetUid })}
-              />
-            )) : (
-              <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
-                <Text style={[styles.whyText, { color: textColor(isDark) }]}>
-                  {home.intents.length
-                    ? 'Nothing worth your time yet. Linky re-checks every hour and will send one brief a day when someone fits. No filler.'
-                    : 'No open intent. Tell Linky who you need below and he starts looking.'}
-                </Text>
-              </View>
-            )}
+            {(pendingAsk || answer) ? (
+              <>
+                <SectionTitle title="Your ask" hint={home.limits.asksPerDay ? `${Math.max(0, home.limits.asksPerDay - home.limits.asksUsedToday)} of ${home.limits.asksPerDay} asks left today` : undefined} isDark={isDark} />
+                <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
+                  <View style={[styles.turn, styles.turnUser]}>
+                    <Text style={[styles.turnText, { backgroundColor: COLORS.primary, color: '#000' }, COLORS.primary === '#FFFFFF' ? { borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)' } : null]}>
+                      {pendingAsk || answer?.need}
+                    </Text>
+                  </View>
+                  {thinking ? (
+                    <Text style={[styles.turnThinking, { color: textColor(isDark, 'muted') }]}>Linky is checking the network…</Text>
+                  ) : answer ? (
+                    <View style={styles.turn}>
+                      <Text style={[styles.turnText, { color: textColor(isDark), backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>
+                        {answer.reply}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {!thinking && answer?.none && answer.nearest.length ? (
+                    <View style={styles.nearestRow}>
+                      {answer.nearest.map((n) => (
+                        <TouchableOpacity key={n.uid} style={[styles.nearest, { borderColor: border }]} onPress={() => navigation.navigate('Profile', { userId: n.uid })} activeOpacity={0.75}>
+                          <Avatar uri={n.pic} size={30} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.nearestName, { color: textColor(isDark) }]} numberOfLines={1}>{n.name}</Text>
+                            <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{[n.role, n.city].filter(Boolean).join(' · ') || 'On LINKUP'}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+                {!thinking ? answerCards.map((card) => (
+                  <CardView
+                    key={card.id}
+                    card={card}
+                    isDark={isDark}
+                    busy={busyId === card.id}
+                    onMeet={() => onMeet(card)}
+                    onSkip={() => onCardStatus(card, 'skip')}
+                    onSave={() => onCardStatus(card, 'saved')}
+                    onOpen={() => navigation.navigate('Profile', { userId: card.targetUid })}
+                  />
+                )) : null}
+              </>
+            ) : null}
+
+            {otherCards.length ? (
+              <>
+                <SectionTitle
+                  title={answer ? 'Earlier cards' : 'Your cards'}
+                  hint={home.limits.meetsPerDay == null ? 'Unlimited Meets · PLUS' : `${Math.max(0, home.limits.meetsPerDay - home.limits.meetsUsedToday)} of ${home.limits.meetsPerDay} Meets left today`}
+                  isDark={isDark}
+                />
+                {otherCards.map((card) => (
+                  <CardView
+                    key={card.id}
+                    card={card}
+                    isDark={isDark}
+                    busy={busyId === card.id}
+                    onMeet={() => onMeet(card)}
+                    onSkip={() => onCardStatus(card, 'skip')}
+                    onSave={() => onCardStatus(card, 'saved')}
+                    onOpen={() => navigation.navigate('Profile', { userId: card.targetUid })}
+                  />
+                ))}
+              </>
+            ) : null}
 
             {asked.length ? (
               <>
@@ -410,64 +415,10 @@ export default function LinkyHomeScreen({ navigation }: any) {
               </>
             ) : null}
 
-            <SectionTitle title="Your intents" hint={`${home.intents.length} of ${home.limits.activeIntents} open`} isDark={isDark} />
-            {home.intents.map((intent) => (
-              <View key={intent.id} style={[styles.intentRow, { backgroundColor: surface, borderColor: border }]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.intentNeed, { color: textColor(isDark) }]}>{intent.need}</Text>
-                  <Text style={[styles.intentMeta, { color: textColor(isDark, 'muted') }]}>
-                    {[OFFER_LABELS[intent.offer], URGENCY_LABELS[intent.urgency], intent.location || (intent.remote ? 'Remote' : ''), `${intent.matchCount} ${intent.matchCount === 1 ? 'card' : 'cards'}`].filter(Boolean).join(' · ')}
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => onCloseIntent(intent.id, intent.need)} style={styles.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <X size={14} color={textColor(isDark, 'muted')} />
-                </TouchableOpacity>
-              </View>
-            ))}
-            {!home.intents.length ? (
-              <Text style={[styles.emptyLine, { color: textColor(isDark, 'muted') }]}>
-                {home.plus ? 'Up to 3 open intents on PLUS.' : 'Free members run 1 open intent at a time. PLUS runs 3 with unlimited Meets.'}
-              </Text>
-            ) : null}
-
-            {turns.length ? (
-              <>
-                <SectionTitle title="New intent" hint="Linky interviews you so the match is precise" isDark={isDark} />
-                <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
-                  {turns.map((t, i) => (
-                    <View key={`${i}-${t.role}`} style={[styles.turn, t.role === 'user' ? styles.turnUser : null]}>
-                      <Text style={[styles.turnText, { color: textColor(isDark), backgroundColor: t.role === 'user' ? COLORS.primary : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)') }, t.role === 'user' && COLORS.primary === '#FFFFFF' ? { borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)', color: '#000' } : t.role === 'user' ? { color: '#000' } : null]}>
-                        {t.content}
-                      </Text>
-                    </View>
-                  ))}
-                  {thinking ? <Text style={[styles.turnThinking, { color: textColor(isDark, 'muted') }]}>Linky is thinking…</Text> : null}
-                  {draft ? (
-                    <View style={styles.draftActions}>
-                      <TouchableOpacity style={[styles.ghostBtn, { borderColor: border }]} onPress={cancelIntake} disabled={saving}>
-                        <Text style={[styles.ghostBtnText, { color: textColor(isDark, 'secondary') }]}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: COLORS.primary, borderColor: isDark ? 'transparent' : 'rgba(0,0,0,0.12)' }]} onPress={saveDraft} disabled={saving} activeOpacity={0.85}>
-                        {saving ? <ActivityIndicator size="small" color="#000" /> : (
-                          <>
-                            <Plus size={13} color="#000" />
-                            <Text style={styles.primaryBtnText}>Save intent</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity onPress={cancelIntake} style={{ alignSelf: 'flex-end', marginTop: 6 }}>
-                      <Text style={[styles.ghostBtnText, { color: textColor(isDark, 'muted') }]}>Cancel</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </>
-            ) : null}
-
-            {!turns.length ? (
+            {!pendingAsk && !answer && !otherCards.length ? (
               <View style={styles.chips}>
-                {['I need a Flutter developer for a fintech MVP, paid, Harare', 'Looking for a co-founder with sales experience, equity', 'Want 20 minutes with someone who has raised from local angels'].map((s) => (
+                <Text style={[styles.emptyLine, { color: textColor(isDark, 'muted') }]}>Try one of these, or type your own below.</Text>
+                {['A Flutter developer in Harare for a paid fintech MVP', 'A co-founder with sales experience, equity', 'Someone who has raised from local angels, coffee'].map((s) => (
                   <TouchableOpacity key={s} style={[styles.chip, { borderColor: border, backgroundColor: surface }]} onPress={() => send(s)} activeOpacity={0.75}>
                     <Text style={[styles.chipText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{s}</Text>
                   </TouchableOpacity>
@@ -482,7 +433,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
         <View style={[styles.composer, { backgroundColor: surface, borderColor: border }]}>
           <TextInput
             style={[styles.input, { color: textColor(isDark) }]}
-            placeholder={turns.length ? 'Answer Linky…' : 'Who do you need? Tell Linky…'}
+            placeholder="Who do you need? Ask Linky…"
             placeholderTextColor="#999"
             value={input}
             onChangeText={setInput}
@@ -501,8 +452,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
       <PaywallModal
         visible={!!paywall}
         onClose={() => setPaywall(null)}
-        feature="Linky intents & intros"
-        description={paywall || 'PLUS runs 3 open intents and unlimited Meets.'}
+        feature="Linky asks & intros"
+        description={paywall || 'PLUS gets 60 asks a day and unlimited Meets.'}
       />
     </View>
   );
@@ -541,16 +492,15 @@ const styles = StyleSheet.create({
   primaryBtnText: { fontSize: 12, fontWeight: '900', color: '#000' },
   stateRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   stateText: { fontSize: 12, fontWeight: '700' },
-  intentRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
-  intentNeed: { fontSize: 13, fontWeight: '800', lineHeight: 18 },
-  intentMeta: { fontSize: 11, fontWeight: '600', marginTop: 3 },
-  closeBtn: { padding: 4 },
   emptyLine: { fontSize: 12, fontWeight: '600', lineHeight: 18 },
   turn: { marginBottom: 8, alignItems: 'flex-start' },
   turnUser: { alignItems: 'flex-end' },
   turnText: { fontSize: 13, lineHeight: 19, fontWeight: '600', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, maxWidth: '88%', overflow: 'hidden' },
   turnThinking: { fontSize: 12, fontWeight: '700', marginTop: 2 },
-  draftActions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 8 },
+  nearestRow: { gap: 8, marginTop: 4 },
+  nearest: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
+  nearestName: { fontSize: 13, fontWeight: '800' },
+  nearestMeta: { fontSize: 11, fontWeight: '600', marginTop: 1 },
   chips: { marginTop: 16, gap: 8 },
   chip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
   chipText: { fontSize: 12, fontWeight: '700', lineHeight: 17 },

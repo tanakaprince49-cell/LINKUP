@@ -298,7 +298,7 @@ function TabNavigator({ navigation }: any) {
         tabBarIcon: ({ focused }) => {
           const iconMap: Record<string, { active: string; inactive: string }> = {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
-            LinkyHome: { active: 'Sparkles', inactive: 'Sparkles' },
+            LinkyHome: { active: 'Handshake', inactive: 'Handshake' },
             Hub: { active: 'Gamepad2', inactive: 'Gamepad2' },
             Campaigns: { active: 'Megaphone', inactive: 'Megaphone' },
             Search: { active: 'Search', inactive: 'Search' },
