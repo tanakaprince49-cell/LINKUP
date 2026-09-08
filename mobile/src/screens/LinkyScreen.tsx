@@ -438,6 +438,7 @@ export default function LinkyScreen({ navigation }: any) {
       <SafeAreaView edges={['top']} style={[styles.header, { backgroundColor: isDark ? COLORS.darkBgSec : COLORS.lightBgSec, borderBottomColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
         <TouchableOpacity style={styles.headerBtn} onPress={() => {
           if (navigation.canGoBack()) navigation.goBack();
+          else navigation.navigate('Main', { screen: 'LinkyHome' });
         }}>
           <ArrowLeft size={20} color={textColor(isDark)} />
         </TouchableOpacity>

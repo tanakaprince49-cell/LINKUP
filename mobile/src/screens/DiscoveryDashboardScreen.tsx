@@ -13,7 +13,7 @@ import { rankLeague } from '../lib/builderLeague';
 import { loadLeaguePool } from '../lib/leaguePool';
 import { getBestOpportunityAlerts, getRotatedOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, getRotatedProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, ArrowLeftRight, UserCheck, Megaphone, Globe, Lock, Sparkles } from 'lucide-react-native';
+import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, UserCheck, Megaphone, Globe, Lock, Sparkles } from 'lucide-react-native';
 import { hasLinkupPro } from '../lib/paywall';
 import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS, websiteDisplay } from '../lib/campaigns';
 import { SponsoredSlot } from '../components/SponsoredCard';
@@ -531,11 +531,11 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   <Text style={[styles.heroBtnText, { color: '#000' }]}>Daily 5</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => navigation.navigate('Swipe')}
+                  onPress={() => navigation.navigate('LinkyHome')}
                   style={[styles.heroBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
                 >
-                  <ArrowLeftRight size={14} color={textColor(isDark)} />
-                  <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>Swipe</Text>
+                  <Sparkles size={14} color={textColor(isDark)} />
+                  <Text style={[styles.heroBtnText, { color: textColor(isDark) }]}>Linky</Text>
                 </TouchableOpacity>
                 <View style={[styles.heroStatus, { backgroundColor: HOME_GOLD_TINT }]}>
                   <Star size={12} color={HOME_INK} />

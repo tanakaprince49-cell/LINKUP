@@ -100,6 +100,9 @@ function notificationBody(data: any) {
   if (data?.type === 'campaign_approved') return content || 'Your campaign has been approved!';
   if (data?.type === 'campaign_rejected') return content || 'Your campaign was not approved.';
   if (data?.type === 'plus_expiring') return content || 'Your LINKUP PLUS term is ending soon.';
+  if (data?.type === 'intro_request') return content || 'Linky has an intro for you.';
+  if (data?.type === 'intro_accepted') return content || 'Your intro was accepted.';
+  if (data?.type === 'daily_brief') return content || 'Linky found someone worth your time.';
   return content || 'Open LINKUP for the latest update.';
 }
 

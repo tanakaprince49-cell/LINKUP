@@ -83,6 +83,10 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         return { Icon: X, color: '#DC2626', bg: 'rgba(220,38,38,0.12)', fill: 'transparent' };
       case 'plus_expiring':
         return { Icon: Bell, color: '#B45309', bg: 'rgba(245,158,11,0.16)', fill: 'transparent' };
+      case 'intro_request':
+      case 'intro_accepted':
+      case 'daily_brief':
+        return { Icon: Sparkles, color: '#16A34A', bg: 'rgba(22,163,74,0.14)', fill: 'transparent' };
       default:
         return { Icon: Bell, color: textColor(isDark, 'muted'), bg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', fill: 'transparent' };
     }
@@ -153,6 +157,10 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           notification.fromId
         ) {
           navigation.navigate('ActiveOpportunity', { userId: notification.fromId });
+          return;
+        }
+        if (notification.type === 'intro_request' || notification.type === 'daily_brief' || notification.type === 'intro_declined') {
+          navigation.navigate('Main', { screen: 'LinkyHome' });
           return;
         }
         if (notification.type === 'plus_expiring') {

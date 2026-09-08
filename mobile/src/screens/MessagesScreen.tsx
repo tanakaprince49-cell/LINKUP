@@ -332,10 +332,10 @@ export default function MessagesScreen({ navigation, route }: any) {
               {!archivedOnly ? (
                 <>
                   <Text style={{ fontSize: 12, fontWeight: '700', color: '#777', textAlign: 'center', lineHeight: 18 }}>
-                    Chat stays empty until someone matches you. Swipe, search, or invite 3 builders you already know.
+                    Chat stays empty until someone accepts an intro. Tell Linky who you need, search, or invite 3 builders you already know.
                   </Text>
-                  <TouchableOpacity onPress={() => navigation.navigate('Swipe')} style={{ backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 16 }}>
-                    <Text style={{ fontSize: 11, fontWeight: '900', color: '#000', letterSpacing: 1 }}>OPEN DISCOVER</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('LinkyHome')} style={{ backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 16 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '900', color: '#000', letterSpacing: 1 }}>OPEN LINKY</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => void shareLinkupInvite()}>
                     <Text style={{ fontSize: 11, fontWeight: '900', color: COLORS.primaryStrong, letterSpacing: 1 }}>INVITE BUILDERS</Text>
