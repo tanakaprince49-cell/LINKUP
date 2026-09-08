@@ -41,7 +41,6 @@ const NetworkQuizScreen = lazyScreen(() => import('./src/screens/NetworkQuizScre
 const DailyFiveScreen = lazyScreen(() => import('./src/screens/DailyFiveScreen'));
 const ShipLogScreen = lazyScreen(() => import('./src/screens/ShipLogScreen'));
 const CityLeagueScreen = lazyScreen(() => import('./src/screens/CityLeagueScreen'));
-const LinkyScreen = lazyScreen(() => import('./src/screens/LinkyScreen'));
 const LinkyProfileScreen = lazyScreen(() => import('./src/screens/LinkyProfileScreen'));
 const LinkySettingsScreen = lazyScreen(() => import('./src/screens/LinkySettingsScreen'));
 const LinkyAuditScreen = lazyScreen(() => import('./src/screens/LinkyAuditScreen'));
@@ -699,7 +698,6 @@ function AppContent() {
             <Stack.Screen name="FounderFlip" component={FounderFlipScreen} />
             <Stack.Screen name="PitchPerfect" component={PitchPerfectScreen} />
             <Stack.Screen name="NetworkQuiz" component={NetworkQuizScreen} />
-            <Stack.Screen name="Linky" component={LinkyScreen} options={{ animation: Platform.OS === 'android' ? 'fade' : 'slide_from_right' }} />
             <Stack.Screen name="LinkyProfile" component={LinkyProfileScreen} options={{ animation: Platform.OS === 'android' ? 'fade' : 'slide_from_right' }} />
             <Stack.Screen name="LinkySettings" component={LinkySettingsScreen} />
             <Stack.Screen name="LinkyAudit" component={LinkyAuditScreen} />
@@ -743,7 +741,6 @@ const SCREEN_REGISTRY: Array<[string, any]> = [
   ['AlertsScreen', AlertsScreen],
   ['NewsScreen', NewsScreen],
   ['RecommendedMatchesScreen', RecommendedMatchesScreen],
-  ['LinkyScreen', LinkyScreen],
 ];
 SCREEN_REGISTRY.forEach(([name, component]) => {
   if (typeof component !== 'function' && !(component && typeof component === 'object')) {

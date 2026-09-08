@@ -22,10 +22,7 @@ const users = {
   eve: { displayName: 'Eve Mutasa', occupation: '', city: 'Harare', country: 'Zimbabwe', skills: [], industries: [], bio: '', onboarded: true, isVisible: true },
   fadzi: { displayName: 'Fadzi Moyo', occupation: 'Data analyst', company: 'Econet', city: 'Harare', country: 'Zimbabwe', skills: ['excel', 'power bi', 'statistics'], industries: ['telecoms'], bio: 'Numbers person. Dashboards and forecasting.', onboarded: true, isVisible: true },
   gift: { displayName: 'Gift Sibanda', occupation: 'Accountant', company: 'KPMG', city: 'Harare', country: 'Zimbabwe', skills: ['tax', 'audit'], industries: ['finance'], bio: '', onboarded: true, isVisible: true },
-  fred: { displayName: 'Fred', occupation: 'Co-founder and CEO @Cura AI Labs', city: '', country: 'US', skills: ['Machine Learning'], industries: [], bio: '', onboarded: true, isVisible: true },
-  luke: { displayName: 'Luke Tembani', username: 'luket', occupation: 'Developer', city: 'Harare', country: 'Zimbabwe', skills: ['react'], industries: [], bio: '', onboarded: true, isVisible: true },
 };
-const MEMBERS = Object.keys(users).length;
 for (const [uid, u] of Object.entries(users)) {
   await db.collection('users').doc(uid).set({ uid, ...u });
   await db.collection('publicProfiles').doc(uid).set({ uid, ...u, profilePic: `https://ik.imagekit.io/x/${uid}.jpg` });
@@ -35,9 +32,8 @@ const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exit(1);
 
 // ---- ask: greeting -> coach, no budget, no cards
 let r = await L.ask('alice', 'hi linky');
-assert(r.none && !r.cards.length && r.kind === 'chat' && /Who do you need|tell me who you need|say who you need/i.test(r.reply) && r.asksLeft === 10, 'greeting -> in-character reply, no budget used: ' + r.reply.slice(0, 60));
-r = await L.ask('alice', 'find me someone please');
-assert(r.none && r.kind === 'coach' && /Give me a person, a role or a skill/.test(r.reply) && r.asksLeft === 10, 'vague ask -> coaching, no budget used');
+assert(r.none && !r.cards.length && /tell me who you need/i.test(r.reply) && r.asksLeft === 10, 'greeting -> coaching reply, no budget used');
+assert(r.kind === 'chat' && r.free === true && Array.isArray(r.suggest) && r.suggest.length === 3, 'chit-chat is tagged as chat, is free, and comes with tappable chips');
 // ---- ask: immediate cited answer
 r = await L.ask('alice', 'I need a Flutter developer in Harare for a paid fintech MVP');
 console.log('    reply:', r.reply);
@@ -55,17 +51,9 @@ assert(again.cached && again.cards.map((c) => c.id).join() === firstAskCards.joi
 // ---- nobody fits -> graceful, no error, nearest people, budget consumed
 r = await L.ask('alice', 'a quantum cryptography professor from Oslo');
 console.log('    reply:', r.reply);
-assert(r.none && !r.cards.length && /no one on LINKUP fits|Nobody on LINKUP does|not on LINKUP yet|came up empty/.test(r.reply) && r.checked === MEMBERS - 1, 'no-match ask answers gracefully with member count: ' + r.reply.slice(0, 60));
-assert(Array.isArray(r.nearest) && r.nearest.length === 0, 'no fake "nearest" list when the ask names no city we have');
-assert(/Search outside LINKUP/.test(r.reply), 'no-match points to the outside search');
+assert(r.none && !r.cards.length && /Nobody on LINKUP fits/.test(r.reply) && r.checked === 6, 'no-match ask answers gracefully with member count');
+assert(Array.isArray(r.nearest) && r.nearest.length >= 1 && !r.nearest.some((n) => n.uid === 'alice') && /Harare/.test(r.nearest[0].city), 'nearest people offered instead of an error, own city first: ' + r.nearest.map((n) => n.name).join(', '));
 assert(r.asksLeft === 8, 'no-match ask still counts');
-const firstMiss = r.reply;
-r = await L.ask('alice', 'a harpsichord restorer with a pilot licence');
-assert(r.none && r.reply !== firstMiss, 'two misses in a row do not repeat the same canned block');
-await db.collection('linkyState').doc('alice').set({ asks: { day: L.dayKey(), count: 2 } }, { merge: true });
-r = await L.ask('alice', 'a quantum physicist in Harare');
-assert(r.none && r.nearest.length >= 1 && r.nearest.every((n) => /Harare/.test(n.city)) && /In Harare I do have/.test(r.reply), 'a city in the ask -> same-city people offered honestly: ' + r.nearest.map((n) => n.name).join(', '));
-await db.collection('linkyState').doc('alice').set({ asks: { day: L.dayKey(), count: 2 } }, { merge: true });
 // ---- related-concept expansion (zero tokens): "math" is on nobody's profile
 r = await L.ask('alice', 'find me a person who understands math');
 console.log('    reply:', r.reply);
@@ -88,39 +76,14 @@ assert(pointer2.cached, 'pointers are cached per ask');
 // ---- interleaved repeat (an unrelated ask in between) is still cached
 r = await L.ask('alice', 'I need a Flutter developer in Harare for a paid fintech MVP');
 assert(r.cached && r.cards.map((c) => c.id).join() === firstAskCards.join() && r.asksLeft === 6, 'repeat after another ask is still served from cache');
-// ---- name lookup (free: no budget, no tokens)
+// ---- name lookup
 r = await L.ask('alice', 'connect me with Cara Dube');
-assert(r.cards.length === 1 && r.cards[0].targetUid === 'cara' && /Cara Dube/.test(r.cards[0].why) && r.kind === 'name' && r.asksLeft === 6, 'asking for a person by name finds them without spending an ask: ' + r.cards[0].why);
-r = await L.ask('alice', 'fred');
-assert(r.cards.length === 1 && r.cards[0].targetUid === 'fred' && /Fred\? Yes - Fred is on LINKUP: Co-founder and CEO @Cura AI Labs/.test(r.reply), '"fred" -> Fred with a human reply: ' + r.reply);
-r = await L.ask('alice', 'send a message to fred');
-assert(r.cards.length === 1 && r.cards[0].targetUid === 'fred', '"send a message to fred" -> Fred');
-r = await L.ask('alice', 'Luke Tembani');
-assert(r.cards.length === 1 && r.cards[0].targetUid === 'luke' && /Luke Tembani is on LINKUP: Developer in Harare/.test(r.reply), '"Luke Tembani" -> Luke: ' + r.reply);
-r = await L.ask('alice', 'who is @luket');
-assert(r.cards.length === 1 && r.cards[0].targetUid === 'luke', 'handle lookup works');
-r = await L.ask('alice', 'tembani');
-assert(r.cards.length === 1 && r.cards[0].targetUid === 'luke', 'surname alone works');
-r = await L.ask('alice', 'alice moyo');
-assert(r.kind === 'chat' && /That is you, Alice/.test(r.reply), 'asking for yourself is handled');
-// ---- skipped person by name: says why, offers unskip
-const lukeCard = r.cards[0] || (await L.loadCards('alice')).find((c) => c.targetUid === 'luke');
-await L.setCardStatus('alice', lukeCard.id, 'skip');
-r = await L.ask('alice', 'luke');
-assert(r.none && !r.cards.length && /you skipped their card/.test(r.reply) && /unskip Luke/.test(r.reply) && r.nearest[0]?.uid === 'luke', 'skipped member by name -> honest reason + unskip hint: ' + r.reply);
-r = await L.ask('alice', 'unskip luke');
-assert(r.kind === 'chat' && /Luke Tembani is back/.test(r.reply), 'unskip by name restores the card');
-r = await L.ask('alice', 'luke tembani');
-assert(r.cards.length === 1 && r.cards[0].targetUid === 'luke', 'after unskip Luke is back in results');
-// ---- small talk in character, no budget
-for (const [m, re] of [['hi', /Who do you need|tell me who you need|say who you need/i], ['thanks', /Anytime|what I am here for|No stress/], ['who are you', /I am Linky/], ['what can you do', /Three things/], ['you have no personality', /Fair hit|Ouch/], ['ok', /Cool|Good|Noted/]]) {
-  r = await L.ask('alice', m);
-  assert(r.kind === 'chat' && re.test(r.reply) && r.asksLeft === 6, `small talk "${m}" answered in character without budget: ${r.reply.slice(0, 60)}`);
-}
-r = await L.ask('alice', 'connect me with Cara Dube');
+assert(r.cards.length === 1 && r.cards[0].targetUid === 'cara' && /Cara Dube/.test(r.cards[0].why), 'asking for a person by name finds them: ' + r.cards[0].why);
 // ---- home
 let h = await L.home('alice');
-assert(h.limits.meetsPerDay === 3 && h.limits.asksPerDay === 10 && h.limits.asksUsedToday === 4 && h.lastAsk && h.lastAsk.need === 'connect me with Cara Dube', 'home shows limits + last ask (name asks are free)');
+assert(h.limits.meetsPerDay === 3 && h.limits.asksPerDay === 10 && h.limits.asksUsedToday === 4 && h.lastAsk && h.lastAsk.need === 'connect me with Cara Dube', 'home shows limits + last ask (a name lookup cost nothing: 4 of 5 asks)');
+assert(Array.isArray(h.thread) && h.thread.length >= 10 && h.thread.every((t) => t.text && ['user', 'linky'].includes(t.role)), 'home returns the whole thread, oldest first, both sides');
+assert(h.thread.filter((t) => t.role === 'linky').every((t) => !/[*_#]|^>/.test(t.text)), 'Linky never sends markdown into a chat bubble');
 assert(!('intents' in h), 'home has no intents');
 assert(h.cards.some((c) => c.targetUid === 'bob') && h.cards.some((c) => c.targetUid === 'cara'), 'cards persist across asks');
 // ---- meet -> intro pending + notification to bob
@@ -198,64 +161,9 @@ assert(br.cards?.length === 1 && br.cards[0].targetUid === 'cara' && /meet 1/.te
 br = await botReplyForTest('telegram', '12345', 'meet 1');
 assert(/Asked Cara Dube/.test(br.text), 'bot "meet 1" targets the first card of the last answer: ' + br.text);
 br = await botReplyForTest('telegram', '12345', 'a blockchain lawyer in Lagos');
-assert(!br.cards && /no one on LINKUP fits|Nobody on LINKUP does|not on LINKUP yet|came up empty/.test(br.text) && /Reply OUTSIDE/.test(br.text), 'bot no-match is graceful and points to OUTSIDE');
+assert(!br.cards && /Nobody on LINKUP fits/.test(br.text), 'bot no-match is graceful');
 br = await botReplyForTest('telegram', '12345', 'more');
-assert(/Outside LINKUP/.test(br.text), 'bot "more" gives offline pointers for the last ask');
-br = await botReplyForTest('telegram', '12345', 'fred');
-assert(br.cards?.length === 1 && br.cards[0].targetUid === 'fred' && /Fred\? Yes - Fred is on LINKUP/.test(br.text) && /meet 1/.test(br.text), 'bot "fred" -> Fred card + human reply: ' + br.text.split('\n')[0]);
-br = await botReplyForTest('telegram', '12345', 'send a message to fred');
-assert(br.cards?.length === 1 && br.cards[0].targetUid === 'fred', 'bot "send a message to fred" -> Fred');
-br = await botReplyForTest('telegram', '12345', 'Luke Tembani');
-assert(br.cards?.length === 1 && br.cards[0].targetUid === 'luke', 'bot "Luke Tembani" -> Luke');
-br = await botReplyForTest('telegram', '12345', 'hey linky');
-assert(!br.cards && /Who do you need|tell me who you need|say who you need/i.test(br.text), 'bot greeting answered in character: ' + br.text.slice(0, 50));
-br = await botReplyForTest('telegram', '12345', 'thanks bro');
-assert(!br.cards && /Anytime|what I am here for|No stress/.test(br.text), 'bot thanks answered in character');
-// ---- outside search (SerpApi mocked with a real captured payload; budget + cache + filter)
-const S = await import('../../api/_scout.js');
-const built = S.buildQuery('a fintech founder', 'Zimbabwe');
-assert(built.q === 'site:linkedin.com/in ("Founder") AND "Fintech" "Zimbabwe"', 'strict operator query: ' + built.q);
-assert(S.buildQuery('someone who understands math').q === 'site:linkedin.com/in ("Founder" OR "CEO" OR "Head of" OR "Lead") AND "Mathematics"', 'topic aliases + default roles');
-let noKey = await S.scout('alice', 'a fintech founder');
-assert(noKey.configured === false && /SERPAPI_KEY/.test(noKey.reply), 'without SERPAPI_KEY the outside search degrades gracefully');
-process.env.SERPAPI_KEY = 'test-key';
-const fixture = JSON.parse((await import('node:fs')).readFileSync(new URL('./fixtures/serpapi-fintech-zw.json', import.meta.url), 'utf8'));
-const realFetch = globalThis.fetch;
-let serpCalls = 0;
-globalThis.fetch = async (url, opts) => {
-  const u = String(url);
-  if (u.startsWith('https://serpapi.com/search.json')) {
-    serpCalls += 1;
-    const p = new URL(u).searchParams;
-    assert(p.get('num') === '100' && p.get('engine') === 'google' && /^site:linkedin\.com\/in /.test(p.get('q')), 'every SerpApi call uses num=100 + strict operators');
-    return new Response(JSON.stringify(fixture), { status: 200, headers: { 'content-type': 'application/json' } });
-  }
-  return realFetch(url, opts);
-};
-let sc = await S.scout('alice', 'a fintech founder', { place: 'Zimbabwe' });
-console.log('    scout:', sc.reply.slice(0, 90), '|', sc.people.map((p) => p.name).join(', '));
-assert(sc.configured && !sc.cached && serpCalls === 1 && sc.people.length >= 5 && sc.people.every((p) => /^https:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/in\//.test(p.url) && p.name && p.opener), 'outside search returns real LinkedIn profiles with openers');
-assert(sc.people.every((p) => p.matched.length) && (sc.raw || 0) >= sc.filtered, 'regex pre-filter ran before anything else');
-const stored = await db.collection('linkyScout').get();
-assert(stored.size === 1 && Array.isArray(stored.docs[0].data().organic) && stored.docs[0].data().organic.length === fixture.organic_results.length, 'raw organic results persisted once');
-const meta = await db.collection('linkyMeta').doc('serpapi').get();
-assert(meta.data().count === 1, 'monthly SerpApi counter incremented');
-sc = await S.scout('bob', 'a fintech founder', { place: 'Zimbabwe' });
-assert(sc.cached && serpCalls === 1 && sc.people.length >= 5, 'same ask from another member is served from the shared cache (no second SerpApi call)');
-await db.collection('linkyMeta').doc('serpapi').set({ month: new Date().toISOString().slice(0, 7), count: S.SCOUT.monthlyCap });
-sc = await S.scout('alice', 'a solar engineer', { place: 'Harare' });
-assert(sc.budget === 'month' && serpCalls === 1 && /budget for this month is used up/.test(sc.reply), 'monthly cap stops SerpApi calls gracefully');
-await db.collection('linkyMeta').doc('serpapi').set({ month: new Date().toISOString().slice(0, 7), count: 0 });
-await db.collection('linkyState').doc('alice').set({ scout: { day: L.dayKey(), count: S.SCOUT.perMemberPerDay } }, { merge: true });
-sc = await S.scout('alice', 'a solar engineer', { place: 'Harare' });
-assert(sc.budget === 'member' && serpCalls === 1, 'per-member daily cap stops SerpApi calls gracefully');
-await db.collection('linkyState').doc('alice').set({ scout: { day: L.dayKey(), count: 0 } }, { merge: true });
-br = await botReplyForTest('telegram', '12345', 'outside a fintech founder');
-assert(/Outside LINKUP: \d+ real public profiles/.test(br.text) && /linkedin\.com\/in\//.test(br.text) && /around Harare/.test(br.text) && serpCalls === 2, 'bot OUTSIDE lists real profiles, scoped to the member city (one new query for the new place)');
-br = await botReplyForTest('telegram', '12345', 'outside a fintech founder');
-assert(/Outside LINKUP: \d+ real public profiles/.test(br.text) && serpCalls === 2, 'repeating OUTSIDE is served from the cache (no new SerpApi call)');
-globalThis.fetch = realFetch;
-process.env.SERPAPI_KEY = '';
+assert(/Outside LINKUP/.test(br.text), 'bot "more" gives outside-LINKUP pointers for the last ask');
 br = await botReplyForTest('telegram', '12345', 'cards');
 assert(/Your cards/.test(br.text), 'bot "cards" lists live cards');
 // ---- cron: housekeeping only

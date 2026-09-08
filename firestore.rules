@@ -1407,6 +1407,13 @@ service cloud.firestore {
     match /botLinks/{code} {
       allow read, write: if false;
     }
+    // Outreach runs, the search-credit ledger and the 7-day "already looked
+    // that up" cache (api/_serpapi.js). Members get leads through /api/linky
+    // only - and the ledger in particular must not be client-writable, or one
+    // member could zero out the month's SerpApi budget for everybody.
+    match /linkyOutreach/{docId} {
+      allow read, write: if false;
+    }
 
     // ------------------------------------------------------------
     // Legacy per-user profile aux store (Linky score etc.)

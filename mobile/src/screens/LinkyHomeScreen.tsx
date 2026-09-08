@@ -8,8 +8,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Linking,
+  Image,
   Platform,
   RefreshControl,
   ScrollView,
@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { ArrowUp, Check, Clock, Compass, ExternalLink, Globe, Send, Settings2, ShieldCheck, X } from 'lucide-react-native';
+import { Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
@@ -33,15 +33,21 @@ import {
   LinkyCard,
   LinkyHome,
   LinkyIntro,
-  LinkyScout,
+  LinkyLead,
+  LinkyAskResult,
+  LinkyTurn,
   linkyAsk,
   linkyCard,
   linkyHome,
   linkyMeet,
+  linkyPickPerson,
   linkyPointers,
   linkyRespond,
-  linkyScout,
 } from '../lib/linkyApi';
+
+// Cosmetic only - the server answers when it answers. This just keeps the
+// bubble alive with a different line every couple of seconds while it works.
+const THINKING_LINES = ['Linky is reading profiles…', 'Checking who this could be…', 'Almost - comparing two or three…'];
 
 const FALLBACK_AVATAR = 'https://ui-avatars.com/api/?name=U&background=DFFB3F&color=000&size=80';
 
@@ -172,13 +178,21 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [pendingAsk, setPendingAsk] = useState('');
-  const [answer, setAnswer] = useState<LinkyAsk | null>(null);
+  // the chips and the lead list only ever arrive on an ask result, so the state
+  // is the richer type; a lastAsk restored from home gets an empty shell around it
+  const [answer, setAnswer] = useState<LinkyAskResult | null>(null);
   const [pointerText, setPointerText] = useState('');
   const [pointerBusy, setPointerBusy] = useState(false);
-  const [scoutResult, setScoutResult] = useState<LinkyScout | null>(null);
-  const [scoutBusy, setScoutBusy] = useState(false);
+  const [leads, setLeads] = useState<LinkyLead[]>([]);
+  const [pickedBusy, setPickedBusy] = useState('');
   const [paywall, setPaywall] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const [thinkingTick, setThinkingTick] = useState(0);
+  useEffect(() => {
+    if (!thinking) return;
+    const t = setInterval(() => setThinkingTick((x) => x + 1), 2200);
+    return () => clearInterval(t);
+  }, [thinking]);
   const mounted = useRef(true);
 
   useEffect(() => () => { mounted.current = false; }, []);
@@ -191,7 +205,11 @@ export default function LinkyHomeScreen({ navigation }: any) {
       if (!mounted.current) return;
       setHome(h);
       setError('');
-      setAnswer((a) => a || h.lastAsk);
+      // a lastAsk restored from home carries no ask budget of its own; the home
+      // payload's limits are the same numbers, so derive it rather than fake it
+      setAnswer((a) => a || (h.lastAsk
+        ? { ...h.lastAsk, cards: [], cached: false, asksLeft: Math.max(0, h.limits.asksPerDay - h.limits.asksUsedToday) }
+        : null));
     } catch (err) {
       if (!mounted.current) return;
       setError(err instanceof Error ? err.message : 'Linky is unavailable right now.');
@@ -269,7 +287,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
       const out = await linkyAsk(msg);
       setAnswer(out);
       setPointerText('');
-      setScoutResult(null);
+      setLeads([]);
+      if (out.thread) setHome((h) => (h ? { ...h, thread: out.thread } : h));
       setHome((h) => {
         if (!h) return h;
         const byId = new Map(out.cards.map((c) => [c.id, c]));
@@ -286,36 +305,59 @@ export default function LinkyHomeScreen({ navigation }: any) {
     }
   };
 
-  const searchOutside = async () => {
-    if (!answer?.need || scoutBusy) return;
-    setScoutBusy(true);
-    try {
-      const r = await linkyScout(answer.need);
-      setScoutResult(r);
-    } catch (err) {
-      notifyUser('Outside search failed', err instanceof Error ? err.message : 'Please try again.');
-    } finally {
-      setScoutBusy(false);
-    }
-  };
-
-  const copyLine = async (line: string) => {
-    try {
-      const Clipboard = await import('expo-clipboard').catch(() => null);
-      if (Clipboard?.setStringAsync) { await Clipboard.setStringAsync(line); notifyUser('Copied', 'First line copied - paste it into your message.'); }
-    } catch {}
-  };
-
   const askOutside = async () => {
     if (!answer?.need || pointerBusy) return;
     setPointerBusy(true);
     try {
       const r = await linkyPointers(answer.need);
       setPointerText(r.text);
+      setLeads(Array.isArray(r.leads) ? r.leads : []);
     } catch (err) {
       notifyUser('Could not fetch pointers', err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setPointerBusy(false);
+    }
+  };
+
+  // Linky writes the reply; the app shows it as a conversation, oldest first.
+  const turns: LinkyTurn[] = useMemo(() => {
+    const t = (home?.thread || []).filter((x) => x && x.text);
+    if (t.length) return t.slice(-10);
+    if (answer?.need) {
+      return [
+        { id: answer.id, role: 'user', text: answer.need, at: answer.createdAt },
+        { id: answer.id, role: 'linky', text: answer.reply, kind: answer.kind, cardIds: answer.cardIds, at: answer.createdAt + 1 },
+      ];
+    }
+    return [];
+  }, [home?.thread, answer]);
+  const lastLinkyTurn = [...turns].reverse().find((t) => t.role === 'linky');
+  const chips = (lastLinkyTurn?.id === answer?.id ? answer?.suggest : undefined) || [];
+  const onChip = (chip: string) => {
+    if (!chip || thinking) return;
+    if (/outside linkup/i.test(chip)) { askOutside(); return; }
+    const meet = chip.match(/^meet\s*(\d+)/i);
+    if (meet) {
+      const card = answerCards[Number(meet[1]) - 1] || answerCards[0];
+      if (card) { onMeet(card); return; }
+    }
+    if (/what linky knows/i.test(chip)) { navigation.navigate('LinkyAudit'); return; }
+    if (/preferences/i.test(chip)) { navigation.navigate('LinkySettings'); return; }
+    send(chip);
+  };
+
+  // "Which Fred?" - tapping the face is faster than typing the surname.
+  const onPickPerson = async (uid: string) => {
+    if (pickedBusy) return;
+    setPickedBusy(uid);
+    try {
+      const card = await linkyPickPerson(uid);
+      await load(true);
+      setAnswer((a) => (a ? { ...a, kind: 'person', none: false, cardIds: [...(a.cardIds || []), card.id], reply: `${card.targetName}, yes. I put them on a card for you.` } : a));
+    } catch (err) {
+      notifyUser('Could not open that one', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setPickedBusy('');
     }
   };
 
@@ -344,7 +386,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
             <View style={{ flex: 1 }}>
               <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>{firstName ? `Hey ${firstName}.` : 'Hey.'} I'm Linky.</Text>
               <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
-                A role, a skill or just a name - I answer right away with the people on LINKUP I can cite a reason for, and I search the open web when nobody here fits.
+                Tell me who you need and I answer right away with the people on LINKUP I can cite a reason for. No guessing, no waiting.
               </Text>
             </View>
           </View>
@@ -380,92 +422,102 @@ export default function LinkyHomeScreen({ navigation }: any) {
               </>
             ) : null}
 
-            {(pendingAsk || answer) ? (
+            {(pendingAsk || turns.length) ? (
               <>
-                <SectionTitle title="Your ask" hint={home.limits.asksPerDay ? `${Math.max(0, home.limits.asksPerDay - home.limits.asksUsedToday)} of ${home.limits.asksPerDay} asks left today` : undefined} isDark={isDark} />
+                <SectionTitle title="Linky" hint={home.limits.asksPerDay ? `${Math.max(0, home.limits.asksPerDay - home.limits.asksUsedToday)} of ${home.limits.asksPerDay} asks left today` : undefined} isDark={isDark} />
                 <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
-                  <View style={[styles.turn, styles.turnUser]}>
-                    <Text style={[styles.turnText, { backgroundColor: COLORS.primary, color: '#000' }, COLORS.primary === '#FFFFFF' ? { borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)' } : null]}>
-                      {pendingAsk || answer?.need}
-                    </Text>
-                  </View>
-                  {thinking ? (
-                    <Text style={[styles.turnThinking, { color: textColor(isDark, 'muted') }]}>Linky is checking the network…</Text>
-                  ) : answer ? (
-                    <View style={styles.turn}>
-                      <Text style={[styles.turnText, { color: textColor(isDark), backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>
-                        {answer.reply}
+                  {turns.map((t, i) => (t.role === 'user' ? (
+                    <View key={`u${t.at}-${i}`} style={[styles.turn, styles.turnUser]}>
+                      <Text style={[styles.turnText, { backgroundColor: COLORS.primary, color: '#000' }, COLORS.primary === '#FFFFFF' ? { borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)' } : null]}>
+                        {t.text}
                       </Text>
                     </View>
+                  ) : (
+                    <View key={`l${t.at}-${i}`} style={styles.msgRow}>
+                      <View style={[styles.msgDot, { backgroundColor: COLORS.primary }]}><Text style={styles.msgDotText}>L</Text></View>
+                      <Text style={[styles.turnText, { flexShrink: 1, color: textColor(isDark), backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>{t.text}</Text>
+                    </View>
+                  )))}
+                  {thinking && pendingAsk ? (
+                    <View style={[styles.turn, styles.turnUser]}>
+                      <Text style={[styles.turnText, { backgroundColor: COLORS.primary, color: '#000' }]}>{pendingAsk}</Text>
+                    </View>
                   ) : null}
-                  {!thinking && answer?.none && answer.need && answer.kind !== 'chat' && answer.kind !== 'coach' ? (
-                    scoutResult ? (
-                      <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
-                        <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>OUTSIDE LINKUP{scoutResult.cached ? ' · FROM MY NOTES' : ''}</Text>
-                        <Text style={[styles.whyText, { color: textColor(isDark) }]}>{scoutResult.reply}</Text>
-                      </View>
-                    ) : (
-                      <TouchableOpacity style={[styles.ghostBtn, { borderColor: border, alignSelf: 'flex-start', marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={searchOutside} disabled={scoutBusy}>
-                        {scoutBusy ? <ActivityIndicator size="small" color={textColor(isDark, 'muted')} /> : <Globe size={13} color={textColor(isDark, 'secondary')} />}
-                        <Text style={[styles.ghostBtnText, { color: textColor(isDark, 'secondary') }]}>{scoutBusy ? 'Searching the open web…' : 'Search outside LINKUP'}</Text>
-                      </TouchableOpacity>
-                    )
+                  {thinking ? (
+                    <View style={styles.msgRow}>
+                      <View style={[styles.msgDot, { backgroundColor: COLORS.primary }]}><Text style={styles.msgDotText}>L</Text></View>
+                      <Text style={[styles.turnThinking, { color: textColor(isDark, 'muted') }]}>{THINKING_LINES[thinkingTick % THINKING_LINES.length]}</Text>
+                    </View>
                   ) : null}
-                  {!thinking && answer?.none && answer.need && answer.kind !== 'chat' && answer.kind !== 'coach' && answer.kind !== 'name' ? (
+
+                  {!thinking && answer?.nearest?.length ? (
+                    <View style={styles.nearestRow}>
+                      {answer.nearest.map((n) => (
+                        <TouchableOpacity
+                          key={n.uid}
+                          style={[styles.nearest, { borderColor: border }]}
+                          onPress={() => (answer.kind === 'ambiguous' ? onPickPerson(n.uid) : navigation.navigate('Profile', { userId: n.uid }))}
+                          disabled={!!pickedBusy}
+                          activeOpacity={0.75}
+                        >
+                          <Avatar uri={n.pic} size={30} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.nearestName, { color: textColor(isDark) }]} numberOfLines={1}>{n.name}</Text>
+                            <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
+                              {answer.kind === 'ambiguous' ? 'Tap - this one' : [n.role, n.city].filter(Boolean).join(' · ') || 'On LINKUP'}
+                            </Text>
+                          </View>
+                          {pickedBusy === n.uid ? <ActivityIndicator size="small" color={textColor(isDark, 'muted')} /> : null}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  {!thinking && answer?.none && answer.need ? (
                     pointerText ? (
                       <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
                         <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>OUTSIDE LINKUP</Text>
                         <Text style={[styles.whyText, { color: textColor(isDark) }]}>{pointerText}</Text>
+                        {leads.length ? (
+                          <View style={{ marginTop: 10, gap: 8 }}>
+                            {leads.map((l, i) => (
+                              <TouchableOpacity
+                                key={`${l.url}-${i}`}
+                                style={[styles.lead, { borderColor: border }]}
+                                onPress={() => { Linking.openURL(l.url).catch(() => notifyUser('Could not open that link', 'Copy it from a browser instead.')); }}
+                                activeOpacity={0.75}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text style={[styles.nearestName, { color: textColor(isDark) }]} numberOfLines={1}>{l.name}</Text>
+                                  {l.title ? <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>{l.title}{l.why ? ` · ${l.why}` : ''}</Text> : null}
+                                </View>
+                                <Link2 size={14} color={textColor(isDark, 'secondary')} />
+                              </TouchableOpacity>
+                            ))}
+                            <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]}>
+                              Public profiles, found just now. Message them yourself - Linky will not do it for you.
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                     ) : (
                       <TouchableOpacity style={[styles.ghostBtn, { borderColor: border, alignSelf: 'flex-start', marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={askOutside} disabled={pointerBusy}>
                         {pointerBusy ? <ActivityIndicator size="small" color={textColor(isDark, 'muted')} /> : <Compass size={13} color={textColor(isDark, 'secondary')} />}
-                        <Text style={[styles.ghostBtnText, { color: textColor(isDark, 'secondary') }]}>Where else to look</Text>
+                        <Text style={[styles.ghostBtnText, { color: textColor(isDark, 'secondary') }]}>{pointerBusy ? 'Searching the web for them…' : 'Where to look outside LINKUP'}</Text>
                       </TouchableOpacity>
                     )
                   ) : null}
-                  {!thinking && answer?.none && answer.nearest.length ? (
-                    <View style={styles.nearestRow}>
-                      {answer.nearest.map((n) => (
-                        <TouchableOpacity key={n.uid} style={[styles.nearest, { borderColor: border }]} onPress={() => navigation.navigate('Profile', { userId: n.uid })} activeOpacity={0.75}>
-                          <Avatar uri={n.pic} size={30} />
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.nearestName, { color: textColor(isDark) }]} numberOfLines={1}>{n.name}</Text>
-                            <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{[n.role, n.city].filter(Boolean).join(' · ') || 'On LINKUP'}</Text>
-                          </View>
+
+                  {!thinking && chips.length ? (
+                    <View style={styles.chipsRow}>
+                      {chips.slice(0, 3).map((c) => (
+                        <TouchableOpacity key={c} style={[styles.chip, { borderColor: border, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]} onPress={() => onChip(c)} activeOpacity={0.75}>
+                          <Text style={[styles.chipText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{c}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
                   ) : null}
                 </View>
-                {!thinking && scoutResult?.people?.length ? scoutResult.people.map((p) => (
-                  <View key={p.url} style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
-                    <View style={styles.cardTop}>
-                      <View style={[styles.extBadge, { borderColor: border }]}><Globe size={16} color={textColor(isDark, 'secondary')} /></View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.cardName, { color: textColor(isDark) }]} numberOfLines={1}>{p.name}</Text>
-                        {p.headline ? <Text style={[styles.cardRole, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{p.headline}</Text> : null}
-                        <Text style={[styles.cardMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{p.url.replace(/^https?:\/\//, '')}</Text>
-                      </View>
-                      <Text style={[styles.pill, { color: textColor(isDark, 'muted'), borderColor: border }]}>Not a member</Text>
-                    </View>
-                    {p.snippet ? (
-                      <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
-                        <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>WHAT GOOGLE SHOWS{p.matched?.length ? ` · matched: ${p.matched.slice(0, 3).join(', ')}` : ''}</Text>
-                        <Text style={[styles.whyText, { color: textColor(isDark) }]} numberOfLines={4}>{p.snippet}</Text>
-                      </View>
-                    ) : null}
-                    <View style={styles.actions}>
-                      <TouchableOpacity style={[styles.ghostBtn, { borderColor: border }]} onPress={() => copyLine(p.opener)}>
-                        <Text style={[styles.ghostBtnText, { color: textColor(isDark) }]}>Copy first line</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: COLORS.primary, borderColor: isDark ? 'transparent' : 'rgba(0,0,0,0.12)' }]} onPress={() => Linking.openURL(p.url).catch(() => {})}>
-                        <ExternalLink size={14} color="#000" />
-                        <Text style={styles.primaryBtnText}>Open profile</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )) : null}
                 {!thinking ? answerCards.map((card) => (
                   <CardView
                     key={card.id}
@@ -515,7 +567,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
             {!pendingAsk && !answer && !otherCards.length ? (
               <View style={styles.chips}>
                 <Text style={[styles.emptyLine, { color: textColor(isDark, 'muted') }]}>Try one of these, or type your own below.</Text>
-                {['A Flutter developer in Harare for a paid fintech MVP', 'Someone who understands math', 'A co-founder with sales experience, equity'].map((s) => (
+                {['A Flutter developer in Harare for a paid fintech MVP', 'A co-founder with sales experience, equity', 'Someone who has raised from local angels, coffee'].map((s) => (
                   <TouchableOpacity key={s} style={[styles.chip, { borderColor: border, backgroundColor: surface }]} onPress={() => send(s)} activeOpacity={0.75}>
                     <Text style={[styles.chipText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{s}</Text>
                   </TouchableOpacity>
@@ -530,7 +582,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
         <View style={[styles.composer, { backgroundColor: surface, borderColor: border }]}>
           <TextInput
             style={[styles.input, { color: textColor(isDark) }]}
-            placeholder="Who do you need? A role, a skill or a name…"
+            placeholder="Who do you need? Ask Linky…"
             placeholderTextColor="#999"
             value={input}
             onChangeText={setInput}
@@ -578,7 +630,6 @@ const styles = StyleSheet.create({
   cardRole: { fontSize: 12, fontWeight: '600', marginTop: 1 },
   cardMeta: { fontSize: 11, fontWeight: '600', marginTop: 1 },
   pill: { fontSize: 10, fontWeight: '800', borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  extBadge: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   whyBox: { borderRadius: 12, padding: 10, marginTop: 12 },
   whyLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   whyText: { fontSize: 13, lineHeight: 19, fontWeight: '600', marginTop: 3 },
@@ -599,6 +650,11 @@ const styles = StyleSheet.create({
   nearest: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
   nearestName: { fontSize: 13, fontWeight: '800' },
   nearestMeta: { fontSize: 11, fontWeight: '600', marginTop: 1 },
+  msgRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
+  msgDot: { width: 24, height: 24, borderRadius: 9, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  msgDotText: { fontSize: 11, fontWeight: '900', color: '#000' },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  lead: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 9 },
   chips: { marginTop: 16, gap: 8 },
   chip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
   chipText: { fontSize: 12, fontWeight: '700', lineHeight: 17 },
