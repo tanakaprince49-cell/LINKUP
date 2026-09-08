@@ -22,7 +22,7 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import EmailAuthScreen from './src/screens/EmailAuthScreen';
 import LandingScreen from './src/screens/LandingScreen';
 
-const SwipeScreen = lazyScreen(() => import('./src/screens/SwipeScreen'));
+const LinkyHomeScreen = lazyScreen(() => import('./src/screens/LinkyHomeScreen'));
 const IdeaDeckScreen = lazyScreen(() => import('./src/screens/IdeaDeckScreen'));
 const SearchScreen = lazyScreen(() => import('./src/screens/SearchScreen'));
 const AlertsScreen = lazyScreen(() => import('./src/screens/AlertsScreen'));
@@ -43,6 +43,8 @@ const ShipLogScreen = lazyScreen(() => import('./src/screens/ShipLogScreen'));
 const CityLeagueScreen = lazyScreen(() => import('./src/screens/CityLeagueScreen'));
 const LinkyScreen = lazyScreen(() => import('./src/screens/LinkyScreen'));
 const LinkyProfileScreen = lazyScreen(() => import('./src/screens/LinkyProfileScreen'));
+const LinkySettingsScreen = lazyScreen(() => import('./src/screens/LinkySettingsScreen'));
+const LinkyAuditScreen = lazyScreen(() => import('./src/screens/LinkyAuditScreen'));
 const NewsScreen = lazyScreen(() => import('./src/screens/NewsScreen'));
 const CampaignsScreen = lazyScreen(() => import('./src/screens/CampaignsScreen'));
 const CreateCampaignScreen = lazyScreen(() => import('./src/screens/CreateCampaignScreen'));
@@ -53,7 +55,7 @@ const CampaignDetailScreen = lazyScreen(() => import('./src/screens/CampaignDeta
 // then the highest-traffic stack screens. Deep/game screens stay cold — the
 // lazy fallback is theme-matched now, so cold loads are invisible anyway.
 const PRELOADED_SCREENS = [
-  SwipeScreen,
+  LinkyHomeScreen,
   GamificationHubScreen,
   SearchScreen,
   MessagesScreen,
@@ -121,7 +123,7 @@ const linking: any = {
       Main: {
         screens: {
           Dashboard: '',
-          Swipe: 'swipe-deck',
+          LinkyHome: 'linky',
           Search: 'search',
           Inbox: 'inbox',
         },
@@ -132,7 +134,8 @@ const linking: any = {
       Matches: 'connections',
       Chat: 'chat/:matchId',
       ArchivedChats: 'messages/archived',
-      SwipeDeck: 'swipe',
+      LinkySettings: 'linky/settings',
+      LinkyAudit: 'linky/audit',
       IdeaDeck: 'ideas',
       Viewers: 'viewers',
       ActiveOpportunity: 'opportunity/:userId',
@@ -257,7 +260,7 @@ function TabNavigator({ navigation }: any) {
   const [unreadMessages, setUnreadMessages] = React.useState(0);
   const tabLabels: Record<string, string> = {
     Dashboard: 'Explore',
-    Swipe: 'Discover',
+    LinkyHome: 'Linky',
     Hub: 'Play',
     Search: 'Search',
     Inbox: 'Chat',
@@ -295,7 +298,7 @@ function TabNavigator({ navigation }: any) {
         tabBarIcon: ({ focused }) => {
           const iconMap: Record<string, { active: string; inactive: string }> = {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
-            Swipe: { active: 'Layers', inactive: 'Layers' },
+            LinkyHome: { active: 'Sparkles', inactive: 'Sparkles' },
             Hub: { active: 'Gamepad2', inactive: 'Gamepad2' },
             Campaigns: { active: 'Megaphone', inactive: 'Megaphone' },
             Search: { active: 'Search', inactive: 'Search' },
@@ -368,7 +371,7 @@ function TabNavigator({ navigation }: any) {
         header: (props) => {
           const titles: Record<string, string> = {
             Dashboard: 'LINKUP',
-            Swipe: 'Discover',
+            LinkyHome: 'Linky',
             Hub: 'Play',
             Search: 'Search',
             Inbox: 'Messages',
@@ -379,12 +382,7 @@ function TabNavigator({ navigation }: any) {
       })}
     >
       <Tab.Screen name="Dashboard" component={DiscoveryDashboardScreen} />
-      <Tab.Screen name="Swipe" component={SwipeScreen}
-        options={{
-          headerShown: false,
-          tabBarStyle: { display: 'none' },
-        }}
-      />
+      <Tab.Screen name="LinkyHome" component={LinkyHomeScreen} />
       <Tab.Screen name="Hub" component={GamificationHubScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Inbox" component={MessagesScreen} options={{ headerShown: false }} />
@@ -448,6 +446,11 @@ function AppContent() {
         navigationRef.navigate('Chat', { matchId });
         return;
       }
+    }
+
+    if (targetUrl.startsWith('/linky') || data?.type === 'intro_request' || data?.type === 'daily_brief') {
+      navigationRef.navigate('Main', { screen: 'LinkyHome' });
+      return;
     }
 
     if (targetUrl.startsWith('/opportunity/')) {
@@ -684,7 +687,6 @@ function AppContent() {
             <Stack.Screen name="Messages" component={MessagesScreen} />
             <Stack.Screen name="ArchivedChats" component={MessagesScreen} initialParams={{ archivedOnly: true }} />
             <Stack.Screen name="Chat" component={ChatScreen} />
-            <Stack.Screen name="SwipeDeck" component={SwipeScreen} />
             <Stack.Screen name="IdeaDeck" component={IdeaDeckScreen} />
             <Stack.Screen name="Campaigns" component={CampaignsScreen} />
             <Stack.Screen name="CreateCampaign" component={CreateCampaignScreen} />
@@ -699,6 +701,8 @@ function AppContent() {
             <Stack.Screen name="NetworkQuiz" component={NetworkQuizScreen} />
             <Stack.Screen name="Linky" component={LinkyScreen} options={{ animation: Platform.OS === 'android' ? 'fade' : 'slide_from_right' }} />
             <Stack.Screen name="LinkyProfile" component={LinkyProfileScreen} options={{ animation: Platform.OS === 'android' ? 'fade' : 'slide_from_right' }} />
+            <Stack.Screen name="LinkySettings" component={LinkySettingsScreen} />
+            <Stack.Screen name="LinkyAudit" component={LinkyAuditScreen} />
             <Stack.Screen name="DailyFive" component={DailyFiveScreen} />
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
             <Stack.Screen name="CityLeague" component={CityLeagueScreen} />
@@ -728,7 +732,9 @@ function AppContent() {
 const SCREEN_REGISTRY: Array<[string, any]> = [
   ['ProfileScreen', ProfileScreen],
   ['LinkyProfileScreen', LinkyProfileScreen],
-  ['SwipeScreen', SwipeScreen],
+  ['LinkyHomeScreen', LinkyHomeScreen],
+  ['LinkySettingsScreen', LinkySettingsScreen],
+  ['LinkyAuditScreen', LinkyAuditScreen],
   ['CampaignsScreen', CampaignsScreen],
   ['ChatScreen', ChatScreen],
   ['ViewersScreen', ViewersScreen],

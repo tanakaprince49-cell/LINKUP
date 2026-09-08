@@ -1026,7 +1026,8 @@ service cloud.firestore {
           'connection_request', 'connection_approved', 'connection_rejected',
           'game_challenge',
           'campaign_review', 'campaign_approved', 'campaign_rejected',
-          'plus_expiring'
+          'plus_expiring',
+          'intro_request', 'intro_accepted', 'intro_declined', 'daily_brief'
         ] &&
         data.timestamp == request.time &&
         (!data.keys().hasAny(['fromId']) || isValidId(data.fromId)) &&
@@ -1380,6 +1381,31 @@ service cloud.firestore {
           allow delete: if isSignedIn() && existing().userId == request.auth.uid;
         }
       }
+    }
+
+    // ------------------------------------------------------------
+    // Linky (intents, intro cards, double opt-in intros, budgets, bots).
+    // Written ONLY by api/linky.js with the Admin SDK. Members read their
+    // own rows through the API, never directly - so nothing here is open.
+    // Explicit so nobody "helpfully" adds client access later.
+    // ------------------------------------------------------------
+    match /intents/{intentId} {
+      allow read, write: if false;
+    }
+    match /introSuggestions/{userId} {
+      allow read, write: if false;
+    }
+    match /intros/{introId} {
+      allow read, write: if false;
+    }
+    match /linkyState/{userId} {
+      allow read, write: if false;
+    }
+    match /botUsers/{chatKey} {
+      allow read, write: if false;
+    }
+    match /botLinks/{code} {
+      allow read, write: if false;
     }
 
     // ------------------------------------------------------------

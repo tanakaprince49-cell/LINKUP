@@ -183,7 +183,11 @@ export interface AppNotification {
     | 'campaign_review'
     | 'campaign_approved'
     | 'campaign_rejected'
-    | 'plus_expiring';
+    | 'plus_expiring'
+    | 'intro_request'
+    | 'intro_accepted'
+    | 'intro_declined'
+    | 'daily_brief';
   content: string;
   timestamp: Timestamp | FieldValue;
   isRead: boolean;
