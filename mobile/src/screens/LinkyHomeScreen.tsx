@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { ArrowUp, Check, Clock, Send, Settings2, ShieldCheck, X } from 'lucide-react-native';
+import { ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
@@ -36,6 +36,7 @@ import {
   linkyCard,
   linkyHome,
   linkyMeet,
+  linkyPointers,
   linkyRespond,
 } from '../lib/linkyApi';
 
@@ -169,6 +170,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const [thinking, setThinking] = useState(false);
   const [pendingAsk, setPendingAsk] = useState('');
   const [answer, setAnswer] = useState<LinkyAsk | null>(null);
+  const [pointerText, setPointerText] = useState('');
+  const [pointerBusy, setPointerBusy] = useState(false);
   const [paywall, setPaywall] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const mounted = useRef(true);
@@ -260,6 +263,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
     try {
       const out = await linkyAsk(msg);
       setAnswer(out);
+      setPointerText('');
       setHome((h) => {
         if (!h) return h;
         const byId = new Map(out.cards.map((c) => [c.id, c]));
@@ -273,6 +277,19 @@ export default function LinkyHomeScreen({ navigation }: any) {
     } finally {
       setThinking(false);
       setPendingAsk('');
+    }
+  };
+
+  const askOutside = async () => {
+    if (!answer?.need || pointerBusy) return;
+    setPointerBusy(true);
+    try {
+      const r = await linkyPointers(answer.need);
+      setPointerText(r.text);
+    } catch (err) {
+      notifyUser('Could not fetch pointers', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setPointerBusy(false);
     }
   };
 
@@ -354,6 +371,19 @@ export default function LinkyHomeScreen({ navigation }: any) {
                         {answer.reply}
                       </Text>
                     </View>
+                  ) : null}
+                  {!thinking && answer?.none && answer.need ? (
+                    pointerText ? (
+                      <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
+                        <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>OUTSIDE LINKUP</Text>
+                        <Text style={[styles.whyText, { color: textColor(isDark) }]}>{pointerText}</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity style={[styles.ghostBtn, { borderColor: border, alignSelf: 'flex-start', marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={askOutside} disabled={pointerBusy}>
+                        {pointerBusy ? <ActivityIndicator size="small" color={textColor(isDark, 'muted')} /> : <Compass size={13} color={textColor(isDark, 'secondary')} />}
+                        <Text style={[styles.ghostBtnText, { color: textColor(isDark, 'secondary') }]}>Where to look outside LINKUP</Text>
+                      </TouchableOpacity>
+                    )
                   ) : null}
                   {!thinking && answer?.none && answer.nearest.length ? (
                     <View style={styles.nearestRow}>

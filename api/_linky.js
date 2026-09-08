@@ -58,6 +58,87 @@ const uniq = (arr) => Array.from(new Set(arr));
 const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || 'there';
 export const isValidId = (id) => /^[a-zA-Z0-9_-]{1,128}$/.test(String(id || ''));
 
+// Zero-token "understanding": common asks -> stems that actually appear on
+// member profiles. Matching is substring-based, so a stem like "analy" catches
+// analyst / analytics / analysis. Used only when the word-for-word pass finds
+// nobody, and every card still cites the real profile fact it matched.
+const CONCEPTS = [
+  { aliases: ['math', 'maths', 'mathematics', 'mathematician', 'statistics', 'statistician', 'numbers', 'numerate', 'calculus', 'algebra'], stems: ['mathemat', 'statistic', 'data', 'analy', 'quant', 'actuar', 'financ', 'account', 'econom', 'physic', 'engineer', 'machine learning', 'tutor', 'teach', 'lectur', 'research'] },
+  { aliases: ['developer', 'developers', 'dev', 'devs', 'programmer', 'programmers', 'coder', 'coders', 'engineer', 'engineers', 'software', 'coding', 'code', 'techie', 'technical', 'cto', 'tech'], stems: ['software', 'develop', 'engineer', 'program', 'coder', 'coding', 'flutter', 'react', 'node', 'python', 'javascript', 'typescript', 'android', 'ios', 'web', 'backend', 'frontend', 'full stack', 'fullstack', 'mobile', 'app', 'java', 'php', 'laravel', 'django', 'firebase', 'cto'] },
+  { aliases: ['designer', 'designers', 'design', 'ux', 'ui', 'graphics', 'illustrator', 'branding'], stems: ['design', 'ui', 'ux', 'figma', 'graphic', 'brand', 'illustrat', 'creative', 'canva', 'adobe'] },
+  { aliases: ['marketer', 'marketers', 'marketing', 'growth', 'seo', 'ads', 'advertising', 'promotion', 'influencer'], stems: ['market', 'growth', 'social media', 'content', 'brand', 'digital', 'seo', 'ads', 'campaign', 'communicat', 'influenc'] },
+  { aliases: ['sales', 'salesperson', 'seller', 'sellers', 'bd', 'closer', 'partnerships', 'revenue'], stems: ['sales', 'business development', 'bd', 'partnership', 'account manag', 'revenue', 'commercial', 'distribut'] },
+  { aliases: ['investor', 'investors', 'angel', 'angels', 'vc', 'vcs', 'funding', 'fund', 'raise', 'raised', 'capital', 'money', 'financing', 'backers'], stems: ['invest', 'angel', 'venture', 'vc', 'capital', 'fund', 'financ', 'equity', 'portfolio', 'accelerat', 'incubat'] },
+  { aliases: ['lawyer', 'lawyers', 'legal', 'attorney', 'attorneys', 'compliance', 'contracts', 'regulation', 'regulatory'], stems: ['law', 'legal', 'attorney', 'complian', 'contract', 'regulat', 'intellectual property', 'paralegal'] },
+  { aliases: ['accountant', 'accountants', 'accounting', 'finance', 'cfo', 'bookkeeper', 'bookkeeping', 'tax', 'audit', 'auditor', 'treasury'], stems: ['account', 'financ', 'cfo', 'bookkeep', 'tax', 'audit', 'treasur', 'chartered', 'acca'] },
+  { aliases: ['doctor', 'doctors', 'medical', 'health', 'healthcare', 'healthtech', 'nurse', 'nurses', 'clinic', 'pharmacist', 'pharmacy'], stems: ['health', 'medic', 'doctor', 'clinic', 'pharma', 'nurs', 'hospital', 'patient', 'telemedic'] },
+  { aliases: ['farmer', 'farmers', 'agriculture', 'agritech', 'farming', 'agro', 'agribusiness', 'crops', 'livestock', 'poultry'], stems: ['agri', 'farm', 'crop', 'livestock', 'horticult', 'food', 'poultry', 'irrigat', 'soil'] },
+  { aliases: ['fintech', 'payments', 'payment', 'banking', 'bank', 'banker', 'remittance', 'remittances', 'insurance', 'insurtech', 'lending', 'loans', 'microfinance', 'ecocash', 'wallet'], stems: ['fintech', 'payment', 'ecocash', 'mobile money', 'bank', 'wallet', 'remittance', 'lending', 'loan', 'insur', 'microfinance', 'credit'] },
+  { aliases: ['ai', 'ml', 'llm', 'llms', 'chatbot', 'chatbots', 'automation', 'genai'], stems: ['ai', 'artificial intelligence', 'machine learning', 'data scien', 'llm', 'nlp', 'deep learning', 'automat', 'chatbot', 'openai', 'gemini'] },
+  { aliases: ['blockchain', 'crypto', 'web3', 'bitcoin', 'defi', 'nft', 'solidity', 'ethereum'], stems: ['blockchain', 'crypto', 'web3', 'bitcoin', 'defi', 'solidity', 'ethereum', 'token'] },
+  { aliases: ['writer', 'writers', 'writing', 'copywriter', 'copywriting', 'journalist', 'journalism', 'content', 'editor', 'blogger', 'author'], stems: ['writ', 'content', 'copywrit', 'journalis', 'editor', 'blog', 'author', 'storytell'] },
+  { aliases: ['video', 'videographer', 'photographer', 'photography', 'filmmaker', 'film', 'youtuber', 'creator', 'creators', 'editing'], stems: ['video', 'photograph', 'film', 'edit', 'content creat', 'youtube', 'cinemat', 'camera', 'podcast'] },
+  { aliases: ['teacher', 'teachers', 'tutor', 'tutors', 'education', 'edtech', 'lecturer', 'professor', 'trainer', 'training', 'school', 'academic'], stems: ['educat', 'edtech', 'teach', 'tutor', 'lectur', 'school', 'train', 'curricul', 'professor', 'academ', 'universit'] },
+  { aliases: ['operations', 'ops', 'coo', 'logistics', 'supply', 'procurement', 'admin', 'administrator'], stems: ['operation', 'logistic', 'supply chain', 'project manag', 'process', 'coo', 'admin', 'procure'] },
+  { aliases: ['hr', 'recruiter', 'recruiters', 'recruiting', 'recruitment', 'talent', 'hiring', 'headhunter'], stems: ['hr', 'recruit', 'talent', 'people', 'human resource', 'hiring'] },
+  { aliases: ['cofounder', 'co-founder', 'cofounders', 'co-founders', 'founder', 'founders', 'partner', 'partners', 'entrepreneur', 'entrepreneurs', 'startup', 'startups'], stems: ['founder', 'co-founder', 'cofounder', 'ceo', 'entrepreneur', 'startup', 'building'] },
+  { aliases: ['mentor', 'mentors', 'advisor', 'advisors', 'adviser', 'advisory', 'coach', 'coaches', 'consultant', 'consultants', 'expert', 'experts', 'veteran', 'experienced'], stems: ['mentor', 'advis', 'coach', 'consult', 'experienced', 'senior', 'veteran', 'expert', 'director', 'head of', 'years'] },
+  { aliases: ['ecommerce', 'e-commerce', 'retail', 'retailer', 'shop', 'store', 'marketplace', 'fmcg', 'wholesale'], stems: ['ecommerce', 'e-commerce', 'retail', 'shop', 'store', 'marketplace', 'fmcg', 'wholesale', 'merchant'] },
+  { aliases: ['property', 'realtor', 'estate', 'construction', 'builder', 'architect', 'architecture', 'housing', 'proptech', 'contractor'], stems: ['real estate', 'property', 'construct', 'architect', 'housing', 'proptech', 'civil', 'quantity survey'] },
+  { aliases: ['solar', 'energy', 'renewable', 'renewables', 'electricity', 'power', 'electrician', 'battery', 'batteries'], stems: ['solar', 'energy', 'renewable', 'power', 'electric', 'battery', 'grid', 'inverter'] },
+  { aliases: ['transport', 'transportation', 'delivery', 'deliveries', 'courier', 'fleet', 'mobility', 'driver', 'drivers', 'trucking'], stems: ['transport', 'logistic', 'deliver', 'fleet', 'mobility', 'ride', 'courier', 'truck'] },
+  { aliases: ['music', 'musician', 'musicians', 'artist', 'artists', 'producer', 'producers', 'dj', 'entertainment', 'entertainer'], stems: ['music', 'artist', 'producer', 'creative', 'entertain', 'dj', 'sound', 'studio'] },
+  { aliases: ['gaming', 'game', 'games', 'gamedev', 'esports', 'unity'], stems: ['game', 'gaming', 'unity', 'unreal', 'esport'] },
+  { aliases: ['security', 'cybersecurity', 'cyber', 'hacker', 'hackers', 'infosec', 'pentester'], stems: ['cyber', 'security', 'infosec', 'pentest', 'soc', 'ethical hack'] },
+  { aliases: ['devops', 'cloud', 'aws', 'azure', 'infrastructure', 'sysadmin', 'kubernetes', 'docker'], stems: ['devops', 'cloud', 'aws', 'azure', 'gcp', 'infrastructure', 'kubernetes', 'docker', 'sre', 'linux', 'network'] },
+  { aliases: ['data', 'analyst', 'analysts', 'analytics', 'analysis', 'researcher', 'research', 'scientist', 'insights', 'excel', 'sql', 'dashboards'], stems: ['data', 'analy', 'sql', 'statistic', 'bi', 'dashboard', 'excel', 'research', 'power bi', 'tableau'] },
+  { aliases: ['hardware', 'iot', 'electronics', 'robotics', 'mechanical', 'electrical', 'embedded', 'arduino', 'drones', 'drone', '3d'], stems: ['hardware', 'iot', 'embedded', 'electronic', 'robot', 'arduino', 'pcb', 'mechan', 'drone', 'manufactur', 'engineer'] },
+  { aliases: ['student', 'students', 'graduate', 'graduates', 'intern', 'interns', 'internship', 'undergrad', 'university'], stems: ['student', 'universit', 'graduate', 'intern', 'campus', 'college', 'polytech'] },
+  { aliases: ['pm', 'product', 'roadmap', 'scrum', 'agile'], stems: ['product', 'product manag', 'roadmap', 'scrum', 'agile', 'project manag'] },
+  { aliases: ['mobile', 'android', 'ios', 'flutter', 'app', 'apps'], stems: ['mobile', 'android', 'ios', 'flutter', 'react native', 'kotlin', 'swift', 'app'] },
+  { aliases: ['web', 'website', 'websites', 'frontend', 'wordpress', 'webflow', 'landing'], stems: ['web', 'react', 'next', 'vue', 'html', 'css', 'javascript', 'wordpress', 'frontend', 'website', 'webflow'] },
+  { aliases: ['backend', 'api', 'apis', 'database', 'databases', 'server', 'servers'], stems: ['backend', 'api', 'node', 'python', 'django', 'laravel', 'php', 'java', 'database', 'sql', 'firebase', 'server'] },
+  { aliases: ['ngo', 'ngos', 'nonprofit', 'non-profit', 'charity', 'grant', 'grants', 'donor', 'donors', 'impact', 'development'], stems: ['ngo', 'nonprofit', 'non-profit', 'impact', 'development', 'community', 'donor', 'grant', 'social enterprise', 'humanitarian'] },
+  { aliases: ['tourism', 'travel', 'hospitality', 'hotel', 'hotels', 'safari', 'tour', 'tours'], stems: ['touris', 'travel', 'hospitality', 'hotel', 'safari', 'lodge', 'airbnb'] },
+  { aliases: ['fashion', 'clothing', 'apparel', 'textile', 'tailor', 'beauty', 'cosmetics', 'salon', 'hair'], stems: ['fashion', 'cloth', 'apparel', 'textile', 'tailor', 'beauty', 'cosmetic', 'salon', 'hair', 'skincare'] },
+  { aliases: ['mining', 'miner', 'miners', 'minerals', 'geologist', 'geology', 'gold', 'lithium'], stems: ['mining', 'mineral', 'geolog', 'gold', 'lithium', 'metallurg'] },
+  { aliases: ['government', 'policy', 'civic', 'politics', 'political', 'diplomat', 'public'], stems: ['government', 'policy', 'public sector', 'regulat', 'civic', 'politic', 'parliament', 'municipal'] },
+  { aliases: ['pr', 'media', 'press', 'events', 'event', 'communications', 'comms', 'publicist', 'mc'], stems: ['pr', 'public relations', 'communicat', 'media', 'press', 'event', 'broadcast', 'radio', 'tv'] },
+  { aliases: ['export', 'exporter', 'import', 'importer', 'trade', 'trader', 'trading', 'customs', 'forex'], stems: ['export', 'import', 'trade', 'logistic', 'customs', 'wholesale', 'forex', 'commodit'] },
+  { aliases: ['chef', 'cook', 'food', 'restaurant', 'catering', 'baker', 'bakery'], stems: ['food', 'chef', 'restaurant', 'cater', 'bak', 'kitchen', 'culinary', 'beverage'] },
+  { aliases: ['sports', 'sport', 'fitness', 'gym', 'football', 'athlete', 'athletes', 'coaching'], stems: ['sport', 'fitness', 'gym', 'football', 'athlet', 'wellness', 'coach'] },
+];
+const CONCEPT_BY_ALIAS = new Map();
+CONCEPTS.forEach((c) => c.aliases.forEach((a) => CONCEPT_BY_ALIAS.set(a, c)));
+
+// Light stemming so "developers" finds "developer" and "designing" finds "design".
+const stemVariants = (w) => {
+  const out = [w];
+  if (w.length > 4 && w.endsWith('s') && !w.endsWith('ss')) out.push(w.slice(0, -1));
+  if (w.length > 6 && w.endsWith('ing')) out.push(w.slice(0, -3));
+  if (w.length > 5 && w.endsWith('ed')) out.push(w.slice(0, -2));
+  if (w.length > 5 && w.endsWith('ers')) out.push(w.slice(0, -1));
+  return uniq(out);
+};
+
+// Related stems for the ask, each remembering which word it came from.
+export function expandTerms(tokensIn) {
+  const out = [];
+  const seen = new Set(tokensIn);
+  for (const t of tokensIn) {
+    for (const v of stemVariants(t)) {
+      const c = CONCEPT_BY_ALIAS.get(v);
+      if (!c) continue;
+      for (const stem of c.stems) {
+        if (seen.has(stem)) continue;
+        seen.add(stem);
+        out.push({ term: stem, from: t });
+      }
+    }
+  }
+  return out;
+}
+
 const STOP = new Set('me for up in a an the with and or to of is i my by on at who someone who can that this need want looking find help build some any people person good great experienced strong senior junior based from about into been are was be it its as please hi hey hello linky you your get give show connect introduce intro know anyone anybody there here have has do does would could should like want wants needs'.split(' '));
 const tokens = (s) => uniq(String(s || '').toLowerCase().replace(/[^a-z0-9+#.\s-]/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)));
 
@@ -250,8 +331,9 @@ export function parseAsk(message) {
   const loc = all.match(/\b(?:in|from|based in|around|near)\s+([a-z][a-z\s]{2,30})\b/);
   if (loc) location = text(loc[1].split(/\s+(?:and|or|who|that|with|for|to|on|at|doing|building)\b/)[0], 60);
   const remote = !/\b(in person|in-person|local only|must be in|physically)\b/.test(all);
-  const kws = tokens(need).filter((t) => !location || !location.toLowerCase().split(/\s+/).includes(t));
-  return { need, offer, location, remote, tokens: kws, norm: kws.slice().sort().join(' ') };
+  const raw = tokens(need).filter((t) => !location || !location.toLowerCase().split(/\s+/).includes(t));
+  const kws = uniq(raw.flatMap(stemVariants));
+  return { need, offer, location, remote, tokens: kws, expanded: expandTerms(raw), norm: raw.slice().sort().join(' ') };
 }
 
 // ---------------------------------------------------------------- matching
@@ -297,7 +379,7 @@ function whyIsCited(why, c) {
   return [...facts, ...bioHits].some((t) => w.includes(t));
 }
 
-function keywordScore(q, c) {
+function keywordScore(q, c, terms = q.tokens, related = false) {
   const skills = c.skills.map((s) => s.toLowerCase());
   const inds = c.industries.map((s) => s.toLowerCase());
   const role = c.role.toLowerCase();
@@ -305,16 +387,17 @@ function keywordScore(q, c) {
   const name = c.name.toLowerCase();
   const bio = c.bio.toLowerCase();
   const lf = c.lookingFor.map((s) => s.toLowerCase());
+  const w = related ? 0.6 : 1;
   let score = 0;
   const hits = [];
-  for (const kw of q.tokens) {
-    if (name.includes(kw)) { score += 5; hits.push(kw); }
-    if (skills.some((s) => s.includes(kw))) { score += 4; hits.push(kw); }
-    if (role.includes(kw)) { score += 3; hits.push(kw); }
-    if (company.includes(kw)) { score += 2; hits.push(kw); }
-    if (inds.some((s) => s.includes(kw))) { score += 2; hits.push(kw); }
-    if (lf.some((s) => s.includes(kw))) { score += 1; }
-    if (bio.includes(kw)) { score += 1; hits.push(kw); }
+  for (const kw of terms) {
+    if (!related && name.includes(kw)) { score += 5; hits.push(kw); }
+    if (skills.some((s) => s.includes(kw))) { score += 4 * w; hits.push(kw); }
+    if (role.includes(kw)) { score += 3 * w; hits.push(kw); }
+    if (!related && company.includes(kw)) { score += 2; hits.push(kw); }
+    if (inds.some((s) => s.includes(kw))) { score += 2 * w; hits.push(kw); }
+    if (lf.some((s) => s.includes(kw))) { score += 1 * w; }
+    if (bio.includes(kw)) { score += 1 * w; hits.push(kw); }
   }
   const loc = String(q.location || '').toLowerCase();
   if (loc) {
@@ -326,20 +409,42 @@ function keywordScore(q, c) {
   return { score, hits: uniq(hits) };
 }
 
-function templateWhy(c, hits) {
+function templateWhy(c, hits, relatedTo = '') {
   const where = c.city ? ` in ${c.city}` : '';
   const role = c.role ? `${/^[aeiou]/i.test(c.role) ? 'an' : 'a'} ${c.role}` : '';
+  const close = relatedTo ? ` (close to "${relatedTo}")` : '';
   const has = (s) => hits.some((h) => String(s || '').toLowerCase().includes(h));
-  if (hits.length && has(c.name)) return `${c.name}${role ? ` is ${role}` : ' is on LINKUP'}${where}${c.company ? ` at ${c.company}` : ''}.`;
+  if (!relatedTo && hits.length && has(c.name)) return `${c.name}${role ? ` is ${role}` : ' is on LINKUP'}${where}${c.company ? ` at ${c.company}` : ''}.`;
   const skillHit = c.skills.find(has);
-  if (skillHit) return `${c.name} lists ${skillHit}${role ? ` and works as ${role}` : ''}${where}.`;
-  if (c.role && has(c.role)) return `${c.name} is ${role}${where}${c.company ? ` at ${c.company}` : ''}.`;
-  if (c.company && has(c.company)) return `${c.name} works at ${c.company}${role ? ` as ${role}` : ''}${where}.`;
+  if (skillHit) return `${c.name} lists ${skillHit}${close}${role ? ` and works as ${role}` : ''}${where}.`;
+  if (c.role && has(c.role)) return `${c.name} is ${role}${close}${where}${c.company ? ` at ${c.company}` : ''}.`;
+  if (!relatedTo && c.company && has(c.company)) return `${c.name} works at ${c.company}${role ? ` as ${role}` : ''}${where}.`;
   const indHit = c.industries.find(has);
-  if (indHit) return `${c.name} works in ${indHit}${role ? ` as ${role}` : ''}${where}.`;
+  if (indHit) return `${c.name} works in ${indHit}${close}${role ? ` as ${role}` : ''}${where}.`;
   const bioHit = hits.find((h) => c.bio.toLowerCase().includes(h));
-  if (bioHit) return `${c.name}'s profile mentions "${bioHit}"${role ? ` - ${role}` : ''}${where}.`;
+  if (bioHit) return `${c.name}'s profile mentions "${bioHit}"${close}${role ? ` - ${role}` : ''}${where}.`;
   return '';
+}
+
+// Gemini expansion, only when neither the exact words nor the built-in
+// concepts find anyone. Cached per normalised ask for 30 days, across all
+// members, so a given ask costs at most one small call ever.
+const cacheKey = (prefix, norm) => `${prefix}_${crypto.createHash('sha1').update(norm).digest('hex').slice(0, 32)}`;
+async function aiExpandTerms(q) {
+  if (!getGeminiKey()) return null;
+  const ref = db().collection('linkyCache').doc(cacheKey('x', q.norm));
+  const snap = await ref.get().catch(() => null);
+  if (snap?.exists && Date.now() - toMillis(snap.data().createdAt) < 30 * DAY_MS) return snap.data().terms || [];
+  const prompt = [
+    `A member of LINKUP (a network of builders, founders and operators) asked: "${q.need}".`,
+    'List up to 12 short lowercase terms (skills, roles, tools, industries, word stems) that would appear on the profile of someone able to help with that ask. Prefer stems ("analy", "financ") so plural and verb forms match. No explanations.',
+    'Return STRICT JSON only: {"terms":["...", "..."]}',
+  ].join('\n');
+  const raw = await geminiText(prompt, { temperature: 0.2, maxOutputTokens: 160, responseMimeType: 'application/json' });
+  const parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+  const terms = uniq((Array.isArray(parsed?.terms) ? parsed.terms : []).map((t) => text(t, 30).toLowerCase()).filter((t) => t.length >= 3 && !STOP.has(t))).slice(0, 12);
+  await ref.set({ need: q.need, terms, createdAt: Date.now() }).catch(() => {});
+  return terms;
 }
 
 const templateOpener = (c, need) => `Hi ${firstName(c.name)} - Linky pointed me to you. I am looking for ${need}. Open to a quick chat?`;
@@ -389,13 +494,41 @@ export async function findPeople(uid, q, ctx, { user, state, existingCards = [] 
     eligible.push(candidateFacts(p, st));
   }
   const checked = ctx.candidates.filter((p) => p.uid !== uid).length;
-  const pool = [];
-  for (const facts of eligible) {
-    const { score, hits } = keywordScore(q, facts);
-    if (score <= 0 || !hits.length) continue;
-    pool.push({ facts, score, hits });
+  const scan = (terms, related) => {
+    const out = [];
+    for (const facts of eligible) {
+      const { score, hits } = keywordScore(q, facts, terms, related);
+      if (score <= 0 || !hits.length) continue;
+      out.push({ facts, score, hits });
+    }
+    return out;
+  };
+  // Pass 1: the member's own words. Pass 2: built-in related concepts (zero
+  // tokens). Pass 3: one small Gemini expansion, cached. Never more than one
+  // Gemini call per ask: if pass 3 ran, the rerank below is skipped.
+  let pool = scan(q.tokens, false);
+  let expansion = 'none';
+  let relatedTo = '';
+  let usedAi = false;
+  if (!pool.length && q.expanded.length) {
+    pool = scan(q.expanded.map((e) => e.term), true);
+    if (pool.length) { expansion = 'local'; relatedTo = uniq(q.expanded.map((e) => e.from)).join(' '); }
   }
-  if (!pool.length) return { picks: [], nearest: nearestPeople(me, q, eligible), checked, usedAi: false };
+  if (!pool.length && q.tokens.length) {
+    try {
+      const terms = await aiExpandTerms(q);
+      if (Array.isArray(terms)) {
+        usedAi = true;
+        if (terms.length) {
+          pool = scan(terms, true);
+          if (pool.length) { expansion = 'ai'; relatedTo = q.tokens.filter((t) => t.length > 3).slice(0, 3).join(' ') || q.need.slice(0, 40); }
+        }
+      }
+    } catch (err) {
+      console.warn('[linky] ai expansion failed', err?.message || err);
+    }
+  }
+  if (!pool.length) return { picks: [], nearest: nearestPeople(me, q, eligible), checked, usedAi, expansion: 'none' };
 
   // Blend keyword fit with profile compatibility, then shortlist.
   const compat = new Map(localRank(compactProfile({ ...owner, uid, skills: me.skills }), pool.map((x) => compactProfile({ ...x.facts, occupation: x.facts.role })), pool.length).map((r) => [r.uid, r.score]));
@@ -405,8 +538,7 @@ export async function findPeople(uid, q, ctx, { user, state, existingCards = [] 
   const byUid = new Map(shortlist.map((x) => [x.facts.uid, x]));
 
   let picks = null;
-  let usedAi = false;
-  if (shortlist.length >= 2) {
+  if (shortlist.length >= 2 && !usedAi) {
     try {
       picks = await geminiRerank(q, { role: me.role, company: me.company, city: me.city, skills: me.skills.slice(0, 8), notes: (me.notes || me.bio || '').slice(0, 160) }, shortlist.map((x) => x.facts));
       usedAi = Array.isArray(picks);
@@ -429,12 +561,12 @@ export async function findPeople(uid, q, ctx, { user, state, existingCards = [] 
   if (!chosen.length) {
     // Template path: no key, Gemini down/over quota, one candidate, or AI cited nothing.
     for (const x of shortlist) {
-      const why = templateWhy(x.facts, x.hits);
-      if (!why || x.score < 3) continue;
+      const why = templateWhy(x.facts, x.hits, relatedTo);
+      if (!why || x.score < (relatedTo ? 1.5 : 3)) continue;
       chosen.push({ facts: x.facts, score: Math.max(55, Math.min(95, 50 + Math.round(x.blend))), why, opener: templateOpener(x.facts, q.need) });
     }
   }
-  return { picks: chosen.slice(0, LIMITS.cardsPerAsk), nearest: [], checked, usedAi };
+  return { picks: chosen.slice(0, LIMITS.cardsPerAsk), nearest: [], checked, usedAi, expansion, relatedTo };
 }
 
 // When nobody fits: the 3 most adjacent people (same city as the ask or the
@@ -455,18 +587,59 @@ function nearestPeople(me, q, eligible) {
 // ---------------------------------------------------------------- ask (the whole flow, one request)
 const COACH = 'Tell me who you need in one message and I answer right away - for example "a Flutter developer in Harare for a paid fintech MVP", "a co-founder with sales experience, equity", or "someone who has raised from local angels".';
 
-function askReply(q, picks, nearest, checked, source = 'app') {
+function askReply(q, picks, nearest, checked, source = 'app', expansion = 'none', relatedTo = '') {
   if (picks.length) {
     const loc = q.location.toLowerCase();
     const inLoc = !loc || picks.some((p) => `${p.facts.city} ${p.facts.country}`.toLowerCase().includes(loc));
     const where = inLoc ? '' : ` None of them is in ${q.location}, so these are people who could work with you remotely.`;
     const cta = source === 'app' ? ' Tap Meet and I will ask them for you.' : '';
-    return `${picks.length === 1 ? 'One person' : `${picks.length} people`} on LINKUP I can actually cite for "${q.need}".${where}${cta}`;
+    const count = picks.length === 1 ? 'One person' : `${picks.length} people`;
+    if (expansion !== 'none') {
+      return `Nobody on LINKUP lists "${relatedTo || q.need}" word for word, but ${count.toLowerCase()} ${picks.length === 1 ? 'is' : 'are'} close - each card says exactly which skill or role I matched.${where}${cta}`;
+    }
+    return `${count} on LINKUP I can actually cite for "${q.need}".${where}${cta}`;
   }
   const near = nearest.length
     ? ` Closest right now: ${nearest.map((n) => `${n.name}${n.role || n.city ? ` (${[n.role, n.city].filter(Boolean).join(', ')})` : ''}`).join(' · ')}.`
     : '';
-  return `Nobody on LINKUP fits "${q.need}" yet - I checked all ${checked} visible members and I will not guess.${near} Try a broader ask (a skill or role instead of a niche), or invite the person you have in mind to LINKUP (${APP_URL}) and ask me again.`;
+  const outside = source === 'app' ? ' Tap "Where to look outside LINKUP" and I will point you to places that usually have this person.' : ' Reply MORE and I will point you to places outside LINKUP that usually have this person.';
+  return `Nobody on LINKUP fits "${q.need}" yet - I checked all ${checked} visible members and their related skills, and I will not guess.${near}${outside}`;
+}
+
+// Where to look when LINKUP does not have the person: one small Gemini call,
+// cached per ask for 7 days across members; a static answer when there is no
+// key. Only for asks the member actually made (bounded by the ask budget).
+export async function pointers(uid, need, { userDoc } = {}) {
+  const user = userDoc || (await loadUser(uid));
+  const q = parseAsk(need);
+  if (!q.tokens.length) throw new Error('Ask me who you need first.');
+  const state = await loadState(uid);
+  const known = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : []), ...(Array.isArray(state.askHistory) ? state.askHistory : [])]
+    .filter(Boolean).some((a) => (a.norm ? a.norm === q.norm : parseAsk(a.need || '').norm === q.norm));
+  if (!known) throw new Error('Ask me that first, then I can point you outside LINKUP.');
+  const ref = db().collection('linkyCache').doc(cacheKey('p', q.norm));
+  const snap = await ref.get().catch(() => null);
+  if (snap?.exists && Date.now() - toMillis(snap.data().createdAt) < 7 * DAY_MS) return { text: snap.data().text, cached: true };
+  const me = profileFacts(user) || {};
+  const place = q.location || [me.city, me.country].filter(Boolean).join(', ') || 'Zimbabwe';
+  let out = '';
+  if (getGeminiKey()) {
+    try {
+      const prompt = [
+        `You are Linky, the connector for LINKUP. A member in ${place} asked for "${q.need}" and nobody on LINKUP fits yet.`,
+        'In under 90 words of plain text (no markdown, no bullet symbols), give 3 concrete places or ways to find such a person outside LINKUP that are realistic for that location (specific kinds of institutions, professional bodies, communities, platforms and the exact search phrase to use). Then one short outreach message they could send. Never name private individuals. Do not mention that you are an AI.',
+      ].join('\n');
+      out = text(await geminiText(prompt, { temperature: 0.4, maxOutputTokens: 260 }), 900);
+    } catch (err) {
+      console.warn('[linky] pointers gemini failed', err?.message || err);
+    }
+  }
+  if (!out) {
+    const terms = q.tokens.filter((t) => t.length > 3).slice(0, 3).join(' ') || q.need;
+    out = `Outside LINKUP, three quick routes for "${q.need}": 1) LinkedIn - search "${terms}" together with "${place}" and filter by location, then message the two most active people. 2) The university department or professional body for that field in ${place} - they always know who is doing the work right now. 3) The WhatsApp or Telegram communities for that field - ask for one referral, not a list. Outreach line: "Hi, I am building in ${place} and looking for ${q.need}. Could we talk for 15 minutes this week?"`;
+  }
+  await ref.set({ need: q.need, text: out, createdAt: Date.now() }).catch(() => {});
+  return { text: out, cached: false };
 }
 
 export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
@@ -485,7 +658,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
 
   // Greeting / nothing to search on: coach, no tokens, no budget.
   if (!q.tokens.length) {
-    return { id: '', need: q.need, reply: COACH, cards: [], nearest: [], none: true, checked: 0, createdAt: now, cached: false, asksLeft: asksLeft() };
+    return { id: '', need: q.need, reply: COACH, cards: [], nearest: [], none: true, checked: 0, expansion: 'none', createdAt: now, cached: false, usedAi: false, asksLeft: asksLeft() };
   }
   // Same ask again within the cache window (any of the last few asks): same
   // answer, no tokens, no budget.
@@ -507,7 +680,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
 
   const existing = await loadCards(uid);
   const ctx = await buildMatchContext();
-  const { picks, nearest, checked, usedAi } = await findPeople(uid, q, ctx, { user, state, existingCards: existing });
+  const { picks, nearest, checked, usedAi, expansion = 'none', relatedTo = '' } = await findPeople(uid, q, ctx, { user, state, existingCards: existing });
 
   // Persist cards (reuse a live card for the same person instead of duplicating it).
   const askId = `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
@@ -551,17 +724,17 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     await db().collection('introSuggestions').doc(uid).set({ cards: [...keep, ...created], updatedAt: nowTs(), newSince: now }, { merge: true });
   }
 
-  const reply = askReply(q, picks, nearest, checked, source);
+  const reply = askReply(q, picks, nearest, checked, source, expansion, relatedTo);
   const record = {
     id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote,
-    reply, cardIds: resultCards.map((c) => c.id), none: !picks.length, nearest, checked, usedAi, source, createdAt: now,
+    reply, cardIds: resultCards.map((c) => c.id), none: !picks.length, nearest, checked, usedAi, expansion, source, createdAt: now,
   };
   const history = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
   history.push({ id: askId, need: q.need, cards: picks.length, none: !picks.length, source, createdAt: now });
   const recentAsks = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])]
     .filter((a) => a && a.norm !== q.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5);
   await patchState(uid, { lastAsk: record, recentAsks, askHistory: history, asks: { day: today, count: used + 1 } });
-  return { ...publicAsk(record), cards: resultCards, cached: false, asksLeft: Math.max(0, limits.asksPerDay - used - 1) };
+  return { ...publicAsk(record), cards: resultCards, cached: false, usedAi, asksLeft: Math.max(0, limits.asksPerDay - used - 1) };
 }
 
 const publicAsk = (a) => (a ? {
@@ -572,6 +745,7 @@ const publicAsk = (a) => (a ? {
   none: !!a.none,
   nearest: Array.isArray(a.nearest) ? a.nearest : [],
   checked: Number(a.checked || 0),
+  expansion: a.expansion || 'none',
   createdAt: toMillis(a.createdAt),
 } : null);
 

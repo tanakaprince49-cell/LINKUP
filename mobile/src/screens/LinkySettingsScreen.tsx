@@ -10,7 +10,7 @@ import { notifyUser } from '../lib/notify';
 import { IntentOffer, LinkyHome, OFFER_LABELS, linkyHome, linkyLinkCode, linkyPrefs, linkyUnlinkChannel } from '../lib/linkyApi';
 
 const OFFERS: IntentOffer[] = ['paid', 'equity', 'advisory', 'coffee'];
-const TELEGRAM_BOT = String(process.env.EXPO_PUBLIC_LINKY_TELEGRAM_BOT || 'LinkyLinkupBot').replace(/^@/, '');
+const TELEGRAM_BOT = String(process.env.EXPO_PUBLIC_LINKY_TELEGRAM_BOT || 'LINKUP_AIBOT').replace(/^@/, '');
 const WHATSAPP_NUMBER = String(process.env.EXPO_PUBLIC_LINKY_WHATSAPP_NUMBER || '').replace(/[^0-9]/g, '');
 
 export default function LinkySettingsScreen({ navigation }: any) {

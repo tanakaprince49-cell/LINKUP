@@ -30,12 +30,21 @@ written; old docs are inert.)
    to search on → coaching reply, **no Gemini, no budget**.
 2. Same ask again within 12 h → same answer from cache, **no Gemini, no budget**.
 3. Keyword + compatibility scoring over visible `publicProfiles` (+ what each
-   member told Linky). Zero candidates → graceful "nobody fits yet" with the
-   3 nearest people and how many members were checked, **no Gemini**.
-4. Only when ≥ 2 plausible candidates exist: **one** compact Flash-Lite call to
-   rerank the shortlist (≤ 8 people) with cite-or-skip. If Gemini fails / is
-   over quota / cites nothing, the cited template path answers instead — never
-   an error.
+   member told Linky). Plurals/verb forms are stemmed ("developers" → "developer").
+4. Nobody word-for-word → built-in related concepts (`CONCEPTS` in `api/_linky.js`:
+   "math" → statistics / data / analyst / accountant …), **no Gemini**. Cards say
+   `(close to "math")` and cite the real profile fact.
+5. Still nobody → **one** tiny Gemini term-expansion (≤160 output tokens), cached
+   in `linkyCache/x_*` for 30 days **across all members** (a given ask costs at
+   most one call, ever). If that ran, the rerank below is skipped.
+6. Still nobody → graceful "nobody fits yet" with the 3 nearest people (own city
+   first), how many members were checked, and a **"Where to look outside LINKUP"**
+   button (bot: `more`) → one small Gemini call, cached 7 days per ask, static
+   text without a key. Only for asks the member actually made.
+7. Otherwise, only when ≥ 2 plausible candidates exist: **one** compact
+   Flash-Lite rerank of the shortlist (≤ 8 people) with cite-or-skip. If Gemini
+   fails / is over quota / cites nothing, the cited template path answers
+   instead — never an error.
 
 Limits: free = 10 asks/day, 3 Meets/day; PLUS = 60 asks/day, unlimited Meets.
 Up to 5 cards per ask. Inbound cap 5/week (member-adjustable 0–20). Decline =
@@ -45,8 +54,8 @@ after 7 days.
 ## One-time setup (you)
 
 1. **Deploy rules** (CI still 403s): Firebase console → Firestore → Rules → paste `firestore.rules` → Publish.
-2. **Telegram**: BotFather → `/newbot` → copy token → Vercel env `TELEGRAM_BOT_TOKEN` (Production) → redeploy.
-   The hourly housekeeping registers the webhook itself (`/api/telegram`). Optional: `EXPO_PUBLIC_LINKY_TELEGRAM_BOT=<botusername>` so the app's "Open Telegram" button deep-links correctly (default `LinkyLinkupBot`).
+2. **Telegram** (DONE for @LINKUP_AIBOT, display name "LinkyLinkupBot"): token is in Vercel env `TELEGRAM_BOT_TOKEN`; webhook registered at `/api/telegram` with the token-derived secret; commands + description set via the Bot API.
+   The hourly housekeeping re-registers the webhook if it ever changes. Optional: `EXPO_PUBLIC_LINKY_TELEGRAM_BOT=<botusername>` so the app's "Open Telegram" button deep-links correctly (default `LINKUP_AIBOT` — the username BotFather actually gave the bot; its display name is "LinkyLinkupBot").
 3. **WhatsApp** (Meta Cloud API): create a Meta app → WhatsApp → get the **Phone number ID** and a permanent **access token**. Vercel env:
    `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` (any string you invent), optional `WHATSAPP_APP_SECRET`.
    In Meta → Webhooks: callback `https://linkup-muqu.vercel.app/api/whatsapp`, verify token = the string you invented, subscribe to `messages`.
@@ -56,7 +65,7 @@ after 7 days.
 ## Bot commands
 
 Just type who you need (e.g. `a Flutter developer in Harare, paid`) → answered inline with numbered cards.
-`cards` · `meet 1` / `skip 1` / `save 1` · `accept` / `decline` / `later` · `prefs` · `unlink` · `help`.
+`cards` · `meet 1` / `skip 1` / `save 1` · `accept` / `decline` / `later` · `more` (outside-LINKUP pointers after a no-match) · `prefs` · `unlink` · `help`.
 Linking: app → Linky tab → Preferences & bots → Connect → send the 6-character code to the bot (15-minute validity).
 
 ## Verify after deploy

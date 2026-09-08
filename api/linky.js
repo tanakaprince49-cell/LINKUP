@@ -15,7 +15,7 @@ import { verifyRequestUser } from './_firebaseAdmin.js';
 import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import {
   APP_URL, LIMITS, OFFERS, ask, audit, botUserFor, consumeLinkCode, createLinkCode, forget, home,
-  loadCards, loadState, loadUser, meet, orderedCards, respond, runCron, sendTelegram,
+  loadCards, loadState, loadUser, meet, orderedCards, pointers, respond, runCron, sendTelegram,
   sendWhatsApp, setCardStatus, setFacts, setPrefs, unlinkBot, profileFacts, telegramWebhookSecret,
 } from './_linky.js';
 
@@ -87,6 +87,7 @@ const HELP = [
   'meet [n]            - ask for the intro on card n (default 1)',
   'skip [n] / save [n] - clear or keep a card',
   'accept / decline / later - answer an intro request',
+  'more                - where to look outside LINKUP when nobody fits',
   'prefs               - what you are open to',
   'unlink              - disconnect this chat',
   'help                - this list',
@@ -186,6 +187,19 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
     const decision = cmd.startsWith('accept') || cmd.startsWith('yes') ? 'accept' : cmd.startsWith('decline') ? 'decline' : 'later';
     const r = await respond(uid, pending.id, decision);
     return { text: r.status === 'accepted' ? `Done - you and ${pending.requesterName} are connected. Chat: ${APP_URL}/chat/${r.matchId}` : r.status === 'snoozed' ? 'Parked for 2 weeks.' : 'Declined. They will not be suggested to you again.' };
+  }
+
+  // ---- "more" after a no-match: where to look outside LINKUP
+  if (cmd === 'more' || cmd === 'outside' || cmd === 'where') {
+    const state = await loadState(uid);
+    const last = state.lastAsk;
+    if (!last?.need) return { text: 'Ask me who you need first.' };
+    try {
+      const r = await pointers(uid, last.need, { userDoc: user });
+      return { text: r.text };
+    } catch (err) {
+      return { text: String(err?.message || 'That did not work.') };
+    }
   }
 
   // ---- everything else is an ask: answered right now
@@ -326,6 +340,7 @@ async function handleApp(req, res) {
       case 'home': out = await home(uid); break;
       case 'ask': out = await ask(uid, body.message, { source: 'app' }); break;
       case 'facts': out = await setFacts(uid, { notes: body.notes, skills: body.skills, lookingFor: body.lookingFor }); break;
+      case 'pointers': out = await pointers(uid, String(body.need || '')); break;
       case 'meet': out = await meet(uid, String(body.cardId || '')); break;
       case 'card': {
         const status = ['skip', 'saved', 'new'].includes(body.status) ? body.status : 'skip';
