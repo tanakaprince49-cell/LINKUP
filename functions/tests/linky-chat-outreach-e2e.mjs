@@ -20,10 +20,14 @@ process.env.SERPAPI_KEY = 'fake-serp-key-for-tests';
 process.env.OUTREACH_RESERVE_CREDITS = '40';
 
 const realFetch = globalThis.fetch;
+const tgSends = [];
 const calls = { gemini: 0, zen: 0, serp: 0, google: 0, serpQueries: [] };
 // flip these to make a provider fail, so the rescue path is tested and not assumed
 let geminiDown = false;
 let zenDown = false;
+// when on, both model providers stall - the only way to test that a slow model
+// cannot leave a member staring at "typing..." forever
+let hangProviders = false;
 let serpAccount = { total_searches_left: 240, searches_per_month: 250, plan_name: 'Free Plan' };
 let organicOverride = null;
 
@@ -42,6 +46,15 @@ const gotoTargets = { TOK1: 'https://zw.linkedin.com/in/tinashe-moyo', TOK3: 'ht
 globalThis.fetch = async (url, init = {}) => {
   const u = String(url);
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  if (hangProviders && /generativelanguage\.googleapis\.com|\/zen\/v1\//.test(u)) {
+    await new Promise((r) => setTimeout(r, 9000));
+    return json({ error: { message: 'still waiting' } }, 504);
+  }
+  if (u.includes('api.telegram.org')) {
+    calls.tg = (calls.tg || 0) + 1;
+    try { tgSends.push(JSON.parse(init.body || '{}')); } catch { tgSends.push({}); }
+    return json({ ok: true, result: true });
+  }
   if (u.includes('generativelanguage.googleapis.com')) {
     calls.gemini += 1;
     if (geminiDown) return json({ error: { message: '429 Quota exceeded for the gemini key' } }, 429);
@@ -114,6 +127,7 @@ globalThis.fetch = async (url, init = {}) => {
   return realFetch(url, init);
 };
 
+const setHang = (v) => { hangProviders = v; };
 const L = await import('../../api/_linky.js');
 const S = await import('../../api/_serpapi.js');
 const { botReplyForTest } = await import('../../api/linky.js');
@@ -519,6 +533,76 @@ let badLead = null;
 try { await L.approveLead('freda', { key: 'nope', text: 'a perfectly reasonable sentence about meeting up' }); } catch (err) { badLead = err; }
 assert(badLead && /write it first/i.test(badLead.message), 'approve with nothing pending says so: ' + String(badLead?.message));
 
+// ================================================================ never leave them on "typing"
+// A message that dies in the function is indistinguishable, from a phone, from a
+// bot that ignores people. Three ways that happened, all asserted here.
+{
+  // 1. a bad keyboard must be repaired, not sent (Telegram rejects the WHOLE
+  //    message for one unusable button, and the words go with it)
+  const long = 'p:' + encodeURIComponent('a veterinary surgeon for a cattle clinic in Gweru, Zimbabwe, paid well');
+  const fixed = L.sanitizeTelegramMarkup({
+    inline_keyboard: [
+      [{ text: '1. Nobody Atall', url: '' }, { text: 'Draft', callback_data: 'w:1' }],
+      [{ text: 'Search LinkedIn', callback_data: long }],
+    ],
+  });
+  const flat = fixed.inline_keyboard.flat();
+  assert(flat.every((b) => !('url' in b) || /^https?:\/\//.test(b.url)), 'an unusable url button is turned into something that opens, not shipped as a 400: ' + JSON.stringify(flat[0]).slice(0, 90));
+  assert(flat.every((b) => !b.callback_data || Buffer.byteLength(b.callback_data, 'utf8') <= 64), 'callback_data is held to Telegram 64-byte ceiling: ' + flat.map((b) => Buffer.byteLength(b.callback_data || '', 'utf8')).join('/'));
+  assert(flat.some((b) => /google\.com\/search/.test(b.url || '')), 'the unresolved profile still gets a real search link');
+  assert(L.sanitizeTelegramMarkup({ inline_keyboard: [[{}]] }) === undefined, 'a keyboard with nothing usable is dropped entirely rather than sent');
+  assert(L.sanitizeTelegramMarkup({ keyboard: [[{ text: 'x'.repeat(200) }]] }).keyboard[0][0].text.length === 100, 'a chip is capped to Telegram 100-character limit, not rejected');
+
+  // 2. if Telegram still refuses the markup, the words must arrive without it
+  const tokenWas = process.env.TELEGRAM_BOT_TOKEN;
+  const fetchWas = globalThis.fetch;
+  let tgCalls = [];
+  process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+  void tokenWas;
+  globalThis.fetch = async (url, init) => {
+    const body = JSON.parse(init?.body || '{}');
+    tgCalls.push({ hasMarkup: !!body.reply_markup, len: String(body.text || '').length });
+    if (body.reply_markup) return { ok: false, status: 400, json: async () => ({ description: 'Bad Request: can  parse InlineKeyboardButton' }) };
+    return { ok: true, json: async () => ({ ok: true, result: {} }) };
+  };
+  const sent = await L.sendTelegram('777', 'Here are the people I found.', { inline_keyboard: [[{ text: 'bad', url: 'not-a-url' }]] });
+  globalThis.fetch = fetchWas; process.env.TELEGRAM_BOT_TOKEN = tokenWas;
+  assert(sent === true && tgCalls.length === 2 && tgCalls[0].hasMarkup && !tgCalls[1].hasMarkup, 'a refused keyboard is retried as plain text so the member still gets an answer: ' + JSON.stringify(tgCalls));
+
+  // 3. the handler answers within its own budget instead of being killed at 60s
+  const budgetWas = process.env.LINKY_BOT_BUDGET_MS;
+  process.env.LINKY_BOT_BUDGET_MS = '1200';
+  process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+  setHang(true);
+  const handler = (await import('../../api/linky.js')).default;
+  const fakeRes = { statusCode: 0, payload: null, status(c) { this.statusCode = c; return this; }, json(o) { this.payload = o; return this; }, send(o) { this.payload = o; return this; }, setHeader() { return this; }, end() { return this; } };
+  const startedAt = Date.now();
+  await handler({
+    method: 'POST', query: { channel: 'telegram' },
+    headers: { 'x-telegram-bot-api-secret-token': L.telegramWebhookSecret() },
+    body: { update_id: 424242, message: { message_id: 9, chat: { id: 777, type: 'private' }, from: { id: 777, first_name: 'Alice' }, text: 'a quantum cryptography professor from oslo' } },
+  }, fakeRes);
+  const took = Date.now() - startedAt;
+  setHang(false);
+  process.env.LINKY_BOT_BUDGET_MS = budgetWas;
+  const delivered = tgSends.filter((b) => /ran past my|I am here|still here/i.test(b.text || ''));
+  const faults = await db.collection('linkyOutreach').get();
+  assert(fakeRes.statusCode === 200, 'the webhook still answers Telegram with a 200 (no retry storm): ' + fakeRes.statusCode);
+  assert(took < 7000, 'and it did not sit and wait for the model: ' + took + 'ms with providers hanging 9s (floor budget is 4s)');
+  assert(faults.docs.some((d) => d.id.startsWith('tg_err_') && d.data().kind === 'deadline'), 'the slow reply is recorded where it can be read, because there is no log to grep in production');
+  assert(delivered.length >= 1, 'and the member was actually sent something instead of an endless typing dot: ' + JSON.stringify((delivered[0]?.text || '').slice(0, 50)));
+  // and the handler never swallows a break in silence any more
+  const hSrc = (await import('node:fs')).readFileSync(new URL('../../api/linky.js', import.meta.url), 'utf8');
+  assert(/Promise\.race\(\[job, slow\]\)/.test(hSrc) && /recordBotFault\('throw'/.test(hSrc) && /That one broke on my side/.test(hSrc), 'a throw in the reply path is both reported to the member and recorded');
+
+  // the "Search LinkedIn" button survives a long ask: it stops pretending and uses state
+  const long2 = await botReplyForTest('telegram', '777', 'a veterinary surgeon for a cattle clinic in Gweru, Zimbabwe, paid well and free this week');
+  const cb = (long2.buttons || [])[0]?.[0]?.callback_data || '';
+  assert(cb === 'p:last' || Buffer.byteLength(cb, 'utf8') <= 64, 'the tap never carries a callback Telegram will reject: ' + JSON.stringify(cb));
+  const viaLast = await botReplyForTest('telegram', '777', '', { callback: 'p:last' });
+  assert(viaLast.text.length > 40 && !/Ask me who you need first/.test(viaLast.text), 'p:last resolves to the ask on record, so the button works: ' + viaLast.text.slice(0, 50).replace(/\n/g, ' '));
+}
+
 // ================================================================ what Linky is not told
 await resetBudgets();
 // Carrie is built so that "keeps bees" appears in exactly three of her fields -
@@ -630,7 +714,9 @@ assert(/SERPAPI_KEY=/.test(env) && !/980e4ab7|fake-gemini/.test(env), '.env.exam
 // the whole point of the web search is that a lead can be OPENED, on every
 // surface a member might be reading it on
 const botSrc = fsNode.readFileSync('api/linky.js', 'utf8');
-assert(/leadsKeyboard\([\s\S]{0,220}url: l\.url/.test(botSrc), 'the bot turns every lead into its own URL button');
+  const lkSrc = botSrc.slice(botSrc.indexOf('function leadsKeyboard'), botSrc.indexOf('\n}', botSrc.indexOf('function leadsKeyboard')) + 2);
+  assert(/google\.com\/search/.test(lkSrc) && /callback_data: `w:`?|callback_data: `w:\$\{/.test(lkSrc), 'every lead row gets a link that opens and a Draft tap, built in one place: ' + lkSrc.length + ' chars');
+  assert(br.buttons.flat().every((b) => !b.url || /^https?:\/\//.test(b.url)), 'and no lead button carries a url Telegram would reject the whole message for');
 assert(/\$\{l\.url\}/.test(botSrc), 'and the plain-text channel still gets the link on its own line (WhatsApp auto-links it)');
 const homeSrc = fsNode.readFileSync('mobile/src/screens/LinkyHomeScreen.tsx', 'utf8');
 assert(/Linking\.openURL\(l\.url\)/.test(homeSrc), 'the app (and the same screen on web) opens the lead profile on tap');

@@ -163,6 +163,28 @@ a cached SERP is replayed, because a run stored before the fix carried
 `p2_` + a shape guard (`intro` present, `leads` an array) precisely so a
 legacy one-paragraph answer can never come back.
 
+#### The "typing and nothing else" class of bug
+
+Three ways a member can be left with a typing dot and no reply, all fixed and all
+asserted in `linky-chat-outreach-e2e.mjs`:
+
+1. **One bad button kills the whole message.** Telegram validates `reply_markup`
+   before anything else and returns 400 for an empty `url` or a `callback_data`
+   over 64 bytes - the text goes with it. `sanitizeTelegramMarkup` (in
+   `api/_linky.js`) repairs keyboards on the way out: an unresolved profile link
+   becomes a real search URL, a long `p:<encoded ask>` becomes `p:last` (the
+   handler reads the ask back from `linkyState.lastAsk`), oversized labels are
+   capped, and a keyboard with nothing usable is dropped rather than sent.
+2. **Telegram still refuses it.** `sendTelegram` retries the same chunk once
+   *without* the markup, so the words always arrive even if the buttons cannot, and
+   a 429 waits the `retry_after` it was told to.
+3. **The provider is slow.** `handleTelegram` races the reply against
+   `LINKY_BOT_BUDGET_MS` (default 34s, under Vercel's 60s) and sends a plain,
+   true line when it loses. Every one of these paths also writes
+   `linkyOutreach/tg_err_<updateId>` with `kind` (`deadline`, `throw`,
+   `handler`, `send-failed`), the member's text, and the error - because there is
+   no production log to grep, so the diagnosis has to live in the database.
+
 Telegram sends go through `sendTelegram`, which splits at paragraph boundaries
 under 3800 chars, refuses to cut inside an `http` URL, puts the inline keyboard on
 the last chunk, and logs the `description` Telegram gives back. Before this, a long

@@ -192,7 +192,11 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
       if (kind === 's') { await setCardStatus(uid, a, 'skip'); return { text: 'Done, they will not come up again for a while.' }; }
       if (kind === 'v') { await setCardStatus(uid, a, 'saved'); return { text: 'Kept. They will wait for you in cards.' }; }
       if (kind === 'p') {
-        const r = await pointers(uid, String(a || ''), { userDoc: user });
+        const needArg = !a || a === 'last'
+          ? (await loadState(uid).then((st) => st.lastAsk?.need || '').catch(() => ''))
+          : decodeURIComponent(String(a));
+        if (!needArg) return { text: 'Ask me who you need first, then I can look outside.' };
+        const r = await pointers(uid, needArg, { userDoc: user });
         return { text: pointerText(r), buttons: r.leads?.length ? leadsKeyboard(r.leads) : undefined };
       }
       // A tapped chip on WhatsApp arrives as an id like c:0:cards - re-run it as
@@ -360,7 +364,12 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
       // the one chip that used to be filtered OUT here was the only way a member
       // on Telegram could ever reach the LinkedIn search - now it is the first one
       const chips = ['Look outside LINKUP', ...(out.suggest || []).filter((c) => !/outside LINKUP/i.test(c))].slice(0, 3);
-      return { text: out.reply, chips, ...(out.none ? { buttons: [{ text: '🔎 Search LinkedIn', callback_data: 'p:' + encodeURIComponent(out.need || '') }] } : {}) };
+      // callback_data is capped at 64 bytes by Telegram and an encoded ask is
+      // easily 98, so a long one falls back to "the last ask", which the handler
+      // resolves from state instead of needing the whole sentence in a button
+      const cbNeed = encodeURIComponent(out.need || '');
+      const cb = Buffer.byteLength(`p:${cbNeed}`, 'utf8') <= 64 ? `p:${cbNeed}` : 'p:last';
+      return { text: out.reply, chips, ...(out.none ? { buttons: [{ text: 'Search LinkedIn', callback_data: cb }] } : {}) };
     }
     return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n')}`, cards: out.cards, chips: out.suggest };
   } catch (err) {
@@ -461,10 +470,20 @@ function pointerText(r) {
 // can open the profile, so nothing is left as prose to copy out. Telegram takes
 // 100 buttons; OUTREACH.maxLeads is 8, so every lead gets one.
 function leadsKeyboard(leads) {
-  return (leads || []).slice(0, 8).map((l, i) => ([
-    { text: `${i + 1}. ${String(l.name).slice(0, 24)}`, url: l.url },
-    { text: '✍️ Draft', callback_data: `w:${i + 1}` },
-  ]));
+  return (leads || []).slice(0, 8).map((l, i) => {
+    // an empty or relative url is a Telegram 400 for the whole message, and a 400
+    // here is a member watching a typing indicator forever
+    const label = `${i + 1}. ${String(l.name).slice(0, 24)}`;
+    // a lead whose redirect never resolved still gets a button that opens
+    // something, because an empty url is a 400 that eats the whole reply
+    const raw = String(l.url || '');
+    const url = /^https?:\/\//i.test(raw) ? raw
+      : `https://www.google.com/search?q=${encodeURIComponent(`linkedin ${raw || `${l.name || ''} ${l.title || ''}`.trim()}`)}`;
+    return [
+      { text: label, url },
+      { text: 'Draft', callback_data: `w:${i + 1}` },
+    ];
+  });
 }
 
 // "1" after an ambiguous name: the server turns that person into a real card.
@@ -512,6 +531,24 @@ function telegramChips(chips) {
   return { keyboard: [out.slice(0, 3).map((t) => ({ text: String(t).slice(0, 32) }))], resize_keyboard: false, one_time_keyboard: true };
 }
 
+// Vercel kills the function at 60s. Answering slowly looks exactly like not
+// answering at all, so the bot holds itself to a shorter clock and says something
+// true if it runs out - a member should never be left on "typing...".
+const botBudgetMs = () => Math.max(4000, Number(process.env.LINKY_BOT_BUDGET_MS || 34000));
+
+async function recordBotFault(kind, { updateId = 0, chatId = '', text = '', budgetMs = 0, error = '' } = {}) {
+  try {
+    await getDb().collection('linkyOutreach').doc(`tg_err_${updateId || Date.now()}`).set({
+      kind: String(kind).slice(0, 24),
+      at: Date.now(),
+      chatId: String(chatId).slice(0, 40),
+      text: String(text).slice(0, 200),
+      budgetMs: Number(budgetMs) || 0,
+      error: String(error).slice(0, 500),
+    });
+  } catch { /* a diagnostic write must never be what broke the reply */ }
+}
+
 async function handleTelegram(req, res) {
   const secret = telegramWebhookSecret();
   if (!secret) { res.status(503).json({ ok: false, error: 'TELEGRAM_BOT_TOKEN not configured' }); return; }
@@ -539,23 +576,45 @@ async function handleTelegram(req, res) {
       // An ask can take a few seconds; "typing…" is the difference between a
       // chatbot and a voicemail box.
       await telegramApi('sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => null);
-      const r = await botReply('telegram', String(chatId), update.message.text);
+      const budget = botBudgetMs();
+      let timer = null;
+      const slow = new Promise((resolve) => { timer = setTimeout(() => resolve({ __slow: true }), budget); });
+      const job = botReply('telegram', String(chatId), update.message.text).catch((err) => ({ __err: err }));
+      let r = await Promise.race([job, slow]);
+      if (timer) clearTimeout(timer);
+      if (r?.__slow) {
+        await recordBotFault('deadline', { updateId, chatId, text: update.message.text, budgetMs: budget });
+        r = { text: `I am here - that one ran past my ${Math.round(budget / 1000)}s and I stopped waiting on it. Say it again: if it needed the web I will tell you what I found in LINKUP first, then search.` };
+      } else if (r?.__err) {
+        await recordBotFault('throw', { updateId, chatId, text: update.message.text, error: r.__err?.stack || r.__err?.message || r.__err });
+        r = { text: String(r.__err?.message || 'Something on my side broke on that one. Nothing was sent to anybody - try it again in a minute.') };
+      }
       // buttons first (they act on something), then the reply-keyboard chips
       const markup = r.buttons?.length
         ? { inline_keyboard: r.buttons }
         : r.cards?.length
           ? { inline_keyboard: telegramCardButtons(r.cards) }
           : telegramChips(r.chips);
-      // one sender for both paths, so long answers are split instead of being
-      // refused by Telegram (a 400 here used to mean the member saw nothing)
-      await sendTelegram(chatId, r.text, markup);
+      // one sender for both paths: long answers are split, a refused keyboard is
+      // retried as plain text, and nothing is cut in the middle of a link
+      const sent = await sendTelegram(chatId, r.text, markup);
+      if (!sent) await recordBotFault('send-failed', { updateId, chatId, text: update.message.text });
     } else if (update?.message?.chat?.id && !update?.message?.text) {
       // Voice notes, photos, stickers: no transcription here, so say so like a
       // person instead of leaving them on read.
       await sendTelegram(update.message.chat.id, 'I only get text, I am afraid - pictures and voice notes go straight past me. Type who you need and I will go looking.');
     }
   } catch (err) {
+    // the old code logged this and answered 200, so Telegram never retried and the
+    // member never got anything - log it AND say so in the chat
     console.error('[linky] telegram error', err);
+    const chatId = update?.message?.chat?.id || update?.callback_query?.message?.chat?.id;
+    await recordBotFault('handler', {
+      updateId, chatId,
+      text: update?.message?.text || update?.callback_query?.data || '',
+      error: err?.stack || err?.message || err,
+    });
+    if (chatId) await sendTelegram(chatId, 'That one broke on my side - nothing was sent to anybody. Try again in a moment, and if it keeps happening I will have a note of it.').catch(() => null);
   }
   res.status(200).json({ ok: true });
 }

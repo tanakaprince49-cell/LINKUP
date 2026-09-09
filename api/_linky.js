@@ -361,29 +361,95 @@ function chunkLeadsSafe(para, max) {
   return out;
 }
 
+// Telegram validates reply_markup before it looks at the chat, and a single bad
+// button makes it reject the WHOLE message - which is how a member ends up with
+// "typing..." and nothing else. So a keyboard is repaired here rather than sent
+// and lost: url buttons without a real absolute url become tappable callbacks,
+// callback_data is held to Telegram's 64-byte ceiling, and any row left empty
+// after that is dropped.
+const TG_CB_MAX = 64;
+const absUrl = (v) => {
+  const u = String(v || '').trim();
+  if (!/^https?:\/\//i.test(u)) return '';
+  return u.length <= 500 ? u : '';
+};
+const cbSafe = (v) => {
+  const s = String(v || '');
+  if (Buffer.byteLength(s, 'utf8') <= TG_CB_MAX) return s;
+  const cut = s.slice(0, TG_CB_MAX - 8);
+  let hash = 0;
+  for (let i = 0; i < s.length; i += 1) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  return `${cut}:h${hash.toString(36).slice(0, 6)}`;
+};
+
+export function sanitizeTelegramMarkup(markup) {
+  if (!markup || typeof markup !== 'object') return undefined;
+  if (Array.isArray(markup.keyboard)) {
+    const rows = markup.keyboard
+      .map((row) => (Array.isArray(row) ? row : [row])
+        .map((b) => ({ text: String(b?.text || '').slice(0, 100) }))
+        .filter((b) => b.text))
+      .filter((row) => row.length);
+    return rows.length ? { keyboard: rows.slice(0, 6), resize_keyboard: false, one_time_keyboard: true } : undefined;
+  }
+  const rows = (Array.isArray(markup.inline_keyboard) ? markup.inline_keyboard : [])
+    .map((row) => (Array.isArray(row) ? row : [row])
+      .map((b) => {
+        const label = String(b?.text || '').slice(0, 60) || 'Open';
+        const url = absUrl(b?.url);
+        if (b?.url !== undefined && b?.url !== null && !url) {
+          // a lead whose link never resolved: turn the dead button into a search
+          // that does open something, instead of a 400 that eats the whole reply
+          const q = String(b?.fallbackQuery || label).slice(0, 90);
+          return { text: label, url: `https://www.google.com/search?q=${encodeURIComponent(`linkedin ${q}`)}` };
+        }
+        if (url) return { text: label, url };
+        if (b?.callback_data) return { text: label, callback_data: cbSafe(b.callback_data) };
+        if (b?.switch_inline_query !== undefined) return { text: label, switch_inline_query: String(b.switch_inline_query || '').slice(0, 256) };
+        return null;
+      })
+      .filter(Boolean))
+    .filter((row) => row.length)
+    .slice(0, 12);
+  return rows.length ? { inline_keyboard: rows } : undefined;
+}
+
 export async function sendTelegram(chatId, message, markup) {
   const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
   if (!token || !chatId) return false;
   const chunks = splitTelegram(message);
   if (!chunks.length) return false;
+  const clean = sanitizeTelegramMarkup(markup);
+  const post = async (body) => {
+    const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(9000),
+    }).catch((err) => ({ __err: String(err?.message || err) }));
+    if (resp?.__err) return { ok: false, description: resp.__err, network: true };
+    if (resp?.ok) return { ok: true };
+    const data = await (resp && typeof resp.json === 'function' ? resp.json().catch(() => null) : null);
+    return { ok: false, status: resp?.status, description: String(data?.description || 'send failed'), retryAfter: Number(data?.parameters?.retry_after || 0) };
+  };
   let ok = true;
   for (let i = 0; i < chunks.length; i += 1) {
     const isLast = i === chunks.length - 1;
-    const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId, text: chunks[i], disable_web_page_preview: true,
-        // taps belong on the last message of the burst, where the member is reading
-        ...(isLast && markup ? { reply_markup: markup } : {}),
-      }),
-      signal: AbortSignal.timeout(8000),
-    }).catch((err) => { console.warn('[linky] telegram send threw', err?.message || err); return null; });
-    if (!resp?.ok) {
-      ok = false;
-      const body = await Promise.resolve(resp && typeof resp.json === 'function' ? resp.json().catch(() => null) : null);
-      console.warn('[linky] telegram sendMessage rejected', resp?.status || '', body?.error_code || '', String(body?.description || '').slice(0, 120));
+    const base = { chat_id: chatId, text: chunks[i], disable_web_page_preview: true };
+    let res = await post({ ...base, ...(isLast && clean ? { reply_markup: clean } : {}) });
+    if (!res.ok && !res.network && res.retryAfter > 0 && res.retryAfter <= 6) {
+      // 429: Telegram asked for a pause, and one is cheaper than losing the message
+      await new Promise((r) => setTimeout(r, (res.retryAfter + 1) * 1000));
+      res = await post({ ...base, ...(isLast && clean ? { reply_markup: clean } : {}) });
     }
-    if (!isLast) await new Promise((r) => setTimeout(r, 120));
+    if (!res.ok && isLast && clean) {
+      // a keyboard Telegram still refuses must never take the words with it
+      console.warn('[linky] telegram markup refused, resending plain', res.status || '', res.description.slice(0, 120));
+      res = await post(base);
+    }
+    if (!res.ok) {
+      ok = false;
+      console.warn('[linky] telegram sendMessage failed', res.status || '', res.description.slice(0, 140));
+    }
+    if (!isLast) await new Promise((r) => setTimeout(r, 110));
   }
   return ok;
 }
