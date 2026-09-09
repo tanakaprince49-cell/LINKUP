@@ -18,7 +18,7 @@
 import crypto from 'node:crypto';
 import { getAdmin, getDb } from './_firebaseAdmin.js';
 import { aiReady, aiText, geminiText, getGeminiKey, localRank, compactProfile } from './_gemini.js';
-import { findLeads } from './_serpapi.js';
+import { findLeads, outreachDraft } from './_serpapi.js';
 
 export const LIMITS = {
   // Two real searches a day on the free plan, and they are the SAME budget on
@@ -316,12 +316,15 @@ export async function ensureTelegramWebhook(baseUrl) {
   return { configured: true, url, changed: true, ok: !!set?.ok, description: set?.description || '' };
 }
 
-export async function sendTelegram(chatId, message) {
+export async function sendTelegram(chatId, message, markup) {
   const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
   if (!token || !chatId) return false;
   const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text: String(message).slice(0, 4000), disable_web_page_preview: true }),
+    body: JSON.stringify({
+      chat_id: chatId, text: String(message).slice(0, 4000), disable_web_page_preview: true,
+      ...(markup ? { reply_markup: markup } : {}),
+    }),
     signal: AbortSignal.timeout(8000),
   }).catch(() => null);
   return !!resp?.ok;
@@ -985,6 +988,66 @@ async function linkySay(kind, dossier, { name = '', source = 'app', seed = '', f
 //      members, with a static fallback when there is no key.
 // Only for asks the member actually made (bounded by the ask budget), and a
 // cache hit costs neither a SerpApi search nor a token.
+// Models wrap JSON in prose or a fence often enough that a parse has to survive
+// it. Returns null rather than throwing - every caller has a written fallback.
+function readJson(raw) {
+  const t = String(raw || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const start = t.indexOf('{');
+  const end = t.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try { return JSON.parse(t.slice(start, end + 1)); } catch { return null; }
+}
+
+// A lead is identified by its profile URL when there is one, else by the name in
+// lower case - enough to remember "you already wrote to this person" and "you told
+// me you are not interested in them" without inventing a member record for a
+// stranger.
+export const leadKey = (l) => {
+  const url = String(l?.url || '');
+  const m = url.match(/linkedin\.com\/in\/([^\/?#]+)/i);
+  if (m) return `in:${m[1].toLowerCase()}`;
+  if (url) { try { return `u:${new URL(url).pathname.toLowerCase()}`; } catch { /* fall through */ } }
+  return `n:${String(l?.name || '').toLowerCase().trim().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ')}`;
+};
+const leadHit = (key, set) => !!key && set.has(key);
+
+// The member's own outreach history, which is what makes this a graph and not a
+// search box: who they wrote to, who turned them down, who is never to be shown again.
+export function outreachTrail(state) {
+  const t = Array.isArray(state?.outreach) ? state.outreach : [];
+  const muted = new Set(Object.keys(state?.outreachMuted || {}));
+  const sent = new Set();
+  const declined = new Set();
+  t.forEach((e) => {
+    if (!e?.key) return;
+    if (e.status === 'sent') sent.add(e.key);
+    if (e.status === 'declined' || e.status === 'not_interested') declined.add(e.key);
+  });
+  return { entries: t, muted, sent, declined, pending: state?.pendingLead || null, pendingMeet: state?.pendingMeet || null };
+}
+
+// Where to look when a search came back empty. Same three routes a person would
+// try themselves, in the order that actually gets an answer.
+function fallbackRoutes(need, place) {
+  const terms = String(need || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
+    .filter((t) => t.length > 3 && !['with', 'that', 'this', 'from', 'have', 'into', 'your', 'they', 'them', 'want', 'need', 'looking', 'somebody', 'someone', 'please'].includes(t))
+    .slice(0, 3).join(' ') || need;
+  return [
+    `LinkedIn: search "${text(terms, 80)}" plus "${place}" and message the two people who posted something recently.`,
+    `The professional body or university department for it in ${place} - they know who is doing the work right now.`,
+    'The WhatsApp or Telegram group for that trade: ask for one referral, not a list.',
+  ];
+}
+
+// One renderer for every surface that only has text (WhatsApp, Telegram, a plain
+// bubble). Structure in, readable lines out - no semicolon run-on, no double list.
+function renderPointers({ intro = '', routes = [], leads = [] } = {}) {
+  const head = text(intro, 300);
+  if (leads.length) return head;
+  const lines = (routes || []).filter(Boolean).slice(0, 3).map((r, i) => `${i + 1}) ${text(r, 200)}`);
+  return [head, ...lines].filter(Boolean).join('\n');
+}
+
 export async function pointers(uid, need, { userDoc, allowSearch = true } = {}) {
   const user = userDoc || (await loadUser(uid));
   const q = parseAsk(need);
@@ -997,9 +1060,37 @@ export async function pointers(uid, need, { userDoc, allowSearch = true } = {}) 
   const snap = await ref.get().catch(() => null);
   const me = profileFacts(user) || {};
   const place = q.location || [me.city, me.country].filter(Boolean).join(', ') || 'Zimbabwe';
+  const state2 = state;
+  const trail0 = outreachTrail(state2);
   if (snap?.exists && Date.now() - toMillis(snap.data().createdAt) < 7 * DAY_MS) {
     const d = snap.data();
-    return { text: d.text, cached: true, leads: Array.isArray(d.leads) ? d.leads : [], searches: 0, profileFilter: d.profileFilter || '' };
+    // re-filtered on the way out, so a lead the member already wrote to (or told
+    // Linky to never show again) does not come back from the cache
+    const cached = (Array.isArray(d.leads) ? d.leads : [])
+      .filter((l) => !leadHit(leadKey(l), trail0.muted) && !leadHit(leadKey(l), trail0.sent))
+      .map((l) => ({ ...l, key: leadKey(l) }));
+    let intro = text(d.intro || (cached.length ? `Five minutes ago I ran one LinkedIn search for "${q.need}" - these are the ${cached.length} I would message:` : ''), 300);
+    let routes = list(d.routes, 3, 200);
+    const skipped = Math.max(0, (Array.isArray(d.leads) ? d.leads.length : 0) - cached.length);
+    // a cached answer the member has since muted people out of must not be left
+    // claiming there was somebody to message, with nothing under it
+    const total = Array.isArray(d.leads) ? d.leads.length : 0;
+    if (!cached.length && skipped) {
+      intro = `Nobody on LINKUP does "${q.need}" yet, and all ${total} from that LinkedIn search are already in your outreach history - so here is where I would look myself:`;
+      routes = fallbackRoutes(q.need, place);
+    } else {
+      // the saved intro describes the search as it ran; once some leads have been
+      // used up it over-promises, so restate the count that is actually on screen
+      if (skipped && cached.length) {
+        intro = `Nobody on LINKUP does "${q.need}" yet. That LinkedIn search turned up ${total}, ${cached.length} ${cached.length === 1 ? 'is' : 'are'} still new to you and ${skipped} ${skipped === 1 ? 'is' : 'are'} already in your outreach history:`;
+      }
+      if (!cached.length && !routes.length) routes = fallbackRoutes(q.need, place);
+    }
+    return {
+      intro, routes, leads: cached, skipped,
+      text: renderPointers({ intro, routes, leads: cached }),
+      cached: true, searches: 0, found: cached.length, oneSearch: false, profileFilter: d.profileFilter || '',
+    };
   }
   const plus = await isPlusUser(uid, user);
 
@@ -1012,30 +1103,77 @@ export async function pointers(uid, need, { userDoc, allowSearch = true } = {}) 
     }
   }
 
-  // 2. Advice on where else to look + a message they can send themselves.
-  let out = '';
+  // 2. Who he found, and - only when he found nobody - where else to look.
+  // The list of people is NOT baked into this prose any more. The app renders
+  // rows and the bot renders buttons; every surface that used to print the same
+  // five names twice, once in a paragraph and once as links, stopped doing it.
+  const fresh = (outreach.leads || []).filter((l) => l && !leadHit(leadKey(l), trail0.muted) && !leadHit(leadKey(l), trail0.sent));
+  const skipped = (outreach.leads || []).length - fresh.length;
+  // the key travels with the lead: it is what a "not interested" or "sent" refers
+  // back to on any surface, and what makes the same person stick next time
+  const leads = fresh.slice(0, plus ? 8 : 5).map((l) => ({ ...l, key: leadKey(l) }));
+
+  let intro = '';
+  let routes = [];
   if (aiReady()) {
     try {
-      const prompt = [
-        `You are Linky, the connector for LINKUP. A member in ${place} asked for "${q.need}" and nobody on LINKUP fits yet.`,
-        'Sound like Linky: a warm, sharp, well-connected friend who is very good at intros. Plain human sentences, no corporate filler, no emojis, never invent a fact.',
-        'In under 90 words of plain text (no markdown, no bullet symbols), give 3 concrete places or ways to find such a person outside LINKUP that are realistic for that location (specific kinds of institutions, professional bodies, communities, platforms and the exact search phrase to use). Then one short outreach message they could send. Never name private individuals. Do not mention that you are an AI.',
-      ].join('\n');
-      out = text(await geminiText(prompt, { temperature: 0.45, maxOutputTokens: 260 }), 900);
+      const brief = leads.length
+        ? [
+            `You are Linky, the connector for LINKUP. A member in ${place} asked for "${q.need}", LINKUP has nobody for it yet, so you searched public LinkedIn profiles just now and found ${leads.length}.`,
+            'Say ONE short thing before the list: what you did, and the one honest limit of it (public profiles only, no contact details, you have not messaged anybody). Warm, specific, a flicker of personality. Max 30 words, plain sentences, no markdown, no emoji, no "Great news!", never invent a fact.',
+            'Return STRICT JSON only: {"intro":"..."}',
+          ].join('\n')
+        : [
+            `You are Linky, the connector for LINKUP. A member in ${place} asked for "${q.need}" and nobody on LINKUP fits.`,
+            'Give two or three concrete places or ways to find that person in that city that are realistic this week - a named kind of institution, a professional body, a community, the exact search phrase to use. Nothing else.',
+            'Return STRICT JSON only: {"intro":"one line, max 16 words","routes":["...","..."]} - each route under 24 words, plain sentences, no numbering, no markdown, no emoji.',
+          ].join('\n');
+      const raw = await geminiText(brief, { temperature: 0.5, maxOutputTokens: leads.length ? 120 : 300, responseMimeType: 'application/json' });
+      const parsed = readJson(raw);
+      intro = text(parsed?.intro, 300);
+      if (!leads.length) routes = list(parsed?.routes, 3, 200);
     } catch (err) {
       console.warn('[linky] pointers gemini failed', err?.message || err);
     }
   }
-  if (!out) {
-    const terms = q.tokens.filter((t) => t.length > 3).slice(0, 3).join(' ') || q.need;
-    out = `Outside LINKUP, three quick routes for "${q.need}": 1) LinkedIn - search "${terms}" together with "${place}" and filter by location, then message the two most active people. 2) The university department or professional body for that field in ${place} - they always know who is doing the work right now. 3) The WhatsApp or Telegram communities for that field - ask for one referral, not a list. Outreach line: "Hi, I am building in ${place} and looking for ${q.need}. Could we talk for 15 minutes this week?"`;
+  if (!intro) {
+    // never claim a search that did not happen - on the free plan that is exactly
+    // what it looks like when a member is told nothing and no reason
+    const searched = (outreach.searches || 0) > 0;
+    if (leads.length) {
+      intro = `Nobody on LINKUP does "${q.need}" yet, so I ran one LinkedIn search and pulled ${leads.length} ${leads.length === 1 ? 'person' : 'people'} worth a message. Public profiles only - I did not collect contact details and I have not written to anybody.`;
+    } else if (!searched && outreach.note && outreach.note !== 'cached') {
+      // this is the "Telegram gave me nothing" case: the search never ran, so say
+      // why in the member's terms instead of leaving a silent list of routes
+      const why = ({
+        'member-day-cap': 'you have used your LinkedIn searches for today',
+        'hour-cap': 'the shared search budget needs a breather, so try again in an hour',
+        'plan-exhausted': 'this month\'s search credits are used up',
+        'not-configured': 'no search key is set on this deployment',
+      })[outreach.note] || (String(outreach.note).startsWith('search-error') ? 'the search came back wrong' : 'the search was not available');
+      intro = `Nobody on LINKUP does "${q.need}" yet. I could not run the LinkedIn search just now - ${why}. Here is where I would look in ${place} either way:`;
+    } else {
+      intro = `Nobody on LINKUP does "${q.need}" yet, and one LinkedIn search in ${place} turned up nobody I would put in front of you. Here is where I would look instead:`;
+    }
   }
-  const leads = (outreach.leads || []).slice(0, plus ? 10 : 5);
-  if (leads.length) {
-    out = `${out}\n\nI also read the open web just now and ${leads.length === 1 ? 'found one person' : `found ${leads.length} people`} who look worth a message. Public profiles only, no contact details: ${leads.map((l, i) => `${i + 1}. ${l.name}${l.title ? ` - ${l.title}` : ''}`).join('; ')}.`;
-  }
-  await ref.set({ need: q.need, text: out, leads, searches: outreach.searches || 0, profileFilter: outreach.query || '', createdAt: Date.now() }).catch(() => {});
-  return { text: out, cached: false, leads, searches: outreach.searches || 0, note: outreach.note || '', profileFilter: outreach.query || '' };
+  if (!leads.length && !routes.length) routes = fallbackRoutes(q.need, place);
+  // remembered so "draft 2" on a bot means the second person in THIS list, and so
+  // the app can re-render the same five people without spending another search
+  await patchState(uid, {
+    lastLeads: leads.map((l) => ({ name: l.name, title: l.title, url: l.url, why: l.why, key: leadKey(l) })).slice(0, 8),
+    lastLeadsAt: Date.now(), lastLeadsNeed: q.need,
+  }).catch(() => {});
+  const rendered = renderPointers({ intro, routes, leads });
+  await ref.set({
+    need: q.need, place: text(place, 60), intro, routes, leads,
+    searches: outreach.searches || 0, profileFilter: outreach.query || '', createdAt: Date.now(),
+  }).catch(() => {});
+  return {
+    intro, routes, leads, text: rendered, cached: false, skipped,
+    searches: outreach.searches || 0, note: outreach.note || '', profileFilter: outreach.query || '',
+    found: leads.length, oneSearch: (outreach.searches || 0) > 0,
+    place,
+  };
 }
 
 // Cards for one answer, reusing a live card for the same person instead of
@@ -1387,7 +1525,232 @@ export async function introPitch({ requester = {}, target = {}, need = '', why =
   }
 }
 
+// ---------------------------------------------------------------- permissioned outreach
+// Nothing leaves LINKUP on its own, in either direction. For a member, Linky
+// writes the intro, the asker reads it, edits it if they want, and only then does
+// it go to the other person. For somebody outside LINKUP, Linky writes the
+// message, the member approves it and sends it themselves - the intent is recorded
+// either way, which is what turns a search box into a graph.
+async function pushTrail(uid, entry) {
+  const state = await loadState(uid);
+  const outreach = [...(Array.isArray(state.outreach) ? state.outreach : []), { at: Date.now(), ...entry }].slice(-40);
+  await patchState(uid, { outreach, outreachAt: Date.now() });
+  return outreach;
+}
+
 export async function meet(uid, cardId, { userDoc } = {}) {
+  const user = userDoc || (await loadUser(uid));
+  if (!user) throw new Error('Finish your LINKUP profile first.');
+  const cards = await loadCards(uid);
+  const card = cards.find((c) => c.id === cardId);
+  if (!card) throw new Error('That card is gone.');
+  if (card.status === 'meet') return { alreadyRequested: true, introId: card.introId || '' };
+  const target = card.targetUid;
+  const me = profileFacts(user);
+  const plus = await isPlusUser(uid, user);
+  const state = await loadState(uid);
+  const today = dayKey();
+  const used = state.meets?.day === today ? Number(state.meets.count || 0) : 0;
+  const limit = plus ? LIMITS.plus.meetsPerDay : LIMITS.free.meetsPerDay;
+  if (used >= limit) {
+    const err = new Error(`You have used today's ${limit} Meet requests. PLUS members get unlimited Meets.`);
+    err.code = 'meet_limit';
+    throw err;
+  }
+  const matchId = [uid, target].sort().join('_');
+  if (await db().collection('matches').doc(matchId).get().then((x) => x.exists).catch(() => false)) {
+    await setCardStatus(uid, cardId, 'meet');
+    return { matchId, opener: card.opener || '' };
+  }
+  const introId = `${uid}_${target}`;
+  const existingIntro = await db().collection('intros').doc(introId).get();
+  if (existingIntro.exists && existingIntro.data().status === 'pending') {
+    await setCardStatus(uid, cardId, 'meet');
+    return { introId, pending: true, awaitingThem: true };
+  }
+  const targetState = await loadState(target);
+  if (targetState.muted && targetState.muted[uid]) throw new Error('They are not taking intros right now.');
+  const week = weekKey();
+  const inboundCount = targetState.inbound?.week === week ? Number(targetState.inbound.count || 0) : 0;
+  const cap = Number.isFinite(Number(targetState.inboundCap)) ? Number(targetState.inboundCap) : LIMITS.inboundPerWeek;
+  if (inboundCount >= cap) throw new Error('They have hit their weekly intro cap. Ask me again next week.');
+
+  const pitchPack = await introPitch({
+    requester: { ...me },
+    target: { name: card.targetName, role: card.targetRole, company: card.targetCompany, city: card.targetCity, skills: card.targetSkills },
+    need: card.need, why: card.why, place: me.city, seed: `intro:${introId}:${card.askId || ''}`,
+  });
+  const draft = {
+    cardId, targetUid: target, targetName: card.targetName, need: card.need, why: card.why,
+    pitch: pitchPack.pitch, opener: pitchPack.opener || card.opener || '', usedAi: !!pitchPack.usedAi,
+    introId, at: Date.now(),
+  };
+  // The draft is the whole ask. Until this member says send, the other person
+  // has no idea any of this happened - that is the point.
+  await patchState(uid, { pendingMeet: draft });
+  await db().collection('introDrafts').doc(`${uid}_${cardId}`).set({ ...draft, uid, status: 'awaiting_you' }).catch(() => {});
+  return {
+    draft: true, needsApproval: true, draftId: `${uid}_${cardId}`, ...draft,
+    target: { uid: target, name: card.targetName, role: card.targetRole, city: card.targetCity },
+    meetsLeft: plus ? null : Math.max(0, limit - used),
+    note: 'Read it. Edit it if it is not how you talk. It goes to them only when you say send.',
+  };
+}
+
+export async function approveMeet(uid, { cardId = '', text: mine = '', userDoc } = {}) {
+  const state = await loadState(uid);
+  const pending = state.pendingMeet || null;
+  const id = cardId || pending?.cardId;
+  if (!id) throw new Error('Nothing is waiting to go. Ask me for somebody first.');
+  const mineText = String(mine || '').trim();
+  if (mineText.length && mineText.length < 24) throw new Error('That is a bit short to send as an intro. A sentence or two, then I will pass it on.');
+  const draft = pending && pending.cardId === id
+    ? pending
+    : await db().collection('introDrafts').doc(`${uid}_${id}`).get().then((x) => (x.exists ? x.data() : null)).catch(() => null);
+  const out = await sendMeet(uid, id, {
+    userDoc,
+    draft: mineText.length ? { ...draft, pitch: mineText } : draft,
+    overrideText: mineText,
+  });
+  // the name the app and the bot echo back - the card may already have moved on,
+  // so take it from whichever of the two still has it
+  const cards = await loadCards(uid).catch(() => []);
+  const card = (cards || []).find((c) => c.id === id) || {};
+  const targetName = pending?.targetName || draft?.targetName || card.targetName || '';
+  const targetUid = pending?.targetUid || draft?.targetUid || card.targetUid || '';
+  const need = pending?.need || draft?.need || card.need || '';
+  await patchState(uid, { pendingMeet: null });
+  await db().collection('introDrafts').doc(`${uid}_${id}`).set({ status: 'approved', approvedAt: Date.now(), approvedText: text(mineText || draft?.pitch || '', 900) }, { merge: true }).catch(() => {});
+  await pushTrail(uid, { kind: 'intro', targetUid, name: targetName, need, edited: !!mineText, status: 'asked', introId: out.introId || '' });
+  return { ...out, sent: true, edited: !!mineText, targetName, targetUid, need };
+}
+
+export async function cancelMeet(uid, { cardId = '' } = {}) {
+  const state = await loadState(uid);
+  const pending = state.pendingMeet;
+  const id = cardId || pending?.cardId;
+  if (!id) return { ok: true, cancelled: false };
+  await patchState(uid, { pendingMeet: null });
+  await setCardStatus(uid, id, 'saved').catch(() => {});
+  await db().collection('introDrafts').doc(`${uid}_${id}`).set({ status: 'cancelled', cancelledAt: Date.now() }, { merge: true }).catch(() => {});
+  await pushTrail(uid, { kind: 'intro', targetUid: pending?.targetUid || '', name: pending?.targetName || '', status: 'cancelled', need: pending?.need || '' });
+  // the card is the member's own list - put it back the way it was, saved, so a
+  // "not now" costs them nothing but the person they liked
+  return { ok: true, cancelled: true, targetName: pending?.targetName || '' };
+}
+
+/**
+ * Linky writes the message for somebody LINKUP does not have. It is a draft, by
+ * law and by design: we cannot post to LinkedIn for a member and would not.
+ */
+export async function draftLead(uid, { key = '', lead = null, index = 0, need = '', userDoc, source = 'app' } = {}) {
+  const user = userDoc || (await loadUser(uid));
+  if (!user) throw new Error('Finish your LINKUP profile first.');
+  const state = await loadState(uid);
+  // the app may send a number instead of the whole object, referring to the list
+  // Linky last showed - which is also what makes "draft 2" mean the same thing here
+  const picked = lead || (index > 0 ? (Array.isArray(state.lastLeads) ? state.lastLeads : [])[index - 1] : null) ||
+    (Array.isArray(state.lastLeads) && state.lastLeads.length === 1 ? state.lastLeads[0] : null);
+  const me = profileFacts(user) || {};
+  const q = parseAsk(need || state.lastAsk?.need || 'somebody useful');
+  const place = [me.city, me.country].filter(Boolean).join(', ') || 'Zimbabwe';
+  const who = { name: text(picked?.name, 60), title: text(picked?.title, 110), url: text(picked?.url, 400) };
+  if (!who.name) throw new Error('Who should I write to? Tap their name and I will draft it.');
+  const k = text(key, 80) || text(picked?.key, 80) || leadKey(who);
+  const fallback = outreachDraft(who, { need: q.need, name: me.name, place });
+  let body = fallback;
+  let usedAi = false;
+  if (aiReady()) {
+    try {
+      const raw = await geminiText([
+        `Write the first message ${me.name || 'a LINKUP member'} sends to ${who.name}${who.title ? `, ${who.title}` : ''} on LinkedIn.`,
+        `They found ${who.name} from a public search for "${q.need}". ${me.role ? `${me.name} is ${me.role}${me.company ? ` at ${me.company}` : ''}.` : ''} Place: ${place}.`,
+        'It must read like a person typed it on a phone: 45-70 words, first line says who is writing and why THIS person, one concrete thing from their own profile, one small easy ask (15 minutes, a question, an opinion), and an easy no. No "I hope this finds you well", no "I would love to pick your brain", no flattery padding, no hype, no exclamation marks, no emoji, no signature block. Do not invent facts about them.',
+        'Return STRICT JSON only: {"message":"..."}',
+      ].join('\n'), { temperature: 0.55, maxOutputTokens: 320, responseMimeType: 'application/json' });
+      const got = text(readJson(raw)?.message, 900);
+      if (got.length > 40) { body = got; usedAi = true; }
+    } catch (err) {
+      console.warn('[linky] lead draft failed, using the written one', err?.message || err);
+    }
+  }
+  const pendingLead = { key: k, lead: who, need: q.need, text: body, usedAi, place, at: Date.now() };
+  await patchState(uid, { pendingLead });
+  await pushTrail(uid, { kind: 'lead', key: k, name: who.name, need: q.need, status: 'drafted' });
+  return {
+    ok: true, key: k, lead: who, text: body, usedAi, url: who.url, source,
+    howTo: 'Nothing is sent for you and nothing can be: open their profile and paste this. Tell me "sent" when it is out, or "not interested" if you never want to see them again.',
+  };
+}
+
+/** "cancel" on a bot: the draft is dropped, nobody is muted, nothing was sent. */
+export async function dropLeadDraft(uid) {
+  await patchState(uid, { pendingLead: null });
+  return { ok: true };
+}
+
+/** Approval is a record, not a send - and the record is what the graph is made of. */
+export async function approveLead(uid, { key = '', text: mine = '' } = {}) {
+  const state = await loadState(uid);
+  const pending = state.pendingLead;
+  if (!pending?.key) throw new Error('Let me write it first, then you can approve it.');
+  const body = text(mine || pending.text, 900);
+  if (body.length < 24) throw new Error('That looks too short to send. One or two sentences, then I will hand it over.');
+  const intentId = `${uid}_${pending.key.replace(/[^a-z0-9]/gi, '_').slice(0, 48)}_${Date.now().toString(36)}`;
+  const record = {
+    uid, key: pending.key, kind: 'linkedin_lead', lead: pending.lead, need: pending.need,
+    text: body, edited: !!String(mine || '').trim() && text(mine, 900) !== pending.text,
+    status: 'approved_for_self_send', createdAt: nowTs(), updatedAt: Date.now(),
+    expiresAt: (() => { try { return getAdmin().firestore.Timestamp.fromMillis(Date.now() + 60 * DAY_MS); } catch { return null; } })(),
+  };
+  await db().collection('outreachIntents').doc(intentId).set(record).catch((err) => console.warn('[linky] intent write failed', err?.code, err?.message || err));
+  await patchState(uid, { pendingLead: null });
+  await pushTrail(uid, { kind: 'lead', key: pending.key, name: pending.lead?.name, need: pending.need, status: 'approved', intentId, edited: record.edited });
+  return {
+    ok: true, intentId, text: body, url: pending.lead?.url || '', edited: record.edited,
+    lead: pending.lead, note: 'Copy it, open their profile, send it from your own account. Come back and tell me "sent" or "not interested".',
+  };
+}
+
+/** sent / not_interested. "not interested" is a mute: they never come up again. */
+export async function markLead(uid, { key = '', status = 'sent', intentId = '' } = {}) {
+  const state = await loadState(uid);
+  const k = text(key, 80) || state.pendingLead?.key || '';
+  if (!k) throw new Error('Which one?');
+  const kind = status === 'not_interested' || status === 'declined' ? 'not_interested' : 'sent';
+  if (kind === 'not_interested') {
+    const muted = { ...(state.outreachMuted || {}), [k]: 1 };
+    await patchState(uid, { outreachMuted: Object.keys(muted).length > 400 ? muted : muted, pendingLead: null });
+  } else {
+    await patchState(uid, { pendingLead: null });
+  }
+  // keep the name on the trail too, so "you wrote to these" is readable and the
+  // graph knows who this person was, not only their key
+  const prior = (outreachTrail(state).entries || []).find((e) => e && e.key === k);
+  const entry = {
+    kind: 'lead', key: k, status: kind === 'sent' ? 'sent' : 'declined',
+    name: prior?.name || state.pendingLead?.lead?.name || '',
+    need: prior?.need || state.pendingLead?.need || '',
+  };
+  await pushTrail(uid, entry);
+  if (intentId) {
+    await db().collection('outreachIntents').doc(String(intentId).slice(0, 90))
+      .set({ status: kind === 'sent' ? 'sent_by_member' : 'not_interested', markedAt: Date.now() }, { merge: true }).catch(() => {});
+  } else {
+    const found = await db().collection('outreachIntents').where('uid', '==', uid).where('key', '==', k)
+      .limit(1).get().catch(() => null);
+    const doc = found?.docs?.[0];
+    if (doc) await doc.ref.set({ status: kind === 'sent' ? 'sent_by_member' : 'not_interested', markedAt: Date.now() }, { merge: true }).catch(() => {});
+  }
+  return {
+    ok: true, status: kind, muted: kind === 'not_interested',
+    note: kind === 'sent'
+      ? 'Logged. If they reply, bring them into LINKUP and I will keep the thread in one place.'
+      : 'Gone. I will not put them in front of you again.',
+  };
+}
+
+async function sendMeet(uid, cardId, { userDoc, draft = null, overrideText = '' } = {}) {
   const user = userDoc || (await loadUser(uid));
   if (!user) throw new Error('Finish your LINKUP profile first.');
   const cards = await loadCards(uid);
@@ -1431,11 +1794,15 @@ export async function meet(uid, cardId, { userDoc } = {}) {
   if (inboundCount >= cap) {
     throw new Error('They have hit their weekly intro cap. Ask me again next week.');
   }
-  const pitchPack = await introPitch({
-    requester: { ...me },
-    target: { name: card.targetName, role: card.targetRole, company: card.targetCompany, city: card.targetCity, skills: card.targetSkills },
-    need: card.need, why: card.why, place: me.city, seed: `intro:${introId}:${card.askId || ''}`,
-  });
+  // what the member approved is what the target reads: no second draft, no
+  // second model call, nothing "improved" on the way out
+  const pitchPack = overrideText || draft?.pitch
+    ? { pitch: text(overrideText || draft.pitch, 900), opener: text(draft?.opener || '', 600), usedAi: !!draft?.usedAi && !overrideText }
+    : await introPitch({
+        requester: { ...me },
+        target: { name: card.targetName, role: card.targetRole, company: card.targetCompany, city: card.targetCity, skills: card.targetSkills },
+        need: card.need, why: card.why, place: me.city, seed: `intro:${introId}:${card.askId || ''}`,
+      });
   const intro = {
     requesterId: uid,
     targetId: target,
@@ -1644,6 +2011,13 @@ export async function home(uid, { userDoc } = {}) {
     lastAsk: state.lastAsk && now - toMillis(state.lastAsk.createdAt) < 14 * DAY_MS ? publicAsk(state.lastAsk) : null,
     thread: threadOf(state).slice(-LIMITS.threadTurns),
     facts: toldFacts(state),
+    // the outreach the member already approved or declined - so the app can show
+    // "you wrote to these 3" and reopen a draft after a reload instead of losing it
+    outreach: outreachTrail(state).entries.slice(-12).reverse(),
+    pending: {
+      meet: state.pendingMeet && now - toMillis(state.pendingMeet.at) < 3 * DAY_MS ? state.pendingMeet : null,
+      lead: state.pendingLead && now - toMillis(state.pendingLead.at) < 3 * DAY_MS ? state.pendingLead : null,
+    },
     brief: briefText(liveCards, ''),
   };
 }

@@ -1425,6 +1425,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The same reasoning covers the outreach paper trail: an intro Linky drafted
+    // but the member has not approved yet, and the record of a message the member
+    // approved and sent to somebody off-network. Both are written by /api/linky
+    // only - a client that could write them could mark its own intro as approved.
+    match /introDrafts/{docId} {
+      allow read, write: if false;
+    }
+    match /outreachIntents/{docId} {
+      allow read, write: if false;
+    }
+
     // ------------------------------------------------------------
     // Legacy per-user profile aux store (Linky score etc.)
     // ------------------------------------------------------------

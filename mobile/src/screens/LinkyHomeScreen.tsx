@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Linking,
   Image,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
@@ -34,11 +35,17 @@ import {
   LinkyHome,
   LinkyIntro,
   LinkyLead,
+  LinkyDraft,
   LinkyAskResult,
   LinkyTurn,
   linkyAsk,
   linkyCard,
   linkyHome,
+  linkyApproveLead,
+  linkyApproveMeet,
+  linkyCancelMeet,
+  linkyDraftLead,
+  linkyMarkLead,
   linkyMeet,
   linkyPickPerson,
   linkyPointers,
@@ -183,6 +190,15 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const [answer, setAnswer] = useState<LinkyAskResult | null>(null);
   const [pointerText, setPointerText] = useState('');
   const [pointerBusy, setPointerBusy] = useState(false);
+  // The approval step: Linky writes it, the member sends it. `draft` is that
+  // editable bubble - for a member's intro and for an off-network lead alike.
+  const [draft, setDraft] = useState<{
+    kind: 'meet' | 'lead'; cardId?: string; leadKey?: string; title: string; body: string; note?: string; url?: string; index?: number;
+  } | null>(null);
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [leadBusy, setLeadBusy] = useState('');
+  const [pointerRoutes, setPointerRoutes] = useState<string[]>([]);
+  const [pointerMeta, setPointerMeta] = useState({ searches: 0, skipped: 0, cached: false, place: '' });
   const [leads, setLeads] = useState<LinkyLead[]>([]);
   const [pickedBusy, setPickedBusy] = useState('');
   const [paywall, setPaywall] = useState<string | null>(null);
@@ -236,6 +252,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
       const r = await linkyMeet(card.id);
       if (r.matchId) {
         navigation.navigate('Chat', { matchId: r.matchId, otherUser: { uid: card.targetUid, displayName: card.targetName, profilePic: card.targetPic }, draftMessage: r.opener || card.opener || '' });
+      } else if (r.needsApproval) {
+        setDraft({ kind: 'meet', cardId: card.id, title: `To ${r.targetName || card.targetName}`, body: r.pitch || r.opener || '', note: r.note, url: '' });
       } else {
         notifyUser('Asked', `Linky asked ${card.targetName}. You will hear back here${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today).` : '.'}`);
       }
@@ -310,12 +328,98 @@ export default function LinkyHomeScreen({ navigation }: any) {
     setPointerBusy(true);
     try {
       const r = await linkyPointers(answer.need);
-      setPointerText(r.text);
+      // the header line only - the people below it are rows, not a paragraph
+      setPointerText(r.intro || r.text || '');
+      setPointerRoutes(Array.isArray(r.routes) ? r.routes : []);
+      setPointerMeta({ searches: Number(r.searches || 0), skipped: Number(r.skipped || 0), cached: !!r.cached, place: r.place || '' });
       setLeads(Array.isArray(r.leads) ? r.leads : []);
     } catch (err) {
       notifyUser('Could not fetch pointers', err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setPointerBusy(false);
+    }
+  };
+
+  // A draft left half-finished (on Telegram, or by a previous visit) is still the
+  // most important thing on this screen, so it gets a line of its own.
+  const openPending = () => {
+    const p = home?.pending?.meet;
+    if (p?.cardId) {
+      setDraft({
+        kind: 'meet', cardId: p.cardId, title: `To ${p.targetName || 'them'}`,
+        body: p.pitch || p.opener || '',
+        note: 'Nothing has been sent yet - this reaches them only when you press send. Edit it freely; it is your voice, not mine.',
+      });
+      return;
+    }
+    const l = home?.pending?.lead;
+    if (l?.key) {
+      setDraft({
+        kind: 'lead', leadKey: l.key, title: `To ${l.lead?.name || 'them'}`, body: l.text || '', url: l.lead?.url || '',
+        note: 'Linky cannot post to LinkedIn for you, and would not. Approve it, open the profile, paste it in.',
+      });
+    }
+  };
+
+  const openLeadDraft = async (lead: LinkyLead, index: number) => {
+    if (leadBusy) return;
+    setLeadBusy(lead.url || lead.name);
+    try {
+      const r = await linkyDraftLead({ index, key: lead.key, lead, need: answer?.need });
+      setDraft({
+        kind: 'lead', leadKey: r.key || lead.key, index,
+        title: `To ${r.lead?.name || lead.name}`, body: r.text, note: r.howTo, url: r.url || lead.url,
+      });
+    } catch (err) {
+      notifyUser('Could not write that', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setLeadBusy('');
+    }
+  };
+
+  const sendDraft = async () => {
+    if (!draft || draftBusy) return;
+    setDraftBusy(true);
+    try {
+      if (draft.kind === 'meet' && draft.cardId) {
+        const r = await linkyApproveMeet(draft.cardId, draft.body.trim());
+        setDraft(null);
+        notifyUser(r.matchId ? 'You two are already connected' : 'Sent', r.matchId ? 'No intro needed - open the chat.' : `Linky passed your words to them${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today)` : '.'}`);
+        await load(true);
+      } else {
+        const r = await linkyApproveLead(draft.body.trim());
+        setDraft(null);
+        notifyUser('Kept for you to send', r.note || 'Open their profile, paste it, send it from your own account.');
+        if (r.url) Linking.openURL(r.url).catch(() => null);
+      }
+    } catch (err) {
+      notifyUser('Nothing was sent', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setDraftBusy(false);
+    }
+  };
+
+  const dropDraft = async () => {
+    if (!draft) return;
+    const { kind, cardId } = draft;
+    setDraft(null);
+    try {
+      if (kind === 'meet' && cardId) await linkyCancelMeet(cardId);
+    } catch { /* dropping a draft must never fail loudly - nothing was sent anyway */ }
+  };
+
+  const notInterested = async (lead: LinkyLead) => {
+    const key = lead.key || '';
+    if (!key || leadBusy) return;
+    setLeadBusy(key);
+    try {
+      const r = await linkyMarkLead(key, 'not_interested');
+      setLeads((list) => list.filter((x) => (x.key || '') !== key));
+      notifyUser('Gone', r.note || 'Linky will not show them again.');
+    } catch (err) {
+      notifyUser('Could not do that', err instanceof Error ? err.message : undefined);
+    } finally {
+      setLeadBusy('');
     }
   };
 
@@ -368,6 +472,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const firstName = (home?.name || '').split(' ')[0];
   const surface = isDark ? COLORS.darkBgSec : '#FFFFFF';
   const border = isDark ? COLORS.darkBorder : COLORS.lightBorder;
+  const inputBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
+  const outreachCount = (home?.outreach || []).length;
 
   return (
     <View style={[styles.root, appBackground(isDark)]}>
@@ -420,6 +526,24 @@ export default function LinkyHomeScreen({ navigation }: any) {
                   <InboundView key={intro.id} intro={intro} isDark={isDark} busy={busyId === intro.id} onDecision={(d) => onDecision(intro, d)} onOpen={() => navigation.navigate('Profile', { userId: intro.requesterId })} />
                 ))}
               </>
+            ) : null}
+
+            {(home.pending?.meet || home.pending?.lead) && !draft ? (
+              <TouchableOpacity
+                style={[styles.pendingBar, { borderColor: border, backgroundColor: isDark ? 'rgba(223,251,63,0.1)' : 'rgba(223,251,63,0.22)' }]}
+                onPress={openPending}
+                activeOpacity={0.85}
+              >
+                <Send size={14} color={textColor(isDark)} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.pendingBarTitle, { color: textColor(isDark) }]}>
+                    {home.pending?.meet
+                      ? `A message to ${home.pending.meet.targetName || 'them'} is waiting on you`
+                      : `A message to ${home.pending?.lead?.lead?.name || 'them'} is written and waiting`}
+                  </Text>
+                  <Text style={[styles.pendingBarSub, { color: textColor(isDark, 'secondary') }]}>Nothing has been sent. Tap to read it, change it if you want, then send it yourself.</Text>
+                </View>
+              </TouchableOpacity>
             ) : null}
 
             {(pendingAsk || turns.length) ? (
@@ -478,32 +602,45 @@ export default function LinkyHomeScreen({ navigation }: any) {
                       <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
                         <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>OUTSIDE LINKUP</Text>
                         <Text style={[styles.whyText, { color: textColor(isDark) }]}>{pointerText}</Text>
+                        {pointerRoutes.length ? (
+                          <View style={{ marginTop: 8, gap: 6 }}>
+                            {pointerRoutes.map((rt, i) => (
+                              <Text key={'r' + i} style={[styles.leadLine, { color: textColor(isDark, 'secondary') }]}>{i + 1}) {rt}</Text>
+                            ))}
+                          </View>
+                        ) : null}
                         {leads.length ? (
                           <View style={{ marginTop: 10, gap: 8 }}>
                             {leads.map((l, i) => (
-                              <TouchableOpacity
-                                key={`${l.url}-${i}`}
-                                style={[styles.lead, { borderColor: border }]}
-                                onPress={() => { Linking.openURL(l.url).catch(() => notifyUser('Could not open that link', 'Copy it from a browser instead.')); }}
-                                activeOpacity={0.75}
-                              >
-                                <View style={{ flex: 1 }}>
+                              <View key={l.url + '-' + i} style={[styles.lead, { borderColor: border }]}>
+                                <View style={{ flex: 1, gap: 2 }}>
                                   <Text style={[styles.nearestName, { color: textColor(isDark) }]} numberOfLines={1}>{l.name}</Text>
-                                  {l.title ? <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>{l.title}{l.why ? ` · ${l.why}` : ''}</Text> : null}
-                                  {/* the url is printed as well as tappable: on the web people
-                                      want to copy it, and an unresolved link must not look like a lie */}
+                                  {l.title ? <Text style={[styles.nearestMeta, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{l.title}</Text> : null}
+                                  {l.why ? <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>{l.why}</Text> : null}
                                   <Text style={[styles.leadUrl, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
-                                    {l.resolved === false ? 'no direct link - opens a search: ' : ''}{l.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                                    {l.resolved === false ? 'no direct link - opens a search: ' : ''}
+                                    {l.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
                                   </Text>
+                                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                                    <TouchableOpacity style={[styles.leadBtn, { borderColor: border }]} onPress={() => { Linking.openURL(l.url).catch(() => notifyUser('Could not open that link', 'Copy it from a browser instead.')); }} activeOpacity={0.75}>
+                                      <Link2 size={12} color={textColor(isDark, 'secondary')} />
+                                      <Text style={[styles.leadBtnText, { color: textColor(isDark) }]}>Profile</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.leadBtn, { backgroundColor: isDark ? 'rgba(223,251,63,0.14)' : 'rgba(223,251,63,0.24)' }]} onPress={() => openLeadDraft(l, i + 1)} disabled={!!leadBusy} activeOpacity={0.8}>
+                                      <Send size={12} color={textColor(isDark)} />
+                                      <Text style={[styles.leadBtnText, { color: textColor(isDark) }]}>{leadBusy === (l.url || l.name) ? 'Writing...' : 'Draft a message'}</Text>
+                                    </TouchableOpacity>
+                                    {l.key ? (
+                                      <TouchableOpacity style={[styles.leadBtn, { borderColor: border }]} onPress={() => notInterested(l)} disabled={!!leadBusy} activeOpacity={0.75}>
+                                        <X size={12} color={textColor(isDark, 'muted')} />
+                                      </TouchableOpacity>
+                                    ) : null}
+                                  </View>
                                 </View>
-                                <View style={{ alignItems: 'flex-end', gap: 2 }}>
-                                  <Link2 size={14} color={textColor(isDark, 'secondary')} />
-                                  <Text style={[styles.leadOpen, { color: COLORS.primary }]}>OPEN</Text>
-                                </View>
-                              </TouchableOpacity>
+                              </View>
                             ))}
                             <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]}>
-                              Public profiles, found just now. Message them yourself - Linky will not do it for you.
+                              Public profiles from {pointerMeta.searches ? 'one LinkedIn search, run just now' : 'a search Linky ran a moment ago'} - no contact details, and Linky has not written to anybody. Open a profile, paste the message, send it from your own account.{pointerMeta.skipped ? ' ' + pointerMeta.skipped + ' you already saw or wrote to were left out.' : ''}
                             </Text>
                           </View>
                         ) : null}
@@ -606,6 +743,53 @@ export default function LinkyHomeScreen({ navigation }: any) {
         </View>
       </View>
 
+      <Modal visible={!!draft} transparent animationType="fade" onRequestClose={dropDraft}>
+        {draft ? (
+          <View style={styles.sheetWrap}>
+            <View style={[styles.sheet, { borderColor: border, backgroundColor: surface }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={[styles.sheetTitle, { color: textColor(isDark) }]} numberOfLines={2}>
+                  {draft.kind === 'meet' ? 'Before it goes to them' : 'Your message, in your words'}
+                </Text>
+                <TouchableOpacity onPress={dropDraft} style={{ marginLeft: 'auto', padding: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <X size={16} color={textColor(isDark, 'muted')} />
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.sheetSub, { color: textColor(isDark, 'secondary') }]}>{draft.title}</Text>
+              <TextInput
+                style={[styles.sheetInput, { color: textColor(isDark), backgroundColor: inputBg, borderColor: border }]}
+                value={draft.body}
+                onChangeText={(v) => setDraft({ ...draft, body: v })}
+                multiline
+                maxLength={900}
+                autoFocus={Platform.OS !== 'web'}
+              />
+              <Text style={[styles.sheetNote, { color: textColor(isDark, 'muted') }]}>
+                {draft.note || (draft.kind === 'meet'
+                  ? 'Nothing has been sent yet - this reaches them only when you press send. Edit it freely; it is your voice, not mine.'
+                  : 'Linky cannot post to LinkedIn for you, and would not. Approve it, open the profile, paste it in.')}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                <TouchableOpacity
+                  onPress={sendDraft}
+                  disabled={draftBusy || draft.body.trim().length < 24}
+                  style={[styles.sheetBtn, { backgroundColor: COLORS.primary, opacity: draftBusy || draft.body.trim().length < 24 ? 0.5 : 1 }]}
+                >
+                  {draftBusy ? <ActivityIndicator size="small" color="#000" /> : (
+                    <Text style={styles.sheetBtnText}>{draft.kind === 'meet' ? 'SEND IT' : 'APPROVE & OPEN PROFILE'}</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={dropDraft} style={[styles.sheetGhost, { borderColor: border }]}>
+                  <Text style={[styles.sheetGhostText, { color: textColor(isDark, 'secondary') }]}>{draft.kind === 'meet' ? 'Not now' : 'Drop it'}</Text>
+                </TouchableOpacity>
+              </View>
+              {draft.kind === 'lead' && outreachCount ? (
+                <Text style={[styles.sheetFoot, { color: textColor(isDark, 'muted') }]}>{outreachCount} outreach {outreachCount === 1 ? 'message' : 'messages'} Linky has handed you so far. Each one you approve is remembered, so the same person is not shown to you twice.</Text>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+      </Modal>
       <PaywallModal
         visible={!!paywall}
         onClose={() => setPaywall(null)}
@@ -664,6 +848,23 @@ const styles = StyleSheet.create({
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   lead: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 9 },
   leadUrl: { fontSize: 10.5, fontWeight: '600', marginTop: 2, opacity: 0.75 },
+  leadLine: { fontSize: 12.5, lineHeight: 18, fontWeight: '600' },
+  leadBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  leadBtnText: { fontSize: 11, fontWeight: '800' },
+  sheetWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  sheet: { margin: 12, padding: 16, borderRadius: 18, borderWidth: 1, gap: 8 },
+  sheetTitle: { fontSize: 15, fontWeight: '900', flexShrink: 1 },
+  sheetSub: { fontSize: 12, fontWeight: '700' },
+  sheetInput: { borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 150, fontSize: 14, lineHeight: 21, fontWeight: '600', textAlignVertical: 'top' },
+  sheetNote: { fontSize: 11.5, lineHeight: 17, fontWeight: '600' },
+  sheetBtn: { flex: 1, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
+  sheetBtnText: { fontSize: 12, fontWeight: '900', color: '#000', letterSpacing: 0.4 },
+  sheetGhost: { borderWidth: 1, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 16, alignItems: 'center' },
+  sheetGhostText: { fontSize: 12, fontWeight: '800' },
+  sheetFoot: { fontSize: 11, lineHeight: 16, fontWeight: '600' },
+  pendingBar: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 14, padding: 12, marginTop: 10 },
+  pendingBarTitle: { fontSize: 13, fontWeight: '900' },
+  pendingBarSub: { fontSize: 11.5, lineHeight: 16, fontWeight: '600', marginTop: 1 },
   leadOpen: { fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
   chips: { marginTop: 16, gap: 8 },
   chip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },

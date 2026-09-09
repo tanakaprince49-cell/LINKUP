@@ -40,8 +40,9 @@ import { aiReady, aiText, geminiText, getGeminiKey } from './_gemini.js';
 
 export const OUTREACH = {
   num: 100,                 // asked for every time (rule 1); may not be honoured
-  freeMaxPages: 1,          // searches per run on the shared free plan
-  plusMaxPages: 3,          // 3 searches -> ~30 profiles in one run
+  linkedinOnly: true,       // every query carries site:linkedin.com/in, enforced below
+  freeMaxPages: 1,          // one search per ask on the shared free plan
+  plusMaxPages: 2,          // PLUS gets a second page of the same query, not a new engine
   batch: 15,                // profiles per Gemini call
   freeMaxBatches: 1,
   plusMaxBatches: 2,
@@ -65,6 +66,36 @@ const db = () => getDb();
 const monthKey = (ms = Date.now()) => new Date(ms).toISOString().slice(0, 7);
 const hash = (s) => crypto.createHash('sha1').update(String(s)).digest('hex').slice(0, 32);
 const text = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+// Google hands back LinkedIn titles with the entities still encoded
+// ("Electrical &amp; Electronic") and a trailing ellipsis where LinkedIn cut the
+// headline. Neither belongs in a message to a person.
+const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '-', mdash: '-', hellip: '...', rsquo: "'", lsquo: "'", rdquo: '"', ldquo: '"', eacute: 'e', uuml: 'u' };
+export function decodeEntities(v) {
+  return String(v ?? '').replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (whole, inner) => {
+    if (inner[0] === '#') {
+      const code = inner[1] === 'x' || inner[1] === 'X' ? parseInt(inner.slice(2), 16) : parseInt(inner.slice(1), 10);
+      return Number.isFinite(code) && code > 31 && code < 1114111 ? String.fromCodePoint(code) : whole;
+    }
+    const key = inner.toLowerCase();
+    return Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, key) ? NAMED_ENTITIES[key] : whole;
+  });
+}
+
+// A title the member can read at a glance: entities decoded, no dangling "...",
+// never cut in the middle of a word, and the "| Company" tail of a landing page
+// dropped because it is not a person's title.
+export function tidyTitle(v, max = 96) {
+  let t = decodeEntities(v).replace(/\s+/g, ' ').trim();
+  t = t.replace(/\s*[|]\s*[^|]{0,40}$/, '');
+  t = t.replace(/[.\u2026\s-]+$/g, '');
+  if (t.length > max) {
+    const cut = t.slice(0, max);
+    const at = Math.max(cut.lastIndexOf(' '), cut.lastIndexOf(','));
+    t = (at > max * 0.6 ? cut.slice(0, at) : cut).replace(/[,;:\s-]+$/g, '');
+  }
+  return t.trim();
+}
 const toMillis = (v) => (v?.toMillis ? v.toMillis() : typeof v === 'number' ? v : v ? Date.parse(v) || 0 : 0);
 
 // The credit read is cached so a busy hour does not hit /account.json per ask.
@@ -119,6 +150,8 @@ function keywordsFor(need) {
 
 // Strict operators, so the SERP is profiles and not news coverage of a company.
 export function buildQueries(need, { place = '', limit = 2 } = {}) {
+  // limit is a ceiling, not a target: the free plan asks for one search and a
+  // search is a credit out of the same 250 the whole product shares.
   const { words, roles, raw } = keywordsFor(need);
   const placeBits = (() => {
     const p = text(place, 40);
@@ -143,7 +176,9 @@ export function buildQueries(need, { place = '', limit = 2 } = {}) {
     push([`site:linkedin.com/in`, roleGroup, topic, quoted(placeBits[1] || placeBits[0])].filter(Boolean).join(' '));
   }
   if (!out.length) push(`site:linkedin.com/in ${quoted(words.slice(0, 3).join(' ')) || 'founder startup'}`);
-  return out;
+  // Nothing here may scrape the open web at large. Every query is a LinkedIn
+  // profile query or the function refuses to return it.
+  return out.filter((q) => /site:linkedin\.com\/in/.test(q)).slice(0, Math.max(1, Math.min(limit, 2)));
 }
 
 // ---------------------------------------------------------------- credit ledger
@@ -218,6 +253,12 @@ export async function canSearch({ plus = false, uid = '' } = {}) {
 // (start=10, 20...) - that is pagination of one query, never a lookup of a
 // person found in an earlier page (rule 3).
 async function serpSearch(q, { start = 0 } = {}) {
+  // Hard stop, not a style preference: one search is one credit out of the 250
+  // the whole product shares, and what was promised is public LinkedIn profiles
+  // and nothing else. A query without the operator would scrape the open web.
+  if (OUTREACH.linkedinOnly && !/site:linkedin\.com\/in/.test(String(q || ''))) {
+    return { results: [], error: 'not-linkedin' };
+  }
   const params = new URLSearchParams({
     engine: 'google', q, num: String(OUTREACH.num), hl: 'en', gl: 'zw', device: 'desktop',
   });
@@ -247,8 +288,8 @@ export function prefilter(organic, { need = '', roles = [], words = [] } = {}) {
   ])].filter((s) => s.length > 3);
   const out = [];
   for (const r of organic || []) {
-    const title = text(r.title, 200);
-    const snippet = text(r.snippet, 400);
+    const title = tidyTitle(r.title, 200);
+    const snippet = text(decodeEntities(r.snippet), 400);
     const source = text(r.source, 80);
     const hay = `${title} ${snippet}`.toLowerCase();
     if (!hay.trim()) continue;
@@ -267,8 +308,8 @@ export function prefilter(organic, { need = '', roles = [], words = [] } = {}) {
     const hits = needles.filter((n) => hay.includes(n));
     if (needles.length && !hits.length) continue;
     out.push({
-      name: nameBit,
-      title: text(title.split(/\s+-\s+/).slice(1).join(' - '), 160),
+      name: tidyTitle(nameBit, 60),
+      title: tidyTitle(title.split(/\s+-\s+/).slice(1).join(' - '), 110),
       snippet,
       source: source || text(r.displayed_link, 60),
       rawLink: text(r.link || r.redirect_link, 400),
@@ -424,10 +465,11 @@ export async function findLeads(need, { place = '', plus = false, uid = '', aske
     const gi = pool.indexOf(p) >= 0 ? pool.indexOf(p) : flat[idx]?.gi;
     const judged = byIndex.get(gi) || flat[idx] || {};
     return {
-      name: text(p.name, 60),
-      title: text(p.title, 140),
+      name: tidyTitle(p.name, 60),
+      title: tidyTitle(p.title, 110),
       url: p.url,
-      why: text(judged.why || p.hits?.[0] || '', 60),
+      // the reason is a phrase, not a paragraph - it sits on one line next to a name
+      why: tidyTitle(judged.why || p.hits?.[0] || '', 52),
       fit: Number(judged.fit) || Math.max(56, 84 - idx * 4),
       resolved: !!p.resolved,
     };

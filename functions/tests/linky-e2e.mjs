@@ -85,9 +85,14 @@ assert(!r.none && r.cards.some((c) => c.targetUid === 'bob') && r.expansion === 
 let pt = null; try { await L.pointers('alice', 'a blockchain lawyer in Lagos'); } catch (e) { pt = e; }
 assert(pt && /Ask me that first/.test(pt.message), 'pointers refuse asks that were never made (budget guard)');
 const pointer = await L.pointers('alice', 'a quantum cryptography professor from Oslo');
-assert(/Outside LINKUP/.test(pointer.text) && /Oslo|Harare/.test(pointer.text) && !pointer.cached, 'pointers give outside-LINKUP routes without Gemini: ' + pointer.text.slice(0, 80));
+// the answer is structured now: a line of prose, then numbered routes - and no
+// paragraph that repeats as prose the list the client renders as rows
+assert(!pointer.cached && Array.isArray(pointer.routes) && pointer.routes.length >= 2, 'pointers hand back numbered routes as data, not one long sentence');
+assert(/Oslo|Harare/.test(pointer.text) && pointer.text.split('\n').length >= 3, 'and the text is readable lines, not a wall: ' + JSON.stringify(pointer.text.slice(0, 60)));
+assert(!/1\) LinkedIn - search/.test(pointer.text), 'the old "three quick routes" template is gone');
+assert(typeof pointer.intro === 'string' && pointer.intro.length > 30 && pointer.intro.length < 320, 'a short intro line, not a speech');
 const pointer2 = await L.pointers('alice', 'a quantum cryptography professor from Oslo');
-assert(pointer2.cached, 'pointers are cached per ask');
+assert(pointer2.cached && pointer2.routes.length === pointer.routes.length, 'pointers are cached per ask, same shape second time');
 // ---- interleaved repeat (an unrelated ask in between) is still cached
 await clearBudget('alice');
 await clearBudget('alice');
@@ -104,14 +109,37 @@ assert(Array.isArray(h.thread) && h.thread.length >= 10 && h.thread.every((t) =>
 assert(h.thread.filter((t) => t.role === 'linky').every((t) => !/[*_#]|^>/.test(t.text)), 'Linky never sends markdown into a chat bubble');
 assert(!('intents' in h), 'home has no intents');
 assert(h.cards.some((c) => c.targetUid === 'bob') && h.cards.some((c) => c.targetUid === 'cara'), 'cards persist across asks');
-// ---- meet -> intro pending + notification to bob
+// ---- meet is two steps now: Linky drafts, the member approves (and may rewrite).
+// Nothing reaches the other person in between, and an unapproved draft must not
+// spend one of the two Meets a day the free plan gets.
 const bobCard = h.cards.find((c) => c.targetUid === 'bob');
-const m = await L.meet('alice', bobCard.id);
-assert(m.pending && m.introId === 'alice_bob' && m.meetsLeft === FREE.meetsPerDay - 1, `meet creates pending intro, one of the free plan's ${FREE.meetsPerDay} Meets used`);
+const d = await L.meet('alice', bobCard.id);
+assert(d.needsApproval && d.draftId === `alice_${bobCard.id}` && /Bob/.test(d.pitch) && d.pitch.length > 60, 'meet answers with a draft addressed to the real person: ' + d.pitch.slice(0, 70));
+assert(d.meetsLeft === FREE.meetsPerDay, 'a draft nobody approved has cost no Meet yet');
 let notes = await db.collection('notifications').where('userId', '==', 'bob').get();
-assert(notes.size === 1 && notes.docs[0].data().type === 'intro_request' && notes.docs[0].data().requestId === 'alice_bob', 'bob got intro_request notification');
+assert(notes.size === 0, 'and Bob has not been told a thing');
+assert(!(await db.collection('intros').doc('alice_bob').get()).exists, 'no intro doc exists before the approval');
+assert((await L.home('alice')).pending?.meet?.cardId === bobCard.id, 'the draft survives a reload - home hands it back');
+const cancel = await L.cancelMeet('alice', { cardId: bobCard.id });
+assert(cancel.cancelled, 'cancel drops the draft');
+assert((await db.collection('notifications').where('userId', '==', 'bob').get()).size === 0, 'cancelling sends nothing either');
+const MINE = 'Bob - Alice here. I am building mobile money tooling for SMEs in Harare and I need a Flutter hand for two months. Fifteen minutes this week to see whether you would enjoy it?';
+const d2 = await L.meet('alice', bobCard.id);
+assert(d2.needsApproval && d2.pitch.length > 40, 'drafting again after a cancel works');
+const ap = await L.approveMeet('alice', { cardId: bobCard.id, text: MINE });
+assert(ap.introId === 'alice_bob' && ap.sent && ap.edited, 'approve sends it, and remembers it was the member writing, not the model');
+notes = await db.collection('notifications').where('userId', '==', 'bob').get();
+assert(notes.size === 1 && notes.docs[0].data().type === 'intro_request' && notes.docs[0].data().content === MINE, 'Bob is notified with the approved text, verbatim: ' + String(notes.docs[0]?.data().content).slice(0, 50));
+assert((await db.collection('linkyState').doc('alice').get()).data()?.meets?.count === 1, 'the Meet is spent at approval, not at drafting');
+const trail = (await L.home('alice')).outreach || [];
+assert(trail.some((e) => e.kind === 'intro' && e.status === 'asked' && e.edited), 'the intent is on the outreach trail, which is how the graph grows');
 h = await L.home('bob');
 assert(h.inbound.length === 1 && h.inbound[0].requesterName === 'Alice Moyo', 'bob sees inbound intro');
+// a double tap on Send (Telegram retries, and so do thumbs) must not reach Bob twice
+const twice = await L.approveMeet('alice', { cardId: bobCard.id });
+assert(twice.alreadyRequested || twice.pending || twice.introId, 'approving twice is absorbed, not sent twice: ' + JSON.stringify({ ir: twice.alreadyRequested, p: twice.pending, id: twice.introId }));
+assert((await db.collection('notifications').where('userId', '==', 'bob').where('type', '==', 'intro_request').get()).size === 1, 'Bob still has exactly one intro to answer');
+assert((await L.home('alice')).pending?.meet == null, 'and no ghost draft is left pending after the send');
 // ---- re-asking keeps the requested card (status meet) instead of duplicating bob
 await clearBudget('alice');
 await db.collection('linkyState').doc('alice').set({ lastAsk: null }, { merge: true });
@@ -134,7 +162,9 @@ assert(notes.docs.some((d) => d.data().type === 'intro_accepted' && d.data().mat
 const danAsk = await L.ask('dan', 'Flutter developer for a payments app in Harare, paid');
 const bobFromDan = danAsk.cards.find((c) => c.targetUid === 'bob');
 assert(bobFromDan, 'dan gets bob card');
-await L.meet('dan', bobFromDan.id);
+await L.meet('dan', bobFromDan.id);                                    // drafted, not sent
+assert(!(await db.collection('intros').doc('dan_bob').get()).exists, 'a draft alone tells nobody anything');
+await L.approveMeet('dan', { cardId: bobFromDan.id });                  // dan approves it as written
 const dec = await L.respond('bob', 'dan_bob', 'decline');
 assert(dec.status === 'declined', 'decline');
 const bobState = await L.loadState('bob');
@@ -184,11 +214,18 @@ let br = await botReplyForTest('telegram', '12345', 'designer in Bulawayo');
 console.log('    bot:', br.text.split('\n')[0]);
 assert(br.cards?.length === 1 && br.cards[0].targetUid === 'cara' && /meet 1/.test(br.text), 'bot answers an ask inline with numbered cards');
 br = await botReplyForTest('telegram', '12345', 'meet 1');
-assert(/Asked Cara Dube/.test(br.text), 'bot "meet 1" targets the first card of the last answer: ' + br.text);
+assert(/does not move until you say send/.test(br.text) && /Cara/.test(br.text), 'bot "meet 1" drafts first and waits for the human: ' + br.text.slice(0, 80));
+assert(Array.isArray(br.buttons) && /Send it/.test(JSON.stringify(br.buttons)), 'approval on Telegram is a button, not a sentence to guess');
+assert(!(await db.collection('intros').doc('alice_cara').get()).exists, 'and nothing has reached Cara yet');
+br = await botReplyForTest('telegram', '12345', 'send');
+assert(/Sent to Cara Dube/.test(br.text), 'replying SEND lets it go: ' + br.text.slice(0, 70));
+assert((await db.collection('intros').doc('alice_cara').get()).exists, 'the intro doc only exists after the approval');
 br = await botReplyForTest('telegram', '12345', 'a blockchain lawyer in Lagos');
 assert(!br.cards && /Nobody (here|on LINKUP) fits/i.test(br.text), 'bot no-match is graceful: ' + br.text.slice(0, 70));
+assert((br.chips || []).some((c) => /outside LINKUP/i.test(c)), 'and the no-match keeps the outside-LINKUP chip, which is how a member on Telegram reaches the search at all: ' + JSON.stringify(br.chips));
+assert(/Search LinkedIn/.test(JSON.stringify(br.buttons || [])), 'with a button that says what it actually does');
 br = await botReplyForTest('telegram', '12345', 'more');
-assert(/Outside LINKUP/.test(br.text), 'bot "more" gives outside-LINKUP pointers for the last ask');
+assert(br.text.split('\n').length >= 3 && !/;\s*\d+\./.test(br.text), 'bot "more" answers in short lines, never a run-on sentence: ' + br.text.slice(0, 60).replace(/\n/g, ' | '));
 br = await botReplyForTest('telegram', '12345', 'cards');
 assert(/Your cards/.test(br.text), 'bot "cards" lists live cards');
 // ---- cron: housekeeping only

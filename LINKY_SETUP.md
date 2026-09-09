@@ -80,7 +80,9 @@ SerpApi **free plan is 250 searches a month for the whole product**, so:
 
 1. **One search per ask, `num=100` + strict operators** in `q`:
    `site:linkedin.com/in ("developer" OR "software engineer") "flutter developer" "Harare"`.
-   Free plan = 1 search per run, PLUS = 3. `num=100` is sent because the extraction
+   Free plan = 1 page per run, PLUS = 2 - and **only ever `site:linkedin.com/in`**:
+   `serpSearch()` refuses a query that does not carry that operator
+   (`{error:'not-linkedin'}`), so no credit can be spent on a general web search. `num=100` is sent because the extraction
    rule demands it, **but the account only returns ~10 results per credit**, so all
    budget maths is done at 10/page (`start=` paging only inside the remaining budget).
 2. **Prefilter locally, before any token.** Title + snippet are matched on hardcoded
@@ -146,10 +148,41 @@ link-unwrapping are asserted against it.
    Pass `--webhook https://linkup-muqu.vercel.app/api/telegram` to (re)register the webhook from the same script.
 6. Nothing else: Gemini and the Firebase service account are already in Vercel; housekeeping authenticates with a Google token from the existing GitHub secret.
 
+## Permissioned outreach: Linky drafts, the member sends
+
+Nothing Linky writes reaches another human on its own. That is true of the internal
+Meet path and the outside-the-network lead path, and both are two calls, not one:
+
+| | internal (someone on LINKUP) | outside (a public LinkedIn profile) |
+|---|---|---|
+| draft | `meet(uid, cardId)` → `{needsApproval, draftId, pitch, opener, targetName}` | `draftLead(uid, {index\|key\|lead, need})` → `{key, text, url, howTo}` |
+| approve | `approveMeet(uid, {cardId, text?})` → the intro + notification are written **here**, and the Meet is spent **here** | `approveLead(uid, {text?})` → writes `outreachIntents/{id}` with `status: approved_for_self_send`; **no send**, the member pastes it |
+| decline | `cancelMeet(uid, {cardId})` → nothing was ever sent, the card goes back to `saved` | `markLead(uid, {key, status:'not_interested'})` → muted, and the mute is applied to cached answers too, so a person said "no" to cannot come back |
+
+The draft is `linkyState/{uid}.pendingMeet` / `.pendingLead` plus
+`introDrafts/{uid}_{cardId}` (server-only; `firestore.rules` denies client reads of
+`introDrafts`, `outreachIntents` and `linkyOutreach`), so a half-finished approval
+survives a reload, a switch between Telegram and the app, and a night's sleep
+(`home.pending` returns both for 3 days). Editing is allowed and expected: whatever
+text comes back on the approve call is what the other person reads, verbatim - the
+send path never re-drafts, never calls the model again, and never "improves" it.
+Every step writes `linkyState/{uid}.outreach` (`drafted` → `approved` →
+`sent`/`declined`), which is what turns search into a graph: `pointers()` filters
+anyone already written to or declined, and says how many it left out.
+
+App: `LinkyHomeScreen` renders leads as rows (name, title, why, the URL on its own
+line) with **Profile / Draft a message / ✕**, and both draft kinds open the same
+editable sheet with `SEND IT` / `Not now`. A banner above the chat re-opens a draft
+that is still waiting. Telegram/WhatsApp get the same as inline keyboards: `w:<n>`
+drafts, `y:`/`n:` approve or cancel an intro, `ld:y`/`ld:n` approve or mute a lead,
+plus the typed grammar (`send`, `edit <text>`, `cancel`, `sent`, `not interested 2`,
+`draft 2`) for people who would rather type.
+
 ## Bot commands
 
 Just type who you need (e.g. `a Flutter developer in Harare, paid`) → answered inline with numbered cards.
-`cards` · `meet 1` / `skip 1` / `save 1` · `unskip fred` (a skip is a 14-day cool-off, not a verdict - Linky says the words when it withholds someone) · `accept` / `decline` / `later` · `draft` (write the first line) · `more` (outside-LINKUP pointers after a no-match) · `prefs` · `audit` · `unlink` · `help`. Free replies carry a reply-keyboard of the suggestions Linky generated, so most taps are one button.
+`cards` · `meet 1` (answers with a draft and waits for `send`) / `skip 1` / `save 1` ·
+`send` · `edit <your own words>` · `cancel` · `sent` · `not interested 2` · `draft 2` · `unskip fred` (a skip is a 14-day cool-off, not a verdict - Linky says the words when it withholds someone) · `accept` / `decline` / `later` · `draft` (write the first line) · `more` (outside-LINKUP pointers after a no-match) · `prefs` · `audit` · `unlink` · `help`. Free replies carry a reply-keyboard of the suggestions Linky generated, so most taps are one button.
 Linking: app → Linky tab → Preferences & bots → Connect → send the 6-character code to the bot (15-minute validity).
 
 ## Verify after deploy

@@ -81,6 +81,32 @@ export type LinkyLead = {
   why?: string;
   fit?: number;
   resolved?: boolean;
+  /** who this person is to Linky: the same key across searches, so "not
+      interested" can mean "never show me this human again". */
+  key?: string;
+};
+
+/** A message Linky wrote that the member has not approved yet. */
+export type LinkyDraft = {
+  cardId?: string;
+  targetUid?: string;
+  targetName?: string;
+  need?: string;
+  pitch: string;
+  opener?: string;
+  usedAi?: boolean;
+};
+
+export type LinkyOutreachEntry = {
+  kind: 'intro' | 'lead';
+  key?: string;
+  name?: string;
+  need?: string;
+  status: string;
+  at: number;
+  edited?: boolean;
+  intentId?: string;
+  targetUid?: string;
 };
 
 export type LinkyAskResult = LinkyAsk & {
@@ -124,6 +150,9 @@ export type LinkyHome = {
   thread?: LinkyTurn[];
   facts: LinkyToldFacts;
   brief: string;
+  /** who the member already wrote to, and who they said never mind about */
+  outreach?: LinkyOutreachEntry[];
+  pending?: { meet?: LinkyDraft | null; lead?: { key: string; lead: LinkyLead; text: string; need?: string } | null };
 };
 
 export type LinkyAudit = {
@@ -165,11 +194,40 @@ export async function linkyCall<T = any>(action: string, payload: Record<string,
 
 export const linkyHome = () => linkyCall<LinkyHome>('home');
 export const linkyAsk = (message: string) => linkyCall<LinkyAskResult>('ask', { message });
-export const linkyMeet = (cardId: string) => linkyCall<{ introId?: string; matchId?: string; pending?: boolean; opener?: string; meetsLeft?: number | null; alreadyRequested?: boolean }>('meet', { cardId });
+/** Stage 1: Linky drafts the intro. Nothing reaches the other person yet. */
+export const linkyMeet = (cardId: string) => linkyCall<{
+  introId?: string; matchId?: string; pending?: boolean; awaitingThem?: boolean; opener?: string;
+  meetsLeft?: number | null; alreadyRequested?: boolean;
+  needsApproval?: boolean; draftId?: string; pitch?: string; targetName?: string; note?: string;
+  target?: { uid: string; name: string; role?: string; city?: string };
+}>('meet', { cardId });
+
+/** Stage 2: the member approves it - optionally in their own words - and it goes. */
+export const linkyApproveMeet = (cardId: string, text?: string) => linkyCall<{
+  introId?: string; matchId?: string; pending?: boolean; meetsLeft?: number | null; sent?: boolean; edited?: boolean;
+}>('approveMeet', text ? { cardId, text } : { cardId });
+
+export const linkyCancelMeet = (cardId: string) => linkyCall<{ cancelled: boolean; targetName?: string }>('cancelMeet', { cardId });
 export const linkyCard = (cardId: string, status: 'skip' | 'saved') => linkyCall<LinkyCard>('card', { cardId, status });
 export const linkyRespond = (introId: string, decision: 'accept' | 'decline' | 'later') => linkyCall<{ status: string; matchId?: string }>('respond', { introId, decision });
 export const linkyPrefs = (prefs: { openTo?: IntentOffer[]; inboundCap?: number }) => linkyCall<{ ok: boolean }>('prefs', prefs);
-export const linkyPointers = (need: string) => linkyCall<{ text: string; cached: boolean; leads?: LinkyLead[]; searches?: number; note?: string }>('pointers', { need });
+export const linkyPointers = (need: string) => linkyCall<{
+  text: string; cached: boolean; leads?: LinkyLead[]; searches?: number; note?: string;
+  intro?: string; routes?: string[]; found?: number; skipped?: number; oneSearch?: boolean; place?: string;
+}>('pointers', { need });
+
+/** "draft 2" - Linky writes the message for one of the people he just found. */
+export const linkyDraftLead = (args: { index?: number; lead?: LinkyLead; key?: string; need?: string }) => linkyCall<{
+  ok: boolean; key: string; lead: LinkyLead; text: string; url: string; usedAi?: boolean; howTo?: string;
+}>('draftLead', args);
+
+/** Approving an off-network message is a record, not a send: the member pastes it. */
+export const linkyApproveLead = (text?: string) => linkyCall<{
+  ok: boolean; intentId: string; text: string; url?: string; edited?: boolean; note?: string; lead?: LinkyLead;
+}>('approveLead', text ? { text } : {});
+
+export const linkyMarkLead = (key: string, status: 'sent' | 'not_interested', intentId?: string) =>
+  linkyCall<{ ok: boolean; status: string; muted?: boolean; note?: string }>('markLead', intentId ? { key, status, intentId } : { key, status });
 /** "Which Fred?" -> "the first one". Turns a picked member into a real card. */
 export const linkyPickPerson = (targetUid: string) => linkyCall<LinkyCard>('pickPerson', { targetUid });
 export const linkyFacts = (facts: { notes: string; skills: string[]; lookingFor: string[]; hidden?: LinkyHidden }) =>

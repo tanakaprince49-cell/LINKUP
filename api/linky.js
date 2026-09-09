@@ -14,9 +14,10 @@ import crypto from 'node:crypto';
 import { getDb, verifyRequestUser } from './_firebaseAdmin.js';
 import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import {
-  APP_URL, LIMITS, OFFERS, ask, audit, botUserFor, consumeLinkCode, createLinkCode, forget, hideFact, home,
-  loadCards, loadState, loadUser, meet, orderedCards, pickPerson, pointers, removeAsk, respond, runCron, sendTelegram,
-  sendWhatsApp, setCardStatus, setFacts, setPrefs, unlinkBot, profileFacts, telegramWebhookSecret,
+  APP_URL, LIMITS, OFFERS, approveLead, approveMeet, ask, audit, botUserFor, cancelMeet, consumeLinkCode, createLinkCode,
+  draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead, meet, orderedCards, pickPerson,
+  pointers, removeAsk, respond, runCron, sendTelegram, sendWhatsApp, setCardStatus, setFacts, setPrefs, unlinkBot,
+  profileFacts, telegramWebhookSecret,
 } from './_linky.js';
 
 
@@ -107,6 +108,9 @@ const HELP = [
   'skip 1     clear a card   |   save 1   keep it',
   'accept     answer an intro waiting on you (decline / later too)',
   'more       where to look outside LINKUP when nobody fits',
+  'draft 2    write the message for person 2 from that search',
+  'send       approve what Linky drafted   |   edit <text>  rewrite it first',
+  'sent       tell me you sent it          |   not interested 2  never show them again',
   'prefs      what you are open to',
   'unlink     disconnect this chat',
   '',
@@ -156,10 +160,41 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
   if (callback) {
     const [kind, a, b] = String(callback).split(':');
     try {
-      if (kind === 'm') { const r = await meet(uid, a, { userDoc: user }); return { text: r.matchId ? `You two are already connected, so no intro needed. Chat: ${APP_URL}/chat/${r.matchId}` : `On it. I will ask them politely and tell you the moment they answer.${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today)` : ''}` }; }
+      if (kind === 'm') {
+        const r = await meet(uid, a, { userDoc: user });
+        if (r.matchId) return { text: `You two are already connected, so no intro needed. Chat: ${APP_URL}/chat/${r.matchId}` };
+        if (r.awaitingThem || r.pending) return { text: `You already asked ${r.targetName || 'them'}. I will tell you the moment they answer.` };
+        if (!r.needsApproval) return { text: `Asked ${r.targetName || 'them'}. I will tell you when they answer.` };
+        return { text: draftText(r), buttons: approveButtons(a) };
+      }
+      if (kind === 'y') return await approveFromBot(uid, user, a.split(':')[0], '');
+      if (kind === 'n') {
+        const r = await cancelMeet(uid, { cardId: a.split(':')[0] });
+        return { text: r.cancelled ? `Left unsent. ${r.targetName || 'They'} will not know you thought about it.` : 'Nothing was waiting to go.' };
+      }
+      if (kind === 'w') return await draftForNumber(uid, user, Number(a) || 1, channel);
+      if (kind === 'e') {
+        return { text: 'Type it after the word, in one message: "edit Hi Tinashe, I am Alice - 15 minutes on Thursday?" I will hold it until you say send.' };
+      }
+      if (kind === 'ld') {
+        const state = await loadState(uid);
+        if (a === 'y') {
+          try { const r = await approveLead(uid, {}); return { text: `${r.text}\n\n${r.note}` }; } catch (err) { return { text: String(err?.message || 'That did not work.') }; }
+        }
+        const r = await markLead(uid, { key: state.pendingLead?.key || leadKeyByIdx(state, 0), status: 'not_interested' });
+        return { text: r.note };
+      }
+      if (kind === 't') {
+        const [status, idx] = a.split(':');
+        const r = await markLead(uid, { key: leadKeyByIdx(await loadState(uid), Number(idx) || 0) || '' });
+        return { text: r.note || 'Noted.' };
+      }
       if (kind === 's') { await setCardStatus(uid, a, 'skip'); return { text: 'Done, they will not come up again for a while.' }; }
       if (kind === 'v') { await setCardStatus(uid, a, 'saved'); return { text: 'Kept. They will wait for you in cards.' }; }
-      if (kind === 'p') { const r = await pointers(uid, String(a || ''), { userDoc: user }); return { text: pointerText(r) }; }
+      if (kind === 'p') {
+        const r = await pointers(uid, String(a || ''), { userDoc: user });
+        return { text: pointerText(r), buttons: r.leads?.length ? leadsKeyboard(r.leads) : undefined };
+      }
       // A tapped chip on WhatsApp arrives as an id like c:0:cards - re-run it as
       // though the member had typed it.
       if (kind === 'c') return await botReply(channel, chatId, [a, b].filter(Boolean).join(':').replace(/^\d+:/, ''));
@@ -224,6 +259,51 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
     return { text: r.reply, chips: (r.suggest || []).slice(0, 3) };
   }
 
+  // ---- permissioned outreach: Linky drafts, the human approves, edits or drops
+  if (/^(send|send it|approve|yes send|go ahead|look good|thats fine|that.s fine)$/i.test(cmd.trim())) {
+    const state = await loadState(uid);
+    if (state.pendingMeet) { const r = await approveMeet(uid, { userDoc: user }); return { text: sentText(r) }; }
+    if (state.pendingLead) {
+      const r = await approveLead(uid, {});
+      return { text: `${r.text}\n\n${r.note}` };
+    }
+    return { text: 'Nothing is waiting on you. Ask me for somebody first.' };
+  }
+  if (/^(edit|change|rewrite it|make it|say instead)\b/i.test(cmd.trim())) {
+    const mine = raw.replace(/^(edit|change|rewrite it|make it|say instead)\b[:,\s]*/i, '').trim();
+    const state = await loadState(uid);
+    if (!mine) return { text: 'Type it after the word - "edit Hi Tinashe, ...". I will hold it until you say send.' };
+    if (state.pendingLead) {
+      const r = await approveLead(uid, { text: mine });
+      return { text: `${r.text}\n\n${r.note}` };
+    }
+    if (state.pendingMeet) return { text: sentText(await approveMeet(uid, { text: mine, userDoc: user })) };
+    return { text: 'Nothing to edit yet. Say "draft 2" after a search and I will write something you can change.' };
+  }
+  if (/^(cancel|never mind|drop it|discard)$/i.test(cmd.trim())) {
+    const r = await cancelMeet(uid, {});
+    const state = await loadState(uid);
+    if (r.cancelled) return { text: `Left unsent${r.targetName ? ` - ${r.targetName} will never hear about it` : ''}.` };
+    if (state.pendingLead) { await dropLeadDraft(uid); return { text: 'Dropped. Nothing was sent.' }; }
+    return { text: 'Nothing was waiting to go.' };
+  }
+  if (/^not interested\b/i.test(cmd.trim()) || /^never show\b/i.test(cmd.trim())) {
+    const idx = Number(cmd.match(/\d+/)?.[0] || 0);
+    const key = leadKeyByIdx(await loadState(uid), idx);
+    if (!key) return { text: 'Which one? "not interested 2".' };
+    const r = await markLead(uid, { key, status: 'not_interested' });
+    return { text: r.note };
+  }
+  if (/^(sent|i sent it|done sent|replied|they replied)\b/i.test(cmd.trim())) {
+    const state = await loadState(uid);
+    const r = await markLead(uid, { key: state.pendingLead?.key || '', status: 'sent' });
+    return { text: r.note };
+  }
+  // "draft 3" after a search = write the message for the third person I listed
+  if (/^draft\s+\d+$/i.test(cmd.trim())) {
+    return await draftForNumber(uid, user, Number(cmd.match(/\d+/)?.[0] || 1), channel);
+  }
+
   // ---- card decisions by number
   if (/^(meet|skip|save)\b/.test(cmd)) {
     const cards = await numbered();
@@ -232,7 +312,12 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
     try {
       if (cmd.startsWith('meet')) {
         const r = await meet(uid, card.id, { userDoc: user });
-        return { text: r.matchId ? `You are already connected with ${card.targetName}. Chat: ${APP_URL}/chat/${r.matchId}` : `Asked ${card.targetName}. I will tell you when they answer.${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today)` : ''}` };
+        if (r.matchId) return { text: `You are already connected with ${card.targetName}. Chat: ${APP_URL}/chat/${r.matchId}` };
+        if (r.awaitingThem || r.pending) return { text: `You already asked ${card.targetName}. I will tell you the moment they answer.` };
+        if (!r.needsApproval) return { text: `Asked ${card.targetName}.${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today)` : ''}` };
+        // Nothing reaches the other person until this member says so - on the bot
+        // that "yes" is one button, and "edit ..." lets them rewrite it in place.
+        return { text: draftText(r), buttons: approveButtons(card.id), chips: ['send', 'cancel'] };
       }
       await setCardStatus(uid, card.id, cmd.startsWith('skip') ? 'skip' : 'saved');
       return { text: cmd.startsWith('skip') ? `Skipped ${card.targetName}.` : `Saved ${card.targetName}.` };
@@ -258,7 +343,10 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
     if (!last?.need) return { text: 'Ask me who you need first, then I can go looking outside LINKUP.' };
     try {
       const r = await pointers(uid, last.need, { userDoc: user });
-      return { text: pointerText(r), buttons: r.leads?.length ? leadsKeyboard(r.leads) : undefined };
+      return {
+        text: pointerText(r), buttons: r.leads?.length ? leadsKeyboard(r.leads) : undefined,
+        chips: r.leads?.length ? ['draft 1', 'not interested 1'] : ['ask something else', 'help'],
+      };
     } catch (err) {
       return { text: String(err?.message || 'That did not work.') };
     }
@@ -269,11 +357,72 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
   try {
     const out = await ask(uid, message, { userDoc: user, source: channel });
     if (!out.cards.length) {
-      return { text: out.reply, chips: (out.suggest || []).filter((c) => !/outside LINKUP/i.test(c)).slice(0, 3) };
+      // the one chip that used to be filtered OUT here was the only way a member
+      // on Telegram could ever reach the LinkedIn search - now it is the first one
+      const chips = ['Look outside LINKUP', ...(out.suggest || []).filter((c) => !/outside LINKUP/i.test(c))].slice(0, 3);
+      return { text: out.reply, chips, ...(out.none ? { buttons: [{ text: '🔎 Search LinkedIn', callback_data: 'p:' + encodeURIComponent(out.need || '') }] } : {}) };
     }
     return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n')}`, cards: out.cards, chips: out.suggest };
   } catch (err) {
     return { text: String(err?.message || 'That did not work.') };
+  }
+}
+
+// ---------------------------------------------------------------- bot rendering
+// for the approval step
+const draftText = (r) => [
+  `Here is what ${r.targetName} would get. Read it - it does not move until you say send.`,
+  '',
+  r.pitch,
+  '',
+  'Reply SEND to send it as it is, or "edit <your own words>" to send yours instead.',
+  ...(r.meetsLeft != null ? [`(${r.meetsLeft} Meets left today.)`] : []),
+].join('\n');
+
+const sentText = (r) => (r.matchId
+  ? `You two are already connected, so no intro needed. Chat: ${APP_URL}/chat/${r.matchId}`
+  : `Sent to ${r.targetName || 'them'}. ${r.edited ? 'Your words, not mine. ' : ''}I will tell you the moment they answer.`);
+
+const approveButtons = (cardId) => ([
+  [{ text: '✅ Send it', callback_data: `y:${cardId}` }, { text: '✏️ Edit it', callback_data: `e:${cardId}` }],
+  [{ text: '✖️ Cancel', callback_data: `n:${cardId}` }],
+]);
+
+const leadDraftText = (r) => [
+  `This is what I would send ${r.lead.name}${r.lead.title ? ` (${r.lead.title})` : ''}. It goes nowhere until you paste it yourself:`,
+  '',
+  r.text,
+  '',
+  r.url ? `Their profile: ${r.url}` : '',
+  '',
+  'Reply SEND and I hold it for you to copy, or "edit ..." to make it yours first.',
+].filter((x) => x !== '').join('\n');
+
+const leadApproveButtons = () => ([
+  [{ text: '✅ Approve it', callback_data: 'ld:y' }, { text: '🚫 Never show again', callback_data: 'ld:n' }],
+]);
+
+// which person a number refers to, from the list Linky last showed
+function leadKeyByIdx(state, idx) {
+  const list = Array.isArray(state?.lastLeads) ? state.lastLeads : [];
+  if (!list.length) return '';
+  if (!idx || idx < 1) return state?.pendingLead?.key || list[0]?.key || '';
+  return list[Math.min(idx, list.length) - 1]?.key || '';
+}
+
+async function draftForNumber(uid, user, idx, channel) {
+  const state = await loadState(uid);
+  const lead = (Array.isArray(state.lastLeads) ? state.lastLeads : [])[Math.max(1, Number(idx) || 1) - 1];
+  if (!lead) return { text: 'I have nobody listed to write for. Ask me who you need, say MORE if nobody fits, then "draft 1".' };
+  const r = await draftLead(uid, { lead, key: lead.key, need: state.lastLeadsNeed || '', userDoc: user, source: channel });
+  return { text: leadDraftText(r), buttons: leadApproveButtons() };
+}
+
+async function approveFromBot(uid, user, cardId) {
+  try {
+    return { text: sentText(await approveMeet(uid, { cardId, userDoc: user })) };
+  } catch (err) {
+    return { text: String(err?.message || 'That did not go out.') };
   }
 }
 
@@ -285,19 +434,37 @@ const hiddenCount = (h = {}) => {
   return n ? `${n} fact${n === 1 ? '' : 's'}` : 'nothing';
 };
 
+// One person per block, the link on its own line so it is tappable on a phone and
+// copyable on a desktop. No run-on sentence with five names in it.
 function pointerText(r) {
   const leads = Array.isArray(r?.leads) ? r.leads : [];
-  const body = String(r?.text || '').trim();
-  if (!leads.length) return body;
-  const list = leads.map((l, i) => `${i + 1}. ${l.name}${l.title ? ` - ${l.title}` : ''}${l.why ? ` (${l.why})` : ''}\n   ${l.url}`).join('\n');
-  return `${body}\n\nHere are ${leads.length} public ${leads.length === 1 ? 'profile' : 'profiles'} I found just now - no contact details, just the public page:\n${list}\n\nMessage them yourself from your own account - or say DRAFT and I will write the first line for you.`;
+  const head = String(r?.intro || r?.text || '').trim();
+  if (!leads.length) {
+    const routes = (Array.isArray(r?.routes) ? r.routes : []).map((x, i) => `${i + 1}) ${String(x).trim()}`).filter((x) => x.length > 3).join('\n');
+    return [head, routes].filter(Boolean).join('\n\n');
+  }
+  const list = leads.map((l, i) => [
+    `${i + 1}. ${l.name}${l.title ? ` - ${l.title}` : ''}`,
+    l.why ? `   ${l.why}` : '',
+    `   ${l.url}`,
+  ].filter(Boolean).join('\n')).join('\n\n');
+  const extra = r.skipped ? `\n\n(${r.skipped} ${r.skipped === 1 ? 'person' : 'people'} I have already sent you did not make the list again.)` : '';
+  // the number in the hint has to be a number that exists on the list above
+  const n = leads.length > 1 ? 2 : 1;
+  const hint = leads.length > 1
+    ? `Say "draft ${n}" and I write the message for that one - you approve it and send it yourself. "not interested ${n}" and I never show them again.`
+    : `Say "draft 1" or tap Draft, and I write the message - you approve it and send it yourself. "not interested 1" and I never show them again.`;
+  return `${head}\n\n${list}${extra}\n\n${hint}`;
 }
 
 // One URL button per lead: the whole point of the web search is that the member
 // can open the profile, so nothing is left as prose to copy out. Telegram takes
 // 100 buttons; OUTREACH.maxLeads is 8, so every lead gets one.
 function leadsKeyboard(leads) {
-  return (leads || []).slice(0, 10).map((l, i) => ([{ text: `${i + 1}. ${String(l.name).slice(0, 22)}`, url: l.url }]));
+  return (leads || []).slice(0, 8).map((l, i) => ([
+    { text: `${i + 1}. ${String(l.name).slice(0, 24)}`, url: l.url },
+    { text: '✍️ Draft', callback_data: `w:${i + 1}` },
+  ]));
 }
 
 // "1" after an ambiguous name: the server turns that person into a real card.
@@ -366,16 +533,19 @@ async function handleTelegram(req, res) {
       const chatId = cq.message?.chat?.id;
       const r = await botReply('telegram', String(chatId), '', { callback: String(cq.data || '') });
       await telegramApi('answerCallbackQuery', { callback_query_id: cq.id, text: String(r.text).slice(0, 190) });
-      await sendTelegram(chatId, r.text);
+      await sendTelegram(chatId, r.text, r.buttons ? { inline_keyboard: r.buttons } : undefined);
     } else if (update?.message?.text) {
       const chatId = update.message.chat.id;
       // An ask can take a few seconds; "typing…" is the difference between a
       // chatbot and a voicemail box.
       await telegramApi('sendChatAction', { chat_id: chatId, action: 'typing' }).catch(() => null);
       const r = await botReply('telegram', String(chatId), update.message.text);
-      const markup = r.cards?.length
-        ? { inline_keyboard: telegramCardButtons(r.cards) }
-        : telegramChips(r.chips);
+      // buttons first (they act on something), then the reply-keyboard chips
+      const markup = r.buttons?.length
+        ? { inline_keyboard: r.buttons }
+        : r.cards?.length
+          ? { inline_keyboard: telegramCardButtons(r.cards) }
+          : telegramChips(r.chips);
       await telegramApi('sendMessage', { chat_id: chatId, text: r.text, disable_web_page_preview: true, ...(markup ? { reply_markup: markup } : {}) });
     } else if (update?.message?.chat?.id && !update?.message?.text) {
       // Voice notes, photos, stickers: no transcription here, so say so like a
@@ -480,7 +650,14 @@ async function handleApp(req, res) {
       case 'hideFact': out = await hideFact(uid, { kind: String(body.kind || ''), value: String(body.value || ''), hide: body.hide !== false }); break;
       case 'removeAsk': out = await removeAsk(uid, String(body.id || '')); break;
       case 'pointers': out = await pointers(uid, String(body.need || '')); break;
+      // Permissioned outreach: draft -> (optionally edit) -> approve -> the member
+      // sends. Nothing here talks to LinkedIn or the target on its own.
       case 'meet': out = await meet(uid, String(body.cardId || '')); break;
+      case 'approveMeet': out = await approveMeet(uid, { cardId: String(body.cardId || ''), text: String(body.text || '') }); break;
+      case 'cancelMeet': out = await cancelMeet(uid, { cardId: String(body.cardId || '') }); break;
+      case 'draftLead': out = await draftLead(uid, { lead: body.lead || null, key: String(body.key || ''), index: Number(body.index || 0), need: String(body.need || '') }); break;
+      case 'approveLead': out = await approveLead(uid, { key: String(body.key || ''), text: String(body.text || '') }); break;
+      case 'markLead': out = await markLead(uid, { key: String(body.key || ''), status: body.status === 'not_interested' ? 'not_interested' : 'sent', intentId: String(body.intentId || '') }); break;
       case 'pickPerson': out = await pickPerson(uid, String(body.targetUid || '')); break;
       case 'card': {
         const status = ['skip', 'saved', 'new'].includes(body.status) ? body.status : 'skip';

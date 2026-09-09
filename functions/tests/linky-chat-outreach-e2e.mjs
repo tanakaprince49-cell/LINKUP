@@ -258,6 +258,32 @@ br = await botReplyForTest('telegram', '777', 'who are you');
 assert(br.text.length > 20 && !/Nobody here fits/.test(br.text), 'small talk on Telegram is not answered with a search result');
 br = await botReplyForTest('telegram', '777', 'Where to look outside LINKUP');
 assert(has(br.text, /Outside LINKUP|found|profile/i), 'tapping the chip on Telegram maps to MORE: ' + br.text.slice(0, 70));
+// ---- the surface the member actually reads. The complaint was that Telegram
+// showed neither the people nor their LinkedIn profiles, so the taps are tested
+// where they are rendered, not only in the brain underneath.
+{
+  const lines = String(br.text).split('\n');
+  assert(/linkedin\.com\/in\//.test(br.text), 'the bot prints the public profile, so a phone tap opens it: ' + br.text.slice(0, 55).replace(/\n/g, ' | '));
+  assert(lines.some((l) => /^https?:\/\/\S*linkedin\.com\/in\//.test(l.trim())), 'the url gets a line of its own instead of being buried mid-sentence');
+  assert(Array.isArray(br.buttons) && br.buttons.some((row) => row.some((b) => /Draft/.test(b.text) && /^w:/.test(String(b.callback_data)))), 'and every person carries a Draft tap');
+  const tapped = await botReplyForTest('telegram', '777', '', { callback: 'w:1' });
+  assert(tapped.text.length > 90 && /paste|yourself|goes nowhere/i.test(tapped.text), 'a tap on Draft writes the message right there: ' + tapped.text.slice(0, 55).replace(/\n/g, ' | '));
+  const ids = JSON.stringify(tapped.buttons || []);
+  assert(/ld:y/.test(ids) && /ld:n/.test(ids), 'with approve and never-show-me-again as taps, not typing exercises');
+  const afterSent = await botReplyForTest('telegram', '777', 'sent');
+  assert(has(afterSent.text, /logged|reply/i), 'typing "sent" is understood: ' + afterSent.text.slice(0, 55));
+  const declined = await botReplyForTest('telegram', '777', 'not interested 2');
+  assert(has(declined.text, /gone|not put/i), 'and so is "not interested 2": ' + declined.text.slice(0, 55));
+  const again = await botReplyForTest('telegram', '777', 'more');
+  assert(!/Tinashe|Rutendo/.test(again.text) && /Nyasha/.test(again.text), 'the two they dealt with are not re-served, the one still new is: ' + again.text.slice(0, 50).replace(/\n/g, ' | '));
+  assert(/2 are already in your outreach history|2 people I have already sent/.test(again.text) && /1 is still new to you/.test(again.text), 'and it says plainly how many the search found versus what is left: ' + again.text.slice(0, 70).replace(/\n/g, ' | '));
+  assert(again.text.split('\n').filter((l) => /^https?:\/\//.test(l.trim())).length === 1, 'one line per remaining profile, and only that one: ' + again.text.split('\n').filter((l) => /^https?:/.test(l.trim())).length);
+  assert(!/Say "draft 2"/.test(again.text) && /draft 1/.test(again.text), 'the hint points at a number that is on the list: ' + String(again.text).split('\n').pop());
+  const fsTg = await import('node:fs');
+  const srcTg = fsTg.readFileSync(new URL('../../api/linky.js', import.meta.url), 'utf8');
+  assert(/r\.buttons\?\.length\s*\?\s*\{\s*inline_keyboard: r\.buttons\s*\}/.test(srcTg), 'the message path attaches those buttons to the Telegram send');
+  assert(/sendTelegram\(chatId, r\.text, r\.buttons \? \{ inline_keyboard: r\.buttons \} : undefined\)/.test(srcTg), 'and so does the callback path, so a tap is answered with taps');
+}
 br = await botReplyForTest('telegram', '777', 'a blockchain lawyer in lagos right now');
 
 // the slash menu BotFather shows and what botReply() actually answers must not drift:
@@ -401,15 +427,63 @@ const noMatch = await L.ask('freda', 'a veterinary surgeon for a cattle clinic i
 assert(noMatch.none, 'setup: a need LINKUP genuinely does not cover (' + noMatch.reply.slice(0, 60) + ')');
 const beforePt = { ...calls };
 const pointers = await L.pointers('freda', 'a veterinary surgeon for a cattle clinic in Gweru');
-assert(pointers.leads.length >= 1 && /Tendai Mhlanga/.test(pointers.text), 'outside LINKUP now names a real person it found: ' + String(pointers.text).slice(-180).replace(/\n/g, ' '));
+assert(pointers.leads.length >= 1 && pointers.leads[0].name && /Tendai/i.test(pointers.leads[0].name), 'outside LINKUP returns the person it found as data: ' + JSON.stringify(pointers.leads[0]).slice(0, 120));
 assert(calls.serp - beforePt.serp === 1, 'one search for one question, whatever the member count');
-assert(has(pointers.text, /no contact details/i), 'and says plainly what it did not collect');
+assert(has(pointers.text, /not collect contact details|no contact details/i), 'and the one line it does say tells them plainly what was not collected');
+// the presentation the member complained about: the prose used to paste the whole
+// list into itself, so the app showed every name twice and the bot read it as a wall
+assert(pointers.text.split('\n').length <= 2 && !/;/.test(pointers.text) && !/Tendai/.test(pointers.text), 'the prose is a short intro, not the list again: ' + JSON.stringify(pointers.text).slice(0, 90));
+assert(pointers.found === pointers.leads.length && pointers.intro.length > 30, 'and the answer carries intro/found/leads, so any surface can render it as rows');
+assert(pointers.leads[0].key && pointers.leads.every((l) => l.key), 'every lead has a key, which is what lets a decline stick');
 // the bubble names them; the link travels as data so the app can open it and the
 // bot can render it as a button - a bare url pasted into prose is the worst of both
-assert(/Tendai Mhlanga - Veterinary Surgeon/.test(pointers.text), 'each lead is named with their title');
+assert(has(pointers.leads[0].title, /veterinary|surgeon/i) && !/&[a-z]+;|&#\d+;/.test(pointers.leads[0].title), 'each lead arrives with a clean title, no HTML entities left in it');
+assert(pointers.title === undefined && typeof pointers.leads[0].name === 'string' && !/\.{3}$/.test(pointers.leads[0].title), 'and the title is not sliced mid-word by a hard character cap');
 assert(/^https:\S*linkedin\.com\/in\//.test(pointers.leads[0].url || ''), 'and carries a public profile URL the client can open :: ' + JSON.stringify(pointers.leads[0]));
 assert(pointers.leads.every((l) => l.resolved || /google\.com\/search/.test(l.url)), 'an unresolved link stays an honest search fallback, never a broken profile url');
 assert(!/\{|"reply"/.test(pointers.text), 'the advice is prose, never the raw model JSON');
+
+// ================================================================ permissioned outreach
+// The rule the whole feature hangs on: Linky writes, a human approves, exactly one
+// message moves - and every intent, sent or declined, is kept so the graph learns.
+const dk = await L.draftLead('freda', { index: 1 });
+assert(dk.ok && dk.key === pointers.leads[0].key && dk.text.length > 60, 'a draft exists for the tapped person, keyed to them: ' + JSON.stringify({ key: dk.key, n: dk.text.length }));
+assert(/Tendai|vet|clinic|surgeon/i.test(dk.text), 'and it names their actual work rather than a template: ' + dk.text.slice(0, 70).replace(/\n/g, ' '));
+assert(dk.url === pointers.leads[0].url && /paste this/i.test(dk.howTo), 'the profile URL travels with it, and the instruction is that the member sends it');
+assert(!/hope this finds you well|I would love to pick|game-?changer|thrilled|excited to connect/i.test(dk.text), 'the lead draft is not slop');
+assert((await L.home('freda')).pending?.lead?.key === dk.key, 'the draft waits on the member, and survives a reload');
+assert(!(await db.collection('outreachIntents').where('uid', '==', 'freda').get()).size, 'nothing is recorded as approved while nobody has read it');
+const OWN = 'Dr Mhlanga - Freda here, I run a small animal practice in Gweru. Two cattle cases we cannot triage are sitting on my desk. Fifteen minutes of your opinion on them, this week or next? If it is not something you want, say no and I will not ask again.';
+const ap = await L.approveLead('freda', { key: dk.key, text: OWN });
+assert(ap.ok && ap.edited && ap.text === OWN && ap.intentId, 'the member may rewrite it, and their words are what is kept: ' + JSON.stringify({ edited: ap.edited, id: !!ap.intentId }));
+assert(ap.url === pointers.leads[0].url, 'approve hands the profile back to open, it does not send anything itself');
+const rec = await db.collection('outreachIntents').doc(ap.intentId).get();
+assert(rec.exists && rec.data().status === 'approved_for_self_send' && rec.data().text === OWN, 'the intent is stored as a graph record: who, what, and that a human approved it');
+const trail = (await L.home('freda')).outreach || [];
+assert(trail.some((e) => e.key === dk.key && e.status === 'drafted') && trail.some((e) => e.key === dk.key && e.status === 'approved'), 'and the member state keeps the whole trail, drafted then approved');
+assert(trail.every((e) => e.name), 'every trail row says who it was about');
+// decline is a mute, and it survives the cache - without spending another credit
+const dk2 = await L.draftLead('freda', { index: 1 });
+const mute = await L.markLead('freda', { key: dk2.key, status: 'not_interested' });
+assert(mute.muted === true && /not put them in front/i.test(mute.note), 'a decline mutes, in plain words: ' + mute.note);
+const serpsBefore = calls.serp;
+const after = await L.pointers('freda', 'a veterinary surgeon for a cattle clinic in Gweru');
+assert(after.cached && !after.leads.some((l) => l.key === dk2.key) && after.skipped >= 1, 'the muted person is gone from the cached answer too, and the count says why: ' + JSON.stringify({ found: after.found, skipped: after.skipped }));
+assert(calls.serp === serpsBefore, 'and that was done from state, not by re-searching - the free plan stays intact');
+assert(after.routes.length >= 1, 'with nobody left to show, it falls back to routes instead of a dead end');
+// "sent" is its own remembered state
+const dk3 = await L.draftLead('freda', { index: 1 });
+const sentMark = await L.markLead('freda', { key: dk3.key, status: 'sent' });
+assert(sentMark.status === 'sent' && /bring them into LINKUP/i.test(sentMark.note), '"sent" is logged and points at the next step: ' + sentMark.note);
+assert(((await L.home('freda')).outreach || []).some((e) => e.key === dk3.key && e.status === 'sent'), 'the trail shows the message the member actually sent');
+// a draft can be dropped, and dropping one is not a failure
+await L.draftLead('freda', { index: 1 });
+await L.dropLeadDraft('freda');
+assert(!(await L.home('freda')).pending?.lead, 'a dropped draft leaves nothing pending');
+// approving something that was never drafted is refused, not faked
+let badLead = null;
+try { await L.approveLead('freda', { key: 'nope', text: 'a perfectly reasonable sentence about meeting up' }); } catch (err) { badLead = err; }
+assert(badLead && /write it first/i.test(badLead.message), 'approve with nothing pending says so: ' + String(badLead?.message));
 
 // ================================================================ what Linky is not told
 await resetBudgets();
@@ -479,11 +553,14 @@ const noKey = await (async () => {
 })();
 assert(noKey.usedAi === false && noKey.pitch.length > 60 && /Carrie/.test(noKey.pitch), 'with no key at all he still writes something a human would send');
 if (target) {
-  const meetRes = await L.meet('alice', target.id);
+  const drafted = await L.meet('alice', target.id);
+  assert(drafted.needsApproval && /Carrie/.test(drafted.pitch) && drafted.pitch.length > 60, 'he drafts for Carrie and stops there: ' + drafted.pitch.slice(0, 60));
+  assert(!(await db.collection('notifications').where('userId', '==', 'carrie').where('type', '==', 'intro_request').get()).size, 'and Carrie is told nothing until Alice approves');
+  const meetRes = await L.approveMeet('alice', { cardId: target.id });
   const introDoc = meetRes.introId ? (await db.collection('intros').doc('alice_carrie').get()).data() : null;
+  assert(introDoc && introDoc.pitch === drafted.pitch, 'what Alice approved is what the intro stores, unchanged');
   const note = (await db.collection('notifications').where('userId', '==', 'carrie').where('type', '==', 'intro_request').get()).docs[0]?.data();
-  assert(!!note && /Ruwa|honey|bee/i.test(note.content || ''), 'the notification Carrie receives is the written pitch, not a form letter: ' + String(note?.content).slice(0, 80));
-  assert(meetRes.channelText ? /ACCEPT/.test(meetRes.channelText) : true, 'on a bot the pitch ends with the three words to reply with');
+  assert(!!note && /Ruwa|honey|bee/i.test(note.content || ''), 'the notification Carrie receives is the approved pitch, not a form letter: ' + String(note?.content).slice(0, 80));
 }
 
 // ================================================================ the second key
