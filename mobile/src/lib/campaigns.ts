@@ -554,15 +554,27 @@ export const updateCampaignCreative = async (
   const placements = (patch.placements.length ? patch.placements : ['ideas']).filter((placement) =>
     CAMPAIGN_PLACEMENT_OPTIONS.some((option) => option.id === placement && option.available)
   );
-  await updateDoc(doc(db, 'campaigns', campaignId), {
-    name: patch.name.slice(0, 90),
-    creative: patch.creative,
-    industries: patch.industries.slice(0, 6),
-    placements: placements.length ? placements : ['ideas'],
-    // an edit to a serving campaign leaves a mark moderation can work from
-    ...(options.wasLive ? { liveEditedAt: serverTimestamp() } : {}),
-    updatedAt: serverTimestamp(),
-  });
+  try {
+    await updateDoc(doc(db, 'campaigns', campaignId), {
+      name: patch.name.slice(0, 90),
+      creative: patch.creative,
+      industries: patch.industries.slice(0, 6),
+      placements: placements.length ? placements : ['ideas'],
+      // an edit to a serving campaign leaves a mark moderation can work from
+      ...(options.wasLive ? { liveEditedAt: serverTimestamp() } : {}),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    // A refusal here is almost never the owner's fault: the rules that allow a
+    // live edit ship separately from the app, and CI can only release them with
+    // a service account that holds the Rules Admin role. Say which it was.
+    if (String((err as { code?: string } | null)?.code || '') === 'permission-denied') {
+      throw new Error(
+        'Firestore refused the edit. Nothing was saved - if this campaign is live, the newest security rules may not be deployed yet (GitHub Action "Firestore rules deploy" reports the same 403 when the service account lacks Firebase Rules Admin).'
+      );
+    }
+    throw err;
+  }
   if (options.wasLive) {
     await notifyCampaignAdmins(
       campaignId, options.ownerName || 'Owner', options.productName || patch.name,
