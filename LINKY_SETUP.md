@@ -148,6 +148,27 @@ link-unwrapping are asserted against it.
    Pass `--webhook https://linkup-muqu.vercel.app/api/telegram` to (re)register the webhook from the same script.
 6. Nothing else: Gemini and the Firebase service account are already in Vercel; housekeeping authenticates with a Google token from the existing GitHub secret.
 
+### How the outside answer is written (and re-written)
+
+`pointers()` returns data, not decoration: `{intro, routes, leads, found, skipped,
+searches, place}`. Every text-only surface renders that with one function
+(`renderPointers` in `api/_linky.js`, `pointerText` in `api/linky.js`), so the app
+cannot print the list twice behind the prose. Three small things keep it human:
+`polishNeed()` reduces `find a 5 star tutor` to `5-star tutor` instead of throwing
+the member's sentence back at them, `showPlace()` capitalises the parsed city for
+display while the **query keeps the raw string** (so the 7-day result cache still
+hits and no credit is re-spent), and `tidyTitle()`/`decodeEntities()` run again when
+a cached SERP is replayed, because a run stored before the fix carried
+`Electrical &amp; Electronic` and a mid-word `...`. The pointers cache key is
+`p2_` + a shape guard (`intro` present, `leads` an array) precisely so a
+legacy one-paragraph answer can never come back.
+
+Telegram sends go through `sendTelegram`, which splits at paragraph boundaries
+under 3800 chars, refuses to cut inside an `http` URL, puts the inline keyboard on
+the last chunk, and logs the `description` Telegram gives back. Before this, a long
+answer was `slice(0, 4000)`-ed or rejected with a 400 that nobody could see - which
+is what "it is not pulling up the links" actually was.
+
 ## Permissioned outreach: Linky drafts, the member sends
 
 Nothing Linky writes reaches another human on its own. That is true of the internal

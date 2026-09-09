@@ -399,7 +399,16 @@ export async function findLeads(need, { place = '', plus = false, uid = '', aske
   const cached = await cacheRef.get().catch(() => null);
   if (cached && cached.exists && Date.now() - toMillis(cached.data().at) < OUTREACH.cacheDays * DAY) {
     // Rule 1 of the cheap kind: the same need again costs no search and no token.
-    return { leads: cached.data().leads || [], searches: 0, cached: true, query: primary, note: 'cached' };
+    // Re-tidied on the way out, because a run saved before the entity fix would
+    // otherwise hand a member "Electrical &amp; Electronic" and a cut-off title.
+    const saved = Array.isArray(cached.data().leads) ? cached.data().leads : [];
+    const leads = saved.map((l) => ({
+      ...l,
+      name: tidyTitle(l?.name, 60),
+      title: tidyTitle(l?.title, 110),
+      why: tidyTitle(l?.why, 52),
+    })).filter((l) => l.name && l.url);
+    return { leads, searches: 0, cached: true, query: primary, note: 'cached' };
   }
   const budget = await canSearch({ plus, uid });
   if (!budget.ok) {

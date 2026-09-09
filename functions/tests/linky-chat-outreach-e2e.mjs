@@ -276,7 +276,7 @@ assert(has(br.text, /Outside LINKUP|found|profile/i), 'tapping the chip on Teleg
   assert(has(declined.text, /gone|not put/i), 'and so is "not interested 2": ' + declined.text.slice(0, 55));
   const again = await botReplyForTest('telegram', '777', 'more');
   assert(!/Tinashe|Rutendo/.test(again.text) && /Nyasha/.test(again.text), 'the two they dealt with are not re-served, the one still new is: ' + again.text.slice(0, 50).replace(/\n/g, ' | '));
-  assert(/2 are already in your outreach history|2 people I have already sent/.test(again.text) && /1 is still new to you/.test(again.text), 'and it says plainly how many the search found versus what is left: ' + again.text.slice(0, 70).replace(/\n/g, ' | '));
+  assert(/2 already in your outreach history|2 people I have already sent/.test(again.text) && /1 is new to you/.test(again.text), 'and it says plainly how many the search found versus what is left: ' + again.text.slice(0, 70).replace(/\n/g, ' | '));
   assert(again.text.split('\n').filter((l) => /^https?:\/\//.test(l.trim())).length === 1, 'one line per remaining profile, and only that one: ' + again.text.split('\n').filter((l) => /^https?:/.test(l.trim())).length);
   assert(!/Say "draft 2"/.test(again.text) && /draft 1/.test(again.text), 'the hint points at a number that is on the list: ' + String(again.text).split('\n').pop());
   const fsTg = await import('node:fs');
@@ -429,7 +429,7 @@ const beforePt = { ...calls };
 const pointers = await L.pointers('freda', 'a veterinary surgeon for a cattle clinic in Gweru');
 assert(pointers.leads.length >= 1 && pointers.leads[0].name && /Tendai/i.test(pointers.leads[0].name), 'outside LINKUP returns the person it found as data: ' + JSON.stringify(pointers.leads[0]).slice(0, 120));
 assert(calls.serp - beforePt.serp === 1, 'one search for one question, whatever the member count');
-assert(has(pointers.text, /not collect contact details|no contact details/i), 'and the one line it does say tells them plainly what was not collected');
+assert(has(pointers.text, /no contact details|no emails|not collect/i), 'and the one line it does say tells them plainly what was not collected: ' + pointers.text.slice(0, 90));
 // the presentation the member complained about: the prose used to paste the whole
 // list into itself, so the app showed every name twice and the bot read it as a wall
 assert(pointers.text.split('\n').length <= 2 && !/;/.test(pointers.text) && !/Tendai/.test(pointers.text), 'the prose is a short intro, not the list again: ' + JSON.stringify(pointers.text).slice(0, 90));
@@ -442,6 +442,40 @@ assert(pointers.title === undefined && typeof pointers.leads[0].name === 'string
 assert(/^https:\S*linkedin\.com\/in\//.test(pointers.leads[0].url || ''), 'and carries a public profile URL the client can open :: ' + JSON.stringify(pointers.leads[0]));
 assert(pointers.leads.every((l) => l.resolved || /google\.com\/search/.test(l.url)), 'an unresolved link stays an honest search fallback, never a broken profile url');
 assert(!/\{|"reply"/.test(pointers.text), 'the advice is prose, never the raw model JSON');
+
+// ---- the reply a member actually reads: no stale shapes, no entities, no echoes
+{
+  const cacheDocs = await db.collection('linkyCache').get();
+  assert(cacheDocs.docs.some((d) => d.id.startsWith('p2_')), 'the outside answer is cached under a new key, so prose written in the old run-on shape can never be replayed');
+  await Promise.all(cacheDocs.docs.filter((d) => d.id.startsWith('p2_')).map((d) => d.ref.delete()));
+  const serpsNow = calls.serp;
+  const warm = await L.pointers('freda', 'a veterinary surgeon for a cattle clinic in Gweru');
+  assert(calls.serp === serpsNow && warm.leads.length >= 1, 're-asking after the bump reuses the saved SERP at 0 credits, and still answers with people: ' + JSON.stringify({ s: calls.serp - serpsNow, n: warm.leads.length }));
+  assert(/earlier/.test(warm.intro) && !/just now/.test(warm.intro), 'and it admits it reused a search instead of claiming a new one: ' + warm.intro.slice(0, 70));
+  assert(!/&amp;|&#\d+;|\.{3}/.test(warm.text + warm.leads.map((l) => `${l.name} ${l.title} ${l.why}`).join(' ')), 'no raw HTML entities and no dangling ellipsis anywhere in the reply');
+  assert(!/^outside linkup/i.test(warm.intro) && !/outreach line/i.test(warm.text), 'it does not restate the label printed above it, and the old "Outreach line:" stamp is gone');
+  assert(warm.text.length < 700, 'one readable block on Telegram, not an essay: ' + warm.text.length + ' chars');
+  // and the ask stops being parroted back at the member
+  assert(L.polishNeed('find a 5 star tutor') === '5-star tutor', 'the ask is reduced to what they are after: ' + L.polishNeed('find a 5 star tutor'));
+  assert(L.polishNeed('looking for a flutter developer in harare') === 'flutter developer in harare', 'verbs and filler come off the front');
+  assert(L.polishNeed('a vet') === 'a vet' && L.polishNeed('') === '', 'and a short ask is never stripped into nonsense');
+  const parrot = await L.pointers('freda', 'a veterinary surgeon for a cattle clinic in Gweru').catch(() => null);
+  assert(parrot === null || !/find a |looking for /.test(parrot.intro), 'the intro never contains the instruction, only the thing');
+}
+
+// ---- a long answer must still arrive: Telegram refuses >4096 chars, and the old
+// code "handled" it with slice(0,4000), which cut links mid-handle
+{
+  const leadLine = (i) => `${i}. Person Surname - Senior Electrical & Electronic Engineer\n   ships fintech rails\n   https://zw.linkedin.com/in/some-person-${i}-with-a-longish-handle-123456`;
+  const big = ['Nobody on LINKUP does this yet. Public profiles only.', '', ...Array.from({ length: 60 }, (_, i) => leadLine(i + 1)).flatMap((x) => [x, ''])].join('\n');
+  const chunks = L.splitTelegram(big);
+  assert(chunks.length >= 2 && chunks.every((c) => c.length <= 4096), 'a 9k answer is split into Telegram-sized pieces, not truncated: ' + chunks.map((c) => c.length).join('/'));
+  const urls = (t) => (String(t).match(/https:\/\/\S+/g) || []);
+  assert(urls(chunks.join('\n')).length === urls(big).length && urls(chunks.join('\n')).every((u) => /-123456$/.test(u)), 'every profile URL survives the split whole: ' + urls(chunks.join('\n')).length + '/' + urls(big).length);
+  const srcTg2 = (await import('node:fs')).readFileSync(new URL('../../api/linky.js', import.meta.url), 'utf8');
+  assert(!/telegramApi\('sendMessage'/.test(srcTg2), 'the webhook sends through the splitter on the message path too, so a 400 cannot silently eat a reply');
+  assert(/sendTelegram\(chatId, r\.text, markup\)/.test(srcTg2), 'and the typed path uses it with the markup attached');
+}
 
 // ================================================================ permissioned outreach
 // The rule the whole feature hangs on: Linky writes, a human approves, exactly one

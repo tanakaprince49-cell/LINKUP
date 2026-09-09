@@ -89,7 +89,8 @@ const pointer = await L.pointers('alice', 'a quantum cryptography professor from
 // paragraph that repeats as prose the list the client renders as rows
 assert(!pointer.cached && Array.isArray(pointer.routes) && pointer.routes.length >= 2, 'pointers hand back numbered routes as data, not one long sentence');
 assert(/Oslo|Harare/.test(pointer.text) && pointer.text.split('\n').length >= 3, 'and the text is readable lines, not a wall: ' + JSON.stringify(pointer.text.slice(0, 60)));
-assert(!/1\) LinkedIn - search/.test(pointer.text), 'the old "three quick routes" template is gone');
+assert(!/together with|filter by location|Outreach line|quick routes/i.test(pointer.text), 'the old "three quick routes ... Outreach line:" template is gone for good');
+assert(/Posted this month|recent noise|LinkedIn - search/i.test(pointer.text), 'the routes it gives read like advice from a person: ' + pointer.text.split('\n')[1]);
 assert(typeof pointer.intro === 'string' && pointer.intro.length > 30 && pointer.intro.length < 320, 'a short intro line, not a speech');
 const pointer2 = await L.pointers('alice', 'a quantum cryptography professor from Oslo');
 assert(pointer2.cached && pointer2.routes.length === pointer.routes.length, 'pointers are cached per ask, same shape second time');

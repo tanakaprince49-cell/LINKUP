@@ -316,18 +316,76 @@ export async function ensureTelegramWebhook(baseUrl) {
   return { configured: true, url, changed: true, ok: !!set?.ok, description: set?.description || '' };
 }
 
+// Telegram refuses anything over 4096 characters, and the old code "solved" that
+// with slice(0, 4000) - which is how a member ended up with half a message or no
+// message at all, links cut in the middle of a URL. Split on the paragraph
+// boundary instead; a chunk only gets hard-cut if a single paragraph is huge.
+const TG_LIMIT = 3800;
+export function splitTelegram(message, max = TG_LIMIT) {
+  const t = String(message || '').replace(/\r/g, '');
+  if (!t.trim()) return [];
+  if (t.length <= max) return [t];
+  const out = [];
+  let cur = '';
+  const flush = () => { if (cur.trim()) out.push(cur.trim()); cur = ''; };
+  for (const para of t.split(/\n{2,}/)) {
+    const next = cur ? `${cur}\n\n${para}` : para;
+    if (next.length <= max) { cur = next; continue; }
+    flush();
+    if (para.length > max) out.push(...chunkLeadsSafe(para, max));
+    else cur = para;
+  }
+  flush();
+  return out.filter(Boolean);
+}
+// a lead list must never be cut between "https://" and the handle: keep every
+// http(s) URL whole by refusing to split inside one
+function chunkLeadsSafe(para, max) {
+  const out = [];
+  let rest = para;
+  while (rest.length > max) {
+    let at = -1;
+    const nl = rest.lastIndexOf('\n', max);
+    const sp = rest.lastIndexOf(' ', max);
+    at = nl > max * 0.5 ? nl : sp > max * 0.5 ? sp : max;
+    const urlAt = rest.lastIndexOf('http', at);
+    if (urlAt > 0) {
+      const end = rest.indexOf(' ', urlAt);
+      if (end === -1 || end > at) at = urlAt;   // the url would be cut: stop before it
+    }
+    if (at <= 0) at = max;
+    out.push(rest.slice(0, at).trimEnd());
+    rest = rest.slice(at).replace(/^\s+/, '');
+  }
+  if (rest.trim()) out.push(rest.trim());
+  return out;
+}
+
 export async function sendTelegram(chatId, message, markup) {
   const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
   if (!token || !chatId) return false;
-  const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId, text: String(message).slice(0, 4000), disable_web_page_preview: true,
-      ...(markup ? { reply_markup: markup } : {}),
-    }),
-    signal: AbortSignal.timeout(8000),
-  }).catch(() => null);
-  return !!resp?.ok;
+  const chunks = splitTelegram(message);
+  if (!chunks.length) return false;
+  let ok = true;
+  for (let i = 0; i < chunks.length; i += 1) {
+    const isLast = i === chunks.length - 1;
+    const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId, text: chunks[i], disable_web_page_preview: true,
+        // taps belong on the last message of the burst, where the member is reading
+        ...(isLast && markup ? { reply_markup: markup } : {}),
+      }),
+      signal: AbortSignal.timeout(8000),
+    }).catch((err) => { console.warn('[linky] telegram send threw', err?.message || err); return null; });
+    if (!resp?.ok) {
+      ok = false;
+      const body = await Promise.resolve(resp && typeof resp.json === 'function' ? resp.json().catch(() => null) : null);
+      console.warn('[linky] telegram sendMessage rejected', resp?.status || '', body?.error_code || '', String(body?.description || '').slice(0, 120));
+    }
+    if (!isLast) await new Promise((r) => setTimeout(r, 120));
+  }
+  return ok;
 }
 
 export async function sendWhatsApp(waId, message) {
@@ -1026,16 +1084,49 @@ export function outreachTrail(state) {
   return { entries: t, muted, sent, declined, pending: state?.pendingLead || null, pendingMeet: state?.pendingMeet || null };
 }
 
+// "find a 5 star tutor" is an instruction to Linky, not the name of a person.
+// Repeating the whole ask back at someone is what makes a reply read like a
+// search log, so the ask gets reduced to the thing they are after.
+const NEED_NOISE = /^(?:hey\s+|hi\s+|please\s+|so\s+|look\s+)?(?:can you |could you |would you |will you |do you know )?(?:i\s+(?:really\s+|badly\s+)?(?:need to find|need|want to find|want|am looking for|am searching for|would like)|we\s+(?:are|'re)\s+looking for|find(?: me)?|looking for|look for|search for|need(?:s)? to find|need|want|help me find|introduce me to|connect me to|connect me with|get me|set me up with|any)\s+(?:a|an|some|the|my|one)?\s+/i;
+export function polishNeed(need) {
+  let t = String(need || '').replace(/\s+/g, ' ').trim().replace(/[.?!;,:]+$/g, '');
+  for (let i = 0; i < 3; i += 1) {
+    const prev = t;
+    t = t.replace(NEED_NOISE, '').replace(/^(?:me|for|to)\s+/i, '').trim();
+    if (t === prev) break;
+  }
+  t = t.replace(/\b(\d+)\s*star\b/gi, '$1-star')
+    .replace(/\s+(?:right now|asap|today|tomorrow|urgently|now)$/i, '')
+    .replace(/[.?!;:]+$/g, '');
+  return text(t || need, 80);
+}
+
+// Place names come out of the parser lowercase ("oslo"), which is how a reply
+// starts to read like a log file. Display gets them capitalised; the search query
+// keeps what it had, so the 7-day result cache still hits and no credit is spent.
+export function showPlace(v) {
+  return text(String(v || '')
+    .replace(/\b[a-z]{2,}\b/g, (w, i, str) => (i && /[^\s,]/.test(str[i - 1]) ? w : w[0].toUpperCase() + w.slice(1)))
+    .replace(/\b(Usa|Uk|Eu|Us|Za|Nz|Zimb)\b/g, (m) => m.toUpperCase()), 60);
+}
+
+// Linky never announces the box he is inside, and the model sometimes starts a
+// sentence with the label the client already printed above it.
+const tidyIntroLine = (v) => text(String(v || '')
+  .replace(/^\s*(?:outside\s+(?:of\s+)?link(?:up)?)\s*[\-:,.]?\s*/i, '')
+  .replace(/\s*\boutreach line\b[\s:\-].*$/i, ''), 320);
+
 // Where to look when a search came back empty. Same three routes a person would
 // try themselves, in the order that actually gets an answer.
 function fallbackRoutes(need, place) {
   const terms = String(need || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
     .filter((t) => t.length > 3 && !['with', 'that', 'this', 'from', 'have', 'into', 'your', 'they', 'them', 'want', 'need', 'looking', 'somebody', 'someone', 'please'].includes(t))
     .slice(0, 3).join(' ') || need;
+  const city = String(place || '').split(',')[0].trim() || 'your city';
   return [
-    `LinkedIn: search "${text(terms, 80)}" plus "${place}" and message the two people who posted something recently.`,
-    `The professional body or university department for it in ${place} - they know who is doing the work right now.`,
-    'The WhatsApp or Telegram group for that trade: ask for one referral, not a list.',
+    `LinkedIn - search "${text(terms, 80)}" with "${city}", then message the two people who posted something this month. Recent noise beats a tidy profile.`,
+    `The association, institute or university department that covers it in ${city}. Ask one person who runs it - they know exactly who is doing the work.`,
+    `The trade's WhatsApp or Telegram group: ask for one referral, not a list. One warm name is worth twenty cold ones.`,
   ];
 }
 
@@ -1056,33 +1147,41 @@ export async function pointers(uid, need, { userDoc, allowSearch = true } = {}) 
   const known = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : []), ...(Array.isArray(state.askHistory) ? state.askHistory : [])]
     .filter(Boolean).some((a) => (a.norm ? a.norm === q.norm : parseAsk(a.need || '').norm === q.norm));
   if (!known) throw new Error('Ask me that first, then I can point you outside LINKUP.');
-  const ref = db().collection('linkyCache').doc(cacheKey('p', q.norm));
+  // p2: the shape changed (intro + routes + leads instead of one long sentence),
+  // so an answer written by the old code is not read at all. The search itself is
+  // still served from _serpapi's 7-day result cache, so this costs no credit.
+  const ref = db().collection('linkyCache').doc(cacheKey('p2', q.norm));
   const snap = await ref.get().catch(() => null);
   const me = profileFacts(user) || {};
   const place = q.location || [me.city, me.country].filter(Boolean).join(', ') || 'Zimbabwe';
+  // display-only forms of the place (the search query keeps the raw string, so the
+  // 7-day result cache still hits and no credit is spent re-running a warm search)
+  const placeShow = showPlace(place) || 'Zimbabwe';
+  const city = showPlace(String(place || '').split(',')[0].trim()) || 'Zimbabwe';
   const state2 = state;
   const trail0 = outreachTrail(state2);
-  if (snap?.exists && Date.now() - toMillis(snap.data().createdAt) < 7 * DAY_MS) {
+  if (snap?.exists && snap.data().intro && Array.isArray(snap.data().leads)
+    && Date.now() - toMillis(snap.data().createdAt) < 7 * DAY_MS) {
     const d = snap.data();
     // re-filtered on the way out, so a lead the member already wrote to (or told
     // Linky to never show again) does not come back from the cache
     const cached = (Array.isArray(d.leads) ? d.leads : [])
       .filter((l) => !leadHit(leadKey(l), trail0.muted) && !leadHit(leadKey(l), trail0.sent))
       .map((l) => ({ ...l, key: leadKey(l) }));
-    let intro = text(d.intro || (cached.length ? `Five minutes ago I ran one LinkedIn search for "${q.need}" - these are the ${cached.length} I would message:` : ''), 300);
+    let intro = tidyIntroLine(d.intro) || text(cached.length ? `A LinkedIn search I ran earlier for "${polishNeed(q.need)}" - these ${cached.length} are still the ones I would message:` : '', 300);
     let routes = list(d.routes, 3, 200);
     const skipped = Math.max(0, (Array.isArray(d.leads) ? d.leads.length : 0) - cached.length);
     // a cached answer the member has since muted people out of must not be left
     // claiming there was somebody to message, with nothing under it
     const total = Array.isArray(d.leads) ? d.leads.length : 0;
     if (!cached.length && skipped) {
-      intro = `Nobody on LINKUP does "${q.need}" yet, and all ${total} from that LinkedIn search are already in your outreach history - so here is where I would look myself:`;
-      routes = fallbackRoutes(q.need, place);
+      intro = `Nobody on LINKUP does "${polishNeed(q.need)}" yet, and all ${total} from that LinkedIn search are already in your outreach history - so here is where I would look myself:`;
+      routes = fallbackRoutes(q.need, city || placeShow);
     } else {
       // the saved intro describes the search as it ran; once some leads have been
       // used up it over-promises, so restate the count that is actually on screen
       if (skipped && cached.length) {
-        intro = `Nobody on LINKUP does "${q.need}" yet. That LinkedIn search turned up ${total}, ${cached.length} ${cached.length === 1 ? 'is' : 'are'} still new to you and ${skipped} ${skipped === 1 ? 'is' : 'are'} already in your outreach history:`;
+        intro = `Nobody on LINKUP does "${polishNeed(q.need)}" yet. That LinkedIn search turned up ${total}: ${cached.length} ${cached.length === 1 ? 'is' : 'are'} new to you, ${skipped} ${skipped === 1 ? 'is' : 'are'} already in your outreach history, so they will not be shown twice:`;
       }
       if (!cached.length && !routes.length) routes = fallbackRoutes(q.need, place);
     }
@@ -1113,25 +1212,26 @@ export async function pointers(uid, need, { userDoc, allowSearch = true } = {}) 
   // back to on any surface, and what makes the same person stick next time
   const leads = fresh.slice(0, plus ? 8 : 5).map((l) => ({ ...l, key: leadKey(l) }));
 
+  const needShort = polishNeed(q.need);
   let intro = '';
   let routes = [];
   if (aiReady()) {
     try {
       const brief = leads.length
         ? [
-            `You are Linky, the connector for LINKUP. A member in ${place} asked for "${q.need}", LINKUP has nobody for it yet, so you searched public LinkedIn profiles just now and found ${leads.length}.`,
-            'Say ONE short thing before the list: what you did, and the one honest limit of it (public profiles only, no contact details, you have not messaged anybody). Warm, specific, a flicker of personality. Max 30 words, plain sentences, no markdown, no emoji, no "Great news!", never invent a fact.',
+            `You are Linky, the connector for LINKUP. A member in ${city} wanted "${needShort}", LINKUP has nobody for it yet, so you ran one public LinkedIn search and found ${leads.length}.`,
+            `Say ONE short thing before the list, in your own voice: what you did, and the one honest limit (public profiles, no contact details, you have not messaged anybody). Warm, dry, a flicker of humour, like a friend who actually did the favours. Max 32 words. Plain sentences, no markdown, no emoji, no "Great news!", no exclamation marks, never invent a fact. Do not start with "Outside LINKUP" - the app already printed that label.`,
             'Return STRICT JSON only: {"intro":"..."}',
           ].join('\n')
         : [
-            `You are Linky, the connector for LINKUP. A member in ${place} asked for "${q.need}" and nobody on LINKUP fits.`,
-            'Give two or three concrete places or ways to find that person in that city that are realistic this week - a named kind of institution, a professional body, a community, the exact search phrase to use. Nothing else.',
-            'Return STRICT JSON only: {"intro":"one line, max 16 words","routes":["...","..."]} - each route under 24 words, plain sentences, no numbering, no markdown, no emoji.',
+            `You are Linky, the connector for LINKUP. A member in ${city} wanted "${needShort}" and nobody on LINKUP fits.`,
+            'One short honest line (max 18 words), then two or three concrete ways to find that person in ' + city + ' this week: a named kind of institution, a professional body, a community, the exact search phrase. Realistic, slightly funny, zero corporate filler. No markdown, no emoji.',
+            'Return STRICT JSON only: {"intro":"...","routes":["...","..."]} - each route under 26 words, plain sentences, no numbering.',
           ].join('\n');
-      const raw = await geminiText(brief, { temperature: 0.5, maxOutputTokens: leads.length ? 120 : 300, responseMimeType: 'application/json' });
+      const raw = await geminiText(brief, { temperature: 0.6, maxOutputTokens: leads.length ? 140 : 320, responseMimeType: 'application/json' });
       const parsed = readJson(raw);
-      intro = text(parsed?.intro, 300);
-      if (!leads.length) routes = list(parsed?.routes, 3, 200);
+      intro = tidyIntroLine(parsed?.intro);
+      if (!leads.length) routes = list(parsed?.routes, 3, 200).map(tidyIntroLine).filter(Boolean);
     } catch (err) {
       console.warn('[linky] pointers gemini failed', err?.message || err);
     }
@@ -1141,7 +1241,7 @@ export async function pointers(uid, need, { userDoc, allowSearch = true } = {}) 
     // what it looks like when a member is told nothing and no reason
     const searched = (outreach.searches || 0) > 0;
     if (leads.length) {
-      intro = `Nobody on LINKUP does "${q.need}" yet, so I ran one LinkedIn search and pulled ${leads.length} ${leads.length === 1 ? 'person' : 'people'} worth a message. Public profiles only - I did not collect contact details and I have not written to anybody.`;
+      intro = `Nobody on LINKUP does "${needShort}" yet - that one lives outside our walls. ${outreach.cached ? 'The LinkedIn search I ran earlier turned up' : 'I ran one LinkedIn search and pulled'} ${leads.length} ${leads.length === 1 ? 'person' : 'people'} still worth a message. Public profiles only: no emails, no phone numbers, and I have not written to anybody.`;
     } else if (!searched && outreach.note && outreach.note !== 'cached') {
       // this is the "Telegram gave me nothing" case: the search never ran, so say
       // why in the member's terms instead of leaving a silent list of routes
@@ -1151,12 +1251,12 @@ export async function pointers(uid, need, { userDoc, allowSearch = true } = {}) 
         'plan-exhausted': 'this month\'s search credits are used up',
         'not-configured': 'no search key is set on this deployment',
       })[outreach.note] || (String(outreach.note).startsWith('search-error') ? 'the search came back wrong' : 'the search was not available');
-      intro = `Nobody on LINKUP does "${q.need}" yet. I could not run the LinkedIn search just now - ${why}. Here is where I would look in ${place} either way:`;
+      intro = `Nobody on LINKUP does "${needShort}" yet. I could not run the LinkedIn search just now - ${why}. Here is where I would look in ${city} anyway:`;
     } else {
-      intro = `Nobody on LINKUP does "${q.need}" yet, and one LinkedIn search in ${place} turned up nobody I would put in front of you. Here is where I would look instead:`;
+      intro = `Nobody on LINKUP does "${needShort}" yet, and one LinkedIn search in ${city} turned up nobody I would put in front of you. Not for lack of trying - here is where I would look instead:`;
     }
   }
-  if (!leads.length && !routes.length) routes = fallbackRoutes(q.need, place);
+  if (!leads.length && !routes.length) routes = fallbackRoutes(q.need, city || placeShow);
   // remembered so "draft 2" on a bot means the second person in THIS list, and so
   // the app can re-render the same five people without spending another search
   await patchState(uid, {
@@ -1165,7 +1265,7 @@ export async function pointers(uid, need, { userDoc, allowSearch = true } = {}) 
   }).catch(() => {});
   const rendered = renderPointers({ intro, routes, leads });
   await ref.set({
-    need: q.need, place: text(place, 60), intro, routes, leads,
+    need: q.need, place: text(place, 60), intro, routes: routes || [], leads,
     searches: outreach.searches || 0, profileFilter: outreach.query || '', createdAt: Date.now(),
   }).catch(() => {});
   return {

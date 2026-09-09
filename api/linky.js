@@ -546,7 +546,9 @@ async function handleTelegram(req, res) {
         : r.cards?.length
           ? { inline_keyboard: telegramCardButtons(r.cards) }
           : telegramChips(r.chips);
-      await telegramApi('sendMessage', { chat_id: chatId, text: r.text, disable_web_page_preview: true, ...(markup ? { reply_markup: markup } : {}) });
+      // one sender for both paths, so long answers are split instead of being
+      // refused by Telegram (a 400 here used to mean the member saw nothing)
+      await sendTelegram(chatId, r.text, markup);
     } else if (update?.message?.chat?.id && !update?.message?.text) {
       // Voice notes, photos, stickers: no transcription here, so say so like a
       // person instead of leaving them on read.
