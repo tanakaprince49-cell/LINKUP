@@ -101,7 +101,7 @@ export function clippedJson(value, max = MAX_PROFILE_CHARS) {
   return JSON.stringify(value ?? {}).slice(0, max);
 }
 
-async function callGemini(prompt, options, apiKey) {
+export async function callGemini(prompt, options, apiKey) {
 
   const generationConfig = {
     temperature: options.temperature ?? 0.25,
@@ -274,14 +274,32 @@ export function aiStatus() {
   };
 }
 
-/** One real round trip, so "configured" can be told apart from "working". */
+/** One real round trip per provider, so "configured" can be told apart from
+ *  "working" - and so a quota refusal on one key is not mistaken for a broken app. */
 export async function aiProbe() {
+  const status = aiStatus();
   const started = Date.now();
-  if (!aiStatus().ready) return { ok: false, error: 'no key set', ms: 0 };
-  try {
-    const { text, provider } = await aiText('Reply with exactly this JSON and nothing else: {"pong":true}', { temperature: 0, maxOutputTokens: 20 });
-    return { ok: true, provider, ms: Date.now() - started, said: String(text).slice(0, 40) };
-  } catch (err) {
-    return { ok: false, error: String(err?.message || err).slice(0, 240), ms: Date.now() - started };
-  }
+  const attempts = [];
+  const prompt = 'Reply with exactly this JSON and nothing else: {"pong":true}';
+  const run = async (name, call, key) => {
+    const t0 = Date.now();
+    try {
+      const text = await call(prompt, { temperature: 0, maxOutputTokens: 30 }, key);
+      attempts.push({ provider: name, ok: true, ms: Date.now() - t0, said: String(text).slice(0, 40) });
+      return true;
+    } catch (err) {
+      attempts.push({ provider: name, ok: false, ms: Date.now() - t0, error: String(err?.message || err).slice(0, 300) });
+      return false;
+    }
+  };
+  if (status.gemini.configured) await run('gemini', callGemini, getGeminiKey());
+  if (status.zen.configured) await run('zen', callZen, getZenKey());
+  const won = attempts.find((a) => a.ok);
+  return {
+    ok: !!won || attempts.length === 0,
+    provider: won ? won.provider : '',
+    ms: Date.now() - started,
+    attempts,
+    ...(attempts.length ? {} : { error: 'no provider key is set on this deployment' }),
+  };
 }
