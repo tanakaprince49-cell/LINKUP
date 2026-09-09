@@ -53,6 +53,9 @@ written; old docs are inert.)
    voice, with the answer's facts handed over as a dossier; the model returns
    `{reply, suggest}` only. Gemini missing / failing / returning junk → a
    deterministic plain reply on the same facts, so nobody ever sees an AI error.
+   `aiText()` (`api/_gemini.js`) tries Gemini first and re-sends the same prompt to
+   OpenCode Zen (`ZEN_API_KEY`) when Gemini errors, is over quota or times out; the
+   wording cache is shared across providers, so a rescue costs nothing the second time.
    Hand-written tone templates were deleted on purpose: three surfaces must not
    drift, and this is text-only - no voice anywhere in the product.
 9. Otherwise, only when ≥ 2 plausible candidates exist: **one** compact
@@ -60,7 +63,12 @@ written; old docs are inert.)
    fails / is over quota / cites nothing, the cited template path answers
    instead — never an error.
 
-Limits: free = 10 asks/day, 3 Meets/day; PLUS = 60 asks/day, unlimited Meets.
+Limits: free = **2 searches/day and 2 Meets/day**; PLUS = 60 searches/day, unlimited
+Meets. "Searches" is the metered thing - asking Linky to look through the network.
+A lookup by name, small talk, "write me a message", hiding a fact and the whole
+help flow answer before the counter, so the 2 a day are never spent on "hi".
+One counter, not three: the app, the Telegram bot and WhatsApp all call the same
+`ask()`, so 2 on one surface is 2 everywhere.
 Up to 5 cards per ask. Inbound cap 5/week (member-adjustable 0–20). Decline =
 silent mute both ways; skipped people stay away for 14 days. Intros expire
 after 7 days.
@@ -96,6 +104,14 @@ at 4 searches/day so a single keen brainstorm cannot empty the month; `/account.
 `total_searches_left` is at or under `OUTREACH_RESERVE_CREDITS`, the pipeline
 refuses to spend and `pointers()` degrades to advice-only prose. Same query within
 7 days is served from `linkyOutreach/q_*` at 0 credits.
+
+**What the member can edit:** the "What Linky knows about you" screen
+(`LinkyAuditScreen`) writes `linkyState/{uid}.facts`. Tapping any fact hides it from
+Linky (`hideFact`) - the LINKUP profile keeps it, but the matcher and the "why"
+never see it again, in any of its forms ("beekeeping" also hides "Beekeeper").
+Giving it back is the same tap. A single past ask can be deleted (`removeAsk`),
+which also lifts it out of the chat thread. Hiding or restoring busts that member's
+answer cache so the next ask is re-run, not replayed.
 
 **Vercel env for this:** `SERPAPI_KEY` (absent = the whole feature quietly stays
 advice-only, which is the safe default) and `OUTREACH_RESERVE_CREDITS` (default

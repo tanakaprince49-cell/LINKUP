@@ -473,7 +473,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
                     </View>
                   ) : null}
 
-                  {!thinking && answer?.none && answer.need ? (
+                  {!thinking && (answer?.none && answer.need || leads.length) ? (
                     pointerText ? (
                       <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
                         <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>OUTSIDE LINKUP</Text>
@@ -490,8 +490,16 @@ export default function LinkyHomeScreen({ navigation }: any) {
                                 <View style={{ flex: 1 }}>
                                   <Text style={[styles.nearestName, { color: textColor(isDark) }]} numberOfLines={1}>{l.name}</Text>
                                   {l.title ? <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>{l.title}{l.why ? ` · ${l.why}` : ''}</Text> : null}
+                                  {/* the url is printed as well as tappable: on the web people
+                                      want to copy it, and an unresolved link must not look like a lie */}
+                                  <Text style={[styles.leadUrl, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
+                                    {l.resolved === false ? 'no direct link - opens a search: ' : ''}{l.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                                  </Text>
                                 </View>
-                                <Link2 size={14} color={textColor(isDark, 'secondary')} />
+                                <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                                  <Link2 size={14} color={textColor(isDark, 'secondary')} />
+                                  <Text style={[styles.leadOpen, { color: COLORS.primary }]}>OPEN</Text>
+                                </View>
                               </TouchableOpacity>
                             ))}
                             <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]}>
@@ -655,6 +663,8 @@ const styles = StyleSheet.create({
   msgDotText: { fontSize: 11, fontWeight: '900', color: '#000' },
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   lead: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 9 },
+  leadUrl: { fontSize: 10.5, fontWeight: '600', marginTop: 2, opacity: 0.75 },
+  leadOpen: { fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
   chips: { marginTop: 16, gap: 8 },
   chip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
   chipText: { fontSize: 12, fontWeight: '700', lineHeight: 17 },

@@ -64,7 +64,10 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const editCampaign: Campaign | null = route?.params?.editCampaign || null;
-  const isEditing = !!editCampaign && editCampaign.status === 'pending_review';
+  // a live campaign is the one that most needs an edit, so the form is open for
+  // active and paused too - the status never changes here, only the creative
+  const isEditing = !!editCampaign && ['pending_review', 'active', 'paused'].includes(editCampaign.status);
+  const isLiveEdit = !!editCampaign && (editCampaign.status === 'active' || editCampaign.status === 'paused');
 
   const [name, setName] = useState(editCampaign?.name || '');
   const [productName, setProductName] = useState(editCampaign?.creative?.productName || editCampaign?.creative?.title || '');
@@ -150,13 +153,21 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
         category,
       };
       if (isEditing && editCampaign) {
-        await updateCampaignCreative(editCampaign.id, {
-          name: name.trim(),
-          creative: creativePayload,
-          industries: category,
-          placements,
-        });
-        notifyUser('Changes saved ✔', 'Your campaign stays in the review queue with the updated creative.');
+        await updateCampaignCreative(
+          editCampaign.id,
+          { name: name.trim(), creative: creativePayload, industries: category, placements },
+          {
+            wasLive: isLiveEdit,
+            ownerName: displayNameFor(myProfile || user),
+            productName: creativePayload.productName || name.trim(),
+          }
+        );
+        notifyUser(
+          'Changes saved ✔',
+          isLiveEdit
+            ? 'Your campaign is still live with the new creative. Moderation has been told to look at it.'
+            : 'Your campaign stays in the review queue with the updated creative.'
+        );
         navigation.goBack();
         return;
       }
@@ -221,7 +232,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
           <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>{isEditing ? 'Edit Campaign' : 'New Campaign'}</Text>
-          <Text style={styles.headerSub}>{isEditing ? 'Update while in review' : 'Advertise your product to founders'}</Text>
+          <Text style={styles.headerSub}>{isEditing ? (isLiveEdit ? 'Editing a live campaign - it stays live' : 'Update while in review') : 'Advertise your product to founders'}</Text>
         </View>
         <View style={styles.headerBtn} />
       </View>
@@ -412,7 +423,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
             ) : (
               <>
                 <Send size={15} color={COLORS.lightTextPrimary} />
-                <Text style={[styles.submitText, { color: COLORS.lightTextPrimary }]}>{isEditing ? 'SAVE CHANGES' : 'SUBMIT FOR REVIEW'}</Text>
+                <Text style={[styles.submitText, { color: COLORS.lightTextPrimary }]}>{isEditing ? (isLiveEdit ? 'PUBLISH CHANGES' : 'SAVE CHANGES') : 'SUBMIT FOR REVIEW'}</Text>
               </>
             )}
           </TouchableOpacity>

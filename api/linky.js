@@ -14,8 +14,8 @@ import crypto from 'node:crypto';
 import { getDb, verifyRequestUser } from './_firebaseAdmin.js';
 import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import {
-  APP_URL, LIMITS, OFFERS, ask, audit, botUserFor, consumeLinkCode, createLinkCode, forget, home,
-  loadCards, loadState, loadUser, meet, orderedCards, pickPerson, pointers, respond, runCron, sendTelegram,
+  APP_URL, LIMITS, OFFERS, ask, audit, botUserFor, consumeLinkCode, createLinkCode, forget, hideFact, home,
+  loadCards, loadState, loadUser, meet, orderedCards, pickPerson, pointers, removeAsk, respond, runCron, sendTelegram,
   sendWhatsApp, setCardStatus, setFacts, setPrefs, unlinkBot, profileFacts, telegramWebhookSecret,
 } from './_linky.js';
 
@@ -212,7 +212,8 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
     const line = (label, value) => (value ? `${label}: ${value}\n` : '');
     const top = (a.asks || []).slice(0, 3).map((x) => `  - ${x.need}${x.none ? ' (nobody yet)' : ` (${x.cards} cards)`}`).join('\n');
     return {
-      text: `Here is everything I have on you.\n\n${line('Role', a.facts.role)}${line('Company', a.facts.company)}${line('City', a.facts.city)}${line('Skills', (a.facts.skills || []).slice(0, 6).join(', '))}${line('Open to', a.signals.openTo.map(offerLabel).join(', '))}${line('Your notes', (a.told.notes || '').slice(0, 180))}Used today: ${a.signals.asksUsedToday} asks, ${a.signals.meetsUsedToday} Meets. People you asked me not to suggest again: ${a.signals.mutedCount}.\n\n${top ? `Last asks:\n${top}` : 'No asks yet.'}\n\nSay "forget" any time and I delete all of it.`,
+      text: `Here is everything I have on you.\n\n${line('Role', a.facts.role)}${line('Company', a.facts.company)}${line('City', a.facts.city)}${line('Skills', (a.facts.skills || []).slice(0, 6).join(', '))}${line('Open to', a.signals.openTo.map(offerLabel).join(', '))}${line('Your notes', (a.told.notes || '').slice(0, 180))}Used today: ${a.signals.asksUsedToday} of ${a.signals.plus ? LIMITS.plus.asksPerDay : LIMITS.free.asksPerDay} searches, ${a.signals.meetsUsedToday} Meets. Looking someone up by name is free.
+Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n${top ? `Last asks:\n${top}` : 'No asks yet.'}\n\nSay "forget" any time and I delete all of it.`,
     };
   }
   // "draft" is a real intent the app has; on the bot it drafted nothing and simply
@@ -277,6 +278,13 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
 }
 
 // Outside-LINKUP answer, formatted once for both bots.
+const hiddenCount = (h = {}) => {
+  const lists = ['skills', 'industries', 'lookingFor'].reduce((n, k) => n + (Array.isArray(h[k]) ? h[k].length : 0), 0);
+  const flags = ['notes', 'bio', 'company', 'city'].filter((k) => h[k]).length;
+  const n = lists + flags;
+  return n ? `${n} fact${n === 1 ? '' : 's'}` : 'nothing';
+};
+
 function pointerText(r) {
   const leads = Array.isArray(r?.leads) ? r.leads : [];
   const body = String(r?.text || '').trim();
@@ -285,8 +293,11 @@ function pointerText(r) {
   return `${body}\n\nHere are ${leads.length} public ${leads.length === 1 ? 'profile' : 'profiles'} I found just now - no contact details, just the public page:\n${list}\n\nMessage them yourself from your own account - or say DRAFT and I will write the first line for you.`;
 }
 
+// One URL button per lead: the whole point of the web search is that the member
+// can open the profile, so nothing is left as prose to copy out. Telegram takes
+// 100 buttons; OUTREACH.maxLeads is 8, so every lead gets one.
 function leadsKeyboard(leads) {
-  return leads.slice(0, 3).map((l, i) => ([{ text: `${i + 1}. ${String(l.name).slice(0, 22)}`, url: l.url }]));
+  return (leads || []).slice(0, 10).map((l, i) => ([{ text: `${i + 1}. ${String(l.name).slice(0, 22)}`, url: l.url }]));
 }
 
 // "1" after an ambiguous name: the server turns that person into a real card.
@@ -463,7 +474,11 @@ async function handleApp(req, res) {
     switch (action) {
       case 'home': out = await home(uid); break;
       case 'ask': out = await ask(uid, body.message, { source: 'app' }); break;
-      case 'facts': out = await setFacts(uid, { notes: body.notes, skills: body.skills, lookingFor: body.lookingFor }); break;
+      case 'facts': out = await setFacts(uid, { notes: body.notes, skills: body.skills, lookingFor: body.lookingFor, hidden: body.hidden }); break;
+      // one fact at a time, so "Linky knows too much" has an answer shorter than
+      // "delete your whole account"
+      case 'hideFact': out = await hideFact(uid, { kind: String(body.kind || ''), value: String(body.value || ''), hide: body.hide !== false }); break;
+      case 'removeAsk': out = await removeAsk(uid, String(body.id || '')); break;
       case 'pointers': out = await pointers(uid, String(body.need || '')); break;
       case 'meet': out = await meet(uid, String(body.cardId || '')); break;
       case 'pickPerson': out = await pickPerson(uid, String(body.targetUid || '')); break;

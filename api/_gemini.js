@@ -1,4 +1,10 @@
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+// Second brain. If Gemini is down, over quota or returns junk, the same prompt
+// goes to OpenCode Zen (OpenAI-compatible) instead of the user seeing a
+// fallback sentence. Same contract, different provider, no code change at the
+// call sites.
+const ZEN_URL = process.env.ZEN_API_URL || 'https://opencode.ai/zen/v1/chat/completions';
+const ZEN_MODEL = process.env.ZEN_MODEL || process.env.EXPO_PUBLIC_ZEN_MODEL || 'opencode/gemini-2.5-flash';
 const MAX_PROFILE_CHARS = 2600;
 
 export function setCors(res) {
@@ -22,14 +28,26 @@ export function getGeminiKey() {
   ).trim();
 }
 
+export function getZenKey() {
+  return String(
+    process.env.ZEN_API_KEY || process.env.OPENCODE_ZEN_API_KEY || process.env.EXPO_PUBLIC_OPENCODE_ZEN_API_KEY || ''
+  ).trim();
+}
+
+/** Any usable model at all. Guards must test this, not getGeminiKey(): a Zen-only
+ *  deployment is a fully working deployment. */
+export function aiReady() {
+  return !!(getGeminiKey() || getZenKey());
+}
+
 export function sendError(res, status, message, technical) {
   setCors(res);
   res.status(status).json({
     error: message,
     technical: (() => {
-      const raw = String(technical || message);
-      const key = getGeminiKey();
-      return (key ? raw.replace(key, '[redacted-key]') : raw).slice(0, 500);
+      let raw = String(technical || message);
+      for (const key of [getGeminiKey(), getZenKey()]) if (key) raw = raw.split(key).join('[redacted-key]');
+      return raw.slice(0, 500);
     })(),
   });
 }
@@ -69,11 +87,7 @@ export function clippedJson(value, max = MAX_PROFILE_CHARS) {
   return JSON.stringify(value ?? {}).slice(0, max);
 }
 
-export async function geminiText(prompt, options = {}) {
-  const apiKey = getGeminiKey();
-  if (!apiKey) {
-    throw new Error('Vercel AI API missing GEMINI_API_KEY or EXPO_PUBLIC_GEMINI_API_KEY.');
-  }
+async function callGemini(prompt, options, apiKey) {
 
   const generationConfig = {
     temperature: options.temperature ?? 0.25,
@@ -82,6 +96,7 @@ export async function geminiText(prompt, options = {}) {
   if (options.responseMimeType) generationConfig.responseMimeType = options.responseMimeType;
 
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_MODEL}:generateContent`, {
+    signal: AbortSignal.timeout(Number(options.timeoutMs || 12000)),
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -110,6 +125,60 @@ export async function geminiText(prompt, options = {}) {
     throw new Error(`Gemini returned empty content. Finish reason: ${data?.candidates?.[0]?.finishReason || 'unknown'}`);
   }
   return text;
+}
+
+async function callZen(prompt, options, apiKey) {
+  const response = await fetch(ZEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(Number(options.timeoutMs || 12000)),
+    body: JSON.stringify({
+      model: options.model || ZEN_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: options.temperature ?? 0.25,
+      max_tokens: Math.max(128, Math.min(1200, Number(options.maxOutputTokens || 260))),
+      ...(options.responseMimeType ? { response_format: { type: 'json_object' } } : {}),
+    }),
+  });
+  const raw = await response.text();
+  let data = null;
+  try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+  if (!response.ok) throw new Error(data?.error?.message || `Zen HTTP ${response.status}: ${raw.slice(0, 300)}`);
+  const text = String(data?.choices?.[0]?.message?.content || '').trim();
+  if (!text) throw new Error('Zen returned an empty completion.');
+  return text;
+}
+
+/**
+ * One prompt, in through whichever model answers. Gemini first (cheaper, we
+ * already pay for it), OpenCode Zen as the rescue. Both failing throws the
+ * combined error - and every caller in Linky has a deterministic answer behind
+ * it, so a throw here is never a message a member sees.
+ */
+export async function aiText(prompt, options = {}) {
+  const attempts = [
+    ['gemini', getGeminiKey(), callGemini],
+    ['zen', getZenKey(), callZen],
+  ].filter(([, key]) => !!key);
+  if (!attempts.length) {
+    throw new Error('No AI provider configured (GEMINI_API_KEY or ZEN_API_KEY).');
+  }
+  const errors = [];
+  for (const [provider, key, call] of attempts) {
+    try {
+      const text = await call(prompt, options, key);
+      return { text, provider };
+    } catch (err) {
+      errors.push(`${provider}: ${err?.message || err}`);
+      if (provider === 'gemini') console.warn('[ai] gemini failed, trying Zen', err?.message || err);
+    }
+  }
+  throw new Error(errors.join(' | '));
+}
+
+/** Same answer, provider hidden - what every existing caller already expects. */
+export async function geminiText(prompt, options = {}) {
+  return (await aiText(prompt, options)).text;
 }
 
 const normalizeList = (value) => {

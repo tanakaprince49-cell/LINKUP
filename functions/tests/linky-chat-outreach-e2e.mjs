@@ -20,7 +20,10 @@ process.env.SERPAPI_KEY = 'fake-serp-key-for-tests';
 process.env.OUTREACH_RESERVE_CREDITS = '40';
 
 const realFetch = globalThis.fetch;
-const calls = { gemini: 0, serp: 0, google: 0, serpQueries: [] };
+const calls = { gemini: 0, zen: 0, serp: 0, google: 0, serpQueries: [] };
+// flip these to make a provider fail, so the rescue path is tested and not assumed
+let geminiDown = false;
+let zenDown = false;
 let serpAccount = { total_searches_left: 240, searches_per_month: 250, plan_name: 'Free Plan' };
 let organicOverride = null;
 
@@ -41,6 +44,7 @@ globalThis.fetch = async (url, init = {}) => {
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   if (u.includes('generativelanguage.googleapis.com')) {
     calls.gemini += 1;
+    if (geminiDown) return json({ error: { message: '429 Quota exceeded for the gemini key' } }, 429);
     const asked = JSON.parse(init.body || '{}');
     const prompt = asked?.contents?.[0]?.parts?.[0]?.text || '';
     // The outreach scorer and the wording engine share this one mock, so each
@@ -54,6 +58,13 @@ globalThis.fetch = async (url, init = {}) => {
     if (/give 3 concrete places or ways/.test(prompt)) {
       return json({ candidates: [{ content: { parts: [{ text: 'Outside LINKUP, three routes for that need: the UZ computer science department, the ZimFintech WhatsApp group, and LinkedIn with a location filter. Then message the two most active people you find.' }] } }] });
     }
+    if (/STRICT JSON only: \{"pitch"/.test(prompt)) {
+      calls.intro = (calls.intro || 0) + 1;
+      return json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        pitch: 'Carrie keeps hives in Ruwa and sells the honey on her own site. Alice is building the payments side of exactly that kind of sale and asked for you by name - not for a crowd. Fifteen minutes this week would be enough. If the timing is wrong, say no and I will not ask twice.',
+        opener: 'Hi Carrie - Alice here. I do the money side of a honey business and I am stuck on payouts for smallholders. Your Ruwa setup is the closest thing to what I need. Fifteen minutes this week?',
+      }) }] } }] });
+    }
     const dossier = (() => {
       const i = prompt.lastIndexOf('Dossier: ');
       try { return JSON.parse(prompt.slice(i + 9)); } catch { return {}; }
@@ -62,7 +73,7 @@ globalThis.fetch = async (url, init = {}) => {
     const names = found.map((m) => m.name).join(' and ');
     const bySituation = {
       chat: 'I was hoping somebody would ask me something interesting - who are you after today?',
-      limit: "That is today's ten asks gone, friend. It resets at midnight, and a name lookup is always free.",
+      limit: `That is today's ${dossier.asks_limit_today} asks gone, friend. It resets at midnight, and looking somebody up by name is always free.`,
       person: dossier.cannot_introduce_because
         ? `${(dossier.found || {}).name} is on LINKUP, but ${dossier.cannot_introduce_because}. I did not push a request.`
         : `${(dossier.found || {}).name} is right here - I checked, that is a real profile.`,
@@ -76,6 +87,16 @@ globalThis.fetch = async (url, init = {}) => {
     const chips = found.length ? ['meet 1', 'who else do you have', 'write me a first message']
       : dossier.situation === 'none' ? ['Where to look outside LINKUP', 'Try a role instead'] : ['a flutter developer in harare', 'help'];
     return json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ reply: replyText, suggest: chips }) }] } }] });
+  }
+  if (u.includes('/zen/v1/chat/completions')) {
+    calls.zen += 1;
+    if (zenDown) return json({ error: { message: 'Zen is having a day' } }, 503);
+    const asked = JSON.parse(init.body || '{}');
+    const content = String(asked?.messages?.[0]?.content || '');
+    if (/give 3 concrete places or ways/.test(content)) {
+      return json({ choices: [{ message: { content: 'Zen says: try the UZ CS society, the Harare Angular meetup and LinkedIn with a Harare filter. Message the two people who posted last week.' } }] });
+    }
+    return json({ choices: [{ message: { content: JSON.stringify({ reply: 'Zen wrote this sentence because Gemini is down - I am still me, just on the other key.', suggest: ['a react developer in harare', 'help'] }) } }] });
   }
   if (u.includes('serpapi.com/account.json')) return json(serpAccount);
   if (u.includes('serpapi.com/search.json')) {
@@ -97,6 +118,15 @@ const L = await import('../../api/_linky.js');
 const S = await import('../../api/_serpapi.js');
 const { botReplyForTest } = await import('../../api/linky.js');
 const db = (await import('../../api/_firebaseAdmin.js')).getDb();
+
+// the free plan is 2 searches a day now; every section tops its members up so it
+// is testing the matcher, not the paywall (the budget section sets counts itself)
+const MEMBERS = ['alice', 'bob', 'carol', 'dave', 'eve', 'frank', 'grace', 'henry', 'irene', 'jack', 'kenji', 'lucy', 'luke', 'freda', 'zanele', 'tinashe', 'farai', 'chipo', 'nia', 'rafael', 'sofia', 'omar', 'priya', 'noah', 'amelie', 'dmitri'];
+const clearBudget = async (uid) => {
+  await db.collection('linkyState').doc(uid).set({ asks: { day: 'test-reset', count: 0 }, meets: { day: 'test-reset', count: 0 } }, { merge: true });
+};
+const resetBudgets = async () => { for (const u of MEMBERS) await clearBudget(u); };
+
 await fetch('http://127.0.0.1:8089/emulator/v1/projects/linkup-e0906/databases/(default)/documents', { method: 'DELETE' });
 
 const users = {
@@ -113,15 +143,17 @@ for (const [uid, u] of Object.entries(users)) {
   await db.collection('publicProfiles').doc(uid).set({ uid, ...u, profilePic: `https://ik/${uid}.jpg` });
 }
 
+const nowSuffix = () => Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
 let failed = 0;
 const assert = (cond, msg) => { if (!cond) { console.error('FAIL:', msg); failed += 1; } else console.log('ok  -', msg); };
 const has = (s, re) => re.test(String(s || ''));
 
 // ================================================================ name lookup
+await resetBudgets();
 let r = await L.ask('alice', 'fred');
 console.log('    LINKY>', r.reply);
 assert(r.kind === 'person' && r.cards.length === 1 && r.cards[0].targetUid === 'fred', '"fred" finds the human instead of saying nobody fits');
-assert(r.free === true && r.asksLeft === 10, 'a name lookup costs no ask');
+assert(r.free === true && r.asksLeft === L.LIMITS.free.asksPerDay, `a name lookup costs no ask (free plan has ${L.LIMITS.free.asksPerDay} searches a day)`);
 assert(r.reply.length > 30 && r.reply.length < 700 && /I checked, that is a real profile/.test(r.reply), 'the sentence is the model wording, not a stamped template');
 assert(/^Alice\./.test(r.reply), 'the member name is prepended by the app, never asked of the model');
 assert(!/"reply":/.test(r.reply) && !/```/.test(r.reply), 'and the raw model JSON never leaks into the bubble');
@@ -136,6 +168,7 @@ r = await L.ask('alice', 'is captain reach on here');
 assert(r.kind === 'none' && r.nearest.length >= 1 && has(r.suggest[0], /./), 'an unknown name falls through to the network search and offers next steps');
 
 // ================================================================ ambiguous
+await resetBudgets();
 r = await L.ask('alice', 'tapiwa');
 assert(r.kind === 'ambiguous' && r.nearest.length === 2 && !r.cards.length, 'a name with two owners asks which one instead of guessing: ' + r.nearest.map((n) => n.name).join(' / '));
 assert(/Which one do you mean/.test(r.reply), 'and it asks in a sentence, not a list');
@@ -148,15 +181,19 @@ if (pick) {
 }
 
 // ================================================================ blocked door
+await resetBudgets();
 await L.setPrefs('bob', { inboundCap: 0 });
 r = await L.ask('alice', 'bob chikwanha');
 assert(r.kind === 'person' && !r.cards.length && r.nearest.some((n) => n.uid === 'bob'), 'a member who switched intros off is found, not reported missing');
 assert(has(r.reply, /switched|off|not taking|intro/i), 'and Linky explains the closed door: ' + r.reply.slice(0, 90));
 
+
 // ================================================================ chit-chat
+await resetBudgets();
+await resetBudgets();
 calls.gemini = 0;
 const hi = await L.ask('luke', 'hi');
-assert(hi.kind === 'chat' && hi.free === true && hi.asksLeft === 10, 'a greeting is chat, not a search, and costs nothing');
+assert(hi.kind === 'chat' && hi.free === true && hi.asksLeft === L.LIMITS.free.asksPerDay, `a greeting is chat, not a search, and costs nothing (free plan is ${L.LIMITS.free.asksPerDay} searches a day)`);
 assert(calls.gemini === 1, 'chit-chat wording is exactly one small Gemini call: ' + calls.gemini);
 assert(/hoping somebody would ask/i.test(hi.reply), 'the model wrote the sentence (mocked): ' + hi.reply.slice(0, 60));
 assert(Array.isArray(hi.suggest) && hi.suggest.length >= 2, 'Linky offers tappable replies instead of a dead end');
@@ -164,10 +201,23 @@ const hiAgain = await L.ask('freda', 'hi');
 assert(calls.gemini === 1 && hiAgain.reply.includes('Freda'), 'the shared wording is cached for everyone, then personalised per member');
 assert(!/Alice/.test(hi.reply), 'and no other member name leaks into this reply');
 assert(/Freda/.test(hiAgain.reply), 'the shared wording is personalised on the way out');
+// the real complaint, verbatim: a person who wants to talk was answered like a
+// search engine that found nothing
+const blunt = await L.ask('luke', 'no one else in mind jusy want to chat');
+assert(blunt.kind === 'chat' && blunt.free === true, 'the "I just want to chat" message is chat, not a search that found nobody: ' + blunt.kind);
+assert(!/Nobody on LINKUP|nobody here fits|checked all|visible profiles|56/i.test(blunt.reply), 'and never gets the audit-style "nobody fits" sentence: ' + blunt.reply.slice(0, 110));
+const bluntButReal = await L.ask('luke', 'i just want to chat about a flutter developer');
+assert(bluntButReal.kind !== 'chat', 'a chat sentence that names a role is still a search: ' + bluntButReal.kind);
+const boredAsk = await L.ask('luke', 'are you a real person');
+assert(boredAsk.kind === 'chat' && boredAsk.free, 'and "are you a real person" is answered like a person, not a query');
+
 const thanks = await L.ask('luke', 'thanks linky');
-assert(thanks.kind === 'chat' && thanks.asksLeft === 10, 'thanks is chat too, still free');
+assert(thanks.kind === 'chat' && thanks.free === true, 'thanks is chat too, still free');
+const lukeState = await db.collection('linkyState').doc('luke').get();
+assert(Number(lukeState.data().asks.count) === 1, 'only the one real search was metered for luke, not the small talk: ' + lukeState.data().asks.count);
 
 // ================================================================ the thread
+await resetBudgets();
 const home = await L.home('luke');
 assert(Array.isArray(home.thread) && home.thread.length >= 4, 'home returns a thread, not one answer');
 assert(home.thread.filter((t) => t.role === 'linky').length === home.thread.filter((t) => t.role === 'user').length, 'every question has a Linky turn back');
@@ -175,6 +225,7 @@ assert(home.thread.every((t) => !/[*_`#]|^\s*[-•]>/.test(t.text)), 'no markdow
 assert(home.thread.length <= L.LIMITS.threadTurns, 'the thread is capped so the doc cannot grow forever');
 
 // ================================================================ keep going
+await resetBudgets();
 const first = await L.ask('freda', 'a developer in harare');
 const seenNames = first.cards.map((c) => c.targetUid);
 const elseAsk = await L.ask('freda', 'who else do you have');
@@ -182,7 +233,8 @@ assert(elseAsk.asksLeft === first.asksLeft - 1, '"who else" is a real search, so
 assert(elseAsk.cards.every((c) => !seenNames.includes(c.targetUid)), 'the second lap never repeats who was already shown: ' + elseAsk.cards.map((c) => c.targetName).join(', '));
 
 // ================================================================ budget
-await db.collection('linkyState').doc('alice').set({ asks: { day: L.dayKey(), count: 10 } }, { merge: true });
+await resetBudgets();
+await db.collection('linkyState').doc('alice').set({ asks: { day: L.dayKey(), count: L.LIMITS.free.asksPerDay } }, { merge: true });
 let lim = null;
 try { await L.ask('alice', 'a quantum cryptographer in oslo'); } catch (e) { lim = e; }
 assert(lim && lim.code === 'ask_limit' && has(lim.message, /midnight|reset/i), 'out of asks says when it resets, kindly: ' + lim?.message);
@@ -190,7 +242,8 @@ const freeName = await L.ask('alice', 'fred');
 assert(freeName.kind === 'person' && !freeName.reply.includes('used up'), 'even with zero asks left, a name lookup still works');
 
 // ================================================================ the bots
-await db.collection('linkyState').doc('alice').set({ asks: { day: L.dayKey(), count: 2 } }, { merge: true });
+await resetBudgets();
+await db.collection('linkyState').doc('alice').set({ asks: { day: L.dayKey(), count: 0 } }, { merge: true });
 const { code } = await L.createLinkCode('alice');
 let br = await botReplyForTest('telegram', '777', 'hey people');
 assert(!/did not work/.test(br.text) && /code/i.test(br.text), 'a six letter word in a sentence is not treated as a link code: ' + br.text.slice(0, 70));
@@ -226,6 +279,7 @@ assert(!br.cards && has(br.text, /nobody/i), 'a bot no match stays graceful, nev
 assert(has(br.text, /MORE/i), 'and offers the way out');
 
 // ================================================================ outreach agent
+await resetBudgets();
 const before = { ...calls };
 const LEDGER = `budget_${new Date().toISOString().slice(0, 7)}`;
 const ledUsed = async () => Number(((await db.collection('linkyOutreach').doc(LEDGER).get()).data() || {}).used || 0);
@@ -357,7 +411,104 @@ assert(/^https:\S*linkedin\.com\/in\//.test(pointers.leads[0].url || ''), 'and c
 assert(pointers.leads.every((l) => l.resolved || /google\.com\/search/.test(l.url)), 'an unresolved link stays an honest search fallback, never a broken profile url');
 assert(!/\{|"reply"/.test(pointers.text), 'the advice is prose, never the raw model JSON');
 
+// ================================================================ what Linky is not told
+await resetBudgets();
+// Carrie is built so that "keeps bees" appears in exactly three of her fields -
+// skill, headline and bio - which is what makes hiding worth testing at all.
+const CARRIE = { uid: 'carrie', displayName: 'Carrie Moyo', occupation: 'Beekeeper', company: 'Ruwa Farms', city: 'Harare', country: 'Zimbabwe', skills: ['beekeeping', 'sales'], industries: ['agriculture'], bio: 'Runs beekeeping workshops for schools', onboarded: true, isVisible: true };
+await db.collection('users').doc('carrie').set(CARRIE);
+await db.collection('publicProfiles').doc('carrie').set({ ...CARRIE, profilePic: 'https://ik/carrie.jpg' });
+const beeAsk = 'someone who keeps bees';
+await clearBudget('alice');
+const withCarrie = await L.ask('alice', beeAsk);
+assert(withCarrie.cards.some((c) => c.targetUid === 'carrie'), `setup: Carrie answers to "${beeAsk}"`);
+await L.hideFact('carrie', { kind: 'skills', value: 'beekeeping', hide: true });
+const afterHideAudit = await L.audit('carrie');
+assert((afterHideAudit.hidden?.skills || []).includes('beekeeping'), 'the audit shows what is being held back');
+const pub = (await db.collection('publicProfiles').doc('carrie').get()).data();
+assert((pub.skills || []).includes('beekeeping') && pub.occupation === 'Beekeeper', 'hiding never touches the public profile, only what Linky knows');
+await clearBudget('alice');
+await db.collection('linkyState').doc('alice').set({ lastAsk: null, recentAsks: [] }, { merge: true });
+const afterHide = await L.ask('alice', 'a person who keeps bees near Harare');
+assert(!afterHide.cards.some((c) => c.targetUid === 'carrie'), 'hiding the skill takes "Beekeeper" and "beekeeping workshops" with it - the match is gone: ' + JSON.stringify(afterHide.cards.map((c) => c.targetName)));
+assert(!/beekeep/i.test(JSON.stringify(afterHide.cards.map((c) => c.why))), 'and it is never quoted in a reason');
+// a fact nobody hid is still fair game: hiding one thing is not hiding everything
+await clearBudget('alice');
+await db.collection('linkyState').doc('alice').set({ lastAsk: null, recentAsks: [] }, { merge: true });
+const stillThere = await L.ask('alice', 'someone who runs workshops for schools');
+assert(stillThere.cards.some((c) => c.targetUid === 'carrie'), 'what was not withheld still works - hiding is per fact, not a blackout');
+await L.hideFact('carrie', { kind: 'bio', value: 'bio', hide: true });
+await clearBudget('alice');
+await db.collection('linkyState').doc('alice').set({ lastAsk: null, recentAsks: [] }, { merge: true });
+const bioHidden = await L.ask('alice', 'who runs workshops for schools around Harare');
+assert(!bioHidden.cards.some((c) => c.targetUid === 'carrie'), 'and the bio can be withheld on its own too');
+await L.hideFact('carrie', { kind: 'bio', value: 'bio', hide: false });
+await L.hideFact('carrie', { kind: 'skills', value: 'beekeeping', hide: false });
+const restored = await L.audit('carrie');
+assert(!(restored.hidden?.skills || []).includes('beekeeping'), 'one tap gives it back');
+await clearBudget('alice');
+await db.collection('linkyState').doc('alice').set({ lastAsk: null, recentAsks: [] }, { merge: true });
+const backAgain = await L.ask('alice', 'who keeps bees and sells honey');
+assert(backAgain.cards.some((c) => c.targetUid === 'carrie'), 'and she is matchable again');
+
+// "and forget that I ever asked"
+const beforeForgets = (await L.audit('alice')).asks.length;
+const removed = await L.removeAsk('alice', backAgain.id);
+const afterForgets = await L.audit('alice');
+assert(removed.forgotten === 1 && !afterForgets.asks.some((a) => a.id === backAgain.id), 'a single ask can be deleted without wiping everything');
+assert(afterForgets.asks.length === beforeForgets - 1, 'the rest of the history is untouched');
+const afterThread = await L.home('alice');
+assert(!afterThread.thread.some((t) => t.id === backAgain.id), 'their turn and Linky\'s answer both leave the thread');
+
+// ================================================================ the intro Linky writes
+await resetBudgets();
+await clearBudget('alice');
+const forIntro = await L.ask('alice', beeAsk);
+const target = forIntro.cards.find((c) => c.targetUid === 'carrie') || (await L.home('alice')).cards.find((c) => c.targetUid === 'carrie');
+const said = await L.introPitch({ requester: { name: 'Alice Moyo', role: 'Founder', city: 'Harare' }, target: { name: 'Carrie Moyo', role: 'Beekeeper', city: 'Harare' }, need: beeAsk, why: 'sells honey at the farmers market', place: 'this week', seed: `t${nowSuffix()}` });
+assert(said.usedAi === true && /Ruwa|hives/i.test(said.pitch), 'the pitch and the opener are written for this pair, not stamped out: ' + said.pitch.slice(0, 70));
+assert(said.pitch.length < 520 && said.opener.length < 360, 'and they are short enough to actually be read');
+assert(!/hope this finds you well|game-?changer|synergy|thrilled|honou?red|delve|exclamation/i.test(said.pitch + said.opener), 'none of the slop words survive into an intro');
+assert(/\d+ minutes|fifteen minutes/i.test(said.pitch) && /no\b/i.test(said.pitch), 'a tiny ask and a no that costs nothing are both in there');
+const noKey = await (async () => {
+  const gk = process.env.GEMINI_API_KEY, zk = process.env.ZEN_API_KEY, g = geminiDown;
+  process.env.GEMINI_API_KEY = ''; process.env.ZEN_API_KEY = '';
+  const out = await L.introPitch({ requester: { name: 'Alice Moyo', role: 'Founder' }, target: { name: 'Carrie Moyo', role: 'Beekeeper', city: 'Harare' }, need: beeAsk, why: 'sells honey at the farmers market', seed: `t${nowSuffix()}b` });
+  process.env.GEMINI_API_KEY = gk; process.env.ZEN_API_KEY = zk;
+  return out;
+})();
+assert(noKey.usedAi === false && noKey.pitch.length > 60 && /Carrie/.test(noKey.pitch), 'with no key at all he still writes something a human would send');
+if (target) {
+  const meetRes = await L.meet('alice', target.id);
+  const introDoc = meetRes.introId ? (await db.collection('intros').doc('alice_carrie').get()).data() : null;
+  const note = (await db.collection('notifications').where('userId', '==', 'carrie').where('type', '==', 'intro_request').get()).docs[0]?.data();
+  assert(!!note && /Ruwa|honey|bee/i.test(note.content || ''), 'the notification Carrie receives is the written pitch, not a form letter: ' + String(note?.content).slice(0, 80));
+  assert(meetRes.channelText ? /ACCEPT/.test(meetRes.channelText) : true, 'on a bot the pitch ends with the three words to reply with');
+}
+
+// ================================================================ the second key
+await resetBudgets();
+const gkSave = process.env.GEMINI_API_KEY, zkSave = process.env.ZEN_API_KEY;
+process.env.GEMINI_API_KEY = 'unit-gemini-key';
+process.env.ZEN_API_KEY = 'unit-zen-key';
+geminiDown = true;
+calls.zen = 0;
+await clearBudget('tapi1');
+const rescued = await L.ask('tapi1', 'a react developer in harare');
+assert(calls.gemini >= 1 && calls.zen >= 1, 'Gemini is tried first, Zen takes the hit when it fails');
+assert(rescued.usedAi === true && /Zen wrote this sentence/.test(rescued.reply), 'and the member never sees an outage: ' + rescued.reply.slice(0, 70));
+calls.zen = 0;
+zenDown = true;
+await clearBudget('tapi2');
+const bothDown = await L.ask('tapi2', 'a node developer in harare');
+assert(bothDown.usedAi === false && bothDown.reply.length > 20, 'with both keys down he answers in his own words instead of erroring');
+assert(!/unit-gemini-key|unit-zen-key/.test(JSON.stringify(bothDown)), 'a provider failure never echoes a key back to the client');
+process.env.GEMINI_API_KEY = gkSave; process.env.ZEN_API_KEY = zkSave;
+geminiDown = false; zenDown = false;
+
+
 // ================================================================ wiring
+await resetBudgets();
 const vercel = fsNode.readFileSync('vercel.json', 'utf8');
 assert(JSON.parse(vercel).rewrites.some((x) => x.source === '/api/telegram' && /channel=telegram/.test(x.destination)), 'the Telegram webhook route is still rewritten to /api/linky');
 assert(JSON.parse(vercel).functions?.['api/linky.js']?.maxDuration >= 60, 'api/linky.js keeps a long enough timeout for a search + a model call');
@@ -365,6 +516,26 @@ const rules = fsNode.readFileSync('firestore.rules', 'utf8');
 assert(/match \/linkyOutreach\/\{docId\} \{\s*allow read, write: if false;/.test(rules), 'the ledger and the runs are locked to the Admin SDK');
 const env = fsNode.readFileSync('.env.example', 'utf8');
 assert(/SERPAPI_KEY=/.test(env) && !/980e4ab7|fake-gemini/.test(env), '.env.example documents SERPAPI_KEY and no real key is committed');
+// the whole point of the web search is that a lead can be OPENED, on every
+// surface a member might be reading it on
+const botSrc = fsNode.readFileSync('api/linky.js', 'utf8');
+assert(/leadsKeyboard\([\s\S]{0,220}url: l\.url/.test(botSrc), 'the bot turns every lead into its own URL button');
+assert(/\$\{l\.url\}/.test(botSrc), 'and the plain-text channel still gets the link on its own line (WhatsApp auto-links it)');
+const homeSrc = fsNode.readFileSync('mobile/src/screens/LinkyHomeScreen.tsx', 'utf8');
+assert(/Linking\.openURL\(l\.url\)/.test(homeSrc), 'the app (and the same screen on web) opens the lead profile on tap');
+assert(/l\.url\.replace\(/.test(homeSrc), 'and prints the link itself, so it can be copied on a desktop');
+const auditSrc = fsNode.readFileSync('mobile/src/screens/LinkyAuditScreen.tsx', 'utf8');
+assert(/linkyHideFact/.test(auditSrc) && /linkyRemoveAsk/.test(auditSrc), 'the audit screen wires hide-or-restore per fact and forget-one-ask');
+assert(/Free \(2 searches a day, 2 Meets a day\)/.test(auditSrc), 'and states the real free plan instead of an old number');
+const clientApi = fsNode.readFileSync('mobile/src/lib/linkyApi.ts', 'utf8');
+assert(/'hideFact'/.test(clientApi) && /'removeAsk'/.test(clientApi), 'the client library exposes both calls');
+for (const f of ['mobile/src/screens/LinkyHomeScreen.tsx', 'mobile/src/screens/LinkyProfileScreen.tsx', 'mobile/src/components/PaywallModal.tsx']) {
+  assert(!/10 asks|ten asks/.test(fsNode.readFileSync(f, 'utf8')), `${f} does not promise the retired 10-a-day budget`);
+}
+const envEx = fsNode.readFileSync('.env.example', 'utf8');
+assert(/ZEN_API_KEY=/.test(envEx) && /ZEN_MODEL/.test(envEx), 'the second AI key is documented where ops reads it');
+const setupDoc = fsNode.readFileSync('LINKY_SETUP.md', 'utf8');
+assert(/2 searches\/day and 2 Meets\/day/.test(setupDoc), 'the setup doc states the free plan once, correctly');
 const src = fsNode.readFileSync('api/_linky.js', 'utf8');
 assert(!/import .*_linkyVoice/.test(src), 'no hand written voice module: the words come from Gemini');
 assert(/plainReply/.test(src) && /geminiWording/.test(src), 'both paths exist: model first, plain fallback second');

@@ -372,7 +372,7 @@ export const isCampaignServable = (campaign: Campaign | null | undefined, now: n
   return expiresAt > now;
 };
 
-const notifyCampaignAdmins = async (campaignId: string, ownerName: string, productName: string) => {
+const notifyCampaignAdmins = async (campaignId: string, ownerName: string, productName: string, verb = 'submitted for review') => {
   try {
     const adminsSnap = await getDoc(doc(db, 'config', 'admins'));
     const adminUids: string[] = adminsSnap.data()?.uids || [];
@@ -384,7 +384,7 @@ const notifyCampaignAdmins = async (campaignId: string, ownerName: string, produ
         fromName: ownerName || 'An advertiser',
         fromPic: '',
         type: 'campaign_review',
-        content: `submitted "${campaignName}" for review.`,
+        content: `${verb} "${campaignName}".`,
         campaignId,
         isRead: false,
         timestamp: serverTimestamp(),
@@ -533,8 +533,14 @@ export const setCampaignStatus = async (
   }
 };
 
-/** Owner edits while the campaign is still in review — stats, ownership and
- * the pending status are untouchable (rules enforce it too). */
+/**
+ * Owner edits, live or not. A campaign that is already serving is the one people
+ * most need to change - the price moved, the landing page changed, the logo is
+ * wrong - and making them pause first (losing their slot) or resubmit from
+ * scratch was a rule that only produced worse ads. So edits apply straight
+ * away, the status is untouched, and admins are pinged to look at the new
+ * creative. Stats, ownership and billing fields stay unreachable (rules too).
+ */
 export const updateCampaignCreative = async (
   campaignId: string,
   patch: {
@@ -542,7 +548,8 @@ export const updateCampaignCreative = async (
     creative: CampaignCreative;
     industries: string[];
     placements: string[];
-  }
+  },
+  options: { wasLive?: boolean; ownerName?: string; productName?: string } = {}
 ) => {
   const placements = (patch.placements.length ? patch.placements : ['ideas']).filter((placement) =>
     CAMPAIGN_PLACEMENT_OPTIONS.some((option) => option.id === placement && option.available)
@@ -552,8 +559,16 @@ export const updateCampaignCreative = async (
     creative: patch.creative,
     industries: patch.industries.slice(0, 6),
     placements: placements.length ? placements : ['ideas'],
+    // an edit to a serving campaign leaves a mark moderation can work from
+    ...(options.wasLive ? { liveEditedAt: serverTimestamp() } : {}),
     updatedAt: serverTimestamp(),
   });
+  if (options.wasLive) {
+    await notifyCampaignAdmins(
+      campaignId, options.ownerName || 'Owner', options.productName || patch.name,
+      'edited a LIVE campaign, so the creative needs a second look'
+    ).catch(() => {});
+  }
 };
 
 /**

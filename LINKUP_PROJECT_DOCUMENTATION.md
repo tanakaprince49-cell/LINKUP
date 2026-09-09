@@ -440,6 +440,7 @@ Security:
 
 - Requires Firebase Auth.
 - Uses `GEMINI_API_KEY` as a Firebase Functions secret.
+  A second key (`ZEN_API_KEY`, OpenCode Zen) rescues any request where Gemini fails; with neither set the deterministic path answers.
 - Clips payload size before sending to Gemini.
 
 ### `rankCandidates`
@@ -867,6 +868,7 @@ firebase deploy --only firestore:rules,functions --project linkup-e0906
 - Expo Go does not fully support Android remote push notifications with recent Expo SDKs; use a development build or real APK.
 - True end-to-end encrypted messaging is not implemented.
 - AI ranking depends on deployed Firebase Functions and the configured `GEMINI_API_KEY` secret.
+  A second key (`ZEN_API_KEY`, OpenCode Zen) rescues any request where Gemini fails; with neither set the deterministic path answers.
 - Some Firestore queries may need indexes as features expand.
 
 ## 13. Suggested Next Improvements

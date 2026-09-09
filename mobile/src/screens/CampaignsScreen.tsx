@@ -591,10 +591,11 @@ export default function CampaignsScreen({ navigation }: any) {
                         : <Play size={12} color={textColor(isDark, 'secondary')} />}
                     </TouchableOpacity>
                   )}
-                  {campaign.status === 'pending_review' && (
+                  {(campaign.status === 'pending_review' || campaign.status === 'active' || campaign.status === 'paused') && (
                     <TouchableOpacity
                       onPress={() => navigation.navigate('CreateCampaign', { editCampaign: campaign })}
                       style={s.campActionBtn} activeOpacity={0.8}
+                      accessibilityLabel={campaign.status === 'pending_review' ? 'Edit campaign' : 'Edit live campaign'}
                     >
                       <Pencil size={12} color={textColor(isDark, 'secondary')} />
                     </TouchableOpacity>

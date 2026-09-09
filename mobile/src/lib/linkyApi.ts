@@ -99,7 +99,17 @@ export type LinkyAskResult = LinkyAsk & {
   blocked?: string;
 };
 
-export type LinkyToldFacts = { notes: string; skills: string[]; lookingFor: string[]; updatedAt: number | null };
+export type LinkyToldFacts = { notes: string; skills: string[]; lookingFor: string[]; hidden?: LinkyHidden; updatedAt: number | null };
+/** What the member told Linky NOT to use. Hiding never edits their LINKUP profile. */
+export type LinkyHidden = {
+  skills: string[];
+  industries: string[];
+  lookingFor: string[];
+  notes?: boolean;
+  bio?: boolean;
+  company?: boolean;
+  city?: boolean;
+};
 
 export type LinkyHome = {
   name: string;
@@ -119,6 +129,7 @@ export type LinkyHome = {
 export type LinkyAudit = {
   facts: Record<string, any>;
   told: LinkyToldFacts;
+  hidden?: LinkyHidden;
   signals: Record<string, any>;
   asks: Array<{ id: string; need: string; cards: number; none: boolean; source: string; createdAt: number }>;
   cards: Array<{ id: string; targetName: string; why: string; status: string; createdAt: number }>;
@@ -161,7 +172,13 @@ export const linkyPrefs = (prefs: { openTo?: IntentOffer[]; inboundCap?: number 
 export const linkyPointers = (need: string) => linkyCall<{ text: string; cached: boolean; leads?: LinkyLead[]; searches?: number; note?: string }>('pointers', { need });
 /** "Which Fred?" -> "the first one". Turns a picked member into a real card. */
 export const linkyPickPerson = (targetUid: string) => linkyCall<LinkyCard>('pickPerson', { targetUid });
-export const linkyFacts = (facts: { notes: string; skills: string[]; lookingFor: string[] }) => linkyCall<{ ok: boolean; facts: LinkyToldFacts }>('facts', facts);
+export const linkyFacts = (facts: { notes: string; skills: string[]; lookingFor: string[]; hidden?: LinkyHidden }) =>
+  linkyCall<{ ok: boolean; facts: LinkyToldFacts }>('facts', facts);
+/** One fact at a time: hide it from Linky (their profile keeps it) or give it back. */
+export const linkyHideFact = (kind: string, value: string, hide: boolean) =>
+  linkyCall<{ ok: boolean; hidden: LinkyHidden }>('hideFact', { kind, value, hide });
+/** "and forget that I ever asked" */
+export const linkyRemoveAsk = (id: string) => linkyCall<{ ok: boolean; forgotten: number }>('removeAsk', { id });
 export const linkyAudit = () => linkyCall<LinkyAudit>('audit');
 export const linkyForget = () => linkyCall<{ ok: boolean }>('forget');
 export const linkyLinkCode = () => linkyCall<{ code: string; expiresInMinutes: number }>('linkCode');

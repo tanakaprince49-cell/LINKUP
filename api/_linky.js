@@ -17,11 +17,15 @@
 //   botLinks/{code}         short-lived codes that link a chat to an account
 import crypto from 'node:crypto';
 import { getAdmin, getDb } from './_firebaseAdmin.js';
-import { geminiText, getGeminiKey, localRank, compactProfile } from './_gemini.js';
+import { aiReady, aiText, geminiText, getGeminiKey, localRank, compactProfile } from './_gemini.js';
 import { findLeads } from './_serpapi.js';
 
 export const LIMITS = {
-  free: { asksPerDay: 10, meetsPerDay: 3 },
+  // Two real searches a day on the free plan, and they are the SAME budget on
+  // every surface: an ask typed in the app and an ask typed at the Telegram bot
+  // both burn one of the two, so nobody farms extra searches by switching channel.
+  // Looking someone up by name, chit-chat, drafting and the limit reply are free.
+  free: { asksPerDay: 2, meetsPerDay: 2 },
   plus: { asksPerDay: 60, meetsPerDay: 100000 },
   inboundPerWeek: 5,
   introDays: 7,
@@ -187,20 +191,67 @@ export function profileFacts(p) {
 // What the member told Linky directly (editable on "What Linky knows about you").
 export function toldFacts(state) {
   const f = state?.facts || {};
-  return { notes: text(f.notes, 800), skills: list(f.skills, 20, 40), lookingFor: list(f.lookingFor, 10, 80), updatedAt: toMillis(f.updatedAt) || null };
+  return {
+    notes: text(f.notes, 800), skills: list(f.skills, 20, 40), lookingFor: list(f.lookingFor, 10, 80),
+    // What the member does NOT want Linky to know. It hides the fact from
+    // matching and from the "why" - it does not touch their LINKUP profile.
+    hidden: {
+      skills: list(f.hidden?.skills, 40, 40),
+      industries: list(f.hidden?.industries, 40, 40),
+      lookingFor: list(f.hidden?.lookingFor, 40, 80),
+      notes: !!f.hidden?.notes, bio: !!f.hidden?.bio, company: !!f.hidden?.company, city: !!f.hidden?.city,
+    },
+    updatedAt: toMillis(f.updatedAt) || null,
+  };
 }
+
+// Subtracting a hidden fact is by word, not by position, so "FinTech" hides
+// "fintech" everywhere it appears - including inside the free-text bio, which
+// is where an "I do not want anyone to know I do insurance" actually matters.
+// "beekeeping" on their profile and "Beekeeper" in their headline are the same
+// fact to a human, so both sides are reduced to a stem before they are compared.
+// Short words must match exactly or a hidden "AI" would eat "domain".
+const stemOf = (w) => String(w || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim().replace(/(ings?|ers?|ees?|ies|es|s)$/, '');
+const hiddenHit = (value, hide) => (hide || []).some((h) => {
+  const a = stemOf(value);
+  const b = stemOf(h);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return Math.min(a.length, b.length) >= 4 && (a.includes(b) || b.includes(a));
+});
+const minusHidden = (arr, hide) => (arr || []).filter((x) => !hiddenHit(x, hide));
+// a withheld fact can still be sitting inside a sentence (a headline, a bio).
+// Words carrying it are removed from what Linky reads, so hiding "beekeeping"
+// actually hides "Beekeeper" too - and the profile a human sees is untouched.
+const scrubHidden = (s, hide = []) => {
+  const raw = String(s || '');
+  if (!raw || !(hide || []).length) return raw;
+  return raw
+    .split(/(\s+)/)
+    .map((piece) => (/^\s+$/.test(piece) ? piece : (hiddenHit(piece.replace(/[^a-z0-9']/gi, ''), hide) ? '' : piece)))
+    .join('')
+    .replace(/\s*,\s*(?=,|\s|$)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[,;\s]+|[,;\s]+$/g, '')
+    .trim();
+};
 
 // Profile facts + told facts, merged the way the matcher sees them.
 function mergedFacts(p, state) {
   const base = profileFacts(p);
   if (!base) return null;
   const told = toldFacts(state);
+  const hid = told.hidden;
   return {
     ...base,
-    skills: uniq([...base.skills, ...told.skills]).slice(0, 24),
-    lookingFor: uniq([...base.lookingFor, ...told.lookingFor]).slice(0, 12),
-    bio: [base.bio, told.notes].filter(Boolean).join(' ').slice(0, 1200),
-    notes: told.notes,
+    skills: minusHidden(uniq([...base.skills, ...told.skills]).slice(0, 24), hid.skills),
+    industries: minusHidden(base.industries, hid.industries),
+    lookingFor: minusHidden(uniq([...base.lookingFor, ...told.lookingFor]).slice(0, 12), hid.lookingFor),
+    role: scrubHidden(base.role, [...hid.skills, ...hid.industries]),
+    company: hid.company ? '' : scrubHidden(base.company, hid.skills),
+    city: hid.city ? '' : base.city,
+    bio: [hid.bio ? '' : base.bio, hid.notes ? '' : told.notes].filter(Boolean).map((x) => scrubHidden(x, hid.skills)).filter(Boolean).join(' ').slice(0, 1200),
+    notes: hid.notes ? '' : told.notes,
   };
 }
 
@@ -360,6 +411,12 @@ const DRAFT_RX = /\b(?:write|draft|compose|give me|prepare|what should i say|wha
 // "who else", "anyone else", "more options" -> second lap over the last ask.
 const ELSE_RX = /\b(?:who else|anyone else|anybody else|any other|other people|more people|more options|others\??|else\??|next|keep going|try again|look again|again)\b/i;
 // bare affirmatives / negatives with no new information
+// "no one else in mind, just want to chat" has nouns in it, so the matcher ran
+// on it and told a human nobody fits. Sentences like that are not a search, and
+// a role word anywhere in the message is what tells the two apart.
+const CHIT_RX = /\b(?:just (?:want|wanna|looking|here|checking|saying|asking)?\s*(?:to\s*)?(?:chat|talk|talk a bit|bounce ideas|vent|browse|say hi|say hello|check in)|want(?:s|ing)? (?:to|a) chat|up for a chat|fancy a chat|no (?:one|body) (?:else )?in mind|nobody in mind|nothing specific in mind|nothing in particular|how are you|how'?s it going|how are u|you ok\?|you good\?|what'?s up|hey there|who are you|what are you|are you (?:a |an )?(?:real|human|ai|bot)|you real\?|talk to me|keep me company|bored|what can you do|help me with what you do|are you (?:there|awake)|hi|hey|hello|yo|hiya|howdy|good (?:morning|afternoon|evening)|thanks?(?: you)?(?: linky)?|ty|cheers|no worries|all good|nice (?:to meet|meeting) you|how do you do|sup|what are you up to|are you (?:busy|bored|alone|single)|just checking in|say hi|saying hi|kicking it|hang out|can (?:we|i) (?:talk|chat)|are you (?:around|about|free)|got a (?:minute|moment|sec|second)|wyd|what are you doing|no agenda|nothing on my (?:mind|head)|i.?m (?:bored|stuck)|feeling lonely|nice to (?:meet|talk to) you|good to (?:meet|talk) you|that was a great intro|great intro|the intro was (?:great|good|nice)|that intro (?:was|went) (?:great|well|good)|you.?re a legend|you are a legend|bless you|much appreciated)\b/i;
+const ROLEISH_RX = /\b(?:devel?op(?:er|ing|ment)|programmer|engineer|designer|architect|marketer|marketer|lawyer|analyst|accountant|bookkeep\w*|audit\w*|actuar\w*|quant|recruiter|consultant|copywriter|writer|editor|photographer|videographer|founder|co-?founder|ceo|cto|coo|cmo|cfo|product manager|project manager|data scien\w*|data engine\w*|machine learning|ai engineer|devops|backend|frontend|full[- ]?stack|flutter|react|node(?:\.js)?|python|django|laravel|wordpress|shopify|mobile app|web app|ui|ux|fintech|insurance|logistics|procurement|supply chain|tax|legal|paralegal|nurse|doctor|clinician|teacher|lecturer|professor|researcher|scientist|builder|maker|hacker|investor|angel|vc|mentor|advisor|adviser|sales|growth|marketing|operations|farmer|agronom\w*|mining|energy|solar|log\w*|construction|quantity survey\w*)\b/i;
+
 const BARE_RX = /^(yes|yeah|yep|no|nope|nah|ok|okay|k|sure|cool|nice|great|thanks|thank you|ty|hm+hmm*|huh|\?+\s*|!\s*)[.!?\s]*$/i;
 
 export function parseAsk(message) {
@@ -388,6 +445,25 @@ export function parseAsk(message) {
     wantsDraft: DRAFT_RX.test(all) && !/[a-z]{4,}\s+(developer|designer|engineer|marketer|lawyer|analyst)/i.test(all),
     wantsElse: ELSE_RX.test(all),
     bare: BARE_RX.test(need.trim()),
+    // Chit-chat outranks "there are nouns here", but a single role word pulls it
+    // back to a real ask: "just want to chat about a flutter developer" is a search.
+    // "is this small talk" must be decided by whether there is anything to search
+    // for, not by whether a name-shaped substring exists - namePhrases() calls
+    // "you a real person" a name, and that is how a chat turned into "nobody fits".
+    // "is this small talk" has to be decided by whether there is anything to
+    // search for - not by whether a name-shaped substring exists. namePhrases()
+    // happily calls "you a real person" a name, and that is how a chat turned
+    // into "nobody fits you". Each veto below is a real search signal.
+    chitChat: (() => {
+      if (!CHIT_RX.test(all)) return false;
+      if (ROLEISH_RX.test(all)) return false;                              // a role, a skill, a trade
+      // "coffee" is what OFFER_RX calls any message containing the word chat,
+      // so it cannot veto a chat on its own - the other vetoes still apply
+      if (offer && offer !== 'coffee') return false;                          // paid / equity / advisory
+      if (location && location.split(/\s+/).length <= 2) return false;     // a place they could mean
+      if (names.some((p) => p.split(/\s+/).length >= 2 && /[A-Z][a-z]{2,}/.test(need))) return false;
+      return true;
+    })(),
   };
 }
 
@@ -412,14 +488,14 @@ function candidateFacts(p, st) {
     uid: p.uid,
     name: displayNameOf(p),
     pic: hosted(p.profilePic),
-    role: text(p.occupation, 100),
-    company: text(p.company, 120),
-    city: text(p.city, 80),
+    role: scrubHidden(text(p.occupation, 100), [...told.hidden.skills, ...told.hidden.industries]),
     country: text(p.country, 80),
-    skills: uniq([...list(p.skills, 12), ...told.skills]).slice(0, 20),
-    industries: list(p.industries, 8),
-    lookingFor: uniq([...list(p.lookingFor, 6), ...told.lookingFor]).slice(0, 10),
-    bio: [text(p.bio, 240), told.notes].filter(Boolean).join(' ').slice(0, 700),
+    skills: minusHidden(uniq([...list(p.skills, 12), ...told.skills]).slice(0, 20), told.hidden.skills),
+    industries: minusHidden(list(p.industries, 8), told.hidden.industries),
+    lookingFor: minusHidden(uniq([...list(p.lookingFor, 6), ...told.lookingFor]).slice(0, 10), told.hidden.lookingFor),
+    company: told.hidden.company ? '' : scrubHidden(text(p.company, 120), told.hidden.skills),
+    city: told.hidden.city ? '' : text(p.city, 80),
+    bio: [told.hidden.bio ? '' : text(p.bio, 240), told.hidden.notes ? '' : told.notes].filter(Boolean).map((x) => scrubHidden(x, told.hidden.skills)).filter(Boolean).join(' ').slice(0, 700),
     remoteOnly: !!p.remoteOnly,
   };
 }
@@ -602,7 +678,7 @@ function templateWhy(c, hits, relatedTo = '') {
 // members, so a given ask costs at most one small call ever.
 const cacheKey = (prefix, norm) => `${prefix}_${crypto.createHash('sha1').update(norm).digest('hex').slice(0, 32)}`;
 async function aiExpandTerms(q) {
-  if (!getGeminiKey()) return null;
+  if (!aiReady()) return null;
   const ref = db().collection('linkyCache').doc(cacheKey('x', q.norm));
   const snap = await ref.get().catch(() => null);
   if (snap?.exists && Date.now() - toMillis(snap.data().createdAt) < 30 * DAY_MS) return snap.data().terms || [];
@@ -618,7 +694,14 @@ async function aiExpandTerms(q) {
   return terms;
 }
 
-const templateOpener = (c, need) => `Hi ${firstName(c.name)} - Linky pointed me to you. I am looking for ${need}. Open to a quick chat?`;
+// The opener is the first line a stranger reads, so it carries the actual
+// evidence instead of adjectives: who is asking, why THIS person, one small ask.
+const templateOpener = (c, need) => {
+  const bit = [c.role ? `${/^[aeiou]/i.test(c.role) ? 'an' : 'a'} ${c.role}` : '', c.company ? `at ${c.company}` : '', c.city ? `in ${c.city}` : '']
+    .filter(Boolean).join(' ');
+  const hook = c.skills?.length ? `I am looking for ${need}, and your ${c.skills[0]} is what made me stop on your profile.` : `I am looking for ${need}, and Linky says you are the closest thing to it here.`;
+  return `Hi ${firstName(c.name)} - ${bit ? `you are ${bit} ` : ''}and ${hook} Worth 15 minutes this week? If the timing is bad, no worries at all.`;
+};
 
 // The only Gemini call in the ask flow. Compact on purpose.
 async function geminiRerank(q, requester, shortlist) {
@@ -628,7 +711,8 @@ async function geminiRerank(q, requester, shortlist) {
     'Sound like a warm, sharp, well-connected friend who is good at intros: plain human sentences, no corporate filler, no emojis, never invent a fact.',
     `A member asked: "${q.need}"${q.offer ? ` (offer: ${q.offer})` : ''}${q.location ? ` (location: ${q.location}${q.remote ? ', remote fine' : ', in person'})` : ''}.`,
     'Pick which candidates are genuinely worth an introduction for that ask. Cite-or-skip: every "why" must quote a concrete fact from that candidate\'s record (a skill, role, company, city or bio detail). No evidence = leave them out. Never invent facts. Return an empty list rather than guess.',
-    'Return STRICT JSON only: {"picks":[{"uid":"...","score":0-100,"why":"one plain sentence, under 26 words, citing the evidence","opener":"one friendly sentence the member could send, under 30 words"}]}',
+    'Return STRICT JSON only: {"picks":[{"uid":"...","score":0-100,"why":"one plain sentence, under 26 words, citing the evidence","opener":"the first line the member sends, under 30 words: says who they are looking for, names ONE true thing about this person from the profile, and asks one small question that is easy to answer yes to"}]}',
+    'An opener must never flatter ("your impressive work"), never sell ("exciting opportunity"), never say "I hope this finds you well". Specific beats charming: "saw you shipped EcoCash in 9 weeks - can I ask how you handled the agent float?" is the bar.',
     `At most ${Math.min(LIMITS.cardsPerAsk, shortlist.length)} picks, best first. Omit scores under 55.`,
     `Member: ${JSON.stringify(requester)}`,
     `Candidates: ${JSON.stringify(shortlist.map((c) => ({ uid: c.uid, name: c.name, role: c.role, company: c.company, city: c.city, skills: c.skills.slice(0, 8), industries: c.industries.slice(0, 5), lookingFor: c.lookingFor.slice(0, 4), bio: c.bio.slice(0, 160) })))}`,
@@ -791,18 +875,18 @@ async function appendThread(uid, state, turns) {
 //   - no key, an error, or junk JSON -> plainReply() below answers instead.
 //     A member never sees a failure, they see a shorter, blunter Linky.
 const VOICE_KINDS = {
-  chat: 'This is chit-chat, not a search. Answer warmly like a friend who is glad to hear from them, in 1-2 short sentences, then steer to one clear next step. A question back is allowed and usually good.',
-  found: 'The matcher found people. Be genuinely pleased for them, say how many, and be confident without overselling. Reference the need in your own words.',
-  close: 'Nobody matched the words exactly, but the matcher found adjacent people worth a look. Say that honestly and cheerfully, in your own words - never as an apology.',
-  none: 'The matcher found nobody. Be straight and kind, own the limits of the network without sounding like an error message, and do not apologise more than once. Encourage the next move.',
-  person: 'They asked for a specific person and the matcher found them. Sound like someone who is glad to hand over a name: quick, certain, no ceremony.',
-  ambiguous: 'Their search could be more than one member. Ask which one they mean, lightly, in one short question. Never pick for them.',
-  draft: 'Write the message they should send. Keep it human, specific, and short enough to read on a phone.',
-  limit: 'They have run out of asks for today. Tell them kindly, no corporate apology, and mention what tomorrow brings.',
+  chat: 'This is chit-chat, not a search, so do not talk about searching, profiles, members or limits. Be a charming friend who happens to be free right now: react to what they actually said, be a little funny, then ask one real question or offer one specific thing you could do. Two sentences maximum.',
+  found: 'The matcher found people. Be pleased for them the way a friend is pleased, not the way a press release is. Mention how many in passing, point at why they are worth a look, and let the cards do the bragging.',
+  close: 'Nobody matched their words exactly, but adjacent people are worth a look. Say it cheerfully and never as an apology - "close enough to be useful" is a normal answer, not a failure.',
+  none: 'The matcher found nobody. Be straight and a little dry, zero ceremony: nobody here, and you are not going to invent somebody. One apology maximum, then the next move - and make the next move sound easy, not like a form.',
+  person: 'They asked for a human by name and you found them. Hand the name over quickly, like a friend who already knew where they were. No ceremony, and never "I am happy to inform you".',
+  ambiguous: 'More than one member could be who they mean. Ask which one in one short line that contains both names. Admitting the doubt is charming here; guessing is not.',
+  draft: 'Write the message they should send. It must sound like a person wrote it two minutes ago: specific, warm, easy to answer, no flattery padding, no "I hope this finds you well".',
+  limit: 'They are out of searches for today. Say it lightly, never with corporate regret, and be useful about it: what is still free (looking someone up by name) and what tomorrow brings. Do not lecture about pricing.',
 };
 
 async function geminiWording(kind, dossier, { source = 'app', seed = '' } = {}) {
-  if (!getGeminiKey()) return null;
+  if (!aiReady()) return null;
   const ref = db().collection('linkyCache').doc(cacheKey('v', `${kind}|${source}|${seed}`));
   try {
     const snap = await ref.get().catch(() => null);
@@ -815,10 +899,12 @@ async function geminiWording(kind, dossier, { source = 'app', seed = '' } = {}) 
     : `It is a ${source === 'telegram' ? 'Telegram' : 'WhatsApp'} message: plain text, under 260 characters, no links in the reply.`;
   const prompt = [
     'You are Linky, the connector at LINKUP - a network of founders, builders and operators, Harare first.',
-    'Linky is warm, quick, human and a little playful. He likes people, he likes finding them, and he never bluffs.',
+    'Your voice: charismatic, warm, quick, funny in an easy way - the chatbot everybody wishes their app had. You are the well-connected friend everyone texts when they need somebody, and you enjoy it. Contractions, short sentences, rhythm that changes. Light teasing is fine when it is kind. Never stiff, never a customer-service script, never breathless, never three exclamation marks, never fake enthusiasm about something that is not exciting.',
+    'At most ONE emoji, and only in chit-chat or a greeting. Never in an answer that lists people, never as decoration.',
+    'Style is presentation, never substance: you may not soften, pad, hedge or invent a fact to sound nicer. If the honest answer is "nobody", that is the answer they get - said like a human.',
     VOICE_KINDS[kind] || VOICE_KINDS.chat,
     channelNote,
-    'Write 1-3 short sentences of plain text. Start with a capital letter. No markdown, no asterisks, no bullet symbols, no emoji at all, no hashtags. No corporate filler ("leverage", "I hope this finds you well", "unfortunately"). Do not greet with the member\'s name and do not use any name that is not in the dossier.',
+    'Write 1-3 short sentences of plain text. Start with a capital letter. No markdown, no asterisks, no bullet symbols, no hashtags, and no emoji unless this is chit-chat (then one at most). Banned corporate filler: "leverage", "I hope this finds you well", "unfortunately", "I am sorry to inform you", "great question", "absolutely!", "feel free to", "rest assured", "at your convenience", "please do not hesitate Do not greet with the member\'s name and do not use any name that is not in the dossier.',
     'Only use facts from the dossier. Never add a person, skill, city, company or number that is not there. Never say a message was sent, an intro was made or a reply arrived - Linky asks, people answer.',
     'Return STRICT JSON only: {"reply":"the message","suggest":["up to 3 things they might tap next, each under 34 characters, in THEIR voice, e.g. who else do you have"]}',
     `Dossier: ${JSON.stringify(dossier).slice(0, 2400)}`,
@@ -852,11 +938,11 @@ function plainReply(kind, d = {}) {
   const nearest = Array.isArray(d.closest_instead) ? d.closest_instead : (Array.isArray(d.nearest) ? d.nearest : []);
   const who = nearest.length ? ` Closest here: ${nearest.map(personLine).join(', ')}.` : '';
   switch (kind) {
-    case 'found': return `${count} ${count === 1 ? 'person' : 'people'} on LINKUP fit "${d.need}". Each card cites the profile line I matched.${d.remote_only_note ? ` ${cap1(d.remote_only_note)}.` : ''}${ctaFor(d)}`;
+    case 'found': return `${count} ${count === 1 ? 'person fits' : 'people fit'} "${d.need}". I picked them for a reason and it is on each card - the profile line, not my opinion.${d.remote_only_note ? ` ${cap1(d.remote_only_note)}.` : ''}${ctaFor(d)}`;
     case 'close': return `Nobody lists "${d.need}" word for word, but ${count} ${count === 1 ? 'person is' : 'people are'} close (${d.matched_on || 'related skills'}). The card says exactly what I matched.${ctaFor(d)}`;
     case 'none': {
       const scanned = Number(d.members_checked || 0) > 0 ? `all ${d.members_checked} visible profiles` : 'every visible profile';
-      return `Nobody on LINKUP fits "${d.need}" yet - I read ${scanned} and I will not guess.${who}${d.outside_hint ? ` ${cap1(d.outside_hint)}.` : ''}`;
+      return `Nobody here fits "${d.need}" - I read ${scanned} and I am not going to invent somebody to fill the gap.${who}${d.outside_hint ? ` ${cap1(d.outside_hint)}.` : ''}`;
     }
     case 'person': {
       const f = d.found || d.person || {};
@@ -868,7 +954,7 @@ function plainReply(kind, d = {}) {
     case 'ambiguous': return `I have ${(d.people || []).length} members who could be who you mean: ${(d.people || []).map((x) => x.name).join(', ')}. Which one?`;
     case 'limit': return `That is today's ${d.asks_limit_today || d.limit} asks used up. It resets at ${d.resets || 'midnight'}, and PLUS gets ${d.plus_asks_per_day || d.plusLimit || LIMITS.plus.asksPerDay} a day. Looking someone up by name is free either way.`;
     case 'draft': return d.ready_message || 'Tell me who the message is for and I will write it - then you send it yourself, from your own account.';
-    default: return 'Tell me who you need - a role, a skill, a city, or a name - and I will check the network right now.';
+    default: return 'So what do you need? A role, a skill, a city, or just a name - I will go and look through the network right now and tell you exactly who fits.';
   }
 }
 
@@ -928,7 +1014,7 @@ export async function pointers(uid, need, { userDoc, allowSearch = true } = {}) 
 
   // 2. Advice on where else to look + a message they can send themselves.
   let out = '';
-  if (getGeminiKey()) {
+  if (aiReady()) {
     try {
       const prompt = [
         `You are Linky, the connector for LINKUP. A member in ${place} asked for "${q.need}" and nobody on LINKUP fits yet.`,
@@ -1030,10 +1116,12 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
 
   // ---- 1b. small talk: greetings, thanks, "who are you", "ok".
   // Free, instant, and never dressed up as a search result.
-  if ((!q.tokens.length || q.bare) && !wantsElseNow) {
+  if (q.chitChat || ((!q.tokens.length || q.bare) && !wantsElseNow)) {
     const id = newId();
     const { reply: chat, suggest: chatSuggest, usedAi } = await linkySay('chat', {
       they_said: q.need,
+      tone: 'charming and a bit funny. Do not mention searching, profiles, budgets or limits unless they raised it. Do not answer a feeling with a call to action.',
+      last_real_ask: state.lastAsk && state.lastAsk.need && now - toMillis(state.lastAsk.createdAt) < 3 * DAY_MS ? text(state.lastAsk.need, 120) : '',
       asks_left_today: asksLeft(),
       member_you: { name: me.name, role: me.role, city: me.city },
       network_size: 'a few dozen visible members',
@@ -1255,6 +1343,50 @@ export async function setCardStatus(uid, cardId, status) {
   return { ...card, status };
 }
 
+// The intro is the only message LINKUP sends on somebody's behalf, so it is the
+// one place where "would I answer this?" is the entire job. Two texts come out of
+// one call: what the target reads, and the line the asker opens with afterwards.
+// Both have a hand-written backup, because a missing AI is not a reason to send
+// a member nothing at all.
+export async function introPitch({ requester = {}, target = {}, need = '', why = '', place = '', seed = '' } = {}) {
+  const tName = firstName(target.name || '') || 'there';
+  const aName = text(requester.name, 60) || 'A LINKUP member';
+  const roleBit = target.role ? `${/^[aeiou]/i.test(target.role) ? 'an' : 'a'} ${target.role}` : '';
+  const pitch = [`Hi ${tName} - ${aName} asked me to make the introduction, and I said yes before I checked if you were busy.`,
+    need ? `They are looking for ${text(need, 160)}${place ? ` around ${text(place, 40)}` : ''}.` : '',
+    why ? `You came up because ${text(why, 200).replace(/\.$/, '')}.` : `You came up because ${aName} reads your profile and pointed at it.`,
+    `Fifteen minutes on a call this week, if you are open to it. If the timing is wrong, say so - I will not ask twice and nobody takes it badly.`,
+  ].filter(Boolean).join(' ');
+  const opener = `Hi ${tName} - ${aName} here. Linky pointed me at you${need ? ` after I said I needed ${text(need, 120)}` : ''}${roleBit ? `, and your work as ${roleBit} is exactly why` : ''}. Worth 15 minutes this week?`;
+  if (!aiReady()) return { pitch, opener, usedAi: false };
+  const ref = db().collection('linkyCache').doc(cacheKey('i', seed || `${aName}|${tName}|${need}`));
+  const snap = await ref.get().catch(() => null);
+  if (snap && snap.exists && Date.now() - toMillis(snap.data().createdAt) < 30 * DAY_MS) {
+    const d = snap.data();
+    if (text(d.pitch, 900) && text(d.opener, 600)) return { pitch: text(d.pitch, 900), opener: text(d.opener, 600), usedAi: true, cached: true };
+  }
+  const prompt = [
+    "You are Linky, LINKUP's connector. You are writing the message that decides whether a busy, good person says yes to a stranger.",
+    'Two texts, STRICT JSON only: {"pitch":"...","opener":"..."}',
+    `pitch: what ${tName} reads, from Linky, on behalf of ${aName}. Max 70 words. It must say who is asking and that they asked for THIS person; name the one real reason from the dossier (a fact, never an adjective); make the ask tiny and concrete (15 minutes, this week); and offer a no that costs them nothing. Confident, warm, a flicker of humour. No flattery padding, no hype, no "game-changer", no "I hope this finds you well", no exclamation marks, no emoji.`,
+    `opener: the first line ${aName} sends once ${tName} says yes. Max 45 words, first person, sounds like a human typing on a phone in one go: one true thing about ${tName}, what ${aName} is building or needs, one easy question to answer. Never "per my last email", never pitch-deck language, never "synergy", "revolutionise" or "passionate".`,
+    'Never invent a fact that is not in the dossier. Never promise money, equity, a job or a time. If the dossier has no reason, say what the asker is building instead of flattering anybody.',
+    `Dossier: ${JSON.stringify({ asker: { name: aName, role: text(requester.role, 80), company: text(requester.company, 80), city: text(requester.city, 40) }, target: { name: target.name, role: text(target.role, 80), company: text(target.company, 80), city: text(target.city, 40), skills: list(target.skills, 6, 40) }, need: text(need, 200), why: text(why, 240), place: text(place, 60) })}`.slice(0, 2600),
+  ].join('\n');
+  try {
+    const { text: raw } = await aiText(prompt, { temperature: 0.75, maxOutputTokens: 420, responseMimeType: 'application/json' });
+    const parsed = JSON.parse(String(raw).slice(String(raw).indexOf('{'), String(raw).lastIndexOf('}') + 1));
+    const pOut = text(parsed.pitch, 700);
+    const oOut = text(parsed.opener, 480);
+    if (pOut.length < 60 || oOut.length < 30) return { pitch, opener, usedAi: false };
+    await ref.set({ pitch: pOut, opener: oOut, at: Date.now(), createdAt: Date.now() }, { merge: true }).catch(() => {});
+    return { pitch: pOut, opener: oOut, usedAi: true };
+  } catch (err) {
+    console.warn('[linky] intro pitch failed, using the written one', err?.message || err);
+    return { pitch, opener, usedAi: false };
+  }
+}
+
 export async function meet(uid, cardId, { userDoc } = {}) {
   const user = userDoc || (await loadUser(uid));
   if (!user) throw new Error('Finish your LINKUP profile first.');
@@ -1299,13 +1431,19 @@ export async function meet(uid, cardId, { userDoc } = {}) {
   if (inboundCount >= cap) {
     throw new Error('They have hit their weekly intro cap. Ask me again next week.');
   }
+  const pitchPack = await introPitch({
+    requester: { ...me },
+    target: { name: card.targetName, role: card.targetRole, company: card.targetCompany, city: card.targetCity, skills: card.targetSkills },
+    need: card.need, why: card.why, place: me.city, seed: `intro:${introId}:${card.askId || ''}`,
+  });
   const intro = {
     requesterId: uid,
     targetId: target,
     askId: card.askId || '',
     need: card.need,
     why: card.why,
-    opener: card.opener || '',
+    pitch: pitchPack.pitch,
+    opener: pitchPack.opener || card.opener || '',
     requesterName: me.name,
     requesterPic: me.pic,
     requesterRole: me.role,
@@ -1324,14 +1462,14 @@ export async function meet(uid, cardId, { userDoc } = {}) {
   ]);
   const cardsRef = db().collection('introSuggestions').doc(uid);
   await cardsRef.set({ cards: cards.map((c) => (c.id === cardId ? { ...c, status: 'meet', introId, updatedAt: Date.now() } : c)), updatedAt: nowTs() }, { merge: true });
-  const content = `${me.name} wants to meet: "${card.need}". Linky's reason: ${card.why}`;
+  const content = pitchPack.pitch;
   await notifyUser(target, {
     type: 'intro_request',
     content,
     from: me,
     requestId: introId,
     pushTitle: 'Linky has an intro for you',
-    channelText: `Linky here. ${me.name}${me.role ? ` (${me.role})` : ''} wants to meet you.\nThey need: ${card.need}\nWhy you: ${card.why}\n\nReply ACCEPT, DECLINE or LATER.`,
+    channelText: `${pitchPack.pitch}\n\nReply ACCEPT, DECLINE or LATER - all three are fine answers.`,
     state: targetState,
   });
   return { introId, pending: true, meetsLeft: plus ? null : Math.max(0, limit - used - 1) };
@@ -1526,10 +1664,64 @@ export async function setFacts(uid, input) {
     notes: text(input?.notes, 800),
     skills: list(input?.skills, 20, 40),
     lookingFor: list(input?.lookingFor, 10, 80),
+    // a save from the notes form must not silently un-hide everything: when the
+    // caller sent no hidden block, keep what they already had
+    hidden: normaliseHidden(input && input.hidden !== undefined ? input.hidden : (await loadState(uid)).facts?.hidden),
     updatedAt: Date.now(),
   };
   await patchState(uid, { facts, lastAsk: FieldValue().delete(), recentAsks: FieldValue().delete() });
   return { ok: true, facts: { ...facts } };
+}
+
+const HIDDEN_LISTS = ['skills', 'industries', 'lookingFor'];
+const HIDDEN_FLAGS = ['notes', 'bio', 'company', 'city'];
+function normaliseHidden(h) {
+  const src = h || {};
+  const out = {};
+  for (const k of HIDDEN_LISTS) out[k] = list(src[k], 40, k === 'lookingFor' ? 80 : 40);
+  for (const k of HIDDEN_FLAGS) out[k] = !!src[k];
+  return out;
+}
+
+// One tap on a fact in the audit page. This hides it from LINKY - their LINKUP
+// profile keeps it, Linky simply stops matching on it and quoting it. Deleting a
+// fact nobody else can see is the whole point of letting people audit him.
+export async function hideFact(uid, { kind = 'skills', value = '', hide = true } = {}) {
+  const state = await loadState(uid);
+  const cur = normaliseHidden((state.facts || {}).hidden);
+  const next = { ...cur };
+  if (HIDDEN_LISTS.includes(kind)) {
+    const v = text(value, 80);
+    const rest = (cur[kind] || []).filter((x) => x.toLowerCase() !== v.toLowerCase());
+    if (hide && v) rest.push(v);
+    next[kind] = rest;
+  } else if (HIDDEN_FLAGS.includes(kind)) {
+    if (hide) next[kind] = true;
+    else delete next[kind];
+  } else {
+    throw new Error('What should I hide? A skill, an industry, a looking-for, your notes, your bio, your company or your city.');
+  }
+  const facts = { ...((state.facts || {})), hidden: normaliseHidden(next), updatedAt: Date.now() };
+  // and their cached answers go with it: an ask from this morning that was
+  // answered using the now-hidden fact must not be served again
+  await patchState(uid, { facts, lastAsk: FieldValue().delete(), recentAsks: FieldValue().delete() });
+  return { ok: true, hidden: facts.hidden, told: toldFacts({ facts }) };
+}
+
+// "and forget that I ever asked" - one memory out, not the whole ledger.
+export async function removeAsk(uid, askId) {
+  const state = await loadState(uid);
+  const id = String(askId || '').trim();
+  if (!id) throw new Error('Which one should I forget?');
+  const before = (Array.isArray(state.askHistory) ? state.askHistory : []);
+  const kept = before.filter((a) => String(a && a.id) !== id);
+  const recent = (Array.isArray(state.recentAsks) ? state.recentAsks : []).filter((a) => String(a && a.id) !== id);
+  const patch = { askHistory: kept.slice(-20), recentAsks: recent };
+  if (state.lastAsk && String(state.lastAsk.id) === id) patch.lastAsk = FieldValue().delete();
+  const thread = threadOf(state).filter((t) => String(t && t.id) !== id);
+  if (thread.length !== threadOf(state).length) patch.chat = thread;
+  await patchState(uid, patch);
+  return { ok: true, forgotten: before.length - kept.length, turns: thread.length };
 }
 
 export async function audit(uid, { userDoc } = {}) {
@@ -1548,6 +1740,7 @@ export async function audit(uid, { userDoc } = {}) {
       skills: facts.skills, industries: facts.industries, lookingFor: facts.lookingFor, goals: facts.goals, bio: facts.bio,
     },
     told,
+    hidden: toldFacts(state).hidden,
     signals: {
       plus: await isPlusUser(uid, user),
       asksUsedToday: state.asks?.day === dayKey() ? Number(state.asks.count || 0) : 0,

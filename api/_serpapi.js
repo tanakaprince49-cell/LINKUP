@@ -36,7 +36,7 @@
 // ---------------------------------------------------------------------------
 import crypto from 'node:crypto';
 import { getAdmin, getDb } from './_firebaseAdmin.js';
-import { geminiText, getGeminiKey } from './_gemini.js';
+import { aiReady, aiText, geminiText, getGeminiKey } from './_gemini.js';
 
 export const OUTREACH = {
   num: 100,                 // asked for every time (rule 1); may not be honoured
@@ -320,7 +320,10 @@ async function cleanLinks(profiles) {
 // One call per batch of 15 (rule 2). The model returns indices plus a score,
 // and is explicitly forbidden from explaining the ones it dropped.
 export async function scoreBatch(profiles, { need = '', place = '' } = {}) {
-  if (!profiles.length || !getGeminiKey()) return profiles.map((p, i) => ({ i, fit: 70 - i, why: '' }));
+  if (!profiles.length) return profiles.map((p, i) => ({ i, fit: 70 - i, why: '' }));
+  // No model at all: keep the local prefilter order and let it through its own
+  // (lower) floor, because "no key" is not evidence that these people are wrong.
+  if (!aiReady()) return profiles.map((p, i) => ({ i, fit: 70 - i, why: p.hits?.[0] ? `matches ${p.hits[0]}` : '', fallback: true }));
   const prompt = [
     'You shortlist people for LINKUP, a network of founders, builders and operators. A member needs somebody LINKUP does not have yet.',
     'Score each public profile on whether THIS person could realistically help. Be strict about the role and generous about adjacent roles.',
@@ -329,7 +332,7 @@ export async function scoreBatch(profiles, { need = '', place = '' } = {}) {
     `Profiles: ${JSON.stringify(profiles.map((p, i) => ({ i, name: p.name, title: p.title, snippet: p.snippet.slice(0, 200) })))}`,
   ].filter(Boolean).join('\n');
   try {
-    const raw = await geminiText(prompt, { temperature: 0.1, maxOutputTokens: 400, responseMimeType: 'application/json' });
+    const raw = await aiText(prompt, { temperature: 0.1, maxOutputTokens: 400, responseMimeType: 'application/json' }).then((r) => r.text);
     const parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
     const keep = Array.isArray(parsed?.keep) ? parsed.keep : [];
     return keep

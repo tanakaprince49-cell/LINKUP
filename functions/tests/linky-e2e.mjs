@@ -29,12 +29,20 @@ for (const [uid, u] of Object.entries(users)) {
 }
 await db.collection('userPrivate').doc('bob').set({ pushTokens: [] });
 const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exit(1); } console.log('ok  -', m); };
+// the free plan is 2 searches and 2 Meets a day now. Every assertion below is
+// written against L.LIMITS so the suite still says something when the number moves,
+// and anything that is not testing the paywall tops the member up first.
+const FREE = L.LIMITS.free;
+const clearBudget = async (uid) => {
+  await db.collection('linkyState').doc(uid).set({ asks: { day: 'test-reset', count: 0 }, meets: { day: 'test-reset', count: 0 } }, { merge: true });
+};
 
 // ---- ask: greeting -> coach, no budget, no cards
 let r = await L.ask('alice', 'hi linky');
-assert(r.none && !r.cards.length && /tell me who you need/i.test(r.reply) && r.asksLeft === 10, 'greeting -> coaching reply, no budget used');
+assert(r.none && !r.cards.length && /what do you need|who you need|a role, a skill/i.test(r.reply) && r.asksLeft === L.LIMITS.free.asksPerDay && r.free === true, 'greeting -> coaching reply, no budget used');
 assert(r.kind === 'chat' && r.free === true && Array.isArray(r.suggest) && r.suggest.length === 3, 'chit-chat is tagged as chat, is free, and comes with tappable chips');
 // ---- ask: immediate cited answer
+await clearBudget('alice');
 r = await L.ask('alice', 'I need a Flutter developer in Harare for a paid fintech MVP');
 console.log('    reply:', r.reply);
 console.log('    cards:', r.cards.map((c) => `${c.targetName} :: ${c.why}`));
@@ -43,18 +51,23 @@ assert(r.cards.every((c) => c.why.length > 12 && c.opener.length > 10), 'every c
 assert(!r.cards.some((c) => c.targetUid === 'cara'), 'cara (designer, no overlap) not a card');
 assert(!r.cards.some((c) => c.targetUid === 'alice'), 'never matches yourself');
 assert(!r.cards.some((c) => c.targetUid === 'eve'), 'eve (empty profile) is never cited');
-assert(r.asksLeft === 9, 'one ask consumed');
+assert(r.asksLeft === FREE.asksPerDay - 1, 'one ask consumed');
 const firstAskCards = r.cards.map((c) => c.id);
-// ---- same ask again -> cached, no budget
+// ---- same ask again -> cached, no budget (deliberately NOT topped up: the
+// point is that the repeat inherits whatever the first ask already used)
 const again = await L.ask('alice', 'I need a Flutter developer in Harare for a paid fintech MVP');
-assert(again.cached && again.cards.map((c) => c.id).join() === firstAskCards.join() && again.asksLeft === 9, 'repeat ask is served from cache with the same cards');
+assert(again.cached && again.cards.map((c) => c.id).join() === firstAskCards.join() && again.asksLeft === FREE.asksPerDay - 1, 'repeat ask is served from cache with the same cards and costs nothing');
 // ---- nobody fits -> graceful, no error, nearest people, budget consumed
+await clearBudget('alice');
+await clearBudget('alice');
 r = await L.ask('alice', 'a quantum cryptography professor from Oslo');
 console.log('    reply:', r.reply);
-assert(r.none && !r.cards.length && /Nobody on LINKUP fits/.test(r.reply) && r.checked === 6, 'no-match ask answers gracefully with member count');
+assert(r.none && !r.cards.length && /Nobody (here|on LINKUP) fits/i.test(r.reply) && /read all 6 visible profiles/i.test(r.reply) && r.checked === 6, 'no-match ask answers gracefully with member count: ' + r.reply.slice(0, 70));
 assert(Array.isArray(r.nearest) && r.nearest.length >= 1 && !r.nearest.some((n) => n.uid === 'alice') && /Harare/.test(r.nearest[0].city), 'nearest people offered instead of an error, own city first: ' + r.nearest.map((n) => n.name).join(', '));
-assert(r.asksLeft === 8, 'no-match ask still counts');
+assert(r.asksLeft === FREE.asksPerDay - 1, 'no-match ask still counts');
 // ---- related-concept expansion (zero tokens): "math" is on nobody's profile
+await clearBudget('alice');
+await clearBudget('alice');
 r = await L.ask('alice', 'find me a person who understands math');
 console.log('    reply:', r.reply);
 console.log('    cards:', r.cards.map((c) => `${c.targetName} :: ${c.why}`));
@@ -64,6 +77,8 @@ assert(/word for word/.test(r.reply) && r.expansion === 'local', 'reply is hones
 assert(!r.cards.some((c) => c.targetUid === 'eve'), 'empty profiles are never cited even in expansion');
 assert(r.usedAi === false, 'no Gemini call for a local expansion');
 // ---- plural / verb forms match without expansion
+await clearBudget('alice');
+await clearBudget('alice');
 r = await L.ask('alice', 'developers');
 assert(!r.none && r.cards.some((c) => c.targetUid === 'bob') && r.expansion === 'none', 'plural "developers" matches "developer" word for word');
 // ---- pointers: only for an ask that was made; static text without a key
@@ -74,14 +89,17 @@ assert(/Outside LINKUP/.test(pointer.text) && /Oslo|Harare/.test(pointer.text) &
 const pointer2 = await L.pointers('alice', 'a quantum cryptography professor from Oslo');
 assert(pointer2.cached, 'pointers are cached per ask');
 // ---- interleaved repeat (an unrelated ask in between) is still cached
+await clearBudget('alice');
+await clearBudget('alice');
 r = await L.ask('alice', 'I need a Flutter developer in Harare for a paid fintech MVP');
-assert(r.cached && r.cards.map((c) => c.id).join() === firstAskCards.join() && r.asksLeft === 6, 'repeat after another ask is still served from cache');
+assert(r.cached && r.cards.map((c) => c.id).join() === firstAskCards.join() && r.asksLeft === FREE.asksPerDay, 'repeat after another ask is still served from cache, and a cached answer is not metered');
 // ---- name lookup
+await clearBudget('alice');
 r = await L.ask('alice', 'connect me with Cara Dube');
 assert(r.cards.length === 1 && r.cards[0].targetUid === 'cara' && /Cara Dube/.test(r.cards[0].why), 'asking for a person by name finds them: ' + r.cards[0].why);
 // ---- home
 let h = await L.home('alice');
-assert(h.limits.meetsPerDay === 3 && h.limits.asksPerDay === 10 && h.limits.asksUsedToday === 4 && h.lastAsk && h.lastAsk.need === 'connect me with Cara Dube', 'home shows limits + last ask (a name lookup cost nothing: 4 of 5 asks)');
+assert(h.limits.meetsPerDay === FREE.meetsPerDay && h.limits.asksPerDay === FREE.asksPerDay && h.limits.asksUsedToday === 0 && h.lastAsk && h.lastAsk.need === 'connect me with Cara Dube', `home shows the free plan's limits (${FREE.asksPerDay} searches, ${FREE.meetsPerDay} Meets a day) + last ask, and a name lookup cost nothing`);
 assert(Array.isArray(h.thread) && h.thread.length >= 10 && h.thread.every((t) => t.text && ['user', 'linky'].includes(t.role)), 'home returns the whole thread, oldest first, both sides');
 assert(h.thread.filter((t) => t.role === 'linky').every((t) => !/[*_#]|^>/.test(t.text)), 'Linky never sends markdown into a chat bubble');
 assert(!('intents' in h), 'home has no intents');
@@ -89,13 +107,15 @@ assert(h.cards.some((c) => c.targetUid === 'bob') && h.cards.some((c) => c.targe
 // ---- meet -> intro pending + notification to bob
 const bobCard = h.cards.find((c) => c.targetUid === 'bob');
 const m = await L.meet('alice', bobCard.id);
-assert(m.pending && m.introId === 'alice_bob' && m.meetsLeft === 2, 'meet creates pending intro, 2 meets left');
+assert(m.pending && m.introId === 'alice_bob' && m.meetsLeft === FREE.meetsPerDay - 1, `meet creates pending intro, one of the free plan's ${FREE.meetsPerDay} Meets used`);
 let notes = await db.collection('notifications').where('userId', '==', 'bob').get();
 assert(notes.size === 1 && notes.docs[0].data().type === 'intro_request' && notes.docs[0].data().requestId === 'alice_bob', 'bob got intro_request notification');
 h = await L.home('bob');
 assert(h.inbound.length === 1 && h.inbound[0].requesterName === 'Alice Moyo', 'bob sees inbound intro');
 // ---- re-asking keeps the requested card (status meet) instead of duplicating bob
+await clearBudget('alice');
 await db.collection('linkyState').doc('alice').set({ lastAsk: null }, { merge: true });
+await clearBudget('alice');
 r = await L.ask('alice', 'Flutter developer Harare fintech');
 const bobAgain = r.cards.filter((c) => c.targetUid === 'bob');
 assert(bobAgain.length === 1 && bobAgain[0].id === bobCard.id && bobAgain[0].status === 'meet', 'same person reuses the live card (no duplicates)');
@@ -121,32 +141,36 @@ const bobState = await L.loadState('bob');
 assert(bobState.muted && bobState.muted.dan, 'bob muted dan');
 const danHome = await L.home('dan');
 assert(danHome.cards.find((c) => c.id === bobFromDan.id).status === 'declined', 'dan card shows declined');
+await clearBudget('dan');
 r = await L.ask('dan', 'Flutter developer in Harare');
 assert(!r.cards.some((c) => c.targetUid === 'bob'), 'declined person never comes back for dan');
 // ---- inbound cap 0 excludes from matching; openTo filter
 await L.setPrefs('bob', { inboundCap: 0 });
 await db.collection('introSuggestions').doc('alice').delete();
 await db.collection('linkyState').doc('alice').set({ lastAsk: null }, { merge: true });
+await clearBudget('alice');
 r = await L.ask('alice', 'Flutter developer Harare');
 assert(!r.cards.some((c) => c.targetUid === 'bob') && r.cards.some((c) => c.targetUid === 'dan'), 'bob excluded when inbound cap is 0, dan still cited');
 await L.setPrefs('dan', { openTo: ['equity'] });
 await db.collection('linkyState').doc('alice').set({ lastAsk: null }, { merge: true });
+await clearBudget('alice');
 r = await L.ask('alice', 'Flutter developer Harare, paid work');
 assert(!r.cards.some((c) => c.targetUid === 'dan'), 'dan excluded by openTo=[equity] for a paid ask');
 // ---- editable facts: what you tell Linky is matched and cited
 await L.setFacts('eve', { notes: 'I run growth for a solar startup', skills: ['solar', 'growth marketing'], lookingFor: ['angel investors'] });
 const evTold = L.toldFacts(await L.loadState('eve'));
 assert(evTold.skills.length === 2 && evTold.notes.startsWith('I run growth'), 'facts saved');
+await clearBudget('alice');
 r = await L.ask('alice', 'someone who knows solar and growth marketing');
 assert(r.cards.length === 1 && r.cards[0].targetUid === 'eve' && /solar|growth/i.test(r.cards[0].why), 'told facts make eve matchable + cited: ' + r.cards[0].why);
 const a = await L.audit('eve');
 assert(a.told.skills.includes('solar') && a.facts.name === 'Eve Mutasa' && Array.isArray(a.asks), 'audit returns told facts + profile facts + asks');
 const aliceAudit = await L.audit('alice');
 assert(aliceAudit.asks.length >= 5 && aliceAudit.asks[0].need === 'someone who knows solar and growth marketing', 'audit lists asks newest first');
-// ---- ask budget: free 10/day -> 402 code
-await db.collection('linkyState').doc('alice').set({ asks: { day: L.dayKey(), count: 10 }, lastAsk: null }, { merge: true });
+// ---- ask budget: the free plan's cap -> 402 code
+await db.collection('linkyState').doc('alice').set({ asks: { day: L.dayKey(), count: FREE.asksPerDay }, lastAsk: null }, { merge: true });
 let lim = null; try { await L.ask('alice', 'designer in Bulawayo'); } catch (e) { lim = e; }
-assert(lim && lim.code === 'ask_limit', 'free tier blocked at 11th ask: ' + lim?.message);
+assert(lim && lim.code === 'ask_limit', `free tier blocked at ask number ${FREE.asksPerDay + 1}: ` + lim?.message);
 await db.collection('linkyState').doc('alice').set({ asks: { day: L.dayKey(), count: 0 } }, { merge: true });
 // ---- bot linking + bot brain (ask answered inline)
 const { code } = await L.createLinkCode('alice');
@@ -155,13 +179,14 @@ assert(linkedUid === 'alice', 'link code (case-insensitive) links telegram chat 
 assert((await L.botUserFor('telegram', '12345')).uid === 'alice', 'botUsers row exists');
 assert((await L.consumeLinkCode(code, 'telegram', '999')) === null, 'code is single-use');
 const { botReplyForTest } = await import('../../api/linky.js');
+await clearBudget('alice');
 let br = await botReplyForTest('telegram', '12345', 'designer in Bulawayo');
 console.log('    bot:', br.text.split('\n')[0]);
 assert(br.cards?.length === 1 && br.cards[0].targetUid === 'cara' && /meet 1/.test(br.text), 'bot answers an ask inline with numbered cards');
 br = await botReplyForTest('telegram', '12345', 'meet 1');
 assert(/Asked Cara Dube/.test(br.text), 'bot "meet 1" targets the first card of the last answer: ' + br.text);
 br = await botReplyForTest('telegram', '12345', 'a blockchain lawyer in Lagos');
-assert(!br.cards && /Nobody on LINKUP fits/.test(br.text), 'bot no-match is graceful');
+assert(!br.cards && /Nobody (here|on LINKUP) fits/i.test(br.text), 'bot no-match is graceful: ' + br.text.slice(0, 70));
 br = await botReplyForTest('telegram', '12345', 'more');
 assert(/Outside LINKUP/.test(br.text), 'bot "more" gives outside-LINKUP pointers for the last ask');
 br = await botReplyForTest('telegram', '12345', 'cards');

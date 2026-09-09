@@ -1327,10 +1327,20 @@ service cloud.firestore {
           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) &&
           incoming().status in ['active', 'paused'] &&
           existing().status in ['active', 'paused']) ||
+        // An owner may fix their own creative at any time the campaign is
+        // theirs - including while it is serving, since a wrong price on a live
+        // ad is worse than an unmoderated minute. What they may NOT do is touch
+        // status, stats, billing or the reviewer's note while doing it.
         (existing().ownerId == request.auth.uid &&
-          existing().status == 'pending_review' &&
+          existing().status in ['pending_review', 'active', 'paused'] &&
+          incoming().status == existing().status &&
           isSaneExpiry() &&
-          !incoming().diff(existing()).affectedKeys().hasAny(['ownerId', 'status', 'statsImpressions', 'statsClicks', 'createdAt', 'reviewNote'])) ||
+          incoming().name is string &&
+          incoming().name.size() <= 90 &&
+          incoming().creative is map &&
+          incoming().placements is list &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'creative', 'industries', 'placements', 'liveEditedAt', 'updatedAt']) &&
+          incoming().diff(existing()).affectedKeys().hasAny(['name', 'creative', 'industries', 'placements'])) ||
         (incoming().diff(existing()).affectedKeys().hasOnly(['statsImpressions', 'statsClicks']) &&
           incoming().statsImpressions >= existing().statsImpressions &&
           incoming().statsImpressions <= existing().statsImpressions + 32 &&
