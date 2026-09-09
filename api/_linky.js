@@ -1770,13 +1770,22 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       cards = await persistCards(uid, existing, [{ facts, score: 96, why, opener: text(opener, 240) }], { askId: id, need, now });
       cardIds = cards.map((c) => c.id);
     }
-    const { reply } = await linkySay('person', {
+    // "send intro to X" wants the next step, not just a name handed over. The
+    // wording is cached, so the instruction is appended deterministically rather
+    // than trusted to a sentence written for somebody else last week.
+    const wantsSend = /\b(?:send|introduce|intro|message|reach out|write to|ask them|get a chat|connect)\b/i.test(msgTyped);
+    const howTo = !cards.length ? '' : source === 'app'
+      ? ' Tap Meet on the card and I will ask them for you - you approve the words first.'
+      : ' Reply meet 1 and I will ask them for you - you approve the words first.';
+    const { reply: saidPerson } = await linkySay('person', {
       asked_for: nameHit.match.phrase, found: { ...person, skills: facts.skills.slice(0, 6) },
       already_connected: connected, cannot_introduce_because: blocked || '', channel: source,
+      they_want_to_send: wantsSend && !!cards.length,
       what_happens_next: blocked ? 'the member can open the profile and message directly; Linky will not push an intro request'
         : connected ? 'they can keep talking in Messages'
-        : 'a card is ready and Linky asks permission before anything is sent',
-    }, { name: me.name, source, seed: `person:${facts.uid}:${!!blocked}:${connected}`, fallback: plainReply('person', { person }) });
+        : cards.length ? 'a card is ready and Linky asks permission before anything is sent' : '',
+    }, { name: me.name, source, seed: `person:${facts.uid}:${uid}:${!!blocked}:${connected}:${wantsSend && !!cards.length ? 'send' : 'find'}`, fallback: plainReply('person', { person }) });
+    const reply = wantsSend && cards.length && !/meet/i.test(saidPerson) ? `${saidPerson.replace(/[.\s]*$/, '.')}${howTo}` : saidPerson;
     const thread = await sayBack(id, reply, { kind: 'person', cardIds });
     const foundNearest = [{ uid: facts.uid, name: person.name, pic: facts.pic, role: person.role, city: person.city }];
     const record = { id, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply, cardIds, none: !cards.length, nearest: blocked || connected ? foundNearest : [], checked: ctx.candidates.length, usedAi: false, expansion: 'none', source, kind: 'person', createdAt: now };

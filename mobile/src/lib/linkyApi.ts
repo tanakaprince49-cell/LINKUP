@@ -55,6 +55,8 @@ export type LinkyAsk = {
   /** `check` = Linky asked before searching; answer it with yes / no. */
   kind?: 'found' | 'close' | 'none' | 'person' | 'ambiguous' | 'chat' | 'draft' | 'check';
   askingFirst?: boolean;
+  /** What decided the turn - `ai:chat` (the model) or `words:chat` (offline lists). */
+  intent?: string;
   cardIds: string[];
   none: boolean;
   nearest: LinkyNearest[];

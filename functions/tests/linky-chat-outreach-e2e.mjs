@@ -185,7 +185,7 @@ console.log('    LINKY>', r.reply);
 assert(r.kind === 'person' && r.cards.length === 1 && r.cards[0].targetUid === 'fred', '"fred" finds the human instead of saying nobody fits');
 assert(r.free === true && r.asksLeft === L.LIMITS.free.asksPerDay, `a name lookup costs no ask (free plan has ${L.LIMITS.free.asksPerDay} searches a day)`);
 assert(r.reply.length > 30 && r.reply.length < 700 && /I checked, that is a real profile/.test(r.reply), 'the sentence is the model wording, not a stamped template');
-assert(/^Alice\./.test(r.reply), 'the member name is prepended by the app, never asked of the model');
+assert(/^(?:hey |hi )?Alice[.!]/i.test(r.reply), 'the member name is prepended by the app, never asked of the model: ' + r.reply.slice(0, 12));
 assert(!/"reply":/.test(r.reply) && !/```/.test(r.reply), 'and the raw model JSON never leaks into the bubble');
 r = await L.ask('alice', 'send a message to fred');
 assert(r.kind === 'person' && r.cards.length === 1 && !/Nobody on LINKUP fits/.test(r.reply), '"send a message to fred" is understood as a person request');

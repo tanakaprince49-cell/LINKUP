@@ -350,5 +350,16 @@ assert(f.ok && !(await db.collection('linkyState').doc('alice').get()).exists &&
   assert(true, 'the word lists carry every decision in that mode, which is what the suite above proves');
 }
 
+
+// ---- "send intro to X": a name found is not the answer, the next step is
+{
+  const sent = await L.ask('alice', 'send an intro to Dan Ncube');
+  assert(sent.kind === 'person' && sent.cards.length === 1, 'he is found by name, not searched for: ' + JSON.stringify({ k: sent.kind, c: sent.cards.length }));
+  assert(/meet/i.test(sent.reply), 'and the reply says how the message actually goes out: ' + JSON.stringify(sent.reply.slice(-72)));
+  assert((sent.reply.match(/meet/gi) || []).length === 1, 'the instruction is not said twice just because the cached line mentions it too');
+  const plain = await L.ask('alice', 'is Dan Ncube around?');
+  assert(plain.kind === 'person' && /Dan/.test(plain.reply), 'a lookup without "send" is still answered');
+}
+
 console.log('\nALL PASSED');
 process.exit(0);

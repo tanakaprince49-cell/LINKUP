@@ -307,10 +307,14 @@ tells them apart (`parseAsk` in `api/_linky.js`):
 
 | they write | what he does |
 | --- | --- |
-| `who could be my Co founder`, `I am thinking about bringing on a technical co founder`, `should i look for a bookkeeper`, `anyone come to mind for taxes?` | **free** reflective reply that ends with `Want me to look?` - no cards, no ask spent. `kind: 'check'`, `askingFirst: true`. On Telegram that comes with a **Yes / No** button; in the app the two chips under the bubble are the same yes and no. |
+| `who could be my Co founder`, `I am thinking about bringing on a technical co founder`, `should i look for a bookkeeper`, `anyone come to mind for taxes?` | **free** reflective reply that ends with `Should I search for them?` - no cards, no ask spent. `kind: 'check'`, `askingFirst: true`. On Telegram that comes with **Yes, search for them** / **No, just talking** buttons; in the app the two chips under the bubble are the same yes and no. |
 | `yes`, `yeah`, `go ahead`, `ok`, `sure why not` (within 40 minutes, nothing else in the message) | the search he offered runs - this is the turn that costs an ask |
 | `no`, `no thanks, just thinking`, `not now` | one short line, nothing searched, nothing charged |
 | `find a flutter developer in harare, paid`, `who do you have for ...`, `search linkedin for ...` | an **order**: people come back immediately, no extra round trip |
+
+A name lookup that also asks to send (`send an intro to Dan Ncube`) always ends with the
+next step - `Reply meet 1 and I will ask them for you` - appended deterministically when
+the cached sentence forgot it, and never twice.
 
 What is deliberately protected:
 
