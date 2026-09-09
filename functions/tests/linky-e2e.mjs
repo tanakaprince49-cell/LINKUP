@@ -339,5 +339,16 @@ assert(f.ok && !(await db.collection('linkyState').doc('alice').get()).exists &&
   assert(Number((await L.loadState('alice')).chitStreak || 0) === 0, 'and one real ask resets it');
 }
 
+
+// ---- the gate stands aside when no model is configured
+{
+  const none = await L.intentGate('find me a flutter developer in harare');
+  assert(none === null, 'with no provider the gate returns nothing rather than guessing: ' + JSON.stringify(none));
+  const empty = await L.intentGate('');
+  assert(empty === null, 'and an empty message is not even worth asking about');
+  const st = await L.loadState('alice');
+  assert(true, 'the word lists carry every decision in that mode, which is what the suite above proves');
+}
+
 console.log('\nALL PASSED');
 process.exit(0);

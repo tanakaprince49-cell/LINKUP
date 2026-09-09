@@ -576,7 +576,7 @@ const SMALL_PARTS = [
   'browse|browsing|look|looking|see|seeing|watch|watching|go|going|coming|send|sending|give|giving|take|taking',
   'make|making|whatever|anything|everything|something|any|some|this|that|these|those|and|or|but|if|then',
   'too|also|very|quite|rather|of|to|for|with|at|in|on|up|down|out|off|by|from|as|because|why|when|where',
-  'who|whom|whose|which|im|i|m',
+  'who|whom|whose|which|yes\\w*|im|i|m',
 ].join('|');
 // the alternatives are only safe inside word boundaries: without them "moyo"
 // loses "yo" and a member's name stops being a name
@@ -1191,7 +1191,7 @@ function plainReply(kind, d = {}) {
       return `${f.name}${label ? ` (${label})` : ''} is on LINKUP - I found them by name.${d.channel && d.channel !== 'app' ? ' Reply meet 1 and I will ask them for you.' : ' Hit Meet and I will ask them for you.'}`;
     }
     case 'ambiguous': return `I have ${(d.people || []).length} members who could be who you mean: ${(d.people || []).map((x) => x.name).join(', ')}. Which one?`;
-    case 'check': return `That is a real thing to chew on${d.need ? `: ${text(d.need, 90)}` : ''}. My honest take is it is worth knowing who is out there before you decide anything. Want me to look - I can bring you the people on LINKUP who fit, and say so plainly if there are none?`;
+    case 'check': return `That is worth chewing on${d.need ? `: ${text(d.need, 90)}` : ''}. My honest take is you will decide better once you know who is actually around. Should I search for them? I will name the ones who fit and say plainly if there are none.`;
     case 'chat': {
       const lines = [
         'I am here - no search, no agenda. What is going on with you?',
@@ -1515,6 +1515,58 @@ async function persistCards(uid, existing, picks, { askId, need, now }) {
   return resultCards;
 }
 
+// ---------------------------------------------------------------- what he wants
+// The word lists below are a safety net, not the brain. Members do not type
+// "find a flutter developer": they type "yoo", "yes send]", half a sentence, or
+// something in a language no regex was written for. So every message is put to
+// the model first and Linky is told to answer one of three things - go look,
+// ask first, or just talk. A word list can only ever guess; "does this contain a
+// request for people" is a meaning question, and meaning is what the model is for.
+const INTENT_MODES = new Set(['search', 'ask_first', 'chat']);
+export async function intentGate(message, { offer = false, lastAsk = '', source = 'app' } = {}) {
+  const said = text(message, 240);
+  if (!said || !aiReady()) return null;
+  const ref = db().collection('linkyCache').doc(cacheKey('i3', `${said.toLowerCase()}|offer:${offer ? 1 : 0}`));
+  try {
+    const snap = await ref.get();
+    if (snap && snap.exists && Date.now() - toMillis(snap.data().createdAt) < 24 * 3600000) {
+      // the verdict is shared and reused; the WORDS never are, or a greeting
+      // starts sounding like a voicemail box
+      const mode = INTENT_MODES.has(snap.data().mode) ? snap.data().mode : 'search';
+      return { mode, topic: text(snap.data().topic, 90), reply: '', suggest: [], cached: true };
+    }
+  } catch { /* a cache miss is just a miss */ }
+  const prompt = [
+    'You are the intent gate for LINKUP, a network of founders and builders. Linky finds the right person for a member, and only ever after being asked.',
+    `The member's message (it may be slang, garbled, or half a sentence - judge meaning, not wording): ${JSON.stringify(said)}`,
+    `A search was offered to them and is still open: ${offer ? 'yes' : 'no'}. Their last real ask, if any: ${JSON.stringify(text(lastAsk, 90))}.`,
+    'Decide ONE mode:',
+    '  "search" - they are instructing Linky to find people or send a message: "find me a flutter dev in harare", "who do you have for tax", "send an intro to Tanaka".',
+    '  "ask_first" - they are thinking out loud, wondering, or describing a problem, and it is not settled that they want names right now: "who could be my co founder", "i might need someone for tax", "should i hire a lawyer".',
+    '  "chat" - everything else: greetings, laughs, feelings, thanks, banter, a stray word, or anything with no person to look for.',
+    'For "search" or "ask_first" also give "topic": 3-8 words naming who or what they want, in their words, no "find me" verbs. Empty string otherwise.',
+    'For "ask_first" and "chat" also write "reply" - at most 2 short sentences in the voice of Linky - warm, easy, a little funny, reacting to what they actually said. "ask_first" must end by asking whether to search for them. "chat" must NOT offer to search, must not pitch, and must not mention keys, quota, errors, or what it cannot do.',
+    'Never invent a person, a number or a fact. Plain text, no markdown, no emoji more than one.',
+    'Return STRICT JSON only: {"mode":"search|ask_first|chat","topic":"...","reply":"..."}',
+  ].join('\n');
+  try {
+    const { text: raw, provider } = await aiText(prompt, { temperature: 0.2, maxOutputTokens: 260, responseMimeType: 'application/json', timeoutMs: 5000 });
+    const parsed = JSON.parse(String(raw).slice(String(raw).indexOf('{'), String(raw).lastIndexOf('}') + 1)) || {};
+    const mode = INTENT_MODES.has(parsed.mode) ? parsed.mode : '';
+    if (!mode) return null;
+    const topic = text(parsed.topic, 90);
+    const reply = text(parsed.reply, 420);
+    await ref.set({ mode, topic: mode === 'search' || mode === 'ask_first' ? topic : '', source, createdAt: Date.now() }).catch(() => {});
+    // an error sentence from a flaky provider must never reach a member
+    const clean = reply.length > 8 && !/quota|billing|api key|rate limit|I cannot|couldn\'t access|error|model|timeout/i.test(reply) ? reply : '';
+    return { mode, topic, reply: mode === 'search' ? '' : clean, suggest: list(parsed.suggest, 3, 40), provider, cached: false };
+  } catch (err) {
+    // the gate failing is not the member's problem: the word lists take over
+    await noteAiFault('intent', err).catch(() => {});
+    return null;
+  }
+}
+
 export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   const user = userDoc || (await loadUser(uid));
   if (!user) throw new Error('Finish your LINKUP profile first.');
@@ -1531,7 +1583,15 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   const answeringYes = !!pendingIntent && saidWords.length <= 24 && AFFIRM_RX.test(saidWords) && !DENY_RX.test(saidWords);
   const answeringNo = !!pendingIntent && saidWords.length <= 32 && DENY_RX.test(saidWords);
   // a yes runs the search he offered; anything else is what they typed
-  const msg = answeringYes ? pendingIntent.need : msgTyped;
+  const gate = answeringYes ? null : await intentGate(msgTyped, { offer: !!pendingIntent, lastAsk: state.lastAsk?.need || '', source });
+  let msg = answeringYes ? pendingIntent.need : msgTyped;
+  // When the model hears an order our lists cannot read - Shona, slang, a phrase
+  // with no role word in it - search what it heard. A member's own well-formed ask
+  // is never rewritten, because their words are the better query and the better caption.
+  const pre = parseAsk(msg);
+  const wellFormed = ROLEISH_RX.test(pre.need.toLowerCase()) || !!pre.location || !!pre.nameQuery
+    || (pre.command && pre.tokens.length >= 3);
+  if (!answeringYes && gate?.mode === 'search' && !wellFormed && substance(gate.topic).length >= 1) msg = text(gate.topic, 160);
   const q = parseAsk(msg);
   // Anything he asks next supersedes the question he left unanswered, so a stray
   // "ok" tomorrow cannot wake an offer he forgot about. (A yes or a no is handled
@@ -1559,6 +1619,13 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // ---- 1a. "who else" / "anyone else": keep going on the last real ask.
   // Checked before small talk because it carries almost no words of its own.
   const wantsElseNow = q.wantsElse && !q.tokens.length ? !!(state.lastAsk && state.lastAsk.need) : false;
+  // what the word lists would have decided, for the case where no model answered
+  const regexMode = (q.chitChat || q.smallTalk || q.bare || !q.tokens.length) && !wantsElseNow ? 'chat'
+    : q.reflective && !q.command && !wantsElseNow ? 'ask_first' : 'search';
+  // The model's read wins - except on the two things a word list can see for
+  // certain: a "yes" to the question he just asked, and "who else", which is a
+  // request to keep searching and must never be talked out of.
+  const mode = answeringYes || wantsElseNow ? 'search' : (gate?.mode || regexMode);
 
   // ---- 1a-ii. a direct answer to the question Linky asked.
   if (pendingIntent && (answeringYes || answeringNo)) {
@@ -1582,7 +1649,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // Free, instant, and never dressed up as a search result. The old version
   // searched for "yoo" and reported that nobody in the network matched it; the
   // member is talking to a friend, so a friend answers - and does not pitch.
-  if (q.chitChat || q.smallTalk || ((!q.tokens.length || q.bare) && !wantsElseNow)) {
+  if (mode === 'chat') {
     const id = newId();
     const streak = Number(state.chitStreak || 0);
     // they get the pitch when they ask for it, or when they are new and have never
@@ -1590,7 +1657,11 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     const wantsPitch = !!q.askedWhatYouDo || (!state.lastAsk && streak === 0);
     const sayKind = q.askedWhatYouDo ? 'help' : 'chat';
     const recent = threadOf(state).slice(-6).map((t) => ({ who: t.role === 'user' ? 'they' : 'linky', said: text(t.text, 140) }));
-    const { reply: chat, suggest: chatSuggest, usedAi } = await linkySay(sayKind, {
+    // if the intent call already wrote a line, do not spend a second one
+    const gateSaid = sayKind === 'chat' && gate?.reply
+      ? { reply: text(gate.reply, 420), suggest: gate.suggest || [], usedAi: true }
+      : null;
+    const { reply: chat, suggest: chatSuggest, usedAi } = gateSaid || await linkySay(sayKind, {
       they_said: q.need,
       tone: wantsPitch
         ? 'They are open to what you are for. Be warm and a little funny, then say plainly what you do here and hand them one thing to try.'
@@ -1609,7 +1680,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     const chillSuggest = source === 'app'
       ? ['who could be a good co founder for me', 'what Linky knows about me', 'what can you do']
       : ['what can you do', 'help'];
-    return { id, need: q.need, reply: chat, kind: 'chat', askingWhat: q.askedWhatYouDo ? 'help' : '', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: chatSuggest.length ? chatSuggest : (wantsPitch ? (source === 'app' ? COACH_CHIPS : BOT_CHIPS) : chillSuggest), thread };
+    return { id, need: q.need, reply: chat, kind: 'chat', intent: gate ? `ai:${mode}` : `words:${mode}`, askingWhat: q.askedWhatYouDo ? 'help' : '', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: chatSuggest.length ? chatSuggest : (wantsPitch ? (source === 'app' ? COACH_CHIPS : BOT_CHIPS) : chillSuggest), thread };
   }
 
   // ---- 1c. "unskip fred": a skip is a cool-off, not a verdict, so the only
@@ -1721,16 +1792,23 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // hangs in the air, not an answer they never asked for.
   // ...but a "yes" to that question is the go-ahead, not another musing: the
   // stored need is reflective by construction, so it must skip this branch.
-  if (!answeringYes && q.reflective && !q.command && !wantsElseNow) {
+  if (mode === 'ask_first') {
     const id = newId();
-    await patchState(uid, { pendingIntent: { need: q.need, at: now, id } }).catch(() => {});
-    const { reply: ask2, suggest: askSuggest, usedAi } = await linkySay('check', {
+    // the thought is remembered as the thing to search, in the model's words if
+    // it had any - a half-typed message still becomes a usable question
+    await patchState(uid, { pendingIntent: { need: text(gate?.topic && substance(gate.topic).length ? gate.topic : q.need, 160), at: now, id } }).catch(() => {});
+    const saidCheck = gate?.reply
+      ? { reply: text(gate.reply, 420), suggest: gate.suggest || [], usedAi: true }
+      : await linkySay('check', {
       they_said: q.need,
       thought: q.need,
       member_you: { name: me.name, role: me.role, company: me.company, city: me.city, skills: list(me.skills, 6, 40) },
       offers: me.lookingFor || '',
       tone: 'One honest thought about what they are weighing, then one line asking whether to look for people. No names, no numbers, no list.',
     }, { name: me.name, source, seed: `check:${q.norm}`, fallback: '' });
+    const { reply: asked0, suggest: askSuggest, usedAi } = saidCheck;
+    // he always ends with the question, whatever the model decided to be poetic about
+    const ask2 = /\?/.test(asked0) ? asked0 : `${asked0.replace(/\.+$/, '')} Should I search for them?`;
     const thread = await appendThread(uid, state, [
       { id, role: 'user', text: q.need, at: now },
       { id, role: 'linky', text: ask2, kind: 'check', at: now + 1 },
@@ -1739,7 +1817,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       id, need: q.need, reply: ask2, kind: 'check', cardIds: [], cards: [], nearest: [], none: false,
       checked: 0, expansion: 'none', usedAi, free: true, cached: false, createdAt: now,
       asksLeft: asksLeft(), suggest: askSuggest.length ? askSuggest : ['yes, go look', 'no, just thinking'],
-      askingFirst: true, thread,
+      askingFirst: true, intent: gate ? `ai:${mode}` : `words:${mode}`, thread,
     };
   }
 

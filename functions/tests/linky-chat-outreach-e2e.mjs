@@ -56,10 +56,20 @@ globalThis.fetch = async (url, init = {}) => {
     return json({ ok: true, result: true });
   }
   if (u.includes('generativelanguage.googleapis.com')) {
+    const askedPre = JSON.parse(init.body || '{}');
+    const promptPre = askedPre?.contents?.[0]?.parts?.[0]?.text || '';
+    // the intent gate is its own call, counted separately so every existing
+    // "exactly one Gemini call" assertion still measures wording only
+    if (/You are the intent gate/.test(promptPre)) {
+      calls.intent = (calls.intent || 0) + 1;
+      const cand = (t) => { const content = { parts: [{ text: t }] }; return { candidates: [{ content }] }; };
+      if (!intentMode) return json(cand('the mock has no opinion'));
+      return json(cand(JSON.stringify({ mode: intentMode, topic: intentTopic, reply: intentReply })));
+    }
     calls.gemini += 1;
     if (geminiDown) return json({ error: { message: '429 Quota exceeded for the gemini key' } }, 429);
-    const asked = JSON.parse(init.body || '{}');
-    const prompt = asked?.contents?.[0]?.parts?.[0]?.text || '';
+    const asked = askedPre;
+    const prompt = promptPre;
     // The outreach scorer and the wording engine share this one mock, so each
     // gets its own payload shape.
     if (/Return STRICT JSON only: \{"keep"/.test(prompt)) {
@@ -129,6 +139,11 @@ globalThis.fetch = async (url, init = {}) => {
 };
 
 const setHang = (v) => { hangProviders = v; };
+// what the intent gate will say, per test. null = it declines, so the word lists
+// decide - which is exactly what happens when no provider answers at all.
+let intentMode = null, intentTopic = '', intentReply = '';
+const setIntent = (mode, { topic = '', reply = '' } = {}) => { intentMode = mode; intentTopic = topic; intentReply = reply; };
+const clearIntent = () => { intentMode = null; intentTopic = ''; intentReply = ''; };
 const L = await import('../../api/_linky.js');
 const S = await import('../../api/_serpapi.js');
 const { botReplyForTest } = await import('../../api/linky.js');
@@ -801,5 +816,63 @@ assert(!/import .*_linkyVoice/.test(src), 'no hand written voice module: the wor
 assert(/plainReply/.test(src) && /geminiWording/.test(src), 'both paths exist: model first, plain fallback second');
 
 if (failed) { console.error(`\n${failed} FAILED`); process.exit(1); }
+
+// ================================================================ the intent gate
+// "connect to gemini api" means the model decides what a message IS. The word
+// lists are only what runs when nothing answers.
+{
+  const { memberError } = await import('../../api/linky.js');
+  assert(memberError(new Error('gemini: You exceeded your current quota, please check your plan and billing details')).length > 10 && !/quota|billing/i.test(memberError(new Error('gemini: You exceeded your current quota'))), 'a provider refusal is never put in front of a member');
+  assert(/2 asks/.test(memberError(Object.assign(new Error("That is today's 2 asks used up."), { code: 'ask_limit' }))), 'and Linky own limit line still passes through');
+  assert(memberError(new Error('Finish your LINKUP profile first.')) === 'Finish your LINKUP profile first.', 'a real instruction from the app is not swallowed');
+
+  await resetBudgets();
+  await clearBudget('alice');
+  const gBefore = calls.gemini;
+  const iBefore = calls.intent || 0;
+  setIntent('chat', { reply: 'Morning. Books can wait, coffee cannot.' });
+  const gateChat = await L.ask('alice', 'theres this thing with my books again');
+  assert(calls.intent - iBefore === 1, 'every message goes to the model before anything is searched');
+  assert(gateChat.kind === 'chat' && !gateChat.cards.length && gateChat.free === true, 'the gate can stop a search the word lists would have run: ' + JSON.stringify({ k: gateChat.kind, cards: gateChat.cards.length }));
+  assert(/coffee cannot/.test(gateChat.reply), 'and the line it wrote is the line the member reads: ' + JSON.stringify(gateChat.reply.slice(0, 50)));
+  assert(calls.gemini === gBefore, 'without a second call to say the same thing again');
+  clearIntent();
+
+  setIntent('ask_first', { topic: 'a bookkeeper for my payroll', reply: 'That is worth sorting before it gets worse. Should I search for them?' });
+  const gateAsk = await L.ask('alice', 'ugh my payroll stuff is a mess again');
+  assert(gateAsk.kind === 'check' && gateAsk.free === true && !gateAsk.cards.length, 'thinking out loud gets a question, never cards: ' + JSON.stringify({ k: gateAsk.kind }));
+  assert(/\?/.test(gateAsk.reply), 'and it ends as a question: ' + JSON.stringify(gateAsk.reply.slice(0, 60)));
+  const stG = await L.loadState('alice');
+  assert(/bookkeeper/.test(stG.pendingIntent?.need || ''), 'what is remembered is the topic the model named: ' + (stG.pendingIntent?.need || ''));
+  clearIntent();
+  await clearBudget('alice');
+  const gateYes = await L.ask('alice', 'yes');
+  assert(gateYes.kind !== 'check' && /bookkeep|payroll/i.test(gateYes.need), 'a yes looks for exactly that, nothing else: ' + gateYes.need);
+
+  // the proof from the chat log: a stray "yes send]" became a person search
+  setIntent('chat', { reply: 'Nothing is queued to send yet. Say who and I will ask them.' });
+  const junk = await L.ask('alice', 'yes send]');
+  clearIntent();
+  assert(junk.kind === 'chat' && !/people fit|person fits|1 person/i.test(junk.reply), 'a stray reply is never searched for: ' + JSON.stringify(junk.reply.slice(0, 55)));
+  assert(!/Juan|Mexico/.test(junk.reply + JSON.stringify(junk.cards)), 'and no stranger from another continent turns up');
+
+  // an order in words no list contains: trust the model's reading of it
+  await clearBudget('alice');
+  setIntent('search', { topic: 'a vet for a cattle clinic in gweru' });
+  const foreign = await L.ask('alice', 'ndinoda munhu anogona kubatsira nemombe dzangu');
+  clearIntent();
+  assert(/vet|cattle|gweru/i.test(foreign.need) && foreign.kind !== 'chat', 'it searches what the model heard, not the noise: ' + foreign.need);
+
+  // verdicts are remembered, wording is not
+  setIntent('chat', { reply: 'First time wording for this one.' });
+  await L.ask('alice', 'hlo my brother');
+  const iOne = calls.intent;
+  setIntent(null);
+  const twice = await L.ask('alice', 'hlo my brother');
+  clearIntent();
+  assert(calls.intent === iOne, 'the same message is not asked twice within a day: ' + JSON.stringify({ a: iOne, b: calls.intent }));
+  assert(twice.kind === 'chat', 'the repeat is still chat, with the words written fresh');
+}
+
 console.log('\nALL PASSED');
 process.exit(0);

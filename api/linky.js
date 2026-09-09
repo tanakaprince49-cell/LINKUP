@@ -127,6 +127,17 @@ function cardLine(c, n) {
   return `${n}. ${c.targetName}${c.targetRole ? ` - ${c.targetRole}` : ''}${c.targetCity ? ` (${c.targetCity})` : ''}\n   Why: ${c.why}`;
 }
 
+// A member never reads infrastructure. A provider refusing a key, a timeout, a
+// stack trace: that goes to the fault doc, and what comes back is a sentence a
+// person could say. (Linky's own copy - the daily limit lines - passes through.)
+const PROVIDER_NOISE = /quota|billing|api key|apikey|rate limit|too many requests|\b4\d\d\b|\b5\d\d\b|generativelanguage|opencode|gemini|INTERNAL|unavailable|fetch failed|network|timed out|timeout|abort|ECONN|ENOTFOUND|socket|Unexpected token|JSON/i;
+export function memberError(err, fallbackLine = 'Hold on - that one did not go through. Say it again and I will try once more.') {
+  const raw = String(err?.message || err || '').trim();
+  if (err?.code === 'ask_limit' || err?.code === 'meet_limit') return raw || fallbackLine;
+  if (!raw || PROVIDER_NOISE.test(raw)) return fallbackLine;
+  return raw;
+}
+
 export async function botReply(channel, chatId, textIn, { callback } = {}) {
   const raw = String(textIn || '').trim();
   const lower = raw.toLowerCase();
@@ -184,7 +195,7 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
       if (kind === 'ld') {
         const state = await loadState(uid);
         if (a === 'y') {
-          try { const r = await approveLead(uid, {}); return { text: `${r.text}\n\n${r.note}` }; } catch (err) { return { text: String(err?.message || 'That did not work.') }; }
+          try { const r = await approveLead(uid, {}); return { text: `${r.text}\n\n${r.note}` }; } catch (err) { return { text: memberError(err, 'That did not work.') }; }
         }
         const r = await markLead(uid, { key: state.pendingLead?.key || leadKeyByIdx(state, 0), status: 'not_interested' });
         return { text: r.note };
@@ -209,7 +220,7 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
       if (kind === 'c') return await botReply(channel, chatId, [a, b].filter(Boolean).join(':').replace(/^\d+:/, ''));
       if (kind === 'r') { const r = await respond(uid, b, a); return { text: r.status === 'accepted' ? `Done - you and ${await nameOf(uid, b)} are connected. Chat: ${APP_URL}/chat/${r.matchId}` : r.status === 'snoozed' ? 'Parked for 2 weeks, no pressure on either side.' : 'Declined quietly. They will not be suggested to you again.' }; }
     } catch (err) {
-      return { text: String(err?.message || 'That did not work.') };
+      return { text: memberError(err, 'That did not work.') };
     }
   }
 
@@ -331,7 +342,7 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
       await setCardStatus(uid, card.id, cmd.startsWith('skip') ? 'skip' : 'saved');
       return { text: cmd.startsWith('skip') ? `Skipped ${card.targetName}.` : `Saved ${card.targetName}.` };
     } catch (err) {
-      return { text: String(err?.message || 'That did not work.') };
+      return { text: memberError(err, 'That did not work.') };
     }
   }
 
@@ -357,7 +368,7 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
         chips: r.leads?.length ? ['draft 1', 'not interested 1'] : ['ask something else', 'help'],
       };
     } catch (err) {
-      return { text: String(err?.message || 'That did not work.') };
+      return { text: memberError(err, 'That did not work.') };
     }
   }
 
@@ -369,8 +380,8 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
       // he asked instead of searching: the answer has to be one tap, not a sentence
       return {
         text: out.reply,
-        buttons: [[{ text: 'Yes, look for them', callback_data: 'q:y' }, { text: 'Not now', callback_data: 'q:n' }]],
-        chips: ['yes, go look', 'no, just thinking'],
+        buttons: [[{ text: 'Yes, search for them', callback_data: 'q:y' }, { text: 'No, just talking', callback_data: 'q:n' }]],
+        chips: ['yes, search for them', 'no, just talking'],
       };
     }
     if (!out.cards.length) {
@@ -386,7 +397,7 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
     }
     return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n')}`, cards: out.cards, chips: out.suggest };
   } catch (err) {
-    return { text: String(err?.message || 'That did not work.') };
+    return { text: memberError(err, 'That did not work.') };
   }
 }
 
@@ -444,7 +455,7 @@ async function approveFromBot(uid, user, cardId) {
   try {
     return { text: sentText(await approveMeet(uid, { cardId, userDoc: user })) };
   } catch (err) {
-    return { text: String(err?.message || 'That did not go out.') };
+    return { text: memberError(err, 'That did not go out.') };
   }
 }
 
@@ -504,7 +515,7 @@ async function pickPersonCard(uid, picked) {
   try {
     return await pickPerson(uid, picked.uid);
   } catch (err) {
-    return { error: String(err?.message || 'That did not work.'), picked };
+    return { error: memberError(err, 'That did not work.'), picked };
   }
 }
 
@@ -758,7 +769,7 @@ async function handleApp(req, res) {
     setCors(res);
     res.status(200).json(out);
   } catch (err) {
-    const message = String(err?.message || 'Linky hit a snag.');
+    const message = memberError(err, 'Linky hit a snag - say that again and I will have another go.');
     sendError(res, err?.code === 'ask_limit' || err?.code === 'meet_limit' ? 402 : 400, message, message);
   }
 }

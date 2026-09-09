@@ -221,18 +221,35 @@ drafts, `y:`/`n:` approve or cancel an intro, `ld:y`/`ld:n` approve or mute a le
 plus the typed grammar (`send`, `edit <text>`, `cancel`, `sent`, `not interested 2`,
 `draft 2`) for people who would rather type.
 
-## Small talk is a conversation, not a query
+## What a message means: the intent gate, then the word lists
 
-Members text Linky like a person: `yoo`, `yoo whats up`, `no just wanna chill`. All
-three used to come back as *"Nobody here fits \"yoo\" - I read all 56 visible
-profiles"*, which is a search report about a message that was never a search.
+Members text Linky like a person: `yoo`, `yoo whats up`, `no just wanna chill`,
+`yes send]`, or something in Shona. Every one of those used to come back as *"Nobody
+here fits \"yoo\" - I read all 56 visible profiles"* - a search report about a message
+that was never a search.
 
-So `parseAsk` now asks a different question than "which words look searchable": it
-strips every greeting, laugh, filler and banter word (`SMALL_RX` in `api/_linky.js`,
-which includes the Shona/Ndebele small talk members actually type - `mhoro`, `eish`,
-`mwadi`, `baba`) and if **nothing with substance is left**, the message is small talk.
-That beats any list of greetings, because the list is never complete while emptiness
-is exact. Guards around it:
+**The model decides.** `intentGate()` (`api/_linky.js`) puts every inbound message to
+Gemini (then Zen) and gets back one of three modes plus what it is about:
+
+| mode | meaning | what the member gets |
+| --- | --- | --- |
+| `search` | an instruction to find or message people | the search runs, cards come back, one ask is spent |
+| `ask_first` | thinking out loud, a problem described, not settled | a free line ending in **"Should I search for them?"** - no cards, nothing metered, the thought is held in `pendingIntent` |
+| `chat` | greetings, feelings, banter, thanks, a stray word | a free reply written for this message, no pitch |
+
+The gate also returns the wording for `chat` and `ask_first`, so those turns cost one
+call, not two. Its verdict (mode + topic) is cached per member-message for a day;
+the **words never are**, so a greeting is written fresh each time. When it hears an
+order that no list could read (`ndinoda munhu anogona kubatsira nemombe dzangu`), the
+`topic` it names becomes the query - unless the member's own words were already
+well-formed (a role, a place, a name, a clear imperative), which are never rewritten.
+
+**The word lists are the offline fallback, not the brain.** If no provider answers,
+`parseAsk` decides with `SMALL_RX`: strip every greeting, laugh, filler and banter
+word (including `mhoro`, `eish`, `mwadi`, `baba`) and if nothing with substance is
+left, it is small talk. Emptiness after stripping is exact, which a list of greetings
+can never be. Two things are never talked out of a search: a `yes` to his own question
+and `who else` / `more`. Guards around it:
 
 * a command word in front (`meet 1`, `cards`, `more`, `why`, `skip`) is never banter;
 * a role, a place, an offer (`paid`/`equity`) or a name with substance pulls it back
@@ -264,6 +281,11 @@ curl -s "https://<host>/api/linky?action=diag&probe=1" -H "x-linky-diag: <secret
 {"ok":true,"ai":{"ready":true,"gemini":{"configured":true,"from":"GEMINI_API_KEY","model":"gemini-2.5-flash-lite"},
   "zen":{"configured":false,"from":""}},"search":{"serpapi":true},"aiFaults":{"day":"2026-09-09","count":0}}
 ```
+
+A member never reads any of this: `memberError()` in `api/linky.js` turns a provider
+refusal, a timeout or a stack trace into `Hold on - that one did not go through. Say it
+again and I will try once more.`, and the raw text goes only to `linkyOutreach/ai_err_*`
+and `?action=diag`. Linky's own copy (the daily limit lines) passes through untouched.
 
 `ai.ready: false` means no key is set under any accepted name (`GEMINI_API_KEY`,
 `GOOGLE_GENERATIVE_AI_API_KEY`, `EXPO_PUBLIC_GEMINI_API_KEY`, `GOOGLE_API_KEY`, then
