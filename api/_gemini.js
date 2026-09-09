@@ -4,7 +4,17 @@ const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
 // fallback sentence. Same contract, different provider, no code change at the
 // call sites.
 const ZEN_URL = process.env.ZEN_API_URL || 'https://opencode.ai/zen/v1/chat/completions';
-const ZEN_MODEL = process.env.ZEN_MODEL || process.env.EXPO_PUBLIC_ZEN_MODEL || 'opencode/gemini-2.5-flash';
+// Zen's catalog moves and ids no longer carry the "opencode/" prefix, so an old
+// ZEN_MODEL value fails every call and Linky quietly drops to hard-coded sentences.
+// The prefix is stripped, and a refused model name is retried down a short chain.
+const cleanModel = (m) => String(m || '').trim().replace(/^opencode\//, '');
+const ZEN_MODEL = cleanModel(process.env.ZEN_MODEL || process.env.EXPO_PUBLIC_ZEN_MODEL || '') || 'gemini-3.5-flash-lite';
+const ZEN_FALLBACK_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gpt-5-nano', 'claude-haiku-4-5'];
+let zenHealthyModel = '';
+const zenChain = (wanted) => {
+  const list = [cleanModel(wanted), zenHealthyModel, ...ZEN_FALLBACK_MODELS.map(cleanModel)].filter(Boolean);
+  return [...new Set(list)];
+};
 const MAX_PROFILE_CHARS = 2600;
 
 export function setCors(res) {
@@ -131,13 +141,13 @@ async function callGemini(prompt, options, apiKey) {
   return text;
 }
 
-async function callZen(prompt, options, apiKey) {
+async function zenOnce(model, prompt, options, apiKey) {
   const response = await fetch(ZEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(Number(options.timeoutMs || 12000)),
     body: JSON.stringify({
-      model: options.model || ZEN_MODEL,
+      model,
       messages: [{ role: 'user', content: prompt }],
       temperature: options.temperature ?? 0.25,
       max_tokens: Math.max(128, Math.min(1200, Number(options.maxOutputTokens || 260))),
@@ -151,6 +161,26 @@ async function callZen(prompt, options, apiKey) {
   const text = String(data?.choices?.[0]?.message?.content || '').trim();
   if (!text) throw new Error('Zen returned an empty completion.');
   return text;
+}
+
+export async function callZen(prompt, options = {}, apiKey = getZenKey()) {
+  const errors = [];
+  for (const model of zenChain(options.model || ZEN_MODEL)) {
+    try {
+      const out = await zenOnce(model, prompt, options, apiKey);
+      zenHealthyModel = model;
+      return out;
+    } catch (err) {
+      const message = String(err?.message || err);
+      errors.push(`${model}: ${message}`);
+      // only a refused model name is worth another try - a missing payment method,
+      // a quota or a network failure fails for every model on the account
+      if (!/not supported|is not a model|unavailable|does not exist|unknown model|invalid model|no such model/i.test(message)) {
+        throw new Error(message);
+      }
+    }
+  }
+  throw new Error(errors[0] || 'Zen failed');
 }
 
 /**
@@ -229,13 +259,18 @@ export function localRank(me, candidates, maxCandidates) {
 
 /** Which model is actually wired up - names and models only, never a key value,
  *  so this is safe to serve from a diagnostic route. */
+/** Which Zen models the account would answer, newest success first. */
+export function zenModels() {
+  return { wanted: ZEN_MODEL, healthy: zenHealthyModel, chain: zenChain(ZEN_MODEL) };
+}
+
 export function aiStatus() {
   const g = firstEnv(GEMINI_KEY_NAMES);
   const z = firstEnv(ZEN_KEY_NAMES);
   return {
     ready: !!(g || z),
     gemini: { configured: !!g, from: g ? g[0] : '', model: process.env.GEMINI_MODEL || DEFAULT_MODEL },
-    zen: { configured: !!z, from: z ? z[0] : '', model: ZEN_MODEL, url: ZEN_URL },
+    zen: { configured: !!z, from: z ? z[0] : '', model: ZEN_MODEL, healthyModel: zenHealthyModel || '', url: ZEN_URL },
   };
 }
 

@@ -130,7 +130,7 @@ function cardLine(c, n) {
 // A member never reads infrastructure. A provider refusing a key, a timeout, a
 // stack trace: that goes to the fault doc, and what comes back is a sentence a
 // person could say. (Linky's own copy - the daily limit lines - passes through.)
-const PROVIDER_NOISE = /quota|billing|api key|apikey|rate limit|too many requests|\b4\d\d\b|\b5\d\d\b|generativelanguage|opencode|gemini|INTERNAL|unavailable|fetch failed|network|timed out|timeout|abort|ECONN|ENOTFOUND|socket|Unexpected token|JSON/i;
+const PROVIDER_NOISE = /quota|billing|payment|api key|apikey|rate limit|too many requests|\b4\d\d\b|\b5\d\d\b|generativelanguage|opencode|gemini|not supported|upstream|INTERNAL|unavailable|fetch failed|network|timed out|timeout|abort|ECONN|ENOTFOUND|socket|Unexpected token|JSON/i;
 export function memberError(err, fallbackLine = 'Hold on - that one did not go through. Say it again and I will try once more.') {
   const raw = String(err?.message || err || '').trim();
   if (err?.code === 'ask_limit' || err?.code === 'meet_limit') return raw || fallbackLine;

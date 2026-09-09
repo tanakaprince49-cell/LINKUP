@@ -361,5 +361,42 @@ assert(f.ok && !(await db.collection('linkyState').doc('alice').get()).exists &&
   assert(plain.kind === 'person' && /Dan/.test(plain.reply), 'a lookup without "send" is still answered');
 }
 
+
+// ---- the Zen model chain: a stale model id must not silence the fallback brain
+{
+  const g = await import('../../api/_gemini.js');
+  const status = g.aiStatus();
+  assert(!/2\.5|opencode\//.test(status.zen.model), 'the default Zen model is one the catalog actually serves today: ' + status.zen.model);
+  const fake = (modelsThatFail) => {
+    const seen = [];
+    const prev = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(init.body || '{}');
+      seen.push(body.model);
+      if (modelsThatFail.includes(body.model)) {
+        return new Response(JSON.stringify({ error: { message: modelsThatFail[0].startsWith('billing') ? 'No payment method. Add a payment method here: https://opencode.ai/x/billing' : `Model ${body.model} is not supported` } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'a sentence from ' + body.model } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    return { seen, restore: () => { globalThis.fetch = prev; } };
+  };
+  const gkWas = process.env.GEMINI_API_KEY, zkWas = process.env.ZEN_API_KEY;
+  process.env.GEMINI_API_KEY = ''; process.env.ZEN_API_KEY = 'unit-zen-only';
+  const broken = fake(['gone-model']);
+  const rescued = await g.aiText('say something', { model: 'gone-model', timeoutMs: 4000 });
+  broken.restore();
+  assert(broken.seen.length >= 2 && /flash|gpt|haiku/.test(broken.seen[1]), 'a refused model name is retried down the chain, not fatal: ' + JSON.stringify(broken.seen));
+  assert(new RegExp('a sentence from ' + broken.seen[1].replace(/[.*+?^${}()|[\]\\-]/g, '\\$&')).test(rescued.text), 'and the caller gets words from whichever model answered: ' + rescued.text);
+  const billed = fake(['billing-model']);
+  let paidErr = '';
+  try { await g.aiText('say something', { model: 'billing-model', timeoutMs: 4000 }); } catch (err) { paidErr = String(err.message); }
+  billed.restore();
+  assert(billed.seen.length === 1, 'an account problem is not retried across every model - one call, then out: ' + JSON.stringify(billed.seen));
+  assert(/payment method/i.test(paidErr), 'and the reason stays in the error for whoever reads diagnostics');
+  const { memberError } = await import('../../api/linky.js');
+  assert(!/payment|opencode|billing/i.test(memberError(new Error('zen: No payment method. Add a payment method here: https://opencode.ai/x/billing'))), 'never in front of a member: ' + JSON.stringify(memberError(new Error('zen: No payment method. Add a payment method here'))));
+  process.env.GEMINI_API_KEY = gkWas; process.env.ZEN_API_KEY = zkWas;
+}
+
 console.log('\nALL PASSED');
 process.exit(0);
