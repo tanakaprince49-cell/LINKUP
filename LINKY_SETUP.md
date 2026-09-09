@@ -364,4 +364,40 @@ credits** and asserts the budget rules themselves: `num=100` on every query, one
 search per ask, no second lookup per person, the ledger counting exactly the
 searches made, and refusal at the credit reserve.
 
+## Which AI key is actually answering
+
+Linky has two brains and one search engine. `api/_gemini.js` reads whichever env
+names exist (`GEMINI_API_KEY`, `ZEN_API_KEY`, `SERPAPI_KEY`, plus the `GOOGLE_API_KEY`
+/ `GOOGLE_GEN_AI_API_KEY` aliases and the `OPENCODE_*` / `ZAI_*` names Zen answers to),
+so the same app works on Vercel and on Cloud Functions without a code change.
+**No key goes in the repo**: they live in Vercel's project env, copied from the GitHub
+secrets on every deploy by `.github/workflows/vercel-production.yml`.
+
+- Gemini answers first. If it fails, times out or comes back empty, the same request
+  goes to **Zen**. If both fail, the member still gets a usable reply out of the
+  built-in copy - never a stack trace, and never provider text.
+- Zen's model name is configurable (`ZEN_MODEL`) because that catalog changes without
+  asking. A model refused as *unknown* is retried down a short chain
+  (lite -> flash -> gpt-5-nano -> haiku) and the one that answered is remembered for
+  the life of the container. A *billing* refusal is not retried - one call, then out,
+  so a dead key costs one timeout per message instead of four.
+- An OpenCode **free-tier key cannot be used from a server** ("OpenCode's free tier can
+  only be used in OpenCode"), so Zen needs a payment method on the workspace before it
+  can be the rescue brain. Until then only Gemini's wording is live, and when Gemini's
+  quota window closes members see the canned copy.
+
+To check the truth of any deployment - ask the running app, don't read the code:
+
+```bash
+curl -s "https://linkup-muqu.vercel.app/api/linky?action=diag&probe=1" \
+  -H "x-linky-diag: <TELEGRAM_BOT_TOKEN, or sha256(token) first 32 hex chars>" | jq
+```
+
+`ai.gemini.configured` / `ai.zen.configured` say a key is *present*; `probe.attempts`
+says whether each one **answered a real round trip right now**, per provider.
+`aiFaults` is the last fault members actually hit plus a snapshot of the keys as they
+were at that moment (that snapshot can lag; `ai` is always live). No key value is ever
+returned, only names and lengths. `?action=cron` uses the same token; `LINKY_DIAG_TOKEN`
+overrides it if you would rather not lean on the bot token.
+
 Native: version 13.5.0 / versionCode 19 — rebuild the APK whenever you like; the web is live now.
