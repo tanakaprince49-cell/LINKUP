@@ -221,6 +221,61 @@ drafts, `y:`/`n:` approve or cancel an intro, `ld:y`/`ld:n` approve or mute a le
 plus the typed grammar (`send`, `edit <text>`, `cancel`, `sent`, `not interested 2`,
 `draft 2`) for people who would rather type.
 
+## Small talk is a conversation, not a query
+
+Members text Linky like a person: `yoo`, `yoo whats up`, `no just wanna chill`. All
+three used to come back as *"Nobody here fits \"yoo\" - I read all 56 visible
+profiles"*, which is a search report about a message that was never a search.
+
+So `parseAsk` now asks a different question than "which words look searchable": it
+strips every greeting, laugh, filler and banter word (`SMALL_RX` in `api/_linky.js`,
+which includes the Shona/Ndebele small talk members actually type - `mhoro`, `eish`,
+`mwadi`, `baba`) and if **nothing with substance is left**, the message is small talk.
+That beats any list of greetings, because the list is never complete while emptiness
+is exact. Guards around it:
+
+* a command word in front (`meet 1`, `cards`, `more`, `why`, `skip`) is never banter;
+* a role, a place, an offer (`paid`/`equity`) or a name with substance pulls it back
+  to a real ask - `someone who knows whatsapp`, `i just want to chat about a flutter
+  developer`, `connect me with Cara Dube` all still search;
+* a one-word "name" made of filler is not a name: `namePhrases("yoo")` returning
+  `"yoo"` is what turned a greeting into a directory scan.
+
+What the chat turn does: it is free, it never costs an ask, and it is written by the
+model **every time** (`NO_CACHE_KINDS` - a greeting cached for fourteen days is what
+sounds like a form). Linky counts consecutive chat turns in `linkyState.chitStreak`
+and stops pitching after the first one: a member who says he is chilling gets company,
+not `Tell me who you need and I will go and look - a role, a skill, a city...`. That
+sentence only appears when they ask what he does (`what can you do`, `who are you` -
+`kind: 'help'`) or when they are new and have never used him for anything.
+
+**If Linky sounds canned, the model is not answering.** Every wording call that fails
+writes a counter to `linkyOutreach/ai_err_<day>` (`{count, lastKind, lastError,
+providers}`) - readable in the Firebase console, locked to clients by
+`firestore.rules`. One curl says the same thing:
+
+```bash
+# the derived Telegram webhook secret works as the token, as does LINKY_CRON_SECRET
+curl -s "https://<host>/api/linky?action=diag" -H "x-linky-diag: <secret>"
+curl -s "https://<host>/api/linky?action=diag&probe=1" -H "x-linky-diag: <secret>"   # makes one real model call
+```
+
+```json
+{"ok":true,"ai":{"ready":true,"gemini":{"configured":true,"from":"GEMINI_API_KEY","model":"gemini-2.5-flash-lite"},
+  "zen":{"configured":false,"from":""}},"search":{"serpapi":true},"aiFaults":{"day":"2026-09-09","count":0}}
+```
+
+`ai.ready: false` means no key is set under any accepted name (`GEMINI_API_KEY`,
+`GOOGLE_GENERATIVE_AI_API_KEY`, `EXPO_PUBLIC_GEMINI_API_KEY`, `GOOGLE_API_KEY`, then
+`ZEN_API_KEY`) and the app is running on fallback copy. `ready: true` with
+`aiFaults.count` climbing means the key is set but refusing - `lastError` says why
+(429 quota, bad model name in `GEMINI_MODEL`, network). The route never returns a key
+value, only which variable it came from, and it needs the deployment token.
+
+Wording also goes to Zen when Gemini fails (`aiText`, not `geminiText`) so a member
+never reads an outage; the deterministic copy is the last resort and is now written to
+sound like a person on a bad day, not a form.
+
 ## A thought is not a work order
 
 Linky used to read every message as a search request, so "who could be my Co founder"

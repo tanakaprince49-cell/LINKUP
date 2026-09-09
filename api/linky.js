@@ -12,12 +12,12 @@
 //   LINKY_CRON_SECRET (optional; otherwise derived from the service-account key so no new secret is needed).
 import crypto from 'node:crypto';
 import { getDb, verifyRequestUser } from './_firebaseAdmin.js';
-import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
+import { aiProbe, aiStatus, handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import {
   APP_URL, LIMITS, OFFERS, approveLead, approveMeet, ask, audit, botUserFor, cancelMeet, consumeLinkCode, createLinkCode,
   draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead, meet, orderedCards, pickPerson,
   pointers, removeAsk, respond, runCron, sendTelegram, sendWhatsApp, setCardStatus, setFacts, setPrefs, unlinkBot,
-  profileFacts, telegramWebhookSecret,
+  lastAiFault, profileFacts, telegramWebhookSecret,
 } from './_linky.js';
 
 
@@ -778,6 +778,32 @@ export default async function handler(req, res) {
       res.status(200).json(out);
     } catch (err) {
       sendError(res, 500, 'Cron failed.', String(err?.message || err));
+    }
+    return;
+  }
+  // "is the brain actually plugged in": which env vars are SET is not a secret (the
+  // values never leave), and this is how a silent canned-reply deployment gets
+  // diagnosed without reading Vercel logs. Needs the cron token or the derived
+  // Telegram webhook secret in x-linky-diag. ?probe=1 makes one real model call.
+  if (String(req.query?.action || '') === 'diag') {
+    const token = cronToken();
+    const secret = telegramWebhookSecret();
+    const given = String(req.headers['x-linky-diag'] || '');
+    const ok = (token && safeEqual(given, token)) || (secret && (safeEqual(given, secret) || safeEqual(String(req.headers['x-telegram-bot-api-secret-token'] || ''), secret)));
+    if (!ok) { sendError(res, 401, 'Need the deployment token.'); return; }
+    try {
+      const out = {
+        ok: true,
+        ai: aiStatus(),
+        search: { serpapi: !!process.env.SERPAPI_KEY },
+        telegram: { bot: !!process.env.TELEGRAM_BOT_TOKEN, webhookSecretDerived: !!secret },
+        aiFaults: await lastAiFault(),
+      };
+      if (String(req.query?.probe || '') === '1') out.probe = await aiProbe();
+      setCors(res);
+      res.status(200).json(out);
+    } catch (err) {
+      sendError(res, 500, 'Diag failed.', String(err?.message || err));
     }
     return;
   }

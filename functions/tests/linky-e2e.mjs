@@ -313,5 +313,31 @@ assert(f.ok && !(await db.collection('linkyState').doc('alice').get()).exists &&
   assert(!order.free, 'and an instruction he gave himself is metered like any ask');
 }
 
+
+// ---- the chat log, verbatim: "yoo" must never become a search report
+// [tanaka] yoo            -> was: Nobody here fits "yoo" - I read all 56 profiles
+// [tanaka] yoo whats up   -> was: Tell me who you need and I will go and look - ...
+// [tanaka] no just wanna chill -> was: Nobody here fits "no just wanna chill"
+{
+  for (const said of ['yoo', 'yoo whats up', 'no just wanna chill', 'hey', 'good morning bro', 'hahaha', 'you there?', 'sup', 'nothing much just chilling']) {
+    const t = await L.ask('alice', said);
+    assert(t.kind === 'chat' && t.free === true && !t.cards.length, `"${said}" is a person talking, not a query: ${JSON.stringify({ kind: t.kind, cards: t.cards.length, free: !!t.free })}`);
+    assert(!/Nobody here fits|nobody fits|people fit|visible profiles/i.test(t.reply), `"${said}" never comes back as a search report: ${JSON.stringify(t.reply.slice(0, 50))}`);
+    assert(t.nearest.length === 0 && t.checked === 0, `"${said}" does not drag three strangers in as the closest match`);
+  }
+  const chill = await L.ask('alice', 'no i just want to vibe');
+  assert(!/Tell me who you need|a role, a skill, a city/i.test(chill.reply), 'and a feeling is not answered with the pitch: ' + JSON.stringify(chill.reply.slice(0, 60)));
+  const asked = await L.ask('alice', 'what can you do');
+  assert(/who you need|read every member|flutter|bring you/i.test(asked.reply), 'asked directly, he does explain what he is for: ' + JSON.stringify(asked.reply.slice(0, 60)));
+  assert(!L.parseAsk('meet 1').smallTalk && !L.parseAsk('cards').smallTalk && !L.parseAsk('more').smallTalk, 'a command is never read as banter however short');
+  assert(!L.parseAsk('find me a payroll auditor in Blantyre').smallTalk && !L.parseAsk('i need a flutter developer').smallTalk, 'neither is a real order');
+  assert(!L.parseAsk('gift knows tax').smallTalk, 'and a name is not banter either');
+  const stD = await L.loadState('alice');
+  assert(Number(stD.chitStreak || 0) >= 6, 'he counts the banter, so he knows when to stop pitching');
+  await clearBudget('alice');
+  await L.ask('alice', 'find me an accountant who knows tax in harare');
+  assert(Number((await L.loadState('alice')).chitStreak || 0) === 0, 'and one real ask resets it');
+}
+
 console.log('\nALL PASSED');
 process.exit(0);

@@ -86,6 +86,7 @@ globalThis.fetch = async (url, init = {}) => {
     const names = found.map((m) => m.name).join(' and ');
     const bySituation = {
       chat: 'I was hoping somebody would ask me something interesting - who are you after today?',
+      help: 'I am Linky - I read this network for you. Say who you need and I bring you the ones that fit, or tell you plainly that nobody does yet.',
       limit: `That is today's ${dossier.asks_limit_today} asks gone, friend. It resets at midnight, and looking somebody up by name is always free.`,
       person: dossier.cannot_introduce_because
         ? `${(dossier.found || {}).name} is on LINKUP, but ${dossier.cannot_introduce_because}. I did not push a request.`
@@ -212,9 +213,13 @@ assert(calls.gemini === 1, 'chit-chat wording is exactly one small Gemini call: 
 assert(/hoping somebody would ask/i.test(hi.reply), 'the model wrote the sentence (mocked): ' + hi.reply.slice(0, 60));
 assert(Array.isArray(hi.suggest) && hi.suggest.length >= 2, 'Linky offers tappable replies instead of a dead end');
 const hiAgain = await L.ask('freda', 'hi');
-assert(calls.gemini === 1 && hiAgain.reply.includes('Freda'), 'the shared wording is cached for everyone, then personalised per member');
-assert(!/Alice/.test(hi.reply), 'and no other member name leaks into this reply');
-assert(/Freda/.test(hiAgain.reply), 'the shared wording is personalised on the way out');
+assert(calls.gemini === 2, 'chit-chat is written fresh for each person, not replayed from a cache - a greeting everybody shares is what starts to sound like a form');
+assert(hiAgain.kind === 'chat' && hiAgain.free === true, 'and she gets the same courtesy, not a search report: ' + hiAgain.kind);
+assert(!/Alice/.test(hi.reply + hiAgain.reply), 'and no other member name leaks into a reply');
+assert(!/(^|[.!?]\s)(hey |hi |hello )?Freda\b/i.test(hiAgain.reply), 'a greeting is not opened with the member name like a letter: ' + hiAgain.reply.slice(0, 50));
+// the name still belongs where the answer is about people
+const namedFor = await L.ask('freda', 'bob chikwanha');
+assert(namedFor.kind === 'person' && /Freda/.test(namedFor.reply), 'but an answer about a person is still addressed to the member: ' + namedFor.reply.slice(0, 60));
 // the real complaint, verbatim: a person who wants to talk was answered like a
 // search engine that found nothing
 const blunt = await L.ask('luke', 'no one else in mind jusy want to chat');
@@ -701,6 +706,64 @@ assert(!/unit-gemini-key|unit-zen-key/.test(JSON.stringify(bothDown)), 'a provid
 process.env.GEMINI_API_KEY = gkSave; process.env.ZEN_API_KEY = zkSave;
 geminiDown = false; zenDown = false;
 
+
+// ================================================================ small talk is a conversation
+// "yoo" used to come back as a search report, and every greeting got the same
+// coaching sentence. Both were caching and routing problems, so both are asserted
+// against the model path, where the copy actually comes from Gemini.
+{
+  await resetBudgets();
+  await clearBudget('alice');
+  const before = calls.gemini;
+  const one = await L.ask('alice', 'yoo');
+  const two = await L.ask('alice', 'yoo whats up');
+  assert(one.kind === 'chat' && two.kind === 'chat' && !one.cards.length, 'on the AI path a greeting is still answered as chat: ' + JSON.stringify({ a: one.kind, b: two.kind }));
+  assert(calls.gemini - before >= 2, 'and chit-chat is written fresh every time, never replayed from a fourteen-day cache');
+  const wordingDocs = await db.collection('linkyCache').get();
+  assert(!wordingDocs.docs.some((d) => (d.data().kind || '') === 'chat'), 'no chat wording is parked in the cache at all');
+  assert(!/Nobody here fits|Situation chat/i.test(one.reply + two.reply), 'a greeting never comes back as a search report: ' + one.reply.slice(0, 50));
+  const chill = await L.ask('alice', 'no just wanna chill');
+  assert(chill.kind === 'chat' && chill.free === true, 'saying he is not looking for anybody is believed, not searched');
+  const asked = await L.ask('alice', 'what can you do');
+  assert(asked.kind === 'chat' && /read this network|who you need/i.test(asked.reply), 'asked what he does, he explains it his way: ' + asked.reply.slice(0, 55));
+  const st = await L.loadState('alice');
+  assert(Number(st.chitStreak || 0) >= 3, 'the banter is counted so the pitch can stay out of it');
+}
+// and when BOTH providers are down, the outage copy still reads like a person
+{
+  const gk = process.env.GEMINI_API_KEY, zk = process.env.ZEN_API_KEY;
+  process.env.GEMINI_API_KEY = 'unit-gemini-key'; process.env.ZEN_API_KEY = 'unit-zen-key';
+  geminiDown = true; zenDown = true;
+  await clearBudget('tapi2');
+  const outage = await L.ask('tapi2', 'yoo');
+  const outage2 = await L.ask('tapi2', 'no just wanna chill');
+  geminiDown = false; zenDown = false;
+  process.env.GEMINI_API_KEY = gk; process.env.ZEN_API_KEY = zk;
+  assert(outage.kind === 'chat' && outage.usedAi === false, 'with both down he answers instead of erroring: ' + JSON.stringify({ k: outage.kind, ai: outage.usedAi }));
+  assert(!/Nobody here fits|people fit|visible profiles/i.test(outage.reply + outage2.reply), 'and the outage copy is never a search report: ' + JSON.stringify(outage.reply.slice(0, 60)));
+  assert(!/a role, a skill, a city, or even just a name/i.test(outage2.reply), 'a member who said he is chilling does not get the form: ' + JSON.stringify(outage2.reply.slice(0, 60)));
+  const fault = await L.lastAiFault();
+  assert(fault.count >= 2, 'every wording call that failed today is counted, so "no personality" has a number behind it: ' + JSON.stringify(fault.count));
+  assert(fault.providers && fault.providers.gemini === true && /down|error|quota|5|4/i.test(fault.lastError), 'and the record says which provider was configured and what it said: ' + JSON.stringify(fault.lastError).slice(0, 70));
+}
+
+// the deployment can be asked, in one call, whether the brain is plugged in
+{
+  const mod = await import('../../api/linky.js');
+  const { cronToken } = mod;
+  const handler = mod.default;
+  const fakeRes = () => { const r = { statusCode: 0, payload: null, status(c) { this.statusCode = c; return this; }, json(o) { this.payload = o; return this; }, send(o) { this.payload = o; return this; }, setHeader() { return this; }, end() { return this; } }; return r; };
+  const noAuth = fakeRes();
+  await handler({ method: 'GET', query: { action: 'diag' }, headers: {} }, noAuth);
+  assert(noAuth.statusCode === 401, 'the diagnostic route is not public: ' + noAuth.statusCode);
+  const okRes = fakeRes();
+  await handler({ method: 'GET', query: { action: 'diag' }, headers: { 'x-linky-diag': cronToken() } }, okRes);
+  const diag = okRes.payload || {};
+  assert(okRes.statusCode === 200 && diag.ok && typeof diag.ai.ready === 'boolean', 'with the deployment token it answers: ' + JSON.stringify(diag.ai));
+  assert(diag.ai.gemini.from === 'GEMINI_API_KEY' && !JSON.stringify(diag).includes('fake-gemini-key'), 'it names which env var the key came from, never the key itself');
+  assert(diag.search.serpapi === !!process.env.SERPAPI_KEY, 'and it says whether the search side is wired: ' + JSON.stringify(diag.search));
+  assert(typeof diag.aiFaults.count === 'number' && diag.aiFaults.count >= 2, 'the AI failure count rides along, so a canned-reply deployment is visible at a glance: ' + JSON.stringify(diag.aiFaults.count));
+}
 
 // ================================================================ wiring
 await resetBudgets();

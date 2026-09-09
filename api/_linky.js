@@ -17,7 +17,7 @@
 //   botLinks/{code}         short-lived codes that link a chat to an account
 import crypto from 'node:crypto';
 import { getAdmin, getDb } from './_firebaseAdmin.js';
-import { aiReady, aiText, geminiText, getGeminiKey, localRank, compactProfile } from './_gemini.js';
+import { aiReady, aiStatus, aiText, geminiText, getGeminiKey, localRank, compactProfile } from './_gemini.js';
 import { findLeads, outreachDraft } from './_serpapi.js';
 
 export const LIMITS = {
@@ -554,6 +554,41 @@ const DENY_RX = /^(?:no|nope|nah|not\s+now|not\s+yet|not\s+right\s+now|just\s+(?
 
 const BARE_RX = /^(yes|yeah|yep|no|nope|nah|ok|okay|k|sure|cool|nice|great|thanks|thank you|ty|hm+hmm*|huh|\?+\s*|!\s*)[.!?\s]*$/i;
 
+// Words that carry no search intent whatsoever: greetings, laughs, filler, banter,
+// and the Shona/Ndebele small talk our members actually type. Strip every one of
+// these out of a message and, if nothing is left, the member is TALKING - they are
+// not ordering a search. This is the check "yoo" needs, because no list of
+// greetings will ever be complete; emptiness after stripping is.
+const SMALL_PARTS = [
+  'y[oa]+h*|hey+|hai+|hi+|heya|hay|hello+\\w*|he?lo|halo|hiya|ya|yah|yw|sup|so',
+  'wassup|wa\\w*?s\\s*up|whats?|what.s|wyd|how.s|how|are|r|is|s|it|its|been|long|time|goes|going|doin\\w*|do|did',
+  'ah+|oh+\\w*|eish|aita|ag|awk|ouch|hmm+h*|uh+h*|mm+k*|hehe\\w*|(?:ha){2,}h*|lo+l+|lma+o|rofl',
+  'kk+|k|ok+ay?|okie|kay|coolt?\\w*|cool|nice|sweet|sharp|standard|sorted|sure|fine|well|good|great',
+  'mhoro|mwadi|hatina|kuzei|kudakara|ndatofara|bros?\\w*|bruv|bruh|chief|boss|leader|makoti|baba|sisi|dhambi',
+  'baby|dear|love|mate|guys?|g|my|mine|me|we|us|our|you|your|yours|u|ur|they|them|their|theirs',
+  'no|nope|nah|not|nothing|nada|zip|much|just|only|still|even|though|really|serious\\w*|literally|kinda|sorta',
+  'wanna|gonna|gotta|tryna|need|needs|wanted|want|like|likes|feel|feeling|mood|vibes?\\w*|vibing|chill\\w*',
+  'hanging|hang|kickin\\w*|sittin\\w*|chilling|relax\\w*|unwind\\w*|bored|board|sleep\\w*|tired|energy',
+  'morning|afternoon|evening|night|day|today|tomorrow|tonight|now|asap|pls|please|here|there|around|about',
+  'alive|awake|asleep|busy|free|single|alone|same|alright|later|l8r|thanks|thank|ty|cheers|appreciate\\w*',
+  'welcome|np|was|were|be|been|being|have|has|had|would|could|should|might|must|will|shall|can|cant',
+  'say|saying|says|said|talk|talking|chat|chats|chatting|catch|catching|meet|meeting|connect|checking|check',
+  'browse|browsing|look|looking|see|seeing|watch|watching|go|going|coming|send|sending|give|giving|take|taking',
+  'make|making|whatever|anything|everything|something|any|some|this|that|these|those|and|or|but|if|then',
+  'too|also|very|quite|rather|of|to|for|with|at|in|on|up|down|out|off|by|from|as|because|why|when|where',
+  'who|whom|whose|which|im|i|m',
+].join('|');
+// the alternatives are only safe inside word boundaries: without them "moyo"
+// loses "yo" and a member's name stops being a name
+const SMALL_RX = new RegExp('\\b(?:' + SMALL_PARTS + ')\\b', 'gi');
+// A command word in front is never banter, however short: "meet 1" and "cards" are
+// instructions with almost no content, and they must not read as small talk.
+const CMDISH_RX = /^\s*(?:\/\w*\s+)?(?:meet|unskip|skip|approve|decline|send|edit|cards|more|why|draft|intro|forget|memory|facts|limits|profile|help|start|connect|link|unlink|campaigns?|audit|mute|unmute|status)\b/i;
+// Small talk that DOES want the pitch: "what can you do", "who are you".
+const HELPISH_RX = /\b(?:what\s+(?:can|do|are|should)\s+you|how\s+do\s+you\s+work|who\s+are\s+you|what\s+is\s+(?:this|linky|it)|what\s+can\s+linky|help\b|explain\b|what\s+do\s+you\s+do)\b/i;
+// the residue of a message once every small-talk word is stripped out
+const substance = (words) => String(words || '').replace(SMALL_RX, ' ').replace(/[^a-z0-9+#.\s-]/g, ' ').split(/\s+/).filter((w) => w.length > 2);
+
 export function parseAsk(message) {
   const need = text(message, 300);
   const all = need.toLowerCase();
@@ -573,7 +608,9 @@ export function parseAsk(message) {
   const names = namePhrases(need).filter((p) => !p.split(/\s+/).some((w) => CONCEPT_BY_ALIAS.has(w.toLowerCase())));
   return {
     need, offer, location, remote, tokens: kws, expanded: expandTerms(raw), norm: raw.slice().sort().join(' '),
-    nameQuery: names[0] || '', nameAttempts: names,
+    // same rule for the name lookup itself, so "cards" is not a phantom person
+    nameQuery: names.find((nm) => substance(nm).length) || '',
+    nameAttempts: names.filter((nm) => substance(nm).length),
     // Two asks with the same keywords but different people are different asks,
     // so the name is part of the identity of the ask (cache key included).
     norm: [raw.slice().sort().join(' '), names[0] ? `@${names[0].toLowerCase().replace(/\s+/g, '')}` : ''].filter(Boolean).join(' ').trim(),
@@ -591,6 +628,21 @@ export function parseAsk(message) {
     // search for - not by whether a name-shaped substring exists. namePhrases()
     // happily calls "you a real person" a name, and that is how a chat turned
     // into "nobody fits you". Each veto below is a real search signal.
+    // Nothing but greeting/filler/banter left after stripping SMALL_RX: the member
+    // is talking. Searching for that is how "yoo" became "Nobody here fits yoo".
+    smallTalk: (() => {
+      if (CMDISH_RX.test(all) || ORDER_RX.test(all) || DRAFT_RX.test(all) || ELSE_RX.test(all)) return false;
+      // a "name" made of nothing but small-talk words is not a name: namePhrases()
+      // happily hands back "yoo" and "you there", and that is what turned a greeting
+      // into a directory search of 56 profiles
+      if (ROLEISH_RX.test(all) || REFLECT_RX.test(all)) return false;
+      if (names.some((nm) => substance(nm).length)) return false;
+      if (location && location.split(/\s+/).length <= 2) return false;
+      if (offer && offer !== 'coffee') return false;
+      return substance(all).length === 0;
+    })(),
+    // "what can you do" / "who are you": a chat turn that wants the pitch.
+    askedWhatYouDo: HELPISH_RX.test(all),
     chitChat: (() => {
       if (!CHIT_RX.test(all)) return false;
       if (ROLEISH_RX.test(all)) return false;                              // a role, a skill, a trade
@@ -1012,7 +1064,8 @@ async function appendThread(uid, state, turns) {
 //   - no key, an error, or junk JSON -> plainReply() below answers instead.
 //     A member never sees a failure, they see a shorter, blunter Linky.
 const VOICE_KINDS = {
-  chat: 'This is chit-chat, not a search, so do not talk about searching, profiles, members or limits. Be a charming friend who happens to be free right now: react to what they actually said, be a little funny, then ask one real question or offer one specific thing you could do. Two sentences maximum.',
+  chat: 'This is a person talking to you, not a search. React to what they actually said first - answer it, tease it, agree with it, disagree - and that is enough. Do not open with a pitch, do not say "tell me what you need", and do not list example searches unless they asked what you can do. If they said they are not looking for anybody, drop it entirely and just be good company. Match their length: two words from them is one line from you. A joke, an opinion or one emoji is allowed here. Never mention profiles you did not search, never say "nobody fits", never sign off like support.',
+  help: 'They asked what you are or what you can do. Explain it the way you would to a friend in a WhatsApp thread: what you are for, one line; what you can actually do, two or three short lines; then hand them one specific thing to try. No bullet points, no "features", no corporate name for the app.',
   found: 'The matcher found people. Be pleased for them the way a friend is pleased, not the way a press release is. Mention how many in passing, point at why they are worth a look, and let the cards do the bragging.',
   close: 'Nobody matched their words exactly, but adjacent people are worth a look. Say it cheerfully and never as an apology - "close enough to be useful" is a normal answer, not a failure.',
   none: 'The matcher found nobody. Be straight and a little dry, zero ceremony: nobody here, and you are not going to invent somebody. One apology maximum, then the next move - and make the next move sound easy, not like a form.',
@@ -1023,8 +1076,48 @@ const VOICE_KINDS = {
   limit: 'They are out of searches for today. Say it lightly, never with corporate regret, and be useful about it: what is still free (looking someone up by name) and what tomorrow brings. Do not lecture about pricing.',
 };
 
+// Kinds that must be written fresh every time: caching a greeting for fourteen days
+// is exactly how a personality turns into a answering machine.
+const NO_CACHE_KINDS = new Set(['chat', 'check', 'help', 'ambiguous']);
+
+// A day of AI trouble, counted where a human can actually read it. When a member
+// says "Linky has no personality", the honest answer is usually this doc: the model
+// never answered, so a hard-coded sentence went out instead.
+async function noteAiFault(kind, err) {
+  try {
+    const st = aiStatus();
+    const ref = db().collection('linkyOutreach').doc(`ai_err_${dayKey(Date.now())}`);
+    const snap = await ref.get().catch(() => null);
+    const prev = snap && snap.exists ? snap.data() : {};
+    await ref.set({
+      kind: 'ai-wording',
+      at: Date.now(),
+      count: Number(prev.count || 0) + 1,
+      lastKind: text(kind, 24),
+      lastError: text(err && err.message ? err.message : err, 300),
+      providers: { gemini: st.gemini.configured, geminiFrom: st.gemini.from, model: st.gemini.model, zen: st.zen.configured, zenFrom: st.zen.from },
+    });
+  } catch { /* a diagnostic write must never be what broke the reply */ }
+}
+
+/** How many times the model failed to answer today (Firestore console, or ?action=diag). */
+export async function lastAiFault() {
+  const day = dayKey(Date.now());
+  try {
+    const snap = await db().collection('linkyOutreach').doc(`ai_err_${day}`).get();
+    if (!snap || !snap.exists) return { day, count: 0 };
+    const d = snap.data();
+    return { day, count: Number(d.count || 0), lastKind: d.lastKind || '', lastError: d.lastError || '', at: toMillis(d.at) || 0, providers: d.providers || null };
+  } catch {
+    return { day, count: -1, error: 'unreadable' };
+  }
+}
+
 async function geminiWording(kind, dossier, { source = 'app', seed = '' } = {}) {
   if (!aiReady()) return null;
+  // A greeting kept for a fortnight is how a personality turns into an answering
+  // machine, so chit-chat, follow-up questions and tie-breakers are written fresh.
+  if (NO_CACHE_KINDS.has(kind)) return wordingOnce(kind, dossier, source, seed, null);
   const ref = db().collection('linkyCache').doc(cacheKey('v', `${kind}|${source}|${seed}`));
   try {
     const snap = await ref.get().catch(() => null);
@@ -1032,6 +1125,10 @@ async function geminiWording(kind, dossier, { source = 'app', seed = '' } = {}) 
       return { reply: text(snap.data().reply, 600), suggest: list(snap.data().suggest, 3, 40) };
     }
   } catch { /* cache miss is just a miss */ }
+  return wordingOnce(kind, dossier, source, seed, ref);
+}
+
+async function wordingOnce(kind, dossier, source, seed, ref) {
   const channelNote = source === 'app'
     ? 'It appears in a chat bubble inside the LINKUP app, next to tappable chips.'
     : `It is a ${source === 'telegram' ? 'Telegram' : 'WhatsApp'} message: plain text, under 260 characters, no links in the reply.`;
@@ -1048,15 +1145,19 @@ async function geminiWording(kind, dossier, { source = 'app', seed = '' } = {}) 
     `Dossier: ${JSON.stringify(dossier).slice(0, 2400)}`,
   ].join('\n');
   try {
-    const raw = await geminiText(prompt, { temperature: 0.85, maxOutputTokens: 260, responseMimeType: 'application/json' });
-    const parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+    // aiText, not geminiText: OpenCode Zen carries the same voice when Gemini is
+    // down, out of quota or missing a key - which is the difference between a
+    // person and a form.
+    const { text: raw, provider } = await aiText(prompt, { temperature: kind === 'chat' || kind === 'help' ? 1 : 0.85, maxOutputTokens: 280, responseMimeType: 'application/json' });
+    const parsed = JSON.parse(String(raw).slice(String(raw).indexOf('{'), String(raw).lastIndexOf('}') + 1));
     const reply = text(parsed && parsed.reply, 600);
-    if (!reply || reply.length < 12) return null;
-    const out = { reply, suggest: list(parsed.suggest, 3, 40) };
-    await ref.set({ kind, source, seed, reply: out.reply, suggest: out.suggest, createdAt: Date.now() }).catch(() => {});
+    if (!reply || reply.length < 12) throw new Error('model returned nothing usable');
+    const out = { reply, suggest: list(parsed.suggest, 3, 40), provider };
+    if (ref) await ref.set({ kind, source, seed, reply: out.reply, suggest: out.suggest, provider, createdAt: Date.now() }).catch(() => {});
     return out;
   } catch (err) {
     console.warn('[linky] wording call failed, using plain reply', err && err.message ? err.message : err);
+    await noteAiFault(kind, err).catch(() => {});
     return null;
   }
 }
@@ -1091,6 +1192,19 @@ function plainReply(kind, d = {}) {
     }
     case 'ambiguous': return `I have ${(d.people || []).length} members who could be who you mean: ${(d.people || []).map((x) => x.name).join(', ')}. Which one?`;
     case 'check': return `That is a real thing to chew on${d.need ? `: ${text(d.need, 90)}` : ''}. My honest take is it is worth knowing who is out there before you decide anything. Want me to look - I can bring you the people on LINKUP who fit, and say so plainly if there are none?`;
+    case 'chat': {
+      const lines = [
+        'I am here - no search, no agenda. What is going on with you?',
+        'Fair enough. I am a well-connected friend with too much free time. How is it going?',
+        'Noted - nothing to find, nobody to impress. How is the work treating you?',
+        'haha. Say the word when you want names, until then I am good company.',
+      ];
+      const first = text(d.name, 24);
+      // the streak is in the rotation so two fallback lines in a row differ
+      const pick = lines[(hash32(String(d.seed || '')) + Number(d.streak || 0)) % lines.length];
+      return first ? `${first} - ${pick}` : pick;
+    }
+    case 'help': return 'I am Linky - the connector here. Tell me who you need and I read every member profile and bring you the ones that fit: a Flutter developer in Harare, a co-founder who can sell, someone who has raised from local angels. When nobody fits I say so, and I can go and look outside LINKUP too.';
     case 'limit': return `That is today's ${d.asks_limit_today || d.limit} asks used up. It resets at ${d.resets || 'midnight'}, and PLUS gets ${d.plus_asks_per_day || d.plusLimit || LIMITS.plus.asksPerDay} a day. Looking someone up by name is free either way.`;
     case 'draft': return d.ready_message || 'Tell me who the message is for and I will write it - then you send it yourself, from your own account.';
     default: return 'So what do you need? A role, a skill, a city, or just a name - I will go and look through the network right now and tell you exactly who fits.';
@@ -1107,7 +1221,8 @@ async function linkySay(kind, dossier, { name = '', source = 'app', seed = '', f
   const body = said ? said.reply : (fallback || plainReply(kind, dossier));
   const suggest = said && said.suggest.length ? said.suggest : (dossier.suggest || []);
   const first = firstName(name);
-  const greet = kind === 'found' || kind === 'close' || kind === 'person' || kind === 'chat' || kind === 'draft';
+  // a member's name belongs on an answer about people, not on every "yoo"
+  const greet = kind === 'found' || kind === 'close' || kind === 'person' || kind === 'draft';
   const alreadyGreeted = /^(hey|hi|hello|good (morning|afternoon|evening)|afternoon|morning|evening|yo)\b/i.test(body);
   const reply = greet && first && first !== 'there' && !alreadyGreeted && !body.toLowerCase().includes(first.toLowerCase())
     ? `${pickGreeting(seed, first)}. ${body}`
@@ -1463,21 +1578,38 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     }
   }
 
-  // ---- 1b. small talk: greetings, thanks, "who are you", "ok".
-  // Free, instant, and never dressed up as a search result.
-  if (q.chitChat || ((!q.tokens.length || q.bare) && !wantsElseNow)) {
+  // ---- 1b. small talk: "yoo", "hey", laughs, "no just wanna chill", "ok".
+  // Free, instant, and never dressed up as a search result. The old version
+  // searched for "yoo" and reported that nobody in the network matched it; the
+  // member is talking to a friend, so a friend answers - and does not pitch.
+  if (q.chitChat || q.smallTalk || ((!q.tokens.length || q.bare) && !wantsElseNow)) {
     const id = newId();
-    const { reply: chat, suggest: chatSuggest, usedAi } = await linkySay('chat', {
+    const streak = Number(state.chitStreak || 0);
+    // they get the pitch when they ask for it, or when they are new and have never
+    // used him for anything. Nobody else gets a form dressed up as a greeting.
+    const wantsPitch = !!q.askedWhatYouDo || (!state.lastAsk && streak === 0);
+    const sayKind = q.askedWhatYouDo ? 'help' : 'chat';
+    const recent = threadOf(state).slice(-6).map((t) => ({ who: t.role === 'user' ? 'they' : 'linky', said: text(t.text, 140) }));
+    const { reply: chat, suggest: chatSuggest, usedAi } = await linkySay(sayKind, {
       they_said: q.need,
-      tone: 'charming and a bit funny. Do not mention searching, profiles, budgets or limits unless they raised it. Do not answer a feeling with a call to action.',
+      tone: wantsPitch
+        ? 'They are open to what you are for. Be warm and a little funny, then say plainly what you do here and hand them one thing to try.'
+        : 'They are not looking for anybody right now. React to what they actually said, ask after them, tease gently if it fits. No pitch, no examples, no "tell me what you need".',
+      recent_turns: recent,
+      they_asked_what_linky_does: !!q.askedWhatYouDo,
+      stop_offering_searches: streak >= 1,
       last_real_ask: state.lastAsk && state.lastAsk.need && now - toMillis(state.lastAsk.createdAt) < 3 * DAY_MS ? text(state.lastAsk.need, 120) : '',
       asks_left_today: asksLeft(),
       member_you: { name: me.name, role: me.role, city: me.city },
       network_size: 'a few dozen visible members',
-      what_linky_can_do: 'find members by role, skill, city or name; explain the match; ask someone for an intro on your behalf; search the open web when nobody fits',
-    }, { name: me.name, source, seed: q.need.toLowerCase(), fallback: q.tokens.length ? COACH : '' });
+      what_linky_can_do: wantsPitch ? 'find members by role, skill, city or name; explain the match; ask someone for an intro on your behalf; search the open web when nobody fits' : '',
+    }, { name: me.name, source, seed: `${q.need.toLowerCase()}:${streak}`, fallback: wantsPitch ? COACH : plainReply('chat', { seed: q.need, streak }) });
+    await patchState(uid, { chitStreak: streak + 1 }).catch(() => {});
     const thread = await sayBack(id, chat, { kind: 'chat' });
-    return { id, need: q.need, reply: chat, kind: 'chat', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: chatSuggest.length ? chatSuggest : (source === 'app' ? COACH_CHIPS : BOT_CHIPS), thread };
+    const chillSuggest = source === 'app'
+      ? ['who could be a good co founder for me', 'what Linky knows about me', 'what can you do']
+      : ['what can you do', 'help'];
+    return { id, need: q.need, reply: chat, kind: 'chat', askingWhat: q.askedWhatYouDo ? 'help' : '', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: chatSuggest.length ? chatSuggest : (wantsPitch ? (source === 'app' ? COACH_CHIPS : BOT_CHIPS) : chillSuggest), thread };
   }
 
   // ---- 1c. "unskip fred": a skip is a cool-off, not a verdict, so the only
@@ -1577,7 +1709,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     const thread = await sayBack(id, reply, { kind: 'person', cardIds });
     const foundNearest = [{ uid: facts.uid, name: person.name, pic: facts.pic, role: person.role, city: person.city }];
     const record = { id, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply, cardIds, none: !cards.length, nearest: blocked || connected ? foundNearest : [], checked: ctx.candidates.length, usedAi: false, expansion: 'none', source, kind: 'person', createdAt: now };
-    await patchState(uid, { lastAsk: record, recentAsks: [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])].filter((a) => a && a.norm !== q.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5) });
+    await patchState(uid, { lastAsk: record, chitStreak: 0, recentAsks: [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])].filter((a) => a && a.norm !== q.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5) });
     const history = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
     history.push({ id, need: q.need, cards: cards.length, none: !cards.length, source, createdAt: now });
     await patchState(uid, { askHistory: history });
@@ -1675,7 +1807,9 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   const recentAsks = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])]
     .filter((a) => a && a.norm !== searchQ.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5);
   const thread = await sayBack(askId, reply, { kind, cardIds: record.cardIds });
-  await patchState(uid, { lastAsk: record, recentAsks, askHistory: history, asks: { day: today, count: used + 1 } });
+  // a searched ask is also the moment the small talk stops: the next greeting
+  // starts from zero, so the pitch is not permanently muted
+  await patchState(uid, { lastAsk: record, chitStreak: 0, recentAsks, askHistory: history, asks: { day: today, count: used + 1 } });
   return { ...publicAsk(record), cards: resultCards, cached: false, usedAi, kind, asksLeft: asksLeft(1), suggest: saidSuggest, thread };
 }
 

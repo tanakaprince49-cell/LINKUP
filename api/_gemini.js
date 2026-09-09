@@ -22,16 +22,20 @@ export function handleOptions(req, res) {
   return false;
 }
 
+// Every name a Gemini key is plausibly stored under. Vercel's own AI SDK scaffold
+// calls it GOOGLE_GENERATIVE_AI_API_KEY, and a deployment that set exactly that
+// used to look "not configured" to us - which is how a member ends up reading a
+// hard-coded sentence instead of Linky.
+const GEMINI_KEY_NAMES = ['GEMINI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'EXPO_PUBLIC_GEMINI_API_KEY', 'GOOGLE_API_KEY'];
+const ZEN_KEY_NAMES = ['ZEN_API_KEY', 'OPENCODE_ZEN_API_KEY', 'EXPO_PUBLIC_OPENCODE_ZEN_API_KEY'];
+const firstEnv = (names) => names.map((k) => [k, String(process.env[k] || '').trim()]).find(([, v]) => !!v);
+
 export function getGeminiKey() {
-  return String(
-    process.env.GEMINI_API_KEY || process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GOOGLE_API_KEY || ''
-  ).trim();
+  return (firstEnv(GEMINI_KEY_NAMES) || ['', ''])[1];
 }
 
 export function getZenKey() {
-  return String(
-    process.env.ZEN_API_KEY || process.env.OPENCODE_ZEN_API_KEY || process.env.EXPO_PUBLIC_OPENCODE_ZEN_API_KEY || ''
-  ).trim();
+  return (firstEnv(ZEN_KEY_NAMES) || ['', ''])[1];
 }
 
 /** Any usable model at all. Guards must test this, not getGeminiKey(): a Zen-only
@@ -223,4 +227,26 @@ export function localRank(me, candidates, maxCandidates) {
     .slice(0, maxCandidates);
 }
 
+/** Which model is actually wired up - names and models only, never a key value,
+ *  so this is safe to serve from a diagnostic route. */
+export function aiStatus() {
+  const g = firstEnv(GEMINI_KEY_NAMES);
+  const z = firstEnv(ZEN_KEY_NAMES);
+  return {
+    ready: !!(g || z),
+    gemini: { configured: !!g, from: g ? g[0] : '', model: process.env.GEMINI_MODEL || DEFAULT_MODEL },
+    zen: { configured: !!z, from: z ? z[0] : '', model: ZEN_MODEL, url: ZEN_URL },
+  };
+}
 
+/** One real round trip, so "configured" can be told apart from "working". */
+export async function aiProbe() {
+  const started = Date.now();
+  if (!aiStatus().ready) return { ok: false, error: 'no key set', ms: 0 };
+  try {
+    const { text, provider } = await aiText('Reply with exactly this JSON and nothing else: {"pong":true}', { temperature: 0, maxOutputTokens: 20 });
+    return { ok: true, provider, ms: Date.now() - started, said: String(text).slice(0, 40) };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err).slice(0, 240), ms: Date.now() - started };
+  }
+}
