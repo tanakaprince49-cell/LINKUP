@@ -52,7 +52,9 @@ export type LinkyAsk = {
   need: string;
   reply: string;
   /** What the answer was, so the UI can dress it: search, a name, chit-chat. */
-  kind?: 'found' | 'close' | 'none' | 'person' | 'ambiguous' | 'chat' | 'draft';
+  /** `check` = Linky asked before searching; answer it with yes / no. */
+  kind?: 'found' | 'close' | 'none' | 'person' | 'ambiguous' | 'chat' | 'draft' | 'check';
+  askingFirst?: boolean;
   cardIds: string[];
   none: boolean;
   nearest: LinkyNearest[];

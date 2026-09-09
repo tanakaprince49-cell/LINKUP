@@ -108,6 +108,7 @@ const HELP = [
   'skip 1     clear a card   |   save 1   keep it',
   'accept     answer an intro waiting on you (decline / later too)',
   'more       where to look outside LINKUP when nobody fits',
+  'yes / no   answer the question I asked instead of searching straight away',
   'draft 2    write the message for person 2 from that search',
   'send       approve what Linky drafted   |   edit <text>  rewrite it first',
   'sent       tell me you sent it          |   not interested 2  never show them again',
@@ -173,6 +174,10 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
         return { text: r.cancelled ? `Left unsent. ${r.targetName || 'They'} will not know you thought about it.` : 'Nothing was waiting to go.' };
       }
       if (kind === 'w') return await draftForNumber(uid, user, Number(a) || 1, channel);
+      if (kind === 'q') {
+        // "should I look?" answered by tap - same words as typing yes / no
+        return await botReply(channel, chatId, a === 'y' ? 'yes' : 'no, just thinking');
+      }
       if (kind === 'e') {
         return { text: 'Type it after the word, in one message: "edit Hi Tinashe, I am Alice - 15 minutes on Thursday?" I will hold it until you say send.' };
       }
@@ -360,6 +365,14 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
   const message = cmd.startsWith('new') ? raw.replace(/^\/?new\b[\s:,-]*/i, '').trim() : raw;
   try {
     const out = await ask(uid, message, { userDoc: user, source: channel });
+    if (out.kind === 'check') {
+      // he asked instead of searching: the answer has to be one tap, not a sentence
+      return {
+        text: out.reply,
+        buttons: [[{ text: 'Yes, look for them', callback_data: 'q:y' }, { text: 'Not now', callback_data: 'q:n' }]],
+        chips: ['yes, go look', 'no, just thinking'],
+      };
+    }
     if (!out.cards.length) {
       // the one chip that used to be filtered OUT here was the only way a member
       // on Telegram could ever reach the LinkedIn search - now it is the first one

@@ -221,6 +221,36 @@ drafts, `y:`/`n:` approve or cancel an intro, `ld:y`/`ld:n` approve or mute a le
 plus the typed grammar (`send`, `edit <text>`, `cancel`, `sent`, `not interested 2`,
 `draft 2`) for people who would rather type.
 
+## A thought is not a work order
+
+Linky used to read every message as a search request, so "who could be my Co founder"
+came back as "2 people fit that" plus five cards. That is the difference between a
+member **talking to him as a friend** and a member **giving him an order**, and he now
+tells them apart (`parseAsk` in `api/_linky.js`):
+
+| they write | what he does |
+| --- | --- |
+| `who could be my Co founder`, `I am thinking about bringing on a technical co founder`, `should i look for a bookkeeper`, `anyone come to mind for taxes?` | **free** reflective reply that ends with `Want me to look?` - no cards, no ask spent. `kind: 'check'`, `askingFirst: true`. On Telegram that comes with a **Yes / No** button; in the app the two chips under the bubble are the same yes and no. |
+| `yes`, `yeah`, `go ahead`, `ok`, `sure why not` (within 40 minutes, nothing else in the message) | the search he offered runs - this is the turn that costs an ask |
+| `no`, `no thanks, just thinking`, `not now` | one short line, nothing searched, nothing charged |
+| `find a flutter developer in harare, paid`, `who do you have for ...`, `search linkedin for ...` | an **order**: people come back immediately, no extra round trip |
+
+What is deliberately protected:
+
+* the pending question lives in `linkyState/{uid}.pendingIntent` (40 min TTL) and is
+  **cleared by anything else they ask**, so a stray "ok" tomorrow cannot wake an offer
+  they forgot about;
+* a question is never recorded as an ask (no `lastAsk`, no cache entry), so it cannot
+  poison the next answer, the repeat-cache, or a free member's 2 asks a day;
+* a "yes" replaces their message with the stored need and re-enters the normal search
+  path - budget, cache, drafts, approval - instead of a second code path;
+* anything long, emotional or unusual falls through to a real search rather than
+  getting stuck behind a question: `want` / `looking for` / `need` always count as
+  asking, and a reply over 24 characters is an instruction, not an answer.
+
+`functions/tests/linky-e2e.mjs` ("thinking out loud is not a work order", plus the
+Telegram tap-Yes case in the bot section) holds all of this.
+
 ## Bot commands
 
 Just type who you need (e.g. `a Flutter developer in Harare, paid`) → answered inline with numbered cards.

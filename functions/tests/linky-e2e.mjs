@@ -81,6 +81,7 @@ await clearBudget('alice');
 await clearBudget('alice');
 r = await L.ask('alice', 'developers');
 assert(!r.none && r.cards.some((c) => c.targetUid === 'bob') && r.expansion === 'none', 'plural "developers" matches "developer" word for word');
+
 // ---- pointers: only for an ask that was made; static text without a key
 let pt = null; try { await L.pointers('alice', 'a blockchain lawyer in Lagos'); } catch (e) { pt = e; }
 assert(pt && /Ask me that first/.test(pt.message), 'pointers refuse asks that were never made (budget guard)');
@@ -221,6 +222,12 @@ assert(!(await db.collection('intros').doc('alice_cara').get()).exists, 'and not
 br = await botReplyForTest('telegram', '12345', 'send');
 assert(/Sent to Cara Dube/.test(br.text), 'replying SEND lets it go: ' + br.text.slice(0, 70));
 assert((await db.collection('intros').doc('alice_cara').get()).exists, 'the intro doc only exists after the approval');
+br = await botReplyForTest('telegram', '12345', 'who could be my co founder');
+assert(!br.cards && /q:y/.test(JSON.stringify(br.buttons || [])), 'on Telegram a musing gets a question with a tap, not five cards: ' + br.text.slice(0, 55));
+await clearBudget('alice');
+const tapYes = await botReplyForTest('telegram', '12345', '', { callback: 'q:y' });
+assert(tapYes.text.length > 20, 'tapping Yes runs the search in the same chat: ' + tapYes.text.slice(0, 45).replace(/\n/g, ' '));
+await clearBudget('alice');
 br = await botReplyForTest('telegram', '12345', 'a blockchain lawyer in Lagos');
 assert(!br.cards && /Nobody (here|on LINKUP) fits/i.test(br.text), 'bot no-match is graceful: ' + br.text.slice(0, 70));
 assert((br.chips || []).some((c) => /outside LINKUP/i.test(c)), 'and the no-match keeps the outside-LINKUP chip, which is how a member on Telegram reaches the search at all: ' + JSON.stringify(br.chips));
@@ -259,5 +266,52 @@ assert(res.code === 200 && res.body === '42', 'whatsapp verify handshake echoes 
 // ---- forget
 const f = await L.forget('alice');
 assert(f.ok && !(await db.collection('linkyState').doc('alice').get()).exists && !(await db.collection('botUsers').doc('telegram_12345').get()).exists, 'forget wipes state, cards, bot link');
+// ---- thinking out loud is not a work order
+// The complaint: "who could be my Co founder" got five cards with no warning.
+// Linky has to tell the difference between an instruction and a thought, and ask.
+{
+  const say = (m) => L.parseAsk(m);
+  assert(say('who could be my Co founder').reflective === true, '"who could be" is a thought, not a request');
+  assert(say('I am thinking about bringing on a technical co founder').reflective === true, '"I am thinking about" too');
+  assert(say('should i look for a bookkeeper').reflective === true && say('anyone come to mind for taxes?').reflective === true, 'should-I and anyone-come-to-mind likewise');
+  assert(say('find a flutter developer in harare').reflective === false && say('find a flutter developer in harare').command === true, 'an imperative is still an imperative');
+  assert(say('who do you have for a flutter developer').reflective === false, '"who do you have" is asking for names, so search now');
+  assert(say('who could be my co founder').reflective && !say('who could be my co founder').chitChat, 'and it is not chit-chat either - it is a question with a person in it');
+
+  await clearBudget('alice');
+  await clearBudget('alice');
+  const stA = await L.loadState('alice');
+  const think = await L.ask('alice', 'who could be my Co founder');
+  const stB = await L.loadState('alice');
+  assert(think.kind === 'check' && !think.cards.length && think.askingFirst === true, 'so the answer is a thought plus a question, never cards: ' + JSON.stringify({ kind: think.kind, cards: think.cards.length }));
+  assert(/\?/.test(think.reply) && !/people fit|I read all/i.test(think.reply), 'and it reads as him asking, not as a search report: ' + think.reply.slice(0, 70));
+  assert((stB.asks?.count || 0) === (stA.asks?.count || 0), 'and a question costs no ask');
+  assert(stB.pendingIntent?.need && /co founder|co-founder|founder/i.test(stB.pendingIntent.need), 'the pending question is what is remembered');
+  assert((stB.lastAsk?.need || '').toLowerCase() !== 'who could be my co founder', 'and it is not recorded as an ask, so it does not poison the next answer or the cache');
+
+  const yes = await L.ask('alice', 'yes');
+  assert(yes.kind !== 'check' && yes.free !== true, 'a yes runs the search he offered: ' + JSON.stringify({ kind: yes.kind, free: !!yes.free }));
+  assert(!(await L.loadState('alice')).pendingIntent, 'and the question is spent');
+  const yesAgain = await L.ask('alice', 'yes');
+  assert(yesAgain.kind === 'chat' || yesAgain.free === true, 'a stray yes afterwards is just a yes, not a fresh search');
+
+  const think2 = await L.ask('alice', 'who might be a good bookkeeper for my startup');
+  assert(think2.kind === 'check', 'the same shape catches other phrasings');
+  const no = await L.ask('alice', 'no thanks, just thinking');
+  assert(no.cards.length === 0 && no.free === true && /search|nothing|Noted|fine/i.test(no.reply), 'a no is taken lightly and searches nothing: ' + no.reply.slice(0, 60));
+  assert(!(await L.loadState('alice')).pendingIntent, 'and a no leaves no question hanging');
+
+  const think3 = await L.ask('alice', 'who might be a good actuary for my startup');
+  assert(think3.kind === 'check', 'he asks first, every time the shape is a musing');
+  const redirect = await L.ask('alice', 'actually find me a payroll auditor in Lusaka');
+  assert(redirect.kind !== 'check' && /payroll/.test(redirect.need + JSON.stringify(redirect.cards)), 'but a new instruction in the middle is not treated as a yes: ' + redirect.reply.slice(0, 55));
+  assert(!(await L.loadState('alice')).pendingIntent, 'and the abandoned question is cleared rather than left to answer itself later');
+
+  await clearBudget('alice');
+  const order = await L.ask('alice', 'find me a payroll auditor in Blantyre, paid');
+  assert(order.cards.length >= 1 && order.kind !== 'check', 'the direct instruction still answers with people straight away');
+  assert(!order.free, 'and an instruction he gave himself is metered like any ask');
+}
+
 console.log('\nALL PASSED');
 process.exit(0);

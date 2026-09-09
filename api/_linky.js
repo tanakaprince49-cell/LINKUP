@@ -544,6 +544,14 @@ const ELSE_RX = /\b(?:who else|anyone else|anybody else|any other|other people|m
 const CHIT_RX = /\b(?:just (?:want|wanna|looking|here|checking|saying|asking)?\s*(?:to\s*)?(?:chat|talk|talk a bit|bounce ideas|vent|browse|say hi|say hello|check in)|want(?:s|ing)? (?:to|a) chat|up for a chat|fancy a chat|no (?:one|body) (?:else )?in mind|nobody in mind|nothing specific in mind|nothing in particular|how are you|how'?s it going|how are u|you ok\?|you good\?|what'?s up|hey there|who are you|what are you|are you (?:a |an )?(?:real|human|ai|bot)|you real\?|talk to me|keep me company|bored|what can you do|help me with what you do|are you (?:there|awake)|hi|hey|hello|yo|hiya|howdy|good (?:morning|afternoon|evening)|thanks?(?: you)?(?: linky)?|ty|cheers|no worries|all good|nice (?:to meet|meeting) you|how do you do|sup|what are you up to|are you (?:busy|bored|alone|single)|just checking in|say hi|saying hi|kicking it|hang out|can (?:we|i) (?:talk|chat)|are you (?:around|about|free)|got a (?:minute|moment|sec|second)|wyd|what are you doing|no agenda|nothing on my (?:mind|head)|i.?m (?:bored|stuck)|feeling lonely|nice to (?:meet|talk to) you|good to (?:meet|talk) you|that was a great intro|great intro|the intro was (?:great|good|nice)|that intro (?:was|went) (?:great|well|good)|you.?re a legend|you are a legend|bless you|much appreciated)\b/i;
 const ROLEISH_RX = /\b(?:devel?op(?:er|ing|ment)|programmer|engineer|designer|architect|marketer|marketer|lawyer|analyst|accountant|bookkeep\w*|audit\w*|actuar\w*|quant|recruiter|consultant|copywriter|writer|editor|photographer|videographer|founder|co-?founder|ceo|cto|coo|cmo|cfo|product manager|project manager|data scien\w*|data engine\w*|machine learning|ai engineer|devops|backend|frontend|full[- ]?stack|flutter|react|node(?:\.js)?|python|django|laravel|wordpress|shopify|mobile app|web app|ui|ux|fintech|insurance|logistics|procurement|supply chain|tax|legal|paralegal|nurse|doctor|clinician|teacher|lecturer|professor|researcher|scientist|builder|maker|hacker|investor|angel|vc|mentor|advisor|adviser|sales|growth|marketing|operations|farmer|agronom\w*|mining|energy|solar|log\w*|construction|quantity survey\w*)\b/i;
 
+// A member thinking out loud is not a work order. "who could be my co founder"
+// wants a thought and a question, not five cards arriving unprompted.
+const REFLECT_RX = /\b(?:who\s+(?:could|might|would|should|'?d)\b|who\s+do\s+you\s+think|what\s+do\s+you\s+think|should\s+i\s+(?:find|look|hire|bring|recruit|get|ask|try|pay|take|give)|any\s+ideas|anyone\s+come\s+to\s+mind|(?:i'?m|i\s+am)\s+(?:also\s+)?thinking\s+(?:about|of)|(?:i\s+was\s+|just\s+)wondering|do\s+you\s+think\s+i\s+(?:need|should|have|could)|is\s+it\s+worth|what\s+would\s+it\s+take|how\s+do\s+i\s+(?:know|spot|tell|judge)|who\s+else\s+might|maybe\s+i\s+need|perhaps\s+i\s+need)\b/i;
+// ...unless the same message is plainly an instruction, in which case search now.
+const ORDER_RX = /^\s*(?:\/\w*\s+)?(?:please\s+)?(?:find|search|look\s*ing\s+for|look\s+for|get\s+me|need|want|introduce|connect|match\s+me|show\s+me|send\s+(?:me\s+)?(?:some|a|a\s+few)|who\s+do\s+you\s+have|who'?s\s+on\s+linkup|who\s+can|anyone\s+who|anybody\s+who|do\s+you\s+know\s+(?:a|an|any))\b/i;
+const AFFIRM_RX = /^(?:y|yes|yeah|yep|yup|sure|ok|okay|kk|go\s+ahead|go\s+for\s+it|go\s+on|do\s+it|do\s+them|let'?s\s+go|why\s+not|find\s+them|look\s+for\s+them|yes\s+please|sure\s+why\s+not|yes\s*,\s*go\s+look)\b/i;
+const DENY_RX = /^(?:no|nope|nah|not\s+now|not\s+yet|not\s+right\s+now|just\s+(?:asking|wondering|talking|curious|thinking)|thinking\s+out\s+loud|maybe\s+later|never\s+mind|leave\s+it|no\s+thanks|not\s+bothered)\b/i;
+
 const BARE_RX = /^(yes|yeah|yep|no|nope|nah|ok|okay|k|sure|cool|nice|great|thanks|thank you|ty|hm+hmm*|huh|\?+\s*|!\s*)[.!?\s]*$/i;
 
 export function parseAsk(message) {
@@ -569,6 +577,8 @@ export function parseAsk(message) {
     // Two asks with the same keywords but different people are different asks,
     // so the name is part of the identity of the ask (cache key included).
     norm: [raw.slice().sort().join(' '), names[0] ? `@${names[0].toLowerCase().replace(/\s+/g, '')}` : ''].filter(Boolean).join(' ').trim(),
+    reflective: REFLECT_RX.test(all) && !ORDER_RX.test(all),
+    command: ORDER_RX.test(all),
     wantsDraft: DRAFT_RX.test(all) && !/[a-z]{4,}\s+(developer|designer|engineer|marketer|lawyer|analyst)/i.test(all),
     wantsElse: ELSE_RX.test(all),
     bare: BARE_RX.test(need.trim()),
@@ -1009,6 +1019,7 @@ const VOICE_KINDS = {
   person: 'They asked for a human by name and you found them. Hand the name over quickly, like a friend who already knew where they were. No ceremony, and never "I am happy to inform you".',
   ambiguous: 'More than one member could be who they mean. Ask which one in one short line that contains both names. Admitting the doubt is charming here; guessing is not.',
   draft: 'Write the message they should send. It must sound like a person wrote it two minutes ago: specific, warm, easy to answer, no flattery padding, no "I hope this finds you well".',
+  check: 'They are thinking out loud, not ordering a search. Respond to the actual thought first - one honest observation, a small challenge if the thought deserves one, no flattery - then ask, in one line, whether you should look for people. Do NOT list anybody, do not pretend you searched, and do not sound like a menu. Two sentences then the question.',
   limit: 'They are out of searches for today. Say it lightly, never with corporate regret, and be useful about it: what is still free (looking someone up by name) and what tomorrow brings. Do not lecture about pricing.',
 };
 
@@ -1079,6 +1090,7 @@ function plainReply(kind, d = {}) {
       return `${f.name}${label ? ` (${label})` : ''} is on LINKUP - I found them by name.${d.channel && d.channel !== 'app' ? ' Reply meet 1 and I will ask them for you.' : ' Hit Meet and I will ask them for you.'}`;
     }
     case 'ambiguous': return `I have ${(d.people || []).length} members who could be who you mean: ${(d.people || []).map((x) => x.name).join(', ')}. Which one?`;
+    case 'check': return `That is a real thing to chew on${d.need ? `: ${text(d.need, 90)}` : ''}. My honest take is it is worth knowing who is out there before you decide anything. Want me to look - I can bring you the people on LINKUP who fit, and say so plainly if there are none?`;
     case 'limit': return `That is today's ${d.asks_limit_today || d.limit} asks used up. It resets at ${d.resets || 'midnight'}, and PLUS gets ${d.plus_asks_per_day || d.plusLimit || LIMITS.plus.asksPerDay} a day. Looking someone up by name is free either way.`;
     case 'draft': return d.ready_message || 'Tell me who the message is for and I will write it - then you send it yourself, from your own account.';
     default: return 'So what do you need? A role, a skill, a city, or just a name - I will go and look through the network right now and tell you exactly who fits.';
@@ -1391,11 +1403,25 @@ async function persistCards(uid, existing, picks, { askId, need, now }) {
 export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   const user = userDoc || (await loadUser(uid));
   if (!user) throw new Error('Finish your LINKUP profile first.');
-  const msg = text(message, 600);
-  if (!msg) throw new Error('Say something first.');
-  const q = parseAsk(msg);
+  const msgTyped = text(message, 600);
+  if (!msgTyped) throw new Error('Say something first.');
   const now = Date.now();
   const state = await loadState(uid);
+  // If Linky asked "want me to look?" a moment ago, "yes"/"no" are answers to
+  // HIM - not a new search, and not small talk to be answered with a joke.
+  const pendingIntent = state.pendingIntent && now - toMillis(state.pendingIntent.at) < 40 * 60 * 1000 ? state.pendingIntent : null;
+  const saidWords = msgTyped.toLowerCase().trim().replace(/^\/+\w*\s*/, '');
+  // only a BARE answer counts as answering him: "please find me a bookkeeper" is
+  // a new instruction, and it must not be swallowed by the question before it
+  const answeringYes = !!pendingIntent && saidWords.length <= 24 && AFFIRM_RX.test(saidWords) && !DENY_RX.test(saidWords);
+  const answeringNo = !!pendingIntent && saidWords.length <= 32 && DENY_RX.test(saidWords);
+  // a yes runs the search he offered; anything else is what they typed
+  const msg = answeringYes ? pendingIntent.need : msgTyped;
+  const q = parseAsk(msg);
+  // Anything he asks next supersedes the question he left unanswered, so a stray
+  // "ok" tomorrow cannot wake an offer he forgot about. (A yes or a no is handled
+  // just below; a new musing re-stores its own further down.)
+  if (pendingIntent && !(answeringYes || answeringNo)) await patchState(uid, { pendingIntent: null }).catch(() => {});
   const me = profileFacts(user) || {};
   const plus = await isPlusUser(uid, user);
   const limits = plus ? LIMITS.plus : LIMITS.free;
@@ -1408,7 +1434,8 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // conversation. Two turns per exchange: theirs, then Linky's.
   const sayBack = async (askId, reply, opts = {}) => {
     const thread = await appendThread(uid, state, [
-      { id: askId, role: 'user', text: opts.userText ?? q.need, at: now },
+      // when they only said "yes", the thread says so and shows what it was yes to
+      { id: askId, role: 'user', text: opts.userText ?? (answeringYes ? `${msgTyped} - so look for "${q.need}"` : q.need), at: now },
       { id: askId, role: 'linky', text: reply, kind: opts.kind || 'answer', cardIds: opts.cardIds || [], at: now + 1 },
     ]);
     return thread;
@@ -1417,6 +1444,24 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // ---- 1a. "who else" / "anyone else": keep going on the last real ask.
   // Checked before small talk because it carries almost no words of its own.
   const wantsElseNow = q.wantsElse && !q.tokens.length ? !!(state.lastAsk && state.lastAsk.need) : false;
+
+  // ---- 1a-ii. a direct answer to the question Linky asked.
+  if (pendingIntent && (answeringYes || answeringNo)) {
+    await patchState(uid, { pendingIntent: null }).catch(() => {});
+    if (answeringNo) {
+      const id = newId();
+      const { reply: chat, usedAi } = await linkySay('chat', {
+        they_said: `no, do not search - I was thinking out loud about ${text(pendingIntent.need, 90)}`,
+        tone: 'They declined the search. Take it lightly, like a friend who is not selling anything. One line, no follow-up pitch.',
+        member_you: { name: me.name, role: me.role, city: me.city },
+      }, { name: me.name, source, seed: `decline:${id}`, fallback: `Noted - no search. The thought is still worth having, and I am here if you want the names.` });
+      const thread = await appendThread(uid, state, [
+        { id, role: 'user', text: msgTyped, at: now },
+        { id, role: 'linky', text: chat, kind: 'chat', at: now + 1 },
+      ]);
+      return { id, need: text(pendingIntent.need, 120), reply: chat, kind: 'chat', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: ['who else do you have', 'help'], thread };
+    }
+  }
 
   // ---- 1b. small talk: greetings, thanks, "who are you", "ok".
   // Free, instant, and never dressed up as a search result.
@@ -1537,6 +1582,33 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     history.push({ id, need: q.need, cards: cards.length, none: !cards.length, source, createdAt: now });
     await patchState(uid, { askHistory: history });
     return { ...publicAsk(record), cards, cached: false, usedAi: false, kind: 'person', matchId: connected ? matchId : '', blocked: blocked || '', free: true, asksLeft: asksLeft(), suggest: cards.length ? ['meet 1', 'who else do you have', 'write me a first message'] : ['search outside LINKUP', 'try a role instead'], thread };
+  }
+
+  // ---- 4b. thinking out loud: answer the thought, ask before searching.
+  // Free, and it does not become the member's "last ask" - the question is what
+  // hangs in the air, not an answer they never asked for.
+  // ...but a "yes" to that question is the go-ahead, not another musing: the
+  // stored need is reflective by construction, so it must skip this branch.
+  if (!answeringYes && q.reflective && !q.command && !wantsElseNow) {
+    const id = newId();
+    await patchState(uid, { pendingIntent: { need: q.need, at: now, id } }).catch(() => {});
+    const { reply: ask2, suggest: askSuggest, usedAi } = await linkySay('check', {
+      they_said: q.need,
+      thought: q.need,
+      member_you: { name: me.name, role: me.role, company: me.company, city: me.city, skills: list(me.skills, 6, 40) },
+      offers: me.lookingFor || '',
+      tone: 'One honest thought about what they are weighing, then one line asking whether to look for people. No names, no numbers, no list.',
+    }, { name: me.name, source, seed: `check:${q.norm}`, fallback: '' });
+    const thread = await appendThread(uid, state, [
+      { id, role: 'user', text: q.need, at: now },
+      { id, role: 'linky', text: ask2, kind: 'check', at: now + 1 },
+    ]);
+    return {
+      id, need: q.need, reply: ask2, kind: 'check', cardIds: [], cards: [], nearest: [], none: false,
+      checked: 0, expansion: 'none', usedAi, free: true, cached: false, createdAt: now,
+      asksLeft: asksLeft(), suggest: askSuggest.length ? askSuggest : ['yes, go look', 'no, just thinking'],
+      askingFirst: true, thread,
+    };
   }
 
   // ---- 5. daily budget (only real searches cost anything)
