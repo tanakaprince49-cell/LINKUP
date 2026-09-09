@@ -35,13 +35,20 @@ if (!token) {
   console.error('TELEGRAM_BOT_TOKEN is not set. Export it or put it in .env (never commit it).');
   process.exit(1);
 }
+// Registered straight from the handler module, so the menu can never advertise a
+// command the bot does not understand. The webhook secret comes from the same
+// helper the handler checks against: setWebhook replaces the whole configuration,
+// so re-running this script without the secret silently un-authenticates the
+// webhook and every update starts failing - which is exactly the "Linky went
+// quiet on Telegram" bug.
+const { BOT_COMMANDS: COMMANDS } = await import('../api/linky.js');
+const { telegramWebhookSecret } = await import('../api/_linky.js');
+
 const argWebhook = (process.argv.find((a) => a.startsWith('--webhook=')) || '').split('=')[1]
   || (() => { const i = process.argv.indexOf('--webhook'); return i > -1 ? process.argv[i + 1] : ''; })();
-const secret = String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
+// never empty while a token exists: the handler derives the same value
+const secret = String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim() || telegramWebhookSecret();
 
-// Registered straight from the handler module, so the menu can never advertise a
-// command the bot does not understand.
-const { BOT_COMMANDS: COMMANDS } = await import('../api/linky.js');
 
 const DESCRIPTION = 'Linky finds the person on LINKUP for what you need - a Flutter developer in Harare, a bookkeeper who has seen a disaster - and shows the profile line that made him pick them. If nobody fits, he says so and tells you where else to look.';
 const SHORT = 'Ask who you need. Linky answers with people, not guesses.';
@@ -71,7 +78,7 @@ results.push(['setMyDescription', await call('setMyDescription', { description: 
 results.push(['setMyShortDescription', await call('setMyShortDescription', { short_description: SHORT })]);
 
 if (argWebhook) {
-  const body = { url: argWebhook, drop_pending_updates: false };
+  const body = { url: argWebhook, drop_pending_updates: false, allowed_updates: ['message', 'callback_query'] };
   if (secret) body.secret_token = secret;
   results.push(['setWebhook', await call('setWebhook', body)]);
   const info = await call('getWebhookInfo');
