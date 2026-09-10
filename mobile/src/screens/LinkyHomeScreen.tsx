@@ -645,7 +645,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
             {(pendingAsk || turns.length) ? (
               <>
-                <SectionTitle title="Linky" hint={home.limits.asksPerDay ? `${Math.max(0, home.limits.asksPerDay - home.limits.asksUsedToday)} of ${home.limits.asksPerDay} free messages left today` : undefined} isDark={isDark} />
+                <SectionTitle title="Linky" hint={!home.plus && home.limits.asksPerDay ? `${Math.max(0, home.limits.asksPerDay - home.limits.asksUsedToday)} of ${home.limits.asksPerDay} free messages left today` : undefined} isDark={isDark} />
                 <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
                   {turns.map((t, i) => (t.role === 'user' ? (
                     <View key={`u${t.at}-${i}`} style={[styles.turn, styles.turnUser]}>
