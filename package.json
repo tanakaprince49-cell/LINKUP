@@ -7,52 +7,18 @@
     "dev": "npm --prefix mobile run web",
     "build": "npm --prefix mobile ci && npm --prefix mobile run build:web",
     "preview": "npx serve mobile/dist",
-    "clean": "rm -rf dist server.js",
     "lint": "npm --prefix mobile run typecheck"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "@google/genai": "^1.29.0",
-    "@tailwindcss/vite": "^4.1.14",
-    "@types/canvas-confetti": "^1.9.0",
-    "@vitejs/plugin-react": "^5.0.4",
-    "canvas-confetti": "^1.9.4",
-    "clsx": "^2.1.1",
-    "dotenv": "^17.2.3",
-    "express": "^4.21.2",
-    "firebase": "^12.13.0",
-    "firebase-admin": "^13.10.0",
-    "lucide-react": "^0.546.0",
-    "motion": "^12.23.24",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "react-markdown": "^10.1.0",
-    "tailwind-merge": "^3.6.0",
-    "vite": "^6.2.3"
+    "firebase-admin": "^13.10.0"
   },
-  "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.14.0",
-    "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
-    "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.3"
-  },
-  "description": "LINKUP is an Expo React Native app for mobile and web. The production web deploy now serves the same Expo app from `mobile/`, so Vercel shows the same experience as the mobile build.",
-  "main": "index.js",
+  "description": "LINKUP is an Expo React Native app for mobile and web. Production web deploys serve the Expo app from mobile/ via Vercel; the api/ directory holds the Vercel serverless functions (they import firebase-admin, which is the only root dependency).",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tanakaprince49-cell/LINKUP.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/tanakaprince49-cell/LINKUP/issues"
-  },
-  "homepage": "https://github.com/tanakaprince49-cell/LINKUP#readme"
+  "license": "ISC"
 }
