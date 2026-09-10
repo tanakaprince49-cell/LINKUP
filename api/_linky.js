@@ -17,7 +17,7 @@
 //   botLinks/{code}         short-lived codes that link a chat to an account
 import crypto from 'node:crypto';
 import { getAdmin, getDb } from './_firebaseAdmin.js';
-import { aiReady, aiStatus, aiText, geminiText, getGeminiKey, localRank, compactProfile } from './_gemini.js';
+import { aiReady, aiStatus, aiText, geminiText, localRank, compactProfile } from './_gemini.js';
 import { findLeads, outreachDraft } from './_serpapi.js';
 import { proofPoints, proofFromSnippet, badgeLine } from './_proof.js';
 
@@ -927,7 +927,7 @@ const templateOpener = (c, need) => {
 
 // The only Gemini call in the ask flow. Compact on purpose.
 async function geminiRerank(q, requester, shortlist) {
-  if (!getGeminiKey()) return null;
+  if (!aiReady()) return null;
   const prompt = [
     'You are Linky, the connector for LINKUP (builders, founders and operators, Harare-first).',
     'Sound like a warm, sharp, well-connected friend who is good at intros: plain human sentences, no corporate filler, no emojis, never invent a fact.',

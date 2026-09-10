@@ -49,8 +49,12 @@ export function getZenKey() {
 }
 
 /** Any usable model at all. Guards must test this, not getGeminiKey(): a Zen-only
- *  deployment is a fully working deployment. */
+ *  deployment is a fully working deployment.
+ *  SOS kill switch: set LINKY_AI_OFF=true (Vercel env) to force Linky fully
+ *  deterministic - zero calls to Gemini or Zen, every answer comes from the
+ *  cited template paths. No redeploy, no key deletion, just one flag. */
 export function aiReady() {
+  if (String(process.env.LINKY_AI_OFF || '').toLowerCase() === 'true') return false;
   return !!(getGeminiKey() || getZenKey());
 }
 
@@ -267,8 +271,10 @@ export function zenModels() {
 export function aiStatus() {
   const g = firstEnv(GEMINI_KEY_NAMES);
   const z = firstEnv(ZEN_KEY_NAMES);
+  const off = String(process.env.LINKY_AI_OFF || '').toLowerCase() === 'true';
   return {
-    ready: !!(g || z),
+    ready: !off && !!(g || z),
+    off,
     gemini: { configured: !!g, from: g ? g[0] : '', model: process.env.GEMINI_MODEL || DEFAULT_MODEL },
     zen: { configured: !!z, from: z ? z[0] : '', model: ZEN_MODEL, healthyModel: zenHealthyModel || '', url: ZEN_URL },
   };
@@ -278,6 +284,9 @@ export function aiStatus() {
  *  "working" - and so a quota refusal on one key is not mistaken for a broken app. */
 export async function aiProbe() {
   const status = aiStatus();
+  if (status.off) {
+    return { ok: true, off: true, attempts: [], note: 'LINKY_AI_OFF is set - deterministic mode, no model calls.' };
+  }
   const started = Date.now();
   const attempts = [];
   const prompt = 'Reply with exactly this JSON and nothing else: {"pong":true}';
