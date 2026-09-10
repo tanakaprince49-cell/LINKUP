@@ -15,6 +15,8 @@ import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { shareLinkupInvite } from '../lib/activation';
 import { notifyUser } from '../lib/notify';
 import ProCrownBadge from '../components/ProCrownBadge';
+import { SponsoredSlot } from '../components/SponsoredCard';
+import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
 
@@ -188,7 +190,7 @@ const ConversationItem = React.memo(({ match, navigation }: { match: Match, navi
 });
 
 export default function MessagesScreen({ navigation, route }: any) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const archivedOnly = !!route?.params?.archivedOnly;
@@ -325,6 +327,17 @@ export default function MessagesScreen({ navigation, route }: any) {
           removeClippedSubviews
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          ListFooterComponent={
+            matches.length > 0 ? (
+              <View style={{ marginTop: 20, marginBottom: 12 }}>
+                <SponsoredSlot
+                  placement="linky"
+                  viewerUid={user?.uid}
+                  enabled={!isSponsoredHiddenForViewer(profile, { email: user?.email, isAdmin: (profile as any)?.isAdmin })}
+                />
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <MessageSquare size={48} color="#222" />

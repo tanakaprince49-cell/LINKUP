@@ -261,7 +261,7 @@ function TabNavigator({ navigation }: any) {
   const tabLabels: Record<string, string> = {
     Dashboard: 'Explore',
     LinkyHome: 'Linky',
-    Feed: 'Feed',
+    Feed: 'Startups',
     Search: 'Search',
     Inbox: 'Chat',
     News: 'News',
@@ -299,7 +299,7 @@ function TabNavigator({ navigation }: any) {
           const iconMap: Record<string, { active: string; inactive: string }> = {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
             LinkyHome: { active: 'Handshake', inactive: 'Handshake' },
-            Feed: { active: 'Rss', inactive: 'Rss' },
+            Feed: { active: 'Rocket', inactive: 'Rocket' },
             Campaigns: { active: 'Megaphone', inactive: 'Megaphone' },
             Search: { active: 'Search', inactive: 'Search' },
             Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },
@@ -372,7 +372,7 @@ function TabNavigator({ navigation }: any) {
           const titles: Record<string, string> = {
             Dashboard: 'LINKUP',
             LinkyHome: 'Linky',
-            Feed: 'Feed',
+            Feed: 'Startups',
             Search: 'Search',
             Inbox: 'Messages',
             News: 'News',

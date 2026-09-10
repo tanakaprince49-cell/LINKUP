@@ -14,7 +14,8 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
-  Alert
+  Alert,
+  Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
@@ -30,7 +31,9 @@ import {
   orderBy, 
   limit, 
   deleteDoc,
-  increment
+  increment,
+  where,
+  getDocs
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -457,9 +460,56 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
         </View>
       </View>
 
-      <Text style={[styles.postContent, { color: textColor(isDark, 'secondary') }]}>
-        {post.content}
-      </Text>
+      {post.type === 'startup' || (post as any).startupName || (post as any).logoUrl || (post as any).website ? (
+        <View>
+          <View style={styles.startupRow}>
+            {(post as any).logoUrl ? (
+              <Image source={{ uri: (post as any).logoUrl }} style={styles.startupLogo} />
+            ) : (
+              <View style={[styles.startupLogo, styles.startupLogoFallback]}>
+                <SafeIcon name="Rocket" size={22} color={textColor(isDark, 'secondary')} />
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.startupName, { color: textColor(isDark) }]}>
+                {(post as any).startupName || post.content}
+              </Text>
+              {(post as any).tagline ? (
+                <Text style={[styles.startupTagline, { color: textColor(isDark, 'secondary') }]}>
+                  {(post as any).tagline}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          {(post as any).website ? (
+            <TouchableOpacity
+              onPress={() => {
+                const url = (post as any).website;
+                Linking.openURL(/^https?:\/\//i.test(url) ? url : `https://${url}`).catch(() => {});
+              }}
+              style={styles.startupLink}
+            >
+              <SafeIcon name="Globe" size={12} color={COLORS.primaryStrong} />
+              <Text style={[styles.startupLinkText, { color: COLORS.primaryStrong }]}>
+                {(post as any).website}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          {(post as any).description ? (
+            <Text style={[styles.postContent, { color: textColor(isDark, 'secondary') }]}>
+              {(post as any).description}
+            </Text>
+          ) : (
+            <Text style={[styles.postContent, { color: textColor(isDark, 'secondary') }]}>
+              {post.content}
+            </Text>
+          )}
+        </View>
+      ) : (
+        <Text style={[styles.postContent, { color: textColor(isDark, 'secondary') }]}>
+          {post.content}
+        </Text>
+      )}
 
       {post.media && post.media.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mediaScroll}>
@@ -536,6 +586,35 @@ export default function FeedScreen({ navigation }: any) {
     return () => unsub();
   }, []);
 
+  // One-time migration: the Startups feed is now strictly startups, so any
+  // legacy (non-startup) posts authored by the signed-in member are removed on
+  // first load. This deletes the requesting user's old placeholder post and
+  // keeps only real startup listings. It only ever touches the user's own
+  // posts and is idempotent (runs once per app session).
+  useEffect(() => {
+    if (!user?.uid) return;
+    const cleaned = (globalThis as any)?.__startupsLegacyCleaned || {};
+    if (cleaned[user.uid]) return;
+    (async () => {
+      try {
+        const q = query(collection(db, 'posts'), where('authorId', '==', user.uid));
+        const snap = await getDocs(q);
+        const legacy = snap.docs.filter((d) => {
+          const data = d.data() as any;
+          return data.type !== 'startup' && !data.startupName;
+        });
+        await Promise.all(legacy.map((d) => deleteDoc(doc(db, 'posts', d.id))));
+        if (legacy.length) {
+          console.info(`Startups: removed ${legacy.length} legacy post(s) for ${user.uid}`);
+        }
+      } catch (err) {
+        console.warn('Startups legacy cleanup skipped:', err);
+      } finally {
+        (globalThis as any).__startupsLegacyCleaned = { ...cleaned, [user.uid]: true };
+      }
+    })();
+  }, [user?.uid]);
+
   // Sponsored slots for FREE members only. PLUS is ad-free (founder/admin
   // accounts still see the placement so they can review it).
   const adsHidden = isSponsoredHiddenForViewer(profile, {
@@ -576,7 +655,7 @@ export default function FeedScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
       <View style={styles.screenTitleRow}>
-        <Text style={[styles.screenTitle, { color: textColor(isDark) }]}>The Feed</Text>
+        <Text style={[styles.screenTitle, { color: textColor(isDark) }]}>Startups</Text>
         <TouchableOpacity
           style={styles.composeBtn}
           onPress={() => {
@@ -584,8 +663,8 @@ export default function FeedScreen({ navigation }: any) {
             navigation.navigate('CreatePost');
           }}
         >
-          <SafeIcon name="PenSquare" size={16} color="#000" />
-          <Text style={styles.composeText}>Post</Text>
+          <SafeIcon name="Rocket" size={16} color="#000" />
+          <Text style={styles.composeText}>List Startup</Text>
         </TouchableOpacity>
       </View>
       <FlatList
@@ -597,8 +676,8 @@ export default function FeedScreen({ navigation }: any) {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <SafeIcon name="Rocket" size={48} color="#222" />
-            <Text style={styles.emptyText}>THE FEED IS QUIET...</Text>
-            <Text style={styles.emptySub}>Start the First Moment</Text>
+            <Text style={styles.emptyText}>NO STARTUPS YET...</Text>
+            <Text style={styles.emptySub}>List the first one</Text>
           </View>
         }
       />
@@ -724,6 +803,45 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontWeight: '500',
     marginBottom: 16,
+  },
+  startupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  startupLogo: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+  },
+  startupLogoFallback: {
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  startupName: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+  },
+  startupTagline: {
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  startupLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+    marginTop: 2,
+  },
+  startupLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   mediaScroll: {
     marginBottom: 16,

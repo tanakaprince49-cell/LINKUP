@@ -125,7 +125,7 @@ export interface Post {
   authorPic?: string;
   authorVerified?: boolean;
   content: string;
-  type: 'build' | 'launch' | 'achievement' | 'update';
+  type: 'startup' | 'build' | 'launch' | 'achievement' | 'update';
   timestamp: Timestamp | FieldValue;
   likesCount: number;
   dislikesCount: number;
@@ -136,6 +136,18 @@ export interface Post {
   viewedBy: string[];
   media?: string[];
   powLink?: string;
+  // Startup listing fields (campaign-style post): the Feed is now strictly
+  // startups, so a post carries what the startup does, its link, logo and the
+  // one-line + full description.
+  startupName?: string;
+  logoUrl?: string;
+  website?: string;
+  tagline?: string;
+  description?: string;
+  // Weekly posting budget: free = 1 startup/week, PLUS = 10/week. Stored so the
+  // cap is a single-equality query (no composite index needed).
+  weekKey?: string;
+  authorWeek?: string;
 }
 
 export interface Match {

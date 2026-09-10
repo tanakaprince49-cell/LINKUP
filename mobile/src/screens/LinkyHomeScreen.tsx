@@ -28,6 +28,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
 import PaywallModal from '../components/PaywallModal';
+import { SponsoredSlot } from '../components/SponsoredCard';
+import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 import {
   LinkyApiError,
   LinkyAsk,
@@ -214,7 +216,7 @@ const InboundView = ({
 
 export default function LinkyHomeScreen({ navigation }: any) {
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const isDark = theme === 'dark';
   const insets = useSafeAreaInsets();
   const [home, setHome] = useState<LinkyHome | null>(null);
@@ -791,6 +793,16 @@ export default function LinkyHomeScreen({ navigation }: any) {
             ) : null}
           </>
         ) : null}
+
+        {/* Free plan sees a single rotating sponsored card here (never stacked);
+            PLUS is ad-free. Profile stays exempt by the global rule. */}
+        <View style={{ marginTop: 14 }}>
+          <SponsoredSlot
+            placement="linky"
+            viewerUid={user?.uid}
+            enabled={!isSponsoredHiddenForViewer(profile, { email: user?.email, isAdmin: (profile as any)?.isAdmin })}
+          />
+        </View>
       </ScrollView>
 
       <View style={[styles.composerWrap, { paddingBottom: Math.max(10, insets.bottom + 6), backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg, borderTopColor: border }]}>
