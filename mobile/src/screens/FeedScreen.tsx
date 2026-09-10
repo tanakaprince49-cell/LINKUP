@@ -467,7 +467,9 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
               <Image source={{ uri: (post as any).logoUrl }} style={styles.startupLogo} />
             ) : (
               <View style={[styles.startupLogo, styles.startupLogoFallback]}>
-                <SafeIcon name="Rocket" size={22} color={textColor(isDark, 'secondary')} />
+                <Text style={[styles.startupLogoInitial, { color: textColor(isDark, 'secondary') }]}>
+                  {String((post as any).startupName || post.content || '?').charAt(0).toUpperCase()}
+                </Text>
               </View>
             )}
             <View style={{ flex: 1 }}>
@@ -819,6 +821,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  startupLogoInitial: {
+    fontSize: 22,
+    fontWeight: '900',
   },
   startupName: {
     fontSize: 18,

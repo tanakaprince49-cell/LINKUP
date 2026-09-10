@@ -142,6 +142,7 @@ export default function CreatePostScreen({ navigation }: any) {
 
   const canSubmit =
     startupName.trim().length >= 2 &&
+    logoUrl.trim().length > 0 &&
     tagline.trim().length >= 8 &&
     normalizeWebsite(website).length > 8 &&
     !isPosting &&
@@ -155,6 +156,10 @@ export default function CreatePostScreen({ navigation }: any) {
     }
     if (startupName.trim().length < 2) {
       Alert.alert('Almost there', 'Add your startup name.');
+      return;
+    }
+    if (!logoUrl.trim()) {
+      Alert.alert('Almost there', 'Add your startup logo — it shows beside the name.');
       return;
     }
     if (tagline.trim().length < 8) {
@@ -315,7 +320,7 @@ export default function CreatePostScreen({ navigation }: any) {
 
             {renderField('STARTUP NAME', startupName, setStartupName, 'e.g. InvoiceMate', { maxLength: 60 })}
 
-            <Text style={[styles.label, { color: textColor(isDark, 'muted') }]}>LOGO</Text>
+            <Text style={[styles.label, { color: textColor(isDark, 'muted') }]}>LOGO <Text style={{ color: COLORS.primaryStrong }}>*</Text></Text>
             <TouchableOpacity
               style={[styles.logoWrap, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
               onPress={pickLogo}
@@ -337,6 +342,9 @@ export default function CreatePostScreen({ navigation }: any) {
                 </View>
               )}
             </TouchableOpacity>
+            <Text style={[styles.hint, { color: textColor(isDark, 'muted') }]}>
+              Required — this logo appears beside your startup name in the feed.
+            </Text>
 
             {renderField('WEBSITE', website, setWebsite, 'yourstartup.com', { maxLength: 120, keyboardType: 'url' })}
             {renderField('ONE-LINE DESCRIPTION', tagline, setTagline, 'One line that sells it — e.g. Invoices paid 2× faster', {
