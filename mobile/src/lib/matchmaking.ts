@@ -41,8 +41,11 @@ const isCallableMissing = (error: unknown) => {
   return raw.includes('not-found') || raw.includes('404');
 };
 
+// Direct device-to-Gemini ranking is OFF by default: it re-ranked the same
+// 40 people on every screen load, uncached, straight off the device. Native
+// now uses local ranking; web goes through the (cached) Vercel route.
 const directGeminiRankingEnabled = () =>
-  String(process.env.EXPO_PUBLIC_ENABLE_DIRECT_GEMINI_RANKING || 'true').toLowerCase() !== 'false';
+  String(process.env.EXPO_PUBLIC_ENABLE_DIRECT_GEMINI_RANKING || 'false').toLowerCase() !== 'false';
 
 /**
  * The Vercel route (/api/rankCandidates) is the server ranker on web. It is

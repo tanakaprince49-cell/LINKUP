@@ -67,8 +67,11 @@ const parseSearchFilterText = (text: string, input: string): GeminiFilterResult 
   return result;
 };
 
+// Direct device-to-Gemini calls are OFF by default: they spent tokens per
+// screen load with no cache and exposed the key to the client. Server paths
+// (Vercel on web) stay on; native falls back to local, deterministic answers.
 const directAIEnabled = () =>
-  String(process.env.EXPO_PUBLIC_ENABLE_DIRECT_AI || 'true').toLowerCase() !== 'false';
+  String(process.env.EXPO_PUBLIC_ENABLE_DIRECT_AI || 'false').toLowerCase() !== 'false';
 
 /**
  * Vercel /api/aiAssist is the server AI on web - on by default. (It used to

@@ -939,7 +939,7 @@ async function geminiRerank(q, requester, shortlist) {
     `Member: ${JSON.stringify(requester)}`,
     `Candidates: ${JSON.stringify(shortlist.map((c) => ({ uid: c.uid, name: c.name, role: c.role, company: c.company, city: c.city, skills: c.skills.slice(0, 8), industries: c.industries.slice(0, 5), lookingFor: c.lookingFor.slice(0, 4), bio: c.bio.slice(0, 160) })))}`,
   ].join('\n');
-  const raw = await geminiText(prompt, { temperature: 0.2, maxOutputTokens: 700, responseMimeType: 'application/json' });
+  const raw = await geminiText(prompt, { temperature: 0.2, maxOutputTokens: 500, responseMimeType: 'application/json' });
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
   const parsed = JSON.parse(raw.slice(start, end + 1));
@@ -1620,7 +1620,7 @@ export async function intentGate(message, { offer = false, lastAsk = '', source 
     'Return STRICT JSON only: {"mode":"search|ask_first|chat","topic":"...","multi":true,"reply":"..."}',
   ].join('\n');
   try {
-    const { text: raw, provider } = await aiText(prompt, { temperature: 0.2, maxOutputTokens: 260, responseMimeType: 'application/json', timeoutMs: 5000 });
+    const { text: raw, provider } = await aiText(prompt, { temperature: 0.2, maxOutputTokens: 180, responseMimeType: 'application/json', timeoutMs: 5000 });
     const parsed = JSON.parse(String(raw).slice(String(raw).indexOf('{'), String(raw).lastIndexOf('}') + 1)) || {};
     const mode = INTENT_MODES.has(parsed.mode) ? parsed.mode : '';
     if (!mode) return null;
@@ -1682,6 +1682,28 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // HIM - not a new search, and not small talk to be answered with a joke.
   const pendingIntent = state.pendingIntent && now - toMillis(state.pendingIntent.at) < 40 * 60 * 1000 ? state.pendingIntent : null;
   const saidWords = msgTyped.toLowerCase().trim().replace(/^\/+\w*\s*/, '');
+  // ---- daily message budget. Free members get 2 messages a day and EVERY
+  // message counts (a search, a greeting, a "yes"); the third one answers with
+  // the paywall instead of a reply, so no model call happens for it either.
+  const me = profileFacts(user) || {};
+  const plus = await isPlusUser(uid, user);
+  const limits = plus ? LIMITS.plus : LIMITS.free;
+  const today = dayKey(now);
+  let used = state.asks?.day === today ? Number(state.asks.count || 0) : 0;
+  const asksLeft = (extra = 0) => Math.max(0, limits.asksPerDay - used - extra);
+  const newId = () => `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
+  if (used >= limits.asksPerDay) {
+    const limitReply = plus
+      ? `That is today's ${limits.asksPerDay} messages used up - it resets at midnight.`
+      : `You have exhausted your ${limits.asksPerDay} free messages today. LINKUP PLUS lifts the cap - $19.99 a month or $149.99 a year.`;
+    const err = new Error(limitReply);
+    err.code = 'ask_limit';
+    throw err;
+  }
+  // the message they just sent is the one being spent now
+  used += 1;
+  await patchState(uid, { asks: { day: today, count: used } }).catch(() => {});
+
   // only a BARE answer counts as answering him: "please find me a bookkeeper" is
   // a new instruction, and it must not be swallowed by the question before it
   const answeringYes = !!pendingIntent && saidWords.length <= 24 && AFFIRM_RX.test(saidWords) && !DENY_RX.test(saidWords);
@@ -1691,12 +1713,16 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // above - it is not the open musing the intent gate needs to read, and letting
   // it flip `offer` would re-ask the model the same message under two cache keys.
   const offerOpen = !!pendingIntent && !pendingIntent.outside;
-  const gate = answeringYes ? null : await intentGate(msgTyped, { offer: offerOpen, lastAsk: state.lastAsk?.need || '', source });
+  // Small talk the word lists already read for certain - greetings, thanks,
+  // "what can you do" - skips the intent gate, so the most common messages
+  // never touch the model at all.
+  const pre = parseAsk(answeringYes ? pendingIntent.need : msgTyped);
+  const skipGate = !answeringYes && (pre.smallTalk || pre.chitChat || pre.bare || pre.askedWhatYouDo);
+  const gate = answeringYes || skipGate ? null : await intentGate(msgTyped, { offer: offerOpen, lastAsk: state.lastAsk?.need || '', source });
   let msg = answeringYes ? pendingIntent.need : msgTyped;
   // When the model hears an order our lists cannot read - Shona, slang, a phrase
   // with no role word in it - search what it heard. A member's own well-formed ask
   // is never rewritten, because their words are the better query and the better caption.
-  const pre = parseAsk(msg);
   const wellFormed = ROLEISH_RX.test(pre.need.toLowerCase()) || !!pre.location || !!pre.nameQuery
     || (pre.command && pre.tokens.length >= 3);
   if (!answeringYes && gate?.mode === 'search' && !wellFormed && substance(gate.topic).length >= 1) msg = text(gate.topic, 160);
@@ -1705,13 +1731,6 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // "ok" tomorrow cannot wake an offer he forgot about. (A yes or a no is handled
   // just below; a new musing re-stores its own further down.)
   if (pendingIntent && !(answeringYes || answeringNo)) await patchState(uid, { pendingIntent: null }).catch(() => {});
-  const me = profileFacts(user) || {};
-  const plus = await isPlusUser(uid, user);
-  const limits = plus ? LIMITS.plus : LIMITS.free;
-  const today = dayKey(now);
-  const used = state.asks?.day === today ? Number(state.asks.count || 0) : 0;
-  const asksLeft = (extra = 0) => Math.max(0, limits.asksPerDay - used - extra);
-  const newId = () => `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
 
   // Anything the member sees is also stored as a turn, so the app can render a
   // conversation. Two turns per exchange: theirs, then Linky's.
@@ -1786,24 +1805,34 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     const wantsPitch = !!q.askedWhatYouDo || (!state.lastAsk && streak === 0);
     const sayKind = q.askedWhatYouDo ? 'help' : 'chat';
     const recent = threadOf(state).slice(-6).map((t) => ({ who: t.role === 'user' ? 'they' : 'linky', said: text(t.text, 140) }));
+    // Greetings, thanks and "what can you do" are answered from a script, so a
+    // "hey" costs zero tokens. The model stays for chat that is actually about
+    // something, and for the very first pitch a new member hears.
+    const isPlainChat = q.smallTalk || q.chitChat || q.bare;
+    let canned = null;
+    if (q.askedWhatYouDo) canned = COACH;
+    else if (isPlainChat && !wantsPitch) canned = plainReply('chat', { name: me.name, seed: q.need, streak });
     // if the intent call already wrote a line, do not spend a second one
     const gateSaid = sayKind === 'chat' && gate?.reply
       ? { reply: text(gate.reply, 420), suggest: gate.suggest || [], usedAi: true }
       : null;
-    const { reply: chat, suggest: chatSuggest, usedAi } = gateSaid || await linkySay(sayKind, {
-      they_said: q.need,
-      tone: wantsPitch
-        ? 'They are open to what you are for. Be warm and a little funny, then say plainly what you do here and hand them one thing to try.'
-        : 'They are not looking for anybody right now. React to what they actually said, ask after them, tease gently if it fits. No pitch, no examples, no "tell me what you need".',
-      recent_turns: recent,
-      they_asked_what_linky_does: !!q.askedWhatYouDo,
-      stop_offering_searches: streak >= 1,
-      last_real_ask: state.lastAsk && state.lastAsk.need && now - toMillis(state.lastAsk.createdAt) < 3 * DAY_MS ? text(state.lastAsk.need, 120) : '',
-      asks_left_today: asksLeft(),
-      member_you: { name: me.name, role: me.role, city: me.city },
-      network_size: 'a few dozen visible members',
-      what_linky_can_do: wantsPitch ? 'find members by role, skill, city or name; explain the match; ask someone for an intro on your behalf; search the open web when nobody fits' : '',
-    }, { name: me.name, source, seed: `${q.need.toLowerCase()}:${streak}`, fallback: wantsPitch ? COACH : plainReply('chat', { seed: q.need, streak }) });
+    const built = canned
+      ? { reply: canned, suggest: [], usedAi: false }
+      : (gateSaid || await linkySay(sayKind, {
+          they_said: q.need,
+          tone: wantsPitch
+            ? 'They are open to what you are for. Be warm and a little funny, then say plainly what you do here and hand them one thing to try.'
+            : 'They are not looking for anybody right now. React to what they actually said, ask after them, tease gently if it fits. No pitch, no examples, no "tell me what you need".',
+          recent_turns: recent,
+          they_asked_what_linky_does: !!q.askedWhatYouDo,
+          stop_offering_searches: streak >= 1,
+          last_real_ask: state.lastAsk && state.lastAsk.need && now - toMillis(state.lastAsk.createdAt) < 3 * DAY_MS ? text(state.lastAsk.need, 120) : '',
+          asks_left_today: asksLeft(),
+          member_you: { name: me.name, role: me.role, city: me.city },
+          network_size: 'a few dozen visible members',
+          what_linky_can_do: wantsPitch ? 'find members by role, skill, city or name; explain the match; ask someone for an intro on your behalf; search the open web when nobody fits' : '',
+        }, { name: me.name, source, seed: `${q.need.toLowerCase()}:${streak}`, fallback: wantsPitch ? COACH : plainReply('chat', { seed: q.need, streak }) }));
+    const { reply: chat, suggest: chatSuggest, usedAi } = built;
     await patchState(uid, { chitStreak: streak + 1 }).catch(() => {});
     const thread = await sayBack(id, chat, { kind: 'chat' });
     const chillSuggest = source === 'app'
@@ -1959,18 +1988,6 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     };
   }
 
-  // ---- 5. daily budget (only real searches cost anything)
-  if (used >= limits.asksPerDay) {
-    const { reply: limitReply } = await linkySay('limit', {
-      asks_used_today: used, asks_limit_today: limits.asksPerDay, plan: plus ? 'PLUS' : 'free',
-      plus_asks_per_day: LIMITS.plus.asksPerDay, resets: 'midnight',
-      note: 'searching by a member name never counts against the budget; PLUS is 19.99 USD a month',
-    }, { name: me.name, source, seed: `limit:${plus ? 'plus' : 'free'}`, fallback: plainReply('limit', { limit: limits.asksPerDay, plusLimit: LIMITS.plus.asksPerDay }) });
-    const err = new Error(limitReply);
-    err.code = 'ask_limit';
-    throw err;
-  }
-
   // ---- 5b. a squad - and only because the member asked for one. Three people
   // who do not overlap, ranked in one local pass, framed in one model call, and
   // still behind a yes before anybody is contacted.
@@ -1999,8 +2016,8 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       const thread = await sayBack(askId, reply, { kind: 'none' });
       const hist = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
       hist.push({ id: askId, need: q.need, cards: 0, none: true, source, createdAt: now });
-      await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used + 1 } });
-      return { ...publicAsk(record), cards: [], cached: false, usedAi: false, kind: 'none', squad: true, asksLeft: asksLeft(1), suggest: sg, thread };
+      await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used } });
+      return { ...publicAsk(record), cards: [], cached: false, usedAi: false, kind: 'none', squad: true, asksLeft: asksLeft(), suggest: sg, thread };
     }
     const picks = [];
     found.squads.forEach((sq) => sq.members.forEach((m, mi) => picks.push({
@@ -2018,15 +2035,15 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       squads: found.squads.map((sq) => ({ people: sq.members.map((m) => ({ name: m.facts.name, part: m.why })), missing: sq.missing })),
       people: resultCards.map((c) => ({ name: c.targetName, role: c.targetRole, city: c.targetCity, reason: c.why, proof: (c.badges || []).map((b) => b.label) })),
       channel: source,
-      asks_left_today: asksLeft(1),
+      asks_left_today: asksLeft(),
       suggest: source === 'app' ? ['meet the squad', 'who else do you have', 'search outside LINKUP'] : ['meet squad', 'who else do you have', 'more'],
     }, { name: me.name, source, seed: `squad:${q.norm}`, fallback: plainReply('squad', { squads: found.squads.map((sq) => ({ people: sq.members.map((m) => ({ name: m.facts.name, part: m.why })), missing: sq.missing })), channel: source }) });
     const record = { id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply, kind: 'squad', cardIds: resultCards.map((c) => c.id), excludedCardIds: [], none: false, nearest: [], checked: found.checked, usedAi: !!found.usedAi, expansion: 'none', source, createdAt: now };
     const thread = await sayBack(askId, reply, { kind: 'squad', cardIds: record.cardIds });
     const hist = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
     hist.push({ id: askId, need: q.need, cards: resultCards.length, none: false, source, createdAt: now });
-    await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used + 1 } });
-    return { ...publicAsk(record), cards: resultCards, cached: false, usedAi: !!found.usedAi, kind: 'squad', squad: { ids: found.squads.map((x) => x.id), slots: found.slots }, asksLeft: asksLeft(1), suggest: sg2, thread };
+    await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used } });
+    return { ...publicAsk(record), cards: resultCards, cached: false, usedAi: !!found.usedAi, kind: 'squad', squad: { ids: found.squads.map((x) => x.id), slots: found.slots }, asksLeft: asksLeft(), suggest: sg2, thread };
   }
 
   // ---- 6. "who else" / "anyone else": second lap over the same need, minus
@@ -2066,7 +2083,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     nobody_found_because: kind === 'none' ? 'no profile here mentions that need, its synonyms, or a related skill' : '',
     which_person_were_you_after: kind === 'none' ? followUp : '',
     remote_only_note: kind !== 'none' && q.location && !inLoc ? `nobody in ${q.location}, so these are people who would work remotely` : '',
-    asks_left_today: asksLeft(1),
+    asks_left_today: asksLeft(),
     channel: source,
     // Nobody fits: never state a profile count, and hand the member one easy
     // next move - going outside the network - rather than a button label.
@@ -2087,10 +2104,10 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // the open question becomes "should I look outside LINKUP?" - a bare "yes"
   // to that is the go-ahead for the LinkedIn search, not a fresh matcher run.
   await patchState(uid, {
-    lastAsk: record, chitStreak: 0, recentAsks, askHistory: history, asks: { day: today, count: used + 1 },
+    lastAsk: record, chitStreak: 0, recentAsks, askHistory: history, asks: { day: today, count: used },
     ...(kind === 'none' ? { pendingIntent: { need: searchQ.need, at: now, id: askId, outside: true } } : {}),
   });
-  return { ...publicAsk(record), cards: resultCards, cached: false, usedAi, kind, asksLeft: asksLeft(1), suggest: saidSuggest, thread };
+  return { ...publicAsk(record), cards: resultCards, cached: false, usedAi, kind, asksLeft: asksLeft(), suggest: saidSuggest, thread };
 }
 
 const publicAsk = (a) => (a ? {
@@ -3015,10 +3032,10 @@ export async function ensureBrief({ matchId = '', requesterId = '', targetId = '
       'Produce, in this order: a headline naming the pair; "why" - the exact overlap that made this intro worth making, one line each, only from the dossier; "icebreakers" - three questions or openers that only make sense because of what is in the dossier (no "so, tell me about yourself"); "agenda" - a 15 minute call in three blocks that add up to 15 (background, show the real thing, alignment check), each with a span like "0-5", a two-word title and one line of instruction that tells them what to actually do.',
       'Hard rules: every claim must be traceable to the dossier - never invent a project, a number, a company or a compliment. Plain sentences, no markdown, no emoji, no corporate filler, no "I hope this finds you well". Do not greet them. Do not mention that you are an AI, or keys, or limits.',
       'Return STRICT JSON only: {"headline":"...","why":["...","..."],"icebreakers":["...","...","..."],"agenda":[{"span":"0-5","title":"Background","ask":"..."},{"span":"5-10","title":"...","ask":"..."},{"span":"10-15","title":"...","ask":"..."}]}',
-      `Dossier: ${JSON.stringify(dossier).slice(0, 2600)}`,
+      `Dossier: ${JSON.stringify(dossier).slice(0, 1500)}`,
     ].join('\n');
     try {
-      const { text: raw } = await aiText(prompt, { temperature: 0.7, maxOutputTokens: 900, responseMimeType: 'application/json', timeoutMs });
+      const { text: raw } = await aiText(prompt, { temperature: 0.7, maxOutputTokens: 700, responseMimeType: 'application/json', timeoutMs });
       const parsed = readJson(raw) || {};
       const keep = (arr, max, each) => list(arr, max, each).filter((x) => x.length > 8 && !/quota|api key|billing|as an ai|i cannot|unable to/i.test(x));
       const why2 = keep(parsed.why, 4, 200).filter((line) => /[a-z]/.test(line));
@@ -3414,10 +3431,10 @@ export async function findSquads(uid, q, ctx, { user, state, existingCards = [],
       'For each squad and each person: one line (6-16 words) naming the part they play in this specific trio, grounded only in what is on their profile; and for each squad one line on what the three of you would still be missing. If a person\'s profile does not support a claim, say less, do not invent.',
       'Plain sentences, no markdown, no emoji, no "exciting", no "leverage". Address the member as "you".',
       'Return STRICT JSON only: {"squads":[{"i":0,"missing":"...","people":[{"uid":"...","part":"..."}]}]}',
-      `Dossier: ${JSON.stringify(dossier).slice(0, 2600)}`,
+      `Dossier: ${JSON.stringify(dossier).slice(0, 1500)}`,
     ].join('\n');
     try {
-      const { text: raw } = await aiText(prompt, { temperature: 0.6, maxOutputTokens: 700, responseMimeType: 'application/json', timeoutMs: 9000 });
+      const { text: raw } = await aiText(prompt, { temperature: 0.6, maxOutputTokens: 500, responseMimeType: 'application/json', timeoutMs: 9000 });
       const parsed = readJson(raw) || {};
       if (Array.isArray(parsed.squads)) framed = parsed.squads;
     } catch (err) {

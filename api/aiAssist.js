@@ -1,5 +1,25 @@
 import { clippedJson, geminiText, handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 
+// A profile has a dozen optional fields; the model only needs the ones that
+// can actually influence a match. Sending the rest is pure token spend.
+const slimProfile = (profile) => {
+  const p = profile || {};
+  return {
+    displayName: String(p.displayName || p.username || '').slice(0, 80),
+    occupation: String(p.occupation || '').slice(0, 80),
+    company: String(p.company || '').slice(0, 60),
+    city: String(p.city || '').slice(0, 40),
+    skills: Array.isArray(p.skills) ? p.skills.slice(0, 8).map((s) => String(s).slice(0, 60)) : [],
+    industries: Array.isArray(p.industries) ? p.industries.slice(0, 6).map((s) => String(s).slice(0, 60)) : [],
+    lookingFor: Array.isArray(p.lookingFor) ? p.lookingFor.slice(0, 5).map((s) => String(s).slice(0, 80)) : [],
+    startupStage: String(p.startupStage || '').slice(0, 60),
+    workStyle: String(p.workStyle || '').slice(0, 60),
+    projects: Array.isArray(p.projects)
+      ? p.projects.slice(0, 2).map((x) => ({ title: String(x?.title || '').slice(0, 60), status: String(x?.status || '').slice(0, 40) }))
+      : [],
+  };
+};
+
 const promptsByTask = {
   startupAnalyzer: (payload) => ({
     maxOutputTokens: 520,
@@ -39,7 +59,7 @@ const promptsByTask = {
       'You generate short, punchy "Match Insights" for a founder profile in the LINKUP app.',
       'Return ONLY plain text (max 2 sentences). No quotes, no markdown.',
       'Focus on: work style, who they work best with, and what type of startup/team fits them.',
-      'Profile JSON: ' + clippedJson(payload.profile, 2500),
+      'Profile JSON: ' + clippedJson(slimProfile(payload.profile), 1200),
     ].join('\n'),
   }),
   warmIntro: (payload) => ({
@@ -51,8 +71,8 @@ const promptsByTask = {
       'Make it specific to both profiles: mention 1-2 concrete overlaps, complementary skills, projects, industries, goals, or work style.',
       'Sound confident, warm, and natural. No generic networking fluff. No markdown. No subject line.',
       'Write 3-5 short sentences. End with one clear collaboration question.',
-      'Me=' + clippedJson(payload.me, 1800),
-      'Other=' + clippedJson(payload.other, 1800),
+      'Me=' + clippedJson(slimProfile(payload.me), 1200),
+      'Other=' + clippedJson(slimProfile(payload.other), 1200),
     ].join('\n'),
   }),
   matchingExplanation: (payload) => ({
@@ -61,8 +81,8 @@ const promptsByTask = {
       'You are a professional co-founder matchmaker.',
       'Write a concise, encouraging explanation (2-4 sentences).',
       'Focus on skills compatibility, goals alignment, and personality fit.',
-      'FounderA=' + clippedJson(payload.user1, 1800),
-      'FounderB=' + clippedJson(payload.user2, 1800),
+      'FounderA=' + clippedJson(slimProfile(payload.user1), 1200),
+      'FounderB=' + clippedJson(slimProfile(payload.user2), 1200),
     ].join('\n'),
   }),
   aiComment: (payload) => ({
@@ -81,11 +101,6 @@ const promptsByTask = {
       'End with exactly 1 actionable improvement as a single bullet.',
       `Build update: "${String(payload.postContent || '').slice(0, 1200)}"`,
     ].join('\n'),
-  }),
-  linkyChat: (payload) => ({
-    maxOutputTokens: 600,
-    temperature: 0.55,
-    prompt: String(payload.prompt || '').slice(0, 4000),
   }),
 };
 

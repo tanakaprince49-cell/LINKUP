@@ -376,7 +376,7 @@ export async function scoreBatch(profiles, { need = '', place = '' } = {}) {
     `Profiles: ${JSON.stringify(profiles.map((p, i) => ({ i, name: p.name, title: p.title, snippet: p.snippet.slice(0, 200) })))}`,
   ].filter(Boolean).join('\n');
   try {
-    const raw = await aiText(prompt, { temperature: 0.1, maxOutputTokens: 500, responseMimeType: 'application/json' }).then((r) => r.text);
+    const raw = await aiText(prompt, { temperature: 0.1, maxOutputTokens: 300, responseMimeType: 'application/json' }).then((r) => r.text);
     const parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
     const keep = Array.isArray(parsed?.keep) ? parsed.keep : [];
     return keep
