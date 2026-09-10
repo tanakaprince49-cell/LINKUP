@@ -20,7 +20,6 @@ import {
   Lightbulb,
   Megaphone,
   MousePointerClick,
-  Package,
   Pause,
   Play,
   Square,
@@ -165,7 +164,7 @@ export default function CampaignDetailScreen({ navigation, route }: any) {
             <View style={styles.creativeHeader}>
               <View style={[styles.creativeIcon, { backgroundColor: COLORS.primary }]}>
                 {campaign.creative?.source === 'product' ? (
-                  <Package size={18} color={COLORS.lightTextPrimary} />
+                  <Megaphone size={18} color={COLORS.lightTextPrimary} />
                 ) : (
                   <Lightbulb size={18} color={COLORS.lightTextPrimary} />
                 )}

@@ -23,7 +23,6 @@ import {
   LayoutGrid,
   Lightbulb,
   Megaphone,
-  Package,
   Search,
   Send,
   Sparkles,
@@ -296,7 +295,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
               <Text style={[styles.logoHint, { color: textColor(isDark, 'muted') }]}>
                 {logoUrl
                   ? 'It appears on every sponsored card, search row and Linky mention.'
-                  : 'Square works best. Without one we show a plain package icon.'}
+                  : 'Square works best. Without one we show a megaphone icon.'}
               </Text>
               {logoUrl ? (
                 <TouchableOpacity onPress={() => setLogoUrl('')} style={styles.logoRemove} activeOpacity={0.8}>
@@ -393,7 +392,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
                 {logoUrl ? (
                   <Image source={{ uri: ikAvatar(logoUrl) }} style={styles.previewLogo} resizeMode="cover" />
                 ) : (
-                  <Package size={18} color={COLORS.lightTextPrimary} />
+                  <Megaphone size={18} color={COLORS.lightTextPrimary} />
                 )}
               </View>
               <View style={styles.sponsoredPill}>

@@ -26,7 +26,6 @@ import {
   Lock,
   Megaphone,
   MousePointerClick,
-  Package,
   Pause,
   Play,
   Pencil,
@@ -564,7 +563,7 @@ export default function CampaignsScreen({ navigation }: any) {
                 <Image source={{ uri: ikAvatar(logo) }} style={s.avatar} resizeMode="cover" />
               ) : (
                 <View style={[s.avatar, s.avatarFallback]}>
-                  <Package size={16} color={LEAGUE_YELLOW} />
+                  <Megaphone size={16} color={LEAGUE_YELLOW} />
                 </View>
               )}
               <View style={{ flex: 1 }}>
@@ -733,7 +732,7 @@ export default function CampaignsScreen({ navigation }: any) {
                 <Image source={{ uri: ikAvatar(campaign.creative.logoUrl) }} style={s.avatar} resizeMode="cover" />
               ) : (
                 <View style={[s.avatar, s.avatarFallback]}>
-                  <Package size={16} color={LEAGUE_YELLOW} />
+                  <Megaphone size={16} color={LEAGUE_YELLOW} />
                 </View>
               )}
               <View style={{ flex: 1 }}>

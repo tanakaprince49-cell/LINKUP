@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AppState, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
-import { Globe, Package } from 'lucide-react-native';
+import { Globe, Megaphone } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, RADIUS, liquidGlass, textColor } from '../theme/theme';
 import { ikAvatar } from '../lib/ikImage';
@@ -58,7 +58,7 @@ export function SponsoredCard({ campaign, viewerUid }: Props) {
           {logo ? (
             <Image source={{ uri: ikAvatar(logo) }} style={styles.logo} resizeMode="cover" />
           ) : (
-            <Package size={22} color={isDark ? '#FFFFFF' : COLORS.inkButton} />
+            <Megaphone size={22} color={isDark ? '#FFFFFF' : COLORS.inkButton} />
           )}
         </View>
 
