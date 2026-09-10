@@ -368,16 +368,16 @@ export async function scoreBatch(profiles, { need = '', place = '' } = {}) {
   const prompt = [
     'You shortlist people for LINKUP, a network of founders, builders and operators. A member needs somebody LINKUP does not have yet.',
     'Score each public profile on whether THIS person could realistically help. Be strict about the role and generous about adjacent roles.',
-    'Return STRICT JSON only: {"keep":[{"i":0,"fit":82,"why":"three words max"}]} - only profiles worth messaging, fit 0-100, "why" under 5 words. No prose, no reasons for the ones you drop, no reformatting the list.',
+    'Return STRICT JSON only: {"keep":[{"i":0,"fit":82,"why":"Flutter dev who ships fintech apps"}]} - only profiles worth messaging, fit 0-100, and "why" is one short clause (under 8 words) naming what on this profile makes them the right person. No prose, no reasons for the ones you drop, no reformatting the list.',
     `Need: "${text(need, 200)}"`, place ? `Place: ${text(place, 60)}` : '',
     `Profiles: ${JSON.stringify(profiles.map((p, i) => ({ i, name: p.name, title: p.title, snippet: p.snippet.slice(0, 200) })))}`,
   ].filter(Boolean).join('\n');
   try {
-    const raw = await aiText(prompt, { temperature: 0.1, maxOutputTokens: 400, responseMimeType: 'application/json' }).then((r) => r.text);
+    const raw = await aiText(prompt, { temperature: 0.1, maxOutputTokens: 500, responseMimeType: 'application/json' }).then((r) => r.text);
     const parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
     const keep = Array.isArray(parsed?.keep) ? parsed.keep : [];
     return keep
-      .map((k) => ({ i: Number(k.i), fit: Math.round(Number(k.fit) || 0), why: text(k.why, 40) }))
+      .map((k) => ({ i: Number(k.i), fit: Math.round(Number(k.fit) || 0), why: text(k.why, 60) }))
       .filter((k) => Number.isInteger(k.i) && k.i >= 0 && k.i < profiles.length && k.fit >= OUTREACH.keepMin)
       .sort((a, b) => b.fit - a.fit);
   } catch (err) {
@@ -506,5 +506,11 @@ function firestoreTimestamp(ms) {
 /** A message the member can paste. Linky writes it, the human sends it. */
 export function outreachDraft(lead, { need = '', name = '', place = '' } = {}) {
   const who = text(name, 40) || 'a founder here';
-  return `Hi ${text(lead?.name || '', 40)}, I am ${who}, building in ${text(place, 40) || 'Zimbabwe'}. ${text(need, 160)} - your ${text(lead?.title, 80)} looks close to that. Worth 15 minutes this week? No pitch, I just want one honest opinion.`;
+  const title = text(lead?.title, 80);
+  // The raw ask is never pasted in ("find elon musk" must not read as a
+  // sentence) - the person's own title carries the reason instead.
+  const hook = title
+    ? `Your profile - ${title} - is exactly the kind of work I am trying to do right now.`
+    : 'Your profile stood out to me.';
+  return `Hi ${text(lead?.name || '', 40)}, I am ${who}, building in ${text(place, 40) || 'Zimbabwe'}. ${hook} Could I get 15 minutes this week for one honest opinion? No pitch, no pressure.`;
 }

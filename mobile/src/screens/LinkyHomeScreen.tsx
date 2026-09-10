@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, X } from 'lucide-react-native';
+import { Link2, ArrowUp, Check, Clock, Send, Settings2, ShieldCheck, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
@@ -48,7 +48,6 @@ import {
   linkyMarkLead,
   linkyMeet,
   linkyPickPerson,
-  linkyPointers,
   linkyRespond,
 } from '../lib/linkyApi';
 
@@ -189,7 +188,6 @@ export default function LinkyHomeScreen({ navigation }: any) {
   // is the richer type; a lastAsk restored from home gets an empty shell around it
   const [answer, setAnswer] = useState<LinkyAskResult | null>(null);
   const [pointerText, setPointerText] = useState('');
-  const [pointerBusy, setPointerBusy] = useState(false);
   // The approval step: Linky writes it, the member sends it. `draft` is that
   // editable bubble - for a member's intro and for an off-network lead alike.
   const [draft, setDraft] = useState<{
@@ -306,6 +304,15 @@ export default function LinkyHomeScreen({ navigation }: any) {
       setAnswer(out);
       setPointerText('');
       setLeads([]);
+      setPointerRoutes([]);
+      // "yes, look outside LINKUP" -> the LinkedIn leads arrive on the ask
+      // itself, so render them the same way the old button did.
+      if (out.leads && out.leads.length) {
+        setPointerText(out.pointerIntro || out.reply || '');
+        setPointerRoutes(Array.isArray(out.routes) ? out.routes : []);
+        setLeads(out.leads);
+        setPointerMeta({ searches: Number(out.searches || 0), skipped: Number(out.skipped || 0), cached: !!out.cached, place: out.place || '' });
+      }
       if (out.thread) setHome((h) => (h ? { ...h, thread: out.thread } : h));
       setHome((h) => {
         if (!h) return h;
@@ -320,23 +327,6 @@ export default function LinkyHomeScreen({ navigation }: any) {
     } finally {
       setThinking(false);
       setPendingAsk('');
-    }
-  };
-
-  const askOutside = async () => {
-    if (!answer?.need || pointerBusy) return;
-    setPointerBusy(true);
-    try {
-      const r = await linkyPointers(answer.need);
-      // the header line only - the people below it are rows, not a paragraph
-      setPointerText(r.intro || r.text || '');
-      setPointerRoutes(Array.isArray(r.routes) ? r.routes : []);
-      setPointerMeta({ searches: Number(r.searches || 0), skipped: Number(r.skipped || 0), cached: !!r.cached, place: r.place || '' });
-      setLeads(Array.isArray(r.leads) ? r.leads : []);
-    } catch (err) {
-      notifyUser('Could not fetch pointers', err instanceof Error ? err.message : 'Please try again.');
-    } finally {
-      setPointerBusy(false);
     }
   };
 
@@ -406,6 +396,10 @@ export default function LinkyHomeScreen({ navigation }: any) {
     try {
       if (kind === 'meet' && cardId) await linkyCancelMeet(cardId);
     } catch { /* dropping a draft must never fail loudly - nothing was sent anyway */ }
+    // "Not now" means not now: the waiting banner must go away too, not linger
+    // at the top as if a message were still about to be sent.
+    setHome((h) => (h ? { ...h, pending: { ...h.pending, meet: null } } : h));
+    if (kind === 'meet') await load(true);
   };
 
   const notInterested = async (lead: LinkyLead) => {
@@ -439,7 +433,6 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const chips = (lastLinkyTurn?.id === answer?.id ? answer?.suggest : undefined) || [];
   const onChip = (chip: string) => {
     if (!chip || thinking) return;
-    if (/outside linkup/i.test(chip)) { askOutside(); return; }
     const meet = chip.match(/^meet\s*(\d+)/i);
     if (meet) {
       const card = answerCards[Number(meet[1]) - 1] || answerCards[0];
@@ -467,8 +460,6 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
   const answerIds = useMemo(() => new Set(answer?.cardIds || []), [answer?.cardIds]);
   const answerCards = useMemo(() => (answer?.cardIds || []).map((id) => (home?.cards || []).find((c) => c.id === id)).filter((c): c is LinkyCard => !!c && c.status !== 'skip'), [answer?.cardIds, home?.cards]);
-  const otherCards = useMemo(() => (home?.cards || []).filter((c) => !answerIds.has(c.id) && (c.status === 'new' || c.status === 'saved')), [home?.cards, answerIds]);
-  const asked = useMemo(() => (home?.cards || []).filter((c) => !answerIds.has(c.id) && (c.status === 'meet' || c.status === 'declined')), [home?.cards, answerIds]);
   const firstName = (home?.name || '').split(' ')[0];
   const surface = isDark ? COLORS.darkBgSec : '#FFFFFF';
   const border = isDark ? COLORS.darkBorder : COLORS.lightBorder;
@@ -597,9 +588,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
                     </View>
                   ) : null}
 
-                  {!thinking && (answer?.none && answer.need || leads.length) ? (
-                    pointerText ? (
-                      <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
+                  {!thinking && (pointerText || leads.length) ? (
+                    <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
                         <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>OUTSIDE LINKUP</Text>
                         <Text style={[styles.whyText, { color: textColor(isDark) }]}>{pointerText}</Text>
                         {pointerRoutes.length ? (
@@ -645,12 +635,6 @@ export default function LinkyHomeScreen({ navigation }: any) {
                           </View>
                         ) : null}
                       </View>
-                    ) : (
-                      <TouchableOpacity style={[styles.ghostBtn, { borderColor: border, alignSelf: 'flex-start', marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={askOutside} disabled={pointerBusy}>
-                        {pointerBusy ? <ActivityIndicator size="small" color={textColor(isDark, 'muted')} /> : <Compass size={13} color={textColor(isDark, 'secondary')} />}
-                        <Text style={[styles.ghostBtnText, { color: textColor(isDark, 'secondary') }]}>{pointerBusy ? 'Searching the web for them…' : 'Where to look outside LINKUP'}</Text>
-                      </TouchableOpacity>
-                    )
                   ) : null}
 
                   {!thinking && chips.length ? (
@@ -678,38 +662,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
               </>
             ) : null}
 
-            {otherCards.length ? (
-              <>
-                <SectionTitle
-                  title={answer ? 'Earlier cards' : 'Your cards'}
-                  hint={home.limits.meetsPerDay == null ? 'Unlimited Meets · PLUS' : `${Math.max(0, home.limits.meetsPerDay - home.limits.meetsUsedToday)} of ${home.limits.meetsPerDay} Meets left today`}
-                  isDark={isDark}
-                />
-                {otherCards.map((card) => (
-                  <CardView
-                    key={card.id}
-                    card={card}
-                    isDark={isDark}
-                    busy={busyId === card.id}
-                    onMeet={() => onMeet(card)}
-                    onSkip={() => onCardStatus(card, 'skip')}
-                    onSave={() => onCardStatus(card, 'saved')}
-                    onOpen={() => navigation.navigate('Profile', { userId: card.targetUid })}
-                  />
-                ))}
-              </>
-            ) : null}
-
-            {asked.length ? (
-              <>
-                <SectionTitle title="Asked" isDark={isDark} />
-                {asked.slice(0, 5).map((card) => (
-                  <CardView key={card.id} card={card} isDark={isDark} busy={false} onMeet={() => {}} onSkip={() => {}} onSave={() => {}} onOpen={() => navigation.navigate('Profile', { userId: card.targetUid })} />
-                ))}
-              </>
-            ) : null}
-
-            {!pendingAsk && !answer && !otherCards.length ? (
+            {!pendingAsk && !answer ? (
               <View style={styles.chips}>
                 <Text style={[styles.emptyLine, { color: textColor(isDark, 'muted') }]}>Try one of these, or type your own below.</Text>
                 {['A Flutter developer in Harare for a paid fintech MVP', 'A co-founder with sales experience, equity', 'Someone who has raised from local angels, coffee'].map((s) => (

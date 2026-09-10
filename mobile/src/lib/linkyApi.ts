@@ -127,6 +127,13 @@ export type LinkyAskResult = LinkyAsk & {
   /** Set when the member asked for somebody they are already connected to. */
   matchId?: string;
   blocked?: string;
+  /** "yes, look outside LINKUP" -> LinkedIn leads come back on the ask itself. */
+  leads?: LinkyLead[];
+  pointerIntro?: string;
+  routes?: string[];
+  searches?: number;
+  skipped?: number;
+  place?: string;
 };
 
 export type LinkyToldFacts = { notes: string; skills: string[]; lookingFor: string[]; hidden?: LinkyHidden; updatedAt: number | null };

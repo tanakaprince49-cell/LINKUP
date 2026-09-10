@@ -385,15 +385,19 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
       };
     }
     if (!out.cards.length) {
-      // the one chip that used to be filtered OUT here was the only way a member
-      // on Telegram could ever reach the LinkedIn search - now it is the first one
-      const chips = ['Look outside LINKUP', ...(out.suggest || []).filter((c) => !/outside LINKUP/i.test(c))].slice(0, 3);
-      // callback_data is capped at 64 bytes by Telegram and an encoded ask is
-      // easily 98, so a long one falls back to "the last ask", which the handler
-      // resolves from state instead of needing the whole sentence in a button
-      const cbNeed = encodeURIComponent(out.need || '');
-      const cb = Buffer.byteLength(`p:${cbNeed}`, 'utf8') <= 64 ? `p:${cbNeed}` : 'p:last';
-      return { text: out.reply, chips, ...(out.none ? { buttons: [{ text: 'Search LinkedIn', callback_data: cb }] } : {}) };
+      // Nobody fits -> Linky has already asked "should I go outside my network?",
+      // so the buttons and chips answer that question instead of shipping a
+      // separate "Search LinkedIn" button. A "yes" runs the LinkedIn search in
+      // the same turn; "not now" drops it without a search.
+      if (out.none) {
+        return {
+          text: out.reply,
+          buttons: [[{ text: 'Yes, search LinkedIn', callback_data: 'q:y' }, { text: 'Not now', callback_data: 'q:n' }]],
+          chips: ['yes, search LinkedIn', 'not now', 'cards'],
+        };
+      }
+      const chips = (out.suggest || []).slice(0, 3);
+      return { text: out.reply, chips };
     }
     return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n')}`, cards: out.cards, chips: out.suggest };
   } catch (err) {

@@ -62,7 +62,7 @@ await clearBudget('alice');
 await clearBudget('alice');
 r = await L.ask('alice', 'a quantum cryptography professor from Oslo');
 console.log('    reply:', r.reply);
-assert(r.none && !r.cards.length && /Nobody (here|on LINKUP) fits/i.test(r.reply) && /read all 6 visible profiles/i.test(r.reply) && r.checked === 6, 'no-match ask answers gracefully with member count: ' + r.reply.slice(0, 70));
+assert(r.none && !r.cards.length && /Nobody on LINKUP does/i.test(r.reply) && /go outside my network/i.test(r.reply) && !/read all|visible profiles/i.test(r.reply) && r.checked === 6, 'no-match ask says they are not on LINKUP and offers to go outside the network, never a profile count: ' + r.reply.slice(0, 80));
 assert(Array.isArray(r.nearest) && r.nearest.length >= 1 && !r.nearest.some((n) => n.uid === 'alice') && /Harare/.test(r.nearest[0].city), 'nearest people offered instead of an error, own city first: ' + r.nearest.map((n) => n.name).join(', '));
 assert(r.asksLeft === FREE.asksPerDay - 1, 'no-match ask still counts');
 // ---- related-concept expansion (zero tokens): "math" is on nobody's profile
@@ -229,9 +229,9 @@ const tapYes = await botReplyForTest('telegram', '12345', '', { callback: 'q:y' 
 assert(tapYes.text.length > 20, 'tapping Yes runs the search in the same chat: ' + tapYes.text.slice(0, 45).replace(/\n/g, ' '));
 await clearBudget('alice');
 br = await botReplyForTest('telegram', '12345', 'a blockchain lawyer in Lagos');
-assert(!br.cards && /Nobody (here|on LINKUP) fits/i.test(br.text), 'bot no-match is graceful: ' + br.text.slice(0, 70));
-assert((br.chips || []).some((c) => /outside LINKUP/i.test(c)), 'and the no-match keeps the outside-LINKUP chip, which is how a member on Telegram reaches the search at all: ' + JSON.stringify(br.chips));
-assert(/Search LinkedIn/.test(JSON.stringify(br.buttons || [])), 'with a button that says what it actually does');
+assert(!br.cards && /Nobody on LINKUP does/i.test(br.text) && /outside my network/i.test(br.text), 'bot no-match is graceful and offers to go outside the network: ' + br.text.slice(0, 70));
+assert((br.chips || []).some((c) => /search LinkedIn/i.test(c)), 'and the no-match hands back a "yes, search LinkedIn" chip so a member can just say yes: ' + JSON.stringify(br.chips));
+assert(/Yes, search LinkedIn/.test(JSON.stringify(br.buttons || [])) && /q:y/.test(JSON.stringify(br.buttons || [])), 'with a button wired to the yes that runs the LinkedIn search');
 br = await botReplyForTest('telegram', '12345', 'more');
 assert(br.text.split('\n').length >= 3 && !/;\s*\d+\./.test(br.text), 'bot "more" answers in short lines, never a run-on sentence: ' + br.text.slice(0, 60).replace(/\n/g, ' | '));
 br = await botReplyForTest('telegram', '12345', 'cards');
@@ -291,9 +291,12 @@ assert(f.ok && !(await db.collection('linkyState').doc('alice').get()).exists &&
 
   const yes = await L.ask('alice', 'yes');
   assert(yes.kind !== 'check' && yes.free !== true, 'a yes runs the search he offered: ' + JSON.stringify({ kind: yes.kind, free: !!yes.free }));
-  assert(!(await L.loadState('alice')).pendingIntent, 'and the question is spent');
+  // that search found nobody, so the musing question is spent and replaced by the
+  // one real follow-up: "should I go outside my network?" - never the old musing.
+  const stAfterYes = await L.loadState('alice');
+  assert(!stAfterYes.pendingIntent || stAfterYes.pendingIntent.outside === true, 'the musing question is spent; only the go-outside offer may wait: ' + JSON.stringify(stAfterYes.pendingIntent));
   const yesAgain = await L.ask('alice', 'yes');
-  assert(yesAgain.kind === 'chat' || yesAgain.free === true, 'a stray yes afterwards is just a yes, not a fresh search');
+  assert(yesAgain.kind === 'outside' && yesAgain.free === true, 'a yes to the go-outside offer runs the LinkedIn search, still free: ' + JSON.stringify({ kind: yesAgain.kind, free: !!yesAgain.free }));
 
   const think2 = await L.ask('alice', 'who might be a good bookkeeper for my startup');
   assert(think2.kind === 'check', 'the same shape catches other phrasings');
@@ -305,7 +308,8 @@ assert(f.ok && !(await db.collection('linkyState').doc('alice').get()).exists &&
   assert(think3.kind === 'check', 'he asks first, every time the shape is a musing');
   const redirect = await L.ask('alice', 'actually find me a payroll auditor in Lusaka');
   assert(redirect.kind !== 'check' && /payroll/.test(redirect.need + JSON.stringify(redirect.cards)), 'but a new instruction in the middle is not treated as a yes: ' + redirect.reply.slice(0, 55));
-  assert(!(await L.loadState('alice')).pendingIntent, 'and the abandoned question is cleared rather than left to answer itself later');
+  const stRedirect = await L.loadState('alice');
+  assert(!stRedirect.pendingIntent || stRedirect.pendingIntent.outside === true, 'and the abandoned question is cleared rather than left to answer itself later (only a fresh go-outside offer may wait): ' + JSON.stringify(stRedirect.pendingIntent));
 
   await clearBudget('alice');
   const order = await L.ask('alice', 'find me a payroll auditor in Blantyre, paid');

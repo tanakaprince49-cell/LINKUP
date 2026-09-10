@@ -64,7 +64,17 @@ const list = (v, max, each = 60) => (Array.isArray(v) ? v : typeof v === 'string
   .map((x) => text(x, each)).filter(Boolean).slice(0, max);
 const hosted = (v) => { const s = text(v, 2048); return /^https?:\/\//i.test(s) && !s.startsWith('data:') ? s : ''; };
 const uniq = (arr) => Array.from(new Set(arr));
-const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || 'there';
+// A name stored in ALL CAPS reads as shouting in a greeting ("Hi TANAKA").
+// Title-case it for display only - matching is case-insensitive downstream.
+export const humanCase = (name) => {
+  const s = String(name || '').trim();
+  if (s.length < 2 || !s) return s;
+  if (s === s.toUpperCase() && s !== s.toLowerCase()) {
+    return s.split(/\s+/).map((w) => (w ? w[0] + w.slice(1).toLowerCase() : w)).join(' ');
+  }
+  return s;
+};
+const firstName = (name) => humanCase(String(name || '').trim().split(/\s+/)[0]) || 'there';
 export const isValidId = (id) => /^[a-zA-Z0-9_-]{1,128}$/.test(String(id || ''));
 
 // Zero-token "understanding": common asks -> stems that actually appear on
@@ -160,11 +170,11 @@ export async function loadUser(uid) {
 
 export function displayNameOf(p) {
   const direct = text(p?.displayName, 100);
-  if (direct && direct !== 'Builder' && direct !== 'New Builder') return direct;
+  if (direct && direct !== 'Builder' && direct !== 'New Builder') return humanCase(direct);
   const full = text(p?.fullName || p?.name, 100);
-  if (full) return full;
+  if (full) return humanCase(full);
   const composed = [p?.firstName, p?.lastName].map((x) => text(x, 50)).filter(Boolean).join(' ');
-  return composed || text(String(p?.email || '').split('@')[0], 60) || 'Builder';
+  return humanCase(composed || text(String(p?.email || '').split('@')[0], 60) || 'Builder');
 }
 
 export function profileFacts(p) {
@@ -888,7 +898,7 @@ async function aiExpandTerms(q) {
 const templateOpener = (c, need) => {
   const bit = [c.role ? `${/^[aeiou]/i.test(c.role) ? 'an' : 'a'} ${c.role}` : '', c.company ? `at ${c.company}` : '', c.city ? `in ${c.city}` : '']
     .filter(Boolean).join(' ');
-  const hook = c.skills?.length ? `I am looking for ${need}, and your ${c.skills[0]} is what made me stop on your profile.` : `I am looking for ${need}, and Linky says you are the closest thing to it here.`;
+  const hook = c.skills?.length ? `your ${c.skills[0]} is what made me stop on your profile.` : `Linky says you are the closest thing to what I am looking for.`;
   return `Hi ${firstName(c.name)} - ${bit ? `you are ${bit} ` : ''}and ${hook} Worth 15 minutes this week? If the timing is bad, no worries at all.`;
 };
 
@@ -1033,7 +1043,7 @@ const personLine = (n) => `${n.name}${n.role || n.city ? ` (${[n.role, n.city].f
 const COACH_CHIPS = ['A Flutter developer in Harare for a paid fintech MVP', 'A co-founder with sales experience, equity', 'Someone who has raised from local angels'];
 const BOT_CHIPS = ['a flutter developer in harare', 'a fintech lawyer in harare', 'help'];
 const FOUND_CHIPS = { app: ['meet 1', 'who else do you have', 'write me a first message'], bot: ['meet 1', 'cards', 'more'] };
-const NONE_CHIPS = { app: ['Where to look outside LINKUP', 'Try a role instead', 'What Linky knows about me'], bot: ['MORE', 'cards', 'prefs'] };
+const NONE_CHIPS = { app: ['yes, look outside LINKUP', 'try a role instead', 'what Linky knows about me'], bot: ['yes, search LinkedIn', 'cards', 'prefs'] };
 
 // Every reply is a turn in a thread, so the app can show an actual
 // conversation instead of a single answer that replaces the last one.
@@ -1066,9 +1076,9 @@ async function appendThread(uid, state, turns) {
 const VOICE_KINDS = {
   chat: 'This is a person talking to you, not a search. React to what they actually said first - answer it, tease it, agree with it, disagree - and that is enough. Do not open with a pitch, do not say "tell me what you need", and do not list example searches unless they asked what you can do. If they said they are not looking for anybody, drop it entirely and just be good company. Match their length: two words from them is one line from you. A joke, an opinion or one emoji is allowed here. Never mention profiles you did not search, never say "nobody fits", never sign off like support.',
   help: 'They asked what you are or what you can do. Explain it the way you would to a friend in a WhatsApp thread: what you are for, one line; what you can actually do, two or three short lines; then hand them one specific thing to try. No bullet points, no "features", no corporate name for the app.',
-  found: 'The matcher found people. Be pleased for them the way a friend is pleased, not the way a press release is. Mention how many in passing, point at why they are worth a look, and let the cards do the bragging.',
+  found: 'The matcher found people. Talk like a friend who just found them a lead, not like a search engine: warm, short, one or two sentences max. Mention how many in passing, point at why they are worth a look, and let the cards do the bragging. Never say "I picked them for a reason", never say "the profile line, not my opinion", never sound like a receipt.',
   close: 'Nobody matched their words exactly, but adjacent people are worth a look. Say it cheerfully and never as an apology - "close enough to be useful" is a normal answer, not a failure.',
-  none: 'The matcher found nobody. Be straight and a little dry, zero ceremony: nobody here, and you are not going to invent somebody. One apology maximum, then the next move - and make the next move sound easy, not like a form.',
+  none: 'The matcher found nobody. Say it like a friend breaking mild news, zero ceremony: they are just not on LINKUP yet, no blame, no stat about how many profiles you read. Then ask, in one easy line, whether you should go outside the network and look on LinkedIn for them. Make the question sound like a favour you actually want to do, not a form.',
   person: 'They asked for a human by name and you found them. Hand the name over quickly, like a friend who already knew where they were. No ceremony, and never "I am happy to inform you".',
   ambiguous: 'More than one member could be who they mean. Ask which one in one short line that contains both names. Admitting the doubt is charming here; guessing is not.',
   draft: 'Write the message they should send. It must sound like a person wrote it two minutes ago: specific, warm, easy to answer, no flattery padding, no "I hope this finds you well".',
@@ -1118,7 +1128,7 @@ async function geminiWording(kind, dossier, { source = 'app', seed = '' } = {}) 
   // A greeting kept for a fortnight is how a personality turns into an answering
   // machine, so chit-chat, follow-up questions and tie-breakers are written fresh.
   if (NO_CACHE_KINDS.has(kind)) return wordingOnce(kind, dossier, source, seed, null);
-  const ref = db().collection('linkyCache').doc(cacheKey('v', `${kind}|${source}|${seed}`));
+  const ref = db().collection('linkyCache').doc(cacheKey('v2', `${kind}|${source}|${seed}`));
   try {
     const snap = await ref.get().catch(() => null);
     if (snap && snap.exists && Date.now() - toMillis(snap.data().createdAt) < 14 * DAY_MS) {
@@ -1177,11 +1187,10 @@ function plainReply(kind, d = {}) {
   const nearest = Array.isArray(d.closest_instead) ? d.closest_instead : (Array.isArray(d.nearest) ? d.nearest : []);
   const who = nearest.length ? ` Closest here: ${nearest.map(personLine).join(', ')}.` : '';
   switch (kind) {
-    case 'found': return `${count} ${count === 1 ? 'person fits' : 'people fit'} "${d.need}". I picked them for a reason and it is on each card - the profile line, not my opinion.${d.remote_only_note ? ` ${cap1(d.remote_only_note)}.` : ''}${ctaFor(d)}`;
+    case 'found': return `${count} ${count === 1 ? 'person' : 'people'} on LINKUP ${count === 1 ? 'fits' : 'fit'} what you asked for. ${count === 1 ? 'Their card says why' : 'Each card says why'} - take a look.${d.remote_only_note ? ` ${cap1(d.remote_only_note)}.` : ''}${ctaFor(d)}`;
     case 'close': return `Nobody lists "${d.need}" word for word, but ${count} ${count === 1 ? 'person is' : 'people are'} close (${d.matched_on || 'related skills'}). The card says exactly what I matched.${ctaFor(d)}`;
     case 'none': {
-      const scanned = Number(d.members_checked || 0) > 0 ? `all ${d.members_checked} visible profiles` : 'every visible profile';
-      return `Nobody here fits "${d.need}" - I read ${scanned} and I am not going to invent somebody to fill the gap.${who}${d.outside_hint ? ` ${cap1(d.outside_hint)}.` : ''}`;
+      return `Nobody on LINKUP does "${d.need}" yet - they are just not here. Want me to go outside my network and pull a few people from LinkedIn?`;
     }
     case 'person': {
       const f = d.found || d.person || {};
@@ -1332,12 +1341,12 @@ function renderPointers({ intro = '', routes = [], leads = [] } = {}) {
   return [head, ...lines].filter(Boolean).join('\n');
 }
 
-export async function pointers(uid, need, { userDoc, allowSearch = true } = {}) {
+export async function pointers(uid, need, { userDoc, allowSearch = true, assumeKnown = false } = {}) {
   const user = userDoc || (await loadUser(uid));
   const q = parseAsk(need);
   if (!q.tokens.length) throw new Error('Ask me who you need first.');
   const state = await loadState(uid);
-  const known = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : []), ...(Array.isArray(state.askHistory) ? state.askHistory : [])]
+  const known = assumeKnown || [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : []), ...(Array.isArray(state.askHistory) ? state.askHistory : [])]
     .filter(Boolean).some((a) => (a.norm ? a.norm === q.norm : parseAsk(a.need || '').norm === q.norm));
   if (!known) throw new Error('Ask me that first, then I can point you outside LINKUP.');
   // p2: the shape changed (intro + routes + leads instead of one long sentence),
@@ -1582,8 +1591,12 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // a new instruction, and it must not be swallowed by the question before it
   const answeringYes = !!pendingIntent && saidWords.length <= 24 && AFFIRM_RX.test(saidWords) && !DENY_RX.test(saidWords);
   const answeringNo = !!pendingIntent && saidWords.length <= 32 && DENY_RX.test(saidWords);
-  // a yes runs the search he offered; anything else is what they typed
-  const gate = answeringYes ? null : await intentGate(msgTyped, { offer: !!pendingIntent, lastAsk: state.lastAsk?.need || '', source });
+  // a yes runs the search he offered; anything else is what they typed.
+  // The "go outside my network?" offer is a narrow yes/no answered by the regex
+  // above - it is not the open musing the intent gate needs to read, and letting
+  // it flip `offer` would re-ask the model the same message under two cache keys.
+  const offerOpen = !!pendingIntent && !pendingIntent.outside;
+  const gate = answeringYes ? null : await intentGate(msgTyped, { offer: offerOpen, lastAsk: state.lastAsk?.need || '', source });
   let msg = answeringYes ? pendingIntent.need : msgTyped;
   // When the model hears an order our lists cannot read - Shona, slang, a phrase
   // with no role word in it - search what it heard. A member's own well-formed ask
@@ -1642,6 +1655,27 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
         { id, role: 'linky', text: chat, kind: 'chat', at: now + 1 },
       ]);
       return { id, need: text(pendingIntent.need, 120), reply: chat, kind: 'chat', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: ['who else do you have', 'help'], thread };
+    }
+    // "should I go outside my network?" -> yes: run the LinkedIn search now,
+    // in the same turn, and hand back the leads with the reason for each one.
+    if (pendingIntent.outside) {
+      const id = newId();
+      const outside = await pointers(uid, pendingIntent.need, { userDoc: user, allowSearch: true, assumeKnown: true });
+      const needShort = polishNeed(pendingIntent.need);
+      const reply = outside.intro || text(outside.text, 400) || `Nobody on LINKUP does "${needShort}" yet, so I went outside the network. Here is who I found on LinkedIn:`;
+      const thread = await appendThread(uid, state, [
+        { id, role: 'user', text: msgTyped, at: now },
+        { id, role: 'linky', text: reply, kind: 'outside', at: now + 1 },
+      ]);
+      return {
+        id, need: text(pendingIntent.need, 120), reply, kind: 'outside', cardIds: [], cards: [], nearest: [],
+        none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: !!outside.cached,
+        createdAt: now, asksLeft: asksLeft(),
+        leads: outside.leads || [], routes: outside.routes || [], pointerIntro: outside.intro || '',
+        searches: outside.searches || 0, skipped: outside.skipped || 0, place: outside.place || '',
+        suggest: ['try a role instead', 'what Linky knows about me'],
+        thread,
+      };
     }
   }
 
@@ -1873,7 +1907,6 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     offer: searchQ.offer || 'not stated',
     location: searchQ.location || 'not stated',
     remote_ok: searchQ.remote,
-    members_checked: checked,
     matches: picks.map((p) => ({ name: p.facts.name, role: p.facts.role, company: p.facts.company, city: [p.facts.city, p.facts.country].filter(Boolean).join(', '), reason: p.why })),
     closest_instead: nearest,
     matched_on: expansion === 'none' ? 'their own words' : `related skills (close to "${relatedTo || searchQ.need}")`,
@@ -1882,7 +1915,9 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     remote_only_note: kind !== 'none' && q.location && !inLoc ? `nobody in ${q.location}, so these are people who would work remotely` : '',
     asks_left_today: asksLeft(1),
     channel: source,
-    outside_hint: kind === 'none' ? (source === 'app' ? 'there is a button to search outside LINKUP' : 'they can reply MORE to search outside LINKUP') : '',
+    // Nobody fits: never state a profile count, and hand the member one easy
+    // next move - going outside the network - rather than a button label.
+    nobody_is_here: kind === 'none' ? true : false,
     suggest: (kind === 'none' ? NONE_CHIPS : FOUND_CHIPS)[source === 'app' ? 'app' : 'bot'],
   }, { name: me.name, source, seed: q.wantsElse ? `${searchQ.norm}:else:${[...exclude].join(',')}` : searchQ.norm });
   const record = {
@@ -1895,8 +1930,13 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     .filter((a) => a && a.norm !== searchQ.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5);
   const thread = await sayBack(askId, reply, { kind, cardIds: record.cardIds });
   // a searched ask is also the moment the small talk stops: the next greeting
-  // starts from zero, so the pitch is not permanently muted
-  await patchState(uid, { lastAsk: record, chitStreak: 0, recentAsks, askHistory: history, asks: { day: today, count: used + 1 } });
+  // starts from zero, so the pitch is not permanently muted. When nobody fits,
+  // the open question becomes "should I look outside LINKUP?" - a bare "yes"
+  // to that is the go-ahead for the LinkedIn search, not a fresh matcher run.
+  await patchState(uid, {
+    lastAsk: record, chitStreak: 0, recentAsks, askHistory: history, asks: { day: today, count: used + 1 },
+    ...(kind === 'none' ? { pendingIntent: { need: searchQ.need, at: now, id: askId, outside: true } } : {}),
+  });
   return { ...publicAsk(record), cards: resultCards, cached: false, usedAi, kind, asksLeft: asksLeft(1), suggest: saidSuggest, thread };
 }
 
@@ -1945,30 +1985,51 @@ export async function setCardStatus(uid, cardId, status) {
 // one call: what the target reads, and the line the asker opens with afterwards.
 // Both have a hand-written backup, because a missing AI is not a reason to send
 // a member nothing at all.
+// The card only keeps a skim of the target (name/role/company/city/skills).
+// The intro reads BOTH profiles, so pull the full profile facts when they are
+// on LINKUP - bio and goals included - and fall back to the card when not.
+async function introTarget(card) {
+  const tUser = await loadUser(card?.targetUid).catch(() => null);
+  const tf = profileFacts(tUser) || {};
+  return {
+    name: card?.targetName || tf.name,
+    role: card?.targetRole || tf.role,
+    company: card?.targetCompany || tf.company,
+    city: card?.targetCity || [tf.city, tf.country].filter(Boolean).join(', '),
+    skills: (Array.isArray(card?.targetSkills) && card.targetSkills.length) ? card.targetSkills : (tf.skills || []),
+    bio: tf.bio || '',
+    goals: tf.goals || '',
+  };
+}
+
 export async function introPitch({ requester = {}, target = {}, need = '', why = '', place = '', seed = '' } = {}) {
   const tName = firstName(target.name || '') || 'there';
-  const aName = text(requester.name, 60) || 'A LINKUP member';
+  const aName = humanCase(text(requester.name, 60)) || 'A LINKUP member';
+  const cleanNeed = polishNeed(need);
   const roleBit = target.role ? `${/^[aeiou]/i.test(target.role) ? 'an' : 'a'} ${target.role}` : '';
-  const pitch = [`Hi ${tName} - ${aName} asked me to make the introduction, and I said yes before I checked if you were busy.`,
-    need ? `They are looking for ${text(need, 160)}${place ? ` around ${text(place, 40)}` : ''}.` : '',
-    why ? `You came up because ${text(why, 200).replace(/\.$/, '')}.` : `You came up because ${aName} reads your profile and pointed at it.`,
-    `Fifteen minutes on a call this week, if you are open to it. If the timing is wrong, say so - I will not ask twice and nobody takes it badly.`,
-  ].filter(Boolean).join(' ');
-  const opener = `Hi ${tName} - ${aName} here. Linky pointed me at you${need ? ` after I said I needed ${text(need, 120)}` : ''}${roleBit ? `, and your work as ${roleBit} is exactly why` : ''}. Worth 15 minutes this week?`;
+  const whyTrim = text(why, 200).replace(/\.$/, '');
+  // Fallback (no AI, or a flaky provider). The raw ask is never pasted in:
+  // "find elon musk" must not read as a sentence. The cited `why` carries it.
+  const pitch = [
+    `Hi ${tName} - ${aName} asked me to make this intro, and your profile is the reason.${whyTrim ? ` ${cap1(whyTrim)}.` : ''}`,
+    `Would you be open to a quick 15-minute call this week? If the timing is bad, that is a completely fine answer - I will not ask twice.`,
+  ].join(' ');
+  const opener = `Hi ${tName}, ${aName} here - Linky introduced us${whyTrim ? ` (${cap1(whyTrim)})` : ''}. Worth a quick call this week?`;
   if (!aiReady()) return { pitch, opener, usedAi: false };
-  const ref = db().collection('linkyCache').doc(cacheKey('i', seed || `${aName}|${tName}|${need}`));
+  const ref = db().collection('linkyCache').doc(cacheKey('i2', seed || `${aName}|${tName}|${cleanNeed}`));
   const snap = await ref.get().catch(() => null);
   if (snap && snap.exists && Date.now() - toMillis(snap.data().createdAt) < 30 * DAY_MS) {
     const d = snap.data();
     if (text(d.pitch, 900) && text(d.opener, 600)) return { pitch: text(d.pitch, 900), opener: text(d.opener, 600), usedAi: true, cached: true };
   }
   const prompt = [
-    "You are Linky, LINKUP's connector. You are writing the message that decides whether a busy, good person says yes to a stranger.",
+    "You are Linky, LINKUP's connector. You are writing the message that decides whether a busy, good person says yes to a stranger. READ BOTH PROFILES in the dossier before writing.",
     'Two texts, STRICT JSON only: {"pitch":"...","opener":"..."}',
-    `pitch: what ${tName} reads, from Linky, on behalf of ${aName}. Max 70 words. It must say who is asking and that they asked for THIS person; name the one real reason from the dossier (a fact, never an adjective); make the ask tiny and concrete (15 minutes, this week); and offer a no that costs them nothing. Confident, warm, a flicker of humour. No flattery padding, no hype, no "game-changer", no "I hope this finds you well", no exclamation marks, no emoji.`,
+    `pitch: what ${tName} reads, from Linky, on behalf of ${aName}. Max 70 words. It must say who is asking and why THIS person specifically - name one real fact from ${tName}'s profile (a skill, a role, a company, a bio detail), never an adjective. Make the ask tiny and concrete (15 minutes, this week) and offer a no that costs them nothing. Confident, warm, a flicker of humour. No flattery padding, no hype, no "game-changer", no "I hope this finds you well", no exclamation marks, no emoji.`,
     `opener: the first line ${aName} sends once ${tName} says yes. Max 45 words, first person, sounds like a human typing on a phone in one go: one true thing about ${tName}, what ${aName} is building or needs, one easy question to answer. Never "per my last email", never pitch-deck language, never "synergy", "revolutionise" or "passionate".`,
+    `The ask was "${cleanNeed}" - use it only for context. NEVER paste the ask back verbatim, and never write "find ...", "I need ..." or "looking for ..." as a sentence fragment. If the ask is somebody's name (like "elon musk"), do not echo the name as a search - talk about what ${aName} is building and why ${tName} specifically came up.`,
     'Never invent a fact that is not in the dossier. Never promise money, equity, a job or a time. If the dossier has no reason, say what the asker is building instead of flattering anybody.',
-    `Dossier: ${JSON.stringify({ asker: { name: aName, role: text(requester.role, 80), company: text(requester.company, 80), city: text(requester.city, 40) }, target: { name: target.name, role: text(target.role, 80), company: text(target.company, 80), city: text(target.city, 40), skills: list(target.skills, 6, 40) }, need: text(need, 200), why: text(why, 240), place: text(place, 60) })}`.slice(0, 2600),
+    `Dossier: ${JSON.stringify({ asker: { name: aName, role: text(requester.role, 80), company: text(requester.company, 80), city: text(requester.city, 40), bio: text(requester.bio, 200), goals: text(requester.goals, 120) }, target: { name: target.name, role: text(target.role, 80), company: text(target.company, 80), city: text(target.city, 40), skills: list(target.skills, 6, 40), bio: text(target.bio, 240), goals: text(target.goals, 120) }, need: text(cleanNeed, 200), why: text(whyTrim, 240), place: text(place, 60) })}`.slice(0, 2800),
   ].join('\n');
   try {
     const { text: raw } = await aiText(prompt, { temperature: 0.75, maxOutputTokens: 420, responseMimeType: 'application/json' });
@@ -2036,7 +2097,7 @@ export async function meet(uid, cardId, { userDoc } = {}) {
 
   const pitchPack = await introPitch({
     requester: { ...me },
-    target: { name: card.targetName, role: card.targetRole, company: card.targetCompany, city: card.targetCity, skills: card.targetSkills },
+    target: await introTarget(card),
     need: card.need, why: card.why, place: me.city, seed: `intro:${introId}:${card.askId || ''}`,
   });
   const draft = {
@@ -2116,15 +2177,16 @@ export async function draftLead(uid, { key = '', lead = null, index = 0, need = 
   const who = { name: text(picked?.name, 60), title: text(picked?.title, 110), url: text(picked?.url, 400) };
   if (!who.name) throw new Error('Who should I write to? Tap their name and I will draft it.');
   const k = text(key, 80) || text(picked?.key, 80) || leadKey(who);
-  const fallback = outreachDraft(who, { need: q.need, name: me.name, place });
+  const fallback = outreachDraft(who, { need: polishNeed(q.need), name: me.name, place });
   let body = fallback;
   let usedAi = false;
   if (aiReady()) {
     try {
       const raw = await geminiText([
         `Write the first message ${me.name || 'a LINKUP member'} sends to ${who.name}${who.title ? `, ${who.title}` : ''} on LinkedIn.`,
-        `They found ${who.name} from a public search for "${q.need}". ${me.role ? `${me.name} is ${me.role}${me.company ? ` at ${me.company}` : ''}.` : ''} Place: ${place}.`,
-        'It must read like a person typed it on a phone: 45-70 words, first line says who is writing and why THIS person, one concrete thing from their own profile, one small easy ask (15 minutes, a question, an opinion), and an easy no. No "I hope this finds you well", no "I would love to pick your brain", no flattery padding, no hype, no exclamation marks, no emoji, no signature block. Do not invent facts about them.',
+        `They found ${who.name} from a public search for "${polishNeed(q.need)}". ${me.role ? `${me.name} is ${me.role}${me.company ? ` at ${me.company}` : ''}.` : ''} ${me.city ? `${me.name} builds in ${me.city}.` : ''} Place: ${place}.`,
+        'It must read like a person typed it on a phone: 45-70 words, first line says who is writing and why THIS person, one concrete thing from their own profile (their title, a role, a project), one small easy ask (15 minutes, a question, an opinion), and an easy no. No "I hope this finds you well", no "I would love to pick your brain", no flattery padding, no hype, no exclamation marks, no emoji, no signature block. Do not invent facts about them.',
+        'NEVER paste the search phrase back (for example do not write "find elon musk" or "looking for X" as a sentence). If the search was for a person by name, write instead about what the sender is building and why this person\'s profile is relevant.',
         'Return STRICT JSON only: {"message":"..."}',
       ].join('\n'), { temperature: 0.55, maxOutputTokens: 320, responseMimeType: 'application/json' });
       const got = text(readJson(raw)?.message, 900);
@@ -2259,7 +2321,7 @@ async function sendMeet(uid, cardId, { userDoc, draft = null, overrideText = '' 
     ? { pitch: text(overrideText || draft.pitch, 900), opener: text(draft?.opener || '', 600), usedAi: !!draft?.usedAi && !overrideText }
     : await introPitch({
         requester: { ...me },
-        target: { name: card.targetName, role: card.targetRole, company: card.targetCompany, city: card.targetCity, skills: card.targetSkills },
+        target: await introTarget(card),
         need: card.need, why: card.why, place: me.city, seed: `intro:${introId}:${card.askId || ''}`,
       });
   const intro = {
