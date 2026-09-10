@@ -14,11 +14,12 @@ import crypto from 'node:crypto';
 import { getDb, verifyRequestUser } from './_firebaseAdmin.js';
 import { aiProbe, aiStatus, handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import {
-  APP_URL, LIMITS, OFFERS, approveLead, approveMeet, ask, audit, botUserFor, cancelMeet, consumeLinkCode, createLinkCode,
-  draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead, meet, orderedCards, pickPerson,
-  pointers, removeAsk, respond, runCron, sendTelegram, sendWhatsApp, setCardStatus, setFacts, setPrefs, unlinkBot,
-  lastAiFault, profileFacts, telegramWebhookSecret,
+  APP_URL, LIMITS, OFFERS, LOOP_CHOICES, answerLoop, approveLead, approveMeet, approveSquad, ask, audit, botUserFor, cancelMeet, cancelSquad,
+  consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
+  meet, meetSquad, orderedCards, pickPerson, pointers, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
+  setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret,
 } from './_linky.js';
+import { badgeLine } from './_proof.js';
 
 
 // ---------------------------------------------------------------- cron auth
@@ -124,7 +125,10 @@ const HELP = [
 const offerLabel = (o) => ({ paid: 'paid work', equity: 'equity', advisory: 'advisory', coffee: 'a coffee' }[o] || o);
 
 function cardLine(c, n) {
-  return `${n}. ${c.targetName}${c.targetRole ? ` - ${c.targetRole}` : ''}${c.targetCity ? ` (${c.targetCity})` : ''}\n   Why: ${c.why}`;
+  const proof = badgeLine(c.badges);
+  const squad = c.squadId ? `\n   Squad${c.squadSize > 1 ? ` of ${c.squadSize}` : ''}${c.squadRole ? ` - ${c.squadRole}` : ''}` : '';
+  const warm = c.pairNote ? `\n   ${c.pairNote}` : '';
+  return `${n}. ${c.targetName}${c.targetRole ? ` - ${c.targetRole}` : ''}${c.targetCity ? ` (${c.targetCity})` : ''}${squad}\n   Why: ${c.why}${proof ? `\n   ${proof}` : ''}${warm}`;
 }
 
 // A member never reads infrastructure. A provider refusing a key, a timeout, a
@@ -181,10 +185,28 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
       }
       if (kind === 'y') return await approveFromBot(uid, user, a.split(':')[0], '');
       if (kind === 'n') {
+        const st0 = await loadState(uid);
+        if (st0.pendingSquad && (!a || a === st0.pendingSquad.squadId || String(a).startsWith(st0.pendingSquad.squadId))) {
+          const rq = await cancelSquad(uid, {});
+          return { text: rq.cancelled ? `Left unsent. None of the three heard anything from me.` : 'Nothing was waiting to go.' };
+        }
         const r = await cancelMeet(uid, { cardId: a.split(':')[0] });
         return { text: r.cancelled ? `Left unsent. ${r.targetName || 'They'} will not know you thought about it.` : 'Nothing was waiting to go.' };
       }
       if (kind === 'w') return await draftForNumber(uid, user, Number(a) || 1, channel);
+      if (kind === 'f') {
+        const r = await answerLoop(uid, { choice: LOOP_CHOICES[a] ? a : '' });
+        return { text: r.note };
+      }
+      if (kind === 'sq') {
+        const r = await meetSquad(uid, a, { userDoc: user });
+        if (!r.needsApproval) return { text: `Asked all of them. I will tell you who answers.` };
+        return { text: squadDraftText(r), buttons: squadApproveButtons(a), chips: ['send', 'cancel'] };
+      }
+      if (kind === 'z') {
+        const r = await approveSquad(uid, { squadId: a });
+        return { text: r.note };
+      }
       if (kind === 'q') {
         // "should I look?" answered by tap - same words as typing yes / no
         return await botReply(channel, chatId, a === 'y' ? 'yes' : 'no, just thinking');
@@ -282,6 +304,7 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
   // ---- permissioned outreach: Linky drafts, the human approves, edits or drops
   if (/^(send|send it|approve|yes send|go ahead|look good|thats fine|that.s fine)$/i.test(cmd.trim())) {
     const state = await loadState(uid);
+    if (state.pendingSquad) { const r = await approveSquad(uid, {}); return { text: r.note }; }
     if (state.pendingMeet) { const r = await approveMeet(uid, { userDoc: user }); return { text: sentText(r) }; }
     if (state.pendingLead) {
       const r = await approveLead(uid, {});
@@ -297,10 +320,13 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
       const r = await approveLead(uid, { text: mine });
       return { text: `${r.text}\n\n${r.note}` };
     }
+    if (state.pendingSquad) { const r = await approveSquad(uid, { text: mine }); return { text: r.note }; }
     if (state.pendingMeet) return { text: sentText(await approveMeet(uid, { text: mine, userDoc: user })) };
     return { text: 'Nothing to edit yet. Say "draft 2" after a search and I will write something you can change.' };
   }
   if (/^(cancel|never mind|drop it|discard)$/i.test(cmd.trim())) {
+    const st9 = await loadState(uid);
+    if (st9.pendingSquad) { const rq = await cancelSquad(uid, {}); return { text: `Left unsent${rq.names?.length ? ` - ${rq.names.join(', ')} never heard about it` : ''}.` }; }
     const r = await cancelMeet(uid, {});
     const state = await loadState(uid);
     if (r.cancelled) return { text: `Left unsent${r.targetName ? ` - ${r.targetName} will never hear about it` : ''}.` };
@@ -322,6 +348,25 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
   // "draft 3" after a search = write the message for the third person I listed
   if (/^draft\s+\d+$/i.test(cmd.trim())) {
     return await draftForNumber(uid, user, Number(cmd.match(/\d+/)?.[0] || 1), channel);
+  }
+
+  // ---- the 48-hour question, answered with a number because it is easier
+  const loopState = await loadState(uid);
+  const loopOpen = loopState.pendingLoop && Date.now() - Number(loopState.pendingLoop.at || 0) < 14 * 864e5 ? loopState.pendingLoop : null;
+  if (loopOpen && /^([1-4])$/.test(cmd.trim())) {
+    const key = Object.keys(LOOP_CHOICES)[Number(cmd.trim()) - 1];
+    const r = await answerLoop(uid, { choice: key });
+    return { text: r.note };
+  }
+  if (/^meet\s+squad\b/i.test(cmd.trim()) || /^squad\b/i.test(cmd.trim())) {
+    const stS = await loadState(uid);
+    const cards = await loadCards(uid);
+    const id = stS.pendingSquad?.squadId || stS.lastAsk?.squadId || (cards.find((c) => c.squadId)?.squadId || '');
+    if (!id) return { text: 'No squad on the table right now. Ask me for a team - say the roles, like "flutter dev + someone who can sell + an investor".' };
+    try {
+      const r = await meetSquad(uid, id, { userDoc: user });
+      return { text: squadDraftText(r), buttons: squadApproveButtons(id), chips: ['send', 'cancel'] };
+    } catch (err) { return { text: memberError(err, 'That did not work.') }; }
   }
 
   // ---- card decisions by number
@@ -420,6 +465,20 @@ const sentText = (r) => (r.matchId
   ? `You two are already connected, so no intro needed. Chat: ${APP_URL}/chat/${r.matchId}`
   : `Sent to ${r.targetName || 'them'}. ${r.edited ? 'Your words, not mine. ' : ''}I will tell you the moment they answer.`);
 
+const squadDraftText = (r) => [
+  `${(r.members || []).map((x) => x.name).filter(Boolean).join(', ')} - all three would get this. Read it first.`,
+  '',
+  r.pitch,
+  '',
+  'Reply SEND and it goes to each of them, or "edit <your own words>" to send yours. Nobody is added to a group chat: each one answers for themselves.',
+  ...(r.meetsLeft != null ? [`(${r.meetsLeft} Meets left today - a squad costs one per person.)`] : []),
+  ...(r.note ? [r.note] : []),
+].join('\n');
+
+const squadApproveButtons = (squadId) => ([
+  [{ text: '\u2705 Send to all three', callback_data: `z:${squadId}` }, { text: '\u270f\ufe0f Edit it', callback_data: `e:${squadId}` }],
+]);
+
 const approveButtons = (cardId) => ([
   [{ text: '✅ Send it', callback_data: `y:${cardId}` }, { text: '✏️ Edit it', callback_data: `e:${cardId}` }],
   [{ text: '✖️ Cancel', callback_data: `n:${cardId}` }],
@@ -483,6 +542,7 @@ function pointerText(r) {
   const list = leads.map((l, i) => [
     `${i + 1}. ${l.name}${l.title ? ` - ${l.title}` : ''}`,
     l.why ? `   ${l.why}` : '',
+    badgeLine(l.proof) ? `   ${badgeLine(l.proof)}` : '',
     `   ${l.url}`,
   ].filter(Boolean).join('\n')).join('\n\n');
   const extra = r.skipped ? `\n\n(${r.skipped} ${r.skipped === 1 ? 'person' : 'people'} I have already sent you did not make the list again.)` : '';
@@ -752,6 +812,11 @@ async function handleApp(req, res) {
         const status = ['skip', 'saved', 'new'].includes(body.status) ? body.status : 'skip';
         out = await setCardStatus(uid, String(body.cardId || ''), status); break;
       }
+      // the 48-hour question, answered from the app's four buttons
+      case 'loop': out = await answerLoop(uid, { choice: String(body.choice || ''), words: String(body.words || ''), introId: String(body.introId || '') }); break;
+      case 'meetSquad': out = await meetSquad(uid, String(body.squadId || '')); break;
+      case 'approveSquad': out = await approveSquad(uid, { squadId: String(body.squadId || ''), text: String(body.text || '') }); break;
+      case 'cancelSquad': out = await cancelSquad(uid, { squadId: String(body.squadId || '') }); break;
       case 'respond': {
         const decision = ['accept', 'decline', 'later'].includes(body.decision) ? body.decision : 'later';
         out = await respond(uid, String(body.introId || ''), decision); break;

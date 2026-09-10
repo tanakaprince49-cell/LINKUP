@@ -19,6 +19,7 @@ import crypto from 'node:crypto';
 import { getAdmin, getDb } from './_firebaseAdmin.js';
 import { aiReady, aiStatus, aiText, geminiText, getGeminiKey, localRank, compactProfile } from './_gemini.js';
 import { findLeads, outreachDraft } from './_serpapi.js';
+import { proofPoints, proofFromSnippet, badgeLine } from './_proof.js';
 
 export const LIMITS = {
   // Two real searches a day on the free plan, and they are the SAME budget on
@@ -33,6 +34,11 @@ export const LIMITS = {
   skipDays: 14,
   shortlist: 8,
   cardsPerAsk: 5,
+  // A squad is two triads at most per ask: six cards is already a
+  // decision, not a list.
+  squadCardsPerAsk: 6,
+  // the follow-up question is a nudge, not a campaign: one per intro
+  loopPerMemberPerDay: 1,
   // A "nobody fits" answer ages faster on purpose: a new member joining this
   // afternoon should show up when the same name is asked tonight.
   askCacheHours: 12,
@@ -616,6 +622,10 @@ export function parseAsk(message) {
   // Role words ("developer", "designer", "founder") are never a name query,
   // even when typed with a capital - "Find me a Developer" is a search.
   const names = namePhrases(need).filter((p) => !p.split(/\s+/).some((w) => CONCEPT_BY_ALIAS.has(w.toLowerCase())));
+  // "flutter dev + someone who can sell + an angel" - joined by + / & / plus, not
+  // by commas around a city. Two role-shaped phrases is a group, one is a person.
+  const squadParts = need.split(/\s*(?:\+|&|\bplus\b)\s*/i).map((x) => x.trim()).filter((x) => x.length > 2);
+  const multiRoles = squadParts.filter((x) => ROLEISH_RX.test(x)).length >= 2;
   return {
     need, offer, location, remote, tokens: kws, expanded: expandTerms(raw), norm: raw.slice().sort().join(' '),
     // same rule for the name lookup itself, so "cards" is not a phantom person
@@ -628,6 +638,9 @@ export function parseAsk(message) {
     command: ORDER_RX.test(all),
     wantsDraft: DRAFT_RX.test(all) && !/[a-z]{4,}\s+(developer|designer|engineer|marketer|lawyer|analyst)/i.test(all),
     wantsElse: ELSE_RX.test(all),
+    // "a squad", "team of three" - a shape, not a vocabulary of roles. The intent
+    // model decides this first; this only speaks when no model answered.
+    wantsSquad: (SQUAD_RX.test(all) || multiRoles) && !ELSE_RX.test(all),
     bare: BARE_RX.test(need.trim()),
     // Chit-chat outranks "there are nouns here", but a single role word pulls it
     // back to a real ask: "just want to chat about a flutter developer" is a search.
@@ -669,16 +682,22 @@ export function parseAsk(message) {
 
 // ---------------------------------------------------------------- matching
 export async function buildMatchContext() {
-  const [pubSnap, stateSnap] = await Promise.all([
+  const [pubSnap, stateSnap, pairSnap] = await Promise.all([
     db().collection('publicProfiles').limit(600).get(),
     db().collection('linkyState').limit(2000).get(),
+    // what members told Linky about intros that already happened. It is small by
+    // construction (only answered loops are written) and it is the difference
+    // between a matcher that learns and a search box.
+    db().collection('linkyPairs').limit(2000).get().catch(() => null),
   ]);
   const states = {};
   stateSnap.docs.forEach((d) => { states[d.id] = d.data(); });
+  const pairs = {};
+  (pairSnap && pairSnap.docs ? pairSnap.docs : []).forEach((d) => { pairs[d.id] = d.data(); });
   const candidates = pubSnap.docs.map((d) => ({ uid: d.id, ...d.data() })).filter((p) =>
     p.uid && !p.deleted && p.isVisible !== false && p.isStealthMode !== true && p.onboarded !== false &&
     !p.uid.startsWith('demo-') && !p.uid.startsWith('bot-') && p.uid !== 'linky-ai');
-  return { candidates, states, week: weekKey(), day: dayKey() };
+  return { candidates, states, pairs, week: weekKey(), day: dayKey() };
 }
 
 function candidateFacts(p, st) {
@@ -754,6 +773,10 @@ export function scoreNameMatch(query, targetName) {
 // Why an intro to this member is not possible right now ('' means it is).
 function introBlocker({ meUid, p, st, myState, ctx, prev, offer, now = Date.now() }) {
   if ((myState.muted || {})[p.uid]) return 'you asked me not to suggest them again';
+  // the post-intro loop is what turns "not a fit" from a feeling into a rule -
+  // 60 days, not forever, because people change and so do projects
+  const pair = (ctx && ctx.pairs || {})[pairId(meUid, p.uid)];
+  if (pair && pair.outcome === 'not_fit' && now - toMillis(pair.at) < 60 * DAY_MS) return 'you told me the two of you were not a fit';
   if (prev && prev.status === 'declined') return 'you two already said no to each other';
   if (st.muted && st.muted[meUid]) return 'they have Linky switched off for new intros';
   if (prev && prev.status === 'skip' && now - toMillis(prev.updatedAt || prev.createdAt) < LIMITS.skipDays * DAY_MS) {
@@ -925,6 +948,26 @@ async function geminiRerank(q, requester, shortlist) {
 
 // Who on LINKUP fits this ask, right now. Returns ranked picks (with cited
 // "why"), the nearest people when nobody fits, and how many members were checked.
+/**
+ * Everybody this member may be shown right now: visible, not muted, not blocked
+ * by an intro rule, not already on the exclusion list from "who else". The 1-on-1
+ * matcher and the squad finder both use this, so a rule can never be applied in
+ * one path and forgotten in the other.
+ */
+function pickEligible({ uid, q, ctx, myState = {}, existingCards = [], exclude = [], muted = {}, now = Date.now() }) {
+  const latestByTarget = new Map();
+  existingCards.forEach((c) => latestByTarget.set(c.targetUid, c));
+  const skip = exclude instanceof Set ? exclude : new Set(exclude || []);
+  const out = [];
+  for (const p of (ctx && ctx.candidates) || []) {
+    if (!p || !p.uid || p.uid === uid || (myState.muted || {})[p.uid] || muted[p.uid] || skip.has(p.uid)) continue;
+    const st = (ctx.states || {})[p.uid] || {};
+    if (introBlocker({ meUid: uid, p, st, myState, ctx, prev: latestByTarget.get(p.uid), offer: q && q.offer, now })) continue;
+    out.push(candidateFacts(p, st));
+  }
+  return out;
+}
+
 export async function findPeople(uid, q, ctx, { user, state, existingCards = [], exclude = [] } = {}) {
   const owner = user || (await loadUser(uid));
   const myState = state || ctx.states[uid] || {};
@@ -934,14 +977,10 @@ export async function findPeople(uid, q, ctx, { user, state, existingCards = [],
   const latestByTarget = new Map();
   existingCards.forEach((c) => latestByTarget.set(c.targetUid, c));
   const excludeSet = exclude instanceof Set ? exclude : new Set(exclude || []);
-  const eligible = [];
-  for (const p of ctx.candidates) {
-    if (p.uid === uid || muted[p.uid] || excludeSet.has(p.uid)) continue;
-    const st = ctx.states[p.uid] || {};
-    if (introBlocker({ meUid: uid, p, st, myState, ctx, prev: latestByTarget.get(p.uid), offer: q.offer, now })) continue;
-    eligible.push(candidateFacts(p, st));
-  }
+  const eligible = pickEligible({ uid, q, ctx, myState, existingCards, exclude: excludeSet, muted, now });
   const checked = ctx.candidates.filter((p) => p.uid !== uid).length;
+  const rawByUid = new Map(ctx.candidates.map((p) => [p.uid, p]));
+  const badgesFor = (facts) => proofPoints(facts, rawByUid.get(facts.uid) || {}, { skipBio: !!(ctx.states[facts.uid] || {}).facts?.hidden?.bio });
   const scan = (terms, related) => {
     const out = [];
     for (const facts of eligible) {
@@ -1003,7 +1042,7 @@ export async function findPeople(uid, q, ctx, { user, state, existingCards = [],
       const score = Math.round(Number(p?.score || 0));
       const why = text(p?.why, 220);
       if (score < 55 || !whyIsCited(why, x.facts)) continue;
-      chosen.push({ facts: x.facts, score, why, opener: text(p?.opener, 240) || templateOpener(x.facts, q.need) });
+      chosen.push({ facts: x.facts, score, why, opener: text(p?.opener, 240) || templateOpener(x.facts, q.need), badges: badgesFor(x.facts) });
     }
   }
   if (!chosen.length) {
@@ -1011,7 +1050,7 @@ export async function findPeople(uid, q, ctx, { user, state, existingCards = [],
     for (const x of shortlist) {
       const why = templateWhy(x.facts, x.hits, relatedTo);
       if (!why || x.score < (relatedTo ? 1.5 : 3)) continue;
-      chosen.push({ facts: x.facts, score: Math.max(55, Math.min(95, 50 + Math.round(x.blend))), why, opener: templateOpener(x.facts, q.need) });
+      chosen.push({ facts: x.facts, score: Math.max(55, Math.min(95, 50 + Math.round(x.blend))), why, opener: templateOpener(x.facts, q.need), badges: badgesFor(x.facts) });
     }
   }
   return { picks: chosen.slice(0, LIMITS.cardsPerAsk), nearest: [], checked, usedAi, expansion, relatedTo };
@@ -1083,12 +1122,14 @@ const VOICE_KINDS = {
   ambiguous: 'More than one member could be who they mean. Ask which one in one short line that contains both names. Admitting the doubt is charming here; guessing is not.',
   draft: 'Write the message they should send. It must sound like a person wrote it two minutes ago: specific, warm, easy to answer, no flattery padding, no "I hope this finds you well".',
   check: 'They are thinking out loud, not ordering a search. Respond to the actual thought first - one honest observation, a small challenge if the thought deserves one, no flattery - then ask, in one line, whether you should look for people. Do NOT list anybody, do not pretend you searched, and do not sound like a menu. Two sentences then the question.',
+  squad: 'They asked for a SQUAD - several complementary people at once - and the matcher picked a triangle. Present it as a unit: name the three, one clause each on the part they play, and one line on what the trio is still missing. Never present them as three separate search results, never say "here are 3 results", and never offer the squad finder to somebody who did not ask for a group.',
+  loop: 'It has been 48 hours since you introduced two people and you are asking how it went. Ask one honest question, no ceremony and no survey voice, and make the four answers sound easy to give. Never guess the outcome, never say you hope it went well, never apologise for asking.',
   limit: 'They are out of searches for today. Say it lightly, never with corporate regret, and be useful about it: what is still free (looking someone up by name) and what tomorrow brings. Do not lecture about pricing.',
 };
 
 // Kinds that must be written fresh every time: caching a greeting for fourteen days
 // is exactly how a personality turns into a answering machine.
-const NO_CACHE_KINDS = new Set(['chat', 'check', 'help', 'ambiguous']);
+const NO_CACHE_KINDS = new Set(['chat', 'check', 'help', 'ambiguous', 'loop']);
 
 // A day of AI trouble, counted where a human can actually read it. When a member
 // says "Linky has no personality", the honest answer is usually this doc: the model
@@ -1151,6 +1192,7 @@ async function wordingOnce(kind, dossier, source, seed, ref) {
     channelNote,
     'Write 1-3 short sentences of plain text. Start with a capital letter. No markdown, no asterisks, no bullet symbols, no hashtags, and no emoji unless this is chit-chat (then one at most). Banned corporate filler: "leverage", "I hope this finds you well", "unfortunately", "I am sorry to inform you", "great question", "absolutely!", "feel free to", "rest assured", "at your convenience", "please do not hesitate Do not greet with the member\'s name and do not use any name that is not in the dossier.',
     'Only use facts from the dossier. Never add a person, skill, city, company or number that is not there. Never say a message was sent, an intro was made or a reply arrived - Linky asks, people answer.',
+    'Do not advertise features the member did not ask about: the squad finder, the one-page brief, the 48-hour follow-up and proof badges all stay unmentioned unless their own message asked for that thing.',
     'Return STRICT JSON only: {"reply":"the message","suggest":["up to 3 things they might tap next, each under 34 characters, in THEIR voice, e.g. who else do you have"]}',
     `Dossier: ${JSON.stringify(dossier).slice(0, 2400)}`,
   ].join('\n');
@@ -1214,6 +1256,13 @@ function plainReply(kind, d = {}) {
       return first ? `${first} - ${pick}` : pick;
     }
     case 'help': return 'I am Linky - the connector here. Tell me who you need and I read every member profile and bring you the ones that fit: a Flutter developer in Harare, a co-founder who can sell, someone who has raised from local angels. When nobody fits I say so, and I can go and look outside LINKUP too.';
+    case 'squad': {
+      const squads = Array.isArray(d.squads) ? d.squads : [];
+      if (!squads.length) return `I look for a squad as three people who do not overlap. ${Array.isArray(d.empty_because) && d.empty_because.length ? `Nobody here covers ${d.empty_because.map((x) => `"${x}"`).join(' or ')}, so I am not going to hand you a pair and call it a team.` : 'Nothing here forms a triangle worth introducing - say it again with the roles you want beside you.'}`;
+      const one = (sq, i) => `Squad ${i + 1}: ${(sq.people || []).map((x) => `${x.name}${x.part ? ` (${x.part})` : ''}`).join(' + ')}.${sq.missing ? ` Still missing: ${sq.missing}.` : ''}`;
+      return `A squad, not three searches.\n${squads.map(one).join('\n')}${d.channel && d.channel !== 'app' ? '\n\nReply "meet squad" and I will ask all of them at once - each one still gets to say yes.' : '\n\nTap Meet squad and I will ask all of them at once - each one still gets to say yes.'}`;
+    }
+    case 'loop': return loopQuestionText((d.other_person && d.other_person.name) || 'them', d.what_the_intro_was_for, d.they_have_messaged);
     case 'limit': return `That is today's ${d.asks_limit_today || d.limit} asks used up. It resets at ${d.resets || 'midnight'}, and PLUS gets ${d.plus_asks_per_day || d.plusLimit || LIMITS.plus.asksPerDay} a day. Looking someone up by name is free either way.`;
     case 'draft': return d.ready_message || 'Tell me who the message is for and I will write it - then you send it yourself, from your own account.';
     default: return 'So what do you need? A role, a skill, a city, or just a name - I will go and look through the network right now and tell you exactly who fits.';
@@ -1231,7 +1280,7 @@ async function linkySay(kind, dossier, { name = '', source = 'app', seed = '', f
   const suggest = said && said.suggest.length ? said.suggest : (dossier.suggest || []);
   const first = firstName(name);
   // a member's name belongs on an answer about people, not on every "yoo"
-  const greet = kind === 'found' || kind === 'close' || kind === 'person' || kind === 'draft';
+  const greet = kind === 'found' || kind === 'close' || kind === 'person' || kind === 'draft' || kind === 'squad';
   const alreadyGreeted = /^(hey|hi|hello|good (morning|afternoon|evening)|afternoon|morning|evening|yo)\b/i.test(body);
   const reply = greet && first && first !== 'there' && !alreadyGreeted && !body.toLowerCase().includes(first.toLowerCase())
     ? `${pickGreeting(seed, first)}. ${body}`
@@ -1480,21 +1529,28 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
 
 // Cards for one answer, reusing a live card for the same person instead of
 // duplicating it. Shared by the matcher path and the name-lookup path.
-async function persistCards(uid, existing, picks, { askId, need, now }) {
+async function persistCards(uid, existing, picks, { askId, need, now, pairs = {} } = {}) {
   if (!picks.length) return [];
   const latestByTarget = new Map();
   existing.forEach((c) => latestByTarget.set(c.targetUid, c));
   const resultCards = [];
   const updatedIds = new Set();
   const created = [];
-  picks.forEach(({ facts, score, why, opener }, i) => {
+  picks.forEach(({ facts, score, why, opener, badges, squad, pairNote }, i) => {
+    const squadBits = squad ? { squadId: squad.id, squadRole: squad.role, squadSize: squad.size, squadIndex: squad.index } : {};
     const prev = latestByTarget.get(facts.uid);
     if (prev && ['new', 'saved', 'meet'].includes(prev.status)) {
-      const next = { ...prev, askId, need, why: prev.status === 'meet' ? prev.why : why, opener: prev.opener || opener, score, updatedAt: now };
+      const next = { ...prev, askId, need, why: prev.status === 'meet' ? prev.why : why, opener: prev.opener || opener, score, updatedAt: now, badges: badges || prev.badges || [], ...squadBits };
       updatedIds.add(prev.id);
       resultCards.push(next);
       return;
     }
+    // a pair the member already met is not a stranger: say so on the card
+    // instead of pretending the network has no memory
+    const known = pairs[pairId(uid, facts.uid)];
+    const warm = known && ['met', 'touch'].includes(known.outcome)
+      ? `You two met${known.at ? ` ${dayKey(known.at).slice(0, 7)}` : ''} and you said it was worth it.`
+      : '';
     const card = {
       id: `${askId.slice(0, 6)}_${facts.uid.slice(0, 8)}_${i}`,
       askId,
@@ -1506,6 +1562,10 @@ async function persistCards(uid, existing, picks, { askId, need, now }) {
       targetCompany: facts.company,
       targetCity: [facts.city, facts.country].filter(Boolean).join(', '),
       targetSkills: facts.skills.slice(0, 5),
+      // what the profile can show, not what it claims to feel - see api/_proof.js
+      badges: (badges || []).slice(0, 3),
+      ...(squad ? { squadId: squad.id, squadRole: squad.role, squadSize: squad.size, squadIndex: squad.index } : {}),
+      ...(warm || pairNote ? { pairNote: text(warm || pairNote, 120) } : {}),
       why,
       opener,
       score,
@@ -1542,7 +1602,7 @@ export async function intentGate(message, { offer = false, lastAsk = '', source 
       // the verdict is shared and reused; the WORDS never are, or a greeting
       // starts sounding like a voicemail box
       const mode = INTENT_MODES.has(snap.data().mode) ? snap.data().mode : 'search';
-      return { mode, topic: text(snap.data().topic, 90), reply: '', suggest: [], cached: true };
+      return { mode, topic: text(snap.data().topic, 90), reply: '', suggest: [], multi: !!snap.data().multi, cached: true };
     }
   } catch { /* a cache miss is just a miss */ }
   const prompt = [
@@ -1554,9 +1614,10 @@ export async function intentGate(message, { offer = false, lastAsk = '', source 
     '  "ask_first" - they are thinking out loud, wondering, or describing a problem, and it is not settled that they want names right now: "who could be my co founder", "i might need someone for tax", "should i hire a lawyer".',
     '  "chat" - everything else: greetings, laughs, feelings, thanks, banter, a stray word, or anything with no person to look for.',
     'For "search" or "ask_first" also give "topic": 3-8 words naming who or what they want, in their words, no "find me" verbs. Empty string otherwise.',
+    'Also set "multi": true when they asked for MORE THAN ONE person at once as a set - a squad, a team, "a dev and someone who can sell", "three of us", "who else should I bring" - and false when they want one human. It changes how many people Linky brings back, nothing else.',
     'For "ask_first" and "chat" also write "reply" - at most 2 short sentences in the voice of Linky - warm, easy, a little funny, reacting to what they actually said. "ask_first" must end by asking whether to search for them. "chat" must NOT offer to search, must not pitch, and must not mention keys, quota, errors, or what it cannot do.',
     'Never invent a person, a number or a fact. Plain text, no markdown, no emoji more than one.',
-    'Return STRICT JSON only: {"mode":"search|ask_first|chat","topic":"...","reply":"..."}',
+    'Return STRICT JSON only: {"mode":"search|ask_first|chat","topic":"...","multi":true,"reply":"..."}',
   ].join('\n');
   try {
     const { text: raw, provider } = await aiText(prompt, { temperature: 0.2, maxOutputTokens: 260, responseMimeType: 'application/json', timeoutMs: 5000 });
@@ -1565,10 +1626,10 @@ export async function intentGate(message, { offer = false, lastAsk = '', source 
     if (!mode) return null;
     const topic = text(parsed.topic, 90);
     const reply = text(parsed.reply, 420);
-    await ref.set({ mode, topic: mode === 'search' || mode === 'ask_first' ? topic : '', source, createdAt: Date.now() }).catch(() => {});
+    await ref.set({ mode, topic: mode === 'search' || mode === 'ask_first' ? topic : '', multi: parsed.multi === true, source, createdAt: Date.now() }).catch(() => {});
     // an error sentence from a flaky provider must never reach a member
     const clean = reply.length > 8 && !/quota|billing|api key|rate limit|I cannot|couldn\'t access|error|model|timeout/i.test(reply) ? reply : '';
-    return { mode, topic, reply: mode === 'search' ? '' : clean, suggest: list(parsed.suggest, 3, 40), provider, cached: false };
+    return { mode, topic, reply: mode === 'search' ? '' : clean, suggest: list(parsed.suggest, 3, 40), multi: parsed.multi === true, provider, cached: false };
   } catch (err) {
     // the gate failing is not the member's problem: the word lists take over
     await noteAiFault('intent', err).catch(() => {});
@@ -1583,6 +1644,40 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   if (!msgTyped) throw new Error('Say something first.');
   const now = Date.now();
   const state = await loadState(uid);
+  // The 48-hour question, if one is open: an answer in a sentence is still an
+  // answer. Only the four known outcomes take the turn over - anything else
+  // carries on as the ask it actually is, and the question stays open.
+  if (state.pendingLoop && now - toMillis(state.pendingLoop.at) < 14 * DAY_MS) {
+    const guess = await classifyLoopAnswer(msgTyped).catch(() => '');
+    if (guess) {
+      const done = await answerLoop(uid, { choice: guess, words: msgTyped });
+      const id = `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
+      const thread = await appendThread(uid, state, [
+        { id, role: 'user', text: msgTyped, at: now },
+        { id, role: 'linky', text: done.note, kind: 'chat', at: now + 1 },
+      ]);
+      return { id, need: text(msgTyped, 120), reply: done.note, kind: 'chat', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: Number.MAX_SAFE_INTEGER, suggest: ['who else do you have', 'what can you do'], thread, intent: 'ai:loop', loop: done.choice };
+    }
+    // No model, no number: a sentence that is clearly not a new search is still
+    // worth keeping against the intro, because "we talked on friday" typed at a
+    // bot should never come back as "nobody here fits friday".
+    const lq = parseAsk(msgTyped);
+    // an instruction to go and find somebody outranks the open question; a
+    // sentence about how the call went does not. Only consulted when no model
+    // answered, and it is a verb test, not a vocabulary of feelings.
+    const isNewAsk = /\b(find|search|look\s+up|message|dm|ping|introduc\w*|connect|draft|write\s+me|who\s+is|who\s+do\s+you\s+have|anyone|somebody|someone)\b/i.test(msgTyped)
+      || !!lq.location || !!lq.offer || lq.wantsElse || lq.wantsDraft;
+    if (!guess && !isNewAsk && msgTyped.length <= 200 && substance(msgTyped).length >= 2) {
+      const done = await answerLoop(uid, { words: msgTyped });
+      // newId() is not in scope yet at this point in ask(), so the id is made here
+      const id = `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
+      const thread = await appendThread(uid, state, [
+        { id, role: 'user', text: msgTyped, at: now },
+        { id, role: 'linky', text: done.note, kind: 'chat', at: now + 1 },
+      ]);
+      return { id, need: text(msgTyped, 120), reply: done.note, kind: 'chat', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: Number.MAX_SAFE_INTEGER, suggest: ['met and building', 'no response yet', 'not a fit'], thread, intent: 'words:loop' };
+    }
+  }
   // If Linky asked "want me to look?" a moment ago, "yes"/"no" are answers to
   // HIM - not a new search, and not small talk to be answered with a joke.
   const pendingIntent = state.pendingIntent && now - toMillis(state.pendingIntent.at) < 40 * 60 * 1000 ? state.pendingIntent : null;
@@ -1876,6 +1971,64 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     throw err;
   }
 
+  // ---- 5b. a squad - and only because the member asked for one. Three people
+  // who do not overlap, ranked in one local pass, framed in one model call, and
+  // still behind a yes before anybody is contacted.
+  if (q.wantsSquad || gate?.multi === true) {
+    let slots = squadSlots(q);
+    if (slots.length < 2) {
+      const fromProfile = squadSlotsFromProfile(me, q);
+      slots = fromProfile.length >= 2 ? fromProfile : await squadSlotsFromModel(me, q, uid);
+    }
+    const askId = newId();
+    if (slots.length < 2) {
+      // Linky will not invent a team out of one role: the missing half comes
+      // back as a question, free, because nothing was searched yet
+      const named = slots[0]?.label ? `I have "${text(slots[0].label, 40)}" and I need the other half.` : 'You have not told me who you want beside you.';
+      const reply = `A squad is three people who do not overlap. ${named} Give me the roles in two or three short phrases - "flutter dev + someone who can sell + an angel who gets EdTech" - and I will build the triangle.`;
+      const thread = await sayBack(askId, reply, { kind: 'check' });
+      return { id: askId, need: q.need, reply, kind: 'check', cardIds: [], cards: [], nearest: [], none: false, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: ['a flutter dev + someone who can sell', 'who could be my co founder'], intent: gate ? `ai:${mode}` : `words:${mode}`, thread };
+    }
+    const found = await findSquads(uid, q, ctx, { user, state, existingCards: existing, slots });
+    if (!found.squads.length) {
+      const missing = (found.slots || []).filter((x) => !x.found).map((x) => x.label);
+      const { reply, suggest: sg } = await linkySay('squad', {
+        need: q.need, members_checked: found.checked, empty_because: missing, slots: found.slots, channel: source,
+      }, { name: me.name, source, seed: `squad:${q.norm}`, fallback: plainReply('squad', { empty_because: missing, channel: source }) });
+      const record = { id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply, kind: 'none', cardIds: [], excludedCardIds: [], none: true, nearest: [], checked: found.checked, usedAi: false, expansion: 'none', source, createdAt: now };
+      const thread = await sayBack(askId, reply, { kind: 'none' });
+      const hist = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
+      hist.push({ id: askId, need: q.need, cards: 0, none: true, source, createdAt: now });
+      await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used + 1 } });
+      return { ...publicAsk(record), cards: [], cached: false, usedAi: false, kind: 'none', squad: true, asksLeft: asksLeft(1), suggest: sg, thread };
+    }
+    const picks = [];
+    found.squads.forEach((sq) => sq.members.forEach((m, mi) => picks.push({
+      facts: m.facts,
+      score: m.score,
+      why: `${m.why}${sq.missing ? ` Still missing for the three of you: ${sq.missing}` : ''}`,
+      opener: templateOpener(m.facts, q.need),
+      badges: m.badges || [],
+      squad: { id: sq.id, role: m.slot, size: sq.members.length, index: mi + 1 },
+    })));
+    const resultCards = await persistCards(uid, existing, picks, { askId, need: q.need, now, pairs: ctx.pairs });
+    const { reply, suggest: sg2 } = await linkySay('squad', {
+      need: q.need,
+      members_checked: found.checked,
+      squads: found.squads.map((sq) => ({ people: sq.members.map((m) => ({ name: m.facts.name, part: m.why })), missing: sq.missing })),
+      people: resultCards.map((c) => ({ name: c.targetName, role: c.targetRole, city: c.targetCity, reason: c.why, proof: (c.badges || []).map((b) => b.label) })),
+      channel: source,
+      asks_left_today: asksLeft(1),
+      suggest: source === 'app' ? ['meet the squad', 'who else do you have', 'search outside LINKUP'] : ['meet squad', 'who else do you have', 'more'],
+    }, { name: me.name, source, seed: `squad:${q.norm}`, fallback: plainReply('squad', { squads: found.squads.map((sq) => ({ people: sq.members.map((m) => ({ name: m.facts.name, part: m.why })), missing: sq.missing })), channel: source }) });
+    const record = { id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply, kind: 'squad', cardIds: resultCards.map((c) => c.id), excludedCardIds: [], none: false, nearest: [], checked: found.checked, usedAi: !!found.usedAi, expansion: 'none', source, createdAt: now };
+    const thread = await sayBack(askId, reply, { kind: 'squad', cardIds: record.cardIds });
+    const hist = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
+    hist.push({ id: askId, need: q.need, cards: resultCards.length, none: false, source, createdAt: now });
+    await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used + 1 } });
+    return { ...publicAsk(record), cards: resultCards, cached: false, usedAi: !!found.usedAi, kind: 'squad', squad: { ids: found.squads.map((x) => x.id), slots: found.slots }, asksLeft: asksLeft(1), suggest: sg2, thread };
+  }
+
   // ---- 6. "who else" / "anyone else": second lap over the same need, minus
   // everybody already on a card, so the conversation can keep going.
   let searchQ = q;
@@ -1893,7 +2046,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   const { picks, nearest, checked, usedAi, expansion = 'none', relatedTo = '' } = await findPeople(uid, searchQ, ctx, { user, state, existingCards: existing, exclude });
 
   const askId = newId();
-  const resultCards = await persistCards(uid, existing, picks, { askId, need: searchQ.need, now });
+  const resultCards = await persistCards(uid, existing, picks, { askId, need: searchQ.need, now, pairs: ctx.pairs });
 
   const kind = picks.length ? (expansion === 'none' ? 'found' : 'close') : 'none';
   const triedName = q.nameAttempts?.[0] || '';
@@ -2271,7 +2424,7 @@ export async function markLead(uid, { key = '', status = 'sent', intentId = '' }
   };
 }
 
-async function sendMeet(uid, cardId, { userDoc, draft = null, overrideText = '' } = {}) {
+async function sendMeet(uid, cardId, { userDoc, draft = null, overrideText = '', squad = null } = {}) {
   const user = userDoc || (await loadUser(uid));
   if (!user) throw new Error('Finish your LINKUP profile first.');
   const cards = await loadCards(uid);
@@ -2307,13 +2460,17 @@ async function sendMeet(uid, cardId, { userDoc, draft = null, overrideText = '' 
   const targetState = await loadState(target);
   if (targetState.muted && targetState.muted[uid]) {
     await setCardStatus(uid, cardId, 'skip');
-    throw new Error('They are not taking intros right now.');
+    const e1 = new Error('They are not taking intros right now.');
+    e1.code = 'not_now';
+    throw e1;
   }
   const week = weekKey();
   const inboundCount = targetState.inbound?.week === week ? Number(targetState.inbound.count || 0) : 0;
   const cap = Number.isFinite(Number(targetState.inboundCap)) ? Number(targetState.inboundCap) : LIMITS.inboundPerWeek;
   if (inboundCount >= cap) {
-    throw new Error('They have hit their weekly intro cap. Ask me again next week.');
+    const e2 = new Error('They have hit their weekly intro cap. Ask me again next week.');
+    e2.code = 'not_now';
+    throw e2;
   }
   // what the member approved is what the target reads: no second draft, no
   // second model call, nothing "improved" on the way out
@@ -2336,6 +2493,9 @@ async function sendMeet(uid, cardId, { userDoc, draft = null, overrideText = '' 
     requesterPic: me.pic,
     requesterRole: me.role,
     requesterCity: [me.city, me.country].filter(Boolean).join(', '),
+    // a squad intro keeps the trio on the record, so the brief and the follow-up
+    // both know the two people were introduced as part of three
+    ...(squad?.squadId ? { squadId: text(squad.squadId, 40), squadMembers: list(squad.members, 4, 40) } : {}),
     targetName: card.targetName,
     targetPic: card.targetPic || '',
     status: 'pending',
@@ -2413,7 +2573,24 @@ export async function respond(uid, introId, decision) {
       lastMessageTime: nowTs(),
       unreadBy: { [uid]: 1, [requester]: 1 },
     }, { merge: true });
-    await ref.set({ status: 'accepted', respondedAt: nowTs(), matchId }, { merge: true });
+    const acceptedAt = Date.now();
+    await ref.set({
+      status: 'accepted', respondedAt: nowTs(), matchId,
+      // the loop starts here and only here: one question per intro, 48 hours
+      // after both people said yes, never a second one after an answer
+      followupDue: getAdmin().firestore.Timestamp.fromMillis(acceptedAt + LOOP_DELAY_MS),
+      followupStatus: 'queued',
+    }, { merge: true });
+    await writePair(uid, requester, { outcome: 'linked', at: acceptedAt, introId }).catch(() => null);
+    // one page before they talk: why this pair, three openers, a 15-minute
+    // shape. Best effort inside the request - a slow model must not hold up an
+    // accept - and cron finishes anything that did not make it in time.
+    const trio = intro.squadId && Array.isArray(intro.squadMembers) ? intro.squadMembers.filter(Boolean).slice(0, 3) : [];
+    const briefPack = await ensureBrief({
+      matchId, requesterId: requester, targetId: uid, need: intro.need, why: intro.why,
+      trio: trio.length > 1 ? `Third of the squad: ${trio.filter((x) => x !== intro.requesterName && x !== intro.targetName).join(', ') || 'the third is still deciding'}. There are three of you, so shape the call for three.` : '',
+      timeoutMs: 4500,
+    }).catch(() => null);
     await notifyUser(requester, {
       type: 'intro_accepted',
       content: `${me.name} accepted Linky's intro. Say hello.`,
@@ -2423,7 +2600,7 @@ export async function respond(uid, introId, decision) {
       pushTitle: 'Intro accepted',
       channelText: `${me.name} accepted your intro (${intro.need}). Open LINKUP to chat: ${APP_URL}/chat/${matchId}`,
     });
-    return { status: 'accepted', matchId };
+    return { status: 'accepted', matchId, brief: briefPack?.brief || null };
   }
   if (decision === 'later') {
     await ref.set({ status: 'snoozed', respondedAt: nowTs(), snoozedUntil: getAdmin().firestore.Timestamp.fromMillis(Date.now() + LIMITS.snoozeDays * DAY_MS) }, { merge: true });
@@ -2454,8 +2631,12 @@ export async function pickPerson(uid, targetUid) {
   const mine = await loadState(uid);
   const blocked = introBlocker({ meUid: uid, p: candidate, st: ctx.states[targetUid] || {}, myState: mine, ctx, prev: existing.find((c) => c.targetUid === targetUid), offer: '', now });
   if (blocked) throw new Error(blocked);
+  // a person looked up by name is not exempt from what Linky already knows
+  const warm = (ctx.pairs || {})[pairId(uid, targetUid)];
   const card = {
     id: `p_${now.toString(36)}_${String(targetUid).slice(0, 8)}`,
+    badges: proofPoints(facts, candidate, { skipBio: !!(ctx.states[targetUid] || {}).facts?.hidden?.bio }),
+    ...(warm && ['met', 'touch'].includes(warm.outcome) ? { pairNote: `You two met${warm.at ? ` ${dayKey(warm.at).slice(0, 7)}` : ''} and you said it was worth it.` } : {}),
     askId: (mine.lastAsk && mine.lastAsk.id) || '',
     need: `an intro to ${facts.name}`,
     targetUid: facts.uid, targetName: facts.name, targetPic: facts.pic, targetRole: facts.role,
@@ -2540,6 +2721,15 @@ export async function home(uid, { userDoc } = {}) {
       lead: state.pendingLead && now - toMillis(state.pendingLead.at) < 3 * DAY_MS ? state.pendingLead : null,
     },
     brief: briefText(liveCards, ''),
+    // the 48-hour question, if one is open: four buttons, no typing needed
+    loop: loopFromState(state, now),
+    // the squad answers are grouped by the trio they belong to
+    squads: Object.values(liveCards.reduce((acc, c) => {
+      if (!c.squadId) return acc;
+      const row = acc[c.squadId] || (acc[c.squadId] = { id: c.squadId, size: c.squadSize || 0, members: [] });
+      row.members.push({ cardId: c.id, uid: c.targetUid, name: c.targetName, role: c.targetRole, part: c.squadRole || '', status: c.status });
+      return acc;
+    }, {})).filter((x) => x.members.length > 1),
   };
 }
 
@@ -2711,6 +2901,666 @@ export async function unlinkBot(channel, chatId) {
   return true;
 }
 
+// ---------------------------------------------------------------- the synergy brief
+// When an intro is accepted, the two people are handed more than a name: a
+// one-page brief written for THIS pair, in the chat they now share. Three parts,
+// on purpose - why they were connected, how to start talking, how to spend 15
+// minutes so the call does not evaporate.
+//
+// Rules it lives by:
+//   - every line traces back to a field on a profile. The overlap is computed
+//     locally first (shared skills, industries, what each is looking for, words
+//     both wrote), so a model outage still produces a real brief, never a
+//     generic one;
+//   - one model call per pair, for the whole brief - never one per person;
+//   - written once and kept on the match, so reloading does not rewrite it and
+//     both sides read the same page.
+const STOPWORDS = new Set(('the and for with that this from have will just like about what when where who your theirs mine been being into over under under out off some any much many still again once here there they them their there these those could would should because before after above below too also then than but nor so ask asks need needs looking wants wanted built building work working team small great good really thing things stuff'.split(' ')));
+
+const lc = (v) => String(v || '').toLowerCase().trim();
+const asSet = (v) => list(v, 24, 48).map(lc).filter((x) => x.length > 2);
+const overlap = (a, b) => a.filter((x) => b.some((y) => y === x
+  || (x.length > 4 && (y.includes(x) || x.includes(y)))));
+const ideaWords = (s) => Array.from(new Set(String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 4 && !STOPWORDS.has(w))));
+
+function sharedGround(me = {}, them = {}) {
+  const mySkills = asSet(me.skills);
+  const theirSkills = asSet(them.skills);
+  const myIndustries = asSet(me.industries);
+  const theirIndustries = asSet(them.industries);
+  const myLooking = asSet(me.lookingFor);
+  const theirLooking = asSet(them.lookingFor);
+  const myWords = ideaWords([me.goals, me.bio, me.notes].filter(Boolean).join(' '));
+  const theirWords = ideaWords([them.goals, them.bio, them.notes].filter(Boolean).join(' '));
+  const city = text(me.city || '', 40) && lc(me.city) === lc(them.city) ? text(me.city, 40) : '';
+  return {
+    skills: uniq(overlap(mySkills, theirSkills)).slice(0, 4),
+    industries: uniq(overlap(myIndustries, theirIndustries)).slice(0, 3),
+    // what each of them said they are after, matched against what the other has
+    iGive: uniq(overlap(mySkills, theirLooking)).slice(0, 3),
+    theyGive: uniq(overlap(theirSkills, myLooking)).slice(0, 3),
+    bothWrote: uniq(overlap(myWords, theirWords)).slice(0, 5),
+    city,
+    myProject: text((Array.isArray(me.projects) ? me.projects[0]?.title : '') || '', 60),
+    theirProject: text((Array.isArray(them.projects) ? them.projects[0]?.title : '') || '', 60),
+  };
+}
+
+function groundLines(g = {}, me = {}, them = {}) {
+  const lines = [];
+  if (g.skills?.length) lines.push(`You both list ${g.skills.join(', ')}.`);
+  if (g.industries?.length) lines.push(`Same patch of the world: ${g.industries.join(', ')}.`);
+  if (g.theyGive?.length) lines.push(`${them.name ? firstName(them.name) : 'They'} are looking for ${g.theyGive.join(' / ')} - that is on your profile.`);
+  if (g.iGive?.length) lines.push(`You are looking for ${g.iGive.join(' / ')} - that is on theirs.`);
+  if (g.bothWrote?.length) lines.push(`You each wrote the word ${g.bothWrote.slice(0, 3).join(', ')} about what you are building.`);
+  if (g.city) lines.push(`Both of you are in ${g.city} - this can be a coffee, not a video call.`);
+  if (!lines.length) lines.push(`No overlapping line on your profiles, so this intro is about the gap between them: ${text(me.role, 40) || 'what you do'} meets ${text(them.role, 40) || 'what they do'}.`);
+  return lines.slice(0, 4);
+}
+
+const ICEBREAKERS = (me, them, g) => {
+  const who = firstName(them.name || 'they');
+  const out = [];
+  if (g.theirProject) out.push(`Ask ${who} what broke in the first month of building ${g.theirProject}. Every founder has that story.`);
+  if (g.skills?.length) out.push(`You both do ${g.skills[0]} - swap the one tool you changed your mind about this year.`);
+  if (g.city) out.push(`Same city: ask ${who} which three people in ${g.city} you wish you had met sooner, and name yours back.`);
+  if (g.bothWrote?.length) out.push(`You both keep coming back to ${g.bothWrote[0]}. Ask what they think everybody else in ${g.bothWrote[0]} gets wrong.`);
+  const spare = [
+    `Skip the résumé: ask ${who} what they are personally stuck on this week.`,
+    `Ask ${who} what a good outcome from this call looks like, before you say what you want from it.`,
+    'Name the thing you are bad at, out loud, first. It makes the rest of the call easier.',
+  ];
+  for (const s of spare) { if (out.length >= 3) break; out.push(s); }
+  return out.slice(0, 3);
+};
+
+const FALLBACK_AGENDA = [
+  { span: '0-5', title: 'Background', ask: 'Two minutes each. What you are building and the one thing you are stuck on. No pitch deck.' },
+  { span: '5-10', title: 'Show the real thing', ask: 'Screens on, whatever exists - a prototype, a spreadsheet, a customer message. Nothing rehearsed.' },
+  { span: '10-15', title: 'Alignment check', ask: 'What would have to be true for you to work together, and who does what by Friday. Nobody leaves without a next step.' },
+];
+
+const agendaLines = (agenda = FALLBACK_AGENDA) => agenda.slice(0, 4).map((a) => `${a.span || ''} ${a.title || ''} - ${a.ask || ''}`.trim());
+
+/**
+ * The brief for one pair, or null when the pair is gone. Idempotent: once a
+ * match has one, nothing is written again.
+ */
+export async function ensureBrief({ matchId = '', requesterId = '', targetId = '', need = '', why = '', timeoutMs = 7000, force = false } = {}) {
+  if (!isValidId(matchId)) return null;
+  const matchRef = db().collection('matches').doc(matchId);
+  const existing = await matchRef.get().catch(() => null);
+  if (!force && existing && existing.exists && existing.data().synergyBrief) return null;
+  const pair = (Array.isArray(existing?.data()?.userIds) ? existing.data().userIds : [requesterId, targetId]).filter(Boolean);
+  const [aUid, bUid] = pair.length === 2 ? pair : [requesterId, targetId];
+  const [aUser, bUser, aState, bState] = await Promise.all([loadUser(aUid), loadUser(bUid), loadState(aUid), loadState(bUid)]);
+  const a = aUser ? mergedFacts(aUser, aState) : null;
+  const b = bUser ? mergedFacts(bUser, bState) : null;
+  if (!a || !b) return null;
+  const ground = sharedGround(a, b);
+  const badgesA = proofPoints(a, aUser, { skipBio: !!aState.facts?.hidden?.bio });
+  const badgesB = proofPoints(b, bUser, { skipBio: !!bState.facts?.hidden?.bio });
+  const dossier = {
+    a: { name: text(a.name, 40), role: text(a.role, 60), company: text(a.company, 50), city: text(a.city, 30), skills: list(a.skills, 8, 30), lookingFor: list(a.lookingFor, 4, 40), goals: text(a.goals || a.bio, 220), proof: badgesA.map((x) => x.label) },
+    b: { name: text(b.name, 40), role: text(b.role, 60), company: text(b.company, 50), city: text(b.city, 30), skills: list(b.skills, 8, 30), lookingFor: list(b.lookingFor, 4, 40), goals: text(b.goals || b.bio, 220), proof: badgesB.map((x) => x.label) },
+    asked_for: text(need, 120),
+    why_linky_said_yes: text(why, 160),
+    overlap: ground,
+  };
+  let data = null;
+  let usedAi = false;
+  if (aiReady()) {
+    const prompt = [
+      'You are Linky, the connector at LINKUP. Two members just said yes to an intro and you are writing the one page they read before they talk. Nobody has met. Write like a well-connected friend who did the homework, not like a consultant.',
+      'Produce, in this order: a headline naming the pair; "why" - the exact overlap that made this intro worth making, one line each, only from the dossier; "icebreakers" - three questions or openers that only make sense because of what is in the dossier (no "so, tell me about yourself"); "agenda" - a 15 minute call in three blocks that add up to 15 (background, show the real thing, alignment check), each with a span like "0-5", a two-word title and one line of instruction that tells them what to actually do.',
+      'Hard rules: every claim must be traceable to the dossier - never invent a project, a number, a company or a compliment. Plain sentences, no markdown, no emoji, no corporate filler, no "I hope this finds you well". Do not greet them. Do not mention that you are an AI, or keys, or limits.',
+      'Return STRICT JSON only: {"headline":"...","why":["...","..."],"icebreakers":["...","...","..."],"agenda":[{"span":"0-5","title":"Background","ask":"..."},{"span":"5-10","title":"...","ask":"..."},{"span":"10-15","title":"...","ask":"..."}]}',
+      `Dossier: ${JSON.stringify(dossier).slice(0, 2600)}`,
+    ].join('\n');
+    try {
+      const { text: raw } = await aiText(prompt, { temperature: 0.7, maxOutputTokens: 900, responseMimeType: 'application/json', timeoutMs });
+      const parsed = readJson(raw) || {};
+      const keep = (arr, max, each) => list(arr, max, each).filter((x) => x.length > 8 && !/quota|api key|billing|as an ai|i cannot|unable to/i.test(x));
+      const why2 = keep(parsed.why, 4, 200).filter((line) => /[a-z]/.test(line));
+      const ice = keep(parsed.icebreakers, 3, 220);
+      const ag = (Array.isArray(parsed.agenda) ? parsed.agenda : []).slice(0, 4)
+        .map((x) => ({ span: text(x?.span, 12) || '', title: text(x?.title, 28), ask: text(x?.ask, 220) }))
+        .filter((x) => x.ask.length > 6);
+      if (why2.length && ice.length >= 2 && ag.length >= 2) {
+        data = { headline: text(parsed.headline, 90) || `${firstName(a.name)} x ${firstName(b.name)}`, why: why2, icebreakers: ice, agenda: ag };
+        usedAi = true;
+      }
+    } catch (err) {
+      console.warn('[linky] brief call failed, composing locally', err?.message || err);
+      await noteAiFault('brief', err).catch(() => {});
+    }
+  }
+  if (!data) {
+    data = {
+      headline: `${firstName(a.name)} x ${firstName(b.name)}`,
+      why: groundLines(ground, a, b),
+      icebreakers: ICEBREAKERS(a, b, ground),
+      agenda: FALLBACK_AGENDA.map((x) => ({ ...x })),
+    };
+  }
+  const proof = [badgesA[0], badgesB[0]].filter(Boolean);
+  const text3 = [
+    `Linky brief - ${firstName(a.name)} x ${firstName(b.name)}`,
+    data.headline && data.headline !== `${firstName(a.name)} x ${firstName(b.name)}` ? data.headline : '',
+    '',
+    'Why I put you two together',
+    ...data.why.map((x) => `- ${x}`),
+    '',
+    'Three ways to start',
+    ...data.icebreakers.map((x, i) => `${i + 1}. ${x}`),
+    '',
+    'Fifteen minutes, if you want them structured',
+    ...agendaLines(data.agenda).map((x) => `- ${x}`),
+    '',
+    ...(proof.length ? ['What each of you already has done', ...proof.map((x) => `- ${firstName(x === badgesA[0] ? a.name : b.name)}: ${x.label}${x.checked ? '' : ' (their words)'}`), ''] : []),
+    'One rule: do not hang up without a next step and a name for who moves first.',
+  ].filter((x) => x !== undefined).join('\n');
+  const payload = { ...data, matchId, pair: [aUid, bUid].sort(), usedAi, at: Date.now(), text: text3.slice(0, 3000) };
+  await matchRef.set({ synergyBrief: { ...payload, text: text3.slice(0, 1200) }, updatedAt: nowTs() }, { merge: true }).catch(() => {});
+  const msgs = db().collection('matches').doc(matchId).collection('messages');
+  await msgs.add({ senderId: 'linky-ai', content: text3.slice(0, 3000), type: 'synergy_brief', brief: payload, timestamp: nowTs() }).catch(() => null);
+  // the same page on the channel they actually read
+  await Promise.allSettled([
+    deliverToChannels(aUid, text3),
+    deliverToChannels(bUid, text3),
+  ]);
+  return { brief: payload, usedAi, text: text3 };
+}
+
+// ---------------------------------------------------------------- the post-intro loop
+// An intro that dies quietly teaches Linky nothing, and a good one that is never
+// followed up on is a match that cannot be repeated. So 48 hours after two people
+// say yes, Linky asks the one who asked - "did you actually talk?" - with four
+// answers, and writes the outcome onto the pair. That record is what makes a
+// "not a fit" never happen twice, and it is the only thing Linky claims to know
+// about how a relationship went: everything else is inference from profiles.
+export const LOOP_CHOICES = {
+  met: 'Met & pursuing the project',
+  touch: 'Great chat, staying in touch',
+  quiet: 'No response yet',
+  nope: 'Not a fit',
+};
+const LOOP_KEYS = Object.keys(LOOP_CHOICES);
+const LOOP_NUM = { 1: 'met', 2: 'touch', 3: 'quiet', 4: 'nope' };
+export const LOOP_DELAY_MS = 48 * 3600000;
+
+const pairId = (a, b) => [a, b].filter(Boolean).sort().join('_');
+
+async function writePair(aUid, bUid, patch) {
+  const id = pairId(aUid, bUid);
+  if (!isValidId(id)) return null;
+  await db().collection('linkyPairs').doc(id).set({ ...patch, updatedAt: nowTs() }, { merge: true }).catch(() => null);
+  return id;
+}
+
+// The four buttons, in the shape each channel can actually render.
+export function loopKeyboard() {
+  return [
+    [{ text: LOOP_CHOICES.met, callback_data: 'f:met' }, { text: LOOP_CHOICES.touch, callback_data: 'f:touch' }],
+    [{ text: LOOP_CHOICES.quiet, callback_data: 'f:quiet' }, { text: LOOP_CHOICES.nope, callback_data: 'f:nope' }],
+  ];
+}
+
+/** A queued follow-up on an accepted intro, 48 hours out. Never two in a day. */
+export async function dueFollowups(now = Date.now(), max = 40) {
+  const out = [];
+  try {
+    const cutoff = getAdmin().firestore.Timestamp.fromMillis(now);
+    const snap = await db().collection('intros').where('followupDue', '<=', cutoff).orderBy('followupDue').limit(max).get();
+    for (const d of snap.docs) {
+      const i = d.data();
+      if (!i || i.status !== 'accepted') continue;
+      if (i.followup && (i.followup.status === 'sent' || i.followup.status === 'answered')) continue;
+      out.push({ id: d.id, ...i, followupDueMs: toMillis(i.followupDue) });
+    }
+  } catch (err) {
+    console.warn('[linky] followup queue unreadable', err?.message || err);
+  }
+  return out;
+}
+
+/**
+ * Cron's second job: ask about the intros that went cold or went warm. One
+ * message per member per day, one question per intro ever, and no second ask
+ * after they answer.
+ */
+export async function sendDueFollowups({ now = Date.now(), max = 20 } = {}) {
+  const queued = await dueFollowups(now, 60);
+  const sent = [];
+  const perMemberToday = new Set();
+  for (const intro of queued) {
+    if (sent.length >= max) break;
+    const uid = intro.requesterId;
+    if (!isValidId(uid) || perMemberToday.has(uid)) continue;
+    const [state, me] = await Promise.all([loadState(uid), loadUser(uid)]);
+    const myName = displayNameOf(me) || 'you';
+    if (state.loop && state.loop.day === dayKey(now) && Number(state.loop.count || 0) >= 1) continue;
+    const otherUid = intro.targetId;
+    const otherUser = await loadUser(otherUid);
+    const other = displayNameOf(otherUser || {}) || intro.targetName || 'them';
+    const matchId = intro.matchId || '';
+    // did they already start talking? then the question is different, and honest
+    let talked = 0;
+    if (matchId) {
+      const msgs = await db().collection('matches').doc(matchId).collection('messages').where('senderId', 'in', [uid, otherUid]).limit(3).get().catch(() => null);
+      talked = msgs ? msgs.size : 0;
+    }
+    const said = await linkySay('loop', {
+      member_you: { name: myName },
+      other_person: { name: other, role: profileFacts(otherUser)?.role || '' },
+      what_the_intro_was_for: text(intro.need, 90),
+      they_have_messaged: talked > 0,
+      hours_since: Math.max(48, Math.round((now - (toMillis(intro.respondedAt) || now - LOOP_DELAY_MS)) / 3600000)),
+      options: Object.values(LOOP_CHOICES),
+      channel: state.channels?.telegram ? 'telegram' : 'app',
+    }, { name: myName, source: state.channels?.telegram ? 'telegram' : 'app', seed: `loop:${intro.id}`, fallback: loopQuestionText(other, intro.need, talked > 0) });
+    const body = said.reply;
+    await db().collection('intros').doc(intro.id).set({ followup: { status: 'sent', at: now, asked: text(body, 300) } }, { merge: true }).catch(() => {});
+    await patchState(uid, {
+      pendingLoop: { introId: intro.id, otherUid, otherName: other, at: now, need: text(intro.need, 90), talked: talked > 0 },
+      loop: { day: dayKey(now), count: Number(state.loop?.count || 0) + 1 },
+    });
+    if (state.channels?.telegram) await sendTelegram(state.channels.telegram, `${body}\n\n${Object.entries(LOOP_CHOICES).map(([k, v], i) => `${i + 1}. ${v}`).join('\n')}`, { inline_keyboard: loopKeyboard() }).catch(() => null);
+    else if (state.channels?.whatsapp) await sendWhatsApp(state.channels.whatsapp, `${body}\n\nJust answer 1, 2, 3 or 4:\n${Object.entries(LOOP_CHOICES).map(([k, v], i) => `${i + 1}. ${v}`).join('\n')}`).catch(() => null);
+    await notifyUser(uid, {
+      type: 'intro_followup',
+      content: body,
+      from: { uid: 'linky-ai', name: 'Linky', pic: '' },
+      requestId: intro.id,
+      pushTitle: `How did it go with ${firstName(other)}?`,
+      channelText: '',
+      state,
+    });
+    sent.push({ introId: intro.id, uid, otherUid });
+    perMemberToday.add(uid);
+  }
+  return { sent: sent.length, due: queued.length, items: sent };
+}
+
+function loopQuestionText(other, need, talked) {
+  const who = firstName(other);
+  const head = talked
+    ? `You and ${who} have been talking - how did it land?`
+    : `48 hours ago I introduced you and ${who}${need ? ` over "${text(need, 60)}"` : ''}. Did you two actually connect?`;
+  return `${head}\n\nJust answer 1, 2, 3 or 4:\n${Object.entries(LOOP_CHOICES).map(([k, v], i) => `${i + 1}. ${v}`).join('\n')}`;
+}
+
+/**
+ * The member answers the loop - by button, by number, or in a sentence. The
+ * outcome is written on the intro, on the pair, and (for "not a fit") into the
+ * rules that decide who gets suggested to whom.
+ */
+export async function answerLoop(uid, { choice = '', words = '', introId = '' } = {}) {
+  const state = await loadState(uid);
+  const pending = state.pendingLoop && Date.now() - toMillis(state.pendingLoop.at) < 14 * DAY_MS ? state.pendingLoop : null;
+  const id = introId || pending?.introId || '';
+  if (!id) throw new Error('Nothing is waiting on an answer from you.');
+  const ref = db().collection('intros').doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error('That intro is gone, so I cannot ask about it.');
+  const intro = snap.data();
+  if (intro.requesterId !== uid && intro.targetId !== uid) throw new Error('That intro is not yours to answer.');
+  const picked = LOOP_KEYS.includes(choice) ? choice : '';
+  const said = words ? await classifyLoopAnswer(words).catch(() => '') : '';
+  const key = picked || said || '';
+  const otherUid = intro.requesterId === uid ? intro.targetId : intro.requesterId;
+  const other = displayNameOf(await loadUser(otherUid).catch(() => null)) || (intro.requesterId === uid ? intro.targetName : intro.requesterName) || 'them';
+  if (!key) {
+    // a sentence that was not one of the four is still an answer worth keeping
+    await writePair(uid, otherUid, { outcome: 'told', note: text(words, 200), at: Date.now(), introId: id });
+    return { ok: true, answered: false, note: 'Noted, and I kept your words with the intro. If you want the short version, answer 1 to 4.' };
+  }
+  const now2 = Date.now();
+  await ref.set({ followup: { status: 'answered', choice: key, at: now2, words: text(words, 300), by: uid } }, { merge: true }).catch(() => {});
+  await writePair(uid, otherUid, { outcome: key, at: now2, by: uid, introId: id, ...(words ? { note: text(words, 200) } : {}) });
+  const next = {
+    met: `Good. I keep that pair warm, so if you need the same kind of person again you will hear about it first. Say "who else" any time.`,
+    touch: `Noted - a contact worth having, not a project. I will not push you two together again, and I will not forget the good part either.`,
+    quiet: `No reply is an answer. The door stays open and I will not nag you about it. Want me to look for somebody else for "${text(intro.need, 60)}"?`,
+    nope: `Understood. I will not put you and ${firstName(other)} in front of each other again for a while, and I will treat that as data, not a failure.`,
+  }[key];
+  await patchState(uid, { pendingLoop: null, loopLog: [{ at: now2, introId: id, otherUid, outcome: key, words: text(words, 160) }, ...(Array.isArray(state.loopLog) ? state.loopLog : [])].slice(0, 20) });
+  return { ok: true, answered: true, choice: key, label: LOOP_CHOICES[key], note: next, otherName: other };
+}
+
+/** Four buckets, one model call, only for members who have an open question. */
+export async function classifyLoopAnswer(words) {
+  const said = text(words, 240);
+  if (!said || !aiReady()) return '';
+  const prompt = [
+    'A member of LINKUP is answering one question: "did you connect with the person I introduced you to, and how did it go?"',
+    `Their answer, in their own words: ${JSON.stringify(said)}`,
+    'Sort it into exactly one of: "met" (they talked and are doing something about it), "touch" (good chat, friendly, no project yet), "quiet" (no reply, nobody got back to them, silence), "nope" (bad fit, not interested, awkward, do not repeat this), or "none" if it is not an answer to that question at all.',
+    'Return STRICT JSON only: {"choice":"met|touch|quiet|nope|none"}',
+  ].join('\n');
+  try {
+    const { text: raw } = await aiText(prompt, { temperature: 0, maxOutputTokens: 40, responseMimeType: 'application/json', timeoutMs: 4500 });
+    const parsed = readJson(raw) || {};
+    return LOOP_KEYS.includes(parsed.choice) ? parsed.choice : '';
+  } catch (err) {
+    await noteAiFault('loop', err).catch(() => {});
+    return '';
+  }
+}
+
+/** The pending question, so the app can render four buttons instead of prose. */
+function loopFromState(state, now = Date.now()) {
+  const p = state.pendingLoop;
+  if (!p || now - toMillis(p.at) > 14 * DAY_MS) return null;
+  return {
+    introId: p.introId || '',
+    otherName: p.otherName || '',
+    need: p.need || '',
+    talked: !!p.talked,
+    at: toMillis(p.at),
+    question: loopQuestionText(p.otherName || 'them', p.need, !!p.talked),
+    choices: LOOP_KEYS.map((k) => ({ key: k, label: LOOP_CHOICES[k] })),
+  };
+}
+
+// ---------------------------------------------------------------- squad finder
+// "I need a technical cofounder, someone who can sell, and an angel who gets
+// EdTech" is not three searches - it is one question with three answers that
+// only work together. So a squad ask is scored as a triangle: each member has
+// to be strong on their own slot AND not overlap the others, or Linky is
+// handing over three people who could all do the same job.
+//
+// Cost discipline: the same local keyword pass ranks every candidate for every
+// slot in one loop, then ONE batched model call frames all the squads. Never a
+// call per profile, never a second SerpApi lookup.
+const SQUAD_SPLIT = /\s*(?:\+|&|\band\b|\balso\b|\bplus\b|,|\/)\s*/i;
+// The offline shape-detector, used only when no model answered the gate. A group
+// word plus more than one person-shaped phrase is a squad, nothing else is.
+export const SQUAD_RX = /\b(squad|triad|trio|crew|full\s+team|team(?:\s+of\s+[2-9])?|group\s+of\s+[2-9]|all\s+three|three\s+(?:of\s+you|people|founders|of\s+us)|who\s+else\s+to\s+bring|bring\s+in\s+both)\b/i;
+const SQUAD_SLOTS_MAX = 3;
+const SQUAD_ANSWERS_MAX = 2;
+
+// Slots from the member's own words. Each is re-parsed with parseAsk so a slot
+// keeps its own location and offer, and "growth marketer in Bulawayo" still
+// means Bulawayo for that one person.
+function squadSlots(q) {
+  const raw = String(q?.need || '');
+  const parts = raw.split(SQUAD_SPLIT).map((s) => text(s, 80)).filter(Boolean)
+    .map((label) => ({ label, ask: parseAsk(label), words: substance(parseAsk(label).need) }))
+    .filter((x) => x.words.length >= 1 && x.ask.tokens.length >= 1);
+  return uniq(parts.map((x) => x.label)).slice(0, SQUAD_SLOTS_MAX)
+    .map((label) => ({ label, ask: parseAsk(label), self: false }));
+}
+
+// When the member said "a squad" but not who is in it, the missing roles come
+// from their own profile: what they are looking for, and what their project
+// needs that they do not list on themselves. Zero-token first, one cached model
+// call only if that is not enough.
+function squadSlotsFromProfile(me, q) {
+  const mine = new Set(asSet(me.skills).map((x) => x.split(' ')[0]));
+  const wanted = asSet(me.lookingFor).filter((x) => x.length > 2);
+  const out = [];
+  for (const w of wanted) {
+    if (out.length >= SQUAD_SLOTS_MAX) break;
+    if ([...mine].some((s) => s.length > 3 && w.includes(s))) continue; // they can do it themselves
+    out.push({ label: w, ask: parseAsk(w), self: false });
+  }
+  if (!out.length && substance(q.need).length > 0) out.push({ label: text(q.need, 70), ask: q, self: false });
+  return out.slice(0, SQUAD_SLOTS_MAX);
+}
+
+async function squadSlotsFromModel(me, q, uid) {
+  if (!aiReady()) return [];
+  const norm = `${q.norm || q.need.toLowerCase().trim()}|${text(me.role, 40)}`;
+  const ref = db().collection('linkyCache').doc(cacheKey('sq', norm));
+  try {
+    const hit = await ref.get();
+    if (hit && hit.exists && Date.now() - toMillis(hit.data().createdAt) < 24 * 3600000) {
+      return list(hit.data().slots, SQUAD_SLOTS_MAX, 60).map((label) => ({ label, ask: parseAsk(label), self: false }));
+    }
+  } catch { /* a miss is just a miss */ }
+  const prompt = [
+    'A LINKUP member asked Linky to put a squad together - more than one person at a time - but did not name the roles. Work out which roles the squad needs from their profile, and only from their profile.',
+    `Their own role: ${JSON.stringify(text(me.role, 60))}. Their skills: ${JSON.stringify(list(me.skills, 8, 30))}. What they said they are looking for: ${JSON.stringify(list(me.lookingFor, 6, 40))}. What they wrote about the work: ${JSON.stringify(text(me.goals || me.bio || q.need, 220))}`,
+    'Give 2 or 3 short role phrases a member of LINKUP could be searched for (2-5 words each, a role, not a adjective), that COMPLEMENT what they already are - never repeat a skill they already list. If their ask named people (a cofounder, an investor), keep those words.',
+    'Return STRICT JSON only: {"slots":["flutter developer","growth marketer","angel investor"]}',
+  ].join('\n');
+  try {
+    const { text: raw } = await aiText(prompt, { temperature: 0.3, maxOutputTokens: 160, responseMimeType: 'application/json', timeoutMs: 5000 });
+    const parsed = readJson(raw) || {};
+    const slots = list(parsed.slots, SQUAD_SLOTS_MAX, 60).filter((s) => substance(s).length >= 1);
+    if (!slots.length) return [];
+    await ref.set({ slots, uid: '', createdAt: Date.now() }, { merge: true }).catch(() => {});
+    return slots.map((label) => ({ label, ask: parseAsk(label), self: false }));
+  } catch (err) {
+    await noteAiFault('squad', err).catch(() => {});
+    return [];
+  }
+}
+
+/**
+ * Rank every eligible member against every slot in one local pass, then build
+ * triangles that are actually complementary: no two members of a squad may
+ * share more than one core skill, and every slot needs its own winner.
+ */
+export async function findSquads(uid, q, ctx, { user, state, existingCards = [], exclude = [], slots = [] } = {}) {
+  const owner = user || (await loadUser(uid));
+  const myState = state || ctx.states[uid] || {};
+  const me = mergedFacts(owner, myState) || {};
+  const eligible = pickEligible({ uid, q, ctx, myState, existingCards, exclude });
+  const rawByUid = new Map(ctx.candidates.map((x) => [x.uid, x]));
+  const badgesFor = (facts) => proofPoints(facts, rawByUid.get(facts.uid) || {}, { skipBio: !!(ctx.states[facts.uid] || {}).facts?.hidden?.bio });
+  const perSlot = slots.map((slot) => {
+    const ranked = [];
+    for (const facts of eligible) {
+      const { score, hits } = keywordScore(slot.ask, facts, slot.ask.tokens.length ? slot.ask.tokens : [slot.label.toLowerCase()], false);
+      if (score <= 0 || !hits.length) continue;
+      ranked.push({ facts, score, hits, slot: slot.label });
+    }
+    ranked.sort((a, b) => b.score - a.score);
+    return { ...slot, ranked: ranked.slice(0, 4) };
+  });
+  const filled = perSlot.filter((s) => s.ranked.length);
+  const checked = ctx.candidates.filter((p) => p.uid !== uid).length;
+  if (filled.length < 2) return { squads: [], filled: filled.length, slots: perSlot.map((s) => ({ label: s.label, found: s.ranked.length })), checked };
+
+  const used = new Set();
+  const squads = [];
+  const depth = Math.min(3, filled.length);
+  const lanes = filled.slice(0, depth);
+  // the requester themself is the spine of the triangle: their skills decide
+  // which candidate is redundant and which one completes the picture
+  const mySkills = asSet(me.skills);
+  const tryLane = (i0, i1, i2) => {
+    if (squads.length >= SQUAD_ANSWERS_MAX) return;
+    const picks = [lanes[0].ranked[i0], lanes[1].ranked[i1], i2 >= 0 && lanes[2] ? lanes[2].ranked[i2] : null].filter(Boolean);
+    if (picks.length < 2) return;
+    const ids = picks.map((p) => p.facts.uid);
+    if (new Set(ids).size !== ids.length) return;
+    if (ids.some((x) => used.has(x))) return;
+    for (let a = 0; a < picks.length; a += 1) {
+      for (let b = a + 1; b < picks.length; b += 1) {
+        // two members who both "do payments and do growth" are one person, not two
+        const shared = overlap(asSet(picks[a].facts.skills), asSet(picks[b].facts.skills));
+        if (shared.length > 1) return;
+      }
+      const own = overlap(asSet(picks[a].facts.skills), mySkills);
+      if (own.length > 2) return; // they are hiring a copy of themselves
+    }
+    const score = Math.round(picks.reduce((acc, p) => acc + p.score, 0) / picks.length);
+    if (score < 1.5) return;
+    picks.forEach((p) => used.add(p.facts.uid));
+    squads.push({ score, members: picks.map((p) => ({ facts: p.facts, score: p.score, hits: p.hits, slot: p.slot })) });
+  };
+  for (let i = 0; i < 3 && squads.length < SQUAD_ANSWERS_MAX; i += 1) {
+    tryLane(i, 0, lanes[2] ? 0 : -1);
+    if (squads.length < SQUAD_ANSWERS_MAX) tryLane(0, i, lanes[2] ? i : -1);
+    if (lanes[2] && squads.length < SQUAD_ANSWERS_MAX) tryLane(i, i, i);
+  }
+  if (!squads.length) return { squads: [], filled: filled.length, slots: perSlot.map((s) => ({ label: s.label, found: s.ranked.length })), checked };
+
+  // One call for the whole answer: name each person's role in the trio and what
+  // the squad is still missing. Nothing here decides who is in it.
+  let framed = null;
+  if (aiReady() && squads.length) {
+    const dossier = {
+      requester: { role: text(me.role, 50), skills: list(me.skills, 6, 24), city: text(me.city, 24) },
+      asked: text(q.need, 120),
+      squads: squads.map((s, i) => ({ i, slots: s.members.map((m) => m.slot), people: s.members.map((m) => ({ uid: m.facts.uid, name: m.facts.name, role: text(m.facts.role, 40), company: text(m.facts.company, 30), city: text(m.facts.city, 20), skills: list(m.facts.skills, 4, 20), said: text(m.facts.bio, 90) })) })),
+    };
+    const prompt = [
+      'You are Linky at LINKUP. A member asked for a squad, and the matcher already chose the people - you only write what each one is to the squad. Never add or drop a person.',
+      `The member's ask, in their words: ${JSON.stringify(dossier.asked)}. Their own role: ${JSON.stringify(dossier.requester.role)}.`,
+      'For each squad and each person: one line (6-16 words) naming the part they play in this specific trio, grounded only in what is on their profile; and for each squad one line on what the three of you would still be missing. If a person\'s profile does not support a claim, say less, do not invent.',
+      'Plain sentences, no markdown, no emoji, no "exciting", no "leverage". Address the member as "you".',
+      'Return STRICT JSON only: {"squads":[{"i":0,"missing":"...","people":[{"uid":"...","part":"..."}]}]}',
+      `Dossier: ${JSON.stringify(dossier).slice(0, 2600)}`,
+    ].join('\n');
+    try {
+      const { text: raw } = await aiText(prompt, { temperature: 0.6, maxOutputTokens: 700, responseMimeType: 'application/json', timeoutMs: 9000 });
+      const parsed = readJson(raw) || {};
+      if (Array.isArray(parsed.squads)) framed = parsed.squads;
+    } catch (err) {
+      console.warn('[linky] squad framing failed, using cited template', err?.message || err);
+      await noteAiFault('squad', err).catch(() => {});
+    }
+  }
+  const byUid = new Map();
+  squads.forEach((s, si) => s.members.forEach((m) => byUid.set(m.facts.uid, m)));
+  const framedPeople = new Map();
+  const framedSquads = new Map();
+  (framed || []).forEach((row) => {
+    const idx = Number(row?.i);
+    if (Number.isFinite(idx)) framedSquads.set(idx, text(row?.missing, 160));
+    (Array.isArray(row?.people) ? row.people : []).forEach((p) => {
+      const uidKey = String(p?.uid || '');
+      const facts = byUid.get(uidKey)?.facts;
+      const line = text(p?.part, 200);
+      if (facts && line && whyIsCited(line, facts)) framedPeople.set(uidKey, line);
+    });
+  });
+  const out = squads.map((s, i) => ({
+    id: `sq${Date.now().toString(36)}${i}`,
+    score: s.score,
+    missing: framedSquads.get(i) || '',
+    members: s.members.map((m) => ({
+      facts: m.facts,
+      slot: m.slot,
+      score: Math.max(55, Math.min(96, 50 + Math.round(m.score * 8))),
+      why: framedPeople.get(m.facts.uid) || templateWhy(m.facts, m.hits, ''),
+      whyFromAi: framedPeople.has(m.facts.uid),
+      badges: badgesFor(m.facts),
+    })),
+  }));
+  return { squads: out, filled: filled.length, slots: perSlot.map((s) => ({ label: s.label, found: s.ranked.length })), checked, usedAi: !!framed };
+}
+
+/**
+ * The squad version of Meet: one approval, one message per person, each still a
+ * double opt-in intro. Nobody is added to a group chat they did not agree to.
+ */
+export async function meetSquad(uid, squadId, { userDoc } = {}) {
+  const user = userDoc || (await loadUser(uid));
+  if (!user) throw new Error('Finish your LINKUP profile first.');
+  const cards = await loadCards(uid);
+  const mine = cards.filter((c) => c.squadId === squadId && ['new', 'saved'].includes(c.status));
+  if (!mine.length) throw new Error('That squad is not on your cards any more.');
+  const plus = await isPlusUser(uid, user);
+  const state = await loadState(uid);
+  const today = dayKey();
+  const used = state.meets?.day === today ? Number(state.meets.count || 0) : 0;
+  const limit = plus ? LIMITS.plus.meetsPerDay : LIMITS.free.meetsPerDay;
+  const left = Math.max(0, limit - used);
+  const want = mine.slice(0, 3);
+  if (!left) {
+    const err = new Error(`You have used today's ${limit} Meet requests, and a squad of three costs one per person. PLUS members get unlimited Meets.`);
+    err.code = 'meet_limit';
+    throw err;
+  }
+  const me = profileFacts(user) || {};
+  const others = uniq(want.map((c) => c.targetName)).filter(Boolean);
+  // ONE call for all three lines: a squad pitch is one message addressed to
+  // three people, so it gets written once and sent as three intros.
+  let lines = null;
+  if (aiReady() && want.length > 1) {
+    const dossier = want.map((c, i) => ({ i, name: text(c.targetName, 30), role: text(c.targetRole, 40), why: text(c.why, 140) }));
+    const prompt = [
+      'You are Linky at LINKUP. A member wants to be introduced to a squad of three people at once. Write the one message they will approve - it goes to each of the three separately, so it must read correctly whichever of them opens it.',
+      `Who is asking: ${JSON.stringify({ name: text(me.name, 30), role: text(me.role, 40), city: text(me.city, 24) })}. What they want: ${JSON.stringify(text(want[0].need, 100))}. The three people: ${JSON.stringify(dossier).slice(0, 1400)}.`,
+      'Rules: first person as the member, not as Linky; 45-90 words; name the squad idea and what each of the three brings; one concrete, low-cost ask (15 minutes, this week); say plainly that anyone can pass, no explanation needed. No flattery padding, no "I hope this finds you well", no markdown, no emoji.',
+      'Return STRICT JSON only: {"line":"the message"}',
+    ].join('\n');
+    try {
+      const { text: raw } = await aiText(prompt, { temperature: 0.75, maxOutputTokens: 420, responseMimeType: 'application/json', timeoutMs: 9000 });
+      const parsed = readJson(raw) || {};
+      const line = text(parsed.line, 700);
+      if (line.length > 60 && !/quota|api key|billing|unable to|I cannot/i.test(line)) lines = line;
+    } catch (err) {
+      await noteAiFault('squad-intro', err).catch(() => {});
+    }
+  }
+  const fallbackLine = `Hi - Linky put a squad together for me and named the three of you: ${others.join(', ')}. I am ${text(me.name, 30)} (${text(me.role, 40) || 'building'}${me.city ? `, ${text(me.city, 20)}` : ''}) and I am looking for ${text(want[0].need, 80)}. Fifteen minutes with all of you on a call this week, and if the shape is wrong nobody owes anybody an explanation.`;
+  const pitch = lines || fallbackLine;
+  const items = want.map((c) => ({ cardId: c.id, targetUid: c.targetUid, targetName: c.targetName, need: c.need, why: c.why, pitch, usedAi: !!lines }));
+  await patchState(uid, { pendingSquad: { squadId, at: Date.now(), items, pitch } });
+  await db().collection('introDrafts').doc(`${uid}_${squadId}`).set({
+    uid, squadId, status: 'awaiting_you', pitch, members: items.map((x) => ({ uid: x.targetUid, name: x.targetName })), at: Date.now(),
+  }).catch(() => {});
+  return {
+    draft: true, needsApproval: true, squadId, pitch, members: items.map((x) => ({ name: x.targetName, uid: x.targetUid })),
+    squad: true, meetsLeft: plus ? null : left,
+    note: want.length > left
+      ? `Read it. One tap sends it to ${left} of the ${want.length} - today you have ${left} Meet${left === 1 ? '' : 's'} left, so I will tell you who it reached and who is still waiting.`
+      : 'Read it. Nothing goes to any of them until you say send, and each one still gets to say yes.',
+  };
+}
+
+export async function cancelSquad(uid, { squadId = '' } = {}) {
+  const state = await loadState(uid);
+  const pending = state.pendingSquad && (!squadId || state.pendingSquad.squadId === squadId) ? state.pendingSquad : null;
+  if (!pending) return { ok: true, cancelled: false };
+  await patchState(uid, { pendingSquad: null });
+  await db().collection('introDrafts').doc(`${uid}_${pending.squadId}`).set({ status: 'cancelled', cancelledAt: Date.now() }, { merge: true }).catch(() => {});
+  for (const item of pending.items || []) await setCardStatus(uid, item.cardId, 'saved').catch(() => {});
+  return { ok: true, cancelled: true, names: (pending.items || []).map((x) => x.targetName).filter(Boolean) };
+}
+
+export async function approveSquad(uid, { squadId = '', text: mine = '' } = {}) {
+  const user = await loadUser(uid);
+  const state = await loadState(uid);
+  const pending = state.pendingSquad && (!squadId || state.pendingSquad.squadId === squadId) ? state.pendingSquad : null;
+  if (!pending?.items?.length) throw new Error('No squad is waiting on you. Ask me for a team first.');
+  const override = text(mine, 900);
+  const sent = [];
+  const waiting = [];
+  let lastErr = '';
+  for (const item of pending.items) {
+    try {
+      const out = await sendMeet(uid, item.cardId, {
+        userDoc: user,
+        draft: { pitch: override || item.pitch, opener: '', usedAi: !!item.usedAi, squadId: pending.squadId },
+        overrideText: override || item.pitch,
+        squad: { squadId: pending.squadId, members: pending.items.map((x) => x.targetName).filter(Boolean) },
+      });
+      sent.push({ name: item.targetName, introId: out.introId || '', matchId: out.matchId || '', pending: !!out.pending, already: !!out.matchId });
+    } catch (err) {
+      if (err?.code === 'meet_limit') { waiting.push(item.targetName); lastErr = 'meet_limit'; continue; }
+      if (err?.code === 'not_now') { waiting.push(item.targetName); lastErr = String(err?.message || err); continue; }
+      lastErr = String(err?.message || err);
+      waiting.push(item.targetName);
+    }
+  }
+  await patchState(uid, { pendingSquad: null });
+  await db().collection('introDrafts').doc(`${uid}_${pending.squadId}`).set({ status: sent.length ? 'approved' : 'failed', approvedAt: Date.now(), approvedText: override, sentTo: sent.map((s) => s.name) }, { merge: true }).catch(() => {});
+  for (const s of sent) await pushTrail(uid, { kind: 'intro', targetUid: s.uid || '', name: s.name, need: pending.items[0]?.need || '', edited: !!override, status: 'asked', introId: s.introId, squadId: pending.squadId });
+  const names = sent.map((s) => s.name).filter(Boolean);
+  const note = sent.length
+    ? `Asked ${names.join(', ')}${waiting.length ? `. ${waiting.join(', ')} is still waiting on you - say "meet squad" again and I will ask them too` : ''}. Each one answers on their own; I will tell you the moment anybody does.`
+    : `Nothing went out. ${lastErr === 'meet_limit' ? 'Your Meets for today are used up.' : 'Say it again and I will try once more.'}`;
+  return { ok: sent.length > 0, sent: sent.length, names, waiting, note, squadId: pending.squadId };
+}
+
+
 // ---------------------------------------------------------------- cron (housekeeping only: nothing waits on it)
 export async function runCron() {
   const now = Date.now();
@@ -2723,5 +3573,26 @@ export async function runCron() {
   });
   if (expiredIntros) await writes.commit();
   const telegram = await ensureTelegramWebhook(APP_URL).catch((e) => ({ error: String(e?.message || e) }));
-  return { pendingIntros: pendingSnap.size - expiredIntros, expiredIntros, telegram };
+  // an accepted intro that never got a brief (no key, slow model, deploy in the
+  // middle) gets one here: same call, same cache, one page per pair ever
+  const loops = await sendDueFollowups({ now, max: 20 }).catch((err) => ({ error: String(err?.message || err) }));
+  let madeBriefs = 0;
+  try {
+    const accepted = await db().collection('intros').where('status', '==', 'accepted').limit(40).get();
+    for (const d of accepted.docs) {
+      if (madeBriefs >= 2) break;
+      const i = d.data();
+      const matchId = i.matchId || '';
+      if (!matchId) continue;
+      // intros accepted before the loop existed still get the follow-up
+      if (!toMillis(i.followupDue) && i.status === 'accepted') {
+        await db().collection('intros').doc(d.id).set({ followupDue: getAdmin().firestore.Timestamp.fromMillis(Date.now() + LOOP_DELAY_MS), followupStatus: 'queued' }, { merge: true }).catch(() => {});
+      }
+      const made = await ensureBrief({ matchId, requesterId: i.requesterId, targetId: i.targetId, need: i.need, why: i.why, timeoutMs: 12000 }).catch(() => null);
+      if (made) madeBriefs += 1;
+    }
+  } catch (err) {
+    console.warn('[linky] brief backfill skipped', err?.message || err);
+  }
+  return { pendingIntros: pendingSnap.size - expiredIntros, expiredIntros, telegram, followups: loops, briefsMade: madeBriefs };
 }

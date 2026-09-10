@@ -7,6 +7,18 @@ import { linkupWebBaseUrl } from './profileLinks';
 
 export type IntentOffer = 'paid' | 'equity' | 'advisory' | 'coffee';
 
+/** Proof of work, straight off a real record. `checked` means LINKUP holds the
+ *  thing itself (a published project, a handle on their profile, a verification
+ *  stamp); otherwise it is their own words and `quote` is the sentence. */
+export type LinkyBadge = {
+  kind: string;
+  label: string;
+  url?: string;
+  quote?: string;
+  checked?: boolean;
+  source?: string;
+};
+
 export type LinkyCard = {
   id: string;
   askId: string;
@@ -18,6 +30,14 @@ export type LinkyCard = {
   targetCompany: string;
   targetCity: string;
   targetSkills: string[];
+  badges?: LinkyBadge[];
+  /** a card from a squad answer: which trio it belongs to and the part they play */
+  squadId?: string;
+  squadRole?: string;
+  squadSize?: number;
+  squadIndex?: number;
+  /** what the member told Linky about the last time these two met */
+  pairNote?: string;
   why: string;
   opener: string;
   score: number;
@@ -53,7 +73,7 @@ export type LinkyAsk = {
   reply: string;
   /** What the answer was, so the UI can dress it: search, a name, chit-chat. */
   /** `check` = Linky asked before searching; answer it with yes / no. */
-  kind?: 'found' | 'close' | 'none' | 'person' | 'ambiguous' | 'chat' | 'draft' | 'check';
+  kind?: 'found' | 'close' | 'none' | 'person' | 'ambiguous' | 'chat' | 'draft' | 'check' | 'squad';
   askingFirst?: boolean;
   /** What decided the turn - `ai:chat` (the model) or `words:chat` (offline lists). */
   intent?: string;
@@ -81,6 +101,8 @@ export type LinkySuggestion = string;
 export type LinkyLead = {
   name: string;
   title?: string;
+  /** proof of work from the public result: stars, users, a raise, an alum link */
+  proof?: LinkyBadge[];
   url: string;
   why?: string;
   fit?: number;
@@ -148,6 +170,32 @@ export type LinkyHidden = {
   city?: boolean;
 };
 
+/** The 48-hour question Linky asks after an intro is accepted. */
+export type LinkyLoopChoice = 'met' | 'touch' | 'quiet' | 'nope';
+export type LinkyLoop = {
+  introId: string;
+  otherName: string;
+  need: string;
+  talked: boolean;
+  at: number;
+  question: string;
+  choices: { key: LinkyLoopChoice; label: string }[];
+};
+export type LinkySquad = {
+  id: string;
+  size: number;
+  members: { cardId: string; uid: string; name: string; role: string; part: string; status: string }[];
+};
+/** The one-pager Linky writes into a new chat, for the two people who said yes. */
+export type LinkyBrief = {
+  headline?: string;
+  why: string[];
+  icebreakers: string[];
+  agenda: { span: string; title: string; ask: string }[];
+  text?: string;
+  usedAi?: boolean;
+};
+
 export type LinkyHome = {
   name: string;
   plus: boolean;
@@ -161,6 +209,10 @@ export type LinkyHome = {
   thread?: LinkyTurn[];
   facts: LinkyToldFacts;
   brief: string;
+  /** the open 48-hour question, if there is one */
+  loop?: LinkyLoop | null;
+  /** squad answers, grouped by the trio they belong to */
+  squads?: LinkySquad[];
   /** who the member already wrote to, and who they said never mind about */
   outreach?: LinkyOutreachEntry[];
   pending?: { meet?: LinkyDraft | null; lead?: { key: string; lead: LinkyLead; text: string; need?: string } | null };
@@ -220,7 +272,22 @@ export const linkyApproveMeet = (cardId: string, text?: string) => linkyCall<{
 
 export const linkyCancelMeet = (cardId: string) => linkyCall<{ cancelled: boolean; targetName?: string }>('cancelMeet', { cardId });
 export const linkyCard = (cardId: string, status: 'skip' | 'saved') => linkyCall<LinkyCard>('card', { cardId, status });
-export const linkyRespond = (introId: string, decision: 'accept' | 'decline' | 'later') => linkyCall<{ status: string; matchId?: string }>('respond', { introId, decision });
+export const linkyRespond = (introId: string, decision: 'accept' | 'decline' | 'later') => linkyCall<{ status: string; matchId?: string; brief?: LinkyBrief | null }>('respond', { introId, decision });
+
+/** Answering Linky's "how did it go?" - one of the four, or in your own words. */
+export const linkyLoopAnswer = (choice: LinkyLoopChoice | '', words?: string) => linkyCall<{
+  ok: boolean; answered: boolean; choice?: string; label?: string; note: string; otherName?: string;
+}>('loop', words ? { choice, words } : { choice });
+
+/** One approval, one message each, still double opt-in per person. */
+export const linkyMeetSquad = (squadId: string) => linkyCall<{
+  needsApproval?: boolean; squadId: string; pitch: string; members: { name: string; uid: string }[];
+  meetsLeft?: number | null; note?: string;
+}>('meetSquad', { squadId });
+export const linkyApproveSquad = (squadId: string, text?: string) => linkyCall<{
+  ok: boolean; sent: number; names: string[]; waiting: string[]; note: string;
+}>('approveSquad', text ? { squadId, text } : { squadId });
+export const linkyCancelSquad = (squadId: string) => linkyCall<{ ok: boolean; cancelled: boolean; names?: string[] }>('cancelSquad', { squadId });
 export const linkyPrefs = (prefs: { openTo?: IntentOffer[]; inboundCap?: number }) => linkyCall<{ ok: boolean }>('prefs', prefs);
 export const linkyPointers = (need: string) => linkyCall<{
   text: string; cached: boolean; leads?: LinkyLead[]; searches?: number; note?: string;

@@ -157,7 +157,9 @@ assert(match.exists && match.data().userIds.join() === 'alice,bob' && match.data
 const cr = await db.collection('connectionRequests').doc('alice_bob').get();
 assert(cr.exists && cr.data().status === 'approved', 'approved connectionRequest unlocks chat gate');
 const msgs = await db.collection('matches').doc('alice_bob').collection('messages').get();
-assert(msgs.size === 1 && /Linky here/.test(msgs.docs[0].data().content), 'opener message from Linky');
+const msgRows = msgs.docs.map((d) => d.data());
+assert(msgs.size === 2 && msgRows.some((x) => /Linky here/.test(x.content || '')), 'opener message from Linky, and nothing else from the bot');
+assert(msgRows.some((x) => x.type === 'synergy_brief'), 'the one-page brief is posted in the same chat, before either of them types');
 notes = await db.collection('notifications').where('userId', '==', 'alice').get();
 assert(notes.docs.some((d) => d.data().type === 'intro_accepted' && d.data().matchId === 'alice_bob'), 'alice got intro_accepted with matchId');
 // ---- decline path (dan asks bob; bob declines -> mute both ways)
@@ -400,6 +402,163 @@ assert(f.ok && !(await db.collection('linkyState').doc('alice').get()).exists &&
   const { memberError } = await import('../../api/linky.js');
   assert(!/payment|opencode|billing/i.test(memberError(new Error('zen: No payment method. Add a payment method here: https://opencode.ai/x/billing'))), 'never in front of a member: ' + JSON.stringify(memberError(new Error('zen: No payment method. Add a payment method here'))));
   process.env.GEMINI_API_KEY = gkWas; process.env.ZEN_API_KEY = zkWas;
+}
+
+
+// ================================================================ the four new
+// abilities: proof of work, the synergy brief, the 48-hour loop and squads.
+{
+  const P = await import('../../api/_proof.js');
+  // ---- 4. proof of work is a quoted fact, never a compliment
+  const badged = P.proofPoints(
+    { name: 'Tinashe Moyo', skills: ['growth'], bio: 'Grew an edtech app to 40k users. 12k stars on my repo.' },
+    { socialLinks: { github: 'tinashem', linkedin: 'https://linkedin.com/in/tinashem' }, projects: [{ title: 'Kaya Learn', status: 'live' }, { title: 'Mvura Pay', status: 'live' }], isVerified: true, fundingStage: 'Seed' },
+  );
+  const shown = badged.map((b) => b.label).join(' | ');
+  assert(/40k users/.test(shown) && /12k GitHub stars/.test(shown) && !/LinkedIn on file/.test(shown), 'traction outranks a contact link for the three slots: ' + shown);
+  const onlyLink = P.proofPoints({}, { socialLinks: { github: 'tinashem' } });
+  assert(onlyLink.some((b) => b.kind === 'github' && b.checked && /tinashem/.test(b.label)), 'a GitHub handle on their own profile is a checked badge: ' + JSON.stringify(onlyLink[0]));
+  assert(!onlyLink.some((b) => /users|stars/.test(b.label)), 'and nothing is invented to fill the row');
+  assert(badged.some((b) => b.kind === 'users' && !b.checked && /40k users/.test(b.label) && /40k users/.test(b.quote)), 'a number they wrote themselves is quoted, not asserted: ' + JSON.stringify(badged));
+  assert(badged.length <= 3, 'at most three badges - a card is not a trophy cabinet');
+  assert(P.badgeLine(badged).includes('(their words)'), 'the text version says which part is unverified: ' + P.badgeLine(badged));
+  assert(P.proofPoints({}, { socialLinks: { github: 'x'.repeat(80) } }).every((b) => b.kind !== 'github'), 'a garbage GitHub value is not a badge');
+  const snipped = P.proofFromSnippet('Y Combinator alum - 10k stars on GitHub, raised $2.5M seed round');
+  assert(snipped.some((b) => /10k GitHub stars/i.test(b.label)) && snipped.some((b) => /Y Combinator alum/.test(b.label)) && snipped.some((b) => /Raised \$2\.5M/.test(b.label)), 'an outside lead gets the same treatment from the snippet we already paid for: ' + snipped.map((b) => b.label).join(' | '));
+
+  // ---- seed a squad-shaped world for the rest of the block
+  const squadFolk = {
+    ruta: { displayName: 'Ruta Zvidzaya', occupation: 'Founder', company: 'Kwata', city: 'Harare', country: 'Zimbabwe', skills: ['react native', 'payments'], industries: ['edtech', 'fintech'], bio: 'Building an AI tutor for secondary schools, need a cofounder', goals: 'wants to ship an AI tutor that schools actually pay for', onboarded: true, isVisible: true },
+    growthg: { displayName: 'Grace Chafa', occupation: 'Growth marketer', company: 'Freelance', city: 'Harare', country: 'Zimbabwe', skills: ['growth', 'marketing', 'seo', 'react native'], industries: ['edtech'], bio: 'Grew a learning app to 40k users', goals: 'wants to work on education', onboarded: true, isVisible: true, socialLinks: { github: 'gracechafa' }, projects: [{ title: 'StudyPass', status: 'live' }, { title: 'QuizWave', status: 'live' }], isVerified: true },
+    angelg: { displayName: 'Nkosinathi Dube', occupation: 'Angel investor', company: 'ZimAngels', city: 'Harare', country: 'Zimbabwe', skills: ['angel', 'fintech'], industries: ['edtech', 'fintech'], bio: 'Wrote cheques into six startups, ex-Econet', goals: 'looking for AI and edtech deals in Zimbabwe', onboarded: true, isVisible: true, fundingStage: 'Seed' },
+  };
+  for (const [uid, u] of Object.entries(squadFolk)) {
+    await db.collection('users').doc(uid).set({ uid, ...u });
+    await db.collection('publicProfiles').doc(uid).set({ uid, ...u, profilePic: `https://ik.imagekit.io/x/${uid}.jpg` });
+  }
+  assert((await L.ask('ruta', 'what can you do')).reply, 'rutas profile exists so help answers');
+
+  // ---- 3. the squad shape: only when it is asked for
+  assert(L.parseAsk('build me a squad of three').wantsSquad === true, 'parseAsk spots a group ask');
+  assert(L.parseAsk('I need a flutter developer in Harare').wantsSquad === false, 'a single person is not a squad');
+  const helpSaid = await L.ask('ruta', 'hey there');
+  assert(!/squad|brief|follow-up|proof badge/i.test(helpSaid.reply), 'Linky does not advertise the new abilities unprompted: ' + helpSaid.reply.slice(0, 60));
+
+  await clearBudget('ruta');
+  const squadAsk = await L.ask('ruta', 'I need a flutter dev + a growth marketer and an angel investor who gets edtech');
+  console.log('    squad reply:', squadAsk.reply.slice(0, 200));
+  assert(squadAsk.kind === 'squad' && !squadAsk.none, 'a multi-role ask is answered as a squad, not three searches');
+  assert(squadAsk.cards.length >= 3 && new Set(squadAsk.cards.map((c) => c.targetUid)).size === squadAsk.cards.length, 'the triangle is distinct humans: ' + squadAsk.cards.map((c) => c.targetName).join(', '));
+  assert(squadAsk.cards.every((c) => c.squadId && c.squadRole), 'every squad card says which trio it is and the part they play');
+  assert(squadAsk.cards.some((c) => c.targetUid === 'growthg' && c.targetUid !== 'ruta'), 'grace is in it for the growth half');
+  assert(/Squad 1/.test(squadAsk.reply) && /flutter|Growth|angel/i.test(squadAsk.reply), 'the reply presents the squad as a unit: ' + squadAsk.reply.slice(0, 120));
+  assert(squadAsk.cards.some((c) => (c.badges || []).some((b) => b.kind === 'github' && b.checked)), 'the squad cards carry proof of work too');
+  assert(squadAsk.asksLeft === FREE.asksPerDay - 1, 'a squad costs one ask, the same as a person');
+
+  // a triangle only counts if the members are not the same person three times
+  {
+    const ctx = await L.buildMatchContext();
+    const slots = ['flutter developer', 'growth marketer', 'angel investor'].map((label) => ({ label, ask: L.parseAsk(label), self: false }));
+    const foundSquad = await L.findSquads('ruta', L.parseAsk('a squad for my edtech startup'), ctx, { user: await L.loadUser('ruta'), slots });
+    assert(foundSquad.squads.length >= 1, 'findSquads fills every slot or says it could not: ' + JSON.stringify(foundSquad.slots));
+    const trio = foundSquad.squads[0];
+    assert(new Set(trio.members.map((x) => x.facts.uid)).size === trio.members.length, 'no human twice in one squad');
+    assert(trio.members.every((x, i, all) => all.every((y, j) => i === j || (x.facts.skills || []).filter((k) => (y.facts.skills || []).includes(k)).length <= 1)), 'a squad member never overlaps another on more than one skill');
+    assert(trio.members.some((x) => x.slot === 'growth marketer') && trio.members.some((x) => x.slot === 'angel investor'), 'the roles the member named are the roles that were filled');
+  }
+
+  // ---- one approval, one message each, and the free plan still decides how far that goes
+  const sqId = squadAsk.cards[0].squadId;
+  await clearBudget('ruta');
+  const squadMeet = await L.meetSquad('ruta', sqId);
+  assert(squadMeet.needsApproval && squadMeet.pitch.length > 80 && squadMeet.members.length === squadAsk.cards.length, 'the squad draft waits for a yes like any other intro');
+  assert(/pass|no explanation|no hard feelings/i.test(squadMeet.pitch) || /15 minutes|fifteen/i.test(squadMeet.pitch), 'the squad pitch asks for a cheap yes: ' + squadMeet.pitch.slice(0, 90));
+  const squadSent = await L.approveSquad('ruta', {});
+  assert(squadSent.sent === FREE.meetsPerDay && squadSent.waiting.length === squadAsk.cards.length - FREE.meetsPerDay, `two Meets a day means two went out and ${squadAsk.cards.length - 2} wait, and Linky says so: ${squadSent.note}`);
+  assert(/still waiting/i.test(squadSent.note), 'the member is told who was left out rather than silently capped');
+
+  // ---- 1. the synergy brief: written for the pair, once, in their chat
+  const introDocs = await db.collection('intros').where('requesterId', '==', 'ruta').get();
+  assert(introDocs.size >= 2, 'the squad approval really created one intro per person');
+  const firstIntro = introDocs.docs.find((d) => d.data().status === 'pending');
+  const targetUid = firstIntro.data().targetId;
+  const matchId = ['ruta', targetUid].sort().join('_');
+  const accepted = await L.respond(targetUid, firstIntro.id, 'accept');
+  assert(accepted.status === 'accepted' && accepted.matchId === matchId, 'the target said yes and a chat exists');
+  const chatMsgs = await db.collection('matches').doc(matchId).collection('messages').get();
+  const briefMsg = chatMsgs.docs.map((d) => d.data()).find((x) => x.type === 'synergy_brief');
+  assert(!!briefMsg, 'Linky posted the one-pager into the chat both of them can read');
+  assert(/Why I put you two together/i.test(briefMsg.content) && /fintech/i.test(briefMsg.brief.why.join(' ')), 'the brief leads with what both profiles actually say: ' + briefMsg.brief.why.join(' | '));
+  {
+    const gap = await L.ensureBrief({ matchId: 'cara_gift', requesterId: 'cara', targetId: 'gift' });
+    assert(!!gap && /gap between them/i.test(gap.brief.why.join(' ')), 'and a pair with nothing shared is told that, not flattered: ' + gap.brief.why.join(' | '));
+    assert(gap.brief.agenda.length === 3 && gap.brief.icebreakers.length === 3, 'the fallback still writes a full page - no model, no missing section');
+  }
+  // the pair that DOES share something (alice and bob are both fintech) has to
+  // show it, because "why you" is the whole point of the page
+  {
+    const abMsgs = await db.collection('matches').doc('alice_bob').collection('messages').get();
+    const abBrief = abMsgs.docs.map((d) => d.data()).find((x) => x.type === 'synergy_brief');
+    assert(!!abBrief && /fintech/i.test(abBrief.brief.why.join(' ')), 'the overlap line cites a fact both profiles actually carry: ' + (abBrief?.brief?.why || []).join(' | '));
+    assert(!/passionate|exciting|synerg|leverage|rockstar/i.test(`${abBrief.brief.why.join(' ')} ${abBrief.content}`), 'and the brief is not a compliment generator');
+  }
+  const agenda = (briefMsg.brief.agenda || []);
+  assert(agenda.length === 3 && agenda[0].span === '0-5' && /15/.test(agenda.map((a) => a.span).join()), 'the agenda is a 15-minute call in three blocks: ' + agenda.map((a) => a.span).join(' '));
+  assert((briefMsg.brief.icebreakers || []).length === 3 && briefMsg.brief.icebreakers.every((x) => x.length > 12), 'three icebreakers, each a sentence a human could say');
+  assert(!(await L.ensureBrief({ matchId, requesterId: 'ruta', targetId: targetUid })), 'and it is written once - reloading does not rewrite the page');
+  const matchDoc = await db.collection('matches').doc(matchId).get();
+  assert(!!matchDoc.data().synergyBrief, 'the brief also lives on the match, so the app can reopen it');
+
+  // ---- 2. the post-intro loop
+  assert(Object.values(L.LOOP_CHOICES).join('|') === 'Met & pursuing the project|Great chat, staying in touch|No response yet|Not a fit', 'the four answers are the four he asked for');
+  const afterAccept = await db.collection('intros').doc(firstIntro.id).get();
+  const due = afterAccept.data().followupDue.toMillis();
+  assert(afterAccept.data().followupStatus === 'queued' && due - Date.now() > 47 * 3600000 && due - Date.now() <= L.LOOP_DELAY_MS + 60000, 'the question is scheduled 48 hours after the yes, not before');
+  let queue = await L.dueFollowups(Date.now());
+  assert(queue.length === 0, 'at 48 hours minus nothing, Linky keeps quiet');
+  queue = await L.dueFollowups(Date.now() + 49 * 3600000);
+  assert(queue.length >= 2 && queue.some((x) => x.id === firstIntro.id), '49 hours later every accepted intro is due for its one question: ' + queue.length);
+  const pushed = await L.sendDueFollowups({ now: Date.now() + 49 * 3600000, max: 5 });
+  assert(pushed.sent === queue.length && new Set(pushed.items.map((x) => x.uid)).size === pushed.sent, 'one question per member, not one per intro: ' + JSON.stringify(pushed.items.map((x) => [x.uid, x.otherUid])));
+  const asked = await L.loadState('ruta');
+  assert(asked.pendingLoop && squadAsk.cards.map((c) => c.targetName).includes(asked.pendingLoop.otherName), 'and it asks the member who wanted the intro, about the person they were introduced to: ' + (asked.pendingLoop || {}).otherName);
+  const loopHome = await L.home('ruta');
+  assert((await L.sendDueFollowups({ now: Date.now() + 49 * 3600000, max: 5 })).sent === 0, 'and the same member is not asked twice in the same day');
+  assert(loopHome.loop && loopHome.loop.choices.length === 4 && /how did it go|actually connect|land/i.test(loopHome.loop.question), 'the app gets four buttons, not a paragraph to type into');
+  const pushedAgain = await L.sendDueFollowups({ now: Date.now() + 50 * 3600000, max: 5 });
+  assert(pushedAgain.sent === 0, 'never the same question twice');
+  // a sentence is still an answer to the question that is open
+  const saidInWords = await L.ask('ruta', 'we spoke on friday and we are building it');
+  assert(/answer 1 to 4|ai:loop/i.test(saidInWords.reply) && saidInWords.free === true && !saidInWords.cards.length, 'a plain sentence about the intro is kept with it, not run as a search: ' + saidInWords.reply.slice(0, 70));
+  assert(saidInWords.intent === 'words:loop' || saidInWords.intent === 'ai:loop', 'and the turn is tagged as the loop, whatever read it: ' + saidInWords.intent);
+  const answered = await L.answerLoop('ruta', { choice: 'met' });
+  assert(answered.answered && answered.choice === 'met', 'and the four options are answerable directly');
+  const pairId = ['ruta', targetUid].sort().join('_');
+  const pair = (await db.collection('linkyPairs').doc(pairId).get()).data();
+  assert(pair && pair.outcome === 'met' && pair.introId === firstIntro.id, 'the outcome is written on the pair, where the matcher can read it');
+  const introAfter = await db.collection('intros').doc(firstIntro.id).get();
+  assert(introAfter.data().followup.status === 'answered' && introAfter.data().followup.choice === 'met', 'and on the intro, so the audit page can show it');
+  // a card for someone they already met says so instead of pretending it is new
+  const warmCard = await L.pickPerson('ruta', targetUid);
+  const warmList = await L.loadCards('ruta');
+  assert(warmList.some((c) => c.targetUid === targetUid && c.pairNote && /met/i.test(c.pairNote)), 'the warm pair is acknowledged on the card: ' + (warmCard.pairNote || 'none'));
+  // "not a fit" ends it, quietly and for a while
+  const otherIntro = (await db.collection('intros').where('requesterId', '==', 'ruta').get()).docs.find((d) => d.data().targetId !== targetUid && d.data().status === 'pending');
+  if (otherIntro) {
+    await L.respond(otherIntro.data().targetId, otherIntro.id, 'accept');
+    await L.answerLoop('ruta', { choice: 'nope' }).catch(() => null);
+    await L.answerLoop('ruta', { choice: 'nope', introId: otherIntro.id });
+    const otherPair = (await db.collection('linkyPairs').doc(['ruta', otherIntro.data().targetId].sort().join('_')).get()).data();
+    assert(otherPair.outcome === 'nope', 'a no is a no: recorded as not a fit');
+    await clearBudget('ruta');
+    await clearBudget('ruta');
+    const afterNo = await L.ask('ruta', 'who could be an angel investor for edtech');
+    assert(!afterNo.cards.some((c) => c.targetUid === otherIntro.data().targetId), 'and Linky stops putting those two in front of each other');
+  }
+  const auditOut = await L.audit('ruta');
+  assert(auditOut && auditOut.facts, 'the audit page still renders with the new state on the member');
+  const loopedHome = await L.home('ruta');
+  assert(!loopedHome.loop, 'once answered, the question is gone from the home screen');
 }
 
 console.log('\nALL PASSED');

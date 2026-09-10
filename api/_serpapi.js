@@ -37,6 +37,7 @@
 import crypto from 'node:crypto';
 import { getAdmin, getDb } from './_firebaseAdmin.js';
 import { aiReady, aiText, geminiText, getGeminiKey } from './_gemini.js';
+import { proofFromSnippet } from './_proof.js';
 
 export const OUTREACH = {
   num: 100,                 // asked for every time (rule 1); may not be honoured
@@ -313,6 +314,8 @@ export function prefilter(organic, { need = '', roles = [], words = [] } = {}) {
       snippet,
       source: source || text(r.displayed_link, 60),
       rawLink: text(r.link || r.redirect_link, 400),
+      // proof of work, read off the same snippet - no second search per person
+      proof: proofFromSnippet(`${title}. ${snippet}`),
       hits,
       position: Number(r.position || out.length + 1),
     });

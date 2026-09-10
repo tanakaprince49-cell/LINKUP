@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Link2, ArrowUp, Check, Clock, Send, Settings2, ShieldCheck, X } from 'lucide-react-native';
+import { Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trophy, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
@@ -38,7 +38,13 @@ import {
   LinkyDraft,
   LinkyAskResult,
   LinkyTurn,
+  LinkyBadge,
+  LinkyLoopChoice,
   linkyAsk,
+  linkyLoopAnswer,
+  linkyMeetSquad,
+  linkyApproveSquad,
+  linkyCancelSquad,
   linkyCard,
   linkyHome,
   linkyApproveLead,
@@ -90,6 +96,35 @@ const CardView = ({
         </View>
         {card.status === 'saved' ? <Text style={[styles.pill, { color: textColor(isDark, 'muted'), borderColor: border }]}>Saved</Text> : null}
       </TouchableOpacity>
+      {card.squadId && card.squadRole ? (
+        <View style={styles.squadRow}>
+          <Compass size={12} color={COLORS.primaryStrong} />
+          <Text style={[styles.squadText, { color: textColor(isDark, 'secondary') }]}>
+            {`Squad${(card.squadSize || 0) > 1 ? ` of ${card.squadSize}` : ''} - ${card.squadRole}`}
+          </Text>
+        </View>
+      ) : null}
+      {card.badges && card.badges.length ? (
+        <View style={styles.badgeRow}>
+          {card.badges.slice(0, 3).map((b) => (
+            <TouchableOpacity
+              key={`${b.kind}-${b.label}`}
+              style={[styles.badge, { backgroundColor: isDark ? 'rgba(223,251,63,0.10)' : 'rgba(223,251,63,0.22)', borderColor: border }]}
+              onPress={() => { if (b.url) Linking.openURL(b.url).catch(() => {}); }}
+              disabled={!b.url}
+              activeOpacity={0.8}
+            >
+              <Trophy size={11} color={textColor(isDark, 'secondary')} />
+              <Text style={[styles.badgeText, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+                {b.label}{b.checked ? '' : ' (their words)'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+      {card.pairNote ? (
+        <Text style={[styles.pairNote, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>{card.pairNote}</Text>
+      ) : null}
       <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
         <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>WHY LINKY PICKED THEM</Text>
         <Text style={[styles.whyText, { color: textColor(isDark) }]}>{card.why}</Text>
@@ -191,7 +226,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
   // The approval step: Linky writes it, the member sends it. `draft` is that
   // editable bubble - for a member's intro and for an off-network lead alike.
   const [draft, setDraft] = useState<{
-    kind: 'meet' | 'lead'; cardId?: string; leadKey?: string; title: string; body: string; note?: string; url?: string; index?: number;
+    kind: 'meet' | 'lead' | 'squad'; cardId?: string; leadKey?: string; title: string; body: string; note?: string; url?: string; index?: number;
   } | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
   const [leadBusy, setLeadBusy] = useState('');
@@ -241,6 +276,42 @@ export default function LinkyHomeScreen({ navigation }: any) {
       return;
     }
     notifyUser(fallbackTitle, err instanceof Error ? err.message : 'Please try again.');
+  };
+
+  const onLoop = async (choice: LinkyLoopChoice) => {
+    setBusyId('loop');
+    try {
+      const r = await linkyLoopAnswer(choice);
+      setHome((h) => (h ? { ...h, loop: null } : h));
+      notifyUser('Answered', r.note);
+    } catch (e: any) {
+      notifyUser('Linky', e?.message || 'That did not go through.');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const onMeetSquad = async (squadId: string) => {
+    setBusyId(squadId);
+    try {
+      const r = await linkyMeetSquad(squadId);
+      if (r.needsApproval) {
+        setDraft({
+          kind: 'squad',
+          cardId: squadId,
+          title: `To ${(r.members || []).map((x) => x.name).filter(Boolean).join(', ')}`,
+          body: r.pitch || '',
+          note: r.note,
+          url: '',
+        });
+        return;
+      }
+      notifyUser('Asked', `Linky asked all of them. Each one answers for themselves.`);
+    } catch (e: any) {
+      notifyUser('Linky', e?.message || 'That did not go through.');
+    } finally {
+      setBusyId('');
+    }
   };
 
   const onMeet = async (card: LinkyCard) => {
@@ -371,6 +442,14 @@ export default function LinkyHomeScreen({ navigation }: any) {
     if (!draft || draftBusy) return;
     setDraftBusy(true);
     try {
+      if (draft.kind === 'squad' && draft.cardId) {
+        // one approval, one message each - and each of them still says yes alone
+        const r = await linkyApproveSquad(draft.cardId, draft.body.trim());
+        setDraft(null);
+        notifyUser(r.sent ? `Asked ${r.names.join(', ')}` : 'Nothing went out', r.note);
+        await load(true);
+        return;
+      }
       if (draft.kind === 'meet' && draft.cardId) {
         const r = await linkyApproveMeet(draft.cardId, draft.body.trim());
         setDraft(null);
@@ -395,6 +474,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
     setDraft(null);
     try {
       if (kind === 'meet' && cardId) await linkyCancelMeet(cardId);
+      if (kind === 'squad' && cardId) await linkyCancelSquad(cardId);
     } catch { /* dropping a draft must never fail loudly - nothing was sent anyway */ }
     // "Not now" means not now: the waiting banner must go away too, not linger
     // at the top as if a message were still about to be sent.
@@ -537,6 +617,32 @@ export default function LinkyHomeScreen({ navigation }: any) {
               </TouchableOpacity>
             ) : null}
 
+            {home.loop ? (
+              <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
+                <View style={styles.loopHead}>
+                  <Clock size={14} color={COLORS.primaryStrong} />
+                  <Text style={[styles.sectionTitle, { color: textColor(isDark), marginLeft: 6 }]}>How did it go?</Text>
+                </View>
+                <Text style={[styles.whyText, { color: textColor(isDark), marginTop: 6 }]}>{home.loop.question}</Text>
+                <View style={styles.loopChoices}>
+                  {home.loop.choices.map((c) => (
+                    <TouchableOpacity
+                      key={c.key}
+                      style={[styles.loopBtn, { borderColor: border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                      onPress={() => onLoop(c.key)}
+                      disabled={busyId === 'loop'}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>{c.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={[styles.loopFoot, { color: textColor(isDark, 'muted') }]}>
+                  One answer, 20 seconds. It is how Linky learns who to put in front of you next.
+                </Text>
+              </View>
+            ) : null}
+
             {(pendingAsk || turns.length) ? (
               <>
                 <SectionTitle title="Linky" hint={home.limits.asksPerDay ? `${Math.max(0, home.limits.asksPerDay - home.limits.asksUsedToday)} of ${home.limits.asksPerDay} asks left today` : undefined} isDark={isDark} />
@@ -607,6 +713,11 @@ export default function LinkyHomeScreen({ navigation }: any) {
                                   <Text style={[styles.nearestName, { color: textColor(isDark) }]} numberOfLines={1}>{l.name}</Text>
                                   {l.title ? <Text style={[styles.nearestMeta, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{l.title}</Text> : null}
                                   {l.why ? <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>{l.why}</Text> : null}
+                                  {l.proof && l.proof.length ? (
+                                    <Text style={[styles.nearestMeta, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+                                      {`Proof: ${l.proof.slice(0, 2).map((b) => b.label).join(' - ')}`}
+                                    </Text>
+                                  ) : null}
                                   <Text style={[styles.leadUrl, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
                                     {l.resolved === false ? 'no direct link - opens a search: ' : ''}
                                     {l.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
@@ -702,7 +813,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
             <View style={[styles.sheet, { borderColor: border, backgroundColor: surface }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text style={[styles.sheetTitle, { color: textColor(isDark) }]} numberOfLines={2}>
-                  {draft.kind === 'meet' ? 'Before it goes to them' : 'Your message, in your words'}
+                  {draft.kind === 'lead' ? 'Your message, in your words' : draft.kind === 'squad' ? 'Before it goes to the three of them' : 'Before it goes to them'}
                 </Text>
                 <TouchableOpacity onPress={dropDraft} style={{ marginLeft: 'auto', padding: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <X size={16} color={textColor(isDark, 'muted')} />
@@ -729,7 +840,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
                   style={[styles.sheetBtn, { backgroundColor: COLORS.primary, opacity: draftBusy || draft.body.trim().length < 24 ? 0.5 : 1 }]}
                 >
                   {draftBusy ? <ActivityIndicator size="small" color="#000" /> : (
-                    <Text style={styles.sheetBtnText}>{draft.kind === 'meet' ? 'SEND IT' : 'APPROVE & OPEN PROFILE'}</Text>
+                    <Text style={styles.sheetBtnText}>{draft.kind === 'lead' ? 'APPROVE & OPEN PROFILE' : draft.kind === 'squad' ? 'SEND TO ALL THREE' : 'SEND IT'}</Text>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity onPress={dropDraft} style={[styles.sheetGhost, { borderColor: border }]}>
@@ -775,6 +886,17 @@ const styles = StyleSheet.create({
   cardRole: { fontSize: 12, fontWeight: '600', marginTop: 1 },
   cardMeta: { fontSize: 11, fontWeight: '600', marginTop: 1 },
   pill: { fontSize: 10, fontWeight: '800', borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, maxWidth: '100%' },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+  squadRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
+  squadText: { fontSize: 11, fontWeight: '800' },
+  pairNote: { fontSize: 11.5, marginTop: 8, fontStyle: 'italic' },
+  loopHead: { flexDirection: 'row', alignItems: 'center' },
+  loopChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  loopBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 9, flexGrow: 1, flexBasis: '46%' },
+  loopBtnText: { fontSize: 13, fontWeight: '800' },
+  loopFoot: { fontSize: 11, marginTop: 10 },
   whyBox: { borderRadius: 12, padding: 10, marginTop: 12 },
   whyLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   whyText: { fontSize: 13, lineHeight: 19, fontWeight: '600', marginTop: 3 },

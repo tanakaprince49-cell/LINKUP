@@ -336,7 +336,7 @@ Telegram tap-Yes case in the bot section) holds all of this.
 
 Just type who you need (e.g. `a Flutter developer in Harare, paid`) → answered inline with numbered cards.
 `cards` · `meet 1` (answers with a draft and waits for `send`) / `skip 1` / `save 1` ·
-`send` · `edit <your own words>` · `cancel` · `sent` · `not interested 2` · `draft 2` · `unskip fred` (a skip is a 14-day cool-off, not a verdict - Linky says the words when it withholds someone) · `accept` / `decline` / `later` · `draft` (write the first line) · `more` (outside-LINKUP pointers after a no-match) · `prefs` · `audit` · `unlink` · `help`. Free replies carry a reply-keyboard of the suggestions Linky generated, so most taps are one button.
+`send` · `edit <your own words>` · `cancel` · `sent` · `not interested 2` · `draft 2` · `unskip fred` (a skip is a 14-day cool-off, not a verdict - Linky says the words when it withholds someone) · `accept` / `decline` / `later` · `draft` (write the first line) · `more` (outside-LINKUP pointers after a no-match) · `meet squad` (approve one message, it goes to the trio as separate opt-in intros) · `1`-`4` (answer the 48-hour follow-up when one is open) · `prefs` · `audit` · `unlink` · `help`. Free replies carry a reply-keyboard of the suggestions Linky generated, so most taps are one button.
 Linking: app → Linky tab → Preferences & bots → Connect → send the 6-character code to the bot (15-minute validity).
 
 ## Verify after deploy
@@ -363,6 +363,92 @@ The outreach suite mocks `globalThis.fetch`, so it spends **zero real SerpApi
 credits** and asserts the budget rules themselves: `num=100` on every query, one
 search per ask, no second lookup per person, the ledger counting exactly the
 searches made, and refusal at the credit reserve.
+
+## What happens after Linky says "here they are"
+
+Four things, all of them text, all of them in the same chat:
+
+### The one-page Synergy Brief
+When the other person accepts, Linky writes a single page into the chat both of
+them can read (`matches/{matchId}/messages`, `type: 'synergy_brief'`, mirrored to
+Telegram/WhatsApp and stored on the match as `synergyBrief`):
+
+- **why you two** - computed locally from both profiles first (shared skills,
+  shared industries, what each of you is `lookingFor` that the other already has,
+  words both of you wrote about the work). If the two profiles genuinely share
+  nothing, the page says that instead of inventing a compliment;
+- **three icebreakers**, each anchored to a fact from one of the profiles
+  (a project title, a stated goal, the city, the shared skill);
+- **a 15-minute agenda** in three blocks (0-5 background, 5-10 show the real
+  thing, 10-15 alignment check) and one rule: nobody hangs up without a next step.
+
+One model call writes the whole page for the pair - never one per person - and it
+is written **once**: `ensureBrief()` returns null if the match already has one, so
+a reload never rewrites it. No key, no quota, or junk JSON, and the same page is
+composed from the local overlap instead (same sections, shorter prose). Cron
+finishes any brief a slow request could not make in time.
+
+### The Post-Intro Loop (48 hours)
+Accepting an intro sets `intros/{id}.followupDue = acceptedAt + 48h`,
+`followupStatus: 'queued'`. The hourly cron (`?action=cron`) finds what is due and
+asks the member who asked for the intro - `Did you actually connect with Grace?` -
+with exactly four answers:
+
+| answer | key | what Linky does with it |
+| --- | --- | --- |
+| Met & pursuing the project | `met` | the pair is warm; cards about that person say you already met |
+| Great chat, staying in touch | `touch` | kept as a contact, not pushed for a project |
+| No response yet | `quiet` | nothing is forced, the door stays open |
+| Not a fit | `nope` | `linkyPairs/{a_b}` records it and `introBlocker` stops suggesting each of you to the other for 60 days |
+
+On Telegram those are four inline buttons (`f:met` … `f:nope`); in the app they
+are four labelled chips on the Linky tab (`home.loop`); a plain number works, and
+so does a sentence - with a model online it is sorted into one of the four
+(`intent: 'ai:loop'`), offline it is stored as a note against the intro rather
+than being run as a search. One question per intro, one per member per day, and
+never again after an answer. Everything the loop learns lives in `linkyPairs`,
+which `buildMatchContext()` loads so the matcher actually uses it.
+
+### Squad Finder (3-way, only when asked)
+A member asking for "a dev + someone who can sell + an angel" gets a triangle, not
+three searches. The intent gate returns `multi: true` (that is the primary
+decider; `SQUAD_RX` on group words like "squad/team of three" is only the offline
+fallback), then:
+
+1. the roles come from the member's own words; when they only say "a squad", the
+   gaps come from their profile (`lookingFor`), and only then from one cached model
+   call;
+2. every visible member is scored against every slot in **one local pass** - no
+   search, no extra tokens - and a triangle is only accepted when no two of its
+   members share more than one core skill and none of them is a copy of the
+   requester;
+3. **one** batched model call frames the whole answer (`part` per person,
+   `missing` per squad), cite-or-reject as everywhere else.
+
+Squads are ordinary cards carrying `squadId / squadRole / squadSize / squadIndex`,
+so Save, Skip and Meet all still work per person. `meetSquad` writes one message
+for the trio in a single call, the member approves it once, and then each of the
+three gets their own double opt-in intro - nobody is added to a group they did not
+agree to, and the free plan's 2 Meets a day still decide how many went out today
+(the rest are named as still waiting). Linky never offers this feature on its own:
+`VOICE_KINDS` and the help copy are told to keep quiet unless the member's own
+message asked about it.
+
+### Proof-of-work badges (`api/_proof.js`)
+Every card carries up to three badges, and every badge is a fact, not a compliment:
+
+- `checked: true` - LINKUP holds the record itself: a GitHub handle on their own
+  profile, a project they published, `isVerified`, a funding stage, projects
+  marked live;
+- otherwise it is *their own words* and `quote` keeps the sentence: "40k users",
+  "10k stars", "raised $2.5M", "Y Combinator alum", "featured in …".
+  The channel copy labels those "(their words)" so a member never reads a quote as
+  a verification.
+
+Traction outranks contact details for the three slots (weights in `_proof.js`), and
+the same extraction runs over outside leads from the SerpApi snippet we already paid
+for - no extra search per person. Hidden facts stay hidden: `hidden.bio` /
+`hidden.notes` are not scanned for quotes.
 
 ## Which AI key is actually answering
 

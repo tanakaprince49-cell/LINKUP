@@ -4,6 +4,7 @@
 // tab uses), and only ever writes through /api/linky.
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Linking,
   ActivityIndicator,
   Image,
   Modal,
@@ -20,7 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { COLORS, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
 import PaywallModal from './PaywallModal';
-import { Clock, Send, X } from 'lucide-react-native';
+import { Trophy, Clock, Send, X } from 'lucide-react-native';
 import {
   LinkyApiError,
   LinkyCard,
@@ -160,6 +161,32 @@ export default function LinkyCardsSection() {
           </View>
           {card.status === 'saved' ? <Text style={[styles.pill, { color: textColor(isDark, 'muted'), borderColor: border }]}>Saved</Text> : null}
         </TouchableOpacity>
+        {card.squadId && card.squadRole ? (
+          <Text style={[styles.squadTag, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+            {`Squad${(card.squadSize || 0) > 1 ? ` of ${card.squadSize}` : ''} - ${card.squadRole}`}
+          </Text>
+        ) : null}
+        {card.badges && card.badges.length ? (
+          <View style={styles.badgeRow}>
+            {card.badges.slice(0, 3).map((b) => (
+              <TouchableOpacity
+                key={`${b.kind}-${b.label}`}
+                style={[styles.badge, { backgroundColor: isDark ? 'rgba(223,251,63,0.10)' : 'rgba(223,251,63,0.22)', borderColor: border }]}
+                onPress={() => { if (b.url) Linking.openURL(b.url).catch(() => {}); }}
+                disabled={!b.url}
+                activeOpacity={0.8}
+              >
+                <Trophy size={11} color={textColor(isDark, 'secondary')} />
+                <Text style={[styles.badgeText, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+                  {b.label}{b.checked ? '' : ' (their words)'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
+        {card.pairNote ? (
+          <Text style={[styles.pairNote, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>{card.pairNote}</Text>
+        ) : null}
         {card.why ? (
           <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
             <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>WHY LINKY PICKED THEM</Text>
@@ -268,6 +295,11 @@ const styles = StyleSheet.create({
   cardRole: { fontSize: 12, fontWeight: '600', marginTop: 1 },
   cardMeta: { fontSize: 11, fontWeight: '600', marginTop: 1 },
   pill: { fontSize: 10, fontWeight: '800', borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+  squadTag: { fontSize: 11, fontWeight: '800', marginTop: 8 },
+  pairNote: { fontSize: 11.5, marginTop: 8, fontStyle: 'italic' },
   whyBox: { borderRadius: 12, padding: 10, marginTop: 12 },
   whyLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   whyText: { fontSize: 13, lineHeight: 19, fontWeight: '600', marginTop: 3 },

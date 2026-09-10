@@ -64,7 +64,7 @@ globalThis.fetch = async (url, init = {}) => {
       calls.intent = (calls.intent || 0) + 1;
       const cand = (t) => { const content = { parts: [{ text: t }] }; return { candidates: [{ content }] }; };
       if (!intentMode) return json(cand('the mock has no opinion'));
-      return json(cand(JSON.stringify({ mode: intentMode, topic: intentTopic, reply: intentReply })));
+      return json(cand(JSON.stringify({ mode: intentMode, topic: intentTopic, reply: intentReply, multi: !!intentMulti })));
     }
     calls.gemini += 1;
     if (geminiDown) return json({ error: { message: '429 Quota exceeded for the gemini key' } }, 429);
@@ -87,6 +87,36 @@ globalThis.fetch = async (url, init = {}) => {
         pitch: 'Carrie keeps hives in Ruwa and sells the honey on her own site. Alice is building the payments side of exactly that kind of sale and asked for you by name - not for a crowd. Fifteen minutes this week would be enough. If the timing is wrong, say no and I will not ask twice.',
         opener: 'Hi Carrie - Alice here. I do the money side of a honey business and I am stuck on payouts for smallholders. Your Ruwa setup is the closest thing to what I need. Fifteen minutes this week?',
       }) }] } }] });
+    }
+    // the one-page brief for a pair
+    if (/STRICT JSON only: \{"headline"/.test(prompt)) {
+      calls.brief = (calls.brief || 0) + 1;
+      const i = prompt.lastIndexOf('Dossier: ');
+      let d = {};
+      try { d = JSON.parse(prompt.slice(i + 9)); } catch { /* the shape below is enough */ }
+      const who = (d.a && d.a.name) || 'the two of you';
+      return json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        headline: 'Why the two of you, on one page',
+        why: [`You both build for the same problem: ${(d.a && d.a.skills || []).slice(0, 2).join(' and ')} on one side, ${(d.b && d.b.skills || []).slice(0, 2).join(' and ')} on the other.`, 'One of you is looking for exactly what the other already does.'],
+        icebreakers: ['Ask what broke in week one of the flutter app.', 'Swap the one tool each of you changed your mind about.', 'Name the thing you are bad at, first, out loud.'],
+        agenda: [{ span: '0-5', title: 'Background', ask: 'Two minutes each: what you are building and the one thing you are stuck on.' }, { span: '5-10', title: 'Show the real thing', ask: 'Screens on, whatever exists.' }, { span: '10-15', title: 'Alignment check', ask: 'What would have to be true to work together, and who moves first.' }],
+      }) }] } }] });
+    }
+    // squad framing: reasons per person, never a new roster
+    if (/STRICT JSON only: \{"squads"/.test(prompt)) {
+      calls.squad = (calls.squad || 0) + 1;
+      const i = prompt.lastIndexOf('Dossier: ');
+      let d = { squads: [] };
+      try { d = JSON.parse(prompt.slice(i + 9)); } catch { /* fall through to the template path */ }
+      return json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ squads: (d.squads || []).map((sq) => ({ i: sq.i, missing: 'somebody to run the day to day', people: (sq.people || []).map((x) => ({ uid: x.uid, part: `the one who does ${(sq.slots || [])[x.i || 0] || 'the technical half'}` })) })) }) }] } }] });
+    }
+    // the message a squad approval sends
+    if (/STRICT JSON only: \{"line"/.test(prompt)) {
+      return json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ line: 'Linky put a squad together for me and named you three. I am Alice, I do the money side, and I am stuck on shipping. Fifteen minutes with all of you this week, and if the shape is wrong nobody owes anybody an explanation.' }) }] } }] });
+    }
+    // "how did it go?" - four buckets, one call
+    if (/STRICT JSON only: \{"choice"/.test(prompt)) {
+      return json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ choice: 'met' }) }] } }] });
     }
     const dossier = (() => {
       const i = prompt.lastIndexOf('Dossier: ');
@@ -141,8 +171,8 @@ globalThis.fetch = async (url, init = {}) => {
 const setHang = (v) => { hangProviders = v; };
 // what the intent gate will say, per test. null = it declines, so the word lists
 // decide - which is exactly what happens when no provider answers at all.
-let intentMode = null, intentTopic = '', intentReply = '';
-const setIntent = (mode, { topic = '', reply = '' } = {}) => { intentMode = mode; intentTopic = topic; intentReply = reply; };
+let intentMode = null, intentTopic = '', intentReply = '', intentMulti = false;
+const setIntent = (mode, { topic = '', reply = '', multi = false } = {}) => { intentMode = mode; intentTopic = topic; intentReply = reply; intentMulti = multi; };
 const clearIntent = () => { intentMode = null; intentTopic = ''; intentReply = ''; };
 const L = await import('../../api/_linky.js');
 const S = await import('../../api/_serpapi.js');
@@ -872,6 +902,79 @@ if (failed) { console.error(`\n${failed} FAILED`); process.exit(1); }
   clearIntent();
   assert(calls.intent === iOne, 'the same message is not asked twice within a day: ' + JSON.stringify({ a: iOne, b: calls.intent }));
   assert(twice.kind === 'chat', 'the repeat is still chat, with the words written fresh');
+}
+
+
+// ================================================================ the model, not
+// the lists, decides a squad; the brief is one call; the loop is answered in a
+// sentence. All of this runs against the fake providers above, so no key is used.
+{
+  const before = { ...calls };
+  await resetBudgets();
+  // a message with no "squad" word in it at all: only the model can tell this is
+  // a request for a group, which is the whole point of the gate
+  setIntent('search', { topic: 'a flutter developer + a product designer + an accountant', multi: true });
+  const squadTurn = await L.ask('alice', 'i am building an app and need a flutter dev + a product designer + someone to keep the books');
+  console.log('    SQUAD>', squadTurn.reply.slice(0, 150));
+  assert(squadTurn.kind === 'squad' && squadTurn.cards.length >= 2, 'the gate hears a group where no keyword would: ' + squadTurn.cards.map((c) => c.targetName).join(', '));
+  assert(squadTurn.cards.every((c) => c.squadId && c.squadRole), 'each person arrives as part of one trio, with the part they play');
+  assert(new Set(squadTurn.cards.map((c) => c.targetUid)).size === squadTurn.cards.length, 'nobody fills two seats in the same squad');
+  assert(squadTurn.cards.every((c) => c.badges.length <= 3), 'cards carry at most three proof points');
+  const squadCalls = calls.gemini - before.gemini;
+  assert(squadCalls <= 2, `one squad is one framing call plus one line of wording, never one per profile (${squadCalls} Gemini calls)`);
+  assert(!/quota|gemini|zen|api key|payment/i.test(squadTurn.reply), 'and no provider word reaches the member');
+
+  // ---- with both models down the squad still happens, in cited plain copy
+  geminiDown = true; zenDown = true;
+  await resetBudgets();
+  const coldSquad = await L.ask('luke', 'put a squad together: a flutter developer + a product designer');
+  geminiDown = false; zenDown = false;
+  assert(coldSquad.kind === 'squad' && coldSquad.cards.length >= 2, 'no model, still a real triangle: ' + coldSquad.cards.map((c) => c.targetName).join(', '));
+  assert(!/Situation|I looked and here is what I found/i.test(coldSquad.reply), 'the offline copy is Linky, not a placeholder: ' + coldSquad.reply.slice(0, 90));
+
+  // ---- the synergy brief: one call, both sides, no invented facts
+  setIntent(null);
+  await resetBudgets();
+  const briefAsk = await L.ask('alice', 'fred moyo');
+  const card = briefAsk.cards[0];
+  const staged = await L.meet('alice', card.id, { userDoc: await L.loadUser('alice') });
+  await L.approveMeet('alice', { cardId: card.id });
+  const introDoc = await db.collection('intros').doc(`alice_${card.targetUid}`).get();
+  const gemBefore = calls.gemini;
+  const acc = await L.respond(card.targetUid, introDoc.id, 'accept');
+  const briefCalls = calls.gemini - gemBefore;
+  assert(acc.status === 'accepted' && briefCalls === 1, `the brief is exactly one model call for the pair, not one per person (${briefCalls})`);
+  const msgsSnap = await db.collection('matches').doc(acc.matchId).collection('messages').get();
+  const brief = msgsSnap.docs.map((d) => d.data()).find((x) => x.type === 'synergy_brief');
+  assert(!!brief && /Why the two of you/i.test(brief.content), 'the page lands in the chat both of them open: ' + brief?.content.slice(0, 70));
+  assert(brief.brief.why.length >= 2 && brief.brief.icebreakers.length === 3 && brief.brief.agenda.length === 3, 'why, three openers, three agenda blocks - all from the model this time');
+  assert(/0-5/.test(brief.brief.agenda[0].span) && /flutter/i.test(brief.content), 'the agenda has times and the page names the actual work');
+  const onMatch = await db.collection('matches').doc(acc.matchId).get();
+  assert(onMatch.data().synergyBrief && onMatch.data().synergyBrief.at, 'and it is stored on the match, so a reload does not rewrite it');
+  assert(!(await L.ensureBrief({ matchId: acc.matchId })), 'a second call writes nothing');
+  // the loop clock starts at the accept
+  const timed = await db.collection('intros').doc(introDoc.id).get();
+  assert(timed.data().followupStatus === 'queued' && timed.data().followupDue.toMillis() - Date.now() > 47 * 3600000, 'and the follow-up is queued for 48 hours from now');
+
+  // ---- the loop: cron asks, the member answers in a sentence, the pair learns
+  const later = Date.now() + 49 * 3600000;
+  const sentOut = await L.sendDueFollowups({ now: later, max: 10 });
+  assert(sentOut.sent >= 1 && sentOut.items.some((x) => x.uid === 'alice'), '48 hours later Linky asks the asker, once: ' + JSON.stringify(sentOut.items.map((x) => x.uid)));
+  const loopKeys = tgSends.filter((t) => /inline_keyboard/.test(JSON.stringify(t)) && /How did it go|connect with|actually talk/i.test(JSON.stringify(t)));
+  assert(JSON.stringify(tgSends).includes('f:met') && JSON.stringify(tgSends).includes('f:nope'), 'on Telegram the four answers are four buttons');
+  const homeWithLoop = await L.home('alice');
+  assert(homeWithLoop.loop && homeWithLoop.loop.choices.map((c) => c.label).join('|') === 'Met & pursuing the project|Great chat, staying in touch|No response yet|Not a fit', 'in the app they are four labelled options: ' + (homeWithLoop.loop?.choices || []).map((c) => c.label).join(' / '));
+  const serpBefore = calls.serp;
+  const said = await L.ask('alice', 'we had a coffee on tuesday and we are doing the thing');
+  assert(said.intent === 'ai:loop' && said.free === true && !said.cards.length, 'a sentence about the intro is read as the answer, not as a search: ' + said.reply.slice(0, 60));
+  assert(calls.serp === serpBefore, 'and it spends no search credit doing so');
+  const pair = (await db.collection('linkyPairs').doc([['alice', card.targetUid].sort().join('_')].join('')).get()).data();
+  assert(pair && pair.outcome === 'met', 'the outcome is written on the pair, where the matcher will see it: ' + JSON.stringify(pair));
+  const cleared = await L.home('alice');
+  assert(!cleared.loop, 'and the question is off the home screen once answered');
+  const again = await L.sendDueFollowups({ now: later + 3600000, max: 10 });
+  assert(!again.sent, 'never the same question twice, even the next hour');
+  clearIntent();
 }
 
 console.log('\nALL PASSED');
