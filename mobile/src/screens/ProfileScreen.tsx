@@ -2491,7 +2491,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 {profile?.isVerified && (
                   <VerifiedBadge size={30} style={styles.inlineVerifiedBadge} />
                 )}
-                {!isViewingOther && <ProCrownBadge size={17} />}
+                {isProPlanActive && <ProCrownBadge size={17} active={isProPlanActive} />}
               </View>
               <Text style={styles.handleText}>
                 @{cleanUsername((profile as any)?.username || displayNameFor(profile) || 'builder')}

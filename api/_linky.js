@@ -626,6 +626,10 @@ export function parseAsk(message) {
   // by commas around a city. Two role-shaped phrases is a group, one is a person.
   const squadParts = need.split(/\s*(?:\+|&|\bplus\b)\s*/i).map((x) => x.trim()).filter((x) => x.length > 2);
   const multiRoles = squadParts.filter((x) => ROLEISH_RX.test(x)).length >= 2;
+  // "give me their LinkedIn profiles" is a request for the open-web lookup, not
+  // for a drafted message. DRAFT_RX sees the words "give me" and would have
+  // handed back a message to the top match; the LinkedIn signal outranks it.
+  const linkedinLookup = /linked\s?in/i.test(all) && /\b(profile|profiles|people|person|them|their|search|look|find|links?)\b/i.test(all);
   return {
     need, offer, location, remote, tokens: kws, expanded: expandTerms(raw), norm: raw.slice().sort().join(' '),
     // same rule for the name lookup itself, so "cards" is not a phantom person
@@ -636,7 +640,8 @@ export function parseAsk(message) {
     norm: [raw.slice().sort().join(' '), names[0] ? `@${names[0].toLowerCase().replace(/\s+/g, '')}` : ''].filter(Boolean).join(' ').trim(),
     reflective: REFLECT_RX.test(all) && !ORDER_RX.test(all),
     command: ORDER_RX.test(all),
-    wantsDraft: DRAFT_RX.test(all) && !/[a-z]{4,}\s+(developer|designer|engineer|marketer|lawyer|analyst)/i.test(all),
+    wantsDraft: DRAFT_RX.test(all) && !/[a-z]{4,}\s+(developer|designer|engineer|marketer|lawyer|analyst)/i.test(all) && !linkedinLookup,
+    linkedinLookup,
     wantsElse: ELSE_RX.test(all),
     // "a squad", "team of three" - a shape, not a vocabulary of roles. The intent
     // model decides this first; this only speaks when no model answered.
@@ -1732,7 +1737,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // "what can you do" - skips the intent gate, so the most common messages
   // never touch the model at all.
   const pre = parseAsk(answeringYes ? pendingIntent.need : msgTyped);
-  const skipGate = !answeringYes && (pre.smallTalk || pre.chitChat || pre.bare || pre.askedWhatYouDo);
+  const skipGate = !answeringYes && (pre.smallTalk || pre.chitChat || pre.bare || pre.askedWhatYouDo || pre.linkedinLookup);
   const gate = answeringYes || skipGate ? null : await intentGate(msgTyped, { offer: offerOpen, lastAsk: state.lastAsk?.need || '', source });
   let msg = answeringYes ? pendingIntent.need : msgTyped;
   // When the model hears an order our lists cannot read - Shona, slang, a phrase
@@ -1757,6 +1762,35 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     ]);
     return thread;
   };
+
+  // ---- 2b. "give me their LinkedIn profiles" / "search LinkedIn for them":
+  // the member wants the open-web lookup itself, not a drafted message and not
+  // another matcher run. This is a word-list certainty (the model gate can and
+  // does misread "give me" as a draft), so it fires before the chat/draft
+  // sections below. It searches for the need they last asked about - that is
+  // who "their" refers to - and the app renders the leads the same way the
+  // "yes, look outside LINKUP" flow does. With nothing on file it asks once.
+  if (q.linkedinLookup) {
+    const id = newId();
+    const lastNeed = state.lastAsk?.need ? text(state.lastAsk.need, 120) : '';
+    if (!lastNeed) {
+      const reply = `Happy to - tell me who you need (a role, a skill, a city) and I will go and pull their public LinkedIn profiles for you.`;
+      const thread = await sayBack(id, reply, { kind: 'chat' });
+      return { id, need: q.need, reply, kind: 'chat', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: ['find me a co-founder in Harare', 'what can you do'], thread };
+    }
+    const outside = await pointers(uid, lastNeed, { userDoc: user, allowSearch: true, assumeKnown: true });
+    const reply = outside.intro || text(outside.text, 400) || `Nobody on LINKUP does "${polishNeed(lastNeed)}" yet, so I went outside the network. Here is who I found on LinkedIn:`;
+    const thread = await sayBack(id, reply, { kind: 'outside' });
+    return {
+      id, need: text(lastNeed, 120), reply, kind: 'outside', cardIds: [], cards: [], nearest: [],
+      none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: !!outside.cached,
+      createdAt: now, asksLeft: asksLeft(),
+      leads: outside.leads || [], routes: outside.routes || [], pointerIntro: outside.intro || '',
+      searches: outside.searches || 0, skipped: outside.skipped || 0, place: outside.place || '',
+      suggest: ['try a role instead', 'what Linky knows about me'],
+      thread,
+    };
+  }
 
   // ---- 1a. "who else" / "anyone else": keep going on the last real ask.
   // Checked before small talk because it carries almost no words of its own.
