@@ -56,6 +56,22 @@ const FieldValue = () => getAdmin().firestore.FieldValue;
 const nowTs = () => FieldValue().serverTimestamp();
 
 export const dayKey = (ms = Date.now()) => new Date(ms).toISOString().slice(0, 10);
+
+// The instant today's daily budget rolls over. dayKey() is UTC-based, so the
+// reset is the next UTC midnight — the client counts down to this exact moment.
+export const nextDailyResetAt = (ms = Date.now()) => {
+  const d = new Date(ms);
+  d.setUTCHours(24, 0, 0, 0);
+  return d.toISOString();
+};
+
+// "5h 12m" / "42m" — the human form of the countdown the app renders live.
+export const resetInWords = (ms = Date.now()) => {
+  const diff = Math.max(0, Date.parse(nextDailyResetAt(ms)) - ms);
+  const hrs = Math.floor(diff / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  return hrs > 0 ? `${hrs}h ${mins}m` : `${Math.max(1, mins)}m`;
+};
 export const weekKey = (ms = Date.now()) => {
   const d = new Date(ms);
   const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -1718,8 +1734,8 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   const newId = () => `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
   if (used >= limits.asksPerDay) {
     const limitReply = plus
-      ? `That is today's ${limits.asksPerDay} messages used up - it resets at midnight.`
-      : `You have exhausted your ${limits.asksPerDay} free messages today. LINKUP PLUS lifts the cap - $19.99 a month or $149.99 a year.`;
+      ? `That is today's ${limits.asksPerDay} messages used up - it resets in ${resetInWords(now)}.`
+      : `You have exhausted your ${limits.asksPerDay} free messages today. It resets in ${resetInWords(now)}. LINKUP PLUS lifts the cap - $19.99 a month or $149.99 a year.`;
     const err = new Error(limitReply);
     err.code = 'ask_limit';
     throw err;
@@ -2307,7 +2323,7 @@ export async function meet(uid, cardId, { userDoc } = {}) {
   const used = state.meets?.day === today ? Number(state.meets.count || 0) : 0;
   const limit = plus ? LIMITS.plus.meetsPerDay : LIMITS.free.meetsPerDay;
   if (used >= limit) {
-    const err = new Error(`You have used today's ${limit} Meet requests. PLUS members get unlimited Meets.`);
+    const err = new Error(`You have used today's ${limit} Meet requests. It resets in ${resetInWords()}. PLUS members get unlimited Meets.`);
     err.code = 'meet_limit';
     throw err;
   }
@@ -2520,7 +2536,7 @@ async function sendMeet(uid, cardId, { userDoc, draft = null, overrideText = '',
   const used = state.meets?.day === today ? Number(state.meets.count || 0) : 0;
   const limit = plus ? LIMITS.plus.meetsPerDay : LIMITS.free.meetsPerDay;
   if (used >= limit) {
-    const err = new Error(`You have used today's ${limit} Meet requests. PLUS members get unlimited Meets.`);
+    const err = new Error(`You have used today's ${limit} Meet requests. It resets in ${resetInWords()}. PLUS members get unlimited Meets.`);
     err.code = 'meet_limit';
     throw err;
   }
@@ -2785,7 +2801,7 @@ export async function home(uid, { userDoc } = {}) {
   return {
     name: profileFacts(user)?.name || '',
     plus,
-    limits: { meetsPerDay: plus ? null : limits.meetsPerDay, meetsUsedToday: meetsUsed, asksPerDay: limits.asksPerDay, asksUsedToday: asksUsed },
+    limits: { meetsPerDay: plus ? null : limits.meetsPerDay, meetsUsedToday: meetsUsed, asksPerDay: limits.asksPerDay, asksUsedToday: asksUsed, asksResetAt: nextDailyResetAt(now) },
     cards: liveCards,
     inbound: inboundSnap.docs.map((d) => publicIntro(d.id, d.data())).filter((i) => now - i.createdAt < LIMITS.introDays * DAY_MS),
     sent: sentSnap.docs.map((d) => publicIntro(d.id, d.data())).sort((a, b) => b.createdAt - a.createdAt).slice(0, 10),
@@ -3554,7 +3570,7 @@ export async function meetSquad(uid, squadId, { userDoc } = {}) {
   const left = Math.max(0, limit - used);
   const want = mine.slice(0, 3);
   if (!left) {
-    const err = new Error(`You have used today's ${limit} Meet requests, and a squad of three costs one per person. PLUS members get unlimited Meets.`);
+    const err = new Error(`You have used today's ${limit} Meet requests, and a squad of three costs one per person. It resets in ${resetInWords()}. PLUS members get unlimited Meets.`);
     err.code = 'meet_limit';
     throw err;
   }

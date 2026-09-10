@@ -201,7 +201,7 @@ export type LinkyBrief = {
 export type LinkyHome = {
   name: string;
   plus: boolean;
-  limits: { meetsPerDay: number | null; meetsUsedToday: number; asksPerDay: number; asksUsedToday: number };
+  limits: { meetsPerDay: number | null; meetsUsedToday: number; asksPerDay: number; asksUsedToday: number; asksResetAt?: string };
   cards: LinkyCard[];
   inbound: LinkyIntro[];
   sent: LinkyIntro[];

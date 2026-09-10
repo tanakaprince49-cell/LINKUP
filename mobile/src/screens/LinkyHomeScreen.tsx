@@ -21,7 +21,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trophy, X, Zap } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -62,6 +62,21 @@ import {
 // Cosmetic only - the server answers when it answers. This just keeps the
 // bubble alive with a different line every couple of seconds while it works.
 const THINKING_LINES = ['Linky is reading profiles…', 'Checking who this could be…', 'Almost - comparing two or three…'];
+
+// Live countdown to the moment today's daily Linky budget resets (the server
+// hands back `asksResetAt` as an ISO instant; dayKey is UTC, so it is the next
+// UTC midnight). Formats as "5h 12m 03s" -> "12m 03s" -> "3s".
+const formatCountdown = (resetAtIso?: string, now = Date.now()) => {
+  if (!resetAtIso) return '';
+  const diff = Math.max(0, Date.parse(resetAtIso) - now);
+  if (diff <= 0) return '';
+  const total = Math.floor(diff / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}h ${m}m ${pad(s)}s` : m > 0 ? `${m}m ${pad(s)}s` : `${s}s`;
+};
 
 const FALLBACK_AVATAR = 'https://ui-avatars.com/api/?name=U&background=DFFB3F&color=000&size=80';
 
@@ -250,6 +265,26 @@ export default function LinkyHomeScreen({ navigation }: any) {
     const t = setInterval(() => setThinkingTick((x) => x + 1), 2200);
     return () => clearInterval(t);
   }, [thinking]);
+
+  // One-second tick so the daily-limit countdown actually counts down on
+  // screen instead of sitting frozen at the value it rendered with. Gated on
+  // focus so a background tab is not re-rendering every second.
+  const isFocused = useIsFocused();
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isFocused) return;
+    setNowTick(Date.now());
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [isFocused]);
+
+  // Derived: how many free asks are left today and, once it is zero, how long
+  // until the budget refreshes. PLUS never sees this (no counter, no cap).
+  const asksUsed = home?.limits?.asksUsedToday ?? 0;
+  const asksPerDay = home?.limits?.asksPerDay ?? 0;
+  const asksLeft = Math.max(0, asksPerDay - asksUsed);
+  const resetCountdown = formatCountdown(home?.limits?.asksResetAt, nowTick);
+  const atDailyLimit = !!home && !home.plus && asksPerDay > 0 && asksLeft <= 0;
   const mounted = useRef(true);
 
   useEffect(() => () => { mounted.current = false; }, []);
@@ -653,7 +688,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
             {(pendingAsk || turns.length) ? (
               <>
-                <SectionTitle title="Linky" hint={!home.plus && home.limits.asksPerDay ? `${Math.max(0, home.limits.asksPerDay - home.limits.asksUsedToday)} of ${home.limits.asksPerDay} free messages left today` : undefined} isDark={isDark} />
+                <SectionTitle title="Linky" hint={!home.plus && asksPerDay ? (asksLeft > 0 ? `${asksLeft} of ${asksPerDay} free messages left today` : `0 of ${asksPerDay} free messages left today · resets in ${resetCountdown || '…'}`) : undefined} isDark={isDark} />
                 <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
                   {turns.map((t, i) => (t.role === 'user' ? (
                     <View key={`u${t.at}-${i}`} style={[styles.turn, styles.turnUser]}>
@@ -806,6 +841,11 @@ export default function LinkyHomeScreen({ navigation }: any) {
       </ScrollView>
 
       <View style={[styles.composerWrap, { paddingBottom: Math.max(10, insets.bottom + 6), backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg, borderTopColor: border }]}>
+        {atDailyLimit && resetCountdown ? (
+          <Text style={[styles.resetLine, { color: textColor(isDark, 'muted') }]}>
+            Today's free messages are used up — resets in {resetCountdown}.
+          </Text>
+        ) : null}
         <View style={[styles.composer, { backgroundColor: surface, borderColor: border }]}>
           <TextInput
             style={[styles.input, { color: textColor(isDark) }]}
@@ -876,7 +916,10 @@ export default function LinkyHomeScreen({ navigation }: any) {
         visible={!!paywall}
         onClose={() => setPaywall(null)}
         feature="Linky asks & intros"
-        description={paywall || 'You have exhausted your 2 free messages today. Upgrade to LINKUP PLUS — $19.99/month or $149.99/year.'}
+        description={(() => {
+          const base = paywall || 'You have exhausted your 2 free messages today. Upgrade to LINKUP PLUS — $19.99/month or $149.99/year.';
+          return resetCountdown ? `${base}\n\nDaily messages reset in ${resetCountdown}.` : base;
+        })()}
       />
     </View>
   );
@@ -964,6 +1007,7 @@ const styles = StyleSheet.create({
   chip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
   chipText: { fontSize: 12, fontWeight: '700', lineHeight: 17 },
   composerWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 12, paddingTop: 8, borderTopWidth: 1 },
+  resetLine: { fontSize: 11, fontWeight: '800', textAlign: 'center', paddingBottom: 8 },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, borderRadius: 18, borderWidth: 1, paddingLeft: 14, paddingRight: 6, paddingVertical: 6 },
   input: { flex: 1, fontSize: 14, fontWeight: '500', maxHeight: 96, paddingVertical: 6 },
   sendBtn: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
