@@ -78,7 +78,7 @@ import {
 } from '../lib/trial';
 
 const CAMPAIGNS_PERKS = [
-  'Showcase your product on Idea Deck, Discover, Search, Hub & Linky picks',
+  'Showcase your product on Idea Deck, Discover, Search, Feed, Hub & Linky picks',
   '3 active campaigns at once — swap creatives anytime',
   'Sponsored cards with your logo and your website as the call-to-action',
   'Live impressions, clicks & CTR on every campaign',
@@ -440,7 +440,7 @@ export default function CampaignsScreen({ navigation }: any) {
         </View>
         <Text style={s.arenaTitle}>Your product is in the deck</Text>
         <Text style={s.arenaSub}>
-          Sponsored cards running across Idea Deck, Discover, Search, Hub and Linky picks.
+          Sponsored cards running across Idea Deck, Discover, Search, Feed, Hub and Linky picks.
         </Text>
         <View style={s.statRow}>
           <View style={s.statChip}>
@@ -623,7 +623,7 @@ export default function CampaignsScreen({ navigation }: any) {
         </View>
         <Text style={s.arenaTitle}>Put your product in front of every founder</Text>
         <Text style={s.arenaSub}>
-          Sponsored cards placed natively across Idea Deck, Discover, Search, Hub and Linky's picks.
+          Sponsored cards placed natively across Idea Deck, Discover, Search, Feed, Hub and Linky's picks.
         </Text>
         <View style={s.statRow}>
           <View style={s.statChip}>

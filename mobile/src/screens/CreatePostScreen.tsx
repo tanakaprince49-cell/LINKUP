@@ -5,15 +5,17 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, increment, query, where, getDocs, limit } from 'firebase/firestore';
-import { uploadMedia } from '../lib/storage';
 import { uploadImageToImageKit } from '../lib/imagekitUpload';
 import { storedProfileImageUri } from '../lib/profilePerformance';
 import { isDiscoverableProfile } from '../lib/discovery';
 import * as ImagePicker from 'expo-image-picker';
-import { X, Camera, Video, Send, Image as ImageIcon } from 'lucide-react-native';
+import { X, Image as ImageIcon } from 'lucide-react-native';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
 const { width } = Dimensions.get('window');
+
+/** Hard cap: a post carries at most 3 images, so the feed stays scannable. */
+const MAX_POST_MEDIA = 3;
 
 export default function CreatePostScreen({ navigation }: any) {
   const { user, profile } = useAuth();
@@ -100,9 +102,11 @@ export default function CreatePostScreen({ navigation }: any) {
         content,
         timestamp: serverTimestamp(),
         likesCount: 0,
+        dislikesCount: 0,
         commentsCount: 0,
         viewsCount: 0,
         likedBy: [],
+        dislikedBy: [],
         viewedBy: [],
         media: hostedMedia, // CDN URLs only — base64 never reaches Firestore
         hashtags,
@@ -144,7 +148,18 @@ export default function CreatePostScreen({ navigation }: any) {
         }
         return asset.uri;
       });
-      setMedia(prev => [...prev, ...newMedia]);
+      setMedia(prev => {
+        const room = MAX_POST_MEDIA - prev.length;
+        if (room <= 0) {
+          Alert.alert('Limit reached', 'Max 3 images per post.');
+          return prev;
+        }
+        const added = newMedia.slice(0, room);
+        if (added.length < newMedia.length) {
+          Alert.alert('Limit reached', 'Max 3 images per post.');
+        }
+        return [...prev, ...added];
+      });
     }
   };
 
@@ -172,7 +187,7 @@ export default function CreatePostScreen({ navigation }: any) {
             <TextInput
               autoFocus
               multiline
-              placeholder="WHAT'S ON YOUR MIND?"
+              placeholder="SHARE YOUR STARTUP OR WHAT YOU'RE BUILDING..."
               placeholderTextColor="#666"
               style={[styles.input, { color: textColor(isDark) }]}
               value={content}
@@ -210,10 +225,9 @@ export default function CreatePostScreen({ navigation }: any) {
             <ImageIcon size={22} color={COLORS.primaryStrong} />
             <Text style={styles.toolText}>Photo</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolBtn} onPress={() => pickMedia('video')}>
-            <Video size={22} color={COLORS.primaryStrong} />
-            <Text style={styles.toolText}>Video</Text>
-          </TouchableOpacity>
+          <View style={styles.mediaCounterWrap}>
+            <Text style={styles.mediaCounter}>{media.length}/{MAX_POST_MEDIA} images</Text>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -299,6 +313,8 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
   },
+  mediaCounterWrap: { marginLeft: 'auto', alignSelf: 'center' },
+  mediaCounter: { color: '#888', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
   tagMenu: {
     backgroundColor: '#16161A',
     borderRadius: 16,

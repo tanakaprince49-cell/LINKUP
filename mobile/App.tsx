@@ -34,7 +34,8 @@ const ActiveOpportunityScreen = lazyScreen(() => import('./src/screens/ActiveOpp
 const ActiveOpportunitiesScreen = lazyScreen(() => import('./src/screens/ActiveOpportunitiesScreen'));
 const TrendingBuildersScreen = lazyScreen(() => import('./src/screens/TrendingBuildersScreen'));
 const RecommendedMatchesScreen = lazyScreen(() => import('./src/screens/RecommendedMatchesScreen'));
-const GamificationHubScreen = lazyScreen(() => import('./src/screens/GamificationHubScreen'));
+const FeedScreen = lazyScreen(() => import('./src/screens/FeedScreen'));
+const CreatePostScreen = lazyScreen(() => import('./src/screens/CreatePostScreen'));
 const FounderFlipScreen = lazyScreen(() => import('./src/screens/FounderFlipScreen'));
 const PitchPerfectScreen = lazyScreen(() => import('./src/screens/PitchPerfectScreen'));
 const NetworkQuizScreen = lazyScreen(() => import('./src/screens/NetworkQuizScreen'));
@@ -55,7 +56,7 @@ const CampaignDetailScreen = lazyScreen(() => import('./src/screens/CampaignDeta
 // lazy fallback is theme-matched now, so cold loads are invisible anyway.
 const PRELOADED_SCREENS = [
   LinkyHomeScreen,
-  GamificationHubScreen,
+  FeedScreen,
   SearchScreen,
   MessagesScreen,
   NewsScreen,
@@ -260,7 +261,7 @@ function TabNavigator({ navigation }: any) {
   const tabLabels: Record<string, string> = {
     Dashboard: 'Explore',
     LinkyHome: 'Linky',
-    Hub: 'Play',
+    Feed: 'Feed',
     Search: 'Search',
     Inbox: 'Chat',
     News: 'News',
@@ -298,7 +299,7 @@ function TabNavigator({ navigation }: any) {
           const iconMap: Record<string, { active: string; inactive: string }> = {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
             LinkyHome: { active: 'Handshake', inactive: 'Handshake' },
-            Hub: { active: 'Gamepad2', inactive: 'Gamepad2' },
+            Feed: { active: 'Feed', inactive: 'Feed' },
             Campaigns: { active: 'Megaphone', inactive: 'Megaphone' },
             Search: { active: 'Search', inactive: 'Search' },
             Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },
@@ -371,7 +372,7 @@ function TabNavigator({ navigation }: any) {
           const titles: Record<string, string> = {
             Dashboard: 'LINKUP',
             LinkyHome: 'Linky',
-            Hub: 'Play',
+            Feed: 'Feed',
             Search: 'Search',
             Inbox: 'Messages',
             News: 'News',
@@ -382,7 +383,7 @@ function TabNavigator({ navigation }: any) {
     >
       <Tab.Screen name="Dashboard" component={DiscoveryDashboardScreen} />
       <Tab.Screen name="LinkyHome" component={LinkyHomeScreen} />
-      <Tab.Screen name="Hub" component={GamificationHubScreen} />
+      <Tab.Screen name="Feed" component={FeedScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Inbox" component={MessagesScreen} options={{ headerShown: false }} />
       <Tab.Screen name="News" component={NewsScreen} />
@@ -697,6 +698,7 @@ function AppContent() {
             <Stack.Screen name="RecommendedMatches" component={RecommendedMatchesScreen} />
             <Stack.Screen name="FounderFlip" component={FounderFlipScreen} />
             <Stack.Screen name="PitchPerfect" component={PitchPerfectScreen} />
+            <Stack.Screen name="CreatePost" component={CreatePostScreen} />
             <Stack.Screen name="NetworkQuiz" component={NetworkQuizScreen} />
             <Stack.Screen name="LinkyProfile" component={LinkyProfileScreen} options={{ animation: Platform.OS === 'android' ? 'fade' : 'slide_from_right' }} />
             <Stack.Screen name="LinkySettings" component={LinkySettingsScreen} />

@@ -128,9 +128,11 @@ export interface Post {
   type: 'build' | 'launch' | 'achievement' | 'update';
   timestamp: Timestamp | FieldValue;
   likesCount: number;
+  dislikesCount: number;
   commentsCount: number;
   viewsCount: number;
   likedBy: string[];
+  dislikedBy: string[];
   viewedBy: string[];
   media?: string[];
   powLink?: string;

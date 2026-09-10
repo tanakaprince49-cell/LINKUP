@@ -41,8 +41,14 @@ import * as Icons from 'lucide-react-native';
 import { generateFeedback } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import VerifiedBadge from '../components/VerifiedBadge';
-import ProCrownBadge from '../components/ProCrownBadge';
+import { SponsoredCard, useSponsoredSlots } from '../components/SponsoredCard';
+import { Campaign, interleaveSponsored, isSponsoredHiddenForViewer } from '../lib/campaigns';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+
+/** Ad density for the Feed: first sponsored card after this many posts... */
+const FEED_FIRST_AD_AFTER = 2;
+/** ...then one after every N posts to the bottom of the list. */
+const FEED_AD_EVERY = 4;
 
 const { width } = Dimensions.get('window');
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
@@ -291,6 +297,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const isLiked = post.likedBy?.includes(user?.uid || '');
+  const isDisliked = post.dislikedBy?.includes(user?.uid || '');
   const [showComments, setShowComments] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -338,6 +345,18 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
           timestamp: serverTimestamp()
         });
       }
+    }
+  };
+
+  // Dislike is a real signal, not an anti-like: the two are independent, so
+  // toggling one never silently clears the other.
+  const handleDislike = async () => {
+    if (!user) return;
+    const postRef = doc(db, 'posts', post.id);
+    if (isDisliked) {
+      await updateDoc(postRef, { dislikesCount: increment(-1), dislikedBy: arrayRemove(user.uid) });
+    } else {
+      await updateDoc(postRef, { dislikesCount: increment(1), dislikedBy: arrayUnion(user.uid) });
     }
   };
 
@@ -463,6 +482,11 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
           </Animated.View>
           <Text style={[styles.actionVal, { color: isLiked ? '#EF4444' : '#666' }]}>{post.likesCount || 0}</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionBtn} onPress={handleDislike}>
+          <SafeIcon name="ThumbsDown" size={18} color={isDisliked ? '#EF4444' : '#666'} fill={isDisliked ? '#EF4444' : 'transparent'} />
+          <Text style={[styles.actionVal, { color: isDisliked ? '#EF4444' : '#666' }]}>{post.dislikesCount || 0}</Text>
+        </TouchableOpacity>
         
         <TouchableOpacity 
           style={styles.actionBtn} 
@@ -489,7 +513,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
 };
 
 export default function FeedScreen({ navigation }: any) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [posts, setPosts] = useState<Post[]>([]);
@@ -512,22 +536,62 @@ export default function FeedScreen({ navigation }: any) {
     return () => unsub();
   }, []);
 
+  // Sponsored slots for FREE members only. PLUS is ad-free (founder/admin
+  // accounts still see the placement so they can review it).
+  const adsHidden = isSponsoredHiddenForViewer(profile, {
+    email: user?.email,
+    isAdmin: (profile as any)?.isAdmin,
+  });
+  const adSlotCount = posts.length
+    ? 1 + Math.floor(Math.max(0, posts.length - FEED_FIRST_AD_AFTER) / FEED_AD_EVERY)
+    : 0;
+  const sponsoredAds = useSponsoredSlots('feed', user?.uid, adSlotCount, !adsHidden);
+
+  type FeedRow = { kind: 'row'; row: Post } | { kind: 'ad'; ad: Campaign | null; slot: number };
+  const feedData = React.useMemo<FeedRow[]>(() => {
+    if (adsHidden || !adSlotCount) return posts.map((row) => ({ kind: 'row', row }));
+    const ads: Array<Campaign | null> = sponsoredAds.length
+      ? sponsoredAds
+      : Array.from({ length: adSlotCount }, () => null);
+    return interleaveSponsored(posts, ads, FEED_AD_EVERY, FEED_FIRST_AD_AFTER);
+  }, [posts, sponsoredAds, adsHidden, adSlotCount]);
+
   if (loading) return (
     <View style={{ flex: 1, backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg, alignItems: 'center', justifyContent: 'center' }}>
       <ActivityIndicator color={COLORS.primaryStrong} />
     </View>
   );
 
+  const renderRow = ({ item }: { item: FeedRow }) => {
+    if (item.kind === 'ad') {
+      return item.ad ? (
+        <SponsoredCard campaign={item.ad} viewerUid={user?.uid} />
+      ) : (
+        <FeedHouseCard isDark={isDark} />
+      );
+    }
+    return <PostCard post={item.row} navigation={navigation} />;
+  };
+
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
       <View style={styles.screenTitleRow}>
         <Text style={[styles.screenTitle, { color: textColor(isDark) }]}>The Feed</Text>
-        <ProCrownBadge />
+        <TouchableOpacity
+          style={styles.composeBtn}
+          onPress={() => {
+            blurActiveElementOnWeb();
+            navigation.navigate('CreatePost');
+          }}
+        >
+          <SafeIcon name="PenSquare" size={16} color="#000" />
+          <Text style={styles.composeText}>Post</Text>
+        </TouchableOpacity>
       </View>
       <FlatList
-        data={posts}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <PostCard post={item} navigation={navigation} />}
+        data={feedData}
+        keyExtractor={(item) => (item.kind === 'ad' ? `ad-${item.slot}-${(item.ad as any)?.id || 'house'}` : item.row.id)}
+        renderItem={renderRow}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
@@ -542,9 +606,32 @@ export default function FeedScreen({ navigation }: any) {
   );
 }
 
+// The house promo that fills an unsold ad slot: it keeps the cadence identical
+// for free members and points them at the paywall/Linky rather than a paid ad.
+function FeedHouseCard({ isDark }: { isDark: boolean }) {
+  return (
+    <TouchableOpacity activeOpacity={0.9} style={[styles.houseCard, liquidGlass(isDark)]}>
+      <View style={styles.housePill}>
+        <Text style={styles.housePillText}>SPONSORED</Text>
+      </View>
+      <Text style={[styles.houseTitle, { color: textColor(isDark) }]}>Advertise to every builder here</Text>
+      <Text style={[styles.houseBody, { color: textColor(isDark, 'secondary') }]}>
+        Run a sponsored card across the Feed, Discover, Search and Linky's picks. List your ad under LinkUp Campaigns.
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
   screenTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 6 },
   screenTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.3 },
+  composeBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#DFFB3F', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  composeText: { fontSize: 12, fontWeight: '900', color: '#000' },
+  houseCard: { borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(128,128,128,0.16)' },
+  housePill: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: 'rgba(128,128,128,0.14)', marginBottom: 10 },
+  housePillText: { fontSize: 8, fontWeight: '900', letterSpacing: 1, color: '#888' },
+  houseTitle: { fontSize: 16, fontWeight: '900', letterSpacing: -0.3, marginBottom: 6 },
+  houseBody: { fontSize: 13, lineHeight: 19, fontWeight: '500' },
   container: {
     flex: 1,
   },
