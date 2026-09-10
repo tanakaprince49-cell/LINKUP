@@ -115,6 +115,8 @@ const NOISE = new Set('me you your for a an the with and or to of is are was be 
 const ROLE_SYNONYMS = {
   developer: ['developer', 'software engineer', 'programmer'],
   engineer: ['engineer', 'developer'],
+  dev: ['developer', 'software engineer'],
+  devs: ['developer', 'software engineer'],
   designer: ['designer', 'ux designer', 'product designer'],
   marketer: ['marketing manager', 'growth marketer', 'head of marketing'],
   'fintech': ['fintech', 'payments', 'mobile money'],
@@ -335,7 +337,9 @@ export async function cleanLink(rawLink) {
   const l = String(rawLink || '');
   if (/^https?:\/\/(www\.)?linkedin\.com\//i.test(l)) return l;
   const m = l.match(/\/goto\?url=([^&\s]+)/) || l.match(/[?&]url=([^&\s]+)/);
-  if (!m) return /^https?:\/\//i.test(l) ? l : '';
+  // Fail closed: a direct non-LinkedIn link is a dictionary/news/definition page,
+  // not a person. Returning it would hand a member a fake "profile" URL.
+  if (!m) return '';
   if (!/\/goto\?/.test(l)) {
     try { const u = new URL(decodeURIComponent(m[1])); if (/linkedin\.com/i.test(u.hostname)) return u.toString(); } catch { /* fall through */ }
   }
@@ -410,7 +414,7 @@ export async function findLeads(need, { place = '', plus = false, uid = '', aske
       name: tidyTitle(l?.name, 60),
       title: tidyTitle(l?.title, 110),
       why: tidyTitle(l?.why, 52),
-    })).filter((l) => l.name && l.url);
+    })).filter((l) => l.name && /linkedin\.com\/in\//i.test(String(l.url || '')));
     return { leads, searches: 0, cached: true, query: primary, note: 'cached' };
   }
   const budget = await canSearch({ plus, uid });
@@ -473,6 +477,9 @@ export async function findLeads(need, { place = '', plus = false, uid = '', aske
   const picked = flat.slice(0, OUTREACH.maxLeads).map((k) => pool[k.gi]);
   const withUrls = await cleanLinks(picked);
   const byIndex = new Map(flat.map((k, n) => [k.gi, k]));
+  // Only real LinkedIn profile URLs are leads. A non-LinkedIn page (dictionary,
+  // news, wiki) that slipped through the SERP is not a person and must never be
+  // shown as one - even if it means returning an empty list with routes instead.
   const leads = withUrls.map((p, idx) => {
     const gi = pool.indexOf(p) >= 0 ? pool.indexOf(p) : flat[idx]?.gi;
     const judged = byIndex.get(gi) || flat[idx] || {};
@@ -485,7 +492,7 @@ export async function findLeads(need, { place = '', plus = false, uid = '', aske
       fit: Number(judged.fit) || Math.max(56, 84 - idx * 4),
       resolved: !!p.resolved,
     };
-  });
+  }).filter((l) => l.resolved && /linkedin\.com\/in\//i.test(l.url));
   await cacheRef.set({ need: text(need, 200), place: text(place, 60), query: primary, leads, searches, at: started, askedBy: text(askedBy, 60) }, { merge: true }).catch(() => {});
   if (uid) {
     await db().collection('linkyOutreach').doc(`member_${uid}`).set({

@@ -1433,16 +1433,20 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
     && Date.now() - toMillis(snap.data().createdAt) < 7 * DAY_MS) {
     const d = snap.data();
     // re-filtered on the way out, so a lead the member already wrote to (or told
-    // Linky to never show again) does not come back from the cache
-    const cached = (Array.isArray(d.leads) ? d.leads : [])
+    // Linky to never show again) does not come back from the cache. Only real
+    // LinkedIn profile URLs count as leads: a stale cache from an older build
+    // that let a dictionary or news page through is self-healing here.
+    const usable = (Array.isArray(d.leads) ? d.leads : [])
+      .filter((l) => l && /linkedin\.com\/in\//i.test(String(l.url || '')));
+    const cached = usable
       .filter((l) => !leadHit(leadKey(l), trail0.muted) && !leadHit(leadKey(l), trail0.sent))
       .map((l) => ({ ...l, key: leadKey(l) }));
     let intro = tidyIntroLine(d.intro) || text(cached.length ? `A LinkedIn search I ran earlier for "${polishNeed(q.need)}" - these ${cached.length} are still the ones I would message:` : '', 300);
     let routes = list(d.routes, 3, 200);
-    const skipped = Math.max(0, (Array.isArray(d.leads) ? d.leads.length : 0) - cached.length);
+    const skipped = Math.max(0, usable.length - cached.length);
     // a cached answer the member has since muted people out of must not be left
     // claiming there was somebody to message, with nothing under it
-    const total = Array.isArray(d.leads) ? d.leads.length : 0;
+    const total = usable.length;
     if (!cached.length && skipped) {
       intro = `Nobody on LINKUP does "${polishNeed(q.need)}" yet, and all ${total} from that LinkedIn search are already in your outreach history - so here is where I would look myself:`;
       routes = fallbackRoutes(q.need, city || placeShow);
@@ -1772,17 +1776,28 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // "yes, look outside LINKUP" flow does. With nothing on file it asks once.
   if (q.linkedinLookup) {
     const id = newId();
-    const lastNeed = state.lastAsk?.need ? text(state.lastAsk.need, 120) : '';
-    if (!lastNeed) {
+    // "find me a dev on linkedin" names who they want in the same sentence; only
+    // a bare "their linkedin profiles" refers back to the previous ask. Strip the
+    // LinkedIn mention and re-parse what is left, so the search targets what they
+    // just said instead of a stale need like an older "co founder" ask.
+    const stripped = text(String(msgTyped || '').replace(/linked\s?in/gi, ' '), 160);
+    const nowQ = parseAsk(stripped);
+    // "find me a dev on linkedin" -> need is "dev", so drop the dangling "on" the
+    // linkedin mention left behind. Only a bare "their linkedin" has nothing left.
+    const needNow = (nowQ.tokens.length || nowQ.nameQuery)
+      ? polishNeed(stripped).replace(/\s+(?:on|from|for|via)$/i, '').trim()
+      : '';
+    const need = needNow || (state.lastAsk?.need ? text(state.lastAsk.need, 120) : '');
+    if (!need) {
       const reply = `Happy to - tell me who you need (a role, a skill, a city) and I will go and pull their public LinkedIn profiles for you.`;
       const thread = await sayBack(id, reply, { kind: 'chat' });
       return { id, need: q.need, reply, kind: 'chat', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: ['find me a co-founder in Harare', 'what can you do'], thread };
     }
-    const outside = await pointers(uid, lastNeed, { userDoc: user, allowSearch: true, assumeKnown: true });
-    const reply = outside.intro || text(outside.text, 400) || `Nobody on LINKUP does "${polishNeed(lastNeed)}" yet, so I went outside the network. Here is who I found on LinkedIn:`;
+    const outside = await pointers(uid, need, { userDoc: user, allowSearch: true, assumeKnown: true });
+    const reply = outside.intro || text(outside.text, 400) || `Nobody on LINKUP does "${polishNeed(need)}" yet, so I went outside the network. Here is who I found on LinkedIn:`;
     const thread = await sayBack(id, reply, { kind: 'outside' });
     return {
-      id, need: text(lastNeed, 120), reply, kind: 'outside', cardIds: [], cards: [], nearest: [],
+      id, need: text(need, 120), reply, kind: 'outside', cardIds: [], cards: [], nearest: [],
       none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: !!outside.cached,
       createdAt: now, asksLeft: asksLeft(),
       leads: outside.leads || [], routes: outside.routes || [], pointerIntro: outside.intro || '',
