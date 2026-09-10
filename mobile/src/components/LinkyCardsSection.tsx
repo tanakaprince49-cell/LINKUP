@@ -1,5 +1,5 @@
-// "Earlier cards" and "Asked" - the Linky card lists that live on the Explore
-// page now instead of the Linky tab. Self-contained: it loads its own data,
+// "Asked" - the Linky card list that lives on the Explore page now instead of
+// the Linky tab. Self-contained: it loads its own data,
 // runs the Meet -> review/edit -> send flow (the same double opt-in the Linky
 // tab uses), and only ever writes through /api/linky.
 import React, { useCallback, useEffect, useState } from 'react';
@@ -137,11 +137,10 @@ export default function LinkyCardsSection() {
     await load();
   };
 
-  const earlier = cards.filter((c) => c.status === 'new' || c.status === 'saved');
   const asked = cards.filter((c) => c.status === 'meet' || c.status === 'declined');
 
   if (!loaded) return null;
-  if (!earlier.length && !asked.length) return null;
+  if (!asked.length) return null;
 
   const renderCard = (card: LinkyCard, readonly: boolean) => {
     const requested = card.status === 'meet';
@@ -238,13 +237,6 @@ export default function LinkyCardsSection() {
         <View style={{ paddingHorizontal: 16 }}>
           <SectionTitle title="Asked" hint={`${asked.length} ${asked.length === 1 ? 'intro' : 'intros'} out`} isDark={isDark} />
           {asked.slice(0, 5).map((card) => renderCard(card, true))}
-        </View>
-      ) : null}
-
-      {earlier.length ? (
-        <View style={{ paddingHorizontal: 16 }}>
-          <SectionTitle title="Earlier cards" isDark={isDark} />
-          {earlier.map((card) => renderCard(card, false))}
         </View>
       ) : null}
 
