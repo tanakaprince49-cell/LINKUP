@@ -15,7 +15,7 @@ import { respondToConnectionRequest } from '../lib/connectionRequests';
 import { notifyUser } from '../lib/notify';
 import { challengeId as makeChallengeId } from '../lib/gameChallenges';
 import { MOBILE_LIST_IMAGE_LIMIT, MOBILE_NOTIFICATION_QUERY_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
-import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X, Sparkles, Megaphone } from 'lucide-react-native';
+import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X, Sparkles, Megaphone, ThumbsDown } from 'lucide-react-native';
 import ScreenHeader from '../components/ScreenHeader';
 
 const formatTimeAgo = (timestamp: any) => {
@@ -64,6 +64,10 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
     switch (notification.type) {
       case 'like':
         return { Icon: Heart, color: '#E11D48', bg: 'rgba(225,29,72,0.14)', fill: '#E11D48' };
+      case 'dislike':
+        return { Icon: ThumbsDown, color: '#EF4444', bg: 'rgba(239,68,68,0.12)', fill: 'transparent' };
+      case 'comment':
+        return { Icon: MessageSquare, color: '#2563EB', bg: 'rgba(37,99,235,0.12)', fill: 'transparent' };
       case 'match':
       case 'connection_approved':
         return { Icon: Check, color: '#16A34A', bg: 'rgba(22,163,74,0.14)', fill: 'transparent' };

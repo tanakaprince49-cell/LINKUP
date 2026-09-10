@@ -15,7 +15,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Linking
+  Linking,
+  Share
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
@@ -144,6 +145,18 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
           likes: [],
         });
         await updateDoc(doc(db, 'posts', post.id), { commentsCount: increment(1) });
+        if (post.authorId !== user.uid) {
+          await addDoc(collection(db, 'notifications'), {
+            userId: post.authorId,
+            fromId: user.uid,
+            fromName: profile?.displayName || 'Someone',
+            fromPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
+            type: 'comment',
+            content: 'commented on your startup.',
+            isRead: false,
+            timestamp: serverTimestamp()
+          });
+        }
       }
     } catch (e) { console.error(e); }
   };
@@ -343,7 +356,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
           fromName: profile?.displayName || 'Someone',
           fromPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
           type: 'like',
-          content: 'liked your post.',
+          content: 'liked your startup.',
           isRead: false,
           timestamp: serverTimestamp()
         });
@@ -360,6 +373,18 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       await updateDoc(postRef, { dislikesCount: increment(-1), dislikedBy: arrayRemove(user.uid) });
     } else {
       await updateDoc(postRef, { dislikesCount: increment(1), dislikedBy: arrayUnion(user.uid) });
+      if (post.authorId !== user.uid) {
+        await addDoc(collection(db, 'notifications'), {
+          userId: post.authorId,
+          fromId: user.uid,
+          fromName: profile?.displayName || 'Someone',
+          fromPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
+          type: 'dislike',
+          content: 'disliked your startup.',
+          isRead: false,
+          timestamp: serverTimestamp()
+        });
+      }
     }
   };
 
@@ -368,6 +393,29 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => { await deleteDoc(doc(db, 'posts', post.id)); }}
     ]);
+  };
+
+  // Shares the startup: name, one-liner and website, with a LINKUP invite tail.
+  // Web PWA uses navigator.share when present; native uses the Share sheet.
+  const handleShare = async () => {
+    const name = (post as any).startupName || post.content || 'Startup';
+    const tagline = (post as any).tagline || '';
+    const website = (post as any).website || '';
+    const message = [
+      name,
+      tagline,
+      website,
+      'On LINKUP — find cofounders and people who actually ship.',
+    ].filter(Boolean).join('\n');
+    try {
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && (navigator as any).share) {
+        await (navigator as any).share({ title: name, text: message });
+        return;
+      }
+      await Share.share({ message, title: name });
+    } catch (err) {
+      console.warn('Share skipped:', err);
+    }
   };
   const openMediaViewer = (index: number) => {
     blurActiveElementOnWeb();
@@ -556,7 +604,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
           <Text style={styles.actionVal}>{post.commentsCount || 0}</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.actionBtn}>
+        <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
           <SafeIcon name="Share2" size={18} color="#666" />
         </TouchableOpacity>
       </View>

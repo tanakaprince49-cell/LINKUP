@@ -91,6 +91,8 @@ function notificationBody(data: any) {
   if (data?.type === 'message') return `${data.fromName || 'Someone'} ${content || 'sent you a message.'}`;
   if (data?.type === 'match') return content || 'You have a new match.';
   if (data?.type === 'like') return `${data.fromName || 'Someone'} ${content || 'liked your profile.'}`;
+  if (data?.type === 'dislike') return `${data.fromName || 'Someone'} ${content || 'disliked your startup.'}`;
+  if (data?.type === 'comment') return `${data.fromName || 'Someone'} ${content || 'commented on your startup.'}`;
   if (data?.type === 'connection_request') return `${data.fromName || 'Someone'} sent a contact request.`;
   if (data?.type === 'connection_approved') return `${data.fromName || 'Someone'} approved your contact request.`;
   if (data?.type === 'connection_rejected') return `${data.fromName || 'Someone'} responded to your contact request.`;
