@@ -715,6 +715,10 @@ function candidateFacts(p, st) {
     city: told.hidden.city ? '' : text(p.city, 80),
     bio: [told.hidden.bio ? '' : text(p.bio, 240), told.hidden.notes ? '' : told.notes].filter(Boolean).map((x) => scrubHidden(x, told.hidden.skills)).filter(Boolean).join(' ').slice(0, 700),
     remoteOnly: !!p.remoteOnly,
+    // PLUS members pay for the network and Linky gives them the attention they
+    // bought: a ranking boost and a "PLUS" mark on their card. A lapsed or
+    // canceled subscription is never treated as paid.
+    plus: plusFromUserDoc(p) || p.turboConnect === true,
   };
 }
 
@@ -822,7 +826,7 @@ export function findByName(q, ctx, { meUid, exclude = [], myState = {}, existing
     scored.push({ uid: p.uid, facts, score: best, phrase, st, blocked });
   }
   if (!scored.length) return null;
-  scored.sort((a, b) => b.score - a.score || (b.facts.skills.length - a.facts.skills.length));
+  scored.sort((a, b) => b.score - a.score || (Number(b.facts.plus || 0) - Number(a.facts.plus || 0)) || (b.facts.skills.length - a.facts.skills.length));
   const top = scored[0];
   // "fred" must not stall because a "Freda" exists: that is a clear winner with
   // a weaker runner-up. A real tie is when two people score the same, in which
@@ -844,6 +848,8 @@ function whyIsCited(why, c) {
   if (w.length < 12) return false;
   const facts = [c.name, ...c.skills, ...c.industries, ...c.lookingFor, c.role, c.company, c.city, c.country]
     .flatMap((f) => tokens(f)).filter((t) => t.length >= 3);
+  // the model may cite a PLUS membership as the reason; make it a legal citation
+  if (c.plus) facts.push('plus');
   const bioHits = tokens(c.bio).filter((t) => t.length >= 6);
   return [...facts, ...bioHits].some((t) => w.includes(t));
 }
@@ -875,6 +881,9 @@ function keywordScore(q, c, terms = q.tokens, related = false) {
     else if (!q.remote) score -= 4;
   }
   if (c.pic) score += 0.5;
+  // Turbo Connect: PLUS members clear the bar more easily and rank higher on
+  // an otherwise equal match. Modest on purpose - relevance still decides.
+  if (c.plus) score += 4;
   return { score, hits: uniq(hits) };
 }
 
@@ -936,8 +945,9 @@ async function geminiRerank(q, requester, shortlist) {
     'Return STRICT JSON only: {"picks":[{"uid":"...","score":0-100,"why":"one plain sentence, under 26 words, citing the evidence","opener":"the first line the member sends, under 30 words: says who they are looking for, names ONE true thing about this person from the profile, and asks one small question that is easy to answer yes to"}]}',
     'An opener must never flatter ("your impressive work"), never sell ("exciting opportunity"), never say "I hope this finds you well". Specific beats charming: "saw you shipped EcoCash in 9 weeks - can I ask how you handled the agent float?" is the bar.',
     `At most ${Math.min(LIMITS.cardsPerAsk, shortlist.length)} picks, best first. Omit scores under 55.`,
+    'PLUS members (plus: true) pay for the network and get a visibility boost: when fit is otherwise equal, put them first, and it is fine to name it in one short clause like "PLUS member". Never say someone is PLUS unless their record says so.',
     `Member: ${JSON.stringify(requester)}`,
-    `Candidates: ${JSON.stringify(shortlist.map((c) => ({ uid: c.uid, name: c.name, role: c.role, company: c.company, city: c.city, skills: c.skills.slice(0, 8), industries: c.industries.slice(0, 5), lookingFor: c.lookingFor.slice(0, 4), bio: c.bio.slice(0, 160) })))}`,
+    `Candidates: ${JSON.stringify(shortlist.map((c) => ({ uid: c.uid, name: c.name, role: c.role, company: c.company, city: c.city, skills: c.skills.slice(0, 8), industries: c.industries.slice(0, 5), lookingFor: c.lookingFor.slice(0, 4), bio: c.bio.slice(0, 160), plus: !!c.plus })))}`,
   ].join('\n');
   const raw = await geminiText(prompt, { temperature: 0.2, maxOutputTokens: 500, responseMimeType: 'application/json' });
   const start = raw.indexOf('{');
@@ -1019,7 +1029,7 @@ export async function findPeople(uid, q, ctx, { user, state, existingCards = [],
 
   // Blend keyword fit with profile compatibility, then shortlist.
   const compat = new Map(localRank(compactProfile({ ...owner, uid, skills: me.skills }), pool.map((x) => compactProfile({ ...x.facts, occupation: x.facts.role })), pool.length).map((r) => [r.uid, r.score]));
-  pool.forEach((x) => { x.blend = x.score * 10 + ((compat.get(x.facts.uid) || 40) - 40) * 0.5; });
+  pool.forEach((x) => { x.blend = x.score * 10 + ((compat.get(x.facts.uid) || 40) - 40) * 0.5 + (x.facts.plus ? 18 : 0); });
   pool.sort((a, b) => b.blend - a.blend);
   const shortlist = pool.slice(0, LIMITS.shortlist);
   const byUid = new Map(shortlist.map((x) => [x.facts.uid, x]));
@@ -1039,9 +1049,10 @@ export async function findPeople(uid, q, ctx, { user, state, existingCards = [],
     for (const p of picks) {
       const x = byUid.get(String(p?.uid || ''));
       if (!x || chosen.some((c) => c.facts.uid === x.facts.uid)) continue;
-      const score = Math.round(Number(p?.score || 0));
+      const modelScore = Math.round(Number(p?.score || 0));
       const why = text(p?.why, 220);
-      if (score < 55 || !whyIsCited(why, x.facts)) continue;
+      if (modelScore < 55 || !whyIsCited(why, x.facts)) continue;
+      const score = Math.min(100, modelScore + (x.facts.plus ? 4 : 0));
       chosen.push({ facts: x.facts, score, why, opener: text(p?.opener, 240) || templateOpener(x.facts, q.need), badges: badgesFor(x.facts) });
     }
   }
@@ -1050,9 +1061,11 @@ export async function findPeople(uid, q, ctx, { user, state, existingCards = [],
     for (const x of shortlist) {
       const why = templateWhy(x.facts, x.hits, relatedTo);
       if (!why || x.score < (relatedTo ? 1.5 : 3)) continue;
-      chosen.push({ facts: x.facts, score: Math.max(55, Math.min(95, 50 + Math.round(x.blend))), why, opener: templateOpener(x.facts, q.need), badges: badgesFor(x.facts) });
+      chosen.push({ facts: x.facts, score: Math.max(55, Math.min(95, 50 + Math.round(x.blend) + (x.facts.plus ? 4 : 0))), why, opener: templateOpener(x.facts, q.need), badges: badgesFor(x.facts) });
     }
   }
+  // PLUS members hold their place when scores are level - the attention they pay for.
+  chosen.sort((a, b) => b.score - a.score || (Number(b.facts.plus || 0) - Number(a.facts.plus || 0)));
   return { picks: chosen.slice(0, LIMITS.cardsPerAsk), nearest: [], checked, usedAi, expansion, relatedTo };
 }
 
@@ -1064,7 +1077,7 @@ function nearestPeople(me, q, eligible) {
   const loc = askLocKnown ? askLoc : String(me.city || '').toLowerCase();
   const compat = new Map(localRank(compactProfile({ uid: me.uid, role: me.role, skills: me.skills, industries: me.industries, goals: me.lookingFor }), eligible.map((c) => compactProfile({ ...c, occupation: c.role })), eligible.length).map((r) => [r.uid, r.score]));
   return eligible
-    .map((c) => ({ c, s: (loc && c.city && loc.includes(c.city.toLowerCase()) ? 3 : 0) + ((compat.get(c.uid) || 40) - 40) / 10 + (c.pic ? 0.25 : 0) + (c.role ? 0.25 : 0) }))
+    .map((c) => ({ c, s: (loc && c.city && loc.includes(c.city.toLowerCase()) ? 3 : 0) + ((compat.get(c.uid) || 40) - 40) / 10 + (c.pic ? 0.25 : 0) + (c.role ? 0.25 : 0) + (c.plus ? 1.5 : 0) }))
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s)
     .slice(0, 3)
@@ -1540,7 +1553,7 @@ async function persistCards(uid, existing, picks, { askId, need, now, pairs = {}
     const squadBits = squad ? { squadId: squad.id, squadRole: squad.role, squadSize: squad.size, squadIndex: squad.index } : {};
     const prev = latestByTarget.get(facts.uid);
     if (prev && ['new', 'saved', 'meet'].includes(prev.status)) {
-      const next = { ...prev, askId, need, why: prev.status === 'meet' ? prev.why : why, opener: prev.opener || opener, score, updatedAt: now, badges: badges || prev.badges || [], ...squadBits };
+      const next = { ...prev, askId, need, why: prev.status === 'meet' ? prev.why : why, opener: prev.opener || opener, score, updatedAt: now, badges: badges || prev.badges || [], plus: !!facts.plus || !!prev.plus, ...squadBits };
       updatedIds.add(prev.id);
       resultCards.push(next);
       return;
@@ -1564,6 +1577,8 @@ async function persistCards(uid, existing, picks, { askId, need, now, pairs = {}
       targetSkills: facts.skills.slice(0, 5),
       // what the profile can show, not what it claims to feel - see api/_proof.js
       badges: (badges || []).slice(0, 3),
+      // Turbo Connect: a PLUS member's card carries the mark the app renders
+      plus: !!facts.plus,
       ...(squad ? { squadId: squad.id, squadRole: squad.role, squadSize: squad.size, squadIndex: squad.index } : {}),
       ...(warm || pairNote ? { pairNote: text(warm || pairNote, 120) } : {}),
       why,

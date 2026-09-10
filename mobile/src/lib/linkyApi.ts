@@ -31,6 +31,8 @@ export type LinkyCard = {
   targetCity: string;
   targetSkills: string[];
   badges?: LinkyBadge[];
+  /** Turbo Connect: this member is on LINKUP PLUS and Linky boosted them */
+  plus?: boolean;
   /** a card from a squad answer: which trio it belongs to and the part they play */
   squadId?: string;
   squadRole?: string;

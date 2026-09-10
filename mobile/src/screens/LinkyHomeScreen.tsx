@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trophy, X } from 'lucide-react-native';
+import { Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trophy, X, Zap } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
@@ -102,6 +102,12 @@ const CardView = ({
           <Text style={[styles.squadText, { color: textColor(isDark, 'secondary') }]}>
             {`Squad${(card.squadSize || 0) > 1 ? ` of ${card.squadSize}` : ''} - ${card.squadRole}`}
           </Text>
+        </View>
+      ) : null}
+      {card.plus ? (
+        <View style={styles.squadRow}>
+          <Zap size={12} color={COLORS.primaryStrong} />
+          <Text style={[styles.plusText, { color: textColor(isDark, 'secondary') }]}>PLUS member</Text>
         </View>
       ) : null}
       {card.badges && card.badges.length ? (
@@ -891,6 +897,7 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '700' },
   squadRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 },
   squadText: { fontSize: 11, fontWeight: '800' },
+  plusText: { fontSize: 11, fontWeight: '900' },
   pairNote: { fontSize: 11.5, marginTop: 8, fontStyle: 'italic' },
   loopHead: { flexDirection: 'row', alignItems: 'center' },
   loopChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },

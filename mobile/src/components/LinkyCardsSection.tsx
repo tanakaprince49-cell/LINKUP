@@ -21,7 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { COLORS, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
 import PaywallModal from './PaywallModal';
-import { Trophy, Clock, Send, X } from 'lucide-react-native';
+import { Trophy, Clock, Send, X, Zap } from 'lucide-react-native';
 import {
   LinkyApiError,
   LinkyCard,
@@ -166,6 +166,14 @@ export default function LinkyCardsSection() {
             {`Squad${(card.squadSize || 0) > 1 ? ` of ${card.squadSize}` : ''} - ${card.squadRole}`}
           </Text>
         ) : null}
+        {card.plus ? (
+          <View style={styles.plusTagRow}>
+            <View style={styles.plusTag}>
+              <Zap size={11} color="#000" />
+              <Text style={styles.plusTagText} numberOfLines={1}>PLUS member</Text>
+            </View>
+          </View>
+        ) : null}
         {card.badges && card.badges.length ? (
           <View style={styles.badgeRow}>
             {card.badges.slice(0, 3).map((b) => (
@@ -299,6 +307,9 @@ const styles = StyleSheet.create({
   badge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
   badgeText: { fontSize: 11, fontWeight: '700' },
   squadTag: { fontSize: 11, fontWeight: '800', marginTop: 8 },
+  plusTagRow: { flexDirection: 'row', marginTop: 8 },
+  plusTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#DFFB3F', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
+  plusTagText: { fontSize: 10, fontWeight: '900', color: '#000', letterSpacing: 0.4 },
   pairNote: { fontSize: 11.5, marginTop: 8, fontStyle: 'italic' },
   whyBox: { borderRadius: 12, padding: 10, marginTop: 12 },
   whyLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
