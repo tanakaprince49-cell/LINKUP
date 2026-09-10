@@ -63,12 +63,12 @@ written; old docs are inert.)
    fails / is over quota / cites nothing, the cited template path answers
    instead — never an error.
 
-Limits: free = **2 searches/day and 2 Meets/day**; PLUS = 60 searches/day, unlimited
+Limits: free = **5 searches/day and 2 Meets/day**; PLUS = 60 searches/day, unlimited
 Meets. "Searches" is the metered thing - asking Linky to look through the network.
 A lookup by name, small talk, "write me a message", hiding a fact and the whole
-help flow answer before the counter, so the 2 a day are never spent on "hi".
+help flow answer before the counter, so the 5 a day are never spent on "hi".
 One counter, not three: the app, the Telegram bot and WhatsApp all call the same
-`ask()`, so 2 on one surface is 2 everywhere.
+`ask()`, so 5 on one surface is 5 everywhere.
 Up to 5 cards per ask. Inbound cap 5/week (member-adjustable 0–20). Decline =
 silent mute both ways; skipped people stay away for 14 days. Intros expire
 after 7 days.

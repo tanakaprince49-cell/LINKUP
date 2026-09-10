@@ -125,7 +125,7 @@ and expose the key to the bundle.
   across members; `aiExpandTerms` 30 days; intent gate 24h; ranking `rank_*` 24h.
 - The Synergy Brief is written **once** per pair (idempotent), one model call per
   pair, with a local composer behind it; cron backfills any missed by a deploy.
-- 2 free messages/day cap means an outage can't be farmed into a token bill.
+- 5 free messages/day cap means an outage can't be farmed into a token bill.
 - `noteAiFault` + `aiProbe` make "quota refusal" distinguishable from "app broken".
 
 ---

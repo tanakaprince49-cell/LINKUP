@@ -264,7 +264,7 @@ export default function LinkyAuditScreen({ navigation }: any) {
                 </BlockView>
               ) : null}
               <BlockView {...ui} title="SIGNALS">
-                <LineView isDark={isDark} k="Plan" v={data.signals.plus ? 'PLUS (60 searches a day, unlimited Meets)' : 'Free (2 searches a day, 2 Meets a day)'} />
+                <LineView isDark={isDark} k="Plan" v={data.signals.plus ? 'PLUS (60 searches a day, unlimited Meets)' : 'Free (5 searches a day, 2 Meets a day)'} />
                 <LineView isDark={isDark} k="Free on any plan" v="Looking someone up by name, chit-chat, drafting a message, hiding a fact" />
                 <LineView isDark={isDark} k="Asks used today" v={String(data.signals.asksUsedToday ?? 0)} />
                 <LineView isDark={isDark} k="Meets used today" v={String(data.signals.meetsUsedToday)} />

@@ -22,11 +22,11 @@ import { findLeads, outreachDraft } from './_serpapi.js';
 import { proofPoints, proofFromSnippet, badgeLine } from './_proof.js';
 
 export const LIMITS = {
-  // Two real searches a day on the free plan, and they are the SAME budget on
+  // Five real searches a day on the free plan, and they are the SAME budget on
   // every surface: an ask typed in the app and an ask typed at the Telegram bot
-  // both burn one of the two, so nobody farms extra searches by switching channel.
+  // both burn one of the five, so nobody farms extra searches by switching channel.
   // Looking someone up by name, chit-chat, drafting and the limit reply are free.
-  free: { asksPerDay: 2, meetsPerDay: 2 },
+  free: { asksPerDay: 5, meetsPerDay: 2 },
   plus: { asksPerDay: 60, meetsPerDay: 100000 },
   inboundPerWeek: 5,
   introDays: 7,
@@ -1722,8 +1722,8 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // HIM - not a new search, and not small talk to be answered with a joke.
   const pendingIntent = state.pendingIntent && now - toMillis(state.pendingIntent.at) < 40 * 60 * 1000 ? state.pendingIntent : null;
   const saidWords = msgTyped.toLowerCase().trim().replace(/^\/+\w*\s*/, '');
-  // ---- daily message budget. Free members get 2 messages a day and EVERY
-  // message counts (a search, a greeting, a "yes"); the third one answers with
+  // ---- daily message budget. Free members get 5 messages a day and EVERY
+  // message counts (a search, a greeting, a "yes"); the sixth one answers with
   // the paywall instead of a reply, so no model call happens for it either.
   const me = profileFacts(user) || {};
   const plus = await isPlusUser(uid, user);

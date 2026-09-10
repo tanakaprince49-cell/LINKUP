@@ -179,7 +179,7 @@ const S = await import('../../api/_serpapi.js');
 const { botReplyForTest } = await import('../../api/linky.js');
 const db = (await import('../../api/_firebaseAdmin.js')).getDb();
 
-// the free plan is 2 searches a day now; every section tops its members up so it
+// the free plan is 5 searches a day now; every section tops its members up so it
 // is testing the matcher, not the paywall (the budget section sets counts itself)
 const MEMBERS = ['alice', 'bob', 'carol', 'dave', 'eve', 'frank', 'grace', 'henry', 'irene', 'jack', 'kenji', 'lucy', 'luke', 'freda', 'zanele', 'tinashe', 'farai', 'chipo', 'nia', 'rafael', 'sofia', 'omar', 'priya', 'noah', 'amelie', 'dmitri'];
 const clearBudget = async (uid) => {
@@ -831,7 +831,7 @@ assert(/Linking\.openURL\(l\.url\)/.test(homeSrc), 'the app (and the same screen
 assert(/l\.url\.replace\(/.test(homeSrc), 'and prints the link itself, so it can be copied on a desktop');
 const auditSrc = fsNode.readFileSync('mobile/src/screens/LinkyAuditScreen.tsx', 'utf8');
 assert(/linkyHideFact/.test(auditSrc) && /linkyRemoveAsk/.test(auditSrc), 'the audit screen wires hide-or-restore per fact and forget-one-ask');
-assert(/Free \(2 searches a day, 2 Meets a day\)/.test(auditSrc), 'and states the real free plan instead of an old number');
+assert(/Free \(5 searches a day, 2 Meets a day\)/.test(auditSrc), 'and states the real free plan instead of an old number');
 const clientApi = fsNode.readFileSync('mobile/src/lib/linkyApi.ts', 'utf8');
 assert(/'hideFact'/.test(clientApi) && /'removeAsk'/.test(clientApi), 'the client library exposes both calls');
 for (const f of ['mobile/src/screens/LinkyHomeScreen.tsx', 'mobile/src/screens/LinkyProfileScreen.tsx', 'mobile/src/components/PaywallModal.tsx']) {
@@ -840,7 +840,7 @@ for (const f of ['mobile/src/screens/LinkyHomeScreen.tsx', 'mobile/src/screens/L
 const envEx = fsNode.readFileSync('.env.example', 'utf8');
 assert(/ZEN_API_KEY=/.test(envEx) && /ZEN_MODEL/.test(envEx), 'the second AI key is documented where ops reads it');
 const setupDoc = fsNode.readFileSync('LINKY_SETUP.md', 'utf8');
-assert(/2 searches\/day and 2 Meets\/day/.test(setupDoc), 'the setup doc states the free plan once, correctly');
+assert(/5 searches\/day and 2 Meets\/day/.test(setupDoc), 'the setup doc states the free plan once, correctly');
 const src = fsNode.readFileSync('api/_linky.js', 'utf8');
 assert(!/import .*_linkyVoice/.test(src), 'no hand written voice module: the words come from Gemini');
 assert(/plainReply/.test(src) && /geminiWording/.test(src), 'both paths exist: model first, plain fallback second');

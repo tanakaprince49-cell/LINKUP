@@ -917,7 +917,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
         onClose={() => setPaywall(null)}
         feature="Linky asks & intros"
         description={(() => {
-          const base = paywall || 'You have exhausted your 2 free messages today. Upgrade to LINKUP PLUS — $19.99/month or $149.99/year.';
+          const base = paywall || 'You have exhausted your 5 free messages today. Upgrade to LINKUP PLUS — $19.99/month or $149.99/year.';
           return resetCountdown ? `${base}\n\nDaily messages reset in ${resetCountdown}.` : base;
         })()}
       />

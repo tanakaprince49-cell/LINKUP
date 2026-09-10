@@ -29,7 +29,7 @@ for (const [uid, u] of Object.entries(users)) {
 }
 await db.collection('userPrivate').doc('bob').set({ pushTokens: [] });
 const assert = (c, m) => { if (!c) { console.error('FAIL:', m); process.exit(1); } console.log('ok  -', m); };
-// the free plan is 2 searches and 2 Meets a day now. Every assertion below is
+// the free plan is 5 searches and 2 Meets a day now. Every assertion below is
 // written against L.LIMITS so the suite still says something when the number moves,
 // and anything that is not testing the paywall tops the member up first.
 const FREE = L.LIMITS.free;
