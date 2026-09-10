@@ -334,7 +334,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       updateDoc(doc(db, 'posts', post.id), {
         viewsCount: increment(1),
         viewedBy: arrayUnion(user.uid)
-      });
+      }).catch(() => {});
     }
   }, [user?.uid]);
 

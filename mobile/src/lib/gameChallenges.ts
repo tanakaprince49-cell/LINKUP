@@ -2,7 +2,7 @@ import { db } from './firebase';
 import { storedProfileImageUri } from './profilePerformance';
 import {
   doc, setDoc, getDoc, onSnapshot, collection, query, where,
-  updateDoc, Timestamp,
+  updateDoc, serverTimestamp,
 } from 'firebase/firestore';
 
 export type GameType = 'founderflip' | 'pitchperfect' | 'networkquiz';
@@ -74,7 +74,10 @@ export async function sendGameChallenge(params: {
     type: 'game_challenge',
     content: `challenged you to ${params.gameType}!`,
     isRead: false,
-    timestamp: Timestamp.now(),
+    // serverTimestamp() equals `request.time` in firestore.rules, which the
+    // notifications rule requires; a client-side Timestamp.now() fails that
+    // check and the whole write is rejected.
+    timestamp: serverTimestamp(),
     gameType: params.gameType,
   });
 }
@@ -121,7 +124,7 @@ export async function respondToChallenge(
       type: 'game_challenge' as const,
       content: `accepted your ${data.gameType} challenge!`,
       isRead: false,
-      timestamp: Timestamp.now(),
+      timestamp: serverTimestamp(),
       gameType: data.gameType,
     });
   }

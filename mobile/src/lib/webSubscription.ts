@@ -118,5 +118,17 @@ export function withWebEntitlements(profile: any, sub: WebSubscription | null | 
     next.entitlements = { ...(profile?.entitlements || {}), pro: true };
   }
 
+  // PLUS identity must agree across rails. The Google Play path writes the
+  // verified tick, crown input and Turbo Connect boost to users/{uid}; a web
+  // buyer gets the same flags (the server also writes them now, but folding
+  // them in here means the buyer sees their own tick immediately, on the same
+  // render that unlocks the gates, instead of a tick that lags a refresh).
+  if (plus) {
+    next.isVerified = true;
+    next.verificationProgram = 'LINKUP PLUS';
+    next.verifiedBy = 'LINKUP PLUS';
+    next.turboConnect = true;
+  }
+
   return next;
 }

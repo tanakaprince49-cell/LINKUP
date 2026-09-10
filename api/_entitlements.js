@@ -89,9 +89,11 @@ export async function grantWebEntitlement(db, args) {
     // was marked 'paid' by the old status poll without ever being granted
     // (status === 'paid' but no paidAt); even then a concurrent grant is
     // caught by the paidAt check.
+    let gateway = 'web';
     if (txRef) {
       const fresh = await t.get(txRef);
       const data = fresh.exists ? fresh.data() || {} : {};
+      gateway = String(data.gateway || 'web');
       const alreadyPaid = String(data.status || '').toLowerCase() === 'paid';
       if (data.paidAt || (alreadyPaid && !force)) {
         return { granted: false, endsAt: null };
@@ -137,6 +139,34 @@ export async function grantWebEntitlement(db, args) {
       },
       { merge: true }
     );
+
+    // A PLUS grant must carry the same outward identity the Google Play path
+    // writes: verified blue check, PLUS crown and the Turbo Connect boost are
+    // all read off users/{uid} by other members. Web used to stop at
+    // webSubscriptions/{uid}, so a web buyer looked unpaid (no tick, no crown,
+    // no boost) to everyone else. Write the flags here, server-side, inside
+    // the same transaction that extends the term.
+    if (tier === 'plus') {
+      t.set(
+        db.collection('users').doc(uid),
+        {
+          uid,
+          isPro: true,
+          plan: 'plus',
+          subscriptionPlan: 'plus',
+          subscriptionStatus: 'active',
+          billingProvider: gateway,
+          isVerified: true,
+          verificationProgram: 'LINKUP PLUS',
+          verifiedBy: 'LINKUP PLUS',
+          verifiedAt: serverTimestamp(),
+          turboConnect: true,
+          proUnlockedAt: serverTimestamp(),
+          subscriptionUpdatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
 
     return { granted: true, endsAt };
   });

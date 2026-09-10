@@ -9,7 +9,7 @@
  *
  * Expiry is decided here, server-side, from the owner's entitlement:
  *
- *   web  (ContiPay)  webSubscriptions/{uid}.campaigns.endsAt   exact
+ *   web  (Payonify)  webSubscriptions/{uid}.campaigns.endsAt   exact
  *   play (trial)     campaignAccounts/{uid}.trialEndsAt        exact
  *   play (paid)      no renewal date published to us           bounded window
  *   play (RTDN)      campaignAccounts/{uid}.expiresAt          exact, future
@@ -102,7 +102,7 @@ function toMillis(value: any): number | null {
 /**
  * What does this advertiser currently have, and when does it run out?
  *
- * Web is checked first: a ContiPay purchase is a prepaid term with a real end
+ * Web is checked first: a Payonify purchase is a prepaid term with a real end
  * date, and it is the most trustworthy signal we hold.
  */
 async function readCampaignsEntitlement(uid: string): Promise<Entitlement> {

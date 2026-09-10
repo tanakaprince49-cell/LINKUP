@@ -162,6 +162,7 @@ export async function playInAppNotificationSound(type?: string) {
       connection_approved: [620, 880, 1180],
       connection_rejected: [420, 540],
       view: [520, 700],
+      dislike: [340, 280],
       game_challenge: [880, 1180, 1480],
       system: [640, 860],
       comment: [680, 900],

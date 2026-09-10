@@ -3,7 +3,7 @@
 // Payonify is a ONE-TIME collection gateway — the checkout flow creates a
 // session and redirects the browser to a hosted payment page. It has no
 // recurring/subscription API, so web plans are sold as PREPAID TERMS
-// (1 / 3 / 12 months) exactly as they were under ContiPay. See PAYONIFY_SETUP.md.
+// (1 / 3 / 12 months). It is the single web payment rail.
 //
 // Security: the secret key never leaves the server. It is read from
 // env at CALL TIME (never module load), so it is never baked into a bundle,

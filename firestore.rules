@@ -1013,7 +1013,7 @@ service cloud.firestore {
         return data.keys().hasOnly([
           'userId', 'fromId', 'fromName', 'fromPic',
           'type', 'content', 'note', 'matchId', 'requestId', 'campaignId',
-          'isRead', 'timestamp'
+          'gameType', 'isRead', 'timestamp'
         ]) &&
         (!data.keys().hasAny(['note']) || (data.note is string && data.note.size() <= 600)) &&
         data.userId is string &&
@@ -1022,7 +1022,7 @@ service cloud.firestore {
         data.content is string &&
         data.content.size() <= 500 &&
         data.type in [
-          'like', 'match', 'view', 'message', 'comment', 'system',
+          'like', 'dislike', 'match', 'view', 'message', 'comment', 'system',
           'connection_request', 'connection_approved', 'connection_rejected',
           'game_challenge',
           'campaign_review', 'campaign_approved', 'campaign_rejected',
@@ -1283,12 +1283,12 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------
-    // LinkUp web billing (Paynow, Zimbabwe)
+    // LinkUp web billing (Payonify — the single web payment rail)
     //
-    // Paynow is a one-time gateway with no recurring API, so web plans are
-    // sold as PREPAID TERMS. See CONTIPAY_SETUP.md.
+    // Payonify is a one-time gateway with no recurring API, so web plans are
+    // sold as PREPAID TERMS. See api/_payonify.js.
     //
-    // Both collections are SERVER-WRITE ONLY: the /api/contipay* Vercel
+    // Both collections are SERVER-WRITE ONLY: the /api/payonify* Vercel
     // functions use Firebase Admin, which bypasses rules entirely. Clients
     // can read their own records so the UI can show payment state, but a
     // client can never mark its own transaction paid — that would be free
@@ -1297,13 +1297,6 @@ service cloud.firestore {
     match /webTransactions/{reference} {
       allow read: if isSignedIn() && existing().uid == request.auth.uid;
       allow write: if false;
-    }
-
-    // Dedupe ledger for ContiPay webhook retries (up to 10 over ~24 hours).
-    // Server-write only; nothing here is useful to a client, so it is not
-    // readable by anyone.
-    match /contipayWebhookEvents/{contiPayRef} {
-      allow read, write: if false;
     }
 
     match /webSubscriptions/{uid} {
@@ -1363,7 +1356,10 @@ service cloud.firestore {
         incoming().content.size() <= 8000;
       allow update: if isSignedIn() && (
         existing().authorId == request.auth.uid ||
-        incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'viewsCount', 'likedBy', 'viewedBy'])
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'likesCount', 'dislikesCount', 'commentsCount', 'viewsCount',
+          'likedBy', 'dislikedBy', 'viewedBy'
+        ])
       );
       allow delete: if isSignedIn() && existing().authorId == request.auth.uid;
 
