@@ -1354,6 +1354,13 @@ service cloud.firestore {
         incoming().authorId == request.auth.uid &&
         incoming().content is string &&
         incoming().content.size() <= 8000;
+      // Non-owners may only touch the reaction/view counters and lists. The
+      // dislike fields (dislikesCount/dislikedBy) MUST stay in this list — a
+      // rules version that lacked them denied every dislike with
+      // "Missing or insufficient permissions", and that failure is invisible
+      // to the client (an unhandled promise rejection) unless the rules are
+      // actually deployed. If dislikes start failing again, redeploy this
+      // file (the CI workflow does it on any change to firestore.rules).
       allow update: if isSignedIn() && (
         existing().authorId == request.auth.uid ||
         incoming().diff(existing()).affectedKeys().hasOnly([

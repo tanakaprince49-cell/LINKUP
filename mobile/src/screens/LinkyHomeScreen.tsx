@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Image,
@@ -90,11 +91,11 @@ const Avatar = ({ uri, size = 44 }: { uri?: string; size?: number }) => (
 
 const SectionTitle = ({ title, hint, action, isDark }: { title: string; hint?: string; action?: React.ReactNode; isDark: boolean }) => (
   <View style={styles.sectionHead}>
-    <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>{title}</Text>
-    <View style={styles.sectionRight}>
-      {hint ? <Text style={[styles.sectionHint, { color: textColor(isDark, 'muted') }]}>{hint}</Text> : null}
-      {action}
+    <View style={styles.sectionHeadRow}>
+      <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>{title}</Text>
+      {action ? <View style={styles.sectionRight}>{action}</View> : null}
     </View>
+    {hint ? <Text style={[styles.sectionHint, { color: textColor(isDark, 'muted') }]}>{hint}</Text> : null}
   </View>
 );
 
@@ -247,6 +248,22 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const { user, profile } = useAuth();
   const isDark = theme === 'dark';
   const insets = useSafeAreaInsets();
+  // On Android 15+ (edge-to-edge) the window does NOT resize when the keyboard
+  // opens — the keyboard simply draws over the bottom of the screen, including
+  // the tab bar. KeyboardAvoidingView's 'height' behaviour is unreliable there,
+  // so we measure the keyboard directly and lift the composer by the exact
+  // amount it overlaps the screen above the tab bar.
+  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const show = Keyboard.addListener('keyboardDidShow', (e) => {
+      setAndroidKeyboardHeight(e.endCoordinates.height);
+      // keep the newest message in view above the keyboard
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => setAndroidKeyboardHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
   const [home, setHome] = useState<LinkyHome | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -662,13 +679,19 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
   return (
     <View style={[styles.root, appBackground(isDark)]}>
-      {/* KeyboardAvoidingView keeps the composer above the keyboard. The
-          composer is absolutely pinned to the bottom of this container, so
-          'height' (which shrinks the container to end at the keyboard top) is
-          what lifts it — 'padding' only pushes in-flow children. 'height' also
-          self-corrects under Android edge-to-edge, where adjustResize no
-          longer resizes the window for us. */}
-      <KeyboardAvoidingView style={styles.fill} behavior="height">
+      {/* Keyboard keeps the composer visible:
+          - iOS: KeyboardAvoidingView 'height' shrinks the container so the
+            absolute-bottom composer ends at the keyboard top. The offset is
+            the custom header height (insets.top + 56).
+          - Android: edge-to-edge means the window never resizes, so the KAV
+            is disabled and the composer is lifted manually by the measured
+            keyboard height (see androidKeyboardHeight above). */}
+      <KeyboardAvoidingView
+        style={styles.fill}
+        behavior="height"
+        enabled={Platform.OS !== 'android'}
+        keyboardVerticalOffset={insets.top + 56}
+      >
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[styles.content, { paddingBottom: 140 + insets.bottom }]}
@@ -931,7 +954,14 @@ export default function LinkyHomeScreen({ navigation }: any) {
         </View>
       </ScrollView>
 
-      <View style={[styles.composerWrap, { paddingBottom: Math.max(10, insets.bottom + 6), backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg, borderTopColor: border }]}>
+      <View style={[styles.composerWrap, {
+        // Android edge-to-edge: lift the composer above the keyboard by the
+        // amount the keyboard covers the area above the tab bar (54 + inset).
+        bottom: Platform.OS === 'android' ? Math.max(0, androidKeyboardHeight - (54 + insets.bottom)) : 0,
+        paddingBottom: Math.max(10, insets.bottom + 6),
+        backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg,
+        borderTopColor: border,
+      }]}>
         {atDailyLimit && resetCountdown ? (
           <Text style={[styles.resetLine, { color: textColor(isDark, 'muted') }]}>
             Today's free messages are used up — resets in {resetCountdown}.
@@ -1029,10 +1059,11 @@ const styles = StyleSheet.create({
   heroLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   heroLink: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
   heroLinkText: { fontSize: 11, fontWeight: '800' },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, marginBottom: 8 },
+  sectionHead: { marginTop: 16, marginBottom: 8 },
+  sectionHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitle: { fontSize: 13, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase' },
-  sectionHint: { fontSize: 11, fontWeight: '700' },
-  sectionRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sectionHint: { fontSize: 11, fontWeight: '700', marginTop: 3 },
+  sectionRight: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 },
   clearBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
   clearBtnText: { fontSize: 11, fontWeight: '800' },
   card: { borderRadius: 18, borderWidth: 1, padding: 14, marginBottom: 10 },

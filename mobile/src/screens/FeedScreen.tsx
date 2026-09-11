@@ -48,6 +48,21 @@ import VerifiedBadge from '../components/VerifiedBadge';
 import { SponsoredCard, useSponsoredSlots } from '../components/SponsoredCard';
 import { Campaign, interleaveSponsored, isSponsoredHiddenForViewer } from '../lib/campaigns';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
+import { notifyUser } from '../lib/notify';
+
+/**
+ * Likes/dislikes write to posts/{id} and notifications. If the write is denied
+ * it is almost always stale Firestore rules (the reactions were allowed in a
+ * rules update that has not reached the deployed project yet). Show the human
+ * version of that instead of a raw FirebaseError.
+ */
+const permissionHint = (error: unknown) => {
+  const message = String((error as any)?.message || error || '');
+  if (/permission|insufficient/i.test(message)) {
+    return 'Your action was rejected by the database rules. Deploy the latest Firestore rules (firestore.rules) and try again.';
+  }
+  return message || 'Please try again.';
+};
 
 /** Ad density for the Feed: first sponsored card after this many posts... */
 const FEED_FIRST_AD_AFTER = 2;
@@ -318,6 +333,13 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const viewerRef = useRef<FlatList>(null);
+  // Optimistic reaction state so a tap updates instantly and reverts if the
+  // write is rejected (e.g. Firestore rules not yet deployed).
+  const [reaction, setReaction] = useState<{ liked: boolean; likes: number; disliked: boolean; dislikes: number } | null>(null);
+  const liked = reaction?.liked ?? isLiked;
+  const disliked = reaction?.disliked ?? isDisliked;
+  const likesCount = reaction?.likes ?? (post.likesCount || 0);
+  const dislikesCount = reaction?.dislikes ?? (post.dislikesCount || 0);
   
   const likeScale = useRef(new Animated.Value(1)).current;
   const commentScale = useRef(new Animated.Value(1)).current;
@@ -344,23 +366,31 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       Animated.timing(likeScale, { toValue: 1.4, duration: 100, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER }),
       Animated.spring(likeScale, { toValue: 1, friction: 3, useNativeDriver: USE_NATIVE_ANIMATION_DRIVER })
     ]).start();
+    const next = !liked;
+    const prev = reaction;
+    setReaction({ liked: next, likes: Math.max(0, likesCount + (next ? 1 : -1)), disliked, dislikes: dislikesCount });
     const postRef = doc(db, 'posts', post.id);
-    if (isLiked) {
-      await updateDoc(postRef, { likesCount: increment(-1), likedBy: arrayRemove(user.uid) });
-    } else {
-      await updateDoc(postRef, { likesCount: increment(1), likedBy: arrayUnion(user.uid) });
-      if (post.authorId !== user.uid) {
-        await addDoc(collection(db, 'notifications'), {
-          userId: post.authorId,
-          fromId: user.uid,
-          fromName: profile?.displayName || 'Someone',
-          fromPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
-          type: 'like',
-          content: 'liked your startup.',
-          isRead: false,
-          timestamp: serverTimestamp()
-        });
+    try {
+      if (next) {
+        await updateDoc(postRef, { likesCount: increment(1), likedBy: arrayUnion(user.uid) });
+        if (post.authorId !== user.uid) {
+          await addDoc(collection(db, 'notifications'), {
+            userId: post.authorId,
+            fromId: user.uid,
+            fromName: profile?.displayName || 'Someone',
+            fromPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
+            type: 'like',
+            content: 'liked your startup.',
+            isRead: false,
+            timestamp: serverTimestamp()
+          }).catch(() => {});
+        }
+      } else {
+        await updateDoc(postRef, { likesCount: increment(-1), likedBy: arrayRemove(user.uid) });
       }
+    } catch (error) {
+      setReaction(prev);
+      notifyUser('Could not like', permissionHint(error));
     }
   };
 
@@ -368,23 +398,31 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
   // toggling one never silently clears the other.
   const handleDislike = async () => {
     if (!user) return;
+    const next = !disliked;
+    const prev = reaction;
+    setReaction({ liked, likes: likesCount, disliked: next, dislikes: Math.max(0, dislikesCount + (next ? 1 : -1)) });
     const postRef = doc(db, 'posts', post.id);
-    if (isDisliked) {
-      await updateDoc(postRef, { dislikesCount: increment(-1), dislikedBy: arrayRemove(user.uid) });
-    } else {
-      await updateDoc(postRef, { dislikesCount: increment(1), dislikedBy: arrayUnion(user.uid) });
-      if (post.authorId !== user.uid) {
-        await addDoc(collection(db, 'notifications'), {
-          userId: post.authorId,
-          fromId: user.uid,
-          fromName: profile?.displayName || 'Someone',
-          fromPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
-          type: 'dislike',
-          content: 'disliked your startup.',
-          isRead: false,
-          timestamp: serverTimestamp()
-        });
+    try {
+      if (next) {
+        await updateDoc(postRef, { dislikesCount: increment(1), dislikedBy: arrayUnion(user.uid) });
+        if (post.authorId !== user.uid) {
+          await addDoc(collection(db, 'notifications'), {
+            userId: post.authorId,
+            fromId: user.uid,
+            fromName: profile?.displayName || 'Someone',
+            fromPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
+            type: 'dislike',
+            content: 'disliked your startup.',
+            isRead: false,
+            timestamp: serverTimestamp()
+          }).catch(() => {});
+        }
+      } else {
+        await updateDoc(postRef, { dislikesCount: increment(-1), dislikedBy: arrayRemove(user.uid) });
       }
+    } catch (error) {
+      setReaction(prev);
+      notifyUser('Could not dislike', permissionHint(error));
     }
   };
 
@@ -578,14 +616,14 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       <View style={styles.cardFooter}>
         <TouchableOpacity style={styles.actionBtn} onPress={handleLike}>
           <Animated.View style={{ transform: [{ scale: likeScale }] }}>
-            <SafeIcon name="Heart" size={18} color={isLiked ? '#EF4444' : '#666'} fill={isLiked ? '#EF4444' : 'transparent'} />
+            <SafeIcon name="Heart" size={18} color={liked ? '#EF4444' : '#666'} fill={liked ? '#EF4444' : 'transparent'} />
           </Animated.View>
-          <Text style={[styles.actionVal, { color: isLiked ? '#EF4444' : '#666' }]}>{post.likesCount || 0}</Text>
+          <Text style={[styles.actionVal, { color: liked ? '#EF4444' : '#666' }]}>{likesCount}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionBtn} onPress={handleDislike}>
-          <SafeIcon name="ThumbsDown" size={18} color={isDisliked ? '#EF4444' : '#666'} fill={isDisliked ? '#EF4444' : 'transparent'} />
-          <Text style={[styles.actionVal, { color: isDisliked ? '#EF4444' : '#666' }]}>{post.dislikesCount || 0}</Text>
+          <SafeIcon name="ThumbsDown" size={18} color={disliked ? '#EF4444' : '#666'} fill={disliked ? '#EF4444' : 'transparent'} />
+          <Text style={[styles.actionVal, { color: disliked ? '#EF4444' : '#666' }]}>{dislikesCount}</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
