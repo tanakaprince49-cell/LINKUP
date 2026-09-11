@@ -299,7 +299,7 @@ function TabNavigator({ navigation }: any) {
           const iconMap: Record<string, { active: string; inactive: string }> = {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
             LinkyHome: { active: 'Handshake', inactive: 'Handshake' },
-            Feed: { active: 'Rocket', inactive: 'Rocket' },
+            Feed: { active: 'Sprout', inactive: 'Sprout' },
             Campaigns: { active: 'Megaphone', inactive: 'Megaphone' },
             Search: { active: 'Search', inactive: 'Search' },
             Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },

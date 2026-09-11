@@ -317,6 +317,8 @@ export const linkyHideFact = (kind: string, value: string, hide: boolean) =>
   linkyCall<{ ok: boolean; hidden: LinkyHidden }>('hideFact', { kind, value, hide });
 /** "and forget that I ever asked" */
 export const linkyRemoveAsk = (id: string) => linkyCall<{ ok: boolean; forgotten: number }>('removeAsk', { id });
+/** "clear the chat" — wipe the whole conversation in one go, keep budget & cards. */
+export const linkyClearChat = () => linkyCall<{ ok: boolean; cleared: number }>('clearChat');
 export const linkyAudit = () => linkyCall<LinkyAudit>('audit');
 export const linkyForget = () => linkyCall<{ ok: boolean }>('forget');
 export const linkyLinkCode = () => linkyCall<{ code: string; expiresInMinutes: number }>('linkCode');

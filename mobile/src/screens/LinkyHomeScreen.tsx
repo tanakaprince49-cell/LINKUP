@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Linking,
   Image,
   Modal,
@@ -22,7 +23,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trophy, X, Zap } from 'lucide-react-native';
+import { Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trash2, Trophy, X, Zap } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
@@ -43,6 +44,7 @@ import {
   LinkyBadge,
   LinkyLoopChoice,
   linkyAsk,
+  linkyClearChat,
   linkyLoopAnswer,
   linkyMeetSquad,
   linkyApproveSquad,
@@ -84,10 +86,13 @@ const Avatar = ({ uri, size = 44 }: { uri?: string; size?: number }) => (
   <Image source={{ uri: uri || FALLBACK_AVATAR }} style={{ width: size, height: size, borderRadius: size / 3.2, backgroundColor: '#E0E0E0' }} />
 );
 
-const SectionTitle = ({ title, hint, isDark }: { title: string; hint?: string; isDark: boolean }) => (
+const SectionTitle = ({ title, hint, action, isDark }: { title: string; hint?: string; action?: React.ReactNode; isDark: boolean }) => (
   <View style={styles.sectionHead}>
     <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>{title}</Text>
-    {hint ? <Text style={[styles.sectionHint, { color: textColor(isDark, 'muted') }]}>{hint}</Text> : null}
+    <View style={styles.sectionRight}>
+      {hint ? <Text style={[styles.sectionHint, { color: textColor(isDark, 'muted') }]}>{hint}</Text> : null}
+      {action}
+    </View>
   </View>
 );
 
@@ -286,6 +291,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const resetCountdown = formatCountdown(home?.limits?.asksResetAt, nowTick);
   const atDailyLimit = !!home && !home.plus && asksPerDay > 0 && asksLeft <= 0;
   const mounted = useRef(true);
+  const hydratedRef = useRef(false);
 
   useEffect(() => () => { mounted.current = false; }, []);
 
@@ -295,6 +301,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
     try {
       const h = await linkyHome();
       if (!mounted.current) return;
+      hydratedRef.current = true;
       setHome(h);
       setError('');
       // a lastAsk restored from home carries no ask budget of its own; the home
@@ -412,7 +419,9 @@ export default function LinkyHomeScreen({ navigation }: any) {
     setInput('');
     setPendingAsk(msg);
     setThinking(true);
-    setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 60);
+    // No manual scroll here — the effect below follows `thinking` and the
+    // growing turn count so the newest message stays in view (previously this
+    // scrolled to y:0, dumping the user at the top of the page every send).
     try {
       const out = await linkyAsk(msg);
       setAnswer(out);
@@ -442,6 +451,41 @@ export default function LinkyHomeScreen({ navigation }: any) {
       setThinking(false);
       setPendingAsk('');
     }
+  };
+
+  // "Delete the chat at once": wipe the whole conversation. The server clears
+  // the thread + last answer only — the daily message counter, what Linky
+  // knows and the cards he found all stay put.
+  const clearConversation = () => {
+    if (!user?.uid || busyId === 'clearChat') return;
+    notifyUser(
+      'Clear the chat?',
+      'This deletes your whole Linky conversation. Your daily messages, what Linky knows about you and the people he found stay exactly as they are.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear chat',
+          style: 'destructive',
+          onPress: async () => {
+            setBusyId('clearChat');
+            try {
+              await linkyClearChat();
+              setAnswer(null);
+              setPendingAsk('');
+              setPointerText('');
+              setLeads([]);
+              setPointerRoutes([]);
+              setHome((h) => (h ? { ...h, thread: [], lastAsk: null } : h));
+              notifyUser('Cleared', 'Your Linky chat is gone.');
+            } catch (e) {
+              notifyUser('Could not clear the chat', e instanceof Error ? e.message : 'Please try again.');
+            } finally {
+              setBusyId(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // A draft left half-finished (on Telegram, or by a previous visit) is still the
@@ -554,6 +598,25 @@ export default function LinkyHomeScreen({ navigation }: any) {
   }, [home?.thread, answer]);
   const lastLinkyTurn = [...turns].reverse().find((t) => t.role === 'linky');
   const chips = (lastLinkyTurn?.id === answer?.id ? answer?.suggest : undefined) || [];
+
+  // Keep the newest message in view. The conversation sits above the fixed
+  // composer, so when a message is sent (thinking turns on) and when the reply
+  // lands (the turn count grows) the view follows instead of stranding the
+  // user at the top of a long page. A baseline turn count is captured right
+  // after the first load so we never auto-scroll past the pending intros.
+  const turnCount = turns.length;
+  const baselineTurnRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    if (baselineTurnRef.current === null) {
+      baselineTurnRef.current = turnCount;
+      return;
+    }
+    if (turnCount === baselineTurnRef.current && !thinking) return;
+    const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+    return () => clearTimeout(t);
+  }, [turnCount, thinking]);
+
   const onChip = (chip: string) => {
     if (!chip || thinking) return;
     const meet = chip.match(/^meet\s*(\d+)/i);
@@ -591,6 +654,13 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
   return (
     <View style={[styles.root, appBackground(isDark)]}>
+      {/* KeyboardAvoidingView keeps the composer above the keyboard. The
+          composer is absolutely pinned to the bottom of this container, so
+          'height' (which shrinks the container to end at the keyboard top) is
+          what lifts it — 'padding' only pushes in-flow children. 'height' also
+          self-corrects under Android edge-to-edge, where adjustResize no
+          longer resizes the window for us. */}
+      <KeyboardAvoidingView style={styles.fill} behavior="height">
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[styles.content, { paddingBottom: 140 + insets.bottom }]}
@@ -688,7 +758,22 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
             {(pendingAsk || turns.length) ? (
               <>
-                <SectionTitle title="Linky" hint={!home.plus && asksPerDay ? (asksLeft > 0 ? `${asksLeft} of ${asksPerDay} free messages left today` : `0 of ${asksPerDay} free messages left today · resets in ${resetCountdown || '…'}`) : undefined} isDark={isDark} />
+                <SectionTitle
+                  title="Linky"
+                  hint={!home.plus && asksPerDay ? (asksLeft > 0 ? `${asksLeft} of ${asksPerDay} free messages left today` : `0 of ${asksPerDay} free messages left today · resets in ${resetCountdown || '…'}`) : undefined}
+                  action={turns.length ? (
+                    <TouchableOpacity
+                      onPress={clearConversation}
+                      disabled={busyId === 'clearChat'}
+                      activeOpacity={0.75}
+                      style={[styles.clearBtn, { borderColor: border }]}
+                    >
+                      {busyId === 'clearChat' ? <ActivityIndicator size="small" color={textColor(isDark, 'muted')} /> : <Trash2 size={12} color={textColor(isDark, 'muted')} />}
+                      <Text style={[styles.clearBtnText, { color: textColor(isDark, 'muted') }]}>Clear chat</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  isDark={isDark}
+                />
                 <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
                   {turns.map((t, i) => (t.role === 'user' ? (
                     <View key={`u${t.at}-${i}`} style={[styles.turn, styles.turnUser]}>
@@ -864,6 +949,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
       </View>
+      </KeyboardAvoidingView>
 
       <Modal visible={!!draft} transparent animationType="fade" onRequestClose={dropDraft}>
         {draft ? (
@@ -927,6 +1013,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  fill: { flex: 1 },
   content: { paddingHorizontal: 16, paddingTop: 14 },
   center: { paddingVertical: 40, alignItems: 'center' },
   hero: { marginBottom: 14 },
@@ -938,9 +1025,12 @@ const styles = StyleSheet.create({
   heroLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   heroLink: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
   heroLinkText: { fontSize: 11, fontWeight: '800' },
-  sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 16, marginBottom: 8 },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, marginBottom: 8 },
   sectionTitle: { fontSize: 13, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase' },
   sectionHint: { fontSize: 11, fontWeight: '700' },
+  sectionRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  clearBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  clearBtnText: { fontSize: 11, fontWeight: '800' },
   card: { borderRadius: 18, borderWidth: 1, padding: 14, marginBottom: 10 },
   cardTop: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   cardName: { fontSize: 15, fontWeight: '900' },

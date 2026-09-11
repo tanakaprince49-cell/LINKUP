@@ -15,7 +15,7 @@ import { getDb, verifyRequestUser } from './_firebaseAdmin.js';
 import { aiProbe, aiStatus, handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import {
   APP_URL, LIMITS, OFFERS, LOOP_CHOICES, answerLoop, approveLead, approveMeet, approveSquad, ask, audit, botUserFor, cancelMeet, cancelSquad,
-  consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
+  clearChat, consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
   meet, meetSquad, orderedCards, pickPerson, pointers, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
   setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret,
 } from './_linky.js';
@@ -798,6 +798,7 @@ async function handleApp(req, res) {
       // "delete your whole account"
       case 'hideFact': out = await hideFact(uid, { kind: String(body.kind || ''), value: String(body.value || ''), hide: body.hide !== false }); break;
       case 'removeAsk': out = await removeAsk(uid, String(body.id || '')); break;
+      case 'clearChat': out = await clearChat(uid); break;
       case 'pointers': out = await pointers(uid, String(body.need || '')); break;
       // Permissioned outreach: draft -> (optionally edit) -> approve -> the member
       // sends. Nothing here talks to LinkedIn or the target on its own.

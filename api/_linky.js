@@ -2906,6 +2906,22 @@ export async function removeAsk(uid, askId) {
   return { ok: true, forgotten: before.length - kept.length, turns: thread.length };
 }
 
+/**
+ * "Clear the chat" — wipe the on-screen conversation in one go. Removes the
+ * thread and the last answer, but deliberately keeps the daily message
+ * counter, what Linky knows (facts), the ask cache and the cards he found —
+ * clearing the chat must never refund the free daily budget or lose a saved
+ * card. The full wipe that also forgets everything is `forget`.
+ */
+export async function clearChat(uid) {
+  const state = await loadState(uid);
+  const turns = threadOf(state).length;
+  const patch = { chat: [] };
+  if (state.lastAsk) patch.lastAsk = FieldValue().delete();
+  await patchState(uid, patch);
+  return { ok: true, cleared: turns };
+}
+
 export async function audit(uid, { userDoc } = {}) {
   const user = userDoc || (await loadUser(uid));
   const [state, cards, introsOut, introsIn] = await Promise.all([
