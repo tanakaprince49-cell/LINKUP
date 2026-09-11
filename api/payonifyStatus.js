@@ -10,9 +10,8 @@
 // Returns: { "status": "paid" | "pending" | "failed" | ..., "entitlement": {...} | null }
 import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import { getDb, verifyRequestUser } from './_firebaseAdmin.js';
-import { readWebEntitlement } from './_entitlements.js';
+import { grantWebEntitlement, readWebEntitlement, repairWebIdentityFlags } from './_entitlements.js';
 import { classifyStatus, retrieveCheckoutSession } from './_payonify.js';
-import { grantWebEntitlement } from './_entitlements.js';
 
 const TX = 'webTransactions';
 
@@ -134,6 +133,10 @@ export default async function handler(req, res) {
       if (outcome === 'paid') { reconciled = { reference: t.id, status: 'paid' }; break; }
     }
     const entitlement = await readWebEntitlement(db, user.uid);
+    // A member whose PLUS was granted before the identity flags existed may
+    // still lack isPro/isVerified/turboConnect on users/{uid}. Stamp them now
+    // (server-trusted, idempotent) so the mobile app and publicProfiles agree.
+    await repairWebIdentityFlags(db, user.uid).catch(() => {});
     res.status(200).json({
       reference: reconciled?.reference || null,
       status: reconciled?.status || (candidates.length ? 'pending' : 'none'),
@@ -165,6 +168,10 @@ export default async function handler(req, res) {
 
   // Per-tier, so the client can tell PLUS from Campaigns on the same account.
   const entitlement = await readWebEntitlement(db, user.uid);
+
+  // Same repair as the no-reference path: "Restore purchases" with a live
+  // reference should also stamp the identity flags if they are somehow missing.
+  await repairWebIdentityFlags(db, user.uid).catch(() => {});
 
   res.status(200).json({ reference, status, entitlement });
 }

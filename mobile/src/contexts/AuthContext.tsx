@@ -354,13 +354,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authError, setAuthError] = useState<string | null>(null);
 
   // WEB BILLING: Payonify grants land in webSubscriptions/{uid} (written only by
-  // api/). Fold that entitlement into the profile so every gate downstream —
-  // hasLinkupPro, the free-limit counters, Campaigns — reads ONE answer whether
-  // the user paid through Google Play on Android or Payonify on web. On native this
-  // memo is a pass-through: Play owns billing there.
+  // api/). Fold that entitlement into the profile on EVERY platform so every
+  // gate downstream — hasLinkupPro, the free-limit counters, Campaigns — reads
+  // ONE answer whether the user paid through Google Play on Android or Payonify
+  // on web. A member who bought PLUS on the web must still be PLUS when they
+  // open the Android app; only the checkout itself stays web-only.
   const [webSubscription, setWebSubscription] = useState<WebSubscription | null>(null);
   const profile = useMemo(() => {
-    const billed = isWebBilling() ? withWebEntitlements(rawProfile, webSubscription) : rawProfile;
+    const billed = withWebEntitlements(rawProfile, webSubscription);
     // FOUNDER / ADMIN: the allowlist is matched on the signed-in email, so it
     // cannot be lost to a Firestore read that failed or a user doc that never
     // got its isAdmin flag. Folding it in here — the one funnel every gate
@@ -370,10 +371,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isOnboarded = Boolean(user?.uid && (profile?.onboarded || completedOnboardingUid === user.uid));
 
   useEffect(() => {
-    if (!isWebBilling() || !user?.uid) {
+    if (!user?.uid) {
       setWebSubscription(null);
       return;
     }
+    // All platforms: a web PLUS purchase must show up in the mobile app too.
     return subscribeWebSubscription(user.uid, setWebSubscription);
   }, [user?.uid]);
 

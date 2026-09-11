@@ -1,9 +1,14 @@
 // Web billing state.
 //
-// Android keeps Google Play Billing. Web uses Payonify, which cannot auto-renew,
-// so a web purchase is a PREPAID TERM: the server writes an `endsAt` date onto
-// webSubscriptions/{uid} and this module turns that document into the same
-// "do you have PLUS?" answer the Play path produces.
+// Android bills through Google Play, web bills through Payonify. Payonify
+// cannot auto-renew, so a web purchase is a PREPAID TERM: the server writes an
+// `endsAt` date onto webSubscriptions/{uid} and this module turns that document
+// into the same "do you have PLUS?" answer the Play path produces.
+//
+// The entitlement is READ on every platform. A member who bought PLUS on the
+// web and then opens the Android app must still be PLUS there (blue check,
+// crown, Turbo Connect, ad-free) — billing surface and entitlement surface are
+// two different things, and only the checkout stays web-only.
 //
 // Nothing here is writable from the app — firestore.rules sets
 // `allow write: if false` on webSubscriptions. Only api/ can grant.
@@ -30,7 +35,7 @@ export type WebSubscription = {
   campaigns?: WebTierState | null;
 };
 
-/** Web is the only surface that bills through Payonify. */
+/** Only the web surface can START a Payonify checkout. Entitlements are read everywhere. */
 export const isWebBilling = () => Platform.OS === 'web';
 
 /** Firestore Timestamp / {seconds} / epoch millis -> millis. */
@@ -43,14 +48,16 @@ function toMillis(value: any): number {
 }
 
 /**
- * Live-listen to a user's web entitlements.
- * Returns an unsubscribe function. No-op on native (Play owns billing there).
+ * Live-listen to a user's web entitlements. Runs on EVERY platform so a web
+ * purchase is honoured in the Android/iOS app too — the document is readable
+ * by its owner (firestore.rules), and only the server can write it.
+ * Returns an unsubscribe function.
  */
 export function subscribeWebSubscription(
   uid: string | undefined | null,
   onChange: (sub: WebSubscription | null) => void
 ): () => void {
-  if (!uid || !isWebBilling()) {
+  if (!uid) {
     onChange(null);
     return () => {};
   }

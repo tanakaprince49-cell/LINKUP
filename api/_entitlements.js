@@ -172,6 +172,52 @@ export async function grantWebEntitlement(db, args) {
   });
 }
 
+/**
+ * Repair the outward identity flags on users/{uid} for a member whose web PLUS
+ * term is active but whose user doc was never stamped (purchases made before
+ * the grant started writing the flags). The Google Play path writes the same
+ * flags, and publicProfiles is synced from users/{uid}, so without this a web
+ * buyer looks unpaid to everyone else on Android — no tick, no crown, no boost.
+ *
+ * Idempotent and additive: it only writes a field when it is missing/wrong, so
+ * it can never fight a fresh grant or a manual correction, and it never clears
+ * anything.
+ *
+ * @returns {Promise<boolean>} true when a repair was written.
+ */
+export async function repairWebIdentityFlags(db, uid) {
+  if (!uid) return false;
+  const subSnap = await db.collection('webSubscriptions').doc(uid).get().catch(() => null);
+  const sub = subSnap && subSnap.exists ? subSnap.data() || {} : {};
+  const plus = sub.plus && typeof sub.plus === 'object' ? sub.plus : null;
+  const active =
+    plus &&
+    String(plus.status || '').toLowerCase() === 'active' &&
+    toMillis(plus.endsAt) > Date.now();
+  if (!active) return false;
+
+  const userRef = db.collection('users').doc(uid);
+  const userSnap = await userRef.get().catch(() => null);
+  const u = userSnap && userSnap.exists ? userSnap.data() || {} : {};
+
+  const patch = {};
+  if (!u.isPro) patch.isPro = true;
+  if (String(u.plan || '').toLowerCase() !== 'plus') patch.plan = 'plus';
+  if (String(u.subscriptionPlan || '').toLowerCase() !== 'plus') patch.subscriptionPlan = 'plus';
+  if (String(u.subscriptionStatus || '').toLowerCase() !== 'active') patch.subscriptionStatus = 'active';
+  if (!u.turboConnect) patch.turboConnect = true;
+  if (!u.isVerified || String(u.verificationProgram || '').toUpperCase() !== 'LINKUP PLUS') {
+    patch.isVerified = true;
+    patch.verificationProgram = 'LINKUP PLUS';
+    patch.verifiedBy = 'LINKUP PLUS';
+    patch.verifiedAt = serverTimestamp();
+  }
+
+  if (Object.keys(patch).length === 0) return false;
+  await userRef.set(patch, { merge: true });
+  return true;
+}
+
 /** Read the current web entitlements for a user, normalised for the client. */
 export async function readWebEntitlement(db, uid) {
   if (!uid) return null;
