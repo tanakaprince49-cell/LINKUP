@@ -1,5 +1,18 @@
 # LINKUP Release Notes
 
+## 14.0.0 (versionCode 20)
+
+**Play Console (paste into "What's new in this release"):**
+
+```
+What's new in 14.0.0:
+
+🚀 Upgraded to Expo SDK 57 (React Native 0.86) — smoother, faster, and ready for the latest devices
+📣 Campaigns now show a megaphone everywhere — nav bar, campaign cards and sponsored posts
+💬 Free Linky messages raised from 2 to 5 a day
+🐞 Fixes: campaign logos, dislike notifications, game-challenge alerts, and more
+```
+
 ## 13.4.0 (versionCode 18)
 
 **Play Console (paste into "What's new in this release"):**

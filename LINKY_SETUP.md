@@ -486,4 +486,4 @@ were at that moment (that snapshot can lag; `ai` is always live). No key value i
 returned, only names and lengths. `?action=cron` uses the same token; `LINKY_DIAG_TOKEN`
 overrides it if you would rather not lean on the bot token.
 
-Native: version 13.5.0 / versionCode 19 — rebuild the APK whenever you like; the web is live now.
+Native: version 14.0.0 / versionCode 20 — rebuild the APK whenever you like; the web is live now.
