@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, endAt, getDocs, getDocsFromCache, limit, onSnapshot, orderBy, query, setDoc, startAfter, startAt } from 'firebase/firestore';
+import { collection, deleteDoc, doc, endAt, getDoc, getDocs, getDocsFromCache, limit, onSnapshot, orderBy, query, setDoc, startAfter, startAt } from 'firebase/firestore';
 import { db } from './firebase';
 import { displayNameFor, isDiscoverableProfile } from './discovery';
 import { sanitizeSocialLinks } from './socialLinks';
@@ -162,6 +162,37 @@ export const syncOwnPublicProfileIndex = async (uid: string, profile: any) => {
     await deleteDoc(ref).catch(() => {});
     return;
   }
+
+  // The SERVER is the authority on PLUS identity: it stamps users/{uid} and
+  // publicProfiles/{uid} from webSubscriptions. A sync that runs before the
+  // web-subscription fold resolves (or an older client) would otherwise write
+  // isPro: false / plan: '' over a server-stamped isPro: true and erase the
+  // paid identity everyone else reads on Android. Preserve the paid fields
+  // whenever this profile doesn't claim them but the stored row does.
+  const claimsPlus =
+    !!index.isPro ||
+    ['pro', 'plus'].includes(String(index.plan || '').toLowerCase()) ||
+    ['pro', 'plus'].includes(String(index.subscriptionPlan || '').toLowerCase());
+  if (!claimsPlus) {
+    try {
+      const existingSnap = await getDoc(ref);
+      const e = existingSnap?.exists?.() ? existingSnap.data() || {} : {};
+      if (e?.isPro) {
+        index.isPro = true;
+        if (e.plan) index.plan = e.plan;
+        if (e.subscriptionPlan) index.subscriptionPlan = e.subscriptionPlan;
+        if (e.subscriptionStatus) index.subscriptionStatus = e.subscriptionStatus;
+        if (e.isVerified) {
+          index.isVerified = true;
+          index.verificationProgram = e.verificationProgram || index.verificationProgram;
+        }
+        if (e.turboConnect) index.turboConnect = true;
+      }
+    } catch {
+      // offline or rules failure: fall through to the unstamped write
+    }
+  }
+
   const signature = JSON.stringify({ ...index, updatedAt: '' });
   if (lastOwnPublicProfileSignature[uid] === signature) return;
   lastOwnPublicProfileSignature[uid] = signature;

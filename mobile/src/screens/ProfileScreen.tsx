@@ -50,6 +50,7 @@ import { resolveConnectionGate, startTalkOrRequest, subscribeToConnectionGate, t
 import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { buildConversationProfileSnapshot } from '../lib/conversationProfiles';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
+import { applyPlusIdentityFlags, repairPlusIdentity } from '../lib/plusRepair';
 import { uploadAvatarToImageKit } from '../lib/imagekitUpload';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
@@ -594,6 +595,16 @@ export default function ProfileScreen({ navigation, route }: any) {
       if (profileDoc) setViewedProfile(profileDoc);
       else setViewedError('This profile is unavailable.');
       setViewedLoading(false);
+      // Web-bought PLUS members were only stamped onto users/{uid} recently;
+      // a legacy buyer's docs can still read as free on Android. Ask the
+      // server to repair the target and fold the authoritative flags in so
+      // the tick / crown / PLUS mark render right now, not on a later visit.
+      repairPlusIdentity(targetUserId)
+        .then((r) => {
+          if (cancelled || !r.plus) return;
+          setViewedProfile((p: any) => (p ? applyPlusIdentityFlags(p, r.flags) : p));
+        })
+        .catch(() => {});
     }).catch((err) => {
       if (cancelled) return;
       console.error("Error fetching viewed profile:", err);

@@ -34,6 +34,7 @@ import { checkPayonifyPayment, takePendingReference } from '../lib/webCheckout';
 import type { WebSubscription } from '../lib/webSubscription';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
 import { signInToFirebaseWithGoogle } from '../lib/googleAuth';
+import { repairPlusIdentity } from '../lib/plusRepair';
 
 let warnedPresenceRules = false;
 const onboardingStorageKey = (uid: string) => `linkup:onboarded:${uid}`;
@@ -423,6 +424,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     // All platforms: a web PLUS purchase must show up in the mobile app too.
     return subscribeWebSubscription(user.uid, setWebSubscription);
+  }, [user?.uid]);
+
+  // Self-repair once per sign-in: a web PLUS member's users/{uid} (+ public
+  // index) may predate the server-side flag stamping, which is what OTHER
+  // members read to render the tick/crown/boost on Android. Ask the server to
+  // (re)stamp so the buyer shows as PLUS to everyone, not just to themselves.
+  useEffect(() => {
+    if (!user?.uid) return;
+    const t = setTimeout(() => {
+      repairPlusIdentity(user.uid).catch(() => {});
+    }, 1200);
+    return () => clearTimeout(t);
   }, [user?.uid]);
 
   // RETURNING FROM PAYONIFY. Payonify sends the browser to PAYONIFY_SUCCESS_URL, so

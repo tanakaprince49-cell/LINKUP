@@ -145,7 +145,9 @@ export async function grantWebEntitlement(db, args) {
     // all read off users/{uid} by other members. Web used to stop at
     // webSubscriptions/{uid}, so a web buyer looked unpaid (no tick, no crown,
     // no boost) to everyone else. Write the flags here, server-side, inside
-    // the same transaction that extends the term.
+    // the same transaction that extends the term — and into publicProfiles
+    // too, because Discover/Search/ProfileScreen on Android read that lean
+    // index first.
     if (tier === 'plus') {
       t.set(
         db.collection('users').doc(uid),
@@ -166,6 +168,28 @@ export async function grantWebEntitlement(db, args) {
         },
         { merge: true }
       );
+
+      // Stamp the public index too — but only when it already exists, so a
+      // brand-new buyer never gets a nameless publicProfiles row before their
+      // own profile sync creates the full document.
+      const pubSnap = await t.get(db.collection('publicProfiles').doc(uid));
+      if (pubSnap.exists) {
+        t.set(
+          db.collection('publicProfiles').doc(uid),
+          {
+            uid,
+            isPro: true,
+            plan: 'plus',
+            subscriptionPlan: 'plus',
+            subscriptionStatus: 'active',
+            isVerified: true,
+            verificationProgram: 'LINKUP PLUS',
+            turboConnect: true,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
     }
 
     return { granted: true, endsAt };
@@ -200,21 +224,46 @@ export async function repairWebIdentityFlags(db, uid) {
   const userSnap = await userRef.get().catch(() => null);
   const u = userSnap && userSnap.exists ? userSnap.data() || {} : {};
 
-  const patch = {};
-  if (!u.isPro) patch.isPro = true;
-  if (String(u.plan || '').toLowerCase() !== 'plus') patch.plan = 'plus';
-  if (String(u.subscriptionPlan || '').toLowerCase() !== 'plus') patch.subscriptionPlan = 'plus';
-  if (String(u.subscriptionStatus || '').toLowerCase() !== 'active') patch.subscriptionStatus = 'active';
-  if (!u.turboConnect) patch.turboConnect = true;
+  const userPatch = {};
+  if (!u.isPro) userPatch.isPro = true;
+  if (String(u.plan || '').toLowerCase() !== 'plus') userPatch.plan = 'plus';
+  if (String(u.subscriptionPlan || '').toLowerCase() !== 'plus') userPatch.subscriptionPlan = 'plus';
+  if (String(u.subscriptionStatus || '').toLowerCase() !== 'active') userPatch.subscriptionStatus = 'active';
+  if (!u.turboConnect) userPatch.turboConnect = true;
   if (!u.isVerified || String(u.verificationProgram || '').toUpperCase() !== 'LINKUP PLUS') {
-    patch.isVerified = true;
-    patch.verificationProgram = 'LINKUP PLUS';
-    patch.verifiedBy = 'LINKUP PLUS';
-    patch.verifiedAt = serverTimestamp();
+    userPatch.isVerified = true;
+    userPatch.verificationProgram = 'LINKUP PLUS';
+    userPatch.verifiedBy = 'LINKUP PLUS';
+    userPatch.verifiedAt = serverTimestamp();
   }
 
-  if (Object.keys(patch).length === 0) return false;
-  await userRef.set(patch, { merge: true });
+  // publicProfiles/{uid} is the lean index Discover/Search/ProfileScreen read
+  // on the mobile app. A web PLUS member whose user doc predates the stamping
+  // must also read as PLUS there — stamp it too, but only when the index row
+  // already exists (never create a nameless public row from a repair).
+  let pubWrote = false;
+  const pubRef = db.collection('publicProfiles').doc(uid);
+  const pubSnap = await pubRef.get().catch(() => null);
+  if (pubSnap && pubSnap.exists) {
+    const p = pubSnap.data() || {};
+    const pubPatch = {};
+    if (!p.isPro) pubPatch.isPro = true;
+    if (String(p.plan || '').toLowerCase() !== 'plus') pubPatch.plan = 'plus';
+    if (String(p.subscriptionPlan || '').toLowerCase() !== 'plus') pubPatch.subscriptionPlan = 'plus';
+    if (String(p.subscriptionStatus || '').toLowerCase() !== 'active') pubPatch.subscriptionStatus = 'active';
+    if (!p.turboConnect) pubPatch.turboConnect = true;
+    if (!p.isVerified || String(p.verificationProgram || '').toUpperCase() !== 'LINKUP PLUS') {
+      pubPatch.isVerified = true;
+      pubPatch.verificationProgram = 'LINKUP PLUS';
+    }
+    if (Object.keys(pubPatch).length) {
+      await pubRef.set({ uid, ...pubPatch, updatedAt: serverTimestamp() }, { merge: true });
+      pubWrote = true;
+    }
+  }
+
+  if (Object.keys(userPatch).length === 0 && !pubWrote) return false;
+  if (Object.keys(userPatch).length) await userRef.set(userPatch, { merge: true });
   return true;
 }
 
