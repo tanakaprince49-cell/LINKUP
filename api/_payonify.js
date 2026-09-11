@@ -10,8 +10,13 @@
 // never logged as part of a config dump, and never sent to the client. The
 // only thing the browser ever sees is the checkout URL Payonify hands back.
 
-const SANDBOX_BASE = 'https://api.payonify.com';
 const LIVE_BASE = 'https://api.payonify.com';
+// Payonify does not publish a separate sandbox host: the sk_test_ / sk_live_
+// key selects test/live on the same endpoint. `SANDBOX_BASE` is kept as its
+// own constant so a future sandbox host (or an on-prem relay) can be dropped
+// in without touching the call sites. Until then `PAYONIFY_ENV=sandbox` must
+// be paired with PAYONIFY_SANDBOX_BASE_URL to actually leave production.
+const SANDBOX_BASE = 'https://api.payonify.com';
 
 /**
  * Read config fresh on every call.
@@ -35,6 +40,7 @@ export function payonifyConfig() {
   const cancelUrl = String(process.env.PAYONIFY_CANCEL_URL || '').trim();
   const live = String(process.env.PAYONIFY_ENV || 'sandbox').toLowerCase() === 'live';
   const override = String(process.env.PAYONIFY_BASE_URL || '').trim().replace(/\/$/, '');
+  const sandboxOverride = String(process.env.PAYONIFY_SANDBOX_BASE_URL || '').trim().replace(/\/$/, '');
 
   return {
     publishableKey,
@@ -43,7 +49,7 @@ export function payonifyConfig() {
     successUrl,
     cancelUrl,
     live,
-    baseUrl: override || (live ? LIVE_BASE : SANDBOX_BASE),
+    baseUrl: override || (live ? LIVE_BASE : sandboxOverride || SANDBOX_BASE),
     ready: !!publishableKey && !!secretKey,
   };
 }

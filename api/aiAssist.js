@@ -1,4 +1,5 @@
 import { clippedJson, geminiText, handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
+import { verifyRequestUser } from './_firebaseAdmin.js';
 
 // A profile has a dozen optional fields; the model only needs the ones that
 // can actually influence a match. Sending the rest is pure token spend.
@@ -108,6 +109,15 @@ export default async function handler(req, res) {
   if (handleOptions(req, res)) return;
   if (req.method !== 'POST') {
     sendError(res, 405, 'Use POST for LINKUP AI.');
+    return;
+  }
+
+  // The model call below costs money, so the endpoint must not be usable by
+  // anyone who is not signed in (quota theft). The web client sends the
+  // Firebase ID token; the Cloud Function equivalent already enforces this.
+  const user = await verifyRequestUser(req);
+  if (!user?.uid) {
+    sendError(res, 401, 'Sign in to use LINKUP AI.');
     return;
   }
 

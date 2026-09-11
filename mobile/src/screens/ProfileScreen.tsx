@@ -30,7 +30,6 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import {
   collection,
   deleteDoc,
-  deleteField,
   doc,
   FieldPath,
   getCountFromServer,
@@ -80,6 +79,7 @@ import {
   LINKUP_PLUS_PRODUCT_ID,
   LINKUP_PLUS_YEARLY_PRODUCT_ID,
   PRO_FEATURES,
+  revokePlayPlus,
 } from '../lib/paywall';
 import { readActiveTrial, trialStatusLabel, type TrialRecord } from '../lib/trial';
 import { MAX_FIRESTORE_IMAGE_CHARS } from '../lib/imageUploadLimits';
@@ -1545,28 +1545,14 @@ export default function ProfileScreen({ navigation, route }: any) {
     setLocalPreferences((prev) => ({ ...prev, turboConnect: false }));
 
     try {
-      await setDoc(
-        doc(db, 'users', ownerUid),
-        {
-          uid: ownerUid,
-          displayName: safeDisplayNameForSave(profile?.displayName || myProfile?.displayName, user?.displayName || user?.email?.split('@')[0]),
-          profileLink: profileLinkFor({ uid: ownerUid, profileLink: (profile as any)?.profileLink || (myProfile as any)?.profileLink }),
-          isPro: false,
-          plan: 'free',
-          subscriptionPlan: 'free',
-          subscriptionStatus: 'canceled',
-          subscriptionCanceledAt: serverTimestamp(),
-          subscriptionUpdatedAt: serverTimestamp(),
-          isVerified: false,
-          verificationProgram: '',
-          verifiedBy: '',
-          verifiedAt: deleteField(),
-          turboConnect: false,
-          settings: nextSettings,
-        },
-        { merge: true }
-      );
-      notifyUser('PLUS canceled', 'LINKUP PLUS perks are turned off for this account.');
+      // The server demotes the outward PLUS identity (users + publicProfiles)
+      // so every other member stops seeing a stale crown/tick.
+      const revoked = await revokePlayPlus();
+      if (revoked.ok) {
+        notifyUser('PLUS canceled', 'LINKUP PLUS perks are turned off for this account.');
+      } else {
+        notifyUser('Canceled on this device', 'LINKUP PLUS is off locally. If you bought through Google Play, use Manage in Google Play to stop billing.');
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${ownerUid}`);
       notifyUser('Canceled on this device', 'LINKUP PLUS is off locally. If you bought through Google Play, use Manage in Google Play to stop billing.');

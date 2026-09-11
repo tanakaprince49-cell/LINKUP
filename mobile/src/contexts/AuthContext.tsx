@@ -651,44 +651,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setDoc(userDocRef, defaultsPatch, { merge: true }).catch(() => {});
             }
             if (hasPaidLinkupPro(data) && rawProfile.isVerified !== true) {
-              const settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
-              setDoc(
-                userDocRef,
-                {
-                  uid: authenticatedUser.uid,
-                  displayName: data.displayName || authenticatedUser.displayName || authenticatedUser.email?.split('@')[0] || 'LINKUP Builder',
-                  profileLink: data.profileLink || publicProfileLink(authenticatedUser.uid),
-                  isPro: true,
-                  plan: 'plus',
-                  subscriptionPlan: 'plus',
-                  subscriptionStatus: 'active',
-                  isVerified: true,
-                  verificationProgram: 'LINKUP PLUS',
-                  verifiedBy: 'LINKUP PLUS',
-                  verifiedAt: serverTimestamp(),
-                  turboConnect: true,
-                  settings: {
-                    ...settings,
-                    publicDiscovery:
-                      typeof settings.publicDiscovery === 'boolean'
-                        ? settings.publicDiscovery
-                        : data.isVisible !== false,
-                    stealthMode:
-                      typeof settings.stealthMode === 'boolean'
-                        ? settings.stealthMode
-                        : !!data.isStealthMode,
-                    turboConnect: true,
-                    hideOnlineStatus:
-                      typeof settings.hideOnlineStatus === 'boolean'
-                        ? settings.hideOnlineStatus
-                        : !!data.hideOnlineStatus,
-                    darkMode: !!settings.darkMode,
-                  },
-                  proUnlockedAt: serverTimestamp(),
-                  subscriptionUpdatedAt: serverTimestamp(),
-                },
-                { merge: true }
-              ).catch((error) => console.warn('LINKUP PLUS verification sync skipped:', error));
+              // The server is the authority on the tick/crown: ask it to
+              // (re)stamp the outward PLUS identity instead of writing it
+              // client-side (the rules now reject those client writes).
+              repairPlusIdentity(authenticatedUser.uid).catch((error) =>
+                console.warn('LINKUP PLUS verification sync skipped:', error)
+              );
             }
             if (inferredOnboarded) {
               setCompletedOnboardingUid(authenticatedUser.uid);

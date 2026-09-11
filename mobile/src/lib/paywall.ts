@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PLUS_PRICES, formatUsd } from './pricing';
+import { auth } from './firebase';
+import { linkupWebBaseUrl } from './profileLinks';
 
 export const PRO_FEATURES = {
   startupAnalyzer: 'AI Startup Analyzer',
@@ -211,6 +213,99 @@ export const buildLocalFreeEntitlement = (canceledAt: string = new Date().toISOS
 export const saveLocalProEntitlement = async (uid: string, entitlement: Record<string, unknown> = buildLocalProEntitlement()) => {
   if (!uid) return;
   await AsyncStorage.setItem(proEntitlementKey(uid), JSON.stringify(entitlement));
+};
+
+// ─── Server-side PLUS lifecycle ─────────────────────────────────────────────
+// The Firestore rules no longer let the client write isPro / isVerified /
+// turboConnect, so every PLUS transition goes through /api/claimPlus on the
+// Vercel backend (Admin SDK). The local AsyncStorage entitlement below is only
+// the device-local optimistic copy for instant UI.
+
+export type PlusClaimResult = {
+  ok: boolean;
+  granted?: boolean;
+  revoked?: boolean;
+  turboConnect?: boolean;
+  plus?: boolean;
+  status?: number;
+  flags?: {
+    isPro: boolean;
+    isVerified: boolean;
+    plan: string;
+    subscriptionPlan: string;
+    subscriptionStatus: string;
+    turboConnect: boolean;
+  } | null;
+  error?: string;
+};
+
+const plusLifecycleEndpoint = () =>
+  Platform.OS === 'web' ? '/api/claimPlus' : `${linkupWebBaseUrl()}/api/claimPlus`;
+
+const plusLifecycleHeaders = async () => {
+  const user = auth.currentUser;
+  const token = user ? await user.getIdToken().catch(() => '') : '';
+  return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+};
+
+/** Verify the Google Play purchase server-side and grant PLUS. */
+export const claimPlayPlus = async (purchase: {
+  productId?: string;
+  purchaseToken?: string | null;
+  transactionId?: string | null;
+  orderId?: string | null;
+}): Promise<PlusClaimResult> => {
+  try {
+    const res = await fetch(plusLifecycleEndpoint(), {
+      method: 'POST',
+      headers: await plusLifecycleHeaders(),
+      body: JSON.stringify({
+        action: 'claim',
+        productId: purchase.productId || '',
+        purchaseToken: purchase.purchaseToken || purchase.transactionId || '',
+        orderId: purchase.orderId || purchase.transactionId || '',
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: String(data?.error || `PLUS activation failed (${res.status}).`), ...(data?.status ? { status: data.status } : {}) };
+    }
+    return { ...(data as PlusClaimResult), ok: true };
+  } catch (error: any) {
+    return { ok: false, error: String(error?.message || 'Could not reach LINKUP PLUS activation.') };
+  }
+};
+
+/** Self-service cancel / lapse: clear the server-stamped PLUS flags. */
+export const revokePlayPlus = async (): Promise<PlusClaimResult> => {
+  try {
+    const res = await fetch(plusLifecycleEndpoint(), {
+      method: 'POST',
+      headers: await plusLifecycleHeaders(),
+      body: JSON.stringify({ action: 'revoke' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: String(data?.error || `Could not cancel PLUS (${res.status}).`) };
+    return { ...(data as PlusClaimResult), ok: true };
+  } catch (error: any) {
+    return { ok: false, error: String(error?.message || 'Could not reach LINKUP PLUS.') };
+  }
+};
+
+/** Toggle Turbo Connect server-side (on requires an active PLUS term). */
+export const setTurboConnectServer = async (on: boolean): Promise<PlusClaimResult> => {
+  try {
+    const res = await fetch(plusLifecycleEndpoint(), {
+      method: 'POST',
+      headers: await plusLifecycleHeaders(),
+      body: JSON.stringify({ action: 'turbo', turboConnect: !!on }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: String(data?.error || `Could not update Turbo Connect (${res.status}).`) };
+    return { ...(data as PlusClaimResult), ok: true };
+  } catch (error: any) {
+    return { ok: false, error: String(error?.message || 'Could not reach LINKUP PLUS.') };
+  }
 };
 
 export const clearLocalProEntitlement = async (uid: string) => {

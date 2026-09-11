@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { getDb } from './_firebaseAdmin.js';
+import { getDb, verifyRequestUser } from './_firebaseAdmin.js';
 import { compactProfile, geminiText, handleOptions, localRank, readJsonBody, sendError, setCors } from './_gemini.js';
 
 const toMillis = (v) => (v?.toMillis ? v.toMillis() : typeof v === 'number' ? v : v ? Date.parse(v) || 0 : 0);
@@ -57,6 +57,14 @@ export default async function handler(req, res) {
   if (handleOptions(req, res)) return;
   if (req.method !== 'POST') {
     sendError(res, 405, 'Use POST for LINKUP AI ranking.');
+    return;
+  }
+
+  // Ranking spends Gemini tokens, so gate it behind a signed-in user exactly
+  // like the Cloud Function equivalent. The web client sends the ID token.
+  const user = await verifyRequestUser(req);
+  if (!user?.uid) {
+    sendError(res, 401, 'Sign in to use LINKUP AI ranking.');
     return;
   }
 

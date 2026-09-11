@@ -1,6 +1,6 @@
 import { httpsCallable } from 'firebase/functions';
 import { Platform } from 'react-native';
-import { functions } from './firebase';
+import { auth, functions } from './firebase';
 import { UserProfile } from '../types';
 import { describeAIError, hasDirectAIKey, recordAIError, requestGeminiText } from './aiDiagnostics';
 
@@ -108,9 +108,13 @@ async function serverGeminiRank(me: UserProfile | null | undefined, candidates: 
   if (!serverAIRankingEnabled() || Platform.OS !== 'web' || typeof fetch !== 'function' || !me || candidates.length === 0) return [];
 
   const compactCandidates = candidates.slice(0, Math.min(maxCandidates, 20)).map(compactProfile);
+  const token = await auth.currentUser?.getIdToken().catch(() => '');
   const response = await fetch('/api/rankCandidates', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({
       me: compactProfile(me),
       candidates: compactCandidates,

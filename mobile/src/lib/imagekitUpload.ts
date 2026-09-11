@@ -9,6 +9,8 @@
  * Free tier: no credit card, rate-limits instead of billing — $0 forever.
  */
 
+import { auth } from './firebase';
+
 const IMAGEKIT_PUBLIC_KEY = 'public_nCVzK4bEGR6VH/FGJHDvjqB5urQ=';
 const IMAGEKIT_URL_ENDPOINT = 'https://ik.imagekit.io/vjkzaxrro';
 // Prod API origin — same deployment that serves the web app.
@@ -36,7 +38,10 @@ export const uploadImageToImageKit = async (
 ): Promise<string | null> => {
   if (!uid || typeof dataUri !== 'string' || !dataUri.startsWith('data:image')) return null;
   try {
-    const authRes = await fetch(AUTH_ENDPOINT);
+    const idToken = await auth.currentUser?.getIdToken().catch(() => '');
+    const authRes = await fetch(AUTH_ENDPOINT, {
+      headers: idToken ? { Authorization: `Bearer ${idToken}` } : undefined,
+    });
     if (!authRes.ok) return null;
     const { token, expire, signature } = (await authRes.json()) as Partial<ImageKitAuthParams>;
     if (!token || !expire || !signature) return null;

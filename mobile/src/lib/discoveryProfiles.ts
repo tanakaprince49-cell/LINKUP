@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, endAt, getDoc, getDocs, getDocsFromCache, limit, onSnapshot, orderBy, query, setDoc, startAfter, startAt } from 'firebase/firestore';
+import { collection, deleteDoc, doc, endAt, getDocs, getDocsFromCache, limit, onSnapshot, orderBy, query, setDoc, startAfter, startAt } from 'firebase/firestore';
 import { db } from './firebase';
 import { displayNameFor, isDiscoverableProfile } from './discovery';
 import { sanitizeSocialLinks } from './socialLinks';
@@ -115,19 +115,18 @@ export const buildPublicProfileIndex = (profile: any) => {
     responseRate: Number((compact as any).responseRate || 0) || 0,
     isVisible: compact.isVisible !== false,
     isStealthMode: !!compact.isStealthMode,
-    turboConnect: !!(compact as any).turboConnect,
     hideOnlineStatus: !!(compact as any).hideOnlineStatus,
-    isVerified: !!(compact as any).isVerified,
-    verificationProgram: text((compact as any).verificationProgram, 80),
-    isPro: !!(compact as any).isPro,
-    plan: text((compact as any).plan, 40),
-    subscriptionPlan: text((compact as any).subscriptionPlan, 40),
-    subscriptionStatus: text((compact as any).subscriptionStatus, 40),
     socialLinks: sanitizeSocialLinks((compact as any).socialLinks),
     onboarded: !!(compact as any).onboarded,
     deleted: false,
     lastActiveAt: (compact as any).lastActiveAt || null,
     updatedAt: new Date().toISOString(),
+    // NOTE: the paid/verification/boost fields (isPro, isVerified,
+    // verificationProgram, plan, subscriptionPlan, subscriptionStatus,
+    // turboConnect) are deliberately ABSENT from this index. The Firestore
+    // rules reject any client write that carries them, because the server
+    // (Admin SDK) is the only authority that may stamp a crown/tick/boost.
+    // Server-stamped values already on the row are preserved by the merge.
   };
 };
 
@@ -164,35 +163,10 @@ export const syncOwnPublicProfileIndex = async (uid: string, profile: any) => {
   }
 
   // The SERVER is the authority on PLUS identity: it stamps users/{uid} and
-  // publicProfiles/{uid} from webSubscriptions. A sync that runs before the
-  // web-subscription fold resolves (or an older client) would otherwise write
-  // isPro: false / plan: '' over a server-stamped isPro: true and erase the
-  // paid identity everyone else reads on Android. Preserve the paid fields
-  // whenever this profile doesn't claim them but the stored row does.
-  const claimsPlus =
-    !!index.isPro ||
-    ['pro', 'plus'].includes(String(index.plan || '').toLowerCase()) ||
-    ['pro', 'plus'].includes(String(index.subscriptionPlan || '').toLowerCase());
-  if (!claimsPlus) {
-    try {
-      const existingSnap = await getDoc(ref);
-      const e = existingSnap?.exists?.() ? existingSnap.data() || {} : {};
-      if (e?.isPro) {
-        index.isPro = true;
-        if (e.plan) index.plan = e.plan;
-        if (e.subscriptionPlan) index.subscriptionPlan = e.subscriptionPlan;
-        if (e.subscriptionStatus) index.subscriptionStatus = e.subscriptionStatus;
-        if (e.isVerified) {
-          index.isVerified = true;
-          index.verificationProgram = e.verificationProgram || index.verificationProgram;
-        }
-        if (e.turboConnect) index.turboConnect = true;
-      }
-    } catch {
-      // offline or rules failure: fall through to the unstamped write
-    }
-  }
-
+  // publicProfiles/{uid} from webSubscriptions (and the Play claim endpoint).
+  // This index omits the paid fields entirely (see buildPublicProfileIndex),
+  // so the merge write below can never overwrite a server-stamped isPro: true
+  // — the stored crown/tick/boost simply persist.
   const signature = JSON.stringify({ ...index, updatedAt: '' });
   if (lastOwnPublicProfileSignature[uid] === signature) return;
   lastOwnPublicProfileSignature[uid] = signature;

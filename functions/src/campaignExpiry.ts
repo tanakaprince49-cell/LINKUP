@@ -58,7 +58,12 @@ async function isAdminUid(uid: string): Promise<boolean> {
   if (!uid) return false;
   try {
     const snap = await db().doc(`users/${uid}`).get();
-    if (snap.exists && snap.data()?.isAdmin === true) return true;
+    if (snap.exists) {
+      const data: any = snap.data() || {};
+      // Accept both admin markers so this stays consistent with the other
+      // admin surface (index.ts assertAdmin), whatever wrote the grant.
+      if (data.isAdmin === true || data.role === 'admin') return true;
+    }
   } catch {
     // Fall through to the Auth lookup.
   }
@@ -95,6 +100,13 @@ function toMillis(value: any): number | null {
     return Number.isFinite(ms) ? ms : null;
   }
   if (value instanceof Date) return value.getTime();
+  if (typeof value === 'string') {
+    // Billing syncs (and the client) write ISO-8601 strings, which Number()
+    // cannot parse — that used to read as "no end date" and silently keep an
+    // ad alive. Parse strings before falling back to the numeric coercion.
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -282,88 +294,110 @@ export const endLapsedCampaigns = onSchedule(
   { region: REGION, schedule: 'every 6 hours', timeoutSeconds: 540, maxInstances: 1 },
   async () => {
     const now = Date.now();
-    const snap = await db().collection('campaigns').where('status', '==', 'active').limit(300).get();
-
-    const batch = db().batch();
     let ending = 0;
     let markingLapsed = 0;
     let tightened = 0;
     let stamped = 0;
     let skipped = 0;
+    let scanned = 0;
 
-    for (const docSnap of snap.docs) {
-      const data: any = docSnap.data() || {};
-      const ownerId = String(data.ownerId || '');
-      if (!ownerId) continue;
-
-      const entitlement = await readCampaignsEntitlement(ownerId);
-      const current = toMillis(data.expiresAt);
-
-      if (!entitlement.reliable) {
-        // Could not determine entitlement. Leave the campaign exactly as it
-        // is; the next pass will look again.
-        skipped += 1;
-        continue;
+    // Batches cap at 500 writes; commit and rotate as we go so a large
+    // backfill never overflows a single batch.
+    let batch = db().batch();
+    let writes = 0;
+    const flush = async () => {
+      if (writes === 0) return;
+      try {
+        await batch.commit();
+      } catch (error) {
+        logger.warn('campaignExpiry: batch commit failed', { error: String(error) });
       }
+      batch = db().batch();
+      writes = 0;
+    };
+    const enqueue = (ref: admin.firestore.DocumentReference, patch: Record<string, any>) => {
+      batch.set(ref, patch, { merge: true });
+      writes += 1;
+    };
 
-      if (!entitlement.active) {
-        const lapsedAt = toMillis(data.entitlementLapsedAt);
-        if (lapsedAt == null) {
-          // First time we have noticed. Start the grace clock rather than
-          // killing an ad over a slow renewal.
-          batch.set(
-            docSnap.ref,
-            {
-              entitlementLapsedAt: admin.firestore.Timestamp.fromMillis(now),
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-          markingLapsed += 1;
+    // Walk EVERY active campaign, not just the first 300: page by document id
+    // (orderBy __name__ needs no composite index) until the set is exhausted.
+    let lastDoc: admin.firestore.QueryDocumentSnapshot | null = null;
+    for (;;) {
+      let query: admin.firestore.Query = db()
+        .collection('campaigns')
+        .where('status', '==', 'active')
+        .orderBy('__name__')
+        .limit(300);
+      if (lastDoc) query = query.startAfter(lastDoc);
+      const snap = await query.get();
+      if (snap.empty) break;
+
+      for (const docSnap of snap.docs) {
+        scanned += 1;
+        const data: any = docSnap.data() || {};
+        const ownerId = String(data.ownerId || '');
+        if (!ownerId) continue;
+
+        const entitlement = await readCampaignsEntitlement(ownerId);
+        const current = toMillis(data.expiresAt);
+
+        if (!entitlement.reliable) {
+          // Could not determine entitlement. Leave the campaign exactly as it
+          // is; the next pass will look again.
+          skipped += 1;
           continue;
         }
-        if (now - lapsedAt < LAPSE_GRACE_MS) continue;
 
-        batch.set(
-          docSnap.ref,
-          {
+        if (!entitlement.active) {
+          const lapsedAt = toMillis(data.entitlementLapsedAt);
+          if (lapsedAt == null) {
+            // First time we have noticed. Start the grace clock rather than
+            // killing an ad over a slow renewal.
+            enqueue(docSnap.ref, {
+              entitlementLapsedAt: admin.firestore.Timestamp.fromMillis(now),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            markingLapsed += 1;
+            continue;
+          }
+          if (now - lapsedAt < LAPSE_GRACE_MS) continue;
+
+          enqueue(docSnap.ref, {
             status: 'ended',
             endedAt: admin.firestore.FieldValue.serverTimestamp(),
             endedReason: `entitlement-lapsed:${entitlement.source}`,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-        ending += 1;
-        continue;
-      }
+          });
+          ending += 1;
+          continue;
+        }
 
-      // Entitlement is live. A campaign must never outlive it, and must never
-      // sit on a stamp that has already passed (that happens when someone
-      // launches during a trial and then buys a real plan).
-      const ceiling = entitlement.endsAt ?? now + CAMPAIGN_WINDOW_DAYS * DAY_MS;
-      if (current == null || current > ceiling || current <= now) {
-        batch.set(
-          docSnap.ref,
-          {
+        // Entitlement is live. A campaign must never outlive it, and must never
+        // sit on a stamp that has already passed (that happens when someone
+        // launches during a trial and then buys a real plan).
+        const ceiling = entitlement.endsAt ?? now + CAMPAIGN_WINDOW_DAYS * DAY_MS;
+        if (current == null || current > ceiling || current <= now) {
+          enqueue(docSnap.ref, {
             expiresAt: admin.firestore.Timestamp.fromMillis(ceiling),
             expiresAtSource: entitlement.source,
             entitlementLapsedAt: null,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-        if (current == null) stamped += 1;
-        else tightened += 1;
+          });
+          if (current == null) stamped += 1;
+          else tightened += 1;
+        }
       }
+
+      if (writes >= 400) await flush();
+      if (snap.size < 300) break;
+      lastDoc = snap.docs[snap.docs.length - 1];
     }
 
-    if (ending || markingLapsed || tightened || stamped) {
-      await batch.commit();
-    }
+    await flush();
 
     logger.info('campaignExpiry: sweep complete', {
-      scanned: snap.size,
+      scanned,
       ending,
       markingLapsed,
       tightened,

@@ -298,8 +298,8 @@ service cloud.firestore {
               data.displayName.size() <= 100));
       }
 
-      function safeProfileUpdateKeys() {
-        return incoming().diff(existing()).affectedKeys().hasOnly([
+      function safeProfileKeys() {
+        return [
           'uid',
           'displayName', 'username', 'profileLink',
           'occupation', 'company', 'bio',
@@ -318,13 +318,31 @@ service cloud.firestore {
           'isPro', 'plan', 'subscriptionPlan', 'subscriptionStatus',
           'proUnlockedAt', 'subscriptionUpdatedAt',
           'settings',
-          'isVerified', 'verificationProgram', 'verifiedBy',
+          'isVerified', 'verificationProgram', 'verifiedBy', 'verifiedAt',
           'onboarded',
-          'lastActiveAt',
+          'lastActiveAt', 'shipLogs', 'shipCount', 'lastShippedAt',
           'reputationScore', 'streakCount', 'founderScore', 'reputationMetrics',
           'aiMatchInsights',
           'circles'
-        ]);
+        ];
+      }
+
+      // Fields that grant (or imply) payment, verification or admin authority.
+      // The CLIENT may never write these: only the server (Admin SDK, which
+      // bypasses rules) stamps them. `isPro` is the root: Linky, Discovery,
+      // the free-limit counters and the crown/tick all key off it.
+      function profileEntitlementFields() {
+        return [
+          'isPro', 'plan', 'subscriptionPlan', 'subscriptionStatus',
+          'proUnlockedAt', 'subscriptionUpdatedAt', 'entitlements',
+          'billingProvider', 'subscriptionProductId', 'subscriptionTransactionId',
+          'subscriptionPurchaseToken', 'linkupPlus', 'role', 'isAdmin',
+          'banned', 'deleted'
+        ];
+      }
+
+      function safeProfileUpdateKeys() {
+        return incoming().diff(existing()).affectedKeys().hasOnly(safeProfileKeys());
       }
 
       function verificationFieldsSafe() {
@@ -476,6 +494,11 @@ service cloud.firestore {
           validChangedList('projects', 20) &&
           validChangedList('startupIdeas', 20) &&
           validChangedList('circles', 20) &&
+          validChangedList('shipLogs', 20) &&
+          validChangedPoints('shipCount') &&
+          (!incoming().diff(existing()).affectedKeys().hasAny(['lastShippedAt']) ||
+            incoming().lastShippedAt is string ||
+            incoming().lastShippedAt == null) &&
           validChangedMap('personalityAnswers', 30) &&
           validChangedMap('roleAnswers', 30) &&
           validChangedMap('resume', 10) &&
@@ -492,6 +515,7 @@ service cloud.firestore {
           validChangedString('subscriptionPlan', 40) &&
           validChangedString('subscriptionStatus', 40) &&
           validChangedBool('isVerified') &&
+          validChangedTimestamp('verifiedAt') &&
           validChangedTimestamp('lastActiveAt') &&
           validChangedTimestamp('proUnlockedAt') &&
           validChangedTimestamp('subscriptionUpdatedAt') &&
@@ -510,6 +534,48 @@ service cloud.firestore {
           incoming().diff(existing()).affectedKeys().hasOnly(['pushTokens']);
       }
 
+      // A client may never ESCALATE its own paid/verification/admin fields.
+      // (Demotion — e.g. cancel — is handled by validProCancelData below.)
+      function paidEscalationSafe() {
+        return !incoming().diff(existing()).affectedKeys().hasAny(profileEntitlementFields());
+      }
+
+      // The server is the authority on PLUS, so an existing isPro: true is
+      // trustworthy for gating Turbo Connect (a PLUS-only perk).
+      function existingPlus() {
+        return existing().get('isPro', false) == true ||
+          existing().get('plan', '').toLowerCase() in ['pro', 'plus'] ||
+          existing().get('subscriptionPlan', '').toLowerCase() in ['pro', 'plus'];
+      }
+
+      // Turbo Connect is a PLUS perk: clients may only ever set it to false,
+      // unless the account is already PLUS (then toggling is legitimate).
+      function turboConnectSafe() {
+        return (!incoming().diff(existing()).affectedKeys().hasAny(['turboConnect']) ||
+            incoming().turboConnect == false ||
+            (incoming().turboConnect == true && existingPlus())) &&
+          (!incoming().diff(existing()).affectedKeys().hasAny(['settings']) ||
+            !incoming().settings.keys().hasAny(['turboConnect']) ||
+            incoming().settings.turboConnect == false ||
+            (incoming().settings.turboConnect == true && existingPlus()));
+      }
+
+      // The only client-writable "verified" stamp is the SHIPPED gamification
+      // badge (3 ship days). Everything else (PLUS tick) is server-only.
+      function shipBadgeVerification() {
+        return incoming().keys().hasAll(['isVerified', 'verificationProgram', 'verifiedBy']) &&
+          incoming().isVerified == true &&
+          incoming().verificationProgram == 'SHIPPED' &&
+          incoming().verifiedBy == 'SHIP LOG' &&
+          (!incoming().keys().hasAny(['verifiedAt']) || incoming().verifiedAt is timestamp);
+      }
+
+      function verificationSafe() {
+        return !incoming().diff(existing()).affectedKeys().hasAny(['isVerified', 'verificationProgram', 'verifiedBy', 'verifiedAt']) ||
+          verificationFieldsSafe() ||
+          shipBadgeVerification();
+      }
+
       allow get: if isOwner(userId) || isPublicProfile(existing()) || hasDirectMatchWithSignedInUser() || (
         isSignedIn() &&
         isReadableProfile(existing()) &&
@@ -520,9 +586,32 @@ service cloud.firestore {
       // profiles locally. This keeps older profiles without visibility fields discoverable.
       allow list: if isSignedIn();
 
-      allow create: if isOwner(userId) && validOwnProfileWrite(incoming());
+      // Create: a brand-new profile. Shape-validated (displayName sane), and
+      // the key whitelist + escalation guards stop a first write from minting
+      // PLUS, a tick, Turbo Connect or an admin role.
+      allow create: if isOwner(userId) &&
+        validOwnProfileWrite(incoming()) &&
+        incoming().keys().hasOnly(safeProfileKeys()) &&
+        !incoming().keys().hasAny(profileEntitlementFields()) &&
+        (!incoming().keys().hasAny(['turboConnect']) || incoming().turboConnect == false) &&
+        (!incoming().keys().hasAny(['settings']) ||
+          (!incoming().settings.keys().hasAny(['turboConnect']) || incoming().settings.turboConnect == false)) &&
+        (!incoming().keys().hasAny(['isVerified']) || incoming().isVerified == false) &&
+        (!incoming().keys().hasAny(['verificationProgram']) || incoming().verificationProgram == '') &&
+        (!incoming().keys().hasAny(['verifiedBy']) || incoming().verifiedBy == '');
 
-      allow update: if isOwner(userId) && validOwnProfileWrite(incoming());
+      // Update: the normal profile edit, the self-service cancel, or the
+      // legacy push-token cleanup. Paid/verification/admin fields can only be
+      // DE-escalated here; every escalation is server-side (Admin SDK).
+      allow update: if isOwner(userId) && (
+        (validProfileUpdateShape() &&
+          safeProfileUpdateKeys() &&
+          verificationSafe() &&
+          paidEscalationSafe() &&
+          turboConnectSafe()) ||
+        (validProCancelData(incoming()) && safeProCancelUpdateKeys()) ||
+        safePushTokenCleanup()
+      );
 
       allow delete: if isOwner(userId);
     }
@@ -618,7 +707,15 @@ service cloud.firestore {
       // in yet (growth loop). Lists stay signed-in so the index cannot be scraped.
       allow get: if true;
       allow list: if isSignedIn();
-      allow create, update: if isOwner(userId) && validPublicProfile(incoming());
+      // The paid/verification/boost fields mirror users/{uid} and are stamped
+      // by the server (Admin SDK) only. A client write may not carry them at
+      // all, otherwise anyone could mint a crown/tick for the whole app.
+      allow create, update: if isOwner(userId) &&
+        validPublicProfile(incoming()) &&
+        !incoming().keys().hasAny([
+          'isPro', 'isVerified', 'verificationProgram', 'plan',
+          'subscriptionPlan', 'subscriptionStatus', 'turboConnect'
+        ]);
       allow delete: if isOwner(userId);
     }
 

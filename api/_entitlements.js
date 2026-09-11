@@ -288,3 +288,194 @@ export async function readWebEntitlement(db, uid) {
   }
   return out;
 }
+
+/**
+ * Grant (or re-affirm) LINKUP PLUS for a member whose Google Play purchase was
+ * verified server-side. This is the Android counterpart of grantWebEntitlement:
+ * the Firestore rules no longer let a client write isPro/isVerified/turboConnect,
+ * so a Play purchase must be turned into the outward PLUS identity here, with
+ * the Admin SDK, exactly like the web path does.
+ *
+ * Idempotent and additive: it only sets the paid flags, never clears them.
+ *
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {string} uid
+ * @param {object} [meta] extra billing metadata to merge onto users/{uid}
+ * @returns {Promise<boolean>} true when the grant was written
+ */
+export async function grantPlayPlus(db, uid, meta = {}) {
+  if (!uid) return false;
+
+  const userRef = db.collection('users').doc(uid);
+  const userSnap = await userRef.get().catch(() => null);
+  const u = userSnap && userSnap.exists ? userSnap.data() || {} : {};
+
+  // Re-check web: a Play buyer who also holds an active web PLUS term is
+  // already paid for, and the web term is the more trustworthy signal.
+  const web = await readWebEntitlement(db, uid);
+  const webActive = web?.plus?.status === 'active';
+  const status = String(u.subscriptionStatus || '').toLowerCase();
+  const alreadyPlus =
+    !!u.isPro ||
+    ['pro', 'plus'].includes(String(u.plan || '').toLowerCase()) ||
+    ['pro', 'plus'].includes(String(u.subscriptionPlan || '').toLowerCase()) ||
+    status === 'active' ||
+    webActive;
+
+  // The order id proves the purchase reached us at least once; re-granting is
+  // harmless (idempotent flags) but we keep a receipt so a re-claim is a no-op
+  // instead of a re-stamp, and so support can audit what Play told us.
+  const transactionId = String(meta.transactionId || '').trim();
+  if (transactionId) {
+    const receiptRef = db.collection('playReceipts').doc(transactionId);
+    const receiptSnap = await receiptRef.get().catch(() => null);
+    if (receiptSnap && receiptSnap.exists) {
+      return alreadyPlus;
+    }
+    await receiptRef
+      .set(
+        {
+          uid,
+          productId: String(meta.productId || '').slice(0, 120),
+          orderId: String(meta.orderId || '').slice(0, 120),
+          grantedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      )
+      .catch(() => {});
+  }
+
+  const patch = {
+    uid,
+    isPro: true,
+    plan: 'plus',
+    subscriptionPlan: 'plus',
+    subscriptionStatus: 'active',
+    billingProvider: 'google-play',
+    isVerified: true,
+    verificationProgram: 'LINKUP PLUS',
+    verifiedBy: 'LINKUP PLUS',
+    verifiedAt: serverTimestamp(),
+    turboConnect: true,
+    proUnlockedAt: u.proUnlockedAt || serverTimestamp(),
+    subscriptionUpdatedAt: serverTimestamp(),
+  };
+  if (meta.productId) patch.subscriptionProductId = String(meta.productId).slice(0, 120);
+  if (transactionId) patch.subscriptionTransactionId = transactionId;
+  if (meta.orderId) patch.subscriptionPurchaseToken = String(meta.orderId).slice(0, 200);
+
+  await userRef.set(patch, { merge: true });
+
+  // Stamp the lean public index only when the row already exists, so a fresh
+  // buyer never gets a nameless publicProfiles row before their own sync.
+  const pubRef = db.collection('publicProfiles').doc(uid);
+  const pubSnap = await pubRef.get().catch(() => null);
+  if (pubSnap && pubSnap.exists) {
+    await pubRef.set(
+      {
+        uid,
+        isPro: true,
+        plan: 'plus',
+        subscriptionPlan: 'plus',
+        subscriptionStatus: 'active',
+        isVerified: true,
+        verificationProgram: 'LINKUP PLUS',
+        turboConnect: true,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+
+  return true;
+}
+
+/**
+ * Demote a member's outward PLUS identity back to free (self-service cancel /
+ * lapse on the Android side, where Google does not push an RTDN to us). This is
+ * the safe inverse of the grants above: it can only ever clear the paid flags,
+ * never raise them, and it only ever acts on the caller's own uid.
+ *
+ * @returns {Promise<boolean>} true when anything was written
+ */
+export async function revokePlusIdentity(db, uid) {
+  if (!uid) return false;
+
+  const userRef = db.collection('users').doc(uid);
+  const userSnap = await userRef.get().catch(() => null);
+  const u = userSnap && userSnap.exists ? userSnap.data() || {} : {};
+  const userPatch = {};
+  if (u.isPro) userPatch.isPro = false;
+  if (String(u.plan || '').toLowerCase() !== 'free') userPatch.plan = 'free';
+  if (String(u.subscriptionPlan || '').toLowerCase() !== 'free') userPatch.subscriptionPlan = 'free';
+  if (String(u.subscriptionStatus || '').toLowerCase() !== 'canceled') userPatch.subscriptionStatus = 'canceled';
+  if (u.turboConnect) userPatch.turboConnect = false;
+  if (u.isVerified) {
+    userPatch.isVerified = false;
+    userPatch.verificationProgram = '';
+    userPatch.verifiedBy = '';
+    userPatch.verifiedAt = null;
+  }
+  if (Object.keys(userPatch).length) userPatch.subscriptionUpdatedAt = serverTimestamp();
+
+  let wrote = false;
+  if (Object.keys(userPatch).length) {
+    await userRef.set(userPatch, { merge: true });
+    wrote = true;
+  }
+
+  const pubRef = db.collection('publicProfiles').doc(uid);
+  const pubSnap = await pubRef.get().catch(() => null);
+  if (pubSnap && pubSnap.exists) {
+    const p = pubSnap.data() || {};
+    const pubPatch = {};
+    if (p.isPro) pubPatch.isPro = false;
+    if (String(p.plan || '').toLowerCase() !== 'free') pubPatch.plan = 'free';
+    if (String(p.subscriptionPlan || '').toLowerCase() !== 'free') pubPatch.subscriptionPlan = 'free';
+    if (String(p.subscriptionStatus || '').toLowerCase() !== 'canceled') pubPatch.subscriptionStatus = 'canceled';
+    if (p.turboConnect) pubPatch.turboConnect = false;
+    if (p.isVerified) {
+      pubPatch.isVerified = false;
+      pubPatch.verificationProgram = '';
+    }
+    if (Object.keys(pubPatch).length) {
+      await pubRef.set({ uid, ...pubPatch, updatedAt: serverTimestamp() }, { merge: true });
+      wrote = true;
+    }
+  }
+
+  return wrote;
+}
+
+/**
+ * Set the Turbo Connect toggle server-side. Turning it ON requires an active
+ * PLUS entitlement (users/{uid}.isPro is only ever written by the server, so it
+ * is trustworthy); turning it OFF is always allowed.
+ *
+ * @returns {Promise<boolean>} true when written
+ */
+export async function setTurboConnect(db, uid, on) {
+  if (!uid) return false;
+  if (on) {
+    const userSnap = await db.collection('users').doc(uid).get().catch(() => null);
+    const u = userSnap && userSnap.exists ? userSnap.data() || {} : {};
+    const plus =
+      !!u.isPro ||
+      ['pro', 'plus'].includes(String(u.plan || '').toLowerCase()) ||
+      ['pro', 'plus'].includes(String(u.subscriptionPlan || '').toLowerCase());
+    const web = await readWebEntitlement(db, uid);
+    if (!plus && !(web?.plus?.status === 'active')) return false;
+  }
+
+  await db
+    .collection('users')
+    .doc(uid)
+    .set({ uid, turboConnect: !!on, subscriptionUpdatedAt: serverTimestamp() }, { merge: true });
+
+  const pubRef = db.collection('publicProfiles').doc(uid);
+  const pubSnap = await pubRef.get().catch(() => null);
+  if (pubSnap && pubSnap.exists) {
+    await pubRef.set({ uid, turboConnect: !!on, updatedAt: serverTimestamp() }, { merge: true });
+  }
+  return true;
+}

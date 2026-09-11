@@ -1,18 +1,17 @@
 import React from 'react';
 import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { finishTransaction, getAvailablePurchases, type Purchase, useIAP } from 'expo-iap';
 import { CheckCircle2, Crown, Lock, X } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, liquidGlass, textColor } from '../theme/theme';
-import { db } from '../lib/firebase';
 import {
   LINKUP_PLUS_PRODUCT_ID,
   LINKUP_PLUS_MONTHLY_PRICE,
   LINKUP_PLUS_YEARLY_PRODUCT_ID,
   LINKUP_PLUS_YEARLY_PRICE,
   buildLocalProEntitlement,
+  claimPlayPlus,
   hasLinkupPro,
   saveLocalProEntitlement,
 } from '../lib/paywall';
@@ -24,7 +23,6 @@ import {
   saveTrialStart,
   trialThenPrice,
 } from '../lib/trial';
-import { publicProfileLink } from '../lib/profileLinks';
 import { checkPayonifyPayment, startPayonifyCheckout, takePendingReference } from '../lib/webCheckout';
 import { notifyUser } from '../lib/notify';
 
@@ -209,13 +207,6 @@ export default function PaywallModal({
       return;
     }
 
-    const fallbackDisplayName = String(
-      profile?.displayName || user.displayName || user.email?.split('@')[0] || 'LINKUP Member'
-    ).trim();
-    const displayName =
-      fallbackDisplayName && !fallbackDisplayName.toLowerCase().startsWith('new ')
-        ? fallbackDisplayName.slice(0, 100)
-        : 'LINKUP Member';
     const unlockedAt = new Date().toISOString();
     const purchasedProductId = getPurchaseProductId(purchase);
     const purchasedPlan =
@@ -257,42 +248,30 @@ export default function PaywallModal({
     await saveLocalProEntitlement(user.uid, localProPatch).catch(() => {});
     updateLocalProfile(localProPatch);
 
-    try {
-      await setDoc(
-        doc(db, 'users', user.uid),
-        {
-          uid: user.uid,
-          displayName,
-          profileLink: publicProfileLink(user.uid),
-          isPro: true,
-          plan: 'plus',
-          subscriptionPlan: 'plus',
-          subscriptionStatus: 'active',
-          subscriptionProductId: purchasedProductId,
-          subscriptionTransactionId: purchase.transactionId || purchase.id || null,
-          subscriptionPurchaseToken: purchase.purchaseToken || null,
-          billingProvider: purchase.store || (Platform.OS === 'android' ? 'google-play' : 'app-store'),
-          isVerified: true,
-          verificationProgram: 'LINKUP PLUS',
-          verifiedBy: 'LINKUP PLUS',
-          verifiedAt: serverTimestamp(),
-          turboConnect: true,
-          settings: proSettings,
-          proUnlockedAt: serverTimestamp(),
-          subscriptionUpdatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+    // The Firestore rules no longer accept client writes of isPro/isVerified/
+    // turboConnect. Unlock the outward PLUS identity server-side by verifying
+    // the Google Play purchase with the Developer API (see /api/claimPlus).
+    const claim = await claimPlayPlus({
+      productId: purchasedProductId,
+      purchaseToken: purchase.purchaseToken || purchase.transactionId || purchase.id || null,
+      transactionId: purchase.transactionId || purchase.id || null,
+      orderId: purchase.transactionId || null,
+    });
+
+    if (claim.ok) {
       Alert.alert('LINKUP PLUS UNLOCKED', 'All LINKUP PLUS perks are active now.');
-      finishUnlock();
-    } catch (error: any) {
+    } else if (claim.status === 503) {
+      // Server-side Play verification is not configured yet. The device keeps
+      // the optimistic unlock so the buyer is never left without PLUS locally;
+      // the claim is retried on later launches once verification is live.
+      Alert.alert('LINKUP PLUS UNLOCKED', 'PLUS is active on this device. LINKUP is finalising your plan — it will show for everyone shortly.');
+    } else {
       Alert.alert('LINKUP PLUS UNLOCKED', 'All PLUS perks are active on this device.');
-      finishUnlock();
-    } finally {
-      setIsUnlocking(false);
-      setIsPurchasing(false);
-      setIsRestoring(false);
     }
+    finishUnlock();
+    setIsUnlocking(false);
+    setIsPurchasing(false);
+    setIsRestoring(false);
   };
 
   async function handlePurchaseSuccess(purchase: Purchase) {

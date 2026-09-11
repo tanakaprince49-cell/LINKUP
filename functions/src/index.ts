@@ -895,14 +895,27 @@ export const searchUsers = onCall({ region: 'us-central1' }, async (request) => 
   const db = admin.firestore();
   let usersQuery: admin.firestore.Query = db.collection('publicProfiles').where('isVisible', '==', true);
 
-  if (skillFilter.length > 0) {
+  const hasSkill = skillFilter.length > 0;
+  const hasIndustry = industryFilter.length > 0;
+  // Firestore allows at most one `array-contains-any` per query, so when both
+  // filters are present we push skills into the query and filter industries
+  // in memory below (previously an `else if` silently dropped industry).
+  if (hasSkill) {
     usersQuery = usersQuery.where('skills', 'array-contains-any', skillFilter.slice(0, 10));
-  } else if (industryFilter.length > 0) {
+  } else if (hasIndustry) {
     usersQuery = usersQuery.where('industries', 'array-contains-any', industryFilter.slice(0, 10));
   }
 
   const snap = await usersQuery.limit(maxResults * 2).get();
   let results = snap.docs.map((d) => ({ uid: d.id, ...d.data() })) as any[];
+
+  if (hasSkill && hasIndustry) {
+    const wanted = industryFilter.map((f) => f.toLowerCase());
+    results = results.filter((p) => {
+      const inds = Array.isArray(p.industries) ? p.industries.map((x: any) => String(x).toLowerCase()) : [];
+      return wanted.some((f) => inds.includes(f));
+    });
+  }
 
   if (queryText) {
     results = results.filter((p) => {
@@ -929,14 +942,19 @@ export const searchUsers = onCall({ region: 'us-central1' }, async (request) => 
 // ─── Admin Functions ───────────────────────────────────────────
 
 const ADMIN_EMAILS = new Set<string>([
-  // Add admin emails here
+  // Founder allowlist — keep in sync with firestore.rules isCampaignAdmin() and
+  // functions/src/campaignExpiry.ts ADMIN_EMAILS.
+  'tanakaprince49@gmail.com',
 ]);
 
 async function assertAdmin(uid: string): Promise<void> {
   const db = admin.firestore();
   const userSnap = await db.collection('users').doc(uid).get();
   const email = String(userSnap.get('email') || '').toLowerCase();
-  const isAdmin = ADMIN_EMAILS.has(email) || userSnap.get('role') === 'admin';
+  // Accept both admin markers so this matches campaignExpiry.isAdminUid()
+  // whatever the grant source was.
+  const isAdmin =
+    ADMIN_EMAILS.has(email) || userSnap.get('role') === 'admin' || userSnap.get('isAdmin') === true;
   if (!isAdmin) throw new HttpsError('permission-denied', 'Admin access required.');
 }
 
@@ -1026,7 +1044,14 @@ export const adminAction = onCall({ region: 'us-central1', secrets: [GEMINI_API_
 export const webhookReceive = onRequest({ region: 'us-central1', cors: true }, async (req, res) => {
   const secret = String(req.query?.secret || req.headers['x-webhook-secret'] || '').trim();
   const expectedSecret = process.env.WEBHOOK_SECRET || '';
-  if (expectedSecret && secret !== expectedSecret) {
+  // Fail CLOSED: with no secret configured there is nothing to authenticate
+  // against, and this endpoint writes to Firestore — anyone could flood
+  // webhookLogs/waitlist. Require the secret to be set in production.
+  if (!expectedSecret) {
+    res.status(503).json({ error: 'WEBHOOK_SECRET is not configured.' });
+    return;
+  }
+  if (secret !== expectedSecret) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }

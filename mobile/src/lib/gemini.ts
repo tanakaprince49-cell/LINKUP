@@ -1,6 +1,6 @@
 import { httpsCallable } from 'firebase/functions';
 import { Platform } from 'react-native';
-import { functions } from './firebase';
+import { auth, functions } from './firebase';
 import { describeAIError, hasDirectAIKey, recordAIError, requestGeminiText } from './aiDiagnostics';
 
 type GeminiFilterResult = {
@@ -97,11 +97,13 @@ async function directGeminiText(prompt: string, maxOutputTokens = 220) {
 async function vercelAiText(task: string, payload: Record<string, unknown>) {
   if (!serverAIEnabled() || Platform.OS !== 'web' || typeof fetch !== 'function') return null;
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const token = await auth.currentUser?.getIdToken().catch(() => '');
   const response = await fetch(`${baseUrl}/api/aiAssist`, {
     method: 'POST',
-    headers: { 
+    headers: {
       'Content-Type': 'application/json',
-      'Accept': 'application/json'
+      'Accept': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify({ task, payload }),
   });
