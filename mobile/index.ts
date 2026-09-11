@@ -1,6 +1,11 @@
 import 'react-native-gesture-handler';
 import { registerRootComponent } from 'expo';
 import { applyBrandFlavor, getStoredBrandFlavorSync } from './src/theme/theme';
+// Web only: clear a corrupted Firestore IndexedDB cache and reload once when
+// the SDK throws "INTERNAL ASSERTION FAILED". Installed before the App module
+// graph builds so a cache that is already corrupt on load is caught too.
+import { installFirestoreSelfHeal } from './src/lib/firestoreSelfHeal';
+installFirestoreSelfHeal();
 
 // 100% SYNCHRONOUS boot path. The previous version awaited AsyncStorage
 // before registering and React Native killed the app with "main has not been

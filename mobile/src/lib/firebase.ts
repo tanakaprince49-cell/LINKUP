@@ -49,6 +49,12 @@ export const db = initializeFirestore(app, {
         // Single-tab keeps everything in IndexedDB (no localStorage mirror).
         // forceOwnership keeps the cache usable if two tabs are open instead of
         // throwing "failed-precondition" in the second one.
+        //
+        // A STALE cache can still corrupt (an older build's schema, or a write
+        // interrupted mid-transaction): the SDK then throws "Unexpected state
+        // (ID: b7de)" from removeMutationBatch and poisons the async queue so
+        // every later call re-throws b815. firestoreSelfHeal.ts (installed in
+        // index.ts) drops the Firestore IndexedDB and reloads once for that.
         localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({ forceOwnership: true }) }),
       }
     : {
