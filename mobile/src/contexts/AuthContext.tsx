@@ -3,11 +3,13 @@ import { Alert, AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   browserLocalPersistence,
+  browserSessionPersistence,
   GoogleAuthProvider,
   EmailAuthProvider,
   User,
   createUserWithEmailAndPassword,
   getRedirectResult,
+  inMemoryPersistence,
   linkWithCredential,
   onAuthStateChanged,
   sendEmailVerification,
@@ -186,6 +188,8 @@ const describeAuthError = (flow: string, error: any) => {
     hint = 'The browser blocked the Google popup. Allow popups for this site and try again.';
   } else if (code.includes('network-request-failed')) {
     hint = 'Network request failed. Check connection, ad blockers, VPN, or browser privacy settings.';
+  } else if (message.toLowerCase().includes('quota') || message.toLowerCase().includes('exceeded the quota')) {
+    hint = "Your browser's site storage for LINKUP is full. Clear site data for this address (or open it in a normal browser tab, not an embedded preview) and try again.";
   } else if (message.toLowerCase().includes('cookie') || message.toLowerCase().includes('storage') || message.toLowerCase().includes('initial state')) {
     hint = 'Google auth needs same-site browser storage. Open LINKUP directly in Chrome/Safari and make sure Vercel rewrites /__/auth to Firebase Hosting.';
   } else if (
@@ -199,6 +203,48 @@ const describeAuthError = (flow: string, error: any) => {
   }
 
   return `${flow}\nCode: ${code}\nHost: ${host || 'native app'}\nFix: ${hint}\nFirebase: ${message}`;
+};
+
+// On web, AsyncStorage lives in window.localStorage and shares the ~5MB
+// origin quota with Firebase Auth's own persistence. Big cached profiles
+// (linkup:profile:v2:{uid}, up to ~900KB each) can fill it so Firebase's
+// "firebase:authUser:..." save throws QuotaExceededError. These caches are
+// only a UI hydration shortcut, so they are safe to drop to make room.
+const dropCachedProfiles = async () => {
+  try {
+    if (Platform.OS === 'web') {
+      const ls = (globalThis as any)?.localStorage;
+      if (!ls) return;
+      const doomed: string[] = [];
+      for (let i = 0; i < ls.length; i += 1) {
+        const key = String(ls.key(i) || '');
+        if (key.startsWith('linkup:profile:')) doomed.push(key);
+      }
+      doomed.forEach((key) => { try { ls.removeItem(key); } catch {} });
+    } else {
+      const keys = await AsyncStorage.getAllKeys();
+      const doomed = keys.filter((key) => key.startsWith('linkup:profile:'));
+      if (doomed.length) await AsyncStorage.multiRemove(doomed);
+    }
+  } catch {
+    // best effort - the cache drop must never make a bad sign-in worse
+  }
+};
+
+// Pick the best web persistence that the browser will actually allow:
+// local (survives reloads) -> session -> in-memory. If localStorage is full
+// or blocked (private mode, embedded preview iframes), falling back lets
+// sign-in still complete instead of dying on a QuotaExceededError.
+const applyWebAuthPersistence = async () => {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+    return;
+  } catch {
+    await dropCachedProfiles();
+    try { await setPersistence(auth, browserLocalPersistence); return; } catch {}
+  }
+  try { await setPersistence(auth, browserSessionPersistence); return; } catch {}
+  try { await setPersistence(auth, inMemoryPersistence); return; } catch {}
 };
 
 const readStoredOnboarding = async (uid: string) => {
@@ -499,7 +545,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const completeWebRedirect = async () => {
       try {
-        await setPersistence(auth, browserLocalPersistence);
+        await applyWebAuthPersistence();
         const result = await getRedirectResult(auth);
         if (result?.user) {
           await syncSignedInUserProfile(result.user);
@@ -722,8 +768,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           prompt: 'select_account',
         });
 
-        await setPersistence(auth, browserLocalPersistence);
-        const result = await signInWithPopup(auth, provider);
+        await applyWebAuthPersistence();
+        let result;
+        try {
+          result = await signInWithPopup(auth, provider);
+        } catch (popupErr: any) {
+          // If it is the persistence write that is failing (quota exceeded or
+          // blocked storage), free the cached profiles and drop to in-memory,
+          // then give the popup one more attempt.
+          const popupMsg = String(popupErr?.message || popupErr?.code || '');
+          if (/quota|storage|setItem/i.test(popupMsg)) {
+            await dropCachedProfiles();
+            try { await setPersistence(auth, inMemoryPersistence); } catch {}
+            result = await signInWithPopup(auth, provider);
+          } else {
+            throw popupErr;
+          }
+        }
         if (result?.user) {
           await syncSignedInUserProfile(result.user);
         }
