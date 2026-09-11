@@ -59,40 +59,44 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
   const unread = notification.isRead === false;
 
   // Type-tinted icons: instant scannability — likes are warm, matches are
-  // green, requests carry the brand accent, views are calm violet.
+  // green, requests carry the brand accent, views are calm violet. The badge
+  // tint is the type colour at a clearly visible 22% alpha (a too-faint tint
+  // made the little logos wash out against the card).
+  const badgeFor = (color: string, Icon: any, fill = 'transparent') =>
+    ({ Icon, color, bg: color + '38', fill });
   const iconMeta = (() => {
     switch (notification.type) {
       case 'like':
-        return { Icon: Heart, color: '#E11D48', bg: 'rgba(225,29,72,0.14)', fill: '#E11D48' };
+        return badgeFor('#E11D48', Heart, '#E11D48');
       case 'dislike':
-        return { Icon: ThumbsDown, color: '#EF4444', bg: 'rgba(239,68,68,0.12)', fill: 'transparent' };
+        return badgeFor('#EF4444', ThumbsDown);
       case 'comment':
-        return { Icon: MessageSquare, color: '#2563EB', bg: 'rgba(37,99,235,0.12)', fill: 'transparent' };
+        return badgeFor('#2563EB', MessageSquare);
       case 'match':
       case 'connection_approved':
-        return { Icon: Check, color: '#16A34A', bg: 'rgba(22,163,74,0.14)', fill: 'transparent' };
+        return badgeFor('#16A34A', Check);
       case 'message':
-        return { Icon: MessageSquare, color: '#2563EB', bg: 'rgba(37,99,235,0.12)', fill: 'transparent' };
+        return badgeFor('#2563EB', MessageSquare);
       case 'connection_request':
-        return { Icon: UserPlus, color: COLORS.primaryStrong, bg: COLORS.primary + '26', fill: 'transparent' };
+        return badgeFor(COLORS.primaryStrong, UserPlus);
       case 'connection_rejected':
-        return { Icon: X, color: '#EF4444', bg: 'rgba(239,68,68,0.12)', fill: 'transparent' };
+        return badgeFor('#EF4444', X);
       case 'view':
-        return { Icon: Eye, color: '#7C3AED', bg: 'rgba(124,58,237,0.12)', fill: 'transparent' };
+        return badgeFor('#7C3AED', Eye);
       case 'campaign_review':
-        return { Icon: Megaphone, color: '#2563EB', bg: 'rgba(37,99,235,0.12)', fill: 'transparent' };
+        return badgeFor('#2563EB', Megaphone);
       case 'campaign_approved':
-        return { Icon: Check, color: '#16A34A', bg: 'rgba(22,163,74,0.14)', fill: 'transparent' };
+        return badgeFor('#16A34A', Check);
       case 'campaign_rejected':
-        return { Icon: X, color: '#DC2626', bg: 'rgba(220,38,38,0.12)', fill: 'transparent' };
+        return badgeFor('#DC2626', X);
       case 'plus_expiring':
-        return { Icon: Bell, color: '#B45309', bg: 'rgba(245,158,11,0.16)', fill: 'transparent' };
+        return badgeFor('#B45309', Bell);
       case 'intro_request':
       case 'intro_accepted':
       case 'daily_brief':
-        return { Icon: Sparkles, color: '#16A34A', bg: 'rgba(22,163,74,0.14)', fill: 'transparent' };
+        return badgeFor('#16A34A', Sparkles);
       default:
-        return { Icon: Bell, color: textColor(isDark, 'muted'), bg: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', fill: 'transparent' };
+        return { Icon: Bell, color: textColor(isDark, 'muted'), bg: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)', fill: 'transparent' };
     }
   })();
 
@@ -196,7 +200,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           </View>
         )}
         <View style={[styles.iconBadge, { backgroundColor: iconMeta.bg, borderColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
-          <iconMeta.Icon size={13} color={iconMeta.color} fill={iconMeta.fill} />
+          <iconMeta.Icon size={15} color={iconMeta.color} fill={iconMeta.fill} />
         </View>
       </View>
       <View style={styles.content}>
@@ -372,12 +376,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -5,
     bottom: -5,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
+    zIndex: 2,
   },
   content: { flex: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },

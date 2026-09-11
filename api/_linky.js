@@ -2697,6 +2697,15 @@ export async function respond(uid, introId, decision) {
       pushTitle: 'Intro accepted',
       channelText: `${me.name} accepted your intro (${intro.need}). Open LINKUP to chat: ${APP_URL}/chat/${matchId}`,
     });
+    // The requester's card must stop reading "Linky will tell you when they
+    // answer" the moment the answer lands — mark it accepted, exactly like a
+    // decline marks it declined.
+    const accRef = db().collection('introSuggestions').doc(requester);
+    const accSnap = await accRef.get();
+    if (accSnap.exists) {
+      const cards = (accSnap.data().cards || []).map((c) => (c.introId === introId ? { ...c, status: 'accepted', updatedAt: Date.now() } : c));
+      await accRef.set({ cards, updatedAt: nowTs() }, { merge: true });
+    }
     return { status: 'accepted', matchId, brief: briefPack?.brief || null };
   }
   if (decision === 'later') {

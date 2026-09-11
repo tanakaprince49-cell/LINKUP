@@ -21,7 +21,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { COLORS, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
 import PaywallModal from './PaywallModal';
-import { Trophy, Clock, Send, X, Zap } from 'lucide-react-native';
+import { Trophy, Check, Clock, Send, X } from 'lucide-react-native';
+import VerifiedBadge from './VerifiedBadge';
 import {
   LinkyApiError,
   LinkyCard,
@@ -137,7 +138,7 @@ export default function LinkyCardsSection() {
     await load();
   };
 
-  const asked = cards.filter((c) => c.status === 'meet' || c.status === 'declined');
+  const asked = cards.filter((c) => c.status === 'meet' || c.status === 'declined' || c.status === 'accepted');
 
   if (!loaded) return null;
   if (!asked.length) return null;
@@ -145,6 +146,7 @@ export default function LinkyCardsSection() {
   const renderCard = (card: LinkyCard, readonly: boolean) => {
     const requested = card.status === 'meet';
     const declined = card.status === 'declined';
+    const accepted = card.status === 'accepted';
     return (
       <View key={card.id} style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
         <TouchableOpacity style={styles.cardTop} onPress={() => navigation.navigate('Profile', { userId: card.targetUid })} activeOpacity={0.75}>
@@ -168,7 +170,7 @@ export default function LinkyCardsSection() {
         {card.plus ? (
           <View style={styles.plusTagRow}>
             <View style={styles.plusTag}>
-              <Zap size={11} color="#000" />
+              <VerifiedBadge size={13} />
               <Text style={styles.plusTagText} numberOfLines={1}>PLUS member</Text>
             </View>
           </View>
@@ -200,11 +202,11 @@ export default function LinkyCardsSection() {
             <Text style={[styles.whyText, { color: textColor(isDark) }]}>{card.why}</Text>
           </View>
         ) : null}
-        {readonly || requested ? (
+        {readonly || requested || accepted ? (
           <View style={styles.stateRow}>
-            {requested ? <Clock size={13} color={textColor(isDark, 'muted')} /> : <X size={13} color={textColor(isDark, 'muted')} />}
-            <Text style={[styles.stateText, { color: textColor(isDark, 'muted') }]}>
-              {requested ? 'Asked. Linky will tell you when they answer.' : declined ? 'Not this time.' : 'On your list.'}
+            {requested ? <Clock size={13} color={textColor(isDark, 'muted')} /> : accepted ? <Check size={13} color="#16A34A" /> : <X size={13} color={textColor(isDark, 'muted')} />}
+            <Text style={[styles.stateText, { color: accepted ? '#16A34A' : textColor(isDark, 'muted') }]}>
+              {requested ? 'Asked. Linky will tell you when they answer.' : accepted ? 'Accepted. Linky connected you two — say hello.' : declined ? 'Not this time.' : 'On your list.'}
             </Text>
           </View>
         ) : (

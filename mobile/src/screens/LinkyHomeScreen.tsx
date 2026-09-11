@@ -23,12 +23,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trash2, Trophy, X, Zap } from 'lucide-react-native';
+import { Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trash2, Trophy, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
 import PaywallModal from '../components/PaywallModal';
+import VerifiedBadge from '../components/VerifiedBadge';
+import BrandMark from '../components/BrandMark';
 import { SponsoredSlot } from '../components/SponsoredCard';
 import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 import {
@@ -103,6 +105,7 @@ const CardView = ({
   const border = isDark ? COLORS.darkBorder : COLORS.lightBorder;
   const requested = card.status === 'meet';
   const declined = card.status === 'declined';
+  const accepted = card.status === 'accepted';
   return (
     <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
       <TouchableOpacity style={styles.cardTop} onPress={onOpen} activeOpacity={0.75}>
@@ -128,7 +131,7 @@ const CardView = ({
       ) : null}
       {card.plus ? (
         <View style={styles.squadRow}>
-          <Zap size={12} color={COLORS.primaryStrong} />
+          <VerifiedBadge size={14} />
           <Text style={[styles.plusText, { color: textColor(isDark, 'secondary') }]}>PLUS member</Text>
         </View>
       ) : null}
@@ -162,6 +165,11 @@ const CardView = ({
         <View style={styles.stateRow}>
           <Clock size={13} color={textColor(isDark, 'muted')} />
           <Text style={[styles.stateText, { color: textColor(isDark, 'muted') }]}>Asked. Linky will tell you when they answer.</Text>
+        </View>
+      ) : accepted ? (
+        <View style={styles.stateRow}>
+          <Check size={13} color="#16A34A" />
+          <Text style={[styles.stateText, { color: '#16A34A' }]}>Accepted. Linky connected you two — say hello.</Text>
         </View>
       ) : declined ? (
         <View style={styles.stateRow}>
@@ -670,9 +678,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
       >
         <View style={styles.hero}>
           <View style={styles.heroRow}>
-            <View style={[styles.linkyBadge, { backgroundColor: COLORS.primary, borderColor: isDark ? 'transparent' : 'rgba(0,0,0,0.12)' }]}>
-              <Text style={styles.linkyBadgeText}>AI</Text>
-            </View>
+            <BrandMark size={44} style={{ borderRadius: 14 }} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>{firstName ? `Hey ${firstName}.` : 'Hey.'} I'm Linky.</Text>
               <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
@@ -1018,8 +1024,6 @@ const styles = StyleSheet.create({
   center: { paddingVertical: 40, alignItems: 'center' },
   hero: { marginBottom: 14 },
   heroRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  linkyBadge: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  linkyBadgeText: { fontSize: 15, fontWeight: '900', color: '#000', letterSpacing: 1 },
   heroTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.3 },
   heroSub: { fontSize: 13, lineHeight: 19, fontWeight: '500', marginTop: 4 },
   heroLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },

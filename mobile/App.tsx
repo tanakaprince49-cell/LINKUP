@@ -80,6 +80,7 @@ import LinkupAlertProvider from './src/components/LinkupAlertProvider';
 import { blurActiveElementOnWeb } from './src/lib/webFocus';
 import { hasLinkupPro } from './src/lib/paywall';
 import ProCrownBadge from './src/components/ProCrownBadge';
+import VerifiedBadge from './src/components/VerifiedBadge';
 import { useOnlineStatus } from './src/lib/network';
 import OfflineScreen from './src/components/OfflineScreen';
 import { IS_LOW_END_ANDROID, safeProfileImageUri } from './src/lib/profilePerformance';
@@ -206,7 +207,10 @@ const AppHeader = ({ navigation, title }: any) => {
               </View>
             </>
           ) : (
-            <Text style={[styles.headerTabTitle, { color: textColor(isDark) }]}>{title}</Text>
+            <View style={styles.headerTitleRow}>
+              <Text style={[styles.headerTabTitle, { color: textColor(isDark) }]}>{title}</Text>
+              {title === 'Linky' ? <VerifiedBadge size={18} /> : null}
+            </View>
           )}
           <View style={{ marginLeft: 8 }}>
             <ProCrownBadge />
@@ -866,6 +870,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.8,
     color: '#111',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   headerTabTitle: {
     fontSize: 20,

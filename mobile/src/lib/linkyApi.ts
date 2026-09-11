@@ -43,7 +43,7 @@ export type LinkyCard = {
   why: string;
   opener: string;
   score: number;
-  status: 'new' | 'saved' | 'skip' | 'meet' | 'declined';
+  status: 'new' | 'saved' | 'skip' | 'meet' | 'declined' | 'accepted';
   introId?: string;
   createdAt: number;
   updatedAt?: number;
