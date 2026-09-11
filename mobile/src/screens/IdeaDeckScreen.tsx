@@ -26,7 +26,7 @@ import { db } from '../lib/firebase';
 import { ensureDirectMatch } from '../lib/chat';
 import { requestConnection } from '../lib/connectionRequests';
 import { displayNameFor, isDiscoverableProfile } from '../lib/discovery';
-import { collectIdeaDeck, fillWithDemoIdeas, IdeaDeckItem, safeIdeaId } from '../lib/ideas';
+import { collectIdeaDeck, IdeaDeckItem, safeIdeaId } from '../lib/ideas';
 import { StartupIdea, UserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -140,14 +140,14 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const rebuildDeckRef = useRef<() => void>(() => {});
   rebuildDeckRef.current = () => {
     const organic = organicIdeasRef.current.filter((idea) => !swipedIdeasRef.current.has(idea.id));
-    // Real ideas always come first; demo ideas only top the deck up so a fresh
-    // install never lands on an empty screen.
-    const filled = fillWithDemoIdeas(organic, swipedIdeasRef.current);
-    // Sponsored is injected AFTER the demo fill, on purpose. Injecting first
-    // put the ad at index 3 of the *organic* deck — and when the network has
-    // few real ideas, the demo filler pushed it to card #1 or buried it. The
-    // slot is a promise about what the viewer sees, so it is placed in the
-    // deck they actually get: the 4th card.
+    // The deck is user-generated only: demo ideas were removed, so a deck
+    // with no organic ideas shows the empty state instead of sample content.
+    const filled = organic;
+    // Sponsored is injected AFTER the organic deck, on purpose. Injecting
+    // first put the ad at index 3 of the *organic* deck — and when the
+    // network has few real ideas, the filler pushed it to card #1 or buried
+    // it. The slot is a promise about what the viewer sees, so it is placed
+    // in the deck they actually get: the 4th card.
     const merged = injectSponsored(filled, sponsoredIdeasRef.current);
     // `merged`, not `filled` — this line used to drop the sponsored card on
     // the floor, so the deck that reached the screen never contained an ad at
@@ -285,12 +285,6 @@ export default function IdeaDeckScreen({ navigation }: any) {
     if (!user?.uid || !idea?.id) return;
     if ((idea as any).sponsored && (idea as any).campaignId) {
       void recordCampaignClick((idea as any).campaignId, user.uid);
-    }
-    // Demo ideas are seeded sample content. Liking one must not write a swipe
-    // doc or notify their fictional owner.
-    if ((idea as any).demo) {
-      notifyUser('Sample idea', 'This is a demo idea showing how the deck works — swipe on to the next one.');
-      return;
     }
     const swipeId = `${idea.id}_${user.uid}`;
     const myName = displayNameFor(myProfile || user);
@@ -497,12 +491,6 @@ export default function IdeaDeckScreen({ navigation }: any) {
   const openInviteComposer = (idea: IdeaDeckItem) => {
     if ((idea as any).sponsored && (idea as any).campaignId) {
       void recordCampaignClick((idea as any).campaignId, user?.uid || '');
-    }
-    // Demo ideas are seeded content attributed to Linky — there is no inbox
-    // behind them, so the invite composer must never open for one.
-    if ((idea as any).demo) {
-      notifyUser('Sample idea', 'This is a demo idea from Linky — swipe on to the next one.');
-      return;
     }
     setInviteIdea(idea);
     setInviteMessage(`I like this idea. I can help with ${String((myProfile as any)?.occupation || 'building it')}.`);
