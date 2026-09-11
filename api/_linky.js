@@ -1116,7 +1116,25 @@ const personLine = (n) => `${n.name}${n.role || n.city ? ` (${[n.role, n.city].f
 const COACH_CHIPS = ['A Flutter developer in Harare for a paid fintech MVP', 'A co-founder with sales experience, equity', 'Someone who has raised from local angels'];
 const BOT_CHIPS = ['a flutter developer in harare', 'a fintech lawyer in harare', 'help'];
 const FOUND_CHIPS = { app: ['meet 1', 'who else do you have', 'write me a first message'], bot: ['meet 1', 'cards', 'more'] };
-const NONE_CHIPS = { app: ['yes, look outside LINKUP', 'try a role instead', 'what Linky knows about me'], bot: ['yes, search LinkedIn', 'cards', 'prefs'] };
+const NONE_CHIPS = { app: ['yes, search LinkedIn', 'try a role instead', 'what Linky knows about me'], bot: ['yes, search LinkedIn', 'cards', 'prefs'] };
+
+// When nobody on LINKUP fits, Linky must hand the member the LinkedIn option
+// out loud, every time. The wording model is non-deterministic (and a 14-day
+// cached line can predate this rule), so a deterministic nudge is appended
+// whenever the reply does not already say LinkedIn - the recommendation never
+// depends on the model's mood.
+const LINKEDIN_NUDGE = (source) => source === 'app'
+  ? 'Want me to go outside the network and search LinkedIn for them?'
+  : 'Want me to search LinkedIn for them?';
+const nudgeLinkedIn = (reply, source) => {
+  const r = String(reply || '').trim();
+  if (/linked\s?in/i.test(r)) return r;
+  const trimmed = r.replace(/[.!?]+$/, '');
+  // The model already offered to go outside the network -> just name LinkedIn
+  // instead of stacking a second "want me to…" question on top.
+  if (/outside/i.test(r)) return `${trimmed}. I can search LinkedIn for them - say the word.`;
+  return `${trimmed}. ${LINKEDIN_NUDGE(source)}`;
+};
 
 // Every reply is a turn in a thread, so the app can show an actual
 // conversation instead of a single answer that replaces the last one.
@@ -1969,8 +1987,14 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     const cards = (await loadCards(uid)).filter((c) => (hit.cardIds || []).includes(c.id));
     const ordered = (hit.cardIds || []).map((id) => cards.find((c) => c.id === id)).filter(Boolean);
     if (hit !== state.lastAsk) await patchState(uid, { lastAsk: hit });
-    const thread = await sayBack(hit.id, hit.reply, { kind: hit.none ? 'none' : 'found', cardIds: hit.cardIds || [] });
-    return { ...publicAsk(hit), cards: ordered, cached: true, asksLeft: asksLeft(), free: true, suggest: (hit.none ? NONE_CHIPS : FOUND_CHIPS)[source === 'app' ? 'app' : 'bot'], thread };
+    // A cached "nobody fits" still owes the member a working LinkedIn chip, so
+    // re-arm the pending "outside" intent the same way a fresh miss does.
+    if (hit.none) {
+      await patchState(uid, { pendingIntent: { need: hit.need || q.need, at: now, id: hit.id || newId(), outside: true } }).catch(() => {});
+    }
+    const hitReply = hit.none ? nudgeLinkedIn(hit.reply, source) : hit.reply;
+    const thread = await sayBack(hit.id, hitReply, { kind: hit.none ? 'none' : 'found', cardIds: hit.cardIds || [] });
+    return { ...publicAsk(hit), reply: hitReply, cards: ordered, cached: true, asksLeft: asksLeft(), free: true, suggest: (hit.none ? NONE_CHIPS : FOUND_CHIPS)[source === 'app' ? 'app' : 'bot'], thread };
   }
 
   const seed = q.norm || q.need;
@@ -2089,15 +2113,18 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     const found = await findSquads(uid, q, ctx, { user, state, existingCards: existing, slots });
     if (!found.squads.length) {
       const missing = (found.slots || []).filter((x) => !x.found).map((x) => x.label);
-      const { reply, suggest: sg } = await linkySay('squad', {
+      const { reply } = await linkySay('squad', {
         need: q.need, members_checked: found.checked, empty_because: missing, slots: found.slots, channel: source,
       }, { name: me.name, source, seed: `squad:${q.norm}`, fallback: plainReply('squad', { empty_because: missing, channel: source }) });
-      const record = { id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply, kind: 'none', cardIds: [], excludedCardIds: [], none: true, nearest: [], checked: found.checked, usedAi: false, expansion: 'none', source, createdAt: now };
-      const thread = await sayBack(askId, reply, { kind: 'none' });
+      // nobody fits the slots -> offer the LinkedIn search out loud, and hand
+      // the LinkedIn chip so one tap runs it (same as a single-person miss).
+      const saidReply3 = nudgeLinkedIn(reply, source);
+      const record = { id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply: saidReply3, kind: 'none', cardIds: [], excludedCardIds: [], none: true, nearest: [], checked: found.checked, usedAi: false, expansion: 'none', source, createdAt: now };
+      const thread = await sayBack(askId, saidReply3, { kind: 'none' });
       const hist = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
       hist.push({ id: askId, need: q.need, cards: 0, none: true, source, createdAt: now });
-      await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used } });
-      return { ...publicAsk(record), cards: [], cached: false, usedAi: false, kind: 'none', squad: true, asksLeft: asksLeft(), suggest: sg, thread };
+      await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used }, pendingIntent: { need: q.need, at: now, id: askId, outside: true } });
+      return { ...publicAsk(record), cards: [], cached: false, usedAi: false, kind: 'none', squad: true, asksLeft: asksLeft(), suggest: (NONE_CHIPS)[source === 'app' ? 'app' : 'bot'], thread };
     }
     const picks = [];
     found.squads.forEach((sq) => sq.members.forEach((m, mi) => picks.push({
@@ -2170,15 +2197,19 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     nobody_is_here: kind === 'none' ? true : false,
     suggest: (kind === 'none' ? NONE_CHIPS : FOUND_CHIPS)[source === 'app' ? 'app' : 'bot'],
   }, { name: me.name, source, seed: q.wantsElse ? `${searchQ.norm}:else:${[...exclude].join(',')}` : searchQ.norm });
+  // Nobody fits -> the LinkedIn offer is always said out loud, even when the
+  // model phrased it as "outside the network" or the cache holds an old line.
+  const saidReply = kind === 'none' ? nudgeLinkedIn(reply, source) : reply;
+  const saidSuggest2 = kind === 'none' ? (NONE_CHIPS)[source === 'app' ? 'app' : 'bot'] : saidSuggest;
   const record = {
     id: askId, need: searchQ.need, norm: searchQ.norm, offer: searchQ.offer, location: searchQ.location, remote: searchQ.remote,
-    reply, kind, cardIds: resultCards.map((c) => c.id), excludedCardIds: [...exclude], none: !picks.length, nearest, checked, usedAi, expansion, source, createdAt: now,
+    reply: saidReply, kind, cardIds: resultCards.map((c) => c.id), excludedCardIds: [...exclude], none: !picks.length, nearest, checked, usedAi, expansion, source, createdAt: now,
   };
   const history = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
   history.push({ id: askId, need: searchQ.need, cards: picks.length, none: !picks.length, source, createdAt: now });
   const recentAsks = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])]
     .filter((a) => a && a.norm !== searchQ.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5);
-  const thread = await sayBack(askId, reply, { kind, cardIds: record.cardIds });
+  const thread = await sayBack(askId, saidReply, { kind, cardIds: record.cardIds });
   // a searched ask is also the moment the small talk stops: the next greeting
   // starts from zero, so the pitch is not permanently muted. When nobody fits,
   // the open question becomes "should I look outside LINKUP?" - a bare "yes"
@@ -2187,7 +2218,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     lastAsk: record, chitStreak: 0, recentAsks, askHistory: history, asks: { day: today, count: used },
     ...(kind === 'none' ? { pendingIntent: { need: searchQ.need, at: now, id: askId, outside: true } } : {}),
   });
-  return { ...publicAsk(record), cards: resultCards, cached: false, usedAi, kind, asksLeft: asksLeft(), suggest: saidSuggest, thread };
+  return { ...publicAsk(record), cards: resultCards, cached: false, usedAi, kind, asksLeft: asksLeft(), suggest: saidSuggest2, thread };
 }
 
 const publicAsk = (a) => (a ? {
