@@ -42,6 +42,19 @@ const timestampToMillis = (timestamp: AppNotification['timestamp']) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
+// Ink-or-white glyph for a solid chip, chosen by luminance so the logo stays
+// 100% visible on any badge colour — dark ink on the bright brand yellow,
+// white on every dark/saturated type colour.
+const glyphFor = (bg: string): string => {
+  const hex = String(bg || '').replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return '#FFFFFF';
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? '#0A0B0D' : '#FFFFFF';
+};
+
 type NotificationRow = AppNotification;
 type ListRow = NotificationRow | { id: string; header: string };
 
@@ -58,12 +71,11 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
   const isRequest = notification.type === 'connection_request' && notification.requestId && notification.fromId && !resolved;
   const unread = notification.isRead === false;
 
-  // Type-tinted icons: instant scannability — likes are warm, matches are
-  // green, requests carry the brand accent, views are calm violet. The badge
-  // tint is the type colour at a clearly visible 22% alpha (a too-faint tint
-  // made the little logos wash out against the card).
+  // Type badges: SOLID, no tint. A translucent (22%-alpha) chip washed the
+  // little logos out against the card, so each type now gets a fully opaque
+  // colour chip with a white glyph — 100% visible on both themes.
   const badgeFor = (color: string, Icon: any, fill = 'transparent') =>
-    ({ Icon, color, bg: color + '38', fill });
+    ({ Icon, color: glyphFor(color), bg: color, fill: fill === 'transparent' ? 'transparent' : glyphFor(color) });
   const iconMeta = (() => {
     switch (notification.type) {
       case 'like':
@@ -96,7 +108,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
       case 'daily_brief':
         return badgeFor('#16A34A', Sparkles);
       default:
-        return { Icon: Bell, color: textColor(isDark, 'muted'), bg: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)', fill: 'transparent' };
+        return { Icon: Bell, color: glyphFor('#64748B'), bg: '#64748B', fill: 'transparent' };
     }
   })();
 
@@ -195,12 +207,12 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         {pic ? (
           <AppImage uri={ikAvatar(pic)} style={styles.avatar} />
         ) : (
-          <View style={[styles.avatarFallback, { backgroundColor: iconMeta.bg }]}>
-            <Text style={[styles.avatarLetter, { color: iconMeta.color }]}>{(notification.fromName || 'L').slice(0, 1).toUpperCase()}</Text>
+          <View style={[styles.avatarFallback, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)' }]}>
+            <Text style={[styles.avatarLetter, { color: textColor(isDark, 'secondary') }]}>{(notification.fromName || 'L').slice(0, 1).toUpperCase()}</Text>
           </View>
         )}
         <View style={[styles.iconBadge, { backgroundColor: iconMeta.bg, borderColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
-          <iconMeta.Icon size={15} color={iconMeta.color} fill={iconMeta.fill} />
+          <iconMeta.Icon size={16} color={iconMeta.color} fill={iconMeta.fill} />
         </View>
       </View>
       <View style={styles.content}>
