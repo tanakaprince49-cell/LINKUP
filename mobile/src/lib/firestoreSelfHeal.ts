@@ -25,6 +25,7 @@
  * Install it before the app boots (index.ts) so a cache that is already
  * corrupt on load is caught on the first failing operation too.
  */
+import { Platform } from 'react-native';
 
 const RESET_AT_KEY = 'linkup:fs-reset-at';
 // One reset+reload per tab per 3 minutes, so a persistent bad state cannot
@@ -111,7 +112,13 @@ let installed = false;
 export function installFirestoreSelfHeal(): void {
   if (installed) return;
   installed = true;
-  if (typeof window === 'undefined') return;
+
+  // React Native's setUpGlobals.js sets `global.window = global` on native,
+  // so `typeof window === 'undefined'` is NOT a web check — native `window`
+  // exists but has no addEventListener, and calling it crashes the app with
+  // "undefined is not a function". Only the web platform has a real window.
+  if (Platform.OS !== 'web') return;
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
 
   const tryReset = async (value: unknown) => {
     const message = toMessage(value);
