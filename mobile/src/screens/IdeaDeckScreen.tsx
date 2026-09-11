@@ -1039,6 +1039,6 @@ const styles = StyleSheet.create({
   postIdeaBtn: { height: 56, borderRadius: 16, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   postIdeaBtnDisabled: { opacity: 0.55 },
   postIdeaText: { color: '#000', fontSize: 13, fontWeight: '900', letterSpacing: 1.8 },
-  confettiLayer: { ...StyleSheet.absoluteFillObject, zIndex: 50 },
+  confettiLayer: { ...StyleSheet.absoluteFill, zIndex: 50 },
   confettiPiece: { position: 'absolute', top: 42, width: 10, height: 18, borderRadius: 4 },
 });

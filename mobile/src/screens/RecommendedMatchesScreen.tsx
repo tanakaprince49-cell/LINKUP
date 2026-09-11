@@ -123,7 +123,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
     }
 
     let cancelled = false;
-    let debounceTimer: NodeJS.Timeout;
+    let debounceTimer: ReturnType<typeof setTimeout>;
 
     const runRanking = async () => {
       setAiLoading(true);

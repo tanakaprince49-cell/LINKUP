@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scene: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
   },
   scenePane: {

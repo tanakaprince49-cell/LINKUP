@@ -185,6 +185,7 @@ export interface AppNotification {
   userId: string;
   type:
     | 'like'
+    | 'dislike'
     | 'match'
     | 'view'
     | 'system'

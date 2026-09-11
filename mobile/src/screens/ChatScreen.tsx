@@ -1413,7 +1413,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scene: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
   },
   scenePane: {
@@ -1678,7 +1678,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   menuSheet: {

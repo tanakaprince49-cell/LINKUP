@@ -1213,7 +1213,7 @@ export default function SearchScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scene: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
   },
   scenePane: {
