@@ -43,6 +43,9 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/linkup-sa.json"
 
+      - name: Show which service account CI is using (client_email only)
+        run: node -e "const fs=require('fs');const sa=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/linkup-sa.json','utf8'));console.log('CI_SERVICE_ACCOUNT='+(sa.client_email||'MISSING'));console.log('PROJECT_ID='+(sa.project_id||'MISSING'))"
+
       - name: Deploy rules and indexes
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/linkup-sa.json
