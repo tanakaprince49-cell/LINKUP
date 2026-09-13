@@ -446,7 +446,7 @@ export function sanitizeTelegramMarkup(markup) {
   return rows.length ? { inline_keyboard: rows } : undefined;
 }
 
-export async function sendTelegram(chatId, message, markup) {
+export async function sendTelegram(chatId, message, markup, reaction = '') {
   const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
   if (!token || !chatId) return false;
   const chunks = splitTelegram(message);
@@ -458,11 +458,12 @@ export async function sendTelegram(chatId, message, markup) {
       body: JSON.stringify(body), signal: AbortSignal.timeout(9000),
     }).catch((err) => ({ __err: String(err?.message || err) }));
     if (resp?.__err) return { ok: false, description: resp.__err, network: true };
-    if (resp?.ok) return { ok: true };
     const data = await (resp && typeof resp.json === 'function' ? resp.json().catch(() => null) : null);
+    if (resp?.ok) return { ok: true, messageId: Number(data?.result?.message_id || 0) };
     return { ok: false, status: resp?.status, description: String(data?.description || 'send failed'), retryAfter: Number(data?.parameters?.retry_after || 0) };
   };
   let ok = true;
+  let lastMessageId = 0;
   for (let i = 0; i < chunks.length; i += 1) {
     const isLast = i === chunks.length - 1;
     const base = { chat_id: chatId, text: chunks[i], disable_web_page_preview: true };
@@ -480,8 +481,20 @@ export async function sendTelegram(chatId, message, markup) {
     if (!res.ok) {
       ok = false;
       console.warn('[linky] telegram sendMessage failed', res.status || '', res.description.slice(0, 140));
+    } else if (res.messageId) {
+      lastMessageId = res.messageId;
     }
     if (!isLast) await new Promise((r) => setTimeout(r, 110));
+  }
+  // A tapback on what Linky just said - only on the message that actually landed,
+  // and only when it earned one. Not every chat supports reactions (a plain 1:1
+  // with the bot can refuse), so a refusal is a shrug, not an error.
+  if (reaction && lastMessageId) {
+    await fetch(`https://api.telegram.org/bot${token}/setMessageReaction`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: lastMessageId, reaction: [{ type: 'emoji', emoji: String(reaction).slice(0, 8) }] }),
+      signal: AbortSignal.timeout(6000),
+    }).catch(() => null);
   }
   return ok;
 }
@@ -1364,6 +1377,21 @@ async function wordingOnce(kind, dossier, source, seed, ref) {
 const cap1 = (s) => { const t = String(s || '').trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; };
 // A bot bubble has no Meet button next to it, so the fallback has to say how
 // to act. The app gets the button, so it gets no instruction.
+// A reaction is a one-character read on what Linky just did - the tapback a
+// friend would drop on a message. Kept small and deterministic, and only for
+// moments that earn one: a real result, a real miss, a real person. Small talk
+// and clarifying questions get none, so the reaction never feels ceremonial.
+export const reactionFor = (kind) => ({
+  found: '🔥',
+  close: '👀',
+  none: '😕',
+  person: '👋',
+  squad: '🤝',
+  outside: '⚡',
+  draft: '✍️',
+  ambiguous: '🤔',
+}[kind] || '');
+
 const ctaFor = (d) => (d.channel && d.channel !== 'app' ? '  Reply meet 1 or 2 or 3 and I will ask them.' : '');
 function plainReply(kind, d = {}) {
   const matches = Array.isArray(d.matches) ? d.matches : [];
@@ -1390,14 +1418,14 @@ function plainReply(kind, d = {}) {
         'I am here - no search and no agenda. What is going on with you?',
         'Fair enough. I am a well-connected friend with plenty of time. How is it going?',
         'Noted - nothing to find and nobody to impress. How is the work treating you?',
-        'haha. Say the word when you want names, until then I am good company.',
+        'haha. Say the word when you want names - until then I am good company.',
       ];
       const first = firstName(d.name || '');
       // the streak is in the rotation so two fallback lines in a row differ
       const pick = lines[(hash32(String(d.seed || '')) + Number(d.streak || 0)) % lines.length];
       return first ? `${first} - ${pick}` : pick;
     }
-    case 'help': return 'I am Linky - the connector here. Tell me who you need and I read every member profile and bring you the ones that fit. A Flutter developer in Harare. A co-founder who can sell. Someone who has raised from local angels. When nobody fits I say so, and I can go and look outside LINKUP too.';
+    case 'help': return 'I am Linky - the connector here. Tell me who you need and I read every member profile and bring you the ones that fit. A Flutter developer in Harare. A co-founder who can sell. Someone who has raised from local angels. When nobody fits I say so and I can go and look outside LINKUP too.';
     case 'squad': {
       const squads = Array.isArray(d.squads) ? d.squads : [];
       if (!squads.length) return `I look for a squad as three people who do not overlap. ${Array.isArray(d.empty_because) && d.empty_because.length ? `Nobody here covers ${d.empty_because.map((x) => x).join(' or ')} so I am not going to hand you a pair and call it a team.` : 'Nothing here forms a triangle worth introducing - say it again with the roles you want beside you.'}`;
@@ -1886,7 +1914,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     const thread = await appendThread(uid, state, [
       // when they only said "yes", the thread says so and shows what it was yes to
       { id: askId, role: 'user', text: opts.userText ?? (answeringYes ? `${msgTyped} - so look for "${q.need}"` : q.need), at: now },
-      { id: askId, role: 'linky', text: reply, kind: opts.kind || 'answer', cardIds: opts.cardIds || [], at: now + 1 },
+      { id: askId, role: 'linky', text: reply, kind: opts.kind || 'answer', cardIds: opts.cardIds || [], reaction: opts.reaction || '', at: now + 1 },
     ]);
     return thread;
   };
@@ -1919,11 +1947,11 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     }
     const outside = await pointers(uid, need, { userDoc: user, allowSearch: true, assumeKnown: true });
     const reply = outside.intro || text(outside.text, 400) || `Nobody on LINKUP does ${polishNeed(need)} yet so I went outside the network. Here is who I found on LinkedIn:`;
-    const thread = await sayBack(id, reply, { kind: 'outside' });
+    const thread = await sayBack(id, reply, { kind: 'outside', reaction: reactionFor('outside') });
     return {
       id, need: text(need, 120), reply, kind: 'outside', cardIds: [], cards: [], nearest: [],
       none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: !!outside.cached,
-      createdAt: now, asksLeft: asksLeft(),
+      createdAt: now, asksLeft: asksLeft(), reaction: reactionFor('outside'),
       leads: outside.leads || [], routes: outside.routes || [], pointerIntro: outside.intro || '',
       searches: outside.searches || 0, skipped: outside.skipped || 0, place: outside.place || '',
       suggest: ['try a role instead', 'what Linky knows about me'],
@@ -1967,12 +1995,12 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       const reply = outside.intro || text(outside.text, 400) || `Nobody on LINKUP does ${needShort} yet so I went outside the network. Here is who I found on LinkedIn:`;
       const thread = await appendThread(uid, state, [
         { id, role: 'user', text: msgTyped, at: now },
-        { id, role: 'linky', text: reply, kind: 'outside', at: now + 1 },
+        { id, role: 'linky', text: reply, kind: 'outside', reaction: reactionFor('outside'), at: now + 1 },
       ]);
       return {
         id, need: text(pendingIntent.need, 120), reply, kind: 'outside', cardIds: [], cards: [], nearest: [],
         none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: !!outside.cached,
-        createdAt: now, asksLeft: asksLeft(),
+        createdAt: now, asksLeft: asksLeft(), reaction: reactionFor('outside'),
         leads: outside.leads || [], routes: outside.routes || [], pointerIntro: outside.intro || '',
         searches: outside.searches || 0, skipped: outside.skipped || 0, place: outside.place || '',
         suggest: ['try a role instead', 'what Linky knows about me'],
@@ -2065,8 +2093,8 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       ready_message: draft,
       rule: 'Linky drafts, the member sends it from their own account. Say that plainly.',
     }, { name: me.name, source, seed: `draft:${top ? top.id : 'none'}`, fallback: draft });
-    const thread = await sayBack(id, reply, { kind: 'draft', cardIds: top ? [top.id] : [] });
-    return { id, need: q.need, reply, kind: 'draft', cardIds: top ? [top.id] : [], cards: top ? [top] : [], nearest: [], none: !top, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: suggest.length ? suggest : (source === 'app' ? ['meet 1', 'who else do you have', 'what Linky knows about me'] : ['meet 1', 'cards', 'help']), thread };
+    const thread = await sayBack(id, reply, { kind: 'draft', cardIds: top ? [top.id] : [], reaction: reactionFor('draft') });
+    return { id, need: q.need, reply, kind: 'draft', cardIds: top ? [top.id] : [], cards: top ? [top] : [], nearest: [], none: !top, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), reaction: reactionFor('draft'), suggest: suggest.length ? suggest : (source === 'app' ? ['meet 1', 'who else do you have', 'what Linky knows about me'] : ['meet 1', 'cards', 'help']), thread };
   }
 
   // ---- 3. same ask again (any of the last few): same answer, free. A
@@ -2083,7 +2111,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       await patchState(uid, { pendingIntent: { need: hit.need || q.need, at: now, id: hit.id || newId(), outside: true } }).catch(() => {});
     }
     const hitReply = hit.none ? nudgeLinkedIn(hit.reply, source) : hit.reply;
-    const thread = await sayBack(hit.id, hitReply, { kind: hit.none ? 'none' : 'found', cardIds: hit.cardIds || [] });
+    const thread = await sayBack(hit.id, hitReply, { kind: hit.none ? 'none' : 'found', cardIds: hit.cardIds || [], reaction: reactionFor(hit.none ? 'none' : 'found') });
     return { ...publicAsk(hit), reply: hitReply, cards: ordered, cached: true, asksLeft: asksLeft(), free: true, suggest: (hit.none ? NONE_CHIPS : FOUND_CHIPS)[source === 'app' ? 'app' : 'bot'], thread };
   }
 
@@ -2105,8 +2133,8 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       const who = [nameHit.match, ...nameHit.others].map((m) => m.facts);
       const { reply } = await linkySay('ambiguous', { people: who.map((f) => ({ name: f.name, role: f.role, city: [f.city, f.country].filter(Boolean).join(', ') })) }, { name: me.name, source, seed: `amb:${q.nameQuery}`, fallback: plainReply('ambiguous', { people: who.map((f) => f.name) }) });
       const nearest = who.map((f) => ({ uid: f.uid, name: f.name, pic: f.pic, role: f.role, city: [f.city, f.country].filter(Boolean).join(', ') }));
-      const thread = await sayBack(id, reply, { kind: 'ambiguous', cardIds: [] });
-      return { id, need: q.need, reply, kind: 'ambiguous', cardIds: [], cards: [], nearest, none: true, checked: ctx.candidates.length, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: ['that one', 'search outside LINKUP', 'no, a role'], thread };
+      const thread = await sayBack(id, reply, { kind: 'ambiguous', cardIds: [], reaction: reactionFor('ambiguous') });
+      return { id, need: q.need, reply, kind: 'ambiguous', cardIds: [], cards: [], nearest, none: true, checked: ctx.candidates.length, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), reaction: reactionFor('ambiguous'), suggest: ['that one', 'search outside LINKUP', 'no, a role'], thread };
     }
     const matchId = [uid, facts.uid].sort().join('_');
     const already = await db().collection('matches').doc(matchId).get().catch(() => null);
@@ -2148,9 +2176,9 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     } else if (!cards.length) {
       finalReply = /\bhttps?:\/\//.test(reply) ? reply : `${reply.replace(/[.\s]*$/, '.')}\n${person.url}`;
     }
-    const thread = await sayBack(id, finalReply, { kind: 'person', cardIds });
+    const thread = await sayBack(id, finalReply, { kind: 'person', cardIds, reaction: reactionFor('person') });
     const foundNearest = [{ uid: facts.uid, name: person.name, pic: facts.pic, role: person.role, city: person.city }];
-    const record = { id, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply: finalReply, cardIds, none: false, nearest: blocked || connected ? foundNearest : [], checked: ctx.candidates.length, usedAi: false, expansion: 'none', source, kind: 'person', createdAt: now };
+    const record = { id, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply: finalReply, cardIds, none: false, nearest: blocked || connected ? foundNearest : [], checked: ctx.candidates.length, usedAi: false, expansion: 'none', source, kind: 'person', createdAt: now, reaction: reactionFor('person') };
     await patchState(uid, { lastAsk: record, chitStreak: 0, recentAsks: [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])].filter((a) => a && a.norm !== q.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5) });
     const history = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
     history.push({ id, need: q.need, cards: cards.length, none: false, source, createdAt: now });
@@ -2219,8 +2247,8 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       // nobody fits the slots -> offer the LinkedIn search out loud, and hand
       // the LinkedIn chip so one tap runs it (same as a single-person miss).
       const saidReply3 = nudgeLinkedIn(reply, source);
-      const record = { id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply: saidReply3, kind: 'none', cardIds: [], excludedCardIds: [], none: true, nearest: [], checked: found.checked, usedAi: false, expansion: 'none', source, createdAt: now };
-      const thread = await sayBack(askId, saidReply3, { kind: 'none' });
+      const record = { id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply: saidReply3, kind: 'none', cardIds: [], excludedCardIds: [], none: true, nearest: [], checked: found.checked, usedAi: false, expansion: 'none', source, createdAt: now, reaction: reactionFor('none') };
+      const thread = await sayBack(askId, saidReply3, { kind: 'none', reaction: reactionFor('none') });
       const hist = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
       hist.push({ id: askId, need: q.need, cards: 0, none: true, source, createdAt: now });
       await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used }, pendingIntent: { need: q.need, at: now, id: askId, outside: true } });
@@ -2245,8 +2273,8 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       asks_left_today: asksLeft(),
       suggest: source === 'app' ? ['meet the squad', 'who else do you have', 'search outside LINKUP'] : ['meet squad', 'who else do you have', 'more'],
     }, { name: me.name, source, seed: `squad:${q.norm}`, fallback: plainReply('squad', { squads: found.squads.map((sq) => ({ people: sq.members.map((m) => ({ name: m.facts.name, part: m.why })), missing: sq.missing })), channel: source }) });
-    const record = { id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply, kind: 'squad', cardIds: resultCards.map((c) => c.id), excludedCardIds: [], none: false, nearest: [], checked: found.checked, usedAi: !!found.usedAi, expansion: 'none', source, createdAt: now };
-    const thread = await sayBack(askId, reply, { kind: 'squad', cardIds: record.cardIds });
+    const record = { id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply, kind: 'squad', cardIds: resultCards.map((c) => c.id), excludedCardIds: [], none: false, nearest: [], checked: found.checked, usedAi: !!found.usedAi, expansion: 'none', source, createdAt: now, reaction: reactionFor('squad') };
+    const thread = await sayBack(askId, reply, { kind: 'squad', cardIds: record.cardIds, reaction: reactionFor('squad') });
     const hist = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
     hist.push({ id: askId, need: q.need, cards: resultCards.length, none: false, source, createdAt: now });
     await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used } });
@@ -2304,12 +2332,13 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   const record = {
     id: askId, need: searchQ.need, norm: searchQ.norm, offer: searchQ.offer, location: searchQ.location, remote: searchQ.remote,
     reply: saidReply, kind, cardIds: resultCards.map((c) => c.id), excludedCardIds: [...exclude], none: !picks.length, nearest, checked, usedAi, expansion, source, createdAt: now,
+    reaction: reactionFor(kind),
   };
   const history = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
   history.push({ id: askId, need: searchQ.need, cards: picks.length, none: !picks.length, source, createdAt: now });
   const recentAsks = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])]
     .filter((a) => a && a.norm !== searchQ.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5);
-  const thread = await sayBack(askId, saidReply, { kind, cardIds: record.cardIds });
+  const thread = await sayBack(askId, saidReply, { kind, cardIds: record.cardIds, reaction: reactionFor(kind) });
   // a searched ask is also the moment the small talk stops: the next greeting
   // starts from zero, so the pitch is not permanently muted. When nobody fits,
   // the open question becomes "should I look outside LINKUP?" - a bare "yes"
@@ -2332,6 +2361,7 @@ const publicAsk = (a) => (a ? {
   checked: Number(a.checked || 0),
   expansion: a.expansion || 'none',
   createdAt: toMillis(a.createdAt),
+  reaction: a.reaction || '',
 } : null);
 
 // Cards in the order the member sees / numbers them: latest ask first, then
@@ -3307,10 +3337,10 @@ export async function ensureBrief({ matchId = '', requesterId = '', targetId = '
     'Three ways to start',
     ...data.icebreakers.map((x, i) => `${i + 1}. ${x}`),
     '',
-    'Fifteen minutes, if you want them structured',
+    'Fifteen minutes if you want them structured',
     ...agendaLines(data.agenda).map((x) => `- ${x}`),
     '',
-    ...(proof.length ? ['What each of you already has done', ...proof.map((x) => `- ${firstName(x === badgesA[0] ? a.name : b.name)}: ${x.label}${x.checked ? '' : ' (their words)'}`), ''] : []),
+    ...(proof.length ? ['What each of you already has done', ...proof.map((x) => `- ${firstName(x === badgesA[0] ? a.name : b.name)}: ${x.label}${x.checked ? '' : ' - their words'}`), ''] : []),
     'One rule: do not hang up without a next step and a name for who moves first.',
   ].filter((x) => x !== undefined).join('\n');
   const payload = { ...data, matchId, pair: [aUid, bUid].sort(), usedAi, at: Date.now(), text: text3.slice(0, 3000) };

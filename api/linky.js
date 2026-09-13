@@ -16,7 +16,7 @@ import { aiProbe, aiStatus, handleOptions, readJsonBody, sendError, setCors } fr
 import {
   APP_URL, LIMITS, OFFERS, LOOP_CHOICES, answerLoop, approveLead, approveMeet, approveSquad, ask, audit, botUserFor, cancelMeet, cancelSquad,
   clearChat, consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
-  meet, meetSquad, orderedCards, patchState, pickPerson, pointers, pullProfiles, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
+  meet, meetSquad, orderedCards, patchState, pickPerson, pointers, pullProfiles, reactionFor, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
   setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret,
 } from './_linky.js';
 import { badgeLine } from './_proof.js';
@@ -124,7 +124,7 @@ const HELP = [
   'unlink       disconnect this chat',
   '',
   'I only say things I can point at on a real profile.',
-  'If nobody fits, I say that instead of guessing.',
+  'If nobody fits I say that instead of guessing.',
 ].join('\n');
 
 // The bot's own short lines, so it reads like a person and not a receipt.
@@ -229,19 +229,19 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
           if (offer && !offer.outside) {
             const out = await ask(uid, 'yes', { source: channel, userDoc: user });
             if (out.cards && out.cards.length) {
-              return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n\n')}`, cards: out.cards, chips: out.suggest };
+              return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n\n')}`, cards: out.cards, chips: out.suggest, reaction: out.reaction };
             }
             if (out.kind === 'none') {
-              return { text: out.reply, buttons: [[{ text: 'Yes search LinkedIn', callback_data: 'q:y' }, { text: 'Not now', callback_data: 'q:n' }]], chips: ['yes search LinkedIn', 'not now', 'cards'] };
+              return { text: out.reply, buttons: [[{ text: 'Yes search LinkedIn', callback_data: 'q:y' }, { text: 'Not now', callback_data: 'q:n' }]], chips: ['yes search LinkedIn', 'not now', 'cards'], reaction: out.reaction };
             }
-            return { text: out.reply, chips: (out.suggest || []).slice(0, 3) };
+            return { text: out.reply, chips: (out.suggest || []).slice(0, 3), reaction: out.reaction };
           }
           // "yes" to "search LinkedIn?" = the open web, straight away.
           const r = await pointers(uid, need, { userDoc: user, allowSearch: true, assumeKnown: true });
           if ((r.leads || []).length) {
-            return { text: pointerText(r), buttons: leadsKeyboard(r.leads), chips: ['draft 1', 'not interested 1'] };
+            return { text: pointerText(r), buttons: leadsKeyboard(r.leads), chips: ['draft 1', 'not interested 1'], reaction: reactionFor('outside') };
           }
-          return { text: pointerText(r), chips: ['ask something else', 'help'] };
+          return { text: pointerText(r), chips: ['ask something else', 'help'], reaction: reactionFor('outside') };
         }
         await patchState(uid, { pendingIntent: null }).catch(() => {});
         return { text: 'No worries. Say the word when you want names and I will go look.' };
@@ -270,7 +270,7 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
           : decodeURIComponent(String(a));
         if (!needArg) return { text: 'Ask me who you need first and then I can look outside.' };
         const r = await pointers(uid, needArg, { userDoc: user });
-        return { text: pointerText(r), buttons: r.leads?.length ? leadsKeyboard(r.leads) : undefined };
+        return { text: pointerText(r), buttons: r.leads?.length ? leadsKeyboard(r.leads) : undefined, reaction: reactionFor('outside') };
       }
       // A tapped chip on WhatsApp arrives as an id like c:0:cards - re-run it as
       // though the member had typed it.
@@ -299,9 +299,9 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
       if (card?.error) return { text: `${picked.name} - ${card.error}` };
     }
   }
-  if (last?.kind === 'ambiguous' && /^\d{1,2}$/.test(cmd.trim())) return { text: 'I lost that one. Say "cards" and pick by name, or ask again.' };
+  if (last?.kind === 'ambiguous' && /^\d{1,2}$/.test(cmd.trim())) return { text: 'I lost that one. Say cards and pick by name - or ask again.' };
   if (cmd === 'unlink') { await unlinkBot(channel, chatId); return { text: 'Unlinked. Your LINKUP account is untouched.' }; }
-  if (cmd === 'forget') { await forget(uid); return { text: 'Forgotten: cards deleted, what you told me cleared, chat unlinked.' }; }
+  if (cmd === 'forget') { await forget(uid); return { text: 'Forgotten - cards deleted - what you told me cleared - chat unlinked.' }; }
 
   const numbered = async () => orderedCards(await loadCards(uid), await loadState(uid)).slice(0, 5);
 
@@ -333,7 +333,7 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
   if (cmd === 'draft' || cmd.startsWith('draft ')) {
     const rest = cmd.replace(/^draft\s*/, '').trim();
     const r = await ask(uid, rest ? `write me a message to ${rest}` : 'write the first message', { source: channel, userDoc: user });
-    return { text: r.reply, chips: (r.suggest || []).slice(0, 3) };
+    return { text: r.reply, chips: (r.suggest || []).slice(0, 3), reaction: r.reaction };
   }
 
   // ---- permissioned outreach: Linky drafts, the human approves, edits or drops
@@ -408,7 +408,7 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
   if (/^(meet|skip|save)\b/.test(cmd)) {
     const cards = await numbered();
     const card = cards[num(cmd) - 1];
-    if (!card) return { text: 'No card with that number. Say "cards" to see them.' };
+    if (!card) return { text: 'No card with that number. Say cards to see them.' };
     try {
       if (cmd.startsWith('meet')) {
         const r = await meet(uid, card.id, { userDoc: user });
@@ -446,6 +446,7 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
       return {
         text: pointerText(r), buttons: r.leads?.length ? leadsKeyboard(r.leads) : undefined,
         chips: r.leads?.length ? ['draft 1', 'not interested 1'] : ['ask something else', 'help'],
+        reaction: reactionFor('outside'),
       };
     } catch (err) {
       return { text: memberError(err, 'That did not work.') };
@@ -468,9 +469,9 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
           return { text: `Nobody on LINKUP matches ${rest} right now. Try a first name or an @username or a role like flutter dev.` };
         }
         if ((r.leads || []).length) {
-          return { text: pointerText(r), buttons: leadsKeyboard(r.leads), chips: ['draft 1', 'not interested 1'] };
+          return { text: pointerText(r), buttons: leadsKeyboard(r.leads), chips: ['draft 1', 'not interested 1'], reaction: reactionFor('outside') };
         }
-        return { text: pointerText(r), chips: ['ask something else', 'help'] };
+        return { text: pointerText(r), chips: ['ask something else', 'help'], reaction: reactionFor('outside') };
       }
       const listTxt = rows
         .map((r, i) => `${i + 1}. ${r.name}${r.role ? ` - ${r.role}` : ''}${r.city ? ` - ${r.city}` : ''}${r.plus ? '  ⚡PLUS' : ''}\n   ${r.link}`)
@@ -478,6 +479,7 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
       return {
         text: `Found ${rows.length} ${rows.length === 1 ? 'person' : 'people'} on LINKUP:\n\n${listTxt}\n\nReply meet 1 or 2 and I will ask them for you.`,
         chips: rows.slice(0, 3).map((r) => r.name.split(' ')[0]),
+        reaction: reactionFor('found'),
       };
     } catch (err) {
       return { text: memberError(err, 'That did not work.') };
@@ -494,6 +496,7 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
         text: out.reply,
         buttons: [[{ text: 'Yes search for them', callback_data: 'q:y' }, { text: 'No just talking', callback_data: 'q:n' }]],
         chips: ['yes search for them', 'no just talking'],
+        reaction: out.reaction,
       };
     }
     if (!out.cards.length) {
@@ -506,12 +509,13 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
           text: out.reply,
           buttons: [[{ text: 'Yes search LinkedIn', callback_data: 'q:y' }, { text: 'Not now', callback_data: 'q:n' }]],
           chips: ['yes search LinkedIn', 'not now', 'cards'],
+          reaction: out.reaction,
         };
       }
       const chips = (out.suggest || []).slice(0, 3);
-      return { text: out.reply, chips };
+      return { text: out.reply, chips, reaction: out.reaction };
     }
-    return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n\n')}`, cards: out.cards, chips: out.suggest };
+    return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n\n')}`, cards: out.cards, chips: out.suggest, reaction: out.reaction };
   } catch (err) {
     return { text: memberError(err, 'That did not work.') };
   }
@@ -578,7 +582,7 @@ async function draftForNumber(uid, user, idx, channel) {
   const lead = (Array.isArray(state.lastLeads) ? state.lastLeads : [])[Math.max(1, Number(idx) || 1) - 1];
   if (!lead) return { text: 'I have nobody listed to write for. Ask me who you need and say MORE if nobody fits. Then say draft 1.' };
   const r = await draftLead(uid, { lead, key: lead.key, need: state.lastLeadsNeed || '', userDoc: user, source: channel });
-  return { text: leadDraftText(r), buttons: leadApproveButtons() };
+  return { text: leadDraftText(r), buttons: leadApproveButtons(), reaction: reactionFor('draft') };
 }
 
 async function approveFromBot(uid, user, cardId) {
@@ -725,7 +729,7 @@ async function handleTelegram(req, res) {
       const chatId = cq.message?.chat?.id;
       const r = await botReply('telegram', String(chatId), '', { callback: String(cq.data || '') });
       await telegramApi('answerCallbackQuery', { callback_query_id: cq.id, text: String(r.text).slice(0, 190) });
-      await sendTelegram(chatId, r.text, r.buttons ? { inline_keyboard: r.buttons } : undefined);
+      await sendTelegram(chatId, r.text, r.buttons ? { inline_keyboard: r.buttons } : undefined, r.reaction);
     } else if (update?.message?.text) {
       const chatId = update.message.chat.id;
       // An ask can take a few seconds; "typing…" is the difference between a
@@ -752,12 +756,12 @@ async function handleTelegram(req, res) {
           : telegramChips(r.chips);
       // one sender for both paths: long answers are split, a refused keyboard is
       // retried as plain text, and nothing is cut in the middle of a link
-      const sent = await sendTelegram(chatId, r.text, markup);
+      const sent = await sendTelegram(chatId, r.text, markup, r.reaction);
       if (!sent) await recordBotFault('send-failed', { updateId, chatId, text: update.message.text });
     } else if (update?.message?.chat?.id && !update?.message?.text) {
       // Voice notes, photos, stickers: no transcription here, so say so like a
       // person instead of leaving them on read.
-      await sendTelegram(update.message.chat.id, 'I only get text, I am afraid - pictures and voice notes go straight past me. Type who you need and I will go looking.');
+      await sendTelegram(update.message.chat.id, 'I only get text I am afraid - pictures and voice notes go straight past me. Type who you need and I will go looking.');
     }
   } catch (err) {
     // the old code logged this and answered 200, so Telegram never retried and the
