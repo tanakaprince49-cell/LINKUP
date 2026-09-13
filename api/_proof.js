@@ -110,14 +110,14 @@ export function proofFromSnippet(textIn = '', source = 'public search result') {
 
 /** One line for a text channel. Empty string when there is nothing to show. */
 export function badgeLine(badges = [], max = 2) {
-  const bits = (Array.isArray(badges) ? badges : []).slice(0, max).map((b) => (b && b.label ? `${b.label}${b.checked ? '' : ' (their words)'}` : '')).filter(Boolean);
+  const bits = (Array.isArray(badges) ? badges : []).slice(0, max).map((b) => (b && b.label ? `${b.label}${b.checked ? '' : ' · their words'}` : '')).filter(Boolean);
   return bits.length ? `Proof: ${bits.join(' · ')}` : '';
 }
 
 /** A clickable, Telegram-safe rendering of the same thing (no markdown tags). */
 export function badgeLines(badges = []) {
   return (Array.isArray(badges) ? badges : []).slice(0, 3)
-    .map((b) => (b && b.label ? `   • ${b.label}${b.checked ? '' : ' (their words)'}${b.url ? ` - ${b.url}` : ''}` : ''))
+    .map((b) => (b && b.label ? `   • ${b.label}${b.checked ? '' : ' · their words'}${b.url ? ` - ${b.url}` : ''}` : ''))
     .filter(Boolean);
 }
 

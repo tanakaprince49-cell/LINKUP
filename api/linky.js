@@ -86,14 +86,14 @@ function readRawBody(req) {
 // matching branch in botReply() is the bug this list exists to prevent.
 export const BOT_COMMANDS = [
   { command: 'start', description: 'Link this chat to your LINKUP account', group: true },
-  { command: 'help', description: 'How Linky works, in one screen', group: true },
+  { command: 'help', description: 'How Linky works in one screen', group: true },
   { command: 'cards', description: 'Your current cards' },
-  { command: 'find', description: 'Pull LINKUP profiles - "find fred"' },
-  { command: 'meet', description: 'Ask for the intro - "meet 1"' },
-  { command: 'skip', description: 'Clear a card - "skip 1"' },
-  { command: 'save', description: 'Keep a card for later - "save 1"' },
+  { command: 'find', description: 'Pull LINKUP profiles - find fred' },
+  { command: 'meet', description: 'Ask for the intro - meet 1' },
+  { command: 'skip', description: 'Clear a card - skip 1' },
+  { command: 'save', description: 'Keep a card for later - save 1' },
   { command: 'accept', description: 'Answer an intro waiting on you' },
-  { command: 'decline', description: 'Say no, quietly, both ways' },
+  { command: 'decline', description: 'Say no quietly - both ways' },
   { command: 'later', description: 'Park an intro for two weeks' },
   { command: 'draft', description: 'Write the first message for your top card' },
   { command: 'more', description: 'Where to look outside LINKUP' },
@@ -103,22 +103,28 @@ export const BOT_COMMANDS = [
 ];
 
 const HELP = [
-  'Just type who you need - a role, a skill, a city, or somebody by name. e.g. "a Flutter developer in Harare, paid" or "fred".',
+  'Just type who you need. A role. A skill. A city. Or somebody by name.',
+  'Example:  a Flutter developer in Harare for a paid fintech MVP',
   '',
-  'cards      your current cards',
-  'find fred  pull LINKUP profiles - name, @username, role or skill',
-  'meet 1     ask for the intro on card 1',
-  'skip 1     clear a card   |   save 1   keep it',
-  'accept     answer an intro waiting on you (decline / later too)',
-  'more       where to look outside LINKUP when nobody fits',
-  'yes / no   answer the question I asked instead of searching straight away',
-  'draft 2    write the message for person 2 from that search',
-  'send       approve what Linky drafted   |   edit <text>  rewrite it first',
-  'sent       tell me you sent it          |   not interested 2  never show them again',
-  'prefs      what you are open to',
-  'unlink     disconnect this chat',
+  'cards        your current cards',
+  'find fred    pull LINKUP profiles by name or @username or role or skill',
+  'meet 1       ask for the intro on card 1',
+  'skip 1       clear a card',
+  'save 1       keep a card for later',
+  'accept       answer an intro waiting on you',
+  'decline      say no quietly - both ways',
+  'more         where to look outside LINKUP when nobody fits',
+  'yes / no     answer the question I asked instead of searching',
+  'draft 2      write the message for person 2 from that search',
+  'send         approve what Linky drafted',
+  'edit         rewrite the draft in your own words first',
+  'sent         tell me you sent it',
+  'not interested 2   never show them again',
+  'prefs        what you are open to',
+  'unlink       disconnect this chat',
   '',
-  'I only say things I can point at on a real profile. If nobody fits, I say that instead of guessing.',
+  'I only say things I can point at on a real profile.',
+  'If nobody fits, I say that instead of guessing.',
 ].join('\n');
 
 // The bot's own short lines, so it reads like a person and not a receipt.
@@ -130,7 +136,8 @@ function cardLine(c, n) {
   const proof = badgeLine(c.badges);
   const squad = c.squadId ? `\n   Squad${c.squadSize > 1 ? ` of ${c.squadSize}` : ''}${c.squadRole ? ` - ${c.squadRole}` : ''}` : '';
   const warm = c.pairNote ? `\n   ${c.pairNote}` : '';
-  return `${n}. ${c.targetName}${c.targetRole ? ` - ${c.targetRole}` : ''}${c.targetCity ? ` (${c.targetCity})` : ''}${squad}\n   Why: ${c.why}${proof ? `\n   ${proof}` : ''}${warm}`;
+  const city = String(c.targetCity || '').replace(/,\s*/g, ' ');
+  return `${n}. ${c.targetName}${c.targetRole ? ` - ${c.targetRole}` : ''}${city ? ` - ${city}` : ''}${squad}\n   Why: ${c.why}${proof ? `\n   ${proof}` : ''}${warm}`;
 }
 
 // A member never reads infrastructure. A provider refusing a key, a timeout, a
@@ -160,18 +167,18 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
       if (uid) {
         const user = await loadUser(uid);
         const name = profileFacts(user)?.name?.split(' ')[0] || 'there';
-        return { text: `That's you linked, ${name}. This chat is your Linky line now - I answer in here the same way I do in the app.\n\n${HELP}` };
+        return { text: `That's you linked - ${name}. This chat is your Linky line now - I answer in here the same way I do in the app.\n\n${HELP}` };
       }
-      if (!lower.startsWith('/start')) return { text: 'That code did not work (codes last 15 minutes). Open LINKUP, go to the Linky tab, tap Connect Telegram / WhatsApp and send me the new code.' };
+      if (!lower.startsWith('/start')) return { text: 'That code did not work - codes last 15 minutes. Open LINKUP and go to the Linky tab. Tap Connect Telegram or WhatsApp and send me the new code.' };
     }
-    return { text: `Hi, I am Linky from LINKUP. To connect this chat to your account: open LINKUP (${APP_URL}), go to the Linky tab, tap "Connect ${channel === 'telegram' ? 'Telegram' : 'WhatsApp'}" and send me the 6-character code.` };
+    return { text: `Hi - I am Linky from LINKUP. To connect this chat to your account open LINKUP at ${APP_URL}. Go to the Linky tab and tap Connect ${channel === 'telegram' ? 'Telegram' : 'WhatsApp'}. Then send me the 6-character code.` };
   }
 
   const uid = bu.uid;
   const user = await loadUser(uid);
   if (!user) {
     await unlinkBot(channel, chatId);
-    return { text: 'Your LINKUP account is gone, so I unlinked this chat.' };
+    return { text: 'Your LINKUP account is gone so I unlinked this chat.' };
   }
 
   // ---- button callbacks (Telegram callback_data / WhatsApp reply ids)
@@ -180,7 +187,7 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
     try {
       if (kind === 'm') {
         const r = await meet(uid, a, { userDoc: user });
-        if (r.matchId) return { text: `You two are already connected, so no intro needed. Chat: ${APP_URL}/chat/${r.matchId}` };
+        if (r.matchId) return { text: `You two are already connected - no intro needed. Chat: ${APP_URL}/chat/${r.matchId}` };
         if (r.awaitingThem || r.pending) return { text: `You already asked ${r.targetName || 'them'}. I will tell you the moment they answer.` };
         if (!r.needsApproval) return { text: `Asked ${r.targetName || 'them'}. I will tell you when they answer.` };
         return { text: draftText(r), buttons: approveButtons(a) };
@@ -211,10 +218,10 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
       }
       if (kind === 'q') {
         // "should I look?" answered by tap - same words as typing yes / no
-        return await botReply(channel, chatId, a === 'y' ? 'yes' : 'no, just thinking');
+        return await botReply(channel, chatId, a === 'y' ? 'yes' : 'no just thinking');
       }
       if (kind === 'e') {
-        return { text: 'Type it after the word, in one message: "edit Hi Tinashe, I am Alice - 15 minutes on Thursday?" I will hold it until you say send.' };
+        return { text: 'Type it after the word in one message - edit Hi Tinashe I am Alice - 15 minutes on Thursday. I will hold it until you say send.' };
       }
       if (kind === 'ld') {
         const state = await loadState(uid);
@@ -229,20 +236,20 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
         const r = await markLead(uid, { key: leadKeyByIdx(await loadState(uid), Number(idx) || 0) || '' });
         return { text: r.note || 'Noted.' };
       }
-      if (kind === 's') { await setCardStatus(uid, a, 'skip'); return { text: 'Done, they will not come up again for a while.' }; }
+      if (kind === 's') { await setCardStatus(uid, a, 'skip'); return { text: 'Done - they will not come up again for a while.' }; }
       if (kind === 'v') { await setCardStatus(uid, a, 'saved'); return { text: 'Kept. They will wait for you in cards.' }; }
       if (kind === 'p') {
         const needArg = !a || a === 'last'
           ? (await loadState(uid).then((st) => st.lastAsk?.need || '').catch(() => ''))
           : decodeURIComponent(String(a));
-        if (!needArg) return { text: 'Ask me who you need first, then I can look outside.' };
+        if (!needArg) return { text: 'Ask me who you need first and then I can look outside.' };
         const r = await pointers(uid, needArg, { userDoc: user });
         return { text: pointerText(r), buttons: r.leads?.length ? leadsKeyboard(r.leads) : undefined };
       }
       // A tapped chip on WhatsApp arrives as an id like c:0:cards - re-run it as
       // though the member had typed it.
       if (kind === 'c') return await botReply(channel, chatId, [a, b].filter(Boolean).join(':').replace(/^\d+:/, ''));
-      if (kind === 'r') { const r = await respond(uid, b, a); return { text: r.status === 'accepted' ? `Done - you and ${await nameOf(uid, b)} are connected. Chat: ${APP_URL}/chat/${r.matchId}` : r.status === 'snoozed' ? 'Parked for 2 weeks, no pressure on either side.' : 'Declined quietly. They will not be suggested to you again.' }; }
+      if (kind === 'r') { const r = await respond(uid, b, a); return { text: r.status === 'accepted' ? `Done - you and ${await nameOf(uid, b)} are connected. Chat: ${APP_URL}/chat/${r.matchId}` : r.status === 'snoozed' ? 'Parked for 2 weeks - no pressure on either side.' : 'Declined quietly. They will not be suggested to you again.' }; }
     } catch (err) {
       return { text: memberError(err, 'That did not work.') };
     }
@@ -262,7 +269,7 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
     const picked = last.nearest[Number(cmd.trim()) - 1];
     if (picked?.uid) {
       const card = await pickPersonCard(uid, picked);
-      if (card && card.id) return { text: `${picked.name}, yes. Card is in front of you - ${card.why}`, cards: [card] };
+      if (card && card.id) return { text: `${picked.name} - yes. The card is in front of you - ${card.why}`, cards: [card] };
       if (card?.error) return { text: `${picked.name} - ${card.error}` };
     }
   }
@@ -276,23 +283,23 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
     const cards = await numbered();
     if (!cards.length) return { text: 'No cards right now. Tell me who you need and I answer straight away.' };
     return {
-      text: `Your cards:\n${cards.map((c, i) => cardLine(c, i + 1)).join('\n')}\n\nReply "meet 1" (or 2, 3...) and I will ask them.`,
+      text: `Your cards:\n\n${cards.map((c, i) => cardLine(c, i + 1)).join('\n\n')}\n\nReply meet 1 or 2 or 3 and I will ask them.`,
       cards,
     };
   }
   if (cmd === 'prefs') {
     const h = await home(uid, { userDoc: user });
-    return { text: `Open to: ${h.prefs.openTo.map(offerLabel).join(', ')}. Weekly inbound cap: ${h.prefs.inboundCap}.\nChange these in the app: Linky tab > Preferences.` };
+    return { text: `Open to: ${h.prefs.openTo.map(offerLabel).join('   ')}\nWeekly inbound cap: ${h.prefs.inboundCap}\nChange these in the app: Linky tab > Preferences.` };
   }
   // Linky reads the audit page out loud, because "what do you know about me" is a
   // question people ask and making them open the app to answer it is a shrug.
   if (cmd === 'audit' || cmd.startsWith('audit ')) {
     const a = await audit(uid, { userDoc: user });
     const line = (label, value) => (value ? `${label}: ${value}\n` : '');
-    const top = (a.asks || []).slice(0, 3).map((x) => `  - ${x.need}${x.none ? ' (nobody yet)' : ` (${x.cards} cards)`}`).join('\n');
+    const top = (a.asks || []).slice(0, 3).map((x) => `  - ${x.need} - ${x.none ? 'nobody yet' : `${x.cards} cards`}`).join('\n');
     return {
-      text: `Here is everything I have on you.\n\n${line('Role', a.facts.role)}${line('Company', a.facts.company)}${line('City', a.facts.city)}${line('Skills', (a.facts.skills || []).slice(0, 6).join(', '))}${line('Open to', a.signals.openTo.map(offerLabel).join(', '))}${line('Your notes', (a.told.notes || '').slice(0, 180))}Used today: ${a.signals.asksUsedToday} of ${a.signals.plus ? LIMITS.plus.asksPerDay : LIMITS.free.asksPerDay} searches, ${a.signals.meetsUsedToday} Meets. Looking someone up by name is free.
-Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n${top ? `Last asks:\n${top}` : 'No asks yet.'}\n\nSay "forget" any time and I delete all of it.`,
+      text: `Here is everything I have on you.\n\n${line('Role', a.facts.role)}${line('Company', a.facts.company)}${line('City', a.facts.city)}${line('Skills', (a.facts.skills || []).slice(0, 6).join('   '))}${line('Open to', a.signals.openTo.map(offerLabel).join('   '))}${line('Your notes', (a.told.notes || '').slice(0, 180))}Used today: ${a.signals.asksUsedToday} of ${a.signals.plus ? LIMITS.plus.asksPerDay : LIMITS.free.asksPerDay} searches - ${a.signals.meetsUsedToday} Meets\nLooking someone up by name is free.
+Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n${top ? `Last asks:\n${top}` : 'No asks yet.'}\n\nSay forget any time and I delete all of it.`,
     };
   }
   // "draft" is a real intent the app has; on the bot it drafted nothing and simply
@@ -317,18 +324,18 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
   if (/^(edit|change|rewrite it|make it|say instead)\b/i.test(cmd.trim())) {
     const mine = raw.replace(/^(edit|change|rewrite it|make it|say instead)\b[:,\s]*/i, '').trim();
     const state = await loadState(uid);
-    if (!mine) return { text: 'Type it after the word - "edit Hi Tinashe, ...". I will hold it until you say send.' };
+    if (!mine) return { text: 'Type it after the word - edit Hi Tinashe and then your words. I will hold it until you say send.' };
     if (state.pendingLead) {
       const r = await approveLead(uid, { text: mine });
       return { text: `${r.text}\n\n${r.note}` };
     }
     if (state.pendingSquad) { const r = await approveSquad(uid, { text: mine }); return { text: r.note }; }
     if (state.pendingMeet) return { text: sentText(await approveMeet(uid, { text: mine, userDoc: user })) };
-    return { text: 'Nothing to edit yet. Say "draft 2" after a search and I will write something you can change.' };
+    return { text: 'Nothing to edit yet. Say draft 2 after a search and I will write something you can change.' };
   }
   if (/^(cancel|never mind|drop it|discard)$/i.test(cmd.trim())) {
     const st9 = await loadState(uid);
-    if (st9.pendingSquad) { const rq = await cancelSquad(uid, {}); return { text: `Left unsent${rq.names?.length ? ` - ${rq.names.join(', ')} never heard about it` : ''}.` }; }
+    if (st9.pendingSquad) { const rq = await cancelSquad(uid, {}); return { text: `Left unsent${rq.names?.length ? ` - ${rq.names.join('   ')} never heard about it` : ''}.` }; }
     const r = await cancelMeet(uid, {});
     const state = await loadState(uid);
     if (r.cancelled) return { text: `Left unsent${r.targetName ? ` - ${r.targetName} will never hear about it` : ''}.` };
@@ -338,7 +345,7 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
   if (/^not interested\b/i.test(cmd.trim()) || /^never show\b/i.test(cmd.trim())) {
     const idx = Number(cmd.match(/\d+/)?.[0] || 0);
     const key = leadKeyByIdx(await loadState(uid), idx);
-    if (!key) return { text: 'Which one? "not interested 2".' };
+    if (!key) return { text: 'Which one? Say not interested 2.' };
     const r = await markLead(uid, { key, status: 'not_interested' });
     return { text: r.note };
   }
@@ -364,7 +371,7 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
     const stS = await loadState(uid);
     const cards = await loadCards(uid);
     const id = stS.pendingSquad?.squadId || stS.lastAsk?.squadId || (cards.find((c) => c.squadId)?.squadId || '');
-    if (!id) return { text: 'No squad on the table right now. Ask me for a team - say the roles, like "flutter dev + someone who can sell + an investor".' };
+    if (!id) return { text: 'No squad on the table right now. Ask me for a team - say the roles like flutter dev + someone who can sell + an investor.' };
     try {
       const r = await meetSquad(uid, id, { userDoc: user });
       return { text: squadDraftText(r), buttons: squadApproveButtons(id), chips: ['send', 'cancel'] };
@@ -381,7 +388,7 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
         const r = await meet(uid, card.id, { userDoc: user });
         if (r.matchId) return { text: `You are already connected with ${card.targetName}. Chat: ${APP_URL}/chat/${r.matchId}` };
         if (r.awaitingThem || r.pending) return { text: `You already asked ${card.targetName}. I will tell you the moment they answer.` };
-        if (!r.needsApproval) return { text: `Asked ${card.targetName}.${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today)` : ''}` };
+        if (!r.needsApproval) return { text: `Asked ${card.targetName}.${r.meetsLeft != null ? `  ${r.meetsLeft} Meets left today.` : ''}` };
         // Nothing reaches the other person until this member says so - on the bot
         // that "yes" is one button, and "edit ..." lets them rewrite it in place.
         return { text: draftText(r), buttons: approveButtons(card.id), chips: ['send', 'cancel'] };
@@ -407,7 +414,7 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
   if (cmd === 'more' || cmd === 'outside' || cmd === 'where') {
     const state = await loadState(uid);
     const last = state.lastAsk;
-    if (!last?.need) return { text: 'Ask me who you need first, then I can go looking outside LINKUP.' };
+    if (!last?.need) return { text: 'Ask me who you need first and then I can go looking outside LINKUP.' };
     try {
       const r = await pointers(uid, last.need, { userDoc: user });
       return {
@@ -422,15 +429,17 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
   // ---- pull real LINKUP profiles (a directory lookup, not an intro)
   if (/^(find|people|members|profiles)\b/.test(cmd)) {
     const rest = raw.replace(/^\/?(find|people|members|profiles)\b[:\s,-]*/i, '').trim();
-    if (!rest) return { text: 'Who are you looking for on LINKUP? Try "find fred" (a name or @username), or "find flutter dev" (a role or skill).' };
+    if (!rest) return { text: 'Who are you looking for on LINKUP? Try find fred for a name or @username. Or find flutter dev for a role or skill.' };
     try {
       const rows = await pullProfiles(rest, { meUid: uid, limit: 5 });
       if (!rows.length) {
-        return { text: `Nobody on LINKUP matches "${rest}" right now. Try a first name, an @username, or a role like "flutter dev" - or ask me normally ("who can help me with ...") and I will look wider.` };
+        return { text: `Nobody on LINKUP matches ${rest} right now. Try a first name or an @username or a role like flutter dev. Or ask me normally and I will look wider.` };
       }
-      const listTxt = rows.map((r, i) => `${i + 1}. ${r.name}${r.role ? ` - ${r.role}` : ''}${r.city ? ` (${r.city})` : ''}${r.plus ? ' ⚡PLUS' : ''}\n   ${r.link}`).join('\n');
+      const listTxt = rows
+        .map((r, i) => `${i + 1}. ${r.name}${r.role ? ` - ${r.role}` : ''}${r.city ? ` - ${r.city}` : ''}${r.plus ? '  ⚡PLUS' : ''}\n   ${r.link}`)
+        .join('\n\n');
       return {
-        text: `Found ${rows.length} on LINKUP:\n\n${listTxt}`,
+        text: `Found ${rows.length} on LINKUP:\n\n${listTxt}\n\nReply meet 1 or 2 and I will ask them for you.`,
         chips: rows.slice(0, 3).map((r) => r.name.split(' ')[0]),
       };
     } catch (err) {
@@ -446,8 +455,8 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
       // he asked instead of searching: the answer has to be one tap, not a sentence
       return {
         text: out.reply,
-        buttons: [[{ text: 'Yes, search for them', callback_data: 'q:y' }, { text: 'No, just talking', callback_data: 'q:n' }]],
-        chips: ['yes, search for them', 'no, just talking'],
+        buttons: [[{ text: 'Yes search for them', callback_data: 'q:y' }, { text: 'No just talking', callback_data: 'q:n' }]],
+        chips: ['yes search for them', 'no just talking'],
       };
     }
     if (!out.cards.length) {
@@ -458,14 +467,14 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
       if (out.none) {
         return {
           text: out.reply,
-          buttons: [[{ text: 'Yes, search LinkedIn', callback_data: 'q:y' }, { text: 'Not now', callback_data: 'q:n' }]],
-          chips: ['yes, search LinkedIn', 'not now', 'cards'],
+          buttons: [[{ text: 'Yes search LinkedIn', callback_data: 'q:y' }, { text: 'Not now', callback_data: 'q:n' }]],
+          chips: ['yes search LinkedIn', 'not now', 'cards'],
         };
       }
       const chips = (out.suggest || []).slice(0, 3);
       return { text: out.reply, chips };
     }
-    return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n')}`, cards: out.cards, chips: out.suggest };
+    return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n\n')}`, cards: out.cards, chips: out.suggest };
   } catch (err) {
     return { text: memberError(err, 'That did not work.') };
   }
@@ -478,21 +487,21 @@ const draftText = (r) => [
   '',
   r.pitch,
   '',
-  'Reply SEND to send it as it is, or "edit <your own words>" to send yours instead.',
-  ...(r.meetsLeft != null ? [`(${r.meetsLeft} Meets left today.)`] : []),
+  'Reply SEND to send it as it is. Or reply edit with your own words to send yours instead.',
+  ...(r.meetsLeft != null ? [`${r.meetsLeft} Meets left today.`] : []),
 ].join('\n');
 
 const sentText = (r) => (r.matchId
-  ? `You two are already connected, so no intro needed. Chat: ${APP_URL}/chat/${r.matchId}`
-  : `Sent to ${r.targetName || 'them'}. ${r.edited ? 'Your words, not mine. ' : ''}I will tell you the moment they answer.`);
+  ? `You two are already connected - no intro needed. Chat: ${APP_URL}/chat/${r.matchId}`
+  : `Sent to ${r.targetName || 'them'}. ${r.edited ? 'Your words - not mine. ' : ''}I will tell you the moment they answer.`);
 
 const squadDraftText = (r) => [
-  `${(r.members || []).map((x) => x.name).filter(Boolean).join(', ')} - all three would get this. Read it first.`,
+  `${(r.members || []).map((x) => x.name).filter(Boolean).join('   ')} - all three would get this. Read it first.`,
   '',
   r.pitch,
   '',
-  'Reply SEND and it goes to each of them, or "edit <your own words>" to send yours. Nobody is added to a group chat: each one answers for themselves.',
-  ...(r.meetsLeft != null ? [`(${r.meetsLeft} Meets left today - a squad costs one per person.)`] : []),
+  'Reply SEND and it goes to each of them. Or reply edit with your own words to send yours. Nobody is added to a group chat - each one answers for themselves.',
+  ...(r.meetsLeft != null ? [`${r.meetsLeft} Meets left today - a squad costs one per person.`] : []),
   ...(r.note ? [r.note] : []),
 ].join('\n');
 
@@ -506,13 +515,13 @@ const approveButtons = (cardId) => ([
 ]);
 
 const leadDraftText = (r) => [
-  `This is what I would send ${r.lead.name}${r.lead.title ? ` (${r.lead.title})` : ''}. It goes nowhere until you paste it yourself:`,
+  `This is what I would send ${r.lead.name}${r.lead.title ? ` - ${r.lead.title}` : ''}. It goes nowhere until you paste it yourself:`,
   '',
   r.text,
   '',
   r.url ? `Their profile: ${r.url}` : '',
   '',
-  'Reply SEND and I hold it for you to copy, or "edit ..." to make it yours first.',
+  'Reply SEND and I hold it for you to copy. Or reply edit to make it yours first.',
 ].filter((x) => x !== '').join('\n');
 
 const leadApproveButtons = () => ([
@@ -530,7 +539,7 @@ function leadKeyByIdx(state, idx) {
 async function draftForNumber(uid, user, idx, channel) {
   const state = await loadState(uid);
   const lead = (Array.isArray(state.lastLeads) ? state.lastLeads : [])[Math.max(1, Number(idx) || 1) - 1];
-  if (!lead) return { text: 'I have nobody listed to write for. Ask me who you need, say MORE if nobody fits, then "draft 1".' };
+  if (!lead) return { text: 'I have nobody listed to write for. Ask me who you need and say MORE if nobody fits. Then say draft 1.' };
   const r = await draftLead(uid, { lead, key: lead.key, need: state.lastLeadsNeed || '', userDoc: user, source: channel });
   return { text: leadDraftText(r), buttons: leadApproveButtons() };
 }
@@ -557,7 +566,7 @@ function pointerText(r) {
   const leads = Array.isArray(r?.leads) ? r.leads : [];
   const head = String(r?.intro || r?.text || '').trim();
   if (!leads.length) {
-    const routes = (Array.isArray(r?.routes) ? r.routes : []).map((x, i) => `${i + 1}) ${String(x).trim()}`).filter((x) => x.length > 3).join('\n');
+    const routes = (Array.isArray(r?.routes) ? r.routes : []).map((x, i) => `${i + 1}. ${String(x).trim()}`).filter((x) => x.length > 3).join('\n');
     return [head, routes].filter(Boolean).join('\n\n');
   }
   const list = leads.map((l, i) => [
@@ -566,12 +575,12 @@ function pointerText(r) {
     badgeLine(l.proof) ? `   ${badgeLine(l.proof)}` : '',
     `   ${l.url}`,
   ].filter(Boolean).join('\n')).join('\n\n');
-  const extra = r.skipped ? `\n\n(${r.skipped} ${r.skipped === 1 ? 'person' : 'people'} I have already sent you did not make the list again.)` : '';
+  const extra = r.skipped ? `\n\n${r.skipped} ${r.skipped === 1 ? 'person' : 'people'} I already sent you did not make the list again.` : '';
   // the number in the hint has to be a number that exists on the list above
   const n = leads.length > 1 ? 2 : 1;
   const hint = leads.length > 1
-    ? `Say "draft ${n}" and I write the message for that one - you approve it and send it yourself. "not interested ${n}" and I never show them again.`
-    : `Say "draft 1" or tap Draft, and I write the message - you approve it and send it yourself. "not interested 1" and I never show them again.`;
+    ? `Say draft ${n} and I write the message for that one - you approve it and send it yourself. Not interested ${n} and I never show them again.`
+    : `Say draft 1 and I write the message - you approve it and send it yourself. Not interested 1 and I never show them again.`;
   return `${head}\n\n${list}${extra}\n\n${hint}`;
 }
 
@@ -693,7 +702,7 @@ async function handleTelegram(req, res) {
       if (timer) clearTimeout(timer);
       if (r?.__slow) {
         await recordBotFault('deadline', { updateId, chatId, text: update.message.text, budgetMs: budget });
-        r = { text: `I am here - that one ran past my ${Math.round(budget / 1000)}s and I stopped waiting on it. Say it again: if it needed the web I will tell you what I found in LINKUP first, then search.` };
+        r = { text: `I am here - that one ran past my ${Math.round(budget / 1000)}s and I stopped waiting on it. Say it again: if it needed the web I will tell you what I found in LINKUP first and then search.` };
       } else if (r?.__err) {
         await recordBotFault('throw', { updateId, chatId, text: update.message.text, error: r.__err?.stack || r.__err?.message || r.__err });
         r = { text: String(r.__err?.message || 'Something on my side broke on that one. Nothing was sent to anybody - try it again in a minute.') };
@@ -723,7 +732,7 @@ async function handleTelegram(req, res) {
       text: update?.message?.text || update?.callback_query?.data || '',
       error: err?.stack || err?.message || err,
     });
-    if (chatId) await sendTelegram(chatId, 'That one broke on my side - nothing was sent to anybody. Try again in a moment, and if it keeps happening I will have a note of it.').catch(() => null);
+    if (chatId) await sendTelegram(chatId, 'That one broke on my side - nothing was sent to anybody. Try again in a moment and if it keeps happening I will have a note of it.').catch(() => null);
   }
   res.status(200).json({ ok: true });
 }
