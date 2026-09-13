@@ -862,6 +862,72 @@ export function findByName(q, ctx, { meUid, exclude = [], myState = {}, existing
   };
 }
 
+// ---------------------------------------------------------------- directory pull
+// The bot can pull real LINKUP profiles straight out of the public index, so a
+// member on Telegram can look someone up without opening the app. Prefix search
+// on searchName / searchUsername first (the lowercase twins the client already
+// maintains for exactly this), then a bounded in-memory pass over a page of the
+// index for role / skill / company / city queries. It runs server-side with the
+// Admin SDK, so it reads the whole discoverable index — but it only ever RETURNS
+// profiles a signed-in member would see in the app (discoverable, not demo/bot,
+// never the caller themself).
+export async function pullProfiles(q, { meUid = '', limit = 5 } = {}) {
+  const needle = String(q || '').replace(/^@+/, '').trim().toLowerCase().slice(0, 40);
+  if (!needle) return [];
+  const want = Math.max(1, Math.min(10, Number(limit) || 5));
+  const hidden = (p) =>
+    !p?.uid || p.deleted || p.isVisible === false || p.isStealthMode === true || p.onboarded === false ||
+    String(p.uid).startsWith('demo-') || String(p.uid).startsWith('bot-') || p.uid === 'linky-ai' || p.uid === meUid;
+  const row = (p) => ({
+    uid: p.uid,
+    name: displayNameOf(p),
+    pic: hosted(p.profilePic),
+    role: text(p.occupation, 100),
+    company: text(p.company, 120),
+    city: text(p.city, 80),
+    country: text(p.country, 80),
+    skills: list(p.skills, 8),
+    plus: plusFromUserDoc(p) || p.turboConnect === true,
+    link: `${APP_URL}/profile/${encodeURIComponent(p.uid)}`,
+  });
+
+  const seen = new Set();
+  const out = [];
+  const add = (p) => { if (!seen.has(p.uid)) { seen.add(p.uid); out.push(row(p)); } };
+
+  // 1) name + @username prefix. orderBy on a single field + startAt/endAt needs
+  //    no composite index, and Firestore auto-indexes single fields.
+  const prefix = (field) =>
+    db().collection('publicProfiles').orderBy(field).startAt(needle).endAt(`${needle}\uf8ff`).limit(want * 2).get()
+      .then((snap) => (snap?.docs || []).map((d) => ({ uid: d.id, ...d.data() })))
+      .catch(() => []);
+  const [nameHits, userHits] = await Promise.all([prefix('searchName'), prefix('searchUsername')]);
+  [...nameHits, ...userHits].filter((p) => !hidden(p)).forEach(add);
+  if (out.length >= want) return out.slice(0, want);
+
+  // 2) role / skill / company / city: a bounded page of the index, matched in
+  //    memory. Older rows without searchName/searchUsername are only reachable
+  //    here, which is why the fallback exists.
+  const terms = uniq(needle.split(/\s+/).filter((w) => w.length >= 2));
+  const page = await db().collection('publicProfiles').limit(400).get().catch(() => null);
+  const scored = [];
+  for (const d of (page?.docs || [])) {
+    const p = { uid: d.id, ...d.data() };
+    if (hidden(p) || seen.has(p.uid)) continue;
+    const hay = [
+      p.occupation, ...(Array.isArray(p.skills) ? p.skills : []),
+      ...(Array.isArray(p.industries) ? p.industries : []),
+      p.company, p.city, p.country, p.bio, p.displayName,
+    ].map((x) => String(x || '').toLowerCase()).join(' ');
+    let s = 0;
+    for (const t of terms) if (hay.includes(t)) s += 1;
+    if (s > 0) scored.push({ p, s });
+  }
+  scored.sort((a, b) => b.s - a.s).slice(0, want - out.length).forEach((x) => add(x.p));
+
+  return out.slice(0, want);
+}
+
 // Cite-or-skip guard: the "why" must name something that is actually on the
 // candidate's profile (or what they told Linky), otherwise the card is dropped.
 function whyIsCited(why, c) {

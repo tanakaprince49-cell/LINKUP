@@ -16,7 +16,7 @@ import { aiProbe, aiStatus, handleOptions, readJsonBody, sendError, setCors } fr
 import {
   APP_URL, LIMITS, OFFERS, LOOP_CHOICES, answerLoop, approveLead, approveMeet, approveSquad, ask, audit, botUserFor, cancelMeet, cancelSquad,
   clearChat, consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
-  meet, meetSquad, orderedCards, pickPerson, pointers, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
+  meet, meetSquad, orderedCards, pickPerson, pointers, pullProfiles, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
   setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret,
 } from './_linky.js';
 import { badgeLine } from './_proof.js';
@@ -88,6 +88,7 @@ export const BOT_COMMANDS = [
   { command: 'start', description: 'Link this chat to your LINKUP account', group: true },
   { command: 'help', description: 'How Linky works, in one screen', group: true },
   { command: 'cards', description: 'Your current cards' },
+  { command: 'find', description: 'Pull LINKUP profiles - "find fred"' },
   { command: 'meet', description: 'Ask for the intro - "meet 1"' },
   { command: 'skip', description: 'Clear a card - "skip 1"' },
   { command: 'save', description: 'Keep a card for later - "save 1"' },
@@ -105,6 +106,7 @@ const HELP = [
   'Just type who you need - a role, a skill, a city, or somebody by name. e.g. "a Flutter developer in Harare, paid" or "fred".',
   '',
   'cards      your current cards',
+  'find fred  pull LINKUP profiles - name, @username, role or skill',
   'meet 1     ask for the intro on card 1',
   'skip 1     clear a card   |   save 1   keep it',
   'accept     answer an intro waiting on you (decline / later too)',
@@ -411,6 +413,25 @@ Held back from me: ${hiddenCount(a.hidden)} muted: ${a.signals.mutedCount}.\n\n$
       return {
         text: pointerText(r), buttons: r.leads?.length ? leadsKeyboard(r.leads) : undefined,
         chips: r.leads?.length ? ['draft 1', 'not interested 1'] : ['ask something else', 'help'],
+      };
+    } catch (err) {
+      return { text: memberError(err, 'That did not work.') };
+    }
+  }
+
+  // ---- pull real LINKUP profiles (a directory lookup, not an intro)
+  if (/^(find|people|members|profiles)\b/.test(cmd)) {
+    const rest = raw.replace(/^\/?(find|people|members|profiles)\b[:\s,-]*/i, '').trim();
+    if (!rest) return { text: 'Who are you looking for on LINKUP? Try "find fred" (a name or @username), or "find flutter dev" (a role or skill).' };
+    try {
+      const rows = await pullProfiles(rest, { meUid: uid, limit: 5 });
+      if (!rows.length) {
+        return { text: `Nobody on LINKUP matches "${rest}" right now. Try a first name, an @username, or a role like "flutter dev" - or ask me normally ("who can help me with ...") and I will look wider.` };
+      }
+      const listTxt = rows.map((r, i) => `${i + 1}. ${r.name}${r.role ? ` - ${r.role}` : ''}${r.city ? ` (${r.city})` : ''}${r.plus ? ' ⚡PLUS' : ''}\n   ${r.link}`).join('\n');
+      return {
+        text: `Found ${rows.length} on LINKUP:\n\n${listTxt}`,
+        chips: rows.slice(0, 3).map((r) => r.name.split(' ')[0]),
       };
     } catch (err) {
       return { text: memberError(err, 'That did not work.') };
