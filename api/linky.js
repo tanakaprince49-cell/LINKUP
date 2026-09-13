@@ -16,7 +16,7 @@ import { aiProbe, aiStatus, handleOptions, readJsonBody, sendError, setCors } fr
 import {
   APP_URL, LIMITS, OFFERS, LOOP_CHOICES, answerLoop, approveLead, approveMeet, approveSquad, ask, audit, botUserFor, cancelMeet, cancelSquad,
   clearChat, consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
-  meet, meetSquad, orderedCards, pickPerson, pointers, pullProfiles, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
+  meet, meetSquad, orderedCards, patchState, pickPerson, pointers, pullProfiles, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
   setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret,
 } from './_linky.js';
 import { badgeLine } from './_proof.js';
@@ -217,8 +217,34 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
         return { text: r.note };
       }
       if (kind === 'q') {
-        // "should I look?" answered by tap - same words as typing yes / no
-        return await botReply(channel, chatId, a === 'y' ? 'yes' : 'no just thinking');
+        // "should I look?" answered by tap. Act here instead of re-routing through
+        // a typed "yes", so the button works even if the offer has been sitting in
+        // the chat a while and the user sent other messages in between.
+        const st = await loadState(uid);
+        if (a === 'y') {
+          const offer = st.pendingIntent && Date.now() - Number(st.pendingIntent.at || 0) < 40 * 60 * 1000 ? st.pendingIntent : null;
+          const need = (offer && offer.need) || (st.lastAsk && st.lastAsk.need) || '';
+          if (!need) return { text: 'That offer has gone cold. Ask me who you need and I will go look right away.' };
+          // "yes" to "should I search for them?" = search LINKUP members.
+          if (offer && !offer.outside) {
+            const out = await ask(uid, 'yes', { source: channel, userDoc: user });
+            if (out.cards && out.cards.length) {
+              return { text: `${out.reply}\n\n${out.cards.map((c, i) => cardLine(c, i + 1)).join('\n\n')}`, cards: out.cards, chips: out.suggest };
+            }
+            if (out.kind === 'none') {
+              return { text: out.reply, buttons: [[{ text: 'Yes search LinkedIn', callback_data: 'q:y' }, { text: 'Not now', callback_data: 'q:n' }]], chips: ['yes search LinkedIn', 'not now', 'cards'] };
+            }
+            return { text: out.reply, chips: (out.suggest || []).slice(0, 3) };
+          }
+          // "yes" to "search LinkedIn?" = the open web, straight away.
+          const r = await pointers(uid, need, { userDoc: user, allowSearch: true, assumeKnown: true });
+          if ((r.leads || []).length) {
+            return { text: pointerText(r), buttons: leadsKeyboard(r.leads), chips: ['draft 1', 'not interested 1'] };
+          }
+          return { text: pointerText(r), chips: ['ask something else', 'help'] };
+        }
+        await patchState(uid, { pendingIntent: null }).catch(() => {});
+        return { text: 'No worries. Say the word when you want names and I will go look.' };
       }
       if (kind === 'e') {
         return { text: 'Type it after the word in one message - edit Hi Tinashe I am Alice - 15 minutes on Thursday. I will hold it until you say send.' };
@@ -433,13 +459,24 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
     try {
       const rows = await pullProfiles(rest, { meUid: uid, limit: 5 });
       if (!rows.length) {
-        return { text: `Nobody on LINKUP matches ${rest} right now. Try a first name or an @username or a role like flutter dev. Or ask me normally and I will look wider.` };
+        // Nobody on LINKUP has that name or role -> use the same words on the
+        // open web (LinkedIn) instead of stopping at "nobody here".
+        let r;
+        try {
+          r = await pointers(uid, rest, { userDoc: user, allowSearch: true, assumeKnown: true });
+        } catch {
+          return { text: `Nobody on LINKUP matches ${rest} right now. Try a first name or an @username or a role like flutter dev.` };
+        }
+        if ((r.leads || []).length) {
+          return { text: pointerText(r), buttons: leadsKeyboard(r.leads), chips: ['draft 1', 'not interested 1'] };
+        }
+        return { text: pointerText(r), chips: ['ask something else', 'help'] };
       }
       const listTxt = rows
         .map((r, i) => `${i + 1}. ${r.name}${r.role ? ` - ${r.role}` : ''}${r.city ? ` - ${r.city}` : ''}${r.plus ? '  ⚡PLUS' : ''}\n   ${r.link}`)
         .join('\n\n');
       return {
-        text: `Found ${rows.length} on LINKUP:\n\n${listTxt}\n\nReply meet 1 or 2 and I will ask them for you.`,
+        text: `Found ${rows.length} ${rows.length === 1 ? 'person' : 'people'} on LINKUP:\n\n${listTxt}\n\nReply meet 1 or 2 and I will ask them for you.`,
         chips: rows.slice(0, 3).map((r) => r.name.split(' ')[0]),
       };
     } catch (err) {
@@ -460,11 +497,11 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
       };
     }
     if (!out.cards.length) {
-      // Nobody fits -> Linky has already asked "should I go outside my network?",
-      // so the buttons and chips answer that question instead of shipping a
-      // separate "Search LinkedIn" button. A "yes" runs the LinkedIn search in
-      // the same turn; "not now" drops it without a search.
-      if (out.none) {
+      // A genuine search miss -> Linky has already asked "should I go outside my
+      // network?", so the buttons and chips answer that question. A person lookup
+      // that came back blocked or already-connected is NOT a miss, so it never
+      // gets the LinkedIn buttons - it gets its reply and its own next steps.
+      if (out.kind === 'none') {
         return {
           text: out.reply,
           buttons: [[{ text: 'Yes search LinkedIn', callback_data: 'q:y' }, { text: 'Not now', callback_data: 'q:n' }]],

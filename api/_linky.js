@@ -307,7 +307,7 @@ export async function loadState(uid) {
   const snap = await db().collection('linkyState').doc(uid).get();
   return snap.exists ? snap.data() : {};
 }
-const patchState = (uid, patch) => db().collection('linkyState').doc(uid).set(patch, { merge: true });
+export const patchState = (uid, patch) => db().collection('linkyState').doc(uid).set(patch, { merge: true });
 
 // ---------------------------------------------------------------- delivery
 async function sendExpoPush(uid, { title, body, data }) {
@@ -871,8 +871,25 @@ export function findByName(q, ctx, { meUid, exclude = [], myState = {}, existing
 // Admin SDK, so it reads the whole discoverable index — but it only ever RETURNS
 // profiles a signed-in member would see in the app (discoverable, not demo/bot,
 // never the caller themself).
+// Words that carry no signal in a directory lookup, so "find fred on linkup"
+// reads as "fred" and not as a search for the word "linkup" in every bio.
+const FIND_STOP = new Set('the a an and or for of to in on at from with by is are was were who what which how do does did can could would should me my you your i we they them he she it its linkup linkedin find search searching look looking for people person member members profile profiles named called somebody someone anyone some any this that these those here there'.split(' '));
+
+function cleanFindQuery(q) {
+  return String(q || '')
+    .replace(/^@+/, '')
+    .toLowerCase()
+    .replace(/\b(?:on|from|in|at)\s+(?:linkup|linkedin)\b/gi, ' ')
+    .replace(/\b(?:linkup|linkedin)\b/gi, ' ')
+    .split(/[^a-z0-9@.#+-]+/)
+    .filter((w) => w && !FIND_STOP.has(w))
+    .join(' ')
+    .trim()
+    .slice(0, 60);
+}
+
 export async function pullProfiles(q, { meUid = '', limit = 5 } = {}) {
-  const needle = String(q || '').replace(/^@+/, '').trim().toLowerCase().slice(0, 40);
+  const needle = cleanFindQuery(q);
   if (!needle) return [];
   const want = Math.max(1, Math.min(10, Number(limit) || 5));
   const hidden = (p) =>
@@ -906,24 +923,31 @@ export async function pullProfiles(q, { meUid = '', limit = 5 } = {}) {
   if (out.length >= want) return out.slice(0, want);
 
   // 2) role / skill / company / city: a bounded page of the index, matched in
-  //    memory. Older rows without searchName/searchUsername are only reachable
-  //    here, which is why the fallback exists.
-  const terms = uniq(needle.split(/\s+/).filter((w) => w.length >= 2));
-  const page = await db().collection('publicProfiles').limit(400).get().catch(() => null);
-  const scored = [];
-  for (const d of (page?.docs || [])) {
-    const p = { uid: d.id, ...d.data() };
-    if (hidden(p) || seen.has(p.uid)) continue;
-    const hay = [
-      p.occupation, ...(Array.isArray(p.skills) ? p.skills : []),
-      ...(Array.isArray(p.industries) ? p.industries : []),
-      p.company, p.city, p.country, p.bio, p.displayName,
-    ].map((x) => String(x || '').toLowerCase()).join(' ');
-    let s = 0;
-    for (const t of terms) if (hay.includes(t)) s += 1;
-    if (s > 0) scored.push({ p, s });
+  //    memory. A term must land on a real field (role, skill, company, city or
+  //    name) to count, and it counts double there - a weak hit buried in a long
+  //    bio is not a person, so it no longer pads a short name list with randoms.
+  const terms = uniq(needle.split(/\s+/).filter((w) => w.length >= 3));
+  if (out.length < want && terms.length) {
+    const page = await db().collection('publicProfiles').limit(400).get().catch(() => null);
+    const scored = [];
+    for (const d of (page?.docs || [])) {
+      const p = { uid: d.id, ...d.data() };
+      if (hidden(p) || seen.has(p.uid)) continue;
+      const fieldHay = [
+        p.displayName, p.occupation, p.company, p.city, p.country,
+        ...(Array.isArray(p.skills) ? p.skills : []),
+        ...(Array.isArray(p.industries) ? p.industries : []),
+      ].map((x) => String(x || '').toLowerCase()).join(' ');
+      const bioHay = String(p.bio || '').toLowerCase();
+      let s = 0;
+      for (const t of terms) {
+        if (fieldHay.includes(t)) s += 2;
+        else if (bioHay.includes(t)) s += 1;
+      }
+      if (s > 0) scored.push({ p, s });
+    }
+    scored.sort((a, b) => b.s - a.s).slice(0, want - out.length).forEach((x) => add(x.p));
   }
-  scored.sort((a, b) => b.s - a.s).slice(0, want - out.length).forEach((x) => add(x.p));
 
   return out.slice(0, want);
 }
@@ -1236,7 +1260,7 @@ const VOICE_KINDS = {
   found: 'The matcher found people. Talk like a friend who just found them a lead, not like a search engine: warm, short, one or two sentences max. Mention how many in passing, point at why they are worth a look, and let the cards do the bragging. Never say "I picked them for a reason", never say "the profile line, not my opinion", never sound like a receipt.',
   close: 'Nobody matched their words exactly, but adjacent people are worth a look. Say it cheerfully and never as an apology - "close enough to be useful" is a normal answer, not a failure.',
   none: 'The matcher found nobody. Say it like a friend breaking mild news, zero ceremony: they are just not on LINKUP yet, no blame, no stat about how many profiles you read. Then ask, in one easy line, whether you should go outside the network and look on LinkedIn for them. Make the question sound like a favour you actually want to do, not a form.',
-  person: 'They asked for a human by name and you found them. Hand the name over quickly, like a friend who already knew where they were. No ceremony, and never "I am happy to inform you".',
+  person: 'They asked for a human by name and you found them. Say it in one or two complete sentences - who they are and what they do - like a friend who already knew where they were. Never output a bare "Name. Role." fragment, and never "I am happy to inform you". If the dossier says the intro cannot go ahead, say why in one plain line and do not sound sorry about it.',
   ambiguous: 'More than one member could be who they mean. Ask which one in one short line that contains both names. Admitting the doubt is charming here; guessing is not.',
   draft: 'Write the message they should send. It must sound like a person wrote it two minutes ago: specific, warm, easy to answer, no flattery padding, no "I hope this finds you well".',
   check: 'They are thinking out loud, not ordering a search. Respond to the actual thought first - one honest observation, a small challenge if the thought deserves one, no flattery - then ask, in one line, whether you should look for people. Do NOT list anybody, do not pretend you searched, and do not sound like a menu. Two sentences then the question.',
@@ -1356,7 +1380,7 @@ function plainReply(kind, d = {}) {
       const f = d.found || d.person || {};
       const label = [f.role, f.city].filter(Boolean).join('  ');
       if (d.already_connected) return `You and ${f.name} are already connected - your chat is in Messages.`;
-      if (d.cannot_introduce_because) return `${f.name} - ${label || 'on LINKUP'} - is on LINKUP. ${cap1(d.cannot_introduce_because)} so I did not push a request. Their profile is one tap away.`;
+      if (d.cannot_introduce_because) return `${f.name} - ${label || 'on LINKUP'} - is on LINKUP. ${cap1(d.cannot_introduce_because)} so I did not push a request.`;
       return `${f.name} - ${label || 'LINKUP member'} - is on LINKUP. I found them by name.${d.channel && d.channel !== 'app' ? '  Reply meet 1 and I will ask them for you.' : '  Hit Meet and I will ask them for you.'}`;
     }
     case 'ambiguous': return `I have ${(d.people || []).length} members who could be who you mean: ${(d.people || []).map((x) => x.name).join('   ')}. Which one?`;
@@ -1368,7 +1392,7 @@ function plainReply(kind, d = {}) {
         'Noted - nothing to find and nobody to impress. How is the work treating you?',
         'haha. Say the word when you want names, until then I am good company.',
       ];
-      const first = text(d.name, 24);
+      const first = firstName(d.name || '');
       // the streak is in the rotation so two fallback lines in a row differ
       const pick = lines[(hash32(String(d.seed || '')) + Number(d.streak || 0)) % lines.length];
       return first ? `${first} - ${pick}` : pick;
@@ -2087,7 +2111,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     const matchId = [uid, facts.uid].sort().join('_');
     const already = await db().collection('matches').doc(matchId).get().catch(() => null);
     const connected = !!(already && already.exists);
-    const person = { name: facts.name, role: facts.role, city: [facts.city, facts.country].filter(Boolean).join(', ') };
+    const person = { name: facts.name, role: facts.role, city: [facts.city, facts.country].filter(Boolean).join(', '), url: `${APP_URL}/profile/${encodeURIComponent(facts.uid)}` };
     let cards = [];
     let cardIds = [];
     if (!blocked && !connected) {
@@ -2114,12 +2138,22 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
         : cards.length ? 'a card is ready and Linky asks permission before anything is sent' : '',
     }, { name: me.name, source, seed: `person:${facts.uid}:${uid}:${!!blocked}:${connected}:${wantsSend && !!cards.length ? 'send' : 'find'}`, fallback: plainReply('person', { person }) });
     const reply = wantsSend && cards.length && !/meet/i.test(saidPerson) ? `${saidPerson.replace(/[.\s]*$/, '.')}${howTo}` : saidPerson;
-    const thread = await sayBack(id, reply, { kind: 'person', cardIds });
+    // On a bot "their profile is one tap away" is a lie unless the link is here,
+    // so a name lookup always leaves the real profile URL, and when the intro was
+    // blocked the one line that unlocks it rides along too.
+    let finalReply = reply;
+    if (blocked) {
+      const unlock = /skip/i.test(blocked) && !/unskip/i.test(reply) ? `\n\nSay unskip ${firstName(facts.name)} and they are back.` : '';
+      finalReply = `${reply.replace(/[.\s]*$/, '.')}${unlock}${/\bhttps?:\/\//.test(reply) ? '' : `\n${person.url}`}`;
+    } else if (!cards.length) {
+      finalReply = /\bhttps?:\/\//.test(reply) ? reply : `${reply.replace(/[.\s]*$/, '.')}\n${person.url}`;
+    }
+    const thread = await sayBack(id, finalReply, { kind: 'person', cardIds });
     const foundNearest = [{ uid: facts.uid, name: person.name, pic: facts.pic, role: person.role, city: person.city }];
-    const record = { id, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply, cardIds, none: !cards.length, nearest: blocked || connected ? foundNearest : [], checked: ctx.candidates.length, usedAi: false, expansion: 'none', source, kind: 'person', createdAt: now };
+    const record = { id, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply: finalReply, cardIds, none: false, nearest: blocked || connected ? foundNearest : [], checked: ctx.candidates.length, usedAi: false, expansion: 'none', source, kind: 'person', createdAt: now };
     await patchState(uid, { lastAsk: record, chitStreak: 0, recentAsks: [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])].filter((a) => a && a.norm !== q.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5) });
     const history = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
-    history.push({ id, need: q.need, cards: cards.length, none: !cards.length, source, createdAt: now });
+    history.push({ id, need: q.need, cards: cards.length, none: false, source, createdAt: now });
     await patchState(uid, { askHistory: history });
     return { ...publicAsk(record), cards, cached: false, usedAi: false, kind: 'person', matchId: connected ? matchId : '', blocked: blocked || '', free: true, asksLeft: asksLeft(), suggest: cards.length ? ['meet 1', 'who else do you have', 'write me a first message'] : ['search outside LINKUP', 'try a role instead'], thread };
   }
