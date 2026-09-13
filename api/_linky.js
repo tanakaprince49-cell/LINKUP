@@ -658,7 +658,7 @@ export function parseAsk(message) {
   // "give me their LinkedIn profiles" is a request for the open-web lookup, not
   // for a drafted message. DRAFT_RX sees the words "give me" and would have
   // handed back a message to the top match; the LinkedIn signal outranks it.
-  const linkedinLookup = /linked\s?in/i.test(all) && /\b(profile|profiles|people|person|them|their|search|look|find|links?)\b/i.test(all);
+  const linkedinLookup = /linked\s?in/i.test(all) && /\b(on|profile|profiles|people|person|them|their|search|look|find|links?)\b/i.test(all);
   return {
     need, offer, location, remote, tokens: kws, expanded: expandTerms(raw), norm: raw.slice().sort().join(' '),
     // same rule for the name lookup itself, so "cards" is not a phantom person
@@ -1965,10 +1965,12 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // what the word lists would have decided, for the case where no model answered
   const regexMode = (q.chitChat || q.smallTalk || q.bare || !q.tokens.length) && !wantsElseNow ? 'chat'
     : q.reflective && !q.command && !wantsElseNow ? 'ask_first' : 'search';
-  // The model's read wins - except on the two things a word list can see for
-  // certain: a "yes" to the question he just asked, and "who else", which is a
-  // request to keep searching and must never be talked out of.
-  const mode = answeringYes || wantsElseNow ? 'search' : (gate?.mode || regexMode);
+  // The model's read wins - except on the three things a word list can see for
+  // certain: a "yes" to the question he just asked, "who else", and a message
+  // that is just somebody's name. A name is a directory lookup, never small
+  // talk - the gate would happily chat "thapelo" away.
+  const nameLookupNow = !!q.nameQuery && !q.chitChat && !q.smallTalk && !q.bare;
+  const mode = answeringYes || wantsElseNow || nameLookupNow ? 'search' : (gate?.mode || regexMode);
 
   // ---- 1a-ii. a direct answer to the question Linky asked.
   if (pendingIntent && (answeringYes || answeringNo)) {

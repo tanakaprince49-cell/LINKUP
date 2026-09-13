@@ -304,6 +304,16 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
   if (cmd === 'forget') { await forget(uid); return { text: 'Forgotten - cards deleted - what you told me cleared - chat unlinked.' }; }
 
   const numbered = async () => orderedCards(await loadCards(uid), await loadState(uid)).slice(0, 5);
+  // The list Linky last put in front of the member: the directory rows from a
+  // find, or the cards from the last ask - whichever is newer. A number or a
+  // name in the next message points at one of these - it is not a new search.
+  const lastShown = async () => {
+    const st = await loadState(uid);
+    const findAt = (st.lastFind && Array.isArray(st.lastFind.rows) && st.lastFind.rows.length) ? Number(st.lastFind.at || 0) : 0;
+    const askAt = st.lastAsk ? Number(st.lastAsk.createdAt || 0) : 0;
+    if (findAt > askAt && Date.now() - findAt < 45 * 60 * 1000) return { rows: st.lastFind.rows, cards: [] };
+    return { rows: [], cards: await numbered() };
+  };
 
   if (cmd === 'brief' || cmd === 'cards' || cmd === 'today') {
     const cards = await numbered();
@@ -404,21 +414,68 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
     } catch (err) { return { text: memberError(err, 'That did not work.') }; }
   }
 
-  // ---- card decisions by number
-  if (/^(meet|skip|save)\b/.test(cmd)) {
+  // ---- point at the list Linky just showed: "5", "meet 5", "i want to meet 5",
+  // or a name from it. Works for cards from an ask and for the directory rows
+  // from a find - the number or the name is the pointer, not a new search.
+  const shown = await lastShown();
+  const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const firstOf = (s) => { const w = normName(s).split(' '); return w[0] || ''; };
+  const nameLike = (a, b) => {
+    const x = normName(a); const y = normName(b);
+    if (!x || !y) return false;
+    if (x === y) return true;
+    const xf = firstOf(x); const yf = firstOf(y);
+    return xf.length > 2 && xf === yf;
+  };
+  const meetCard = async (card) => {
+    const r = await meet(uid, card.id, { userDoc: user });
+    if (r.matchId) return { text: `You are already connected with ${card.targetName}. Chat: ${APP_URL}/chat/${r.matchId}` };
+    if (r.awaitingThem || r.pending) return { text: `You already asked ${card.targetName}. I will tell you the moment they answer.` };
+    if (!r.needsApproval) return { text: `Asked ${card.targetName}.${r.meetsLeft != null ? `  ${r.meetsLeft} Meets left today.` : ''}` };
+    // Nothing reaches the other person until this member says so - on the bot
+    // that "yes" is one button, and "edit ..." lets them rewrite it in place.
+    return { text: draftText(r), buttons: approveButtons(card.id), chips: ['send', 'cancel'] };
+  };
+  const meetRow = async (row) => {
+    const existing = await loadCards(uid);
+    const card = existing.find((c) => c.targetUid === row.uid) || (await pickPerson(uid, row.uid));
+    return meetCard(card);
+  };
+  const meetNth = async (n) => {
+    if (shown.rows.length) {
+      const row = shown.rows[n - 1];
+      if (!row?.uid) return { text: `There is no ${n} on that list. Ask me who you need and I will go look.` };
+      try { return await meetRow(row); } catch (err) { return { text: `${row.name} - ${memberError(err, 'that one did not work out.')}` }; }
+    }
+    const card = shown.cards[n - 1];
+    if (!card) return { text: `There is no card ${n}. Say cards to see them.` };
+    try { return await meetCard(card); } catch (err) { return { text: memberError(err, 'That did not work.') }; }
+  };
+  const bareNum = /^\d{1,2}$/.test(cmd.trim());
+  const bareMeet = /^meet\s*$/i.test(cmd.trim());
+  const meetNumM = cmd.match(/^(?:meet(?:\s+(?:with|up\s+with))?|i\s+(?:want|wanna)\s+(?:to\s+)?meet|want\s+to\s+meet|connect\s+me\s+(?:to|with)|connect\s+with|introduce\s+me\s+to|introduce\s+to|intro\s+me\s+to|intro\s+to)\s+(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?\s*$/i);
+  if ((bareNum || bareMeet || meetNumM) && (shown.rows.length || shown.cards.length)) {
+    return await meetNth(bareNum ? Number(cmd.trim()) : (meetNumM ? Number(meetNumM[1]) : 1));
+  }
+  // a name from the list, typed instead of a number - "thapelo"
+  const nameAsked = cmd.replace(/^(?:meet(?:\s+(?:with|up\s+with))?|connect\s+me\s+(?:to|with)|connect\s+with|introduce\s+me\s+to|introduce\s+to|intro\s+me\s+to|intro\s+to|skip|save|find|show|pick|choose|i\s+(?:want|wanna)\s+(?:to\s+)?(?:meet|pick|choose))\s+/i, '').trim();
+  if (nameAsked && !/\d/.test(nameAsked) && nameAsked.split(/\s+/).length <= 3 && (shown.rows.length || shown.cards.length)) {
+    const row = shown.rows.find((r) => nameLike(r.name, nameAsked));
+    if (row?.uid) {
+      try { return await meetRow(row); } catch (err) { return { text: `${row.name} - ${memberError(err, 'that one did not work out.')}` }; }
+    }
+    const card = shown.cards.find((c) => nameLike(c.targetName, nameAsked));
+    if (card) {
+      try { return await meetCard(card); } catch (err) { return { text: memberError(err, 'That did not work.') }; }
+    }
+  }
+
+  // ---- skip / save by number (cards only - a directory row has no card yet)
+  if (/^(skip|save)\b/.test(cmd)) {
     const cards = await numbered();
     const card = cards[num(cmd) - 1];
     if (!card) return { text: 'No card with that number. Say cards to see them.' };
     try {
-      if (cmd.startsWith('meet')) {
-        const r = await meet(uid, card.id, { userDoc: user });
-        if (r.matchId) return { text: `You are already connected with ${card.targetName}. Chat: ${APP_URL}/chat/${r.matchId}` };
-        if (r.awaitingThem || r.pending) return { text: `You already asked ${card.targetName}. I will tell you the moment they answer.` };
-        if (!r.needsApproval) return { text: `Asked ${card.targetName}.${r.meetsLeft != null ? `  ${r.meetsLeft} Meets left today.` : ''}` };
-        // Nothing reaches the other person until this member says so - on the bot
-        // that "yes" is one button, and "edit ..." lets them rewrite it in place.
-        return { text: draftText(r), buttons: approveButtons(card.id), chips: ['send', 'cancel'] };
-      }
       await setCardStatus(uid, card.id, cmd.startsWith('skip') ? 'skip' : 'saved');
       return { text: cmd.startsWith('skip') ? `Skipped ${card.targetName}.` : `Saved ${card.targetName}.` };
     } catch (err) {
@@ -458,6 +515,21 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
     const rest = raw.replace(/^\/?(find|people|members|profiles)\b[:\s,-]*/i, '').trim();
     if (!rest) return { text: 'Who are you looking for on LINKUP? Try find fred for a name or @username. Or find flutter dev for a role or skill.' };
     try {
+      // "find a sales manager on linkedin" is the open-web lookup, not a directory
+      // read of LINKUP members - the word linkedin is the whole signal. Strip it
+      // and run the same outside search the miss path uses.
+      if (/linked\s?in/i.test(cmd)) {
+        const need = rest.replace(/linked\s?in/gi, ' ').replace(/\s+(?:on|from|for|via)$/i, '').replace(/^(?:a|an|the)\s+/, '').trim() || rest;
+        try {
+          const r = await pointers(uid, need, { userDoc: user, allowSearch: true, assumeKnown: true });
+          if ((r.leads || []).length) {
+            return { text: pointerText(r), buttons: leadsKeyboard(r.leads), chips: ['draft 1', 'not interested 1'], reaction: reactionFor('outside') };
+          }
+          return { text: pointerText(r), chips: ['ask something else', 'help'], reaction: reactionFor('outside') };
+        } catch (err) {
+          return { text: memberError(err, 'That did not work.') };
+        }
+      }
       const rows = await pullProfiles(rest, { meUid: uid, limit: 5 });
       if (!rows.length) {
         // Nobody on LINKUP has that name or role -> use the same words on the
@@ -476,8 +548,12 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
       const listTxt = rows
         .map((r, i) => `${i + 1}. ${r.name}${r.role ? ` - ${r.role}` : ''}${r.city ? ` - ${r.city}` : ''}${r.plus ? '  ⚡PLUS' : ''}\n   ${r.link}`)
         .join('\n\n');
+      // Remember who was just shown, so a number or a name points at it next.
+      await patchState(uid, {
+        lastFind: { rows: rows.map((r) => ({ uid: r.uid, name: r.name, role: r.role, city: r.city })), need: rest, at: Date.now() },
+      }).catch(() => {});
       return {
-        text: `Found ${rows.length} ${rows.length === 1 ? 'person' : 'people'} on LINKUP:\n\n${listTxt}\n\nReply meet 1 or 2 and I will ask them for you.`,
+        text: `Found ${rows.length} ${rows.length === 1 ? 'person' : 'people'} on LINKUP:\n\n${listTxt}\n\nReply meet 1 or the name and I will ask them for you.`,
         chips: rows.slice(0, 3).map((r) => r.name.split(' ')[0]),
         reaction: reactionFor('found'),
       };
