@@ -301,7 +301,7 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
   }
   if (last?.kind === 'ambiguous' && /^\d{1,2}$/.test(cmd.trim())) return { text: 'I lost that one. Say cards and pick by name - or ask again.' };
   if (cmd === 'unlink') { await unlinkBot(channel, chatId); return { text: 'Unlinked. Your LINKUP account is untouched.' }; }
-  if (cmd === 'forget') { await forget(uid); return { text: 'Forgotten - cards deleted - what you told me cleared - chat unlinked.' }; }
+  if (cmd === 'forget') { await forget(uid); return { text: 'Linky recommendations and notes deleted; linked chat disconnected. Your message allowance is not reset.' }; }
 
   const numbered = async () => orderedCards(await loadCards(uid), await loadState(uid)).slice(0, 5);
   // The list Linky last put in front of the member: the directory rows from a
@@ -334,8 +334,8 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
     const line = (label, value) => (value ? `${label}: ${value}\n` : '');
     const top = (a.asks || []).slice(0, 3).map((x) => `  - ${x.need} - ${x.none ? 'nobody yet' : `${x.cards} cards`}`).join('\n');
     return {
-      text: `Here is everything I have on you.\n\n${line('Role', a.facts.role)}${line('Company', a.facts.company)}${line('City', a.facts.city)}${line('Skills', (a.facts.skills || []).slice(0, 6).join('   '))}${line('Open to', a.signals.openTo.map(offerLabel).join('   '))}${line('Your notes', (a.told.notes || '').slice(0, 180))}Used today: ${a.signals.asksUsedToday} of ${a.signals.plus ? LIMITS.plus.asksPerDay : LIMITS.free.asksPerDay} searches - ${a.signals.meetsUsedToday} Meets\nLooking someone up by name is free.
-Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n${top ? `Last asks:\n${top}` : 'No asks yet.'}\n\nSay forget any time and I delete all of it.`,
+      text: `Here is everything I have on you.\n\n${line('Role', a.facts.role)}${line('Company', a.facts.company)}${line('City', a.facts.city)}${line('Skills', (a.facts.skills || []).slice(0, 6).join('   '))}${line('Open to', a.signals.openTo.map(offerLabel).join('   '))}${line('Your notes', (a.told.notes || '').slice(0, 180))}Linky messages used ${a.signals.messageQuota.period === 'month' ? 'this month' : 'today'}: ${a.signals.messageQuota.used} of ${a.signals.messageQuota.limit} - ${a.signals.meetsUsedToday} Meets today.\nAll messages count toward your allowance.
+Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n${top ? `Last asks:\n${top}` : 'No asks yet.'}\n\nSay forget to remove Linky notes, cards, and linked-chat details. Your message allowance is not reset.`,
     };
   }
   // "draft" is a real intent the app has; on the bot it drafted nothing and simply
@@ -987,6 +987,11 @@ async function handleApp(req, res) {
     res.status(200).json(out);
   } catch (err) {
     const message = memberError(err, 'Linky hit a snag - say that again and I will have another go.');
+    if (err?.code === 'ask_limit' && err.messageQuota) {
+      setCors(res);
+      res.status(402).json({ error: message, code: err.code, messageQuota: err.messageQuota, upgradeRequired: err.messageQuota.upgradeRequired });
+      return;
+    }
     sendError(res, err?.code === 'ask_limit' || err?.code === 'meet_limit' ? 402 : 400, message, message);
   }
 }

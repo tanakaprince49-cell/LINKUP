@@ -12,6 +12,7 @@ import * as ExpoLinking from 'expo-linking';
 import * as Icons from 'lucide-react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ErrorBoundary from './src/components/ErrorBoundary';
+import AndroidReviewPrompt from './src/components/AndroidReviewPrompt';
 
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
@@ -423,6 +424,7 @@ function AppContent() {
   const isDark = theme === 'dark';
   const online = useOnlineStatus();
   const [offlineRetry, setOfflineRetry] = React.useState(0);
+  const [activeReviewRoute, setActiveReviewRoute] = React.useState<string>();
   const webPathname =
     Platform.OS === 'web' ? webRoutePath() : '';
   const isPublicSharedWebPath =
@@ -666,10 +668,16 @@ function AppContent() {
       linking={linking}
       theme={navTheme}
       documentTitle={{ enabled: false }}
-      onReady={() => syncWebMetadata(navigationRef.getCurrentRoute()?.name)}
+      onReady={() => {
+        const route = navigationRef.getCurrentRoute()?.name;
+        syncWebMetadata(route);
+        setActiveReviewRoute(route);
+      }}
       onStateChange={() => {
         blurActiveElementOnWeb();
-        syncWebMetadata(navigationRef.getCurrentRoute()?.name);
+        const route = navigationRef.getCurrentRoute()?.name;
+        syncWebMetadata(route);
+        setActiveReviewRoute(route);
       }}
     >
       <Stack.Navigator
@@ -746,6 +754,7 @@ function AppContent() {
           <PWAInstallPrompt />
         </>
       ) : null}
+      <AndroidReviewPrompt userId={user?.uid} ready={!loading && isOnboarded && online} routeName={activeReviewRoute} />
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </NavigationContainer>
   );

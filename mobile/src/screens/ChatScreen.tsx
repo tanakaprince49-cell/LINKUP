@@ -1,3 +1,4 @@
+import { recordReviewAction } from '../lib/appReview';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal, Pressable, ScrollView, Linking, ActivityIndicator, Animated, PanResponder } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -578,6 +579,7 @@ export default function ChatScreen({ route, navigation }: any) {
         ...replyPayload,
       });
 
+      void recordReviewAction(user.uid);
       const recipientId = otherUserId || otherUser?.uid;
       const matchPatch: Record<string, unknown> = {
         lastMessage: text,
@@ -687,6 +689,7 @@ export default function ChatScreen({ route, navigation }: any) {
         ...replyPayload,
       });
 
+      void recordReviewAction(user.uid);
       const recipientId = otherUserId || otherUser?.uid;
       const lastMessage = caption || (mediaKind === 'video' ? 'Sent a video' : 'Sent a photo');
       const matchPatch: Record<string, unknown> = {

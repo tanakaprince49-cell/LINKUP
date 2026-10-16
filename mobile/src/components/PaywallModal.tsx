@@ -1,3 +1,4 @@
+import { blockAppReviews } from '../lib/appReview';
 import React from 'react';
 import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { finishTransaction, getAvailablePurchases, type Purchase, useIAP } from 'expo-iap';
@@ -45,7 +46,7 @@ const PRO_PERKS = [
   '60 Linky messages a day & unlimited Meets',
   "Profile viewer insights — review available names and professional profiles",
   'Advanced search, AI ranking & saved search alerts',
-  'Unlimited AI warm intros & Linky assistant',
+  'AI-assisted introductions & Linky networking tools',
   'Turbo Connect visibility boost in Discover & search',
   'Verified blue check + PLUS crown',
   'Unlimited Startup Analyzer, idea deck & weekly picks',
@@ -99,6 +100,10 @@ export default function PaywallModal({
   onRestore,
   restoreDisabled = false,
 }: PaywallModalProps) {
+  React.useEffect(() => {
+    if (!visible) return;
+    return blockAppReviews();
+  }, [visible]);
   const { user, profile, updateLocalProfile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -465,7 +470,7 @@ export default function PaywallModal({
 
             <Text style={[styles.title, { color: textColor(isDark) }]}>Expand your professional networking tools</Text>
             <Text style={[styles.copy, { color: textColor(isDark, 'secondary') }]}>
-              {description || 'Free members can explore a limited number of builders every 12 hours. LINKUP PLUS unlocks unlimited discovery, smarter AI recommendations, and premium tools to help you find the right co-founder, developer, designer, or investor faster.'}
+              {description || 'Free members receive 10 Linky messages per calendar month and limited professional discovery every 12 hours. LINKUP PLUS unlocks unlimited discovery, smarter AI recommendations, and premium tools to help you find the right co-founder, developer, designer, or investor faster.'}
             </Text>
             <View style={[styles.featurePill, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}> 
               <Text style={[styles.feature, { color: textColor(isDark) }]}>{feature}</Text>

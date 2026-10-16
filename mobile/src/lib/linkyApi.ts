@@ -139,6 +139,8 @@ export type LinkyOutreachEntry = {
 };
 
 export type LinkyAskResult = LinkyAsk & {
+  messageQuota?: LinkyMessageQuota;
+  upgradeRequired?: boolean;
   cards: LinkyCard[];
   cached: boolean;
   usedAi?: boolean;
@@ -199,10 +201,16 @@ export type LinkyBrief = {
   usedAi?: boolean;
 };
 
+export type LinkyMessageQuota = {
+  period: 'day' | 'month'; periodKey: string; limit: number; used: number;
+  remaining: number; resetAt: string; exhausted: boolean; upgradeRequired: boolean;
+};
+
 export type LinkyHome = {
   name: string;
   plus: boolean;
-  limits: { meetsPerDay: number | null; meetsUsedToday: number; asksPerDay: number; asksUsedToday: number; asksResetAt?: string };
+  messageQuota?: LinkyMessageQuota;
+  limits: { meetsPerDay: number | null; meetsUsedToday: number; asksPerDay: number; asksUsedToday: number; asksPeriod?: 'day' | 'month'; asksPerMonth?: number | null; asksUsedThisMonth?: number | null; asksResetAt?: string };
   cards: LinkyCard[];
   inbound: LinkyIntro[];
   sent: LinkyIntro[];
@@ -236,9 +244,11 @@ export type LinkyAudit = {
 
 export class LinkyApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  messageQuota?: LinkyMessageQuota;
+  constructor(message: string, status: number, messageQuota?: LinkyMessageQuota) {
     super(message);
     this.status = status;
+    this.messageQuota = messageQuota;
   }
 }
 
@@ -254,7 +264,7 @@ export async function linkyCall<T = any>(action: string, payload: Record<string,
     body: JSON.stringify({ action, ...payload }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new LinkyApiError(String(data?.error || `Linky is unavailable (${res.status}).`), res.status);
+  if (!res.ok) throw new LinkyApiError(String(data?.error || `Linky is unavailable (${res.status}).`), res.status, data?.messageQuota);
   return data as T;
 }
 

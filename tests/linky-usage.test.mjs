@@ -1,0 +1,175 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import crypto from 'node:crypto';
+import ts from '../mobile/node_modules/typescript/lib/typescript.js';
+import * as usage from '../api/_linkyUsage.js';
+const read = (file) => fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+const DELETE = '__DELETE_FIELD__';
+class Database {
+  rows = new Map(); queue = Promise.resolve(); failStateWrites = false; failLedger = false;
+  snapshot(path) { return { exists: this.rows.has(path), data: () => structuredClone(this.rows.get(path)), get: (field) => this.rows.get(path)?.[field] }; }
+  write(path, value, merge) {
+    if (this.failStateWrites && path.startsWith('linkyState/')) throw Error('state unavailable');
+    const next = merge ? { ...this.rows.get(path), ...value } : { ...value };
+    for (const key of Object.keys(next)) if (next[key] === DELETE) delete next[key];
+    this.rows.set(path, structuredClone(next));
+  }
+  collection(name) {
+    const db = this;
+    const q = { where: () => q, limit: () => q, orderBy: () => q, get: async () => ({ docs: [], size: 0 }), doc(id) {
+      const path = `${name}/${id}`;
+      return { path, get: async () => db.snapshot(path), set: async (value, options) => db.write(path, value, options?.merge), delete: async () => db.rows.delete(path) };
+    } };
+    return q;
+  }
+  runTransaction(work) {
+    const result = this.queue.then(async () => {
+      if (this.failLedger) throw Error('ledger unavailable');
+      const writes = [];
+      const value = await work({ get: async (ref) => this.snapshot(ref.path), set: (ref, data, options) => writes.push([ref.path, data, options?.merge]) });
+      writes.forEach((args) => this.write(...args)); return value;
+    });
+    this.queue = result.catch(() => undefined); return result;
+  }
+  batch() {
+    const db = this, writes = [];
+    return { set: (ref, data, options) => writes.push(() => db.write(ref.path, data, options?.merge)), delete: (ref) => writes.push(() => db.rows.delete(ref.path)), commit: async () => writes.forEach((fn) => fn()) };
+  }
+}
+function core(database) {
+  const module = { exports: {} }; let aiCalls = 0;
+  const mocks = {
+    'node:crypto': crypto, './_linkyUsage.js': usage,
+    './_firebaseAdmin.js': { getDb: () => database, getAdmin: () => ({ firestore: { FieldValue: { delete: () => DELETE, serverTimestamp: () => Date.now() } } }) },
+    './_gemini.js': { aiReady: () => false, geminiText: () => { aiCalls++; throw Error('unexpected AI call'); } },
+    './_serpapi.js': {}, './_proof.js': {},
+  };
+  const code = ts.transpileModule(read('api/_linky.js'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+  vm.runInNewContext(code, { module, exports: module.exports, require: (name) => { assert.ok(name in mocks, name); return mocks[name]; }, console, process: { env: {} }, Date, Set, Map, URL, Buffer, setTimeout, clearTimeout });
+  return { ...module.exports, aiCalls: () => aiCalls };
+}
+const october = Date.parse('2026-10-16T12:00:00Z');
+const member = { uid: 'member', displayName: 'Member', occupation: 'Founder', skills: ['React'], onboarded: true };
+
+test('free allowance is exactly 10 per UTC calendar month, including year and leap-year boundaries', () => {
+  assert.equal(usage.messageQuota({}, { now: october }).limit, 10);
+  assert.equal(usage.nextResetAt(false, Date.parse('2026-12-31T23:59:59Z')), '2027-01-01T00:00:00.000Z');
+  assert.equal(usage.nextResetAt(false, Date.parse('2028-02-29T23:59:59Z')), '2028-03-01T00:00:00.000Z');
+  assert.equal(usage.monthKey(Date.parse('2026-11-01T01:00:00+02:00')), '2026-10');
+});
+
+test('tenth reservation signals immediate paywall and eleventh cannot spend or invoke an answer', async () => {
+  const db = new Database(); let quota;
+  for (let i = 0; i < 10; i++) quota = await usage.reserveMessage(db, 'member', { now: october });
+  assert.equal(quota.remaining, 0); assert.equal(quota.upgradeRequired, true);
+  await assert.rejects(usage.reserveMessage(db, 'member', { now: october }), (e) => e.code === 'ask_limit' && e.messageQuota.used === 10);
+  assert.equal(db.rows.get('linkyUsage/member').month.count, 10);
+});
+
+test('simultaneous requests share a single transactional monthly allowance', async () => {
+  const db = new Database();
+  const results = await Promise.allSettled(Array.from({ length: 30 }, () => usage.reserveMessage(db, 'member', { now: october })));
+  assert.equal(results.filter((r) => r.status === 'fulfilled').length, 10);
+  assert.equal(results.filter((r) => r.status === 'rejected').length, 20);
+  assert.equal(db.rows.get('linkyUsage/member').month.count, 10);
+});
+
+test('midnight does not replenish free messages; next month does, with separate member ledgers', async () => {
+  const db = new Database();
+  for (let i = 0; i < 10; i++) await usage.reserveMessage(db, 'a', { now: october });
+  await assert.rejects(usage.reserveMessage(db, 'a', { now: october + 86_400_000 }));
+  assert.equal((await usage.reserveMessage(db, 'b', { now: october })).remaining, 9);
+  assert.equal((await usage.reserveMessage(db, 'a', { now: Date.parse('2026-11-01T00:00:00Z') })).remaining, 9);
+});
+
+test('PLUS retains 60 daily messages and migration preserves existing daily usage', async () => {
+  const db = new Database(); const options = { plus: true, now: october, legacyState: { asks: { day: '2026-10-16', count: 59 } } };
+  const quota = await usage.reserveMessage(db, 'member', options);
+  assert.equal(quota.limit, 60); assert.equal(quota.used, 60); assert.equal(quota.upgradeRequired, false);
+  await assert.rejects(usage.reserveMessage(db, 'member', options));
+  assert.equal((await usage.reserveMessage(db, 'member', { plus: true, now: october + 86_400_000 })).remaining, 59);
+});
+
+test('upgrade/downgrade does not erase exhausted free monthly use', async () => {
+  const db = new Database();
+  for (let i = 0; i < 10; i++) await usage.reserveMessage(db, 'member', { now: october });
+  assert.equal((await usage.reserveMessage(db, 'member', { plus: true, now: october })).remaining, 59);
+  await assert.rejects(usage.reserveMessage(db, 'member', { plus: false, now: october }));
+});
+
+test('failed message reservation is refundable only within its original bucket', async () => {
+  const db = new Database();
+  const quota = await usage.reserveMessage(db, 'member', { now: october });
+  await usage.refundMessage(db, 'member', quota);
+  assert.equal((await usage.readMessageQuota(db, 'member', { now: october })).used, 0);
+  const old = await usage.reserveMessage(db, 'member', { now: october });
+  await usage.reserveMessage(db, 'member', { now: Date.parse('2026-11-01T00:00:00Z') });
+  await usage.refundMessage(db, 'member', old);
+  assert.equal(db.rows.get('linkyUsage/member').month.count, 1);
+});
+
+test('real ask wrapper counts greetings from every channel, immediately signals tenth, and blocks before AI', async () => {
+  const db = new Database(); const api = core(db);
+  for (let i = 0; i < 10; i++) {
+    const out = await api.ask('member', 'hello', { userDoc: member, source: ['app', 'telegram', 'whatsapp'][i % 3] });
+    assert.equal(out.asksLeft, 9 - i); assert.equal(out.upgradeRequired, i === 9);
+  }
+  db.rows.set('linkyState/member', { pendingLoop: { at: Date.now(), introId: 'intro' } });
+  await assert.rejects(api.ask('member', 'we met', { userDoc: member }), (e) => e.code === 'ask_limit');
+  assert.equal(api.aiCalls(), 0);
+});
+
+test('clear chat and forget cannot reset the allowance ledger', async () => {
+  const db = new Database(); const api = core(db);
+  for (let i = 0; i < 10; i++) await api.ask('member', 'hello', { userDoc: member });
+  await api.clearChat('member'); await api.forget('member');
+  assert.equal(db.rows.get('linkyUsage/member').month.count, 10);
+  assert.ok(!db.rows.has('linkyState/member'));
+  await assert.rejects(api.ask('member', 'hello', { userDoc: member }), (e) => e.code === 'ask_limit');
+});
+
+test('real wrapper fails closed on ledger failure and refunds failed processing', async () => {
+  const db = new Database(); const api = core(db);
+  db.failLedger = true;
+  await assert.rejects(api.ask('member', 'hello', { userDoc: member }), /ledger unavailable/);
+  assert.ok(!db.rows.has('linkyState/member'));
+  db.failLedger = false; db.failStateWrites = true;
+  await assert.rejects(api.ask('member', 'hello', { userDoc: member }), /state unavailable/);
+  assert.equal(db.rows.get('linkyUsage/member').month.count, 0);
+});
+
+test('home publishes monthly allowance and legacy aliases without reading user-editable counters', async () => {
+  const db = new Database(); const api = core(db);
+  await usage.reserveMessage(db, 'member', { now: Date.now() });
+  const home = await api.home('member', { userDoc: member });
+  assert.equal(home.messageQuota.period, 'month'); assert.equal(home.messageQuota.used, 1);
+  assert.equal(home.limits.asksPerDay, 10); assert.equal(home.limits.asksUsedToday, 1);
+  assert.equal(home.limits.asksPeriod, 'month');
+});
+
+test('client opens paywall from exhaustion state and guards further sends, not just a failed eleventh request', () => {
+  const source = read('mobile/src/screens/LinkyHomeScreen.tsx');
+  assert.match(source, /quota\?\.upgradeRequired/); assert.match(source, /setPaywall\(FREE_LINKY_LIMIT_MESSAGE\)/);
+  assert.ok(source.indexOf('if (atMessageLimit &&') < source.indexOf('const out = await linkyAsk(msg)'));
+  assert.match(read('firestore.rules'), /match \/linkyUsage\/\{userId\}\s*\{\s*allow read, write: if false;/);
+});
+
+test('authenticated app API returns structured 402 quota data without losing the upgrade signal', async () => {
+  const db = new Database(); const api = core(db);
+  db.rows.set('users/member', member);
+  for (let i = 0; i < 10; i++) await usage.reserveMessage(db, 'member', { now: Date.now() });
+  const module = { exports: {} };
+  const mocks = {
+    'node:crypto': crypto, './_linky.js': api, './_proof.js': {},
+    './_firebaseAdmin.js': { getDb: () => db, verifyRequestUser: async () => ({ uid: 'member' }) },
+    './_gemini.js': { handleOptions: () => false, readJsonBody: (req) => req.body, setCors: () => {}, sendError: (res, code, message) => res.status(code).json({ error: message }) },
+  };
+  const code = ts.transpileModule(read('api/linky.js'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+  vm.runInNewContext(code, { module, exports: module.exports, require: (name) => { assert.ok(name in mocks, name); return mocks[name]; }, process: { env: {} }, console, Date, Buffer, Set, Map });
+  const response = { status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+  await module.exports.default({ method: 'POST', query: {}, body: { action: 'ask', message: 'hello' }, headers: {} }, response);
+  assert.equal(response.code, 402); assert.equal(response.body.code, 'ask_limit');
+  assert.equal(response.body.messageQuota.period, 'month'); assert.equal(response.body.upgradeRequired, true);
+});

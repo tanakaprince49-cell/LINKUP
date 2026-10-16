@@ -16,18 +16,17 @@
 //   botUsers/{channel_chat} Telegram / WhatsApp chat -> uid
 //   botLinks/{code}         short-lived codes that link a chat to an account
 import crypto from 'node:crypto';
+import { MESSAGE_LIMITS, reserveMessage, refundMessage, readMessageQuota } from './_linkyUsage.js';
 import { getAdmin, getDb } from './_firebaseAdmin.js';
 import { aiReady, aiStatus, aiText, geminiText, localRank, compactProfile } from './_gemini.js';
 import { findLeads, outreachDraft } from './_serpapi.js';
 import { proofPoints, proofFromSnippet, badgeLine } from './_proof.js';
 
 export const LIMITS = {
-  // Five real searches a day on the free plan, and they are the SAME budget on
-  // every surface: an ask typed in the app and an ask typed at the Telegram bot
-  // both burn one of the five, so nobody farms extra searches by switching channel.
-  // Looking someone up by name, chit-chat, drafting and the limit reply are free.
-  free: { asksPerDay: 5, meetsPerDay: 2 },
-  plus: { asksPerDay: 60, meetsPerDay: 100000 },
+  // All member messages count, including greetings, drafts and follow-up replies.
+  // Free: one shared UTC calendar-month allowance across every channel.
+  free: { asksPerMonth: MESSAGE_LIMITS.freePerMonth, meetsPerDay: 2 },
+  plus: { asksPerDay: MESSAGE_LIMITS.plusPerDay, meetsPerDay: 100000 },
   inboundPerWeek: 5,
   introDays: 7,
   snoozeDays: 14,
@@ -1433,7 +1432,7 @@ function plainReply(kind, d = {}) {
       return `A squad - not three searches.\n${squads.map(one).join('\n')}${d.channel && d.channel !== 'app' ? '\n\nReply meet squad and I will ask all of them at once - each one still gets to say yes.' : '\n\nTap Meet squad and I will ask all of them at once - each one still gets to say yes.'}`;
     }
     case 'loop': return loopQuestionText((d.other_person && d.other_person.name) || 'them', d.what_the_intro_was_for, d.they_have_messaged);
-    case 'limit': return `That is today's ${d.asks_limit_today || d.limit} asks used up. It resets at ${d.resets || 'midnight'} and PLUS gets ${d.plus_asks_per_day || d.plusLimit || LIMITS.plus.asksPerDay} a day. Looking someone up by name is free either way.`;
+    case 'limit': return 'Your Linky message allowance has been used. Free accounts receive 10 messages per calendar month; PLUS includes 60 messages per day.';
     case 'draft': return d.ready_message || 'Specify the recipient and collaboration purpose. I can prepare a draft for you to review and send from your own account.';
     default: return 'Describe the professional role, skill, location, or name you want to find. I can review available profiles and explain relevant recommendations.';
   }
@@ -1816,10 +1815,25 @@ export async function intentGate(message, { offer = false, lastAsk = '', source 
 export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   const user = userDoc || (await loadUser(uid));
   if (!user) throw new Error('Finish your LINKUP profile first.');
-  const msgTyped = text(message, 600);
-  if (!msgTyped) throw new Error('Say something first.');
+  const msg = text(message, 600);
+  if (!msg) throw new Error('Say something first.');
   const now = Date.now();
   const state = await loadState(uid);
+  const plus = await isPlusUser(uid, user);
+  // Fail closed on a ledger error. Reserve BEFORE any model call or special
+  // follow-up branch, including replies to Linky's 48-hour question.
+  const quota = await reserveMessage(db(), uid, { plus, now, legacyState: state });
+  try {
+    const out = await answerAsk(uid, msg, { user, state, source, now, plus, quota });
+    return { ...out, asksLeft: quota.remaining, messageQuota: quota, upgradeRequired: quota.upgradeRequired };
+  } catch (error) {
+    await refundMessage(db(), uid, quota).catch((err) => console.error('[linky] message refund failed', err));
+    throw error;
+  }
+}
+
+async function answerAsk(uid, message, { user, state, source, now, plus, quota }) {
+  const msgTyped = message;
   // The 48-hour question, if one is open: an answer in a sentence is still an
   // answer. Only the four known outcomes take the turn over - anything else
   // carries on as the ask it actually is, and the question stays open.
@@ -1832,7 +1846,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
         { id, role: 'user', text: msgTyped, at: now },
         { id, role: 'linky', text: done.note, kind: 'chat', at: now + 1 },
       ]);
-      return { id, need: text(msgTyped, 120), reply: done.note, kind: 'chat', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: Number.MAX_SAFE_INTEGER, suggest: ['who else do you have', 'what can you do'], thread, intent: 'ai:loop', loop: done.choice };
+      return { id, need: text(msgTyped, 120), reply: done.note, kind: 'chat', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: quota.remaining, suggest: ['who else do you have', 'what can you do'], thread, intent: 'ai:loop', loop: done.choice };
     }
     // No model, no number: a sentence that is clearly not a new search is still
     // worth keeping against the intro, because "we talked on friday" typed at a
@@ -1851,34 +1865,16 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
         { id, role: 'user', text: msgTyped, at: now },
         { id, role: 'linky', text: done.note, kind: 'chat', at: now + 1 },
       ]);
-      return { id, need: text(msgTyped, 120), reply: done.note, kind: 'chat', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: Number.MAX_SAFE_INTEGER, suggest: ['met and building', 'no response yet', 'not a fit'], thread, intent: 'words:loop' };
+      return { id, need: text(msgTyped, 120), reply: done.note, kind: 'chat', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: quota.remaining, suggest: ['met and building', 'no response yet', 'not a fit'], thread, intent: 'words:loop' };
     }
   }
   // If Linky asked "want me to look?" a moment ago, "yes"/"no" are answers to
   // HIM - not a new search, and not small talk to be answered with a joke.
   const pendingIntent = state.pendingIntent && now - toMillis(state.pendingIntent.at) < 40 * 60 * 1000 ? state.pendingIntent : null;
   const saidWords = msgTyped.toLowerCase().trim().replace(/^\/+\w*\s*/, '');
-  // ---- daily message budget. Free members get 5 messages a day and EVERY
-  // message counts (a search, a greeting, a "yes"); the sixth one answers with
-  // the paywall instead of a reply, so no model call happens for it either.
   const me = profileFacts(user) || {};
-  const plus = await isPlusUser(uid, user);
-  const limits = plus ? LIMITS.plus : LIMITS.free;
-  const today = dayKey(now);
-  let used = state.asks?.day === today ? Number(state.asks.count || 0) : 0;
-  const asksLeft = (extra = 0) => Math.max(0, limits.asksPerDay - used - extra);
+  const asksLeft = () => quota.remaining;
   const newId = () => `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
-  if (used >= limits.asksPerDay) {
-    const limitReply = plus
-      ? `That is today's ${limits.asksPerDay} messages used up - it resets in ${resetInWords(now)}.`
-      : `You have exhausted your ${limits.asksPerDay} free messages today. It resets in ${resetInWords(now)}. LINKUP PLUS lifts the cap - $19.99 a month or $149.99 a year.`;
-    const err = new Error(limitReply);
-    err.code = 'ask_limit';
-    throw err;
-  }
-  // the message they just sent is the one being spent now
-  used += 1;
-  await patchState(uid, { asks: { day: today, count: used } }).catch(() => {});
 
   // only a BARE answer counts as answering him: "please find me a bookkeeper" is
   // a new instruction, and it must not be swallowed by the question before it
@@ -2045,7 +2041,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
           they_asked_what_linky_does: !!q.askedWhatYouDo,
           stop_offering_searches: streak >= 1,
           last_real_ask: state.lastAsk && state.lastAsk.need && now - toMillis(state.lastAsk.createdAt) < 3 * DAY_MS ? text(state.lastAsk.need, 120) : '',
-          asks_left_today: asksLeft(),
+          messages_remaining: asksLeft(), allowance_period: quota.period,
           member_you: { name: me.name, role: me.role, city: me.city },
           network_size: 'a few dozen visible members',
           what_linky_can_do: wantsPitch ? 'find members by role, skill, city or name; explain the match; ask someone for an intro on your behalf; search the open web when nobody fits' : '',
@@ -2253,7 +2249,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       const thread = await sayBack(askId, saidReply3, { kind: 'none', reaction: reactionFor('none') });
       const hist = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
       hist.push({ id: askId, need: q.need, cards: 0, none: true, source, createdAt: now });
-      await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used }, pendingIntent: { need: q.need, at: now, id: askId, outside: true } });
+      await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, pendingIntent: { need: q.need, at: now, id: askId, outside: true } });
       return { ...publicAsk(record), cards: [], cached: false, usedAi: false, kind: 'none', squad: true, asksLeft: asksLeft(), suggest: (NONE_CHIPS)[source === 'app' ? 'app' : 'bot'], thread };
     }
     const picks = [];
@@ -2272,14 +2268,14 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       squads: found.squads.map((sq) => ({ people: sq.members.map((m) => ({ name: m.facts.name, part: m.why })), missing: sq.missing })),
       people: resultCards.map((c) => ({ name: c.targetName, role: c.targetRole, city: c.targetCity, reason: c.why, proof: (c.badges || []).map((b) => b.label) })),
       channel: source,
-      asks_left_today: asksLeft(),
+      messages_remaining: asksLeft(), allowance_period: quota.period,
       suggest: source === 'app' ? ['meet the squad', 'who else do you have', 'search outside LINKUP'] : ['meet squad', 'who else do you have', 'more'],
     }, { name: me.name, source, seed: `squad:${q.norm}`, fallback: plainReply('squad', { squads: found.squads.map((sq) => ({ people: sq.members.map((m) => ({ name: m.facts.name, part: m.why })), missing: sq.missing })), channel: source }) });
     const record = { id: askId, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply, kind: 'squad', cardIds: resultCards.map((c) => c.id), excludedCardIds: [], none: false, nearest: [], checked: found.checked, usedAi: !!found.usedAi, expansion: 'none', source, createdAt: now, reaction: reactionFor('squad') };
     const thread = await sayBack(askId, reply, { kind: 'squad', cardIds: record.cardIds, reaction: reactionFor('squad') });
     const hist = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
     hist.push({ id: askId, need: q.need, cards: resultCards.length, none: false, source, createdAt: now });
-    await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist, asks: { day: today, count: used } });
+    await patchState(uid, { lastAsk: record, chitStreak: 0, askHistory: hist });
     return { ...publicAsk(record), cards: resultCards, cached: false, usedAi: !!found.usedAi, kind: 'squad', squad: { ids: found.squads.map((x) => x.id), slots: found.slots }, asksLeft: asksLeft(), suggest: sg2, thread };
   }
 
@@ -2320,7 +2316,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
     nobody_found_because: kind === 'none' ? 'no profile here mentions that need, its synonyms, or a related skill' : '',
     which_person_were_you_after: kind === 'none' ? followUp : '',
     remote_only_note: kind !== 'none' && q.location && !inLoc ? `nobody in ${q.location}, so these are people who would work remotely` : '',
-    asks_left_today: asksLeft(),
+    messages_remaining: asksLeft(), allowance_period: quota.period,
     channel: source,
     // Nobody fits: never state a profile count, and hand the member one easy
     // next move - going outside the network - rather than a button label.
@@ -2346,7 +2342,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   // the open question becomes "should I look outside LINKUP?" - a bare "yes"
   // to that is the go-ahead for the LinkedIn search, not a fresh matcher run.
   await patchState(uid, {
-    lastAsk: record, chitStreak: 0, recentAsks, askHistory: history, asks: { day: today, count: used },
+    lastAsk: record, chitStreak: 0, recentAsks, askHistory: history,
     ...(kind === 'none' ? { pendingIntent: { need: searchQ.need, at: now, id: askId, outside: true } } : {}),
   });
   return { ...publicAsk(record), cards: resultCards, cached: false, usedAi, kind, asksLeft: asksLeft(), suggest: saidSuggest2, thread };
@@ -2969,11 +2965,12 @@ export async function home(uid, { userDoc } = {}) {
     .sort((a, b) => toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt));
   const today = dayKey(now);
   const meetsUsed = state.meets?.day === today ? Number(state.meets.count || 0) : 0;
-  const asksUsed = state.asks?.day === today ? Number(state.asks.count || 0) : 0;
+  const quota = await readMessageQuota(db(), uid, { plus, now, legacyState: state });
   return {
     name: profileFacts(user)?.name || '',
     plus,
-    limits: { meetsPerDay: plus ? null : limits.meetsPerDay, meetsUsedToday: meetsUsed, asksPerDay: limits.asksPerDay, asksUsedToday: asksUsed, asksResetAt: nextDailyResetAt(now) },
+    messageQuota: quota,
+    limits: { meetsPerDay: plus ? null : limits.meetsPerDay, meetsUsedToday: meetsUsed, asksPerDay: quota.limit, asksUsedToday: quota.used, asksPeriod: quota.period, asksPerMonth: plus ? null : quota.limit, asksUsedThisMonth: plus ? null : quota.used, asksResetAt: quota.resetAt },
     cards: liveCards,
     inbound: inboundSnap.docs.map((d) => publicIntro(d.id, d.data())).filter((i) => now - i.createdAt < LIMITS.introDays * DAY_MS),
     sent: sentSnap.docs.map((d) => publicIntro(d.id, d.data())).sort((a, b) => b.createdAt - a.createdAt).slice(0, 10),
@@ -3080,9 +3077,9 @@ export async function removeAsk(uid, askId) {
 
 /**
  * "Clear the chat" — wipe the on-screen conversation in one go. Removes the
- * thread and the last answer, but deliberately keeps the daily message
- * counter, what Linky knows (facts), the ask cache and the cards he found —
- * clearing the chat must never refund the free daily budget or lose a saved
+ * thread and the last answer, but deliberately keeps the message allowance
+ * ledger, what Linky knows (facts), the ask cache and the cards he found —
+ * clearing the chat must never refund the free monthly budget or lose a saved
  * card. The full wipe that also forgets everything is `forget`.
  */
 export async function clearChat(uid) {
@@ -3104,6 +3101,8 @@ export async function audit(uid, { userDoc } = {}) {
   ]);
   const facts = profileFacts(user) || {};
   const told = toldFacts(state);
+  const plus = await isPlusUser(uid, user);
+  const quota = await readMessageQuota(db(), uid, { plus, legacyState: state });
   return {
     facts: {
       name: facts.name, role: facts.role, company: facts.company, city: facts.city, country: facts.country,
@@ -3112,8 +3111,8 @@ export async function audit(uid, { userDoc } = {}) {
     told,
     hidden: toldFacts(state).hidden,
     signals: {
-      plus: await isPlusUser(uid, user),
-      asksUsedToday: state.asks?.day === dayKey() ? Number(state.asks.count || 0) : 0,
+      plus, messageQuota: quota,
+      asksUsedToday: quota.used,
       meetsUsedToday: state.meets?.day === dayKey() ? Number(state.meets.count || 0) : 0,
       inboundThisWeek: state.inbound?.week === weekKey() ? Number(state.inbound.count || 0) : 0,
       mutedCount: Object.keys(state.muted || {}).length,

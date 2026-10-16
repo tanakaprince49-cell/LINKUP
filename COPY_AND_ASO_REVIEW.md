@@ -5,8 +5,8 @@ Reviewed 16 October 2026.
 ## Delivery status
 
 - **Implemented in the shared Android/web app source and validated locally.**
-- **Not yet deployed to production or published to Google Play.** Repository push requires working GitHub authentication. Android requires a separately signed, tested release; the Play listing requires Console submission and approval.
-- No Android version, package identifier, subscription product, price, entitlement limit, route, user profile, message, or real-member directory data was changed.
+- The original wording/SEO release was deployed as `620523b`. Google Play still requires a separate signed Android release and listing submission. Subsequent quota/review changes are documented in `LINKY_LIMITS_AND_REVIEWS.md`.
+- The original copy-only release preserved Android version, package identifiers, subscription products, prices, limits, routes, and member data. The subsequent requested change intentionally updates free Linky usage to 10 messages per month; PLUS retains 60 per day.
 - The separate marketing website and its six previously approved screenshots are unchanged.
 
 ## Professional wording
@@ -53,7 +53,7 @@ Search engines must recrawl deployed pages; this work does not guarantee a ranki
 
 > Find cofounders, meet startup collaborators, and grow your professional network.
 
-**Full description:** 2,074/4,000 characters, in `store/google-play/en-US/full-description.txt`.
+**Full description:** 2,156/4,000 characters, in `store/google-play/en-US/full-description.txt`.
 
 **Primary keyword intents:** cofounder networking, find cofounders, cofounder matching, startup networking, startup collaborators, professional networking, startup team, AI networking assistant.
 

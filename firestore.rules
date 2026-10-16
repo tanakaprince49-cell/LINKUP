@@ -1508,6 +1508,10 @@ service cloud.firestore {
     match /intros/{introId} {
       allow read, write: if false;
     }
+    // Server-owned allowance ledger; separate from deletable conversation state.
+    match /linkyUsage/{userId} {
+      allow read, write: if false;
+    }
     match /linkyState/{userId} {
       allow read, write: if false;
     }

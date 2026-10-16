@@ -1,3 +1,5 @@
+import { recordReviewAction } from '../lib/appReview';
+import { FREE_LINKY_LIMIT_MESSAGE, quotaFromHome, homeWithQuota } from '../lib/linkyQuota';
 // Linky tab — replaces the swipe deck.
 //
 // Ask Linky who you need and he answers in the same request with the people
@@ -76,10 +78,12 @@ const formatCountdown = (resetAtIso?: string, now = Date.now()) => {
   const diff = Math.max(0, Date.parse(resetAtIso) - now);
   if (diff <= 0) return '';
   const total = Math.floor(diff / 1000);
-  const h = Math.floor(total / 3600);
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
   const pad = (n: number) => String(n).padStart(2, '0');
+  if (d > 0) return `${d}d ${h}h ${m}m`;
   return h > 0 ? `${h}h ${m}m ${pad(s)}s` : m > 0 ? `${m}m ${pad(s)}s` : `${s}s`;
 };
 
@@ -296,7 +300,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
     return () => clearInterval(t);
   }, [thinking]);
 
-  // One-second tick so the daily-limit countdown actually counts down on
+  // One-second tick so the allowance countdown actually counts down on
   // screen instead of sitting frozen at the value it rendered with. Gated on
   // focus so a background tab is not re-rendering every second.
   const isFocused = useIsFocused();
@@ -308,13 +312,22 @@ export default function LinkyHomeScreen({ navigation }: any) {
     return () => clearInterval(t);
   }, [isFocused]);
 
-  // Derived: how many free asks are left today and, once it is zero, how long
-  // until the budget refreshes. PLUS never sees this (no counter, no cap).
-  const asksUsed = home?.limits?.asksUsedToday ?? 0;
-  const asksPerDay = home?.limits?.asksPerDay ?? 0;
-  const asksLeft = Math.max(0, asksPerDay - asksUsed);
-  const resetCountdown = formatCountdown(home?.limits?.asksResetAt, nowTick);
-  const atDailyLimit = !!home && !home.plus && asksPerDay > 0 && asksLeft <= 0;
+  const quota = home ? quotaFromHome(home) : null;
+  const messageLimit = quota?.limit ?? 10;
+  const asksLeft = quota?.remaining ?? 0;
+  const resetCountdown = formatCountdown(quota?.resetAt, nowTick);
+  const atMessageLimit = !!home && !home.plus && !!quota?.upgradeRequired && (!quota.resetAt || Date.parse(quota.resetAt) > nowTick);
+  const quotaPaywallShown = useRef('');
+  useEffect(() => {
+    if (!isFocused || !atMessageLimit || !quota) return;
+    const key = `${user?.uid}:${quota.periodKey}`;
+    if (quotaPaywallShown.current === key) return;
+    quotaPaywallShown.current = key;
+    setPaywall(FREE_LINKY_LIMIT_MESSAGE);
+  }, [isFocused, atMessageLimit, quota?.periodKey, user?.uid]);
+  useEffect(() => {
+    if (quota && quota.remaining > 0 && paywall === FREE_LINKY_LIMIT_MESSAGE) setPaywall(null);
+  }, [quota?.remaining, paywall]);
   const mounted = useRef(true);
   const hydratedRef = useRef(false);
 
@@ -332,7 +345,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
       // a lastAsk restored from home carries no ask budget of its own; the home
       // payload's limits are the same numbers, so derive it rather than fake it
       setAnswer((a) => a || (h.lastAsk
-        ? { ...h.lastAsk, cards: [], cached: false, asksLeft: Math.max(0, h.limits.asksPerDay - h.limits.asksUsedToday) }
+        ? { ...h.lastAsk, cards: [], cached: false, asksLeft: quotaFromHome(h).remaining }
         : null));
     } catch (err) {
       if (!mounted.current) return;
@@ -342,12 +355,21 @@ export default function LinkyHomeScreen({ navigation }: any) {
     }
   }, [user?.uid]);
 
+  const resetRefreshBusy = useRef(false);
+  useEffect(() => {
+    if (!isFocused || !quota?.resetAt || resetRefreshBusy.current || Date.parse(quota.resetAt) > nowTick) return;
+    resetRefreshBusy.current = true;
+    void load(true).finally(() => { resetRefreshBusy.current = false; });
+  }, [isFocused, quota?.resetAt, Math.floor(nowTick / 60_000), load]);
+
   useFocusEffect(useCallback(() => { load(true); }, [load]));
   useEffect(() => { load(); }, [load]);
 
   const fail = (err: unknown, fallbackTitle: string) => {
     if (err instanceof LinkyApiError && err.status === 402) {
-      setPaywall(err.message);
+      if (err.messageQuota) setHome((h) => h ? homeWithQuota(h, err.messageQuota!) : h);
+      if (err.messageQuota?.period === 'day' || home?.plus) notifyUser('Daily allowance reached', err.message);
+      else setPaywall(err.message);
       return;
     }
     notifyUser(fallbackTitle, err instanceof Error ? err.message : 'Please try again.');
@@ -441,6 +463,10 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const send = async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg || thinking) return;
+    if (atMessageLimit && (!quota?.resetAt || Date.parse(quota.resetAt) > Date.now())) {
+      setPaywall(FREE_LINKY_LIMIT_MESSAGE);
+      return;
+    }
     setInput('');
     setPendingAsk(msg);
     setThinking(true);
@@ -449,6 +475,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
     // scrolled to y:0, dumping the user at the top of the page every send).
     try {
       const out = await linkyAsk(msg);
+      if (user?.uid) void recordReviewAction(user.uid);
       setAnswer(out);
       setPointerText('');
       setLeads([]);
@@ -467,11 +494,13 @@ export default function LinkyHomeScreen({ navigation }: any) {
         const byId = new Map(out.cards.map((c) => [c.id, c]));
         const merged = h.cards.map((c) => byId.get(c.id) || c);
         out.cards.forEach((c) => { if (!merged.some((m) => m.id === c.id)) merged.push(c); });
-        return { ...h, cards: merged, lastAsk: out, limits: { ...h.limits, asksUsedToday: Math.max(h.limits.asksUsedToday, h.limits.asksPerDay - out.asksLeft) } };
+        const updated = { ...h, cards: merged, lastAsk: out };
+        return out.messageQuota ? homeWithQuota(updated, out.messageQuota) : { ...updated, limits: { ...h.limits, asksUsedToday: Math.max(h.limits.asksUsedToday, h.limits.asksPerDay - out.asksLeft) } };
       });
     } catch (err) {
-      if (err instanceof LinkyApiError && err.status === 402) setPaywall(err.message);
-      else notifyUser('Linky could not answer', err instanceof Error ? err.message : 'Please try again.');
+      fail(err, 'Linky could not answer');
+      // A server failure can refund a reserved message. Refresh authoritative use.
+      if (!(err instanceof LinkyApiError && err.status === 402)) void load(true);
     } finally {
       setThinking(false);
       setPendingAsk('');
@@ -485,7 +514,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
     if (!user?.uid || busyId === 'clearChat') return;
     notifyUser(
       'Clear the chat?',
-      "Delete this Linky conversation? Your daily allowance, profile preferences, and saved recommendations remain unchanged.",
+      "Delete this Linky conversation? Your message allowance, profile preferences, and saved recommendations remain unchanged.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -789,7 +818,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
               <>
                 <SectionTitle
                   title="Linky"
-                  hint={!home.plus && asksPerDay ? (asksLeft > 0 ? `${asksLeft} of ${asksPerDay} free messages left today` : `0 of ${asksPerDay} free messages left today · resets in ${resetCountdown || '…'}`) : undefined}
+                  hint={!home.plus && messageLimit ? (asksLeft > 0 ? `${asksLeft} of ${messageLimit} free messages left this month` : `0 of ${messageLimit} free messages left this month · resets in ${resetCountdown || '…'}`) : undefined}
                   action={turns.length ? (
                     <TouchableOpacity
                       onPress={clearConversation}
@@ -962,9 +991,9 @@ export default function LinkyHomeScreen({ navigation }: any) {
         backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg,
         borderTopColor: border,
       }]}>
-        {atDailyLimit && resetCountdown ? (
+        {atMessageLimit && resetCountdown ? (
           <Text style={[styles.resetLine, { color: textColor(isDark, 'muted') }]}>
-            Today's free messages are used up — resets in {resetCountdown}.
+            Your 10 free monthly messages are used up — resets in {resetCountdown}.
           </Text>
         ) : null}
         <View style={[styles.composer, { backgroundColor: surface, borderColor: border }]}>
@@ -1036,11 +1065,12 @@ export default function LinkyHomeScreen({ navigation }: any) {
       </Modal>
       <PaywallModal
         visible={!!paywall}
-        onClose={() => setPaywall(null)}
-        feature="Linky asks & intros"
+        onClose={() => { setPaywall(null); void load(true); }}
+        onUnlocked={() => { setPaywall(null); void load(true); }}
+        feature="Linky monthly message allowance"
         description={(() => {
-          const base = paywall || 'You have exhausted your 5 free messages today. Upgrade to LINKUP PLUS — $19.99/month or $149.99/year.';
-          return resetCountdown ? `${base}\n\nDaily messages reset in ${resetCountdown}.` : base;
+          const base = paywall || FREE_LINKY_LIMIT_MESSAGE;
+          return resetCountdown ? `${base}\n\nYour monthly allowance resets in ${resetCountdown} (00:00 UTC on the first of the month).` : base;
         })()}
       />
     </View>

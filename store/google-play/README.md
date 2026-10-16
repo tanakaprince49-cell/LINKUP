@@ -8,8 +8,8 @@
 |---|---|---:|---:|
 | App name | `en-US/title.txt` | 28 | 30 |
 | Short description | `en-US/short-description.txt` | 80 | 80 |
-| Full description | `en-US/full-description.txt` | 2,074 | 4,000 |
-| Suggested release notes | `en-US/release-notes.txt` | 271 | 500 |
+| Full description | `en-US/full-description.txt` | 2,156 | 4,000 |
+| Suggested release notes | `en-US/release-notes.txt` | 254 | 500 |
 
 **App name:** LINKUP: Cofounder Networking
 

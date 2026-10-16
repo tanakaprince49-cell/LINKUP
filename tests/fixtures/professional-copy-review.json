@@ -633,7 +633,7 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 488,
     "before": "This deletes your whole Linky conversation. Your daily messages, what Linky knows about you and the people he found stay exactly as they are.",
-    "after": "Delete this Linky conversation? Your daily allowance, profile preferences, and saved recommendations remain unchanged."
+    "after": "Delete this Linky conversation? Your message allowance, profile preferences, and saved recommendations remain unchanged."
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",

@@ -1,3 +1,4 @@
+import { openPlayReview } from '../lib/appReview';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
   View, 
@@ -3162,6 +3163,23 @@ export default function ProfileScreen({ navigation, route }: any) {
               onValueChange={(v) => isEditing ? setEditData({ ...editData, hideOnlineStatus: v }) : setPreference('hideOnlineStatus', v)}
             />
           </View>
+
+          {Platform.OS === 'android' ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Rate LINKUP on Google Play"
+              style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}
+              onPress={() => { void openPlayReview().catch(() => notifyUser('Google Play unavailable', 'Unable to open the app listing. Please try again later.')); }}
+            >
+              <View style={styles.prefLabelContainer}>
+                <SafeIcon name="Star" size={18} color={COLORS.primaryStrong} />
+                <View style={styles.prefCopy}>
+                  <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Rate LINKUP</Text>
+                  <Text style={styles.prefHelp}>Share an honest review on Google Play. Rating is optional.</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ) : null}
 
           <View style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}>
             <View style={styles.prefLabelContainer}>
