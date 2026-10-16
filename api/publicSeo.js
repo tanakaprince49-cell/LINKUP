@@ -72,7 +72,7 @@ export function createPublicSeoHandler(database = getDb) {
         if (pages > 50000) throw new Error('Sitemap index capacity exceeded');
         return send(200,xmlIndex([`${APP}/sitemap-static.xml`,...Array.from({length:pages},(_,i) => `${APP}/sitemap-profiles-${i}.xml`)]),'application/xml; charset=utf-8');
       }
-      if (mode === 'static') return send(200,xmlUrls([`${APP}/builders`]),'application/xml; charset=utf-8');
+      if (mode === 'static') return send(200,xmlUrls([`${APP}/landing`,`${APP}/builders`]),'application/xml; charset=utf-8');
       if (mode === 'profiles') {
         const raw = single(req.query?.page);
         if (!/^(0|[1-9]\d{0,4})$/.test(raw)) return failure(400,'Invalid sitemap');

@@ -164,8 +164,8 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
         notifyUser(
           'Changes saved ✔',
           isLiveEdit
-            ? 'Your campaign is still live with the new creative. Moderation has been told to look at it.'
-            : 'Your campaign stays in the review queue with the updated creative.'
+            ? "Your campaign remains active with the updated creative. The change has been submitted for review."
+            : "Your updated campaign remains in the review queue."
         );
         navigation.goBack();
         return;
@@ -184,7 +184,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
         placements,
         isAdmin: isAdminEmail(user?.email) || (myProfile as any)?.isAdmin === true,
       });
-      notifyUser('Campaign submitted 🎉', 'Our team reviews every campaign by hand — yours goes live within 24 hours.');
+      notifyUser('Campaign submitted 🎉', "Your campaign has been submitted for review. It can be published after approval.");
       navigation.goBack();
     } catch (error: any) {
       notifyUser('Could not submit', error?.message || 'Please deploy the latest Firestore rules and try again.');
@@ -248,11 +248,11 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
 
           {renderField('CAMPAIGN NAME (PRIVATE)', name, setName, 'e.g. Launch week push', { maxLength: 60 })}
           {renderField('PRODUCT NAME', productName, setProductName, 'e.g. InvoiceMate', { maxLength: 60 })}
-          {renderField('TAGLINE', tagline, setTagline, 'One line that sells it — e.g. Invoices paid 2× faster', {
+          {renderField('TAGLINE', tagline, setTagline, "Product value proposition, for example: simplify invoice collection", {
             maxLength: 90,
-            hint: 'This is the big text on your sponsored card.',
+            hint: "This headline appears on your sponsored placement.",
           })}
-          {renderField('DESCRIPTION (OPTIONAL)', description, setDescription, 'What does it do, who is it for?', {
+          {renderField('DESCRIPTION (OPTIONAL)', description, setDescription, "Describe your product and its intended customers.", {
             multiline: true,
             maxLength: 500,
           })}
@@ -334,7 +334,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
             <View style={[styles.stepDot, { backgroundColor: COLORS.primary }]}>
               <Text style={styles.stepDotText}>2</Text>
             </View>
-            <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>Where it shows</Text>
+            <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>Campaign placements</Text>
           </View>
 
           {CAMPAIGN_PLACEMENT_OPTIONS.map((option) => {
@@ -403,7 +403,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
               {productName.trim() || 'Your Product'}
             </Text>
             <Text style={[styles.previewTagline, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
-              {tagline.trim() || 'Your one-line pitch shows up here, exactly as founders will read it.'}
+              {tagline.trim() || "Your product value proposition will appear here."}
             </Text>
             <View style={styles.previewCta}>
               <Globe size={13} color="#000" />

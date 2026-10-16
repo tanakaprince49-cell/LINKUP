@@ -139,10 +139,10 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
       <View style={[styles.heroCard, liquidGlass(isDark)]}>
         <View style={styles.heroRow}>
           <Users size={20} color="#4ADE80" />
-          <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Builders ready for action</Text>
+          <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Find your next collaborator</Text>
         </View>
         <Text style={styles.heroSub}>
-          Open opportunities from founders and builders actively looking for teammates, collaborators, and momentum.
+          Explore startup opportunities from founders seeking cofounders, team members, and project collaborators.
         </Text>
       </View>
 
@@ -171,7 +171,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
           ListEmptyComponent={
             <View style={[styles.emptyCard, liquidGlass(isDark)]}>
               <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No active opportunities yet</Text>
-              <Text style={styles.emptySub}>Try search to find builders by role, stage, or industry.</Text>
+              <Text style={styles.emptySub}>Search by professional role, startup stage, or industry.</Text>
               <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.emptyBtn}>
                 <Search size={16} color="#000" />
                 <Text style={styles.emptyBtnText}>Open search</Text>

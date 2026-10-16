@@ -105,7 +105,7 @@ export default function LinkyAuditScreen({ navigation }: any) {
       const r = await linkyFacts({ notes: notes.trim(), skills: splitTags(skills), lookingFor: splitTags(lookingFor) });
       setData((d) => (d ? { ...d, told: r.facts } : d));
       setDirty(false);
-      notifyUser('Saved', 'Linky uses this from your next ask, and when he checks other people\'s asks against you.');
+      notifyUser('Saved', "Linky uses these preferences for future searches and relevant introduction requests.");
     } catch (err) {
       notifyUser('Could not save', err instanceof Error ? err.message : undefined);
     } finally {
@@ -114,9 +114,9 @@ export default function LinkyAuditScreen({ navigation }: any) {
   };
 
   const forget = () => {
-    notifyUser('Forget everything?', 'Deletes your cards and what you told Linky, unlinks Telegram / WhatsApp. Your LINKUP profile and chats stay.', [
+    notifyUser('Forget everything?', "Delete Linky recommendations and notes, and disconnect Telegram and WhatsApp. Your LINKUP profile and conversations remain unchanged.", [
       { text: 'Keep', style: 'cancel' },
-      { text: 'Forget', style: 'destructive', onPress: async () => { try { await linkyForget(); await load(); notifyUser('Done', 'Linky forgot your cards and notes.'); } catch (err) { notifyUser('Could not forget', err instanceof Error ? err.message : undefined); } } },
+      { text: 'Forget', style: 'destructive', onPress: async () => { try { await linkyForget(); await load(); notifyUser('Done', "Your Linky recommendations and notes have been deleted."); } catch (err) { notifyUser('Could not forget', err instanceof Error ? err.message : undefined); } } },
     ]);
   };
 
@@ -165,7 +165,7 @@ export default function LinkyAuditScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Main'))} style={styles.headerBtn}>
           <ArrowLeft size={20} color={textColor(isDark)} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>What Linky knows about you</Text>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Your Linky profile and preferences</Text>
         <View style={styles.headerBtn} />
       </SafeAreaView>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -177,7 +177,7 @@ export default function LinkyAuditScreen({ navigation }: any) {
               <Text style={[styles.intro, { color: textColor(isDark, 'secondary') }]}>
                 Linky matches on the facts below and nothing else. Your profile facts come from your LINKUP profile; the "Tell Linky more" section is yours to edit any time.
               </Text>
-              <BlockView {...ui} title="TELL LINKY MORE" hint="Anything your profile does not say: what you are building, what you can help with, who you want to meet. Linky cites these when he matches you.">
+              <BlockView {...ui} title="TELL LINKY MORE" hint="Add relevant professional context, including your current project, expertise, and the collaborators you would like to meet.">
                 {field('Notes for Linky', notes, setNotes, 'e.g. Building a payments app for informal traders in Mbare. Strong on sales and ops, need technical people. Happy to advise first-time founders on pricing.', true)}
                 {field('Extra skills (comma separated)', skills, setSkills, 'e.g. Flutter, mobile money integrations, B2B sales')}
                 {field('Who you want to meet (comma separated)', lookingFor, setLookingFor, 'e.g. Angel investors in Harare, Flutter developers, agritech founders')}
@@ -250,7 +250,7 @@ export default function LinkyAuditScreen({ navigation }: any) {
                   </View>
                 ) : null}
                 {!data.facts.role && !(data.facts.skills || []).length && !data.facts.bio ? (
-                  <Text style={[styles.v, { color: textColor(isDark, 'muted') }]}>Your profile is nearly empty, so Linky has little to cite. Add a role, skills and a bio.</Text>
+                  <Text style={[styles.v, { color: textColor(isDark, 'muted') }]}>Complete your professional role, skills, and biography so Linky can explain relevant recommendations.</Text>
                 ) : null}
               </BlockView>
               {countHidden(hidden) ? (

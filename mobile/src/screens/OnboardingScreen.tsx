@@ -277,7 +277,7 @@ const roleQuestionBanks: Record<string, RoleQuestion[]> = {
     {
       id: 'founderNeed',
       title: 'First missing piece',
-      subtitle: 'Who would unlock your next level fastest?',
+      subtitle: "Which professional connection would best support your next milestone?",
       multi: true,
       choices: [
         { id: 'Technical Cofounder', label: 'Technical Cofounder' },
@@ -292,7 +292,7 @@ const roleQuestionBanks: Record<string, RoleQuestion[]> = {
     {
       id: 'devTrack',
       title: 'Developer track',
-      subtitle: 'Where are you strongest right now?',
+      subtitle: "What is your primary area of professional expertise?",
       choices: [
         { id: 'Frontend Engineer', label: 'Frontend Engineer' },
         { id: 'Backend Engineer', label: 'Backend Engineer' },
@@ -397,7 +397,7 @@ const roleQuestionBanks: Record<string, RoleQuestion[]> = {
     {
       id: 'studentTrack',
       title: 'Student path',
-      subtitle: 'What kind of builder are you becoming?',
+      subtitle: "Which professional direction are you pursuing?",
       choices: [
         { id: 'Student Founder', label: 'Student Founder' },
         { id: 'Hacker', label: 'Hacker' },
@@ -468,7 +468,7 @@ const genericRoleQuestions = (role: string): RoleQuestion[] => {
     {
       id: `${key}_impact`,
       title: 'Best contribution',
-      subtitle: 'What should people come to you for first?',
+      subtitle: "What expertise can you contribute to a startup team?",
       multi: true,
       choices: [
         { id: 'Strategy', label: 'Strategy' },
@@ -497,7 +497,7 @@ const personalityQuestionsByRole: Record<string, readonly PersonalityQuestion[]>
     },
     {
       id: 'founder_team',
-      title: 'Recruit early or grind solo first?',
+      title: "Build a team early or validate independently first?",
       a: { id: 'Recruit early', label: 'Recruit early' },
       b: { id: 'Grind solo first', label: 'Grind solo first' },
     },
@@ -523,7 +523,7 @@ const personalityQuestionsByRole: Record<string, readonly PersonalityQuestion[]>
     },
     {
       id: 'developer_quality',
-      title: 'Clean systems or fast hacks to learn?',
+      title: "Prioritize system quality or rapid experimentation?",
       a: { id: 'Clean systems', label: 'Clean systems' },
       b: { id: 'Fast hacks', label: 'Fast hacks' },
     },
@@ -607,7 +607,7 @@ const personalityQuestionsByRole: Record<string, readonly PersonalityQuestion[]>
     },
     {
       id: 'marketer_signal',
-      title: 'Storytelling or analytics as your superpower?',
+      title: "Is your primary strength brand communication or data analysis?",
       a: { id: 'Storytelling', label: 'Storytelling' },
       b: { id: 'Analytics', label: 'Analytics' },
     },
@@ -621,7 +621,7 @@ const personalityQuestionsByRole: Record<string, readonly PersonalityQuestion[]>
     },
     {
       id: 'student_team',
-      title: 'Campus team energy or solo build energy?',
+      title: "Do you prefer campus collaboration or independent projects?",
       a: { id: 'Campus team', label: 'Campus team' },
       b: { id: 'Solo build', label: 'Solo build' },
     },
@@ -659,9 +659,9 @@ const personalityQuestionsByRole: Record<string, readonly PersonalityQuestion[]>
     },
     {
       id: 'operator_stage',
-      title: 'Scale readiness or MVP hustle?',
+      title: "Focus on operational scale or early product validation?",
       a: { id: 'Scale readiness', label: 'Scale readiness' },
-      b: { id: 'MVP hustle', label: 'MVP hustle' },
+      b: { id: 'MVP hustle', label: 'Early product validation' },
     },
   ],
 };
@@ -858,7 +858,7 @@ const SkillsInput = ({
       autoCapitalize="words"
     />
     <Text style={{ marginTop: 8, fontSize: 11, color: '#666', fontWeight: '800', lineHeight: 16 }}>
-      Add at least one skill. These power search, swipe ranking, and smart matching.
+      Add at least one professional skill to support search visibility and relevant recommendations.
     </Text>
     {selectedSkills.length > 0 ? (
       <View style={styles.selectedSkillsWrap}>
@@ -999,7 +999,7 @@ export default function OnboardingScreen({ navigation }: any) {
     return {
       key: 'personality',
       title: `${role || 'Builder'} Personality`,
-      subtitle: 'These answers sharpen compatibility and who naturally fits your energy.',
+      subtitle: "These preferences help identify compatible work styles and collaboration requirements.",
       body: (
         <View style={{ gap: 12 }}>
           {currentPersonalityQuestions.map((q) => {
@@ -1296,7 +1296,7 @@ export default function OnboardingScreen({ navigation }: any) {
       case 'Investor':
         return [
           buildMultiChoiceStep('investor_goals', 'Investor Intent', 'What are you here for?', lookingFor, setLookingFor, investorGoalsChoices),
-          buildSkillsStep('Core Skills For Matching', 'Choose your investor edge so founders and opportunities can match properly.'),
+          buildSkillsStep("Professional skills and expertise", 'Choose your investor edge so founders and opportunities can match properly.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Sectors', 'Which industries do you invest in?', industries, setIndustries, industryChoices),
           personalityStep,
@@ -1304,19 +1304,19 @@ export default function OnboardingScreen({ navigation }: any) {
       case 'Developer':
         return [
           buildMultiChoiceStep('developer_goals', 'Developer Goals', 'What kind of opportunity are you looking for?', lookingFor, setLookingFor, builderGoalsChoices),
-          buildSkillsStep('Core Skills For Matching', 'Add your stack and strengths so founders can find you.'),
+          buildSkillsStep("Professional skills and expertise", 'Add your stack and strengths so founders can find you.'),
           ...roleQuestions.map(buildRoleQuestionStep),
-          buildMultiChoiceStep('industries', 'Products You Want To Build', 'Which startup spaces pull you in?', industries, setIndustries, industryChoices),
-          buildSingleChoiceStep('experience', 'Experience Level', 'How battle-tested are you right now?', experience, setExperience, experienceChoices),
+          buildMultiChoiceStep('industries', 'Products You Want To Build', "Which startup industries interest you?", industries, setIndustries, industryChoices),
+          buildSingleChoiceStep('experience', 'Experience Level', "What is your current level of professional experience?", experience, setExperience, experienceChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to build with teams?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
       case 'Designer':
         return [
           buildMultiChoiceStep('designer_goals', 'Designer Goals', 'What kind of opportunity are you looking for?', lookingFor, setLookingFor, builderGoalsChoices),
-          buildSkillsStep('Core Skills For Matching', 'Add your design strengths so teams can find the right fit.'),
+          buildSkillsStep("Professional skills and expertise", 'Add your design strengths so teams can find the right fit.'),
           ...roleQuestions.map(buildRoleQuestionStep),
-          buildMultiChoiceStep('industries', 'Products You Want To Shape', 'Which startup spaces would you love to design for?', industries, setIndustries, industryChoices),
+          buildMultiChoiceStep('industries', 'Products You Want To Shape', "Which startup industries would you like to design for?", industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'Where are you in your design journey?', experience, setExperience, experienceChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you collaborate best?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
@@ -1324,7 +1324,7 @@ export default function OnboardingScreen({ navigation }: any) {
       case 'Marketer':
         return [
           buildMultiChoiceStep('marketer_goals', 'Marketing Goals', 'What kind of opportunity are you looking for?', lookingFor, setLookingFor, builderGoalsChoices),
-          buildSkillsStep('Core Skills For Matching', 'Add your growth channels and strengths so builders can discover you.'),
+          buildSkillsStep("Professional skills and expertise", 'Add your growth channels and strengths so builders can discover you.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Markets You Understand', 'Which startup spaces do you know best?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'How experienced are you in startup growth?', experience, setExperience, experienceChoices),
@@ -1333,18 +1333,18 @@ export default function OnboardingScreen({ navigation }: any) {
         ];
       case 'Student':
         return [
-          buildMultiChoiceStep('student_goals', 'Student Goals', 'What are you hoping to unlock on LINKUP?', lookingFor, setLookingFor, builderGoalsChoices),
-          buildSkillsStep('Core Skills For Matching', 'Add what you can do now and what you want to sharpen.'),
+          buildMultiChoiceStep('student_goals', 'Student Goals', "What professional outcome would you like to pursue on LINKUP?", lookingFor, setLookingFor, builderGoalsChoices),
+          buildSkillsStep("Professional skills and expertise", 'Add what you can do now and what you want to sharpen.'),
           ...roleQuestions.map(buildRoleQuestionStep),
-          buildMultiChoiceStep('industries', 'Startup Interests', 'Which spaces make you want to build?', industries, setIndustries, industryChoices),
-          buildSingleChoiceStep('experience', 'Experience Level', 'How far into building are you?', experience, setExperience, experienceChoices),
+          buildMultiChoiceStep('industries', 'Startup Interests', "Which industries would you like to work in?", industries, setIndustries, industryChoices),
+          buildSingleChoiceStep('experience', 'Experience Level', "What is your current level of project experience?", experience, setExperience, experienceChoices),
           buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like working with others?', workStyle, setWorkStyle, workStyleChoices),
           personalityStep,
         ];
       case 'Operator':
         return [
           buildMultiChoiceStep('operator_goals', 'Operator Goals', 'What kind of opportunity are you looking for?', lookingFor, setLookingFor, builderGoalsChoices),
-          buildSkillsStep('Core Skills For Matching', 'Add the systems and execution strengths you bring.'),
+          buildSkillsStep("Professional skills and expertise", 'Add the systems and execution strengths you bring.'),
           ...roleQuestions.map(buildRoleQuestionStep),
           buildMultiChoiceStep('industries', 'Operating Environments', 'Which kinds of startups do you want to support?', industries, setIndustries, industryChoices),
           buildSingleChoiceStep('experience', 'Experience Level', 'How experienced are you in operations?', experience, setExperience, experienceChoices),
@@ -1356,9 +1356,9 @@ export default function OnboardingScreen({ navigation }: any) {
           const info = roleInfoFor(role);
           return [
             buildMultiChoiceStep('role_goals', `${info.badge} Goals`, 'What kind of opportunity are you looking for?', lookingFor, setLookingFor, builderGoalsChoices),
-            buildSkillsStep('Core Skills For Matching', 'Add the strengths people should discover you for.'),
+            buildSkillsStep("Professional skills and expertise", 'Add the strengths people should discover you for.'),
             ...roleQuestions.map(buildRoleQuestionStep),
-            buildMultiChoiceStep('industries', 'Focus Areas', 'Which startup spaces do you want to be around?', industries, setIndustries, industryChoices),
+            buildMultiChoiceStep('industries', 'Focus Areas', "Which startup industries would you like to participate in?", industries, setIndustries, industryChoices),
             buildSingleChoiceStep('experience', 'Experience Level', 'Where are you in your journey?', experience, setExperience, experienceChoices),
             buildSingleChoiceStep('workStyle', 'Work Style', 'How do you like to collaborate?', workStyle, setWorkStyle, workStyleChoices),
             personalityStep,
@@ -1366,9 +1366,9 @@ export default function OnboardingScreen({ navigation }: any) {
         }
         return [
           buildMultiChoiceStep('founder_goals', 'Founder Goals', 'What are you looking for right now?', lookingFor, setLookingFor, goalsChoices),
-          buildSkillsStep('Core Skills For Matching', 'Add the founder strengths you bring so matches are useful.'),
+          buildSkillsStep("Professional skills and expertise", 'Add the founder strengths you bring so matches are useful.'),
           ...roleQuestions.map(buildRoleQuestionStep),
-          buildMultiChoiceStep('industries', 'Startup Industries', 'Select the spaces you are building in or obsessed with.', industries, setIndustries, industryChoices),
+          buildMultiChoiceStep('industries', 'Startup Industries', "Select the industries relevant to your startup and professional interests.", industries, setIndustries, industryChoices),
           buildSingleChoiceStep('commitment', 'Commitment Level', 'How available are you right now?', commitmentLevel, setCommitmentLevel, commitmentChoices),
           buildSingleChoiceStep('stage', 'Startup Stage', 'Where is your startup today?', startupStage, setStartupStage, startupStageChoices),
           buildSingleChoiceStep('funding', 'Funding Stage', 'What is your current funding stage?', fundingStage, setFundingStage, fundingStageChoices),
@@ -1400,7 +1400,7 @@ export default function OnboardingScreen({ navigation }: any) {
     () => [
       {
         key: 'name',
-        title: 'What should people call you?',
+        title: "What is your professional name?",
         subtitle: 'Use your real name. You can change it later.',
         body: (
           <View>
@@ -1455,7 +1455,7 @@ export default function OnboardingScreen({ navigation }: any) {
       {
         key: 'homebase',
         title: 'Where are you based?',
-        subtitle: 'Country and city. Matches care about your scene and timezone.',
+        subtitle: "Add your country and city to support local collaboration and time-zone compatibility.",
         body: (
           <View style={{ gap: 10 }}>
             <TextInput
@@ -1495,7 +1495,7 @@ export default function OnboardingScreen({ navigation }: any) {
       {
         key: 'identity',
         title: 'What best describes you?',
-        subtitle: 'Pick the lane people should match you on.',
+        subtitle: "Select the professional role most relevant to your collaboration goals.",
         body: (
           <ChoiceGrid value={role} onChange={(v) => setRole(String(v))} choices={identityChoices} isDark={isDark} />
         ),
@@ -1524,7 +1524,7 @@ export default function OnboardingScreen({ navigation }: any) {
       {
         key: 'photos',
         title: 'Add a face photo',
-        subtitle: 'Required. LINKUP is a face-to-face network — every surface, from the deck to the league, is a face.',
+        subtitle: "Required. A profile photo helps other members recognize you across professional discovery and conversations.",
         body: (
           <View style={{ alignItems: 'center' }}>
             <PhotoSlot
@@ -1557,7 +1557,7 @@ export default function OnboardingScreen({ navigation }: any) {
         : [
             {
               key: 'profile-setup-notice',
-              title: "You're in. One more thing.",
+              title: "Your account is ready. Complete your professional profile.",
               subtitle: 'It is recommended that you finish setting up your profile to get accurate matches.',
               body: (
                 <View>
@@ -1572,10 +1572,10 @@ export default function OnboardingScreen({ navigation }: any) {
                     }}
                   >
                     <Text style={{ fontSize: 15, fontWeight: '900', color: textColor(isDark) }}>
-                      Complete profiles get sharper matches
+                      Complete your profile for more relevant recommendations
                     </Text>
                     <Text style={{ marginTop: 6, fontSize: 13, fontWeight: '600', lineHeight: 19, color: textColor(isDark, 'muted') }}>
-                      Bio, skills, projects and social links tell the matching engine who to put in front of you. It takes about two minutes and you can edit everything later.
+                      Your biography, skills, projects, and professional links help LINKUP recommend relevant collaborators. You can update these details at any time.
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -1776,7 +1776,7 @@ export default function OnboardingScreen({ navigation }: any) {
             }}
             style={{ marginTop: 16, alignItems: 'center' }}
           >
-            <Text style={{ fontSize: 14, fontWeight: '800', color: textColor(isDark, 'muted') }}>Skip extra — do this later</Text>
+            <Text style={{ fontSize: 14, fontWeight: '800', color: textColor(isDark, 'muted') }}>Complete additional details later</Text>
           </TouchableOpacity>
         ) : null}
 

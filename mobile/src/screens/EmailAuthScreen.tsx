@@ -89,8 +89,8 @@ export default function EmailAuthScreen({ navigation }: any) {
             </Text>
             <Text style={[styles.sub, { color: textColor(isDark, 'secondary') }]}>
               {mode === 'signin'
-                ? 'Use the email you signed up with. Forgot it? Reset the password below.'
-                : 'A few details now. Then we set up who you are on LINKUP.'}
+                ? "Sign in with your registered email address. Use password reset if you need to restore access."
+                : "Create your account to build a professional profile and connect with the startup community."}
             </Text>
           </View>
 

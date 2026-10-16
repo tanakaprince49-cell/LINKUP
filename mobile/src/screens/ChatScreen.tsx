@@ -292,7 +292,7 @@ export default function ChatScreen({ route, navigation }: any) {
 
   useEffect(() => {
     if (matchId) return;
-    notifyUser('Chat unavailable', 'Open a chat from a real connection (match).');
+    notifyUser('Chat unavailable', "Open a conversation from an approved connection.");
     navigation.goBack();
   }, [matchId, navigation]);
 
@@ -551,12 +551,12 @@ export default function ChatScreen({ route, navigation }: any) {
       return;
     }
     if (!allowSendRate(user.uid)) {
-      notifyUser('Slow down', 'Too many messages in a short time. Wait a minute.');
+      notifyUser('Slow down', "Message limit reached. Please wait before trying again.");
       return;
     }
     const scan = scanMessageSafety(text);
     if (scan.blocked) {
-      notifyUser('Blocked for safety', scan.warning || 'That message is not allowed.');
+      notifyUser('Blocked for safety', scan.warning || "This message cannot be sent. Please review its content.");
       return;
     }
     if (!scan.ok) {
@@ -608,7 +608,7 @@ export default function ChatScreen({ route, navigation }: any) {
       await setDoc(doc(db, 'presence', user.uid), { isOnline: true, lastActiveAt: serverTimestamp() }, { merge: true });
     } catch (e) {
       console.error(e);
-      notifyUser('Message failed', 'Could not send this message. Check your connection and Firebase rules.');
+      notifyUser('Message failed', "Unable to send your message. Check your connection and try again.");
     }
   };
 
@@ -920,13 +920,13 @@ export default function ChatScreen({ route, navigation }: any) {
       messageId,
       reason,
     })
-      .then(() => notifyUser('Report sent', 'Thanks. LINKUP will review this. You can also block them so they cannot write you.'))
+      .then(() => notifyUser('Report sent', "Your report has been submitted for review. You can also block this account to prevent further messages."))
       .catch(() => notifyUser('Report failed', 'Could not send the report. Try again.'));
   };
 
   const openReportUser = () => {
     closeOptionsMenu();
-    notifyUser('Report this person', 'Why are you reporting them?', [
+    notifyUser('Report this person', "Select a reason for reporting this account.", [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Scam / money ask', onPress: () => reportPerson('scam') },
       { text: 'Harassment', onPress: () => reportPerson('harassment') },
@@ -1019,7 +1019,7 @@ export default function ChatScreen({ route, navigation }: any) {
         <View style={[styles.messageWrapper, styles.theirMessageWrapper]}>
           <View style={[styles.messageBubble, styles.theirBubble, liquidGlass(isDark, false)]}>
             <Text style={[styles.messageText, { color: textColor(isDark, 'secondary') }]}>
-              Hidden for safety. This may be a scam or personal-data ask.
+              Message hidden for your protection. It may contain a scam or a request for sensitive information.
             </Text>
             <TouchableOpacity onPress={() => setRevealedUnsafe((c) => ({ ...c, [item.id]: true }))} style={{ marginTop: 8 }}>
               <Text style={{ fontSize: 13, fontWeight: '800', color: COLORS.primaryStrong }}>Show message</Text>
@@ -1199,8 +1199,8 @@ export default function ChatScreen({ route, navigation }: any) {
               {connectionGate.status === 'pending_out'
                 ? 'Request sent. You can chat after they approve.'
                 : connectionGate.status === 'pending_in'
-                  ? 'They asked to connect. Approve them in Notifications.'
-                  : 'Send a connection request first. Nobody can message until it’s approved.'}
+                  ? "A connection request is pending. Review it in Notifications."
+                  : "Send a connection request to begin. Messaging becomes available after approval."}
             </Text>
           </View>
         ) : (

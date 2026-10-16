@@ -66,7 +66,7 @@ import {
 
 // Cosmetic only - the server answers when it answers. This just keeps the
 // bubble alive with a different line every couple of seconds while it works.
-const THINKING_LINES = ['Linky is reading profiles…', 'Checking who this could be…', 'Almost - comparing two or three…'];
+const THINKING_LINES = ['Linky is reading profiles…', "Reviewing relevant professional profiles…", "Comparing potential collaborators…"];
 
 // Live countdown to the moment today's daily Linky budget resets (the server
 // hands back `asksResetAt` as an ISO instant; dayKey is UTC, so it is the next
@@ -158,24 +158,24 @@ const CardView = ({
         <Text style={[styles.pairNote, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>{card.pairNote}</Text>
       ) : null}
       <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
-        <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>WHY LINKY PICKED THEM</Text>
+        <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>RECOMMENDATION RATIONALE</Text>
         <Text style={[styles.whyText, { color: textColor(isDark) }]}>{card.why}</Text>
         <Text style={[styles.forText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>For: {card.need}</Text>
       </View>
       {requested ? (
         <View style={styles.stateRow}>
           <Clock size={13} color={textColor(isDark, 'muted')} />
-          <Text style={[styles.stateText, { color: textColor(isDark, 'muted') }]}>Asked. Linky will tell you when they answer.</Text>
+          <Text style={[styles.stateText, { color: textColor(isDark, 'muted') }]}>Introduction requested. You will be notified when they respond.</Text>
         </View>
       ) : accepted ? (
         <View style={styles.stateRow}>
           <Check size={13} color="#16A34A" />
-          <Text style={[styles.stateText, { color: '#16A34A' }]}>Accepted. Linky connected you two — say hello.</Text>
+          <Text style={[styles.stateText, { color: '#16A34A' }]}>Introduction accepted. You can now start a conversation.</Text>
         </View>
       ) : declined ? (
         <View style={styles.stateRow}>
           <X size={13} color={textColor(isDark, 'muted')} />
-          <Text style={[styles.stateText, { color: textColor(isDark, 'muted') }]}>Not this time.</Text>
+          <Text style={[styles.stateText, { color: textColor(isDark, 'muted') }]}>Introduction declined.</Text>
         </View>
       ) : (
         <View style={styles.actions}>
@@ -381,7 +381,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
         });
         return;
       }
-      notifyUser('Asked', `Linky asked all of them. Each one answers for themselves.`);
+      notifyUser('Asked', "Introduction requests have been sent. Each recipient will respond independently.");
     } catch (e: any) {
       notifyUser('Linky', e?.message || 'That did not go through.');
     } finally {
@@ -485,7 +485,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
     if (!user?.uid || busyId === 'clearChat') return;
     notifyUser(
       'Clear the chat?',
-      'This deletes your whole Linky conversation. Your daily messages, what Linky knows about you and the people he found stay exactly as they are.',
+      "Delete this Linky conversation? Your daily allowance, profile preferences, and saved recommendations remain unchanged.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -501,7 +501,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
               setLeads([]);
               setPointerRoutes([]);
               setHome((h) => (h ? { ...h, thread: [], lastAsk: null } : h));
-              notifyUser('Cleared', 'Your Linky chat is gone.');
+              notifyUser('Cleared', "Your Linky conversation has been deleted.");
             } catch (e) {
               notifyUser('Could not clear the chat', e instanceof Error ? e.message : 'Please try again.');
             } finally {
@@ -565,12 +565,12 @@ export default function LinkyHomeScreen({ navigation }: any) {
       if (draft.kind === 'meet' && draft.cardId) {
         const r = await linkyApproveMeet(draft.cardId, draft.body.trim());
         setDraft(null);
-        notifyUser(r.matchId ? 'You two are already connected' : 'Sent', r.matchId ? 'No intro needed - open the chat.' : `Linky passed your words to them${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today)` : '.'}`);
+        notifyUser(r.matchId ? 'You two are already connected' : 'Sent', r.matchId ? "You are already connected. Open the conversation to continue." : `Linky passed your words to them${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today)` : '.'}`);
         await load(true);
       } else {
         const r = await linkyApproveLead(draft.body.trim());
         setDraft(null);
-        notifyUser('Kept for you to send', r.note || 'Open their profile, paste it, send it from your own account.');
+        notifyUser('Kept for you to send', r.note || "Review the draft and send it from your own account after opening the recipient’s profile.");
         if (r.url) Linking.openURL(r.url).catch(() => null);
       }
     } catch (err) {
@@ -601,7 +601,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
     try {
       const r = await linkyMarkLead(key, 'not_interested');
       setLeads((list) => list.filter((x) => (x.key || '') !== key));
-      notifyUser('Gone', r.note || 'Linky will not show them again.');
+      notifyUser('Gone', r.note || "This profile has been excluded from future recommendations.");
     } catch (err) {
       notifyUser('Could not do that', err instanceof Error ? err.message : undefined);
     } finally {
@@ -703,9 +703,9 @@ export default function LinkyHomeScreen({ navigation }: any) {
           <View style={styles.heroRow}>
             <BrandMark size={44} style={{ borderRadius: 14 }} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>{firstName ? `Hey ${firstName}.` : 'Hey.'} I'm Linky.</Text>
+              <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>{firstName ? `Hey ${firstName}.` : 'Hey.'} Meet Linky, your AI networking assistant.</Text>
               <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
-                Tell me who you need and I answer right away with the people on LINKUP I can cite a reason for. No guessing, no waiting.
+                Describe your business goals and the expertise you need. Linky recommends relevant LINKUP professionals and explains the profile information behind each recommendation.
               </Text>
             </View>
           </View>
@@ -754,7 +754,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
                       ? `A message to ${home.pending.meet.targetName || 'them'} is waiting on you`
                       : `A message to ${home.pending?.lead?.lead?.name || 'them'} is written and waiting`}
                   </Text>
-                  <Text style={[styles.pendingBarSub, { color: textColor(isDark, 'secondary') }]}>Nothing has been sent. Tap to read it, change it if you want, then send it yourself.</Text>
+                  <Text style={[styles.pendingBarSub, { color: textColor(isDark, 'secondary') }]}>This draft has not been sent. Review and edit it before sending from your own account.</Text>
                 </View>
               </TouchableOpacity>
             ) : null}
@@ -780,7 +780,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
                   ))}
                 </View>
                 <Text style={[styles.loopFoot, { color: textColor(isDark, 'muted') }]}>
-                  One answer, 20 seconds. It is how Linky learns who to put in front of you next.
+                  Share brief feedback to help Linky improve future introduction recommendations.
                 </Text>
               </View>
             ) : null}
@@ -932,8 +932,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
             {!pendingAsk && !answer ? (
               <View style={styles.chips}>
-                <Text style={[styles.emptyLine, { color: textColor(isDark, 'muted') }]}>Try one of these, or type your own below.</Text>
-                {['A Flutter developer in Harare for a paid fintech MVP', 'A co-founder with sales experience, equity', 'Someone who has raised from local angels, coffee'].map((s) => (
+                <Text style={[styles.emptyLine, { color: textColor(isDark, 'muted') }]}>Select an example or describe your collaboration requirements.</Text>
+                {['A Flutter developer in Harare for a paid fintech MVP', 'A cofounder with sales experience for an equity-based collaboration', 'A founder with experience raising investment from local angel investors'].map((s) => (
                   <TouchableOpacity key={s} style={[styles.chip, { borderColor: border, backgroundColor: surface }]} onPress={() => send(s)} activeOpacity={0.75}>
                     <Text style={[styles.chipText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{s}</Text>
                   </TouchableOpacity>
@@ -970,7 +970,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
         <View style={[styles.composer, { backgroundColor: surface, borderColor: border }]}>
           <TextInput
             style={[styles.input, { color: textColor(isDark) }]}
-            placeholder="Who do you need? Ask Linky…"
+            placeholder="Describe the cofounder or collaborator you need…"
             placeholderTextColor="#999"
             value={input}
             onChangeText={setInput}

@@ -163,7 +163,7 @@ export default function CreatePostScreen({ navigation }: any) {
       return;
     }
     if (tagline.trim().length < 8) {
-      Alert.alert('Almost there', 'Add a one-line description (a few words at least).');
+      Alert.alert('Almost there', "Add a concise description of your startup and its value proposition.");
       return;
     }
     const cleanWebsite = normalizeWebsite(website);
@@ -272,7 +272,7 @@ export default function CreatePostScreen({ navigation }: any) {
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
           <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>New Startup</Text>
-          <Text style={styles.headerSub}>List your startup for founders</Text>
+          <Text style={styles.headerSub}>Introduce your startup to potential collaborators</Text>
         </View>
         <TouchableOpacity
           onPress={handlePost}
@@ -343,15 +343,15 @@ export default function CreatePostScreen({ navigation }: any) {
               )}
             </TouchableOpacity>
             <Text style={[styles.hint, { color: textColor(isDark, 'muted') }]}>
-              Required — this logo appears beside your startup name in the feed.
+              Required. Your logo identifies your startup in the community feed.
             </Text>
 
             {renderField('WEBSITE', website, setWebsite, 'yourstartup.com', { maxLength: 120, keyboardType: 'url' })}
-            {renderField('ONE-LINE DESCRIPTION', tagline, setTagline, 'One line that sells it — e.g. Invoices paid 2× faster', {
+            {renderField('ONE-LINE DESCRIPTION', tagline, setTagline, "Product value proposition, for example: simplify invoice collection", {
               maxLength: 90,
-              hint: 'This is the headline under your startup name.',
+              hint: "This value proposition appears beneath your startup name.",
             })}
-            {renderField('FULL DESCRIPTION', description, setDescription, 'What does it do, who is it for?', {
+            {renderField('FULL DESCRIPTION', description, setDescription, "Describe your product and its intended customers.", {
               multiline: true,
               maxLength: 500,
             })}
@@ -404,7 +404,7 @@ export default function CreatePostScreen({ navigation }: any) {
         feature="Startup posts"
         description={
           isPlus
-            ? 'You have posted all 10 startups for this week. It resets next week.'
+            ? "You have reached your weekly limit of 10 startup listings. Your allowance resets next week."
             : 'The free plan allows 1 startup a week. Upgrade to LINKUP PLUS — $19.99/month or $149.99/year — and post up to 10 startups a week.'
         }
       />

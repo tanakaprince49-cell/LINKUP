@@ -56,7 +56,7 @@ export const buildDailyFive = (me: any, people: any[]): DailyFiveCard[] => {
     cards.push({
       id: `opp_${opp.uid}`,
       kind: 'opportunity',
-      title: `${displayNameFor(opp)} is hiring energy`,
+      title: `${displayNameFor(opp)} is seeking collaborators`,
       subtitle: Array.isArray(opp.lookingFor) ? opp.lookingFor.slice(0, 3).join(', ') : 'Open to collaborators',
       userId: opp.uid,
       pic: opp.profilePic,
@@ -65,14 +65,14 @@ export const buildDailyFive = (me: any, people: any[]): DailyFiveCard[] => {
   cards.push({
     id: 'idea_habit',
     kind: 'idea',
-    title: 'Today’s idea swipe',
-    subtitle: 'One idea. Yes or no. Say who you’d need.',
+    title: "Review a startup opportunity",
+    subtitle: "Review a startup concept and identify the expertise required to develop it.",
   });
   cards.push({
     id: 'roast',
     kind: 'roast',
-    title: 'Ship something in 30 seconds',
-    subtitle: 'A one-line build log keeps your Rep from rotting.',
+    title: "Share a business milestone",
+    subtitle: "Record a concise progress update to keep your activity-based reputation current.",
   });
   return cards.slice(0, 5);
 };

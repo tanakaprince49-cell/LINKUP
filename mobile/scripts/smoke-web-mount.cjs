@@ -69,11 +69,12 @@ const close = (server) => new Promise((resolve) => { server.close(resolve); serv
     upstreamPort = await listen(upstream);
     const landingPort = await listen(landing);
     browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
-    for (const [name, origin, base] of [
-      ['original-root', `http://127.0.0.1:${upstreamPort}`, ''],
-      ['landing-prefix-proxy', `http://127.0.0.1:${landingPort}`, '/app'],
+    for (const [name, origin, base, width] of [
+      ['original-root', `http://127.0.0.1:${upstreamPort}`, '', 1150],
+      ['landing-prefix-proxy', `http://127.0.0.1:${landingPort}`, '/app', 1150],
+      ['mobile-prefix-proxy', `http://127.0.0.1:${landingPort}`, '/app', 390],
     ]) {
-      const context = await browser.newContext({ viewport: { width: 1150, height: 850 } });
+      const context = await browser.newContext({ viewport: { width, height: 850 } });
       // No provider calls, sign-ins, production data or analytics in this test.
       await context.route('**/*', (route) => {
         const url = new URL(route.request().url());
@@ -104,15 +105,29 @@ const close = (server) => new Promise((resolve) => { server.close(resolve); serv
       }
       watchApp = true;
       await page.goto(origin + base + '/landing', { waitUntil: 'domcontentloaded' });
-      await page.getByText('Use email instead', { exact: true }).waitFor({ timeout: 20000 }).catch(async (error) => {
+      await page.getByText('Continue with email', { exact: true }).waitFor({ timeout: 20000 }).catch(async (error) => {
         console.error(`[${name}] URL:`, page.url());
         console.error(`[${name}] body:`, (await page.textContent('body')).slice(0, 1400));
         throw error;
       });
       assert.equal(await page.evaluate(() => window.__LINKUP_BASE_PATH__), base);
-      await page.getByText('Use email instead', { exact: true }).click();
+      assert.equal(await page.locator('meta[name="robots"]').getAttribute('content'), 'index,follow');
+      assert.equal(await page.locator('link[rel="canonical"]').getAttribute('href'), 'https://www.linkupbuild.com/app/landing');
+      assert.ok((await page.title()).includes('Cofounder Matching'));
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'horizontal overflow');
+      const emailButton = await page.getByText('Continue with email', { exact: true }).boundingBox();
+      assert.ok(emailButton && emailButton.x >= 0 && emailButton.x + emailButton.width <= width, 'CTA clipped horizontally');
+      if (base) {
+        const output = path.join(mobile, '..', 'docs', 'qa');
+        fs.mkdirSync(output, { recursive: true });
+        await page.screenshot({ path: path.join(output, `professional-landing-${width}.png`), fullPage: true });
+      }
+      await page.getByText('Continue with email', { exact: true }).click();
       await page.waitForURL(origin + base + '/login', { timeout: 10000 });
       await page.getByPlaceholder('you@example.com').waitFor();
+      assert.equal(await page.locator('meta[name="robots"]').getAttribute('content'), 'noindex,follow');
+      assert.equal(await page.locator('link[rel="canonical"]').count(), 0);
+      assert.equal(await page.locator('#linkup-app-schema').count(), 0);
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.getByPlaceholder('you@example.com').waitFor({ timeout: 20000 }).catch(async (error) => {
         console.error(`[${name}] reload URL:`, page.url());
@@ -166,7 +181,7 @@ const close = (server) => new Promise((resolve) => { server.close(resolve); serv
       const entry = await context.newPage();
       entry.on('pageerror', (error) => errors.push(error.message));
       await entry.goto(origin + (base || '/'), { waitUntil: 'domcontentloaded' });
-      await entry.getByText('Use email instead', { exact: true }).waitFor({ timeout: 20000 });
+      await entry.getByText('Continue with email', { exact: true }).waitFor({ timeout: 20000 });
       if (base) assert.ok(new URL(entry.url()).pathname.startsWith('/app/'));
       await entry.close();
       assert.deepEqual(escapedRequests, [], 'app requests escaped the /app namespace');

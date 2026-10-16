@@ -746,9 +746,9 @@ export default function SearchScreen({ navigation, route }: any) {
       >
       <View style={[styles.searchHero, liquidGlass(isDark)]}>
         <Text style={[styles.heroKicker, { color: COLORS.secondary }]}>Search</Text>
-        <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Find the missing person in your plan.</Text>
+        <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Find the expertise your business needs.</Text>
         <Text style={[styles.heroCopy, { color: textColor(isDark, 'secondary') }]}>
-          Search handles, skills, projects, locations, and live intent. Then rank results by builder compatibility.
+          Search professional profiles by skills, projects, location, and collaboration goals. Review results ranked by relevance.
         </Text>
       </View>
 
@@ -756,7 +756,7 @@ export default function SearchScreen({ navigation, route }: any) {
         <View style={[styles.searchBar, liquidGlass(isDark, false)]}>
           <Search size={18} color="#666" />
           <TextInput
-            placeholder="Search builders"
+            placeholder="Search professionals"
             placeholderTextColor="#666"
             style={[styles.searchInput, { color: textColor(isDark) }]}
             value={queryText}
@@ -1076,7 +1076,7 @@ export default function SearchScreen({ navigation, route }: any) {
           <View style={[styles.idleIconTile, { backgroundColor: COLORS.primary }]}>
             <Search size={26} color="#000" />
           </View>
-          <Text style={[styles.idleTitle, { color: textColor(isDark) }]}>Search anyone on LINKUP</Text>
+          <Text style={[styles.idleTitle, { color: textColor(isDark) }]}>Search professional profiles</Text>
           <Text style={[styles.idleCopy, { color: textColor(isDark, 'secondary') }]}>
             Nothing loads until you ask — type a name, skill, city, or role and the builders you're looking for appear instantly. Zero waiting, zero wasted data.
           </Text>

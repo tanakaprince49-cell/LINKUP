@@ -1,7 +1,7 @@
 {
   "name": "LINKUP",
   "short_name": "LINKUP",
-  "description": "AI-powered relationship infrastructure for founders, builders, investors, and startup teams.",
+  "description": "Cofounder matching and professional networking for startup founders, collaborators, and teams.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

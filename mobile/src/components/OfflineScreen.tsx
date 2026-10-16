@@ -7,12 +7,12 @@ import { useTheme } from '../contexts/ThemeContext';
 const offlineCat = require('../../assets/offline-cat.png');
 
 const LINES = [
-  'Your Wi-Fi went to get milk and never came back.',
-  'The internet is on a coffee break. Very long coffee.',
-  'Packets left the group chat. You are offline.',
-  'Even pigeons carrying USB sticks would be faster right now.',
-  'LINKUP is here. The internet is… emotionally unavailable.',
-  'We checked under the router. Nothing but dust and hope.',
+  "An active internet connection is required to load your professional network.",
+  "Reconnect to continue exploring professionals and startup opportunities.",
+  "LINKUP cannot reach the network. Check your connection before trying again.",
+  "A stable connection helps keep professional conversations up to date.",
+  "LINKUP is temporarily offline. Your account remains available when you reconnect.",
+  "Check your network settings or switch to another connection.",
 ];
 
 export default function OfflineScreen({ onRetry }: { onRetry?: () => void }) {
@@ -28,11 +28,11 @@ export default function OfflineScreen({ onRetry }: { onRetry?: () => void }) {
         </View>
         <Text style={[styles.title, { color: textColor(isDark) }]}>No internet connection</Text>
         <Text style={[styles.subtitle, { color: textColor(isDark, 'secondary') }]}>
-          The cat pulled the cable again.
+          Your professional network is temporarily unavailable.
         </Text>
         <Text style={[styles.joke, { color: textColor(isDark, 'muted') }]}>{line}</Text>
         <Text style={[styles.hint, { color: textColor(isDark, 'muted') }]}>
-          Check your data or Wi-Fi, then give it another go.
+          Check your mobile data or Wi-Fi connection, then try again.
         </Text>
         <TouchableOpacity style={styles.btn} onPress={onRetry} activeOpacity={0.88}>
           <Text style={styles.btnText}>Try again</Text>

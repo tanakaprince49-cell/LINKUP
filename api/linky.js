@@ -822,7 +822,7 @@ async function handleTelegram(req, res) {
         r = { text: `I am here - that one ran past my ${Math.round(budget / 1000)}s and I stopped waiting on it. Say it again: if it needed the web I will tell you what I found in LINKUP first and then search.` };
       } else if (r?.__err) {
         await recordBotFault('throw', { updateId, chatId, text: update.message.text, error: r.__err?.stack || r.__err?.message || r.__err });
-        r = { text: String(r.__err?.message || 'Something on my side broke on that one. Nothing was sent to anybody - try it again in a minute.') };
+        r = { text: String(r.__err?.message || 'Unable to complete this request. Please try again shortly.') };
       }
       // buttons first (they act on something), then the reply-keyboard chips
       const markup = r.buttons?.length
@@ -837,7 +837,7 @@ async function handleTelegram(req, res) {
     } else if (update?.message?.chat?.id && !update?.message?.text) {
       // Voice notes, photos, stickers: no transcription here, so say so like a
       // person instead of leaving them on read.
-      await sendTelegram(update.message.chat.id, 'I only get text I am afraid - pictures and voice notes go straight past me. Type who you need and I will go looking.');
+      await sendTelegram(update.message.chat.id, 'Linky currently supports text messages only. Please describe the professional expertise or collaboration you need.');
     }
   } catch (err) {
     // the old code logged this and answered 200, so Telegram never retried and the
@@ -849,7 +849,7 @@ async function handleTelegram(req, res) {
       text: update?.message?.text || update?.callback_query?.data || '',
       error: err?.stack || err?.message || err,
     });
-    if (chatId) await sendTelegram(chatId, 'That one broke on my side - nothing was sent to anybody. Try again in a moment and if it keeps happening I will have a note of it.').catch(() => null);
+    if (chatId) await sendTelegram(chatId, 'Unable to complete this request. Please try again shortly. If the issue persists, contact LINKUP support.').catch(() => null);
   }
   res.status(200).json({ ok: true });
 }

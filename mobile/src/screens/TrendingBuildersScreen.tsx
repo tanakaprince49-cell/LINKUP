@@ -247,9 +247,9 @@ export default function TrendingBuildersScreen({ navigation }: any) {
           <Text style={styles.liveText}>LIVE BOARD</Text>
           <Trophy size={14} color="#111" />
         </View>
-        <Text style={styles.arenaTitle}>Who’s winning LINKUP right now</Text>
+        <Text style={styles.arenaTitle}>Active professionals in your network</Text>
         <Text style={styles.arenaSub}>
-          Fair live top 3 — profile quality, views, and recent activity. No Plus boost. Podium people get a notification.
+          The top three profiles are ranked by profile quality, views, and recent activity. PLUS visibility boosts do not affect these rankings.
         </Text>
         <View style={styles.statRow}>
           <View style={styles.statChip}>
@@ -312,8 +312,8 @@ export default function TrendingBuildersScreen({ navigation }: any) {
           ListEmptyComponent={
             podium.length ? null : (
               <View style={styles.emptyCard}>
-                <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>Board is empty</Text>
-                <Text style={styles.emptySub}>When more builders go public, the league starts here.</Text>
+                <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No ranked profiles yet</Text>
+                <Text style={styles.emptySub}>Rankings become available as more members enable public discovery.</Text>
               </View>
             )
           }

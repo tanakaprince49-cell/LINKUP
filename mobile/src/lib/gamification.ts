@@ -4,8 +4,8 @@ import { Achievement, DailyMission, GamificationState, MissionType, WeeklyStats 
 const GAMIFICATION_KEY = 'linkup:gamification:v1';
 
 const MISSION_POOL: { type: MissionType; label: string; target: number; points: number }[] = [
-  { type: 'swipe', label: 'Swipe 10 profiles', target: 10, points: 15 },
-  { type: 'like', label: 'Like 3 profiles', target: 3, points: 10 },
+  { type: 'swipe', label: "Review 10 professional profiles", target: 10, points: 15 },
+  { type: 'like', label: "Express interest in 3 profiles", target: 3, points: 10 },
   { type: 'connect', label: 'Connect with 1 founder', target: 1, points: 20 },
   { type: 'view_profile', label: 'View 5 profiles', target: 5, points: 10 },
   { type: 'message', label: 'Send 3 messages', target: 3, points: 15 },
@@ -13,14 +13,14 @@ const MISSION_POOL: { type: MissionType; label: string; target: number; points: 
 ];
 
 export const ACHIEVEMENT_DEFS = [
-  { id: 'first_spark', label: 'First Spark', description: 'Earn 100 Spark Points', icon: '⚡', target: 100 },
-  { id: 'social_butterfly', label: 'Social Butterfly', description: 'Make 10 connections', icon: '🦋', target: 10 },
-  { id: 'explorer', label: 'Explorer', description: 'Swipe 100 profiles', icon: '🧭', target: 100 },
-  { id: 'streak_7', label: 'On Fire', description: '7-day streak', icon: '🔥', target: 7 },
+  { id: 'first_spark', label: "First milestone", description: 'Earn 100 Spark Points', icon: '⚡', target: 100 },
+  { id: 'social_butterfly', label: "Network builder", description: 'Make 10 connections', icon: '🦋', target: 10 },
+  { id: 'explorer', label: 'Explorer', description: "Review 100 professional profiles", icon: '🧭', target: 100 },
+  { id: 'streak_7', label: "Consistent contributor", description: '7-day streak', icon: '🔥', target: 7 },
   { id: 'streak_30', label: 'Unstoppable', description: '30-day streak', icon: '💪', target: 30 },
-  { id: 'chatterbox', label: 'Chatterbox', description: 'Send 50 messages', icon: '💬', target: 50 },
+  { id: 'chatterbox', label: "Active communicator", description: 'Send 50 messages', icon: '💬', target: 50 },
   { id: 'networker', label: 'Networker', description: 'Get 5 approved connections', icon: '🤝', target: 5 },
-  { id: 'mission_crushed', label: 'Mission Crushed', description: 'Complete 30 daily missions', icon: '🎯', target: 30 },
+  { id: 'mission_crushed', label: "Professional progress", description: 'Complete 30 daily missions', icon: '🎯', target: 30 },
 ];
 
 const defaultWeeklyStats = (): WeeklyStats => {
@@ -178,7 +178,7 @@ export const generateWeeklyReport = (state: GamificationState): string | null =>
   const today = new Date().toISOString().split('T')[0];
   if (state.lastWeeklyReportDate === today) return null;
   const { weeklyStats } = state;
-  return `📊 Weekly Match Report\n${weeklyStats.swipes} swipes · ${weeklyStats.likes} likes · ${weeklyStats.connections} connections · ${weeklyStats.messages} messages · ${weeklyStats.pointsEarned} Spark Points earned`;
+  return `Weekly Networking Report\n${weeklyStats.swipes} profiles reviewed · ${weeklyStats.likes} expressions of interest · ${weeklyStats.connections} connections · ${weeklyStats.messages} messages · ${weeklyStats.pointsEarned} Spark Points earned`;
 };
 
 export const POINTS_PER_ACTION: Record<string, number> = {

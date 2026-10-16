@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { withHead, copy: searchCopy } = require('../../shared/app-seo.cjs');
 
 const appRoot = path.resolve(__dirname, '..');
 const publicDir = path.join(appRoot, 'public');
@@ -157,7 +158,11 @@ html = injectOnce(html, 'linkup-build-id', buildScript, '</body>');
 html = injectOnce(html, 'linkup-pwa-service-worker', pwaScript, '</body>');
 html = injectOnce(html, 'linkup-devtools-guard', devToolsGuard, '</body>');
 
-fs.writeFileSync(indexPath, html);
+// Export distinct public and private shells without changing app routes or assets.
+fs.writeFileSync(indexPath, withHead(html, false));
+const publicLanding = withHead(html, true).replace(/<noscript>[\s\S]*?<\/noscript>/i,
+  '<noscript><main><h1>LINKUP: Cofounder Matching and Startup Networking</h1><p>' + searchCopy.description + '</p><p><a href="https://www.linkupbuild.com/app/builders">Explore public professional profiles</a>. Enable JavaScript to use the app.</p></main></noscript>');
+fs.writeFileSync(path.join(distDir, 'landing.html'), publicLanding);
 
 // Legal pages also exist at both mounts. Their root-relative cross-links must
 // not accidentally open the marketing SPA when viewed through /app.

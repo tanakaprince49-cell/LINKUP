@@ -43,7 +43,7 @@ const LOGO = require('../../assets/logo-square.png');
 
 const PRO_PERKS = [
   '60 Linky messages a day & unlimited Meets',
-  'Who Viewed You — names & profiles of everyone checking you out',
+  "Profile viewer insights — review available names and professional profiles",
   'Advanced search, AI ranking & saved search alerts',
   'Unlimited AI warm intros & Linky assistant',
   'Turbo Connect visibility boost in Discover & search',
@@ -352,7 +352,7 @@ export default function PaywallModal({
     const offerToken = offerTokenFor(offerForPlan(plan));
 
     if (Platform.OS === 'android' && !offerToken) {
-      const message = storeError || 'LINKUP PLUS is not ready in Google Play yet. Check the subscription product IDs and base-plan offers in Play Console.';
+      const message = storeError || "LINKUP PLUS is temporarily unavailable through Google Play. Please try again later or contact support.";
       Alert.alert('Google Play product missing', message);
       return;
     }
@@ -395,7 +395,7 @@ export default function PaywallModal({
           active
             ? 'LINKUP PLUS is active on this account.'
             : result?.status === 'pending'
-              ? 'Your latest payment is still being confirmed. Give it a moment and try again.'
+              ? "Your payment is being verified. Please wait briefly before trying again."
               : 'We could not find a completed PLUS payment on this account.'
         );
       } catch (error: any) {
@@ -463,7 +463,7 @@ export default function PaywallModal({
               ) : null}
             </View>
 
-            <Text style={[styles.title, { color: textColor(isDark) }]}>Build your startup faster</Text>
+            <Text style={[styles.title, { color: textColor(isDark) }]}>Expand your professional networking tools</Text>
             <Text style={[styles.copy, { color: textColor(isDark, 'secondary') }]}>
               {description || 'Free members can explore a limited number of builders every 12 hours. LINKUP PLUS unlocks unlimited discovery, smarter AI recommendations, and premium tools to help you find the right co-founder, developer, designer, or investor faster.'}
             </Text>

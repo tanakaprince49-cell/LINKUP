@@ -184,7 +184,7 @@ export default function NewsScreen() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Bell size={32} color={textColor(isDark, 'muted')} />
-              <Text style={[styles.emptyText, { color: textColor(isDark, 'muted') }]}>No articles found.</Text>
+              <Text style={[styles.emptyText, { color: textColor(isDark, 'muted') }]}>No articles are available for these filters.</Text>
             </View>
           }
         />
@@ -215,10 +215,10 @@ function LinkyHouseCard({ isDark, onPress }: { isDark: boolean; onPress: () => v
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
           <Text style={[styles.houseTitle, { color: textColor(isDark) }]} numberOfLines={2}>
-            Linky found people for you
+            Discover relevant professional connections
           </Text>
           <Text style={[styles.houseBlurb, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
-            I've read every builder here. Unlock me and I'll introduce you to the ones who fit.
+            Explore AI-assisted recommendations based on professional profiles and your collaboration goals.
           </Text>
           <View style={styles.houseCtaRow}>
             <Sparkles size={12} color={COLORS.primaryStrong} />

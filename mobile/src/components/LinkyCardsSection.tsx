@@ -121,7 +121,7 @@ export default function LinkyCardsSection() {
     try {
       const r = await linkyApproveMeet(draft.cardId, draft.body.trim());
       setDraft(null);
-      notifyUser(r.matchId ? 'You two are already connected' : 'Sent', r.matchId ? 'No intro needed - open the chat.' : `Linky passed your words to them${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today)` : '.'}`);
+      notifyUser(r.matchId ? 'You two are already connected' : 'Sent', r.matchId ? "You are already connected. Open the conversation to continue." : `Linky passed your words to them${r.meetsLeft != null ? ` (${r.meetsLeft} Meets left today)` : '.'}`);
       await load();
     } catch (err) {
       notifyUser('Nothing was sent', err instanceof Error ? err.message : 'Please try again.');
@@ -198,7 +198,7 @@ export default function LinkyCardsSection() {
         ) : null}
         {card.why ? (
           <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
-            <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>WHY LINKY PICKED THEM</Text>
+            <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>RECOMMENDATION RATIONALE</Text>
             <Text style={[styles.whyText, { color: textColor(isDark) }]}>{card.why}</Text>
           </View>
         ) : null}
@@ -206,7 +206,7 @@ export default function LinkyCardsSection() {
           <View style={styles.stateRow}>
             {requested ? <Clock size={13} color={textColor(isDark, 'muted')} /> : accepted ? <Check size={13} color="#16A34A" /> : <X size={13} color={textColor(isDark, 'muted')} />}
             <Text style={[styles.stateText, { color: accepted ? '#16A34A' : textColor(isDark, 'muted') }]}>
-              {requested ? 'Asked. Linky will tell you when they answer.' : accepted ? 'Accepted. Linky connected you two — say hello.' : declined ? 'Not this time.' : 'On your list.'}
+              {requested ? "Introduction requested. You will be notified when they respond." : accepted ? "Introduction accepted. You can now start a conversation." : declined ? "Introduction declined." : 'On your list.'}
             </Text>
           </View>
         ) : (

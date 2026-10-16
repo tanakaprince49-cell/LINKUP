@@ -73,8 +73,8 @@ export default function CityLeagueScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.root, appBackground(isDark)]}>
       <ScreenHeader
-        title={city || country ? 'City league' : 'Global league'}
-        subtitle={`${city ? `${city}${country ? `, ${country}` : ''}` : country || 'Global'} · ranked by Rep that can decay`}
+        title={city || country ? "Local rankings" : "Global rankings"}
+        subtitle={`${city ? `${city}${country ? `, ${country}` : ''}` : country || 'Global'} · activity-based reputation ranking`}
         onBack={() => navigation.goBack()}
         isDark={isDark}
       />
@@ -88,8 +88,8 @@ export default function CityLeagueScreen({ navigation }: any) {
           ListEmptyComponent={
             <Text style={[styles.empty, { color: textColor(isDark, 'muted') }]}>
               {city || country
-                ? `No ranked builders in ${city || country} yet — invite builders from your area and take the crown first.`
-                : 'No ranked builders yet.'}
+                ? `No ranked professionals in ${city || country} yet. Invite relevant contacts from your local business community.`
+                : "No professional rankings are available yet."}
             </Text>
           }
           renderItem={({ item, index }) => (

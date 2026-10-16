@@ -44,7 +44,7 @@ export default function LinkySettingsScreen({ navigation }: any) {
 
   const toggle = (o: IntentOffer) => {
     const next = openTo.includes(o) ? openTo.filter((x) => x !== o) : [...openTo, o];
-    if (!next.length) { notifyUser('Keep at least one', 'Turn the weekly cap to 0 if you want no intros at all.'); return; }
+    if (!next.length) { notifyUser('Keep at least one', "Set the weekly limit to 0 to disable incoming introduction requests."); return; }
     setOpenTo(next);
     save({ openTo: next });
   };
@@ -123,12 +123,12 @@ export default function LinkySettingsScreen({ navigation }: any) {
             );
           })}
         </View>
-        <Text style={[styles.fine, { color: textColor(isDark, 'muted') }]}>Linky only shows you to people whose ask matches one of these.</Text>
+        <Text style={[styles.fine, { color: textColor(isDark, 'muted') }]}>Linky considers your stated interests when recommending your profile for an introduction.</Text>
 
         <Text style={[styles.section, { color: textColor(isDark, 'muted') }]}>INBOUND INTROS PER WEEK</Text>
         <Row
           title={cap === 0 ? 'Paused' : `${cap} per week`}
-          body="Declining an intro mutes that person for you. Nobody is told."
+          body="Declining an introduction excludes that person from your recommendations without notifying them."
           right={(
             <View style={styles.stepper}>
               <TouchableOpacity onPress={() => bumpCap(-1)} style={[styles.stepBtn, { borderColor: border }]}><Minus size={14} color={textColor(isDark)} /></TouchableOpacity>

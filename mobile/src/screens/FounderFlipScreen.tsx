@@ -178,7 +178,7 @@ const FounderFlipScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
             <>
               <Loader size={36} color={COLORS.primaryStrong} />
               <Text style={[styles.waitingText, { color: textColor(isDark) }]}>Waiting for opponent...</Text>
-              <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share the challenge so your friend joins</Text>
+              <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share this challenge to invite another member.</Text>
             </>
           )}
         </View>
@@ -221,7 +221,7 @@ const FounderFlipScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
 
       {(gameOver || (challengeResult?.status === 'completed')) && challengeResult && (challengeResult.senderScore != null || challengeResult.recipientScore != null) && (
         <View style={[styles.gameOverBanner, { backgroundColor: '#22C55E' }]}>
-          <Text style={styles.gameOverTitle}>Challenge Complete!</Text>
+          <Text style={styles.gameOverTitle}>Challenge completed</Text>
           {challengeResult.senderScore != null && challengeResult.recipientScore != null ? (
             <>
               <Text style={styles.gameOverMoves}>
@@ -253,7 +253,7 @@ const FounderFlipScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
 
       {!waitingForOpponent && gameOver && !(challengeResult?.status === 'completed') && (
         <View style={styles.gameOverBanner}>
-          <Text style={styles.gameOverTitle}>🎉 You matched all pairs!</Text>
+          <Text style={styles.gameOverTitle}>All pairs completed</Text>
           <Text style={styles.gameOverMoves}>{moves} moves</Text>
           <View style={styles.gameOverActions}>
             <TouchableOpacity style={styles.gameOverBtn} onPress={initGame}>

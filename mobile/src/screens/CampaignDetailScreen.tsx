@@ -85,7 +85,7 @@ export default function CampaignDetailScreen({ navigation, route }: any) {
   };
 
   const confirmEnd = () =>
-    Alert.alert('End this campaign?', 'It stops showing immediately and frees a slot. Stats stay on record.', [
+    Alert.alert('End this campaign?', "The campaign stops immediately and releases a campaign slot. Performance data remains available.", [
       { text: 'Keep running', style: 'cancel' },
       { text: 'End campaign', style: 'destructive', onPress: () => changeStatus('ended') },
     ]);
@@ -130,11 +130,11 @@ export default function CampaignDetailScreen({ navigation, route }: any) {
             <Text style={[styles.heroName, { color: textColor(isDark) }]}>{campaign.name}</Text>
             <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
               {campaign.status === 'pending_review'
-                ? 'In human review — goes live within 24 hours.'
+                ? "Submitted for review. Publication follows approval."
                 : campaign.status === 'active'
-                  ? 'Live in the Idea Deck for eligible founders.'
+                  ? "Active in the startup idea directory for eligible members."
                   : campaign.status === 'paused'
-                    ? 'Paused — not showing anywhere right now.'
+                    ? "Paused. This campaign is not currently displayed."
                     : campaign.status === 'rejected'
                       ? campaign.reviewNote || 'This campaign was not approved.'
                       : 'This campaign has ended.'}

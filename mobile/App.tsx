@@ -1,4 +1,5 @@
 import 'react-native-gesture-handler';
+import { syncWebMetadata } from './src/lib/webMetadata';
 import { webBasePath, webAppPath, webRoutePath, scopedNavigationPath } from './src/lib/webPaths';
 import React from 'react';
 import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text, Platform, InteractionManager } from 'react-native';
@@ -283,11 +284,11 @@ function TabNavigator({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [unreadMessages, setUnreadMessages] = React.useState(0);
   const tabLabels: Record<string, string> = {
-    Dashboard: 'Explore',
+    Dashboard: 'Discover',
     LinkyHome: 'Linky',
     Feed: 'Startups',
     Search: 'Search',
-    Inbox: 'Chat',
+    Inbox: 'Messages',
     News: 'News',
   };
 
@@ -394,7 +395,7 @@ function TabNavigator({ navigation }: any) {
         headerShown: true,
         header: (props) => {
           const titles: Record<string, string> = {
-            Dashboard: 'LINKUP',
+            Dashboard: 'Network',
             LinkyHome: 'Linky',
             Feed: 'Startups',
             Search: 'Search',
@@ -664,7 +665,12 @@ function AppContent() {
       key={navigationStateKey}
       linking={linking}
       theme={navTheme}
-      onStateChange={blurActiveElementOnWeb}
+      documentTitle={{ enabled: false }}
+      onReady={() => syncWebMetadata(navigationRef.getCurrentRoute()?.name)}
+      onStateChange={() => {
+        blurActiveElementOnWeb();
+        syncWebMetadata(navigationRef.getCurrentRoute()?.name);
+      }}
     >
       <Stack.Navigator
         key={navigationStateKey}

@@ -483,8 +483,8 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
         ListEmptyComponent={
           <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}>
-            <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>Nobody here yet</Text>
-            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>This list is empty because the network is still small. Invite 3 builders or search whoever is already on LINKUP.</Text>
+            <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No professionals to display</Text>
+            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>No relevant profiles are available in this view yet. Search the member directory or invite professionals from your network.</Text>
             <TouchableOpacity onPress={() => void shareLinkupInvite()} style={styles.emptyBtn}>
               <Text style={styles.emptyBtnText}>Invite Builders</Text>
             </TouchableOpacity>
@@ -510,12 +510,12 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                   </View>
                 </View>
                 <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>
-                  {people.length === 0 ? 'The room is still small.' : 'Your Daily 5 is ready.'}
+                  {people.length === 0 ? "Grow your professional network." : 'Your Daily 5 is ready.'}
                 </Text>
                 <Text style={[styles.heroSub, { color: textColor(isDark, 'muted') }]}>
                   {people.length === 0
                     ? `${people.length} discoverable builders loaded. Invite people you already trust, or talk to LINKUP concierge in Alerts.`
-                    : 'Smart matches, live project opportunities, and founders worth meeting are ranked into one calm feed.'}
+                    : "Discover recommended cofounders, startup collaborators, and active project opportunities in one place."}
                 </Text>
               </View>
 
@@ -527,7 +527,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     borderColor: HOME_LINE }]}
                 >
                   <Flame size={14} color="#000" />
-                  <Text style={[styles.heroBtnText, { color: '#000' }]}>Daily 5</Text>
+                  <Text style={[styles.heroBtnText, { color: '#000' }]}>Daily briefing</Text>
                 </TouchableOpacity>
                 <View style={[styles.heroStatus, { backgroundColor: HOME_GOLD_TINT }]}>
                   <Star size={12} color={HOME_INK} />
@@ -541,7 +541,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 style={[styles.ideaDeckBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
               >
                 <Lightbulb size={15} color={HOME_INK} />
-                <Text style={[styles.ideaDeckBtnText, { color: textColor(isDark) }]}>Idea Deck — swipe startup ideas worth building</Text>
+                <Text style={[styles.ideaDeckBtnText, { color: textColor(isDark) }]}>Explore startup ideas and collaboration opportunities</Text>
                 <ChevronRight size={15} color={textColor(isDark, 'muted')} />
               </TouchableOpacity>
 
@@ -551,7 +551,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 style={[styles.ideaDeckBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
               >
                 <Megaphone size={15} color={HOME_INK} />
-                <Text style={[styles.ideaDeckBtnText, { color: textColor(isDark) }]}>Campaigns — put your product in front of every founder</Text>
+                <Text style={[styles.ideaDeckBtnText, { color: textColor(isDark) }]}>Campaigns — promote your product to the LINKUP community</Text>
                 <ChevronRight size={15} color={textColor(isDark, 'muted')} />
               </TouchableOpacity>
 
@@ -619,7 +619,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>Opportunity Radar</Text>
-                      <Text style={[styles.radarSub, { color: textColor(isDark, 'muted') }]}>No strong opportunity yet. Add more skills/interests to sharpen alerts.</Text>
+                      <Text style={[styles.radarSub, { color: textColor(isDark, 'muted') }]}>No relevant opportunities yet. Update your skills and interests to improve recommendations.</Text>
                     </View>
                   </View>
                 </View>

@@ -1590,7 +1590,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       return;
     }
 
-    notifyUser("Logout", "Are you sure you want to exit the realm?", [
+    notifyUser("Logout", "Sign out of your LINKUP account on this device?", [
       { text: "Cancel", style: "cancel" },
       { text: "Logout", style: "destructive", onPress: performLogout}
     ]);
@@ -1622,7 +1622,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
     notifyUser(
       "DELETE ACCOUNT", 
-      "This is permanent. Your founder profile and all network data will be wiped from existence. Proceed?", 
+      "Permanently delete your LINKUP account and associated profile data? This action cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
         { 
@@ -2106,7 +2106,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               />
               ) : null}
               <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, marginTop: 12 }]}>
-                <Text style={styles.projectEditLabel}>Socials (optional)</Text>
+                <Text style={styles.projectEditLabel}>Professional links (optional)</Text>
                 {SOCIAL_FIELDS.map((field) => {
                   const chip = SOCIAL_CHIP_STYLE[field.network];
                   return (
@@ -2128,7 +2128,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   );
                 })}
                 <Text style={styles.projectEditHelp}>
-                  Handles or full links both work. Icons show on your profile — tap to open.
+                  Add a username or full profile URL. These links appear on your public professional profile.
                 </Text>
               </View>
               {showEdit('skills') ? (<>
@@ -2228,7 +2228,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   style={[styles.metaInput, editFieldStyle, { color: textColor(isDark) }]}
                   value={toTextValue(editData?.personalityType)}
                   onChangeText={(t: string) => setEditField('personalityType', t)}
-                  placeholder="Personality / work signal (e.g. fast builder, analytical, creative)"
+                  placeholder="Work style, for example: analytical, collaborative, or independent"
                   placeholderTextColor="#666"
                 />
                 <TextInput
@@ -2279,12 +2279,12 @@ export default function ProfileScreen({ navigation, route }: any) {
                 </View>
               </View>
               <View style={[styles.projectEditCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
-                <Text style={styles.projectEditLabel}>Resume Signals</Text>
+                <Text style={styles.projectEditLabel}>Professional experience</Text>
                 <TextInput
                   style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                   value={toTextValue(editData?.resume?.shippedProducts)}
                   onChangeText={(t: string) => setEditField('resume', { ...(editData?.resume || {}), shippedProducts: t })}
-                  placeholder="Shipped products (comma-separated)"
+                  placeholder="Launched products (comma-separated)"
                   placeholderTextColor="#666"
                 />
                 <TextInput
@@ -2298,7 +2298,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                   style={[styles.metaInput, editFieldStyle, { color: textColor(isDark), marginTop: 10 }]}
                   value={toTextValue(editData?.resume?.startupAttempts)}
                   onChangeText={(t: string) => setEditField('resume', { ...(editData?.resume || {}), startupAttempts: t })}
-                  placeholder="Startup attempts (comma-separated)"
+                  placeholder="Startup experience (comma-separated)"
                   placeholderTextColor="#666"
                 />
                 <TextInput
@@ -2849,13 +2849,13 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         {/* VIBE INTRO */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>VIBE-CHECK (INTRO)</Text>
+          <Text style={styles.sectionLabel}>PROFESSIONAL INTRODUCTION</Text>
           {isEditing ? (
             <TextInput
               style={[styles.bioInput, editFieldStyle, { color: textColor(isDark) }]}
               value={toTextValue(editData?.vibeMedia)}
               onChangeText={(t: string) => setEditData({...editData, vibeMedia: t})}
-              placeholder="Paste a link to your 15s audio/video intro..."
+              placeholder="Add a link to a brief professional audio or video introduction."
               placeholderTextColor="#444"
             />
           ) : (
@@ -2863,15 +2863,15 @@ export default function ProfileScreen({ navigation, route }: any) {
               style={[styles.vibeCard, liquidGlass(isDark, false)]}
               onPress={() => {
                 if (profile?.vibeMedia) {
-                  Linking.openURL(profile.vibeMedia).catch(err => notifyUser("Invalid Link", "Could not open vibe intro link."));
+                  Linking.openURL(profile.vibeMedia).catch(err => notifyUser("Invalid Link", "Unable to open this professional introduction link."));
                 } else {
-                  notifyUser("No Vibe", "This user hasn't set a vibe intro yet.");
+                  notifyUser("Introduction unavailable", "This member has not added a professional introduction.");
                 }
               }}
             >
               <SafeIcon name="Mic" size={20} color={COLORS.primaryStrong} />
               <Text style={[styles.vibeText, { color: textColor(isDark, 'muted') }]}>
-                {profile?.vibeMedia ? "PLAY VIBE INTRO" : "NO VIBE INTRO SET"}
+                {profile?.vibeMedia ? "VIEW INTRODUCTION" : "NO INTRODUCTION AVAILABLE"}
               </Text>
             </TouchableOpacity>
           )}
@@ -2887,7 +2887,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               ]}
             >
               <Text style={[styles.analyticsHelp, { color: textColor(isDark, 'muted') }]}>
-                How people find and reply to you
+                Profile discovery and response insights
               </Text>
               {[
                 { icon: 'Eye', label: 'Profile views', value: visibleProfileViewCount, hint: 'Opens of your profile', mode: 'views', paywall: 'Who Viewed You' },
@@ -2950,7 +2950,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               <View style={[styles.analyzerCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
               <Text style={[styles.analyzerTitle, { color: textColor(isDark) }]}>Test your startup idea</Text>
               <Text style={styles.analyzerHelp}>
-                Get a fast score for market, competition, monetization, risks, and your next validation move.
+                Review AI-generated observations on your market, competition, revenue model, risks, and next validation steps. Assess the findings independently.
               </Text>
               <TextInput
                 multiline
@@ -3087,7 +3087,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               <SafeIcon name="Droplet" size={18} color={COLORS.primaryStrong} />
               <View style={styles.prefCopy}>
                 <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>App colour</Text>
-                <Text style={styles.prefHelp}>Full white monochrome or the OG LINKUP yellow. Fully lands everywhere on next app start.</Text>
+                <Text style={styles.prefHelp}>Choose a neutral or LINKUP yellow appearance. Restart the app to apply the theme throughout.</Text>
               </View>
             </View>
           </View>
@@ -3206,7 +3206,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 <Text style={styles.prefHelp}>
                   {isProPlanActive
                     ? 'Manage billing or cancel PLUS from here.'
-                    : 'You are on the free plan. Upgrade anytime to unlock PLUS perks.'}
+                    : "You are using the free plan. Review LINKUP PLUS for additional professional networking tools."}
                 </Text>
               </View>
             </View>
@@ -3356,7 +3356,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 <SafeIcon name="Trash2" size={18} color="#FF4444" />
               <View style={styles.prefCopy}>
                 <Text style={[styles.prefLabel, { color: '#FF4444' }]}>Delete Account Permanently</Text>
-                <Text style={styles.prefHelp}>Deletes your profile document and Firebase Auth account. You may need to sign in again first.</Text>
+                <Text style={styles.prefHelp}>Permanently delete your account and professional profile. You may be asked to sign in again to confirm your identity.</Text>
               </View>
             </View>
           </TouchableOpacity>

@@ -96,7 +96,7 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
       navigation.navigate('Chat', { matchId, otherUser: profile });
     } catch (error) {
       console.error('Opportunity chat error:', error);
-      Alert.alert('Chat unavailable', 'Could not open this opportunity chat.');
+      Alert.alert('Chat unavailable', "Unable to open this conversation. Please try again.");
     } finally {
       setOpeningChat(false);
     }
@@ -186,7 +186,7 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
               <Text style={styles.aiText}>{aiReason}</Text>
             ) : (
               <Text style={styles.insightText}>
-                This builder is actively signaling intent. Reach out if your skills, network, or capital can help them move faster.
+                This member is seeking professional collaboration. Review their requirements and connect if your experience is relevant.
               </Text>
             )}
           </View>

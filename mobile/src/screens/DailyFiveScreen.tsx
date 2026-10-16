@@ -74,8 +74,8 @@ export default function DailyFiveScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.root, appBackground(isDark)]}>
       <ScreenHeader
-        title="Daily 5"
-        subtitle={remaining === 0 ? 'Done. Come back tomorrow.' : `${remaining} left · about 90 seconds`}
+        title="Daily briefing"
+        subtitle={remaining === 0 ? "Daily briefing complete. New recommendations are available tomorrow." : `${remaining} left · about 90 seconds`}
         onBack={() => navigation.goBack()}
         isDark={isDark}
       />

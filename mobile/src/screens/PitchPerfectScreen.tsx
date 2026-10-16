@@ -158,7 +158,7 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
             <>
               <Loader size={36} color={COLORS.primaryStrong} />
               <Text style={[styles.waitingText, { color: textColor(isDark) }]}>Waiting for opponent...</Text>
-              <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share the challenge so your friend joins</Text>
+              <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share this challenge to invite another member.</Text>
             </>
           )}
         </View>
@@ -167,7 +167,7 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
 
       {challengeResult && (
         <View style={{ marginHorizontal: 24, marginBottom: 12, padding: 16, borderRadius: 16, backgroundColor: '#22C55E' }}>
-          <Text style={{ fontSize: 16, fontWeight: '900', color: '#000', textAlign: 'center' }}>Challenge Complete!</Text>
+          <Text style={{ fontSize: 16, fontWeight: '900', color: '#000', textAlign: 'center' }}>Challenge completed</Text>
           {challengeResult.senderScore != null && challengeResult.recipientScore != null ? (
             <>
               <Text style={{ fontSize: 13, fontWeight: '700', color: '#000', textAlign: 'center', marginTop: 4 }}>
@@ -210,10 +210,10 @@ const PitchPerfectScreen: React.FC<{ navigation: any; route?: any }> = ({ naviga
             <Lightbulb size={40} color={COLORS.primaryStrong} />
           </View>
           <Text style={[styles.heroEmptyTitle, { color: textColor(isDark) }]}>
-            Your Next Big Idea
+            Explore your next startup concept
           </Text>
           <Text style={[styles.heroEmptySub, { color: textColor(isDark, 'muted') }]}>
-            Tap the spark below to generate a random startup name and pitch
+            Generate a sample startup concept and value proposition for discussion and further validation.
           </Text>
           <TouchableOpacity style={styles.bigGenBtn} onPress={generatePitch} activeOpacity={0.8}>
             <Zap size={28} color="#000" fill={COLORS.primary} />

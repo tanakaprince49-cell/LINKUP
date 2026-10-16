@@ -96,7 +96,7 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         <View style={styles.header}>
           <View>
             <Text style={[styles.title, { color: textColor(isDark) }]}>Play</Text>
-            <Text style={[styles.subtitle, { color: textColor(isDark, 'muted') }]}>Mini-games & challenges</Text>
+            <Text style={[styles.subtitle, { color: textColor(isDark, 'muted') }]}>Business skills and networking challenges</Text>
           </View>
           <TouchableOpacity style={[styles.sparkPill, { backgroundColor: COLORS.primary }]}>
             <Zap size={14} color="#000" fill="#000" />
@@ -116,17 +116,17 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
             <Text style={styles.loopBtnText}>DAILY 5</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('ShipLog')} style={[styles.loopBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
-            <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>SHIP</Text>
+            <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>PROGRESS</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('CityLeague')} style={[styles.loopBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
-            <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>LEAGUE</Text>
+            <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>RANKINGS</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('IdeaDeck')} style={[styles.loopBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
             <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>IDEAS</Text>
           </TouchableOpacity>
         </View>
         <Text style={[styles.repLine, { color: textColor(isDark, 'muted') }]}>
-          REP {Number(profile?.reputationScore || 0)} · decays if you go quiet · ship 3 days to verify
+          REP {Number(profile?.reputationScore || 0)} · activity-based reputation · log progress on 3 days to earn a badge
         </Text>
 
         {/* One sponsored card at a time; hidden for PLUS members. */}
@@ -140,7 +140,7 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
           }
         />
 
-        <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>GAMES</Text>
+        <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>BUSINESS CHALLENGES</Text>
 
         <View style={styles.gamesGrid}>
           {GAMES.map((game) => (
@@ -216,7 +216,7 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         )}
 
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>MISSIONS</Text>
+          <Text style={[styles.sectionLabel, { color: textColor(isDark) }]}>DEVELOPMENT ACTIVITIES</Text>
           <View style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
             {missions.map((mission) => {
               const pct = Math.min(1, mission.progress / mission.target);
@@ -239,7 +239,7 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
               );
             })}
             {missions.length === 0 && (
-              <Text style={[styles.emptyText, { color: textColor(isDark, 'muted') }]}>Come back tomorrow for new missions</Text>
+              <Text style={[styles.emptyText, { color: textColor(isDark, 'muted') }]}>New professional development activities are available tomorrow.</Text>
             )}
           </View>
         </View>

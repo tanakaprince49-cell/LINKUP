@@ -76,7 +76,7 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
               <Text style={styles.roleText}>{otherUser.ambition?.toUpperCase() || 'FOUNDER'}</Text>
             </View>
           </View>
-          <Text style={styles.lastMsg} numberOfLines={1}>{match.lastMessage || `You connected! Start the conversation.`}</Text>
+          <Text style={styles.lastMsg} numberOfLines={1}>{match.lastMessage || "Connection confirmed. Introduce yourself and discuss your collaboration goals."}</Text>
           
           <View style={styles.aiReasonBox}>
             <Sparkles size={10} color={COLORS.primaryStrong} />
@@ -156,7 +156,7 @@ export default function MatchScreen({ navigation }: any) {
             <View style={styles.emptyState}>
               <Zap size={48} color="#222" />
               <Text style={styles.emptyText}>No Active Connections</Text>
-              <Text style={styles.emptySub}>Start Swiping to Build Your Network</Text>
+              <Text style={styles.emptySub}>Explore relevant professionals to build your network.</Text>
             </View>
           )
         }

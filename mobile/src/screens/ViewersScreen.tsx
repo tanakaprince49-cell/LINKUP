@@ -486,10 +486,10 @@ function ViewersScreen({ navigation, route }: any) {
           <Text style={{ fontSize: 20, fontWeight: '900', color: textColor(isDark), textAlign: 'center' }}>
             {rows.length > 0
               ? `${rows.length} builder${rows.length === 1 ? '' : 's'} checked you out`
-              : "See who's checking you out"}
+              : "Review your profile audience"}
           </Text>
           <Text style={{ marginTop: 10, fontSize: 14, lineHeight: 20, textAlign: 'center', color: textColor(isDark, 'muted') }}>
-            Names, photos, and profiles of everyone researching you are a LINKUP PLUS superpower.
+            LINKUP PLUS provides available profile viewer details to help you understand professional interest in your profile.
           </Text>
           <TouchableOpacity
             onPress={() => setPaywallFeature('Who Viewed You')}
@@ -521,7 +521,7 @@ function ViewersScreen({ navigation, route }: any) {
         visible={!!paywallFeature}
         onClose={() => setPaywallFeature('')}
         feature={paywallFeature || 'Who Viewed You'}
-        description={'Who Viewed You is a LINKUP PLUS feature. Upgrade to see the names and profiles of everyone researching you.'}
+        description={"Profile viewer details are available with LINKUP PLUS. Review available names and profiles to understand interest in your work."}
       />
     </SafeAreaView>
   );

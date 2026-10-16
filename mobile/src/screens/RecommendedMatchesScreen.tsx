@@ -77,7 +77,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       if (lastDate !== currentWeek && lastNotifiedDate !== today) {
         notifyUser(
           'This week’s 3 picks',
-          'Three builders ranked for you this week. Treat them like real intros, not a feed.',
+          "Review three recommended professionals this week and assess their relevance to your collaboration goals.",
           [{ text: 'OK', onPress: () => AsyncStorage.setItem(`linkup:last-notified-date:${user.uid}`, today) }]
         );
       }
@@ -348,10 +348,10 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
       <View style={[styles.heroCard, liquidGlass(isDark)]}>
         <View style={styles.heroRow}>
           <Sparkles size={20} color={COLORS.primaryStrong} />
-          <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Recommended people for you</Text>
+          <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Professionals recommended for you</Text>
         </View>
         <Text style={styles.heroSub}>
-          Ranked by shared skills, industries, goals, work style, and compatibility so you can find useful people faster.
+          Recommendations consider shared skills, industries, professional goals, and work style to support relevant business connections.
         </Text>
         <Text style={styles.heroSub}>
           {isProUser

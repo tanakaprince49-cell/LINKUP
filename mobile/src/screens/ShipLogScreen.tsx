@@ -21,11 +21,11 @@ export default function ShipLogScreen({ navigation }: any) {
     if (!user?.uid) return;
     const line = text.trim();
     if (line.length < 4) {
-      Alert.alert('Too short', 'Write what you shipped today in one line.');
+      Alert.alert('Too short', "Summarize your latest product or business milestone.");
       return;
     }
     if (logs.some((log) => log.createdAt.slice(0, 10) === todayKey())) {
-      Alert.alert('Already shipped today', 'One log per day keeps Rep honest.');
+      Alert.alert('Already shipped today', "You can publish one progress update per day.");
       return;
     }
     setSaving(true);
@@ -54,8 +54,8 @@ export default function ShipLogScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.root, appBackground(isDark)]}>
       <ScreenHeader
-        title="Ship log"
-        subtitle={`${days}/${SHIP_VERIFY_DAYS} days toward ship verification`}
+        title="Progress log"
+        subtitle={`Progress recorded on ${days}/${SHIP_VERIFY_DAYS} days toward your activity badge`}
         onBack={() => navigation.goBack()}
         isDark={isDark}
       />
@@ -63,7 +63,7 @@ export default function ShipLogScreen({ navigation }: any) {
         <TextInput
           value={text}
           onChangeText={setText}
-          placeholder="Shipped today: launched waitlist / talked to 3 users"
+          placeholder="Progress update: launched a waitlist or completed customer interviews"
           placeholderTextColor={textColor(isDark, 'muted')}
           maxLength={180}
           multiline
@@ -78,7 +78,7 @@ export default function ShipLogScreen({ navigation }: any) {
           style={[styles.link, { color: textColor(isDark), borderColor: hairline(isDark) }]}
         />
         <TouchableOpacity onPress={submit} disabled={saving} style={styles.btn}>
-          {saving ? <ActivityIndicator color="#111" /> : <Text style={styles.btnText}>Log ship</Text>}
+          {saving ? <ActivityIndicator color="#111" /> : <Text style={styles.btnText}>Publish update</Text>}
         </TouchableOpacity>
       </View>
       <FlatList
@@ -91,7 +91,7 @@ export default function ShipLogScreen({ navigation }: any) {
             <Text style={[styles.logDate, { color: textColor(isDark, 'muted') }]}>{item.createdAt.slice(0, 10)}</Text>
           </View>
         )}
-        ListEmptyComponent={<Text style={[styles.empty, { color: textColor(isDark, 'muted') }]}>No ships yet. One line. Today.</Text>}
+        ListEmptyComponent={<Text style={[styles.empty, { color: textColor(isDark, 'muted') }]}>No progress updates yet. Record your latest product or business milestone.</Text>}
       />
     </SafeAreaView>
   );

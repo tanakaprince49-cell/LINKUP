@@ -1,0 +1,1510 @@
+[
+  {
+    "file": "mobile/src/screens/ActiveOpportunitiesScreen.tsx",
+    "line": 142,
+    "before": "Builders ready for action",
+    "after": "Find your next collaborator"
+  },
+  {
+    "file": "mobile/src/screens/ActiveOpportunitiesScreen.tsx",
+    "line": 145,
+    "before": "Open opportunities from founders and builders actively looking for teammates, collaborators, and momentum.",
+    "after": "Explore startup opportunities from founders seeking cofounders, team members, and project collaborators."
+  },
+  {
+    "file": "mobile/src/screens/ActiveOpportunitiesScreen.tsx",
+    "line": 174,
+    "before": "Try search to find builders by role, stage, or industry.",
+    "after": "Search by professional role, startup stage, or industry."
+  },
+  {
+    "file": "mobile/src/screens/ActiveOpportunityScreen.tsx",
+    "line": 99,
+    "before": "Could not open this opportunity chat.",
+    "after": "Unable to open this conversation. Please try again."
+  },
+  {
+    "file": "mobile/src/screens/ActiveOpportunityScreen.tsx",
+    "line": 189,
+    "before": "This builder is actively signaling intent. Reach out if your skills, network, or capital can help them move faster.",
+    "after": "This member is seeking professional collaboration. Review their requirements and connect if your experience is relevant."
+  },
+  {
+    "file": "mobile/src/screens/AlertsScreen.tsx",
+    "line": 315,
+    "before": "Requests, matches and momentum",
+    "after": "Connection requests and network updates"
+  },
+  {
+    "file": "mobile/src/screens/AlertsScreen.tsx",
+    "line": 336,
+    "before": "Inbox is quiet",
+    "after": "No notifications yet"
+  },
+  {
+    "file": "mobile/src/screens/AlertsScreen.tsx",
+    "line": 338,
+    "before": "When someone asks to connect, likes you, or checks you out, it lands here. Go swipe a few builders.",
+    "after": "Connection requests, profile interest, and network updates will appear here. Explore relevant professionals to grow your network."
+  },
+  {
+    "file": "mobile/src/screens/AlertsScreen.tsx",
+    "line": 343,
+    "before": "Tip: build-log posts and full profiles get you noticed faster.",
+    "after": "Keep your profile complete and share project updates to help relevant professionals discover you."
+  },
+  {
+    "file": "mobile/src/screens/CampaignDetailScreen.tsx",
+    "line": 88,
+    "before": "It stops showing immediately and frees a slot. Stats stay on record.",
+    "after": "The campaign stops immediately and releases a campaign slot. Performance data remains available."
+  },
+  {
+    "file": "mobile/src/screens/CampaignDetailScreen.tsx",
+    "line": 133,
+    "before": "In human review \u2014 goes live within 24 hours.",
+    "after": "Submitted for review. Publication follows approval."
+  },
+  {
+    "file": "mobile/src/screens/CampaignDetailScreen.tsx",
+    "line": 135,
+    "before": "Live in the Idea Deck for eligible founders.",
+    "after": "Active in the startup idea directory for eligible members."
+  },
+  {
+    "file": "mobile/src/screens/CampaignDetailScreen.tsx",
+    "line": 137,
+    "before": "Paused \u2014 not showing anywhere right now.",
+    "after": "Paused. This campaign is not currently displayed."
+  },
+  {
+    "file": "mobile/src/screens/CampaignsScreen.tsx",
+    "line": 80,
+    "before": "Showcase your product on Idea Deck, Discover, Search, Feed, Hub & Linky picks",
+    "after": "Promote your product across startup ideas, discovery, search, and other eligible placements"
+  },
+  {
+    "file": "mobile/src/screens/CampaignsScreen.tsx",
+    "line": 84,
+    "before": "Reach verified founders, builders & early adopters only",
+    "after": "Reach LINKUP founders, professionals, and early adopters"
+  },
+  {
+    "file": "mobile/src/screens/CampaignsScreen.tsx",
+    "line": 86,
+    "before": "Priority human review \u2014 live within 24 hours",
+    "after": "Priority campaign review before publication"
+  },
+  {
+    "file": "mobile/src/screens/CampaignsScreen.tsx",
+    "line": 440,
+    "before": "Your product is in the deck",
+    "after": "Your campaigns are active"
+  },
+  {
+    "file": "mobile/src/screens/CampaignsScreen.tsx",
+    "line": 530,
+    "before": "Put your product in the deck where founders decide what to build next.",
+    "after": "Promote your product to founders exploring startup ideas and collaboration opportunities."
+  },
+  {
+    "file": "mobile/src/screens/CampaignsScreen.tsx",
+    "line": 623,
+    "before": "Put your product in front of every founder",
+    "after": "Reach the LINKUP startup community"
+  },
+  {
+    "file": "mobile/src/screens/CampaignsScreen.tsx",
+    "line": 724,
+    "before": "Queue is clear",
+    "after": "No campaigns awaiting review"
+  },
+  {
+    "file": "mobile/src/screens/ChatScreen.tsx",
+    "line": 295,
+    "before": "Open a chat from a real connection (match).",
+    "after": "Open a conversation from an approved connection."
+  },
+  {
+    "file": "mobile/src/screens/ChatScreen.tsx",
+    "line": 554,
+    "before": "Too many messages in a short time. Wait a minute.",
+    "after": "Message limit reached. Please wait before trying again."
+  },
+  {
+    "file": "mobile/src/screens/ChatScreen.tsx",
+    "line": 559,
+    "before": "That message is not allowed.",
+    "after": "This message cannot be sent. Please review its content."
+  },
+  {
+    "file": "mobile/src/screens/ChatScreen.tsx",
+    "line": 611,
+    "before": "Could not send this message. Check your connection and Firebase rules.",
+    "after": "Unable to send your message. Check your connection and try again."
+  },
+  {
+    "file": "mobile/src/screens/ChatScreen.tsx",
+    "line": 923,
+    "before": "Thanks. LINKUP will review this. You can also block them so they cannot write you.",
+    "after": "Your report has been submitted for review. You can also block this account to prevent further messages."
+  },
+  {
+    "file": "mobile/src/screens/ChatScreen.tsx",
+    "line": 929,
+    "before": "Why are you reporting them?",
+    "after": "Select a reason for reporting this account."
+  },
+  {
+    "file": "mobile/src/screens/ChatScreen.tsx",
+    "line": 1022,
+    "before": "Hidden for safety. This may be a scam or personal-data ask.",
+    "after": "Message hidden for your protection. It may contain a scam or a request for sensitive information."
+  },
+  {
+    "file": "mobile/src/screens/ChatScreen.tsx",
+    "line": 1202,
+    "before": "They asked to connect. Approve them in Notifications.",
+    "after": "A connection request is pending. Review it in Notifications."
+  },
+  {
+    "file": "mobile/src/screens/ChatScreen.tsx",
+    "line": 1203,
+    "before": "Send a connection request first. Nobody can message until it\u2019s approved.",
+    "after": "Send a connection request to begin. Messaging becomes available after approval."
+  },
+  {
+    "file": "mobile/src/screens/CityLeagueScreen.tsx",
+    "line": 76,
+    "before": "City league",
+    "after": "Local rankings"
+  },
+  {
+    "file": "mobile/src/screens/CityLeagueScreen.tsx",
+    "line": 76,
+    "before": "Global league",
+    "after": "Global rankings"
+  },
+  {
+    "file": "mobile/src/screens/CityLeagueScreen.tsx",
+    "line": 92,
+    "before": "No ranked builders yet.",
+    "after": "No professional rankings are available yet."
+  },
+  {
+    "file": "mobile/src/screens/CreateCampaignScreen.tsx",
+    "line": 167,
+    "before": "Your campaign is still live with the new creative. Moderation has been told to look at it.",
+    "after": "Your campaign remains active with the updated creative. The change has been submitted for review."
+  },
+  {
+    "file": "mobile/src/screens/CreateCampaignScreen.tsx",
+    "line": 168,
+    "before": "Your campaign stays in the review queue with the updated creative.",
+    "after": "Your updated campaign remains in the review queue."
+  },
+  {
+    "file": "mobile/src/screens/CreateCampaignScreen.tsx",
+    "line": 187,
+    "before": "Our team reviews every campaign by hand \u2014 yours goes live within 24 hours.",
+    "after": "Your campaign has been submitted for review. It can be published after approval."
+  },
+  {
+    "file": "mobile/src/screens/CreateCampaignScreen.tsx",
+    "line": 251,
+    "before": "One line that sells it \u2014 e.g. Invoices paid 2\u00d7 faster",
+    "after": "Product value proposition, for example: simplify invoice collection"
+  },
+  {
+    "file": "mobile/src/screens/CreateCampaignScreen.tsx",
+    "line": 253,
+    "before": "This is the big text on your sponsored card.",
+    "after": "This headline appears on your sponsored placement."
+  },
+  {
+    "file": "mobile/src/screens/CreateCampaignScreen.tsx",
+    "line": 255,
+    "before": "What does it do, who is it for?",
+    "after": "Describe your product and its intended customers."
+  },
+  {
+    "file": "mobile/src/screens/CreateCampaignScreen.tsx",
+    "line": 337,
+    "before": "Where it shows",
+    "after": "Campaign placements"
+  },
+  {
+    "file": "mobile/src/screens/CreateCampaignScreen.tsx",
+    "line": 406,
+    "before": "Your one-line pitch shows up here, exactly as founders will read it.",
+    "after": "Your product value proposition will appear here."
+  },
+  {
+    "file": "mobile/src/screens/CreatePostScreen.tsx",
+    "line": 166,
+    "before": "Add a one-line description (a few words at least).",
+    "after": "Add a concise description of your startup and its value proposition."
+  },
+  {
+    "file": "mobile/src/screens/CreatePostScreen.tsx",
+    "line": 275,
+    "before": "List your startup for founders",
+    "after": "Introduce your startup to potential collaborators"
+  },
+  {
+    "file": "mobile/src/screens/CreatePostScreen.tsx",
+    "line": 346,
+    "before": "Required \u2014 this logo appears beside your startup name in the feed.",
+    "after": "Required. Your logo identifies your startup in the community feed."
+  },
+  {
+    "file": "mobile/src/screens/CreatePostScreen.tsx",
+    "line": 350,
+    "before": "One line that sells it \u2014 e.g. Invoices paid 2\u00d7 faster",
+    "after": "Product value proposition, for example: simplify invoice collection"
+  },
+  {
+    "file": "mobile/src/screens/CreatePostScreen.tsx",
+    "line": 352,
+    "before": "This is the headline under your startup name.",
+    "after": "This value proposition appears beneath your startup name."
+  },
+  {
+    "file": "mobile/src/screens/CreatePostScreen.tsx",
+    "line": 354,
+    "before": "What does it do, who is it for?",
+    "after": "Describe your product and its intended customers."
+  },
+  {
+    "file": "mobile/src/screens/CreatePostScreen.tsx",
+    "line": 407,
+    "before": "You have posted all 10 startups for this week. It resets next week.",
+    "after": "You have reached your weekly limit of 10 startup listings. Your allowance resets next week."
+  },
+  {
+    "file": "mobile/src/screens/DailyFiveScreen.tsx",
+    "line": 77,
+    "before": "Daily 5",
+    "after": "Daily briefing"
+  },
+  {
+    "file": "mobile/src/screens/DailyFiveScreen.tsx",
+    "line": 78,
+    "before": "Done. Come back tomorrow.",
+    "after": "Daily briefing complete. New recommendations are available tomorrow."
+  },
+  {
+    "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
+    "line": 486,
+    "before": "Nobody here yet",
+    "after": "No professionals to display"
+  },
+  {
+    "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
+    "line": 487,
+    "before": "This list is empty because the network is still small. Invite 3 builders or search whoever is already on LINKUP.",
+    "after": "No relevant profiles are available in this view yet. Search the member directory or invite professionals from your network."
+  },
+  {
+    "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
+    "line": 513,
+    "before": "The room is still small.",
+    "after": "Grow your professional network."
+  },
+  {
+    "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
+    "line": 518,
+    "before": "Smart matches, live project opportunities, and founders worth meeting are ranked into one calm feed.",
+    "after": "Discover recommended cofounders, startup collaborators, and active project opportunities in one place."
+  },
+  {
+    "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
+    "line": 530,
+    "before": "Daily 5",
+    "after": "Daily briefing"
+  },
+  {
+    "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
+    "line": 544,
+    "before": "Idea Deck \u2014 swipe startup ideas worth building",
+    "after": "Explore startup ideas and collaboration opportunities"
+  },
+  {
+    "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
+    "line": 554,
+    "before": "Campaigns \u2014 put your product in front of every founder",
+    "after": "Campaigns \u2014 promote your product to the LINKUP community"
+  },
+  {
+    "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
+    "line": 622,
+    "before": "No strong opportunity yet. Add more skills/interests to sharpen alerts.",
+    "after": "No relevant opportunities yet. Update your skills and interests to improve recommendations."
+  },
+  {
+    "file": "mobile/src/screens/EmailAuthScreen.tsx",
+    "line": 92,
+    "before": "Use the email you signed up with. Forgot it? Reset the password below.",
+    "after": "Sign in with your registered email address. Use password reset if you need to restore access."
+  },
+  {
+    "file": "mobile/src/screens/EmailAuthScreen.tsx",
+    "line": 93,
+    "before": "A few details now. Then we set up who you are on LINKUP.",
+    "after": "Create your account to build a professional profile and connect with the startup community."
+  },
+  {
+    "file": "mobile/src/screens/EmailVerificationScreen.tsx",
+    "line": 46,
+    "before": "Check your inbox.",
+    "after": "Verify your email address"
+  },
+  {
+    "file": "mobile/src/screens/EmailVerificationScreen.tsx",
+    "line": 48,
+    "before": ". Open it, then come back here.",
+    "after": ". Open the verification link, then return to LINKUP."
+  },
+  {
+    "file": "mobile/src/screens/EmailVerificationScreen.tsx",
+    "line": 51,
+    "before": "Can\u2019t find it? Look in spam or junk.",
+    "after": "Check your spam or junk folder if the verification email has not arrived."
+  },
+  {
+    "file": "mobile/src/screens/EmailVerificationScreen.tsx",
+    "line": 60,
+    "before": "I verified my email",
+    "after": "Confirm email verification"
+  },
+  {
+    "file": "mobile/src/screens/FeedScreen.tsx",
+    "line": 446,
+    "before": "On LINKUP \u2014 find cofounders and people who actually ship.",
+    "after": "Discover cofounders and startup collaborators on LINKUP."
+  },
+  {
+    "file": "mobile/src/screens/FeedScreen.tsx",
+    "line": 767,
+    "before": "NO STARTUPS YET...",
+    "after": "No startup listings yet"
+  },
+  {
+    "file": "mobile/src/screens/FeedScreen.tsx",
+    "line": 768,
+    "before": "List the first one",
+    "after": "Introduce your startup"
+  },
+  {
+    "file": "mobile/src/screens/FeedScreen.tsx",
+    "line": 784,
+    "before": "Advertise to every builder here",
+    "after": "Promote your product to the LINKUP community"
+  },
+  {
+    "file": "mobile/src/screens/FounderFlipScreen.tsx",
+    "line": 181,
+    "before": "Share the challenge so your friend joins",
+    "after": "Share this challenge to invite another member."
+  },
+  {
+    "file": "mobile/src/screens/FounderFlipScreen.tsx",
+    "line": 224,
+    "before": "Challenge Complete!",
+    "after": "Challenge completed"
+  },
+  {
+    "file": "mobile/src/screens/FounderFlipScreen.tsx",
+    "line": 256,
+    "before": "\ud83c\udf89 You matched all pairs!",
+    "after": "All pairs completed"
+  },
+  {
+    "file": "mobile/src/screens/GamificationHubScreen.tsx",
+    "line": 99,
+    "before": "Mini-games & challenges",
+    "after": "Business skills and networking challenges"
+  },
+  {
+    "file": "mobile/src/screens/GamificationHubScreen.tsx",
+    "line": 119,
+    "before": "SHIP",
+    "after": "PROGRESS"
+  },
+  {
+    "file": "mobile/src/screens/GamificationHubScreen.tsx",
+    "line": 122,
+    "before": "LEAGUE",
+    "after": "RANKINGS"
+  },
+  {
+    "file": "mobile/src/screens/GamificationHubScreen.tsx",
+    "line": 129,
+    "before": "\u00b7 decays if you go quiet \u00b7 ship 3 days to verify",
+    "after": "\u00b7 activity-based reputation \u00b7 log progress on 3 days to earn a badge"
+  },
+  {
+    "file": "mobile/src/screens/GamificationHubScreen.tsx",
+    "line": 143,
+    "before": "GAMES",
+    "after": "BUSINESS CHALLENGES"
+  },
+  {
+    "file": "mobile/src/screens/GamificationHubScreen.tsx",
+    "line": 219,
+    "before": "MISSIONS",
+    "after": "DEVELOPMENT ACTIVITIES"
+  },
+  {
+    "file": "mobile/src/screens/GamificationHubScreen.tsx",
+    "line": 242,
+    "before": "Come back tomorrow for new missions",
+    "after": "New professional development activities are available tomorrow."
+  },
+  {
+    "file": "mobile/src/screens/IdeaDeckScreen.tsx",
+    "line": 443,
+    "before": "Add a title and short description so builders understand what you want to build.",
+    "after": "Add a title and concise description so potential collaborators understand your startup concept."
+  },
+  {
+    "file": "mobile/src/screens/IdeaDeckScreen.tsx",
+    "line": 447,
+    "before": "Choose at least one field and one thing you are looking for.",
+    "after": "Select at least one industry and one collaboration requirement."
+  },
+  {
+    "file": "mobile/src/screens/IdeaDeckScreen.tsx",
+    "line": 508,
+    "before": "Write a short message so the idea owner knows why you want to connect.",
+    "after": "Explain your relevant experience and the collaboration you are proposing."
+  },
+  {
+    "file": "mobile/src/screens/IdeaDeckScreen.tsx",
+    "line": 675,
+    "before": "Builders can swipe right if they want in.",
+    "after": "Members can express interest in collaborating on your startup idea."
+  },
+  {
+    "file": "mobile/src/screens/IdeaDeckScreen.tsx",
+    "line": 694,
+    "before": "What do you want to build?",
+    "after": "Describe your startup concept."
+  },
+  {
+    "file": "mobile/src/screens/IdeaDeckScreen.tsx",
+    "line": 765,
+    "before": "The idea owner can approve or reject this request before chat opens.",
+    "after": "The idea owner reviews your connection request before messaging becomes available."
+  },
+  {
+    "file": "mobile/src/screens/IdeaDeckScreen.tsx",
+    "line": 823,
+    "before": "You have swiped every idea in the network right now. New ones appear as builders post them.",
+    "after": "You have reviewed all currently available startup ideas. New submissions will appear here."
+  },
+  {
+    "file": "mobile/src/screens/IdeaDeckScreen.tsx",
+    "line": 824,
+    "before": "Post an idea here so builders can swipe into it.",
+    "after": "Publish a startup idea to invite interest from potential collaborators."
+  },
+  {
+    "file": "mobile/src/screens/IdeaDeckScreen.tsx",
+    "line": 829,
+    "before": "Show These Again",
+    "after": "Review ideas again"
+  },
+  {
+    "file": "mobile/src/screens/LandingScreen.tsx",
+    "line": 57,
+    "before": "Find cofounders and builders",
+    "after": "Cofounder matching and professional networking"
+  },
+  {
+    "file": "mobile/src/screens/LandingScreen.tsx",
+    "line": 62,
+    "before": "Meet the person",
+    "after": "Find the right partner"
+  },
+  {
+    "file": "mobile/src/screens/LandingScreen.tsx",
+    "line": 62,
+    "before": "who can ship it with you.",
+    "after": "to build your business."
+  },
+  {
+    "file": "mobile/src/screens/LandingScreen.tsx",
+    "line": 65,
+    "before": "Swipe, search, and message people who are actually building \u2014 not posting hustle.",
+    "after": "Find a cofounder, discover startup collaborators, and build professional connections around shared skills and goals."
+  },
+  {
+    "file": "mobile/src/screens/LandingScreen.tsx",
+    "line": 102,
+    "before": "Use email instead",
+    "after": "Continue with email"
+  },
+  {
+    "file": "mobile/src/screens/LandingScreen.tsx",
+    "line": 111,
+    "before": "Explore public builder profiles \u2192",
+    "after": "Explore public professional profiles \u2192"
+  },
+  {
+    "file": "mobile/src/screens/LinkyAuditScreen.tsx",
+    "line": 108,
+    "before": "Linky uses this from your next ask, and when he checks other people's asks against you.",
+    "after": "Linky uses these preferences for future searches and relevant introduction requests."
+  },
+  {
+    "file": "mobile/src/screens/LinkyAuditScreen.tsx",
+    "line": 117,
+    "before": "Deletes your cards and what you told Linky, unlinks Telegram / WhatsApp. Your LINKUP profile and chats stay.",
+    "after": "Delete Linky recommendations and notes, and disconnect Telegram and WhatsApp. Your LINKUP profile and conversations remain unchanged."
+  },
+  {
+    "file": "mobile/src/screens/LinkyAuditScreen.tsx",
+    "line": 119,
+    "before": "Linky forgot your cards and notes.",
+    "after": "Your Linky recommendations and notes have been deleted."
+  },
+  {
+    "file": "mobile/src/screens/LinkyAuditScreen.tsx",
+    "line": 168,
+    "before": "What Linky knows about you",
+    "after": "Your Linky profile and preferences"
+  },
+  {
+    "file": "mobile/src/screens/LinkyAuditScreen.tsx",
+    "line": 180,
+    "before": "Anything your profile does not say: what you are building, what you can help with, who you want to meet. Linky cites these when he matches you.",
+    "after": "Add relevant professional context, including your current project, expertise, and the collaborators you would like to meet."
+  },
+  {
+    "file": "mobile/src/screens/LinkyAuditScreen.tsx",
+    "line": 253,
+    "before": "Your profile is nearly empty, so Linky has little to cite. Add a role, skills and a bio.",
+    "after": "Complete your professional role, skills, and biography so Linky can explain relevant recommendations."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 69,
+    "before": "Checking who this could be\u2026",
+    "after": "Reviewing relevant professional profiles\u2026"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 69,
+    "before": "Almost - comparing two or three\u2026",
+    "after": "Comparing potential collaborators\u2026"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 161,
+    "before": "WHY LINKY PICKED THEM",
+    "after": "RECOMMENDATION RATIONALE"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 168,
+    "before": "Asked. Linky will tell you when they answer.",
+    "after": "Introduction requested. You will be notified when they respond."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 173,
+    "before": "Accepted. Linky connected you two \u2014 say hello.",
+    "after": "Introduction accepted. You can now start a conversation."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 178,
+    "before": "Not this time.",
+    "after": "Introduction declined."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 384,
+    "before": "Linky asked all of them. Each one answers for themselves.",
+    "after": "Introduction requests have been sent. Each recipient will respond independently."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 488,
+    "before": "This deletes your whole Linky conversation. Your daily messages, what Linky knows about you and the people he found stay exactly as they are.",
+    "after": "Delete this Linky conversation? Your daily allowance, profile preferences, and saved recommendations remain unchanged."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 504,
+    "before": "Your Linky chat is gone.",
+    "after": "Your Linky conversation has been deleted."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 568,
+    "before": "No intro needed - open the chat.",
+    "after": "You are already connected. Open the conversation to continue."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 573,
+    "before": "Open their profile, paste it, send it from your own account.",
+    "after": "Review the draft and send it from your own account after opening the recipient\u2019s profile."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 604,
+    "before": "Linky will not show them again.",
+    "after": "This profile has been excluded from future recommendations."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 706,
+    "before": "I'm Linky.",
+    "after": "Meet Linky, your AI networking assistant."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 708,
+    "before": "Tell me who you need and I answer right away with the people on LINKUP I can cite a reason for. No guessing, no waiting.",
+    "after": "Describe your business goals and the expertise you need. Linky recommends relevant LINKUP professionals and explains the profile information behind each recommendation."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 757,
+    "before": "Nothing has been sent. Tap to read it, change it if you want, then send it yourself.",
+    "after": "This draft has not been sent. Review and edit it before sending from your own account."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 783,
+    "before": "One answer, 20 seconds. It is how Linky learns who to put in front of you next.",
+    "after": "Share brief feedback to help Linky improve future introduction recommendations."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 973,
+    "before": "Who do you need? Ask Linky\u2026",
+    "after": "Describe the cofounder or collaborator you need\u2026"
+  },
+  {
+    "file": "mobile/src/screens/LinkyProfileScreen.tsx",
+    "line": 41,
+    "before": "Your AI assistant & matchmaker",
+    "after": "Your AI professional networking assistant"
+  },
+  {
+    "file": "mobile/src/screens/LinkyProfileScreen.tsx",
+    "line": 43,
+    "before": "I help you discover the right connections, craft warm intros, and navigate the LINKUP ecosystem.",
+    "after": "Discover relevant professionals, prepare personalized introductions, and explore startup collaboration opportunities."
+  },
+  {
+    "file": "mobile/src/screens/LinkyProfileScreen.tsx",
+    "line": 67,
+    "before": "Linky AI scans the builder graph to find your perfect co-founder, first customer, or next investor. Available 24/7 to draft warm intros and recommend who to meet next.",
+    "after": "Linky uses available professional profile information to recommend potential cofounders and collaborators. Review the supporting details and approve introductions before they are sent. Recommendations do not guarantee a business outcome."
+  },
+  {
+    "file": "mobile/src/screens/LinkyProfileScreen.tsx",
+    "line": 78,
+    "before": "Start Chat",
+    "after": "Open Linky"
+  },
+  {
+    "file": "mobile/src/screens/LinkySettingsScreen.tsx",
+    "line": 47,
+    "before": "Turn the weekly cap to 0 if you want no intros at all.",
+    "after": "Set the weekly limit to 0 to disable incoming introduction requests."
+  },
+  {
+    "file": "mobile/src/screens/LinkySettingsScreen.tsx",
+    "line": 126,
+    "before": "Linky only shows you to people whose ask matches one of these.",
+    "after": "Linky considers your stated interests when recommending your profile for an introduction."
+  },
+  {
+    "file": "mobile/src/screens/LinkySettingsScreen.tsx",
+    "line": 131,
+    "before": "Declining an intro mutes that person for you. Nobody is told.",
+    "after": "Declining an introduction excludes that person from your recommendations without notifying them."
+  },
+  {
+    "file": "mobile/src/screens/MatchScreen.tsx",
+    "line": 79,
+    "before": "You connected! Start the conversation.",
+    "after": "Connection confirmed. Introduce yourself and discuss your collaboration goals."
+  },
+  {
+    "file": "mobile/src/screens/MatchScreen.tsx",
+    "line": 159,
+    "before": "Start Swiping to Build Your Network",
+    "after": "Explore relevant professionals to build your network."
+  },
+  {
+    "file": "mobile/src/screens/MessagesScreen.tsx",
+    "line": 301,
+    "before": "Your founder conversations and team threads.",
+    "after": "Professional conversations and project discussions."
+  },
+  {
+    "file": "mobile/src/screens/MessagesScreen.tsx",
+    "line": 348,
+    "before": "Chat stays empty until someone accepts an intro. Tell Linky who you need, search, or invite 3 builders you already know.",
+    "after": "Conversations become available after a connection is approved. Use Linky, search for relevant professionals, or invite your existing contacts."
+  },
+  {
+    "file": "mobile/src/screens/NetworkQuizScreen.tsx",
+    "line": 236,
+    "before": "Share the challenge so your friend joins",
+    "after": "Share this challenge to invite another member."
+  },
+  {
+    "file": "mobile/src/screens/NetworkQuizScreen.tsx",
+    "line": 304,
+    "before": "Challenge Complete!",
+    "after": "Challenge completed"
+  },
+  {
+    "file": "mobile/src/screens/NewsScreen.tsx",
+    "line": 187,
+    "before": "No articles found.",
+    "after": "No articles are available for these filters."
+  },
+  {
+    "file": "mobile/src/screens/NewsScreen.tsx",
+    "line": 218,
+    "before": "Linky found people for you",
+    "after": "Discover relevant professional connections"
+  },
+  {
+    "file": "mobile/src/screens/NewsScreen.tsx",
+    "line": 221,
+    "before": "I've read every builder here. Unlock me and I'll introduce you to the ones who fit.",
+    "after": "Explore AI-assisted recommendations based on professional profiles and your collaboration goals."
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 280,
+    "before": "Who would unlock your next level fastest?",
+    "after": "Which professional connection would best support your next milestone?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 295,
+    "before": "Where are you strongest right now?",
+    "after": "What is your primary area of professional expertise?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 400,
+    "before": "What kind of builder are you becoming?",
+    "after": "Which professional direction are you pursuing?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 471,
+    "before": "What should people come to you for first?",
+    "after": "What expertise can you contribute to a startup team?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 500,
+    "before": "Recruit early or grind solo first?",
+    "after": "Build a team early or validate independently first?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 526,
+    "before": "Clean systems or fast hacks to learn?",
+    "after": "Prioritize system quality or rapid experimentation?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 610,
+    "before": "Storytelling or analytics as your superpower?",
+    "after": "Is your primary strength brand communication or data analysis?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 624,
+    "before": "Campus team energy or solo build energy?",
+    "after": "Do you prefer campus collaboration or independent projects?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 662,
+    "before": "Scale readiness or MVP hustle?",
+    "after": "Focus on operational scale or early product validation?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 861,
+    "before": "Add at least one skill. These power search, swipe ranking, and smart matching.",
+    "after": "Add at least one professional skill to support search visibility and relevant recommendations."
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1002,
+    "before": "These answers sharpen compatibility and who naturally fits your energy.",
+    "after": "These preferences help identify compatible work styles and collaboration requirements."
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1299,
+    "before": "Core Skills For Matching",
+    "after": "Professional skills and expertise"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1307,
+    "before": "Core Skills For Matching",
+    "after": "Professional skills and expertise"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1309,
+    "before": "Which startup spaces pull you in?",
+    "after": "Which startup industries interest you?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1310,
+    "before": "How battle-tested are you right now?",
+    "after": "What is your current level of professional experience?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1317,
+    "before": "Core Skills For Matching",
+    "after": "Professional skills and expertise"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1319,
+    "before": "Which startup spaces would you love to design for?",
+    "after": "Which startup industries would you like to design for?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1327,
+    "before": "Core Skills For Matching",
+    "after": "Professional skills and expertise"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1336,
+    "before": "What are you hoping to unlock on LINKUP?",
+    "after": "What professional outcome would you like to pursue on LINKUP?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1337,
+    "before": "Core Skills For Matching",
+    "after": "Professional skills and expertise"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1339,
+    "before": "Which spaces make you want to build?",
+    "after": "Which industries would you like to work in?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1340,
+    "before": "How far into building are you?",
+    "after": "What is your current level of project experience?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1347,
+    "before": "Core Skills For Matching",
+    "after": "Professional skills and expertise"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1359,
+    "before": "Core Skills For Matching",
+    "after": "Professional skills and expertise"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1361,
+    "before": "Which startup spaces do you want to be around?",
+    "after": "Which startup industries would you like to participate in?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1369,
+    "before": "Core Skills For Matching",
+    "after": "Professional skills and expertise"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1371,
+    "before": "Select the spaces you are building in or obsessed with.",
+    "after": "Select the industries relevant to your startup and professional interests."
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1403,
+    "before": "What should people call you?",
+    "after": "What is your professional name?"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1458,
+    "before": "Country and city. Matches care about your scene and timezone.",
+    "after": "Add your country and city to support local collaboration and time-zone compatibility."
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1498,
+    "before": "Pick the lane people should match you on.",
+    "after": "Select the professional role most relevant to your collaboration goals."
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1527,
+    "before": "Required. LINKUP is a face-to-face network \u2014 every surface, from the deck to the league, is a face.",
+    "after": "Required. A profile photo helps other members recognize you across professional discovery and conversations."
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1560,
+    "before": "You're in. One more thing.",
+    "after": "Your account is ready. Complete your professional profile."
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1575,
+    "before": "Complete profiles get sharper matches",
+    "after": "Complete your profile for more relevant recommendations"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1578,
+    "before": "Bio, skills, projects and social links tell the matching engine who to put in front of you. It takes about two minutes and you can edit everything later.",
+    "after": "Your biography, skills, projects, and professional links help LINKUP recommend relevant collaborators. You can update these details at any time."
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 1779,
+    "before": "Skip extra \u2014 do this later",
+    "after": "Complete additional details later"
+  },
+  {
+    "file": "mobile/src/screens/PitchPerfectScreen.tsx",
+    "line": 161,
+    "before": "Share the challenge so your friend joins",
+    "after": "Share this challenge to invite another member."
+  },
+  {
+    "file": "mobile/src/screens/PitchPerfectScreen.tsx",
+    "line": 170,
+    "before": "Challenge Complete!",
+    "after": "Challenge completed"
+  },
+  {
+    "file": "mobile/src/screens/PitchPerfectScreen.tsx",
+    "line": 213,
+    "before": "Your Next Big Idea",
+    "after": "Explore your next startup concept"
+  },
+  {
+    "file": "mobile/src/screens/PitchPerfectScreen.tsx",
+    "line": 216,
+    "before": "Tap the spark below to generate a random startup name and pitch",
+    "after": "Generate a sample startup concept and value proposition for discussion and further validation."
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 1593,
+    "before": "Are you sure you want to exit the realm?",
+    "after": "Sign out of your LINKUP account on this device?"
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 1625,
+    "before": "This is permanent. Your founder profile and all network data will be wiped from existence. Proceed?",
+    "after": "Permanently delete your LINKUP account and associated profile data? This action cannot be undone."
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2109,
+    "before": "Socials (optional)",
+    "after": "Professional links (optional)"
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2131,
+    "before": "Handles or full links both work. Icons show on your profile \u2014 tap to open.",
+    "after": "Add a username or full profile URL. These links appear on your public professional profile."
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2231,
+    "before": "Personality / work signal (e.g. fast builder, analytical, creative)",
+    "after": "Work style, for example: analytical, collaborative, or independent"
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2282,
+    "before": "Resume Signals",
+    "after": "Professional experience"
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2287,
+    "before": "Shipped products (comma-separated)",
+    "after": "Launched products (comma-separated)"
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2301,
+    "before": "Startup attempts (comma-separated)",
+    "after": "Startup experience (comma-separated)"
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2852,
+    "before": "VIBE-CHECK (INTRO)",
+    "after": "PROFESSIONAL INTRODUCTION"
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2858,
+    "before": "Paste a link to your 15s audio/video intro...",
+    "after": "Add a link to a brief professional audio or video introduction."
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2866,
+    "before": "Could not open vibe intro link.",
+    "after": "Unable to open this professional introduction link."
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2868,
+    "before": "This user hasn't set a vibe intro yet.",
+    "after": "This member has not added a professional introduction."
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2874,
+    "before": "PLAY VIBE INTRO",
+    "after": "VIEW INTRODUCTION"
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2874,
+    "before": "NO VIBE INTRO SET",
+    "after": "NO INTRODUCTION AVAILABLE"
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2890,
+    "before": "How people find and reply to you",
+    "after": "Profile discovery and response insights"
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2953,
+    "before": "Get a fast score for market, competition, monetization, risks, and your next validation move.",
+    "after": "Review AI-generated observations on your market, competition, revenue model, risks, and next validation steps. Assess the findings independently."
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 3090,
+    "before": "Full white monochrome or the OG LINKUP yellow. Fully lands everywhere on next app start.",
+    "after": "Choose a neutral or LINKUP yellow appearance. Restart the app to apply the theme throughout."
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 3209,
+    "before": "You are on the free plan. Upgrade anytime to unlock PLUS perks.",
+    "after": "You are using the free plan. Review LINKUP PLUS for additional professional networking tools."
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 3359,
+    "before": "Deletes your profile document and Firebase Auth account. You may need to sign in again first.",
+    "after": "Permanently delete your account and professional profile. You may be asked to sign in again to confirm your identity."
+  },
+  {
+    "file": "mobile/src/screens/RecommendedMatchesScreen.tsx",
+    "line": 80,
+    "before": "Three builders ranked for you this week. Treat them like real intros, not a feed.",
+    "after": "Review three recommended professionals this week and assess their relevance to your collaboration goals."
+  },
+  {
+    "file": "mobile/src/screens/RecommendedMatchesScreen.tsx",
+    "line": 351,
+    "before": "Recommended people for you",
+    "after": "Professionals recommended for you"
+  },
+  {
+    "file": "mobile/src/screens/RecommendedMatchesScreen.tsx",
+    "line": 354,
+    "before": "Ranked by shared skills, industries, goals, work style, and compatibility so you can find useful people faster.",
+    "after": "Recommendations consider shared skills, industries, professional goals, and work style to support relevant business connections."
+  },
+  {
+    "file": "mobile/src/screens/SearchScreen.tsx",
+    "line": 1079,
+    "before": "Search anyone on LINKUP",
+    "after": "Search professional profiles"
+  },
+  {
+    "file": "mobile/src/screens/ShipLogScreen.tsx",
+    "line": 24,
+    "before": "Write what you shipped today in one line.",
+    "after": "Summarize your latest product or business milestone."
+  },
+  {
+    "file": "mobile/src/screens/ShipLogScreen.tsx",
+    "line": 28,
+    "before": "One log per day keeps Rep honest.",
+    "after": "You can publish one progress update per day."
+  },
+  {
+    "file": "mobile/src/screens/ShipLogScreen.tsx",
+    "line": 57,
+    "before": "Ship log",
+    "after": "Progress log"
+  },
+  {
+    "file": "mobile/src/screens/ShipLogScreen.tsx",
+    "line": 66,
+    "before": "Shipped today: launched waitlist / talked to 3 users",
+    "after": "Progress update: launched a waitlist or completed customer interviews"
+  },
+  {
+    "file": "mobile/src/screens/ShipLogScreen.tsx",
+    "line": 81,
+    "before": "Log ship",
+    "after": "Publish update"
+  },
+  {
+    "file": "mobile/src/screens/ShipLogScreen.tsx",
+    "line": 94,
+    "before": "No ships yet. One line. Today.",
+    "after": "No progress updates yet. Record your latest product or business milestone."
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "line": 250,
+    "before": "Who\u2019s winning LINKUP right now",
+    "after": "Active professionals in your network"
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "line": 252,
+    "before": "Fair live top 3 \u2014 profile quality, views, and recent activity. No Plus boost. Podium people get a notification.",
+    "after": "The top three profiles are ranked by profile quality, views, and recent activity. PLUS visibility boosts do not affect these rankings."
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "line": 315,
+    "before": "Board is empty",
+    "after": "No ranked profiles yet"
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "line": 316,
+    "before": "When more builders go public, the league starts here.",
+    "after": "Rankings become available as more members enable public discovery."
+  },
+  {
+    "file": "mobile/src/screens/ViewersScreen.tsx",
+    "line": 489,
+    "before": "See who's checking you out",
+    "after": "Review your profile audience"
+  },
+  {
+    "file": "mobile/src/screens/ViewersScreen.tsx",
+    "line": 492,
+    "before": "Names, photos, and profiles of everyone researching you are a LINKUP PLUS superpower.",
+    "after": "LINKUP PLUS provides available profile viewer details to help you understand professional interest in your profile."
+  },
+  {
+    "file": "mobile/src/screens/ViewersScreen.tsx",
+    "line": 524,
+    "before": "Who Viewed You is a LINKUP PLUS feature. Upgrade to see the names and profiles of everyone researching you.",
+    "after": "Profile viewer details are available with LINKUP PLUS. Review available names and profiles to understand interest in your work."
+  },
+  {
+    "file": "mobile/src/components/LinkyCardsSection.tsx",
+    "line": 124,
+    "before": "No intro needed - open the chat.",
+    "after": "You are already connected. Open the conversation to continue."
+  },
+  {
+    "file": "mobile/src/components/LinkyCardsSection.tsx",
+    "line": 201,
+    "before": "WHY LINKY PICKED THEM",
+    "after": "RECOMMENDATION RATIONALE"
+  },
+  {
+    "file": "mobile/src/components/LinkyCardsSection.tsx",
+    "line": 209,
+    "before": "Asked. Linky will tell you when they answer.",
+    "after": "Introduction requested. You will be notified when they respond."
+  },
+  {
+    "file": "mobile/src/components/LinkyCardsSection.tsx",
+    "line": 209,
+    "before": "Accepted. Linky connected you two \u2014 say hello.",
+    "after": "Introduction accepted. You can now start a conversation."
+  },
+  {
+    "file": "mobile/src/components/LinkyCardsSection.tsx",
+    "line": 209,
+    "before": "Not this time.",
+    "after": "Introduction declined."
+  },
+  {
+    "file": "mobile/src/components/OfflineScreen.tsx",
+    "line": 10,
+    "before": "Your Wi-Fi went to get milk and never came back.",
+    "after": "An active internet connection is required to load your professional network."
+  },
+  {
+    "file": "mobile/src/components/OfflineScreen.tsx",
+    "line": 11,
+    "before": "The internet is on a coffee break. Very long coffee.",
+    "after": "Reconnect to continue exploring professionals and startup opportunities."
+  },
+  {
+    "file": "mobile/src/components/OfflineScreen.tsx",
+    "line": 12,
+    "before": "Packets left the group chat. You are offline.",
+    "after": "LINKUP cannot reach the network. Check your connection before trying again."
+  },
+  {
+    "file": "mobile/src/components/OfflineScreen.tsx",
+    "line": 13,
+    "before": "Even pigeons carrying USB sticks would be faster right now.",
+    "after": "A stable connection helps keep professional conversations up to date."
+  },
+  {
+    "file": "mobile/src/components/OfflineScreen.tsx",
+    "line": 14,
+    "before": "LINKUP is here. The internet is\u2026 emotionally unavailable.",
+    "after": "LINKUP is temporarily offline. Your account remains available when you reconnect."
+  },
+  {
+    "file": "mobile/src/components/OfflineScreen.tsx",
+    "line": 15,
+    "before": "We checked under the router. Nothing but dust and hope.",
+    "after": "Check your network settings or switch to another connection."
+  },
+  {
+    "file": "mobile/src/components/OfflineScreen.tsx",
+    "line": 31,
+    "before": "The cat pulled the cable again.",
+    "after": "Your professional network is temporarily unavailable."
+  },
+  {
+    "file": "mobile/src/components/OfflineScreen.tsx",
+    "line": 35,
+    "before": "Check your data or Wi-Fi, then give it another go.",
+    "after": "Check your mobile data or Wi-Fi connection, then try again."
+  },
+  {
+    "file": "mobile/src/components/PaywallModal.tsx",
+    "line": 46,
+    "before": "Who Viewed You \u2014 names & profiles of everyone checking you out",
+    "after": "Profile viewer insights \u2014 review available names and professional profiles"
+  },
+  {
+    "file": "mobile/src/components/PaywallModal.tsx",
+    "line": 355,
+    "before": "LINKUP PLUS is not ready in Google Play yet. Check the subscription product IDs and base-plan offers in Play Console.",
+    "after": "LINKUP PLUS is temporarily unavailable through Google Play. Please try again later or contact support."
+  },
+  {
+    "file": "mobile/src/components/PaywallModal.tsx",
+    "line": 398,
+    "before": "Your latest payment is still being confirmed. Give it a moment and try again.",
+    "after": "Your payment is being verified. Please wait briefly before trying again."
+  },
+  {
+    "file": "mobile/src/components/PaywallModal.tsx",
+    "line": 466,
+    "before": "Build your startup faster",
+    "after": "Expand your professional networking tools"
+  },
+  {
+    "file": "mobile/src/lib/dailyLoop.ts",
+    "line": 68,
+    "before": "Today\u2019s idea swipe",
+    "after": "Review a startup opportunity"
+  },
+  {
+    "file": "mobile/src/lib/dailyLoop.ts",
+    "line": 69,
+    "before": "One idea. Yes or no. Say who you\u2019d need.",
+    "after": "Review a startup concept and identify the expertise required to develop it."
+  },
+  {
+    "file": "mobile/src/lib/dailyLoop.ts",
+    "line": 74,
+    "before": "Ship something in 30 seconds",
+    "after": "Share a business milestone"
+  },
+  {
+    "file": "mobile/src/lib/dailyLoop.ts",
+    "line": 75,
+    "before": "A one-line build log keeps your Rep from rotting.",
+    "after": "Record a concise progress update to keep your activity-based reputation current."
+  },
+  {
+    "file": "mobile/src/lib/gamification.ts",
+    "line": 7,
+    "before": "Swipe 10 profiles",
+    "after": "Review 10 professional profiles"
+  },
+  {
+    "file": "mobile/src/lib/gamification.ts",
+    "line": 8,
+    "before": "Like 3 profiles",
+    "after": "Express interest in 3 profiles"
+  },
+  {
+    "file": "mobile/src/lib/gamification.ts",
+    "line": 16,
+    "before": "First Spark",
+    "after": "First milestone"
+  },
+  {
+    "file": "mobile/src/lib/gamification.ts",
+    "line": 17,
+    "before": "Social Butterfly",
+    "after": "Network builder"
+  },
+  {
+    "file": "mobile/src/lib/gamification.ts",
+    "line": 18,
+    "before": "Swipe 100 profiles",
+    "after": "Review 100 professional profiles"
+  },
+  {
+    "file": "mobile/src/lib/gamification.ts",
+    "line": 19,
+    "before": "On Fire",
+    "after": "Consistent contributor"
+  },
+  {
+    "file": "mobile/src/lib/gamification.ts",
+    "line": 21,
+    "before": "Chatterbox",
+    "after": "Active communicator"
+  },
+  {
+    "file": "mobile/src/lib/gamification.ts",
+    "line": 23,
+    "before": "Mission Crushed",
+    "after": "Professional progress"
+  },
+  {
+    "file": "mobile/src/screens/CityLeagueScreen.tsx",
+    "line": 77,
+    "before": " \u00b7 ranked by Rep that can decay",
+    "after": " \u00b7 activity-based reputation ranking",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/CityLeagueScreen.tsx",
+    "line": 91,
+    "before": "No ranked builders in ${city || country} yet \u2014 invite builders from your area and take the crown first.",
+    "after": "No ranked professionals in ${city || country} yet. Invite relevant contacts from your local business community.",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/ShipLogScreen.tsx",
+    "line": 58,
+    "before": "${days}/${SHIP_VERIFY_DAYS} days toward ship verification",
+    "after": "Progress recorded on ${days}/${SHIP_VERIFY_DAYS} days toward your activity badge",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/lib/dailyLoop.ts",
+    "line": 59,
+    "before": "${displayNameFor(opp)} is hiring energy",
+    "after": "${displayNameFor(opp)} is seeking collaborators",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/lib/gamification.ts",
+    "line": 181,
+    "before": "\ud83d\udcca Weekly Match Report\\n${weeklyStats.swipes} swipes \u00b7 ${weeklyStats.likes} likes \u00b7 ${weeklyStats.connections} connections \u00b7 ${weeklyStats.messages} messages \u00b7 ${weeklyStats.pointsEarned} Spark Points earned",
+    "after": "Weekly Networking Report\\n${weeklyStats.swipes} profiles reviewed \u00b7 ${weeklyStats.likes} expressions of interest \u00b7 ${weeklyStats.connections} connections \u00b7 ${weeklyStats.messages} messages \u00b7 ${weeklyStats.pointsEarned} Spark Points earned",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/OnboardingScreen.tsx",
+    "line": 664,
+    "before": "b: { id: 'MVP hustle', label: 'MVP hustle' }",
+    "after": "b: { id: 'MVP hustle', label: 'Early product validation' }",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/ProfileScreen.tsx",
+    "line": 2868,
+    "before": "\"No Vibe\"",
+    "after": "\"Introduction unavailable\"",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/SearchScreen.tsx",
+    "line": 749,
+    "before": "Find the missing person in your plan.",
+    "after": "Find the expertise your business needs.",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/SearchScreen.tsx",
+    "line": 751,
+    "before": "Search handles, skills, projects, locations, and live intent. Then rank results by builder compatibility.",
+    "after": "Search professional profiles by skills, projects, location, and collaboration goals. Review results ranked by relevance.",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/SearchScreen.tsx",
+    "line": 759,
+    "before": "placeholder=\"Search builders\"",
+    "after": "placeholder=\"Search professionals\"",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 936,
+    "before": "A co-founder with sales experience, equity",
+    "after": "A cofounder with sales experience for an equity-based collaboration",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 936,
+    "before": "Someone who has raised from local angels, coffee",
+    "after": "A founder with experience raising investment from local angel investors",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 935,
+    "before": "Try one of these, or type your own below.",
+    "after": "Select an example or describe your collaboration requirements.",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/IdeaDeckScreen.tsx",
+    "line": 844,
+    "before": "Ideas are free forever - swipe and post as many as you like. LINKUP PLUS unlocks discovery, Who Viewed You, advanced search and removes every sponsored card.",
+    "after": "Startup idea discovery and publishing are included in the free plan. LINKUP PLUS adds discovery tools, profile viewer insights, advanced search, and an ad-free experience.",
+    "kind": "fragment"
+  }
+]

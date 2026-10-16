@@ -38,9 +38,9 @@ export default function LinkyProfileScreen({ navigation }: any) {
             </View>
           </View>
 
-          <Text style={[styles.title, { color: textColor(isDark) }]}>Your AI assistant & matchmaker</Text>
+          <Text style={[styles.title, { color: textColor(isDark) }]}>Your AI professional networking assistant</Text>
           <Text style={[styles.summary, { color: textColor(isDark, 'secondary') }]}>
-            I help you discover the right connections, craft warm intros, and navigate the LINKUP ecosystem.
+            Discover relevant professionals, prepare personalized introductions, and explore startup collaboration opportunities.
           </Text>
 
           <View style={styles.grid}>
@@ -64,8 +64,7 @@ export default function LinkyProfileScreen({ navigation }: any) {
           <View style={{ flex: 1 }}>
             <Text style={[styles.insightTitle, { color: textColor(isDark) }]}>Why Linky AI</Text>
             <Text style={styles.insightText}>
-              Linky AI scans the builder graph to find your perfect co-founder, first customer, or next investor. 
-              Available 24/7 to draft warm intros and recommend who to meet next.
+              Linky uses available professional profile information to recommend potential cofounders and collaborators. Review the supporting details and approve introductions before they are sent. Recommendations do not guarantee a business outcome.
             </Text>
           </View>
         </View>
@@ -75,7 +74,7 @@ export default function LinkyProfileScreen({ navigation }: any) {
           style={styles.chatBtn}
         >
           <MessageSquare size={18} color="#000" />
-          <Text style={styles.chatBtnText}>Start Chat</Text>
+          <Text style={styles.chatBtnText}>Open Linky</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

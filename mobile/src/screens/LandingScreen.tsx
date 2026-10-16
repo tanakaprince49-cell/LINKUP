@@ -54,15 +54,15 @@ export default function LandingScreen({ navigation }: any) {
               <Text style={styles.wordRightText}>UP</Text>
             </View>
           </View>
-          <Text style={[styles.tag, { color: textColor(isDark, 'muted') }]}>Find cofounders and builders</Text>
+          <Text style={[styles.tag, { color: textColor(isDark, 'muted') }]}>Cofounder matching and professional networking</Text>
         </View>
 
         <View style={styles.copy}>
           <Text style={[styles.headline, compact && styles.headlineCompact, { color: textColor(isDark) }]}>
-            Meet the person{'\n'}who can ship it with you.
+            Find the right partner{'\n'}to build your business.
           </Text>
           <Text style={[styles.sub, { color: textColor(isDark, 'secondary') }]}>
-            Swipe, search, and message people who are actually building — not posting hustle.
+            Find a cofounder, discover startup collaborators, and build professional connections around shared skills and goals.
           </Text>
         </View>
 
@@ -99,7 +99,7 @@ export default function LandingScreen({ navigation }: any) {
             onPress={() => navigation.navigate('EmailAuth')}
             activeOpacity={0.85}
           >
-            <Text style={[styles.emailText, { color: textColor(isDark) }]}>Use email instead</Text>
+            <Text style={[styles.emailText, { color: textColor(isDark) }]}>Continue with email</Text>
           </TouchableOpacity>
 
           <Text
@@ -108,7 +108,7 @@ export default function LandingScreen({ navigation }: any) {
             style={[styles.legal, styles.link, { color: textColor(isDark, 'muted') }]}
             onPress={Platform.OS === 'web' ? undefined : () => openLink('https://www.linkupbuild.com/app/builders')}
           >
-            Explore public builder profiles →
+            Explore public professional profiles →
           </Text>
 
           <Text style={[styles.legal, { color: textColor(isDark, 'muted') }]}>

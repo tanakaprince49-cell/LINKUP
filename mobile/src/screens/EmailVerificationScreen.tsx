@@ -43,12 +43,12 @@ export default function EmailVerificationScreen() {
         <View style={styles.logoWrap}>
           <BrandMark size={64} />
         </View>
-        <Text style={[styles.headline, { color: textColor(isDark) }]}>Check your inbox.</Text>
+        <Text style={[styles.headline, { color: textColor(isDark) }]}>Verify your email address</Text>
         <Text style={[styles.sub, { color: textColor(isDark, 'secondary') }]}>
-          We sent a link to {user?.email || 'your email'}. Open it, then come back here.
+          We sent a link to {user?.email || 'your email'}. Open the verification link, then return to LINKUP.
         </Text>
         <Text style={[styles.hint, { color: textColor(isDark, 'muted') }]}>
-          Can’t find it? Look in spam or junk.
+          Check your spam or junk folder if the verification email has not arrived.
         </Text>
 
         <TouchableOpacity
@@ -57,7 +57,7 @@ export default function EmailVerificationScreen() {
           activeOpacity={0.88}
           style={[styles.primaryBtn, checking && styles.disabled]}
         >
-          {checking ? <ActivityIndicator color="#111" /> : <Text style={styles.primaryText}>I verified my email</Text>}
+          {checking ? <ActivityIndicator color="#111" /> : <Text style={styles.primaryText}>Confirm email verification</Text>}
         </TouchableOpacity>
 
         <TouchableOpacity

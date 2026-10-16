@@ -298,7 +298,7 @@ export default function MessagesScreen({ navigation, route }: any) {
               {archivedOnly ? 'Archived chats' : 'Messages'}
             </Text>
             <Text style={styles.screenSub}>
-              {archivedOnly ? 'Hidden conversations you can still reopen.' : 'Your founder conversations and team threads.'}
+              {archivedOnly ? 'Hidden conversations you can still reopen.' : "Professional conversations and project discussions."}
             </Text>
           </View>
         </View>
@@ -345,7 +345,7 @@ export default function MessagesScreen({ navigation, route }: any) {
               {!archivedOnly ? (
                 <>
                   <Text style={{ fontSize: 12, fontWeight: '700', color: '#777', textAlign: 'center', lineHeight: 18 }}>
-                    Chat stays empty until someone accepts an intro. Tell Linky who you need, search, or invite 3 builders you already know.
+                    Conversations become available after a connection is approved. Use Linky, search for relevant professionals, or invite your existing contacts.
                   </Text>
                   <TouchableOpacity onPress={() => navigation.navigate('LinkyHome')} style={{ backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 16 }}>
                     <Text style={{ fontSize: 11, fontWeight: '900', color: '#000', letterSpacing: 1 }}>OPEN LINKY</Text>

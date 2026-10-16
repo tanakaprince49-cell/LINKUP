@@ -233,7 +233,7 @@ const NetworkQuizScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
             <>
               <Loader size={36} color={COLORS.primaryStrong} />
               <Text style={[styles.waitingText, { color: textColor(isDark) }]}>Waiting for opponent...</Text>
-              <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share the challenge so your friend joins</Text>
+              <Text style={[styles.waitingSub, { color: textColor(isDark, 'muted') }]}>Share this challenge to invite another member.</Text>
             </>
           )}
         </View>
@@ -301,7 +301,7 @@ const NetworkQuizScreen: React.FC<{ navigation: any; route?: any }> = ({ navigat
       {finished && challengeResult && (challengeResult.senderScore != null || challengeResult.recipientScore != null) && (
         <View style={styles.finishedContainer}>
           <Text style={styles.finishedEmoji}>🏆</Text>
-          <Text style={[styles.finishedScore, { color: textColor(isDark) }]}>Challenge Complete!</Text>
+          <Text style={[styles.finishedScore, { color: textColor(isDark) }]}>Challenge completed</Text>
           {challengeResult.senderScore != null && challengeResult.recipientScore != null ? (
             <>
               <Text style={[styles.finishedSub, { color: textColor(isDark, 'muted') }]}>

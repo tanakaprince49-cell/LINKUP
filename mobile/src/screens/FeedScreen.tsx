@@ -443,7 +443,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       name,
       tagline,
       website,
-      'On LINKUP — find cofounders and people who actually ship.',
+      "Discover cofounders and startup collaborators on LINKUP.",
     ].filter(Boolean).join('\n');
     try {
       if (Platform.OS === 'web' && typeof navigator !== 'undefined' && (navigator as any).share) {
@@ -764,8 +764,8 @@ export default function FeedScreen({ navigation }: any) {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <SafeIcon name="Rocket" size={48} color="#222" />
-            <Text style={styles.emptyText}>NO STARTUPS YET...</Text>
-            <Text style={styles.emptySub}>List the first one</Text>
+            <Text style={styles.emptyText}>No startup listings yet</Text>
+            <Text style={styles.emptySub}>Introduce your startup</Text>
           </View>
         }
       />
@@ -781,7 +781,7 @@ function FeedHouseCard({ isDark }: { isDark: boolean }) {
       <View style={styles.housePill}>
         <Text style={styles.housePillText}>SPONSORED</Text>
       </View>
-      <Text style={[styles.houseTitle, { color: textColor(isDark) }]}>Advertise to every builder here</Text>
+      <Text style={[styles.houseTitle, { color: textColor(isDark) }]}>Promote your product to the LINKUP community</Text>
       <Text style={[styles.houseBody, { color: textColor(isDark, 'secondary') }]}>
         Run a sponsored card across the Feed, Discover, Search and Linky's picks. List your ad under LinkUp Campaigns.
       </Text>

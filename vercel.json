@@ -121,6 +121,14 @@
       "destination": "/service-worker.js"
     },
     {
+      "source": "/app/landing",
+      "destination": "/landing.html"
+    },
+    {
+      "source": "/landing",
+      "destination": "/landing.html"
+    },
+    {
       "source": "/app/index.html",
       "destination": "/index.html"
     },

@@ -1055,7 +1055,7 @@ const templateOpener = (c, need) => {
   const bit = [c.role ? `${/^[aeiou]/i.test(c.role) ? 'an' : 'a'} ${c.role}` : '', c.company ? `at ${c.company}` : '', c.city ? `in ${c.city}` : '']
     .filter(Boolean).join(' ');
   const hook = c.skills?.length ? `your ${c.skills[0]} is what made me stop on your profile.` : `Linky says you are the closest thing to what I am looking for.`;
-  return `Hi ${firstName(c.name)} - ${bit ? `you are ${bit} ` : ''}and ${hook} Worth 15 minutes this week? If the timing is bad - no worries at all.`;
+  return `Hi ${firstName(c.name)} - ${bit ? `you are ${bit} ` : ''}and ${hook} Would you be available for a brief discussion this week? Please decline if this is not relevant to your current priorities.`;
 };
 
 // The only Gemini call in the ask flow. Compact on purpose.
@@ -1063,7 +1063,7 @@ async function geminiRerank(q, requester, shortlist) {
   if (!aiReady()) return null;
   const prompt = [
     'You are Linky, the connector for LINKUP (builders, founders and operators, Harare-first).',
-    'Sound like a warm, sharp, well-connected friend who is good at intros: plain human sentences, no corporate filler, no emojis, never invent a fact.',
+    'Use clear, concise professional networking language: specific evidence, respectful introductions, no hype, no emojis, and no invented facts.',
     `A member asked: "${q.need}"${q.offer ? ` (offer: ${q.offer})` : ''}${q.location ? ` (location: ${q.location}${q.remote ? ', remote fine' : ', in person'})` : ''}.`,
     'Pick which candidates are genuinely worth an introduction for that ask. Cite-or-skip: every "why" must quote a concrete fact from that candidate\'s record (a skill, role, company, city or bio detail). No evidence = leave them out. Never invent facts. Return an empty list rather than guess.',
     'Return STRICT JSON only: {"picks":[{"uid":"...","score":0-100,"why":"one plain sentence, under 26 words, citing the evidence","opener":"the first line the member sends, under 30 words: says who they are looking for, names ONE true thing about this person from the profile, and asks one small question that is easy to answer yes to"}]}',
@@ -1209,14 +1209,14 @@ function nearestPeople(me, q, eligible) {
 }
 
 // ---------------------------------------------------------------- ask (the whole flow, one request)
-const COACH = 'Tell me who you need and I will go and look. A role. A skill. A city. Or even just a name. Try - A Flutter developer in Harare for a paid fintech MVP. A co-founder with sales experience for equity. Someone who has raised from local angels. Fred Moyo.';
+const COACH = 'Describe the professional role, skills, location, or collaboration you need. For example, a Flutter developer in Harare for a paid fintech MVP, a sales cofounder for an equity-based collaboration, or a founder with fundraising experience.';
 
 const personLine = (n) => text(n.name, 40);
 
 // Quick-reply chips. The wording engine may return better ones for a specific
 // answer; these are the floor, and they are what the app/bot show when Gemini
 // is unavailable. Bots get commands, the app gets sentences it can send back.
-const COACH_CHIPS = ['A Flutter developer in Harare for a paid fintech MVP', 'A co-founder with sales experience, equity', 'Someone who has raised from local angels'];
+const COACH_CHIPS = ['A Flutter developer in Harare for a paid fintech MVP', 'A cofounder with sales experience for an equity-based collaboration', 'Someone who has raised from local angels'];
 const BOT_CHIPS = ['a flutter developer in harare', 'a fintech lawyer in harare', 'help'];
 const FOUND_CHIPS = { app: ['meet 1', 'who else do you have', 'write me a first message'], bot: ['meet 1', 'cards', 'more'] };
 const NONE_CHIPS = { app: ['yes, search LinkedIn', 'try a role instead', 'what Linky knows about me'], bot: ['yes search LinkedIn', 'cards', 'prefs'] };
@@ -1268,18 +1268,18 @@ async function appendThread(uid, state, turns) {
 //   - no key, an error, or junk JSON -> plainReply() below answers instead.
 //     A member never sees a failure, they see a shorter, blunter Linky.
 const VOICE_KINDS = {
-  chat: 'This is a person talking to you, not a search. React to what they actually said first - answer it, tease it, agree with it, disagree - and that is enough. Do not open with a pitch, do not say "tell me what you need", and do not list example searches unless they asked what you can do. If they said they are not looking for anybody, drop it entirely and just be good company. Match their length: two words from them is one line from you. A joke, an opinion or one emoji is allowed here. Never mention profiles you did not search, never say "nobody fits", never sign off like support.',
-  help: 'They asked what you are or what you can do. Explain it the way you would to a friend in a WhatsApp thread: what you are for, one line; what you can actually do, two or three short lines; then hand them one specific thing to try. No bullet points, no "features", no corporate name for the app.',
-  found: 'The matcher found people. Talk like a friend who just found them a lead, not like a search engine: warm, short, one or two sentences max. Mention how many in passing, point at why they are worth a look, and let the cards do the bragging. Never say "I picked them for a reason", never say "the profile line, not my opinion", never sound like a receipt.',
-  close: 'Nobody matched their words exactly, but adjacent people are worth a look. Say it cheerfully and never as an apology - "close enough to be useful" is a normal answer, not a failure.',
-  none: 'The matcher found nobody. Say it like a friend breaking mild news, zero ceremony: they are just not on LINKUP yet, no blame, no stat about how many profiles you read. Then ask, in one easy line, whether you should go outside the network and look on LinkedIn for them. Make the question sound like a favour you actually want to do, not a form.',
-  person: 'They asked for a human by name and you found them. Say it in one or two complete sentences - who they are and what they do - like a friend who already knew where they were. Never output a bare "Name. Role." fragment, and never "I am happy to inform you". If the dossier says the intro cannot go ahead, say why in one plain line and do not sound sorry about it.',
-  ambiguous: 'More than one member could be who they mean. Ask which one in one short line that contains both names. Admitting the doubt is charming here; guessing is not.',
-  draft: 'Write the message they should send. It must sound like a person wrote it two minutes ago: specific, warm, easy to answer, no flattery padding, no "I hope this finds you well".',
-  check: 'They are thinking out loud, not ordering a search. Respond to the actual thought first - one honest observation, a small challenge if the thought deserves one, no flattery - then ask, in one line, whether you should look for people. Do NOT list anybody, do not pretend you searched, and do not sound like a menu. Two sentences then the question.',
-  squad: 'They asked for a SQUAD - several complementary people at once - and the matcher picked a triangle. Present it as a unit: name the three, one clause each on the part they play, and one line on what the trio is still missing. Never present them as three separate search results, never say "here are 3 results", and never offer the squad finder to somebody who did not ask for a group.',
-  loop: 'It has been 48 hours since you introduced two people and you are asking how it went. Ask one honest question, no ceremony and no survey voice, and make the four answers sound easy to give. Never guess the outcome, never say you hope it went well, never apologise for asking.',
-  limit: 'They are out of searches for today. Say it lightly, never with corporate regret, and be useful about it: what is still free (looking someone up by name) and what tomorrow brings. Do not lecture about pricing.',
+  chat: "Respond directly and courteously to the message. Keep a concise professional tone without teasing, jokes, sales pitches, or unsolicited searches. Respect a decision not to search. Never imply a search was performed or profiles were reviewed when it was not.",
+  help: "Explain that Linky is LINKUP's AI professional networking assistant. Briefly describe supported discovery and introduction tools, then offer one relevant next step. Do not claim unsupported capabilities.",
+  found: "Briefly introduce the recommended professionals. Explain their relevance using only the supplied evidence and let the profile cards provide the detail. Use at most two clear sentences and do not imply guaranteed compatibility.",
+  close: "Explain that there are no exact matches and that the recommendations are related alternatives. Be transparent about the difference without presenting a partial match as an exact fit.",
+  none: "Explain that no relevant LINKUP profiles were found. Ask whether the member wants a public LinkedIn search. Do not imply the external search has already happened or provide unsupported network statistics.",
+  person: "Identify the requested member in one or two complete professional sentences using verified dossier facts only. If an introduction cannot proceed, explain the documented reason clearly.",
+  ambiguous: "Ask which person the member means, naming both supplied candidates. Do not guess their identity.",
+  draft: "Write a concise professional introduction with specific profile evidence, a clear collaboration purpose, and one practical question. Avoid flattery, promotional language, and generic formalities. Do not imply the draft was sent.",
+  check: "Address the actual thought first with a useful, evidence-based observation. Then ask whether to search for relevant professionals. Do not list profiles, imply a completed search, or start searching without agreement.",
+  squad: "The member requested a complementary team. Present the supplied group together, identify each person and their documented contribution, and state the remaining expertise gap. Do not offer team discovery unless requested.",
+  loop: "Ask a brief professional follow-up about the introduction after 48 hours. Offer the four supplied response choices clearly. Never assume the members met or describe an unconfirmed outcome.",
+  limit: "Explain that today's search allowance is exhausted. State the available no-cost alternatives and when the allowance refreshes, using only the supplied plan information. Avoid pressure to purchase.",
 };
 
 // Kinds that must be written fresh every time: caching a greeting for fourteen days
@@ -1324,7 +1324,7 @@ async function geminiWording(kind, dossier, { source = 'app', seed = '' } = {}) 
   // A greeting kept for a fortnight is how a personality turns into an answering
   // machine, so chit-chat, follow-up questions and tie-breakers are written fresh.
   if (NO_CACHE_KINDS.has(kind)) return wordingOnce(kind, dossier, source, seed, null);
-  const ref = db().collection('linkyCache').doc(cacheKey('v2', `${kind}|${source}|${seed}`));
+  const ref = db().collection('linkyCache').doc(cacheKey('v3-professional', `${kind}|${source}|${seed}`));
   try {
     const snap = await ref.get().catch(() => null);
     if (snap && snap.exists && Date.now() - toMillis(snap.data().createdAt) < 14 * DAY_MS) {
@@ -1340,7 +1340,7 @@ async function wordingOnce(kind, dossier, source, seed, ref) {
     : `It is a ${source === 'telegram' ? 'Telegram' : 'WhatsApp'} message: plain text, under 260 characters, no links in the reply.`;
   const prompt = [
     'You are Linky, the connector at LINKUP - a network of founders, builders and operators, Harare first.',
-    'Your voice: charismatic, warm, quick, funny in an easy way - the chatbot everybody wishes their app had. You are the well-connected friend everyone texts when they need somebody, and you enjoy it. Contractions, short sentences, rhythm that changes. Light teasing is fine when it is kind. Never stiff, never a customer-service script, never breathless, never three exclamation marks, never fake enthusiasm about something that is not exciting.',
+    "Your voice: professional, approachable, clear, and business-focused. Use concise natural sentences. Respect the member's time. Do not use teasing, jokes, slang, hype, inflated claims, or excessive punctuation. Avoid jargon and generic corporate filler.",
     'At most ONE emoji, and only in chit-chat or a greeting. Never in an answer that lists people, never as decoration.',
     'Style is presentation, never substance: you may not soften, pad, hedge or invent a fact to sound nicer. If the honest answer is "nobody", that is the answer they get - said like a human.',
     VOICE_KINDS[kind] || VOICE_KINDS.chat,
@@ -1400,46 +1400,46 @@ function plainReply(kind, d = {}) {
   const who = nearest.length ? ` Closest here: ${nearest.map(personLine).join('  ')}.` : '';
   switch (kind) {
     case 'found': return `${count} ${count === 1 ? 'person' : 'people'} on LINKUP ${count === 1 ? 'fits' : 'fit'} what you asked for. ${count === 1 ? 'Their card says why' : 'Each card says why'} - take a look.${d.remote_only_note ? ` ${cap1(d.remote_only_note)}.` : ''}${ctaFor(d)}`;
-    case 'close': return `Nobody lists ${d.need || 'that'} word for word but ${count} ${count === 1 ? 'person is' : 'people are'} close - ${d.matched_on || 'related skills'}. The card says exactly what I matched.${ctaFor(d)}`;
+    case 'close': return `No exact profile match was found for ${d.need || 'that request'}, but ${count} ${count === 1 ? 'professional has' : 'professionals have'} related expertise - ${d.matched_on || 'related skills'}. The card says exactly what I matched.${ctaFor(d)}`;
     case 'none': {
-      return `Nobody on LINKUP does ${d.need} yet - they are just not here. Want me to go outside my network and pull a few people from LinkedIn?`;
+      return `No relevant LINKUP profiles were found for ${d.need}. Would you like a public LinkedIn search for potential collaborators?`;
     }
     case 'person': {
       const f = d.found || d.person || {};
       const label = [f.role, f.city].filter(Boolean).join('  ');
       if (d.already_connected) return `You and ${f.name} are already connected - your chat is in Messages.`;
       if (d.cannot_introduce_because) return `${f.name} - ${label || 'on LINKUP'} - is on LINKUP. ${cap1(d.cannot_introduce_because)} so I did not push a request.`;
-      return `${f.name} - ${label || 'LINKUP member'} - is on LINKUP. I found them by name.${d.channel && d.channel !== 'app' ? '  Reply meet 1 and I will ask them for you.' : '  Hit Meet and I will ask them for you.'}`;
+      return `${f.name} - ${label || 'LINKUP member'} - is on LINKUP. I found them by name.${d.channel && d.channel !== 'app' ? '  Reply meet 1 and I will ask them for you.' : '  Select Meet to request an introduction.'}`;
     }
     case 'ambiguous': return `I have ${(d.people || []).length} members who could be who you mean: ${(d.people || []).map((x) => x.name).join('   ')}. Which one?`;
-    case 'check': return `That is worth chewing on${d.need ? `: ${text(d.need, 90)}` : ''}. My honest take is you will decide better once you know who is actually around. Should I search for them? I will name the ones who fit and say plainly if there are none.`;
+    case 'check': return `This may benefit from reviewing relevant expertise${d.need ? `: ${text(d.need, 90)}` : ''}. Would you like me to search for relevant professionals? I will explain the evidence behind any recommendations.`;
     case 'chat': {
       const lines = [
-        'I am here - no search and no agenda. What is going on with you?',
-        'Fair enough. I am a well-connected friend with plenty of time. How is it going?',
-        'Noted - nothing to find and nobody to impress. How is the work treating you?',
-        'haha. Say the word when you want names - until then I am good company.',
+        'Hello. How is your work progressing today?',
+        'Understood. What would you like to discuss?',
+        'Understood. No search has been started. How is your project progressing?',
+        'I am available to discuss your professional goals and collaboration plans.',
       ];
       const first = firstName(d.name || '');
       // the streak is in the rotation so two fallback lines in a row differ
       const pick = lines[(hash32(String(d.seed || '')) + Number(d.streak || 0)) % lines.length];
       return first ? `${first} - ${pick}` : pick;
     }
-    case 'help': return 'I am Linky - the connector here. Tell me who you need and I read every member profile and bring you the ones that fit. A Flutter developer in Harare. A co-founder who can sell. Someone who has raised from local angels. When nobody fits I say so and I can go and look outside LINKUP too.';
+    case 'help': return 'I am Linky, the LINKUP AI professional networking assistant. Describe the expertise you need and I will review relevant available profiles, explain recommendations, and help prepare introductions. If no relevant profiles are found, you can request a public external search.';
     case 'squad': {
       const squads = Array.isArray(d.squads) ? d.squads : [];
-      if (!squads.length) return `I look for a squad as three people who do not overlap. ${Array.isArray(d.empty_because) && d.empty_because.length ? `Nobody here covers ${d.empty_because.map((x) => x).join(' or ')} so I am not going to hand you a pair and call it a team.` : 'Nothing here forms a triangle worth introducing - say it again with the roles you want beside you.'}`;
+      if (!squads.length) return `Team recommendations consider three professionals with complementary expertise. ${Array.isArray(d.empty_because) && d.empty_because.length ? `Current recommendations do not cover ${d.empty_because.map((x) => x).join(' or ')}. A complete team cannot be recommended.` : 'No suitable group was found. Please specify the complementary roles your team needs.'}`;
       const one = (sq, i) => `Squad ${i + 1}: ${(sq.people || []).map((x) => `${x.name}${x.part ? ` · ${x.part}` : ''}`).join(' + ')}.${sq.missing ? ` Still missing: ${sq.missing}.` : ''}`;
       return `A squad - not three searches.\n${squads.map(one).join('\n')}${d.channel && d.channel !== 'app' ? '\n\nReply meet squad and I will ask all of them at once - each one still gets to say yes.' : '\n\nTap Meet squad and I will ask all of them at once - each one still gets to say yes.'}`;
     }
     case 'loop': return loopQuestionText((d.other_person && d.other_person.name) || 'them', d.what_the_intro_was_for, d.they_have_messaged);
     case 'limit': return `That is today's ${d.asks_limit_today || d.limit} asks used up. It resets at ${d.resets || 'midnight'} and PLUS gets ${d.plus_asks_per_day || d.plusLimit || LIMITS.plus.asksPerDay} a day. Looking someone up by name is free either way.`;
-    case 'draft': return d.ready_message || 'Tell me who the message is for and I will write it - then you send it yourself from your own account.';
-    default: return 'So what do you need? Give me a role or a skill or a city or just a name - I will go and look through the network right now and tell you exactly who fits.';
+    case 'draft': return d.ready_message || 'Specify the recipient and collaboration purpose. I can prepare a draft for you to review and send from your own account.';
+    default: return 'Describe the professional role, skill, location, or name you want to find. I can review available profiles and explain relevant recommendations.';
   }
 }
 
-const pickGreeting = (seed = '', first = '') => [`Hey ${first}`, `${first}`, `Hi ${first}`][hash32(String(seed)) % 3];
+const pickGreeting = (seed = '', first = '') => [`Hello ${first}`, `${first}`, `Hi ${first}`][hash32(String(seed)) % 3];
 function hash32(s) { let h = 2166136261; for (let i = 0; i < s.length; i += 1) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return Math.abs(h | 0); }
 
 // One call site for every Linky sentence: model first, safety net second, and
@@ -1571,7 +1571,7 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
   // p2: the shape changed (intro + routes + leads instead of one long sentence),
   // so an answer written by the old code is not read at all. The search itself is
   // still served from _serpapi's 7-day result cache, so this costs no credit.
-  const ref = db().collection('linkyCache').doc(cacheKey('p2', q.norm));
+  const ref = db().collection('linkyCache').doc(cacheKey('p3-professional', q.norm));
   const snap = await ref.get().catch(() => null);
   const me = profileFacts(user) || {};
   const place = q.location || [me.city, me.country].filter(Boolean).join(', ') || 'Zimbabwe';
@@ -1645,12 +1645,12 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
       const brief = leads.length
         ? [
             `You are Linky, the connector for LINKUP. A member in ${city} wanted "${needShort}", LINKUP has nobody for it yet, so you ran one public LinkedIn search and found ${leads.length}.`,
-            `Say ONE short thing before the list, in your own voice: what you did, and the one honest limit (public profiles, no contact details, you have not messaged anybody). Warm, dry, a flicker of humour, like a friend who actually did the favours. Max 32 words. Plain sentences, no markdown, no emoji, no "Great news!", no exclamation marks, never invent a fact. Do not start with "Outside LINKUP" - the app already printed that label.`,
+            `Say ONE short thing before the list, in your own voice: what you did, and the one honest limit (public profiles, no contact details, you have not messaged anybody). Clear, professional, and transparent about the search performed. Max 32 words. Plain sentences, no markdown, no emoji, no "Great news!", no exclamation marks, never invent a fact. Do not start with "Outside LINKUP" - the app already printed that label.`,
             'Return STRICT JSON only: {"intro":"..."}',
           ].join('\n')
         : [
             `You are Linky, the connector for LINKUP. A member in ${city} wanted "${needShort}" and nobody on LINKUP fits.`,
-            'One short honest line (max 18 words), then two or three concrete ways to find that person in ' + city + ' this week: a named kind of institution, a professional body, a community, the exact search phrase. Realistic, slightly funny, zero corporate filler. No markdown, no emoji.',
+            'One short honest line (max 18 words), then two or three concrete ways to find that person in ' + city + ' this week: a named kind of institution, a professional body, a community, the exact search phrase. Practical, professional, evidence-based, with no invented institutions or claims. No markdown, no emoji.',
             'Return STRICT JSON only: {"intro":"...","routes":["...","..."]} - each route under 26 words, plain sentences, no numbering.',
           ].join('\n');
       const raw = await geminiText(brief, { temperature: 0.6, maxOutputTokens: leads.length ? 140 : 320, responseMimeType: 'application/json' });
@@ -1771,7 +1771,7 @@ const INTENT_MODES = new Set(['search', 'ask_first', 'chat']);
 export async function intentGate(message, { offer = false, lastAsk = '', source = 'app' } = {}) {
   const said = text(message, 240);
   if (!said || !aiReady()) return null;
-  const ref = db().collection('linkyCache').doc(cacheKey('i3', `${said.toLowerCase()}|offer:${offer ? 1 : 0}`));
+  const ref = db().collection('linkyCache').doc(cacheKey('i4-professional', `${said.toLowerCase()}|offer:${offer ? 1 : 0}`));
   try {
     const snap = await ref.get();
     if (snap && snap.exists && Date.now() - toMillis(snap.data().createdAt) < 24 * 3600000) {
@@ -1791,7 +1791,7 @@ export async function intentGate(message, { offer = false, lastAsk = '', source 
     '  "chat" - everything else: greetings, laughs, feelings, thanks, banter, a stray word, or anything with no person to look for.',
     'For "search" or "ask_first" also give "topic": 3-8 words naming who or what they want, in their words, no "find me" verbs. Empty string otherwise.',
     'Also set "multi": true when they asked for MORE THAN ONE person at once as a set - a squad, a team, "a dev and someone who can sell", "three of us", "who else should I bring" - and false when they want one human. It changes how many people Linky brings back, nothing else.',
-    'For "ask_first" and "chat" also write "reply" - at most 2 short sentences in the voice of Linky - warm, easy, a little funny, reacting to what they actually said. "ask_first" must end by asking whether to search for them. "chat" must NOT offer to search, must not pitch, and must not mention keys, quota, errors, or what it cannot do.',
+    'For "ask_first" and "chat" also write "reply" - at most 2 short sentences in the voice of Linky - professional, approachable, and directly relevant to what they actually said. "ask_first" must end by asking whether to search for them. "chat" must NOT offer to search, must not pitch, and must not mention keys, quota, errors, or what it cannot do.',
     'Never invent a person, a number or a fact. Plain text, no markdown, no emoji more than one.',
     'Return STRICT JSON only: {"mode":"search|ask_first|chat","topic":"...","multi":true,"reply":"..."}',
   ].join('\n');
@@ -1979,9 +1979,9 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       const id = newId();
       const { reply: chat, usedAi } = await linkySay('chat', {
         they_said: `no, do not search - I was thinking out loud about ${text(pendingIntent.need, 90)}`,
-        tone: 'They declined the search. Take it lightly, like a friend who is not selling anything. One line, no follow-up pitch.',
+        tone: 'They declined the search. Acknowledge their preference respectfully in one concise sentence. Do not repeat the offer or apply sales pressure.',
         member_you: { name: me.name, role: me.role, city: me.city },
-      }, { name: me.name, source, seed: `decline:${id}`, fallback: `Noted - no search. The thought is still worth having and I am here if you want the names.` });
+      }, { name: me.name, source, seed: `decline:${id}`, fallback: `Understood. I will not run a search unless you request one.` });
       const thread = await appendThread(uid, state, [
         { id, role: 'user', text: msgTyped, at: now },
         { id, role: 'linky', text: chat, kind: 'chat', at: now + 1 },
@@ -2039,8 +2039,8 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
       : (gateSaid || await linkySay(sayKind, {
           they_said: q.need,
           tone: wantsPitch
-            ? 'They are open to what you are for. Be warm and a little funny, then say plainly what you do here and hand them one thing to try.'
-            : 'They are not looking for anybody right now. React to what they actually said, ask after them, tease gently if it fits. No pitch, no examples, no "tell me what you need".',
+            ? 'They are open to what you are for. Explain your professional networking purpose concisely and offer one relevant action.'
+            : 'They are not looking for anybody right now. Respond respectfully and professionally to what they actually said. No pitch, no examples, no "tell me what you need".',
           recent_turns: recent,
           they_asked_what_linky_does: !!q.askedWhatYouDo,
           stop_offering_searches: streak >= 1,
@@ -2429,7 +2429,7 @@ export async function introPitch({ requester = {}, target = {}, need = '', why =
   ].join(' ');
   const opener = `Hi ${tName} - ${aName} here. Linky introduced us${whyTrim ? ` - ${cap1(whyTrim)}` : ''}. Worth a quick call this week?`;
   if (!aiReady()) return { pitch, opener, usedAi: false };
-  const ref = db().collection('linkyCache').doc(cacheKey('i2', seed || `${aName}|${tName}|${cleanNeed}`));
+  const ref = db().collection('linkyCache').doc(cacheKey('i3-professional', seed || `${aName}|${tName}|${cleanNeed}`));
   const snap = await ref.get().catch(() => null);
   if (snap && snap.exists && Date.now() - toMillis(snap.data().createdAt) < 30 * DAY_MS) {
     const d = snap.data();
@@ -2438,7 +2438,7 @@ export async function introPitch({ requester = {}, target = {}, need = '', why =
   const prompt = [
     "You are Linky, LINKUP's connector. You are writing the message that decides whether a busy, good person says yes to a stranger. READ BOTH PROFILES in the dossier before writing.",
     'Two texts, STRICT JSON only: {"pitch":"...","opener":"..."}',
-    `pitch: what ${tName} reads, from Linky, on behalf of ${aName}. Max 70 words. It must say who is asking and why THIS person specifically - name one real fact from ${tName}'s profile (a skill, a role, a company, a bio detail), never an adjective. Make the ask tiny and concrete (15 minutes, this week) and offer a no that costs them nothing. Confident, warm, a flicker of humour. No flattery padding, no hype, no "game-changer", no "I hope this finds you well", no exclamation marks, no emoji.`,
+    `pitch: what ${tName} reads, from Linky, on behalf of ${aName}. Max 70 words. It must say who is asking and why THIS person specifically - name one real fact from ${tName}'s profile (a skill, a role, a company, a bio detail), never an adjective. Make the ask tiny and concrete (15 minutes, this week) and offer a no that costs them nothing. Professional, respectful, concise, and specific. No flattery padding, no hype, no "game-changer", no "I hope this finds you well", no exclamation marks, no emoji.`,
     `opener: the first line ${aName} sends once ${tName} says yes. Max 45 words, first person, sounds like a human typing on a phone in one go: one true thing about ${tName}, what ${aName} is building or needs, one easy question to answer. Never "per my last email", never pitch-deck language, never "synergy", "revolutionise" or "passionate".`,
     `The ask was "${cleanNeed}" - use it only for context. NEVER paste the ask back verbatim, and never write "find ...", "I need ..." or "looking for ..." as a sentence fragment. If the ask is somebody's name (like "elon musk"), do not echo the name as a search - talk about what ${aName} is building and why ${tName} specifically came up.`,
     'Never invent a fact that is not in the dossier. Never promise money, equity, a job or a time. If the dossier has no reason, say what the asker is building instead of flattering anybody.',
@@ -3296,7 +3296,7 @@ export async function ensureBrief({ matchId = '', requesterId = '', targetId = '
   let usedAi = false;
   if (aiReady()) {
     const prompt = [
-      'You are Linky, the connector at LINKUP. Two members just said yes to an intro and you are writing the one page they read before they talk. Nobody has met. Write like a well-connected friend who did the homework, not like a consultant.',
+      'You are Linky, the connector at LINKUP. Two members just said yes to an intro and you are writing the one page they read before they talk. Nobody has met. Write a concise professional collaboration brief using only the supplied evidence.',
       'Produce, in this order: a headline naming the pair; "why" - the exact overlap that made this intro worth making, one line each, only from the dossier; "icebreakers" - three questions or openers that only make sense because of what is in the dossier (no "so, tell me about yourself"); "agenda" - a 15 minute call in three blocks that add up to 15 (background, show the real thing, alignment check), each with a span like "0-5", a two-word title and one line of instruction that tells them what to actually do.',
       'Hard rules: every claim must be traceable to the dossier - never invent a project, a number, a company or a compliment. Plain sentences, no markdown, no emoji, no corporate filler, no "I hope this finds you well". Do not greet them. Do not mention that you are an AI, or keys, or limits.',
       'Return STRICT JSON only: {"headline":"...","why":["...","..."],"icebreakers":["...","...","..."],"agenda":[{"span":"0-5","title":"Background","ask":"..."},{"span":"5-10","title":"...","ask":"..."},{"span":"10-15","title":"...","ask":"..."}]}',

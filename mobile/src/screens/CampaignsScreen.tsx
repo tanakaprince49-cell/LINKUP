@@ -77,13 +77,13 @@ import {
 } from '../lib/trial';
 
 const CAMPAIGNS_PERKS = [
-  'Showcase your product on Idea Deck, Discover, Search, Feed, Hub & Linky picks',
+  "Promote your product across startup ideas, discovery, search, and other eligible placements",
   '3 active campaigns at once — swap creatives anytime',
   'Sponsored cards with your logo and your website as the call-to-action',
   'Live impressions, clicks & CTR on every campaign',
-  'Reach verified founders, builders & early adopters only',
+  "Reach LINKUP founders, professionals, and early adopters",
   'Edit creatives while in review, pause or resume in one tap',
-  'Priority human review — live within 24 hours',
+  "Priority campaign review before publication",
 ];
 
 const CAMPAIGNS_PLANS = [
@@ -437,7 +437,7 @@ export default function CampaignsScreen({ navigation }: any) {
           <Text style={s.liveText}>LIVE CAMPAIGNS</Text>
           <Megaphone size={12} color={INK} />
         </View>
-        <Text style={s.arenaTitle}>Your product is in the deck</Text>
+        <Text style={s.arenaTitle}>Your campaigns are active</Text>
         <Text style={s.arenaSub}>
           Sponsored cards running across Idea Deck, Discover, Search, Feed, Hub and Linky picks.
         </Text>
@@ -527,7 +527,7 @@ export default function CampaignsScreen({ navigation }: any) {
           <Megaphone size={22} color={LEAGUE_YELLOW} />
           <Text style={[s.emptyTitle, { color: textColor(isDark) }]}>No campaigns yet</Text>
           <Text style={[s.emptySub, { color: textColor(isDark, 'muted') }]}>
-            Put your product in the deck where founders decide what to build next.
+            Promote your product to founders exploring startup ideas and collaboration opportunities.
           </Text>
         </View>
       ) : (
@@ -620,7 +620,7 @@ export default function CampaignsScreen({ navigation }: any) {
             {Platform.OS === 'web' ? 'PAY ONCE · NO AUTO-RENEWAL' : `${trialForPlan(selectedCampaignsPlan).trialDays} DAYS FREE`}
           </Text>
         </View>
-        <Text style={s.arenaTitle}>Put your product in front of every founder</Text>
+        <Text style={s.arenaTitle}>Reach the LINKUP startup community</Text>
         <Text style={s.arenaSub}>
           Sponsored cards placed natively across Idea Deck, Discover, Search, Feed, Hub and Linky's picks.
         </Text>
@@ -721,7 +721,7 @@ export default function CampaignsScreen({ navigation }: any) {
           REVIEW QUEUE{pending.length > 0 ? ` · ${pending.length}` : ''}
         </Text>
         {pending.length === 0 ? (
-          <Text style={[s.adminEmpty, { color: textColor(isDark, 'muted') }]}>Queue is clear</Text>
+          <Text style={[s.adminEmpty, { color: textColor(isDark, 'muted') }]}>No campaigns awaiting review</Text>
         ) : (
           pending.map((campaign) => (
             <View key={campaign.id} style={[s.row, { backgroundColor: cardBg, borderColor: border }]}>

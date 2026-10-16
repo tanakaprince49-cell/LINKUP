@@ -440,11 +440,11 @@ export default function IdeaDeckScreen({ navigation }: any) {
     const title = ideaTitle.trim();
     const description = ideaDescription.trim();
     if (!title || !description) {
-      notifyUser('Finish your idea', 'Add a title and short description so builders understand what you want to build.');
+      notifyUser('Finish your idea', "Add a title and concise description so potential collaborators understand your startup concept.");
       return;
     }
     if (ideaFields.length === 0 || ideaLookingFor.length === 0) {
-      notifyUser('Add signals', 'Choose at least one field and one thing you are looking for.');
+      notifyUser('Add signals', "Select at least one industry and one collaboration requirement.");
       return;
     }
 
@@ -505,7 +505,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
     if (!user?.uid || !inviteIdea || inviteBusy) return;
     const message = inviteMessage.trim();
     if (!message) {
-      notifyUser('Add a message', 'Write a short message so the idea owner knows why you want to connect.');
+      notifyUser('Add a message', "Explain your relevant experience and the collaboration you are proposing.");
       return;
     }
     if (inviteIdea.ownerId === user.uid) {
@@ -672,7 +672,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
           <View style={styles.composeHeader}>
             <View>
               <Text style={[styles.composeTitle, { color: textColor(isDark) }]}>Post an Idea</Text>
-              <Text style={styles.composeSub}>Builders can swipe right if they want in.</Text>
+              <Text style={styles.composeSub}>Members can express interest in collaborating on your startup idea.</Text>
             </View>
             <TouchableOpacity onPress={() => setComposerOpen(false)} style={styles.composeCloseBtn}>
               <X size={22} color={textColor(isDark)} />
@@ -691,7 +691,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
             <TextInput
               value={ideaDescription}
               onChangeText={setIdeaDescription}
-              placeholder="What do you want to build?"
+              placeholder="Describe your startup concept."
               placeholderTextColor="#777"
               maxLength={500}
               multiline
@@ -762,7 +762,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
               { color: textColor(isDark), borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
             ]}
           />
-          <Text style={styles.inviteHint}>The idea owner can approve or reject this request before chat opens.</Text>
+          <Text style={styles.inviteHint}>The idea owner reviews your connection request before messaging becomes available.</Text>
 
           <TouchableOpacity onPress={sendIdeaInvite} disabled={inviteBusy} style={[styles.postIdeaBtn, inviteBusy && styles.postIdeaBtnDisabled]}>
             {inviteBusy ? <ActivityIndicator color="#000" /> : <Text style={styles.postIdeaText}>Send Invite</Text>}
@@ -820,13 +820,13 @@ export default function IdeaDeckScreen({ navigation }: any) {
           </Text>
           <Text style={styles.emptyText}>
             {seenCount > 0
-              ? 'You have swiped every idea in the network right now. New ones appear as builders post them.'
-              : 'Post an idea here so builders can swipe into it.'}
+              ? "You have reviewed all currently available startup ideas. New submissions will appear here."
+              : "Publish a startup idea to invite interest from potential collaborators."}
           </Text>
           {seenCount > 0 ? (
             <TouchableOpacity onPress={resetSeenIdeas} style={styles.emptyButton}>
               <RefreshCw size={16} color="#000" />
-              <Text style={styles.emptyButtonText}>Show These Again</Text>
+              <Text style={styles.emptyButtonText}>Review ideas again</Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity onPress={() => setComposerOpen(true)} style={styles.emptyButton}>
@@ -841,7 +841,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
       <PaywallModal
         visible={!!paywallFeature}
         feature={paywallFeature || PRO_FEATURES.startupAnalyzer}
-        description={'Ideas are free forever - swipe and post as many as you like. LINKUP PLUS unlocks discovery, Who Viewed You, advanced search and removes every sponsored card.'}
+        description={'Startup idea discovery and publishing are included in the free plan. LINKUP PLUS adds discovery tools, profile viewer insights, advanced search, and an ad-free experience.'}
         onClose={() => setPaywallFeature('')}
       />
     </SafeAreaView>

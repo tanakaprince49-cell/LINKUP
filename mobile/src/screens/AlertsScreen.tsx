@@ -312,7 +312,7 @@ export default function AlertsScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
-      <ScreenHeader title="Notifications" subtitle="Requests, matches and momentum" onBack={() => navigation.goBack()} isDark={isDark} />
+      <ScreenHeader title="Notifications" subtitle="Connection requests and network updates" onBack={() => navigation.goBack()} isDark={isDark} />
       <FlatList
         data={listData}
         keyExtractor={(item) => item.id}
@@ -333,14 +333,14 @@ export default function AlertsScreen({ navigation }: any) {
               <View style={[styles.emptyIcon, { backgroundColor: COLORS.primary + '1F' }]}>
                 <Bell size={26} color={COLORS.primaryStrong} />
               </View>
-              <Text style={[styles.emptyText, { color: textColor(isDark) }]}>Inbox is quiet</Text>
+              <Text style={[styles.emptyText, { color: textColor(isDark) }]}>No notifications yet</Text>
               <Text style={[styles.emptySubText, { color: textColor(isDark, 'muted') }]}>
-                When someone asks to connect, likes you, or checks you out, it lands here. Go swipe a few builders.
+                Connection requests, profile interest, and network updates will appear here. Explore relevant professionals to grow your network.
               </Text>
               <View style={[styles.emptyHint, liquidGlass(isDark, false)]}>
                 <Sparkles size={13} color={COLORS.primaryStrong} />
                 <Text style={[styles.emptyHintText, { color: textColor(isDark, 'secondary') }]}>
-                  Tip: build-log posts and full profiles get you noticed faster.
+                  Keep your profile complete and share project updates to help relevant professionals discover you.
                 </Text>
               </View>
             </View>
