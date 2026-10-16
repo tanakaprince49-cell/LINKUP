@@ -148,6 +148,12 @@ export async function verifyWebhookSignature(payload, signatureHeader) {
     .update(signedPayload)
     .digest('hex');
 
+  // Malformed headers must fail verification, not throw RangeError from
+  // timingSafeEqual when the buffers have different lengths.
+  if (!/^[a-f0-9]{64}$/i.test(receivedSignature)) {
+    return { ok: false, reason: 'invalid-signature-format' };
+  }
+
   // Timing-safe compare
   if (!crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(receivedSignature))) {
     return { ok: false, reason: 'invalid-signature' };

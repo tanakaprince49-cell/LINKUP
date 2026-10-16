@@ -1,5 +1,7 @@
 # LINKUP at linkupbuild.com/app — deployment handoff
 
+**16 October 2026 follow-up:** the coordinated app/marketing fixes are now implemented. The marketing proxy targets upstream `/index.html` explicitly for both `/app` and `/app/`; checkout overrides are constrained to the current browser origin/app mount. Historical preparation notes below are superseded by `DOMAIN_PAYMENT_FIXES.md`.
+
 Prepared 16 October 2026. **App-side source changes are prepared locally, not proof of a production deployment.** No domain, DNS, Firebase console, landing-page source or webhook registration was changed by this work.
 
 ## Intended architecture

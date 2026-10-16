@@ -32,10 +32,10 @@
 import { handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
 import { getDb, serverTimestamp, verifyRequestUser } from './_firebaseAdmin.js';
 import { CURRENCY, WEB_TERMS } from '../shared/pricing.js';
+import { checkoutReturnUrls } from './_webReturns.js';
 
 const TX = 'webTransactions';
 const BASE_URL = 'https://api.payonify.com';
-const DEFAULT_SITE = 'https://linkup-muqu.vercel.app';
 
 function getConfig() {
   const publishableKey = String(process.env.PAYONIFY_PUBLISHABLE_KEY || '').trim();
@@ -48,35 +48,6 @@ function getConfig() {
 
 function getAuthHeader(cfg) {
   return 'Basic ' + Buffer.from(cfg.publishableKey + ':' + cfg.secretKey, 'utf8').toString('base64');
-}
-
-/**
- * The site the browser came from, so the return URLs always point somewhere
- * real even when PAYONIFY_SUCCESS_URL / PAYONIFY_CANCEL_URL are unset.
- * Only https origins are trusted; anything else falls back to the known site.
- */
-function siteOrigin(req) {
-  const fromOrigin = String(req.headers.origin || '').trim();
-  if (/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(fromOrigin)) return fromOrigin;
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').trim();
-  if (host && !/localhost|127\.0\.0\.1/.test(host)) return `https://${host}`;
-  return DEFAULT_SITE;
-}
-
-/**
- * Only ever put a real, plain absolute URL in the request; Payonify validates
- * it strictly. Anything with a query string, fragment, whitespace or braces
- * is normalised down to its origin + path so it cannot be rejected.
- */
-function absoluteUrl(candidate, fallback) {
-  const value = String(candidate || '').trim();
-  try {
-    const u = new URL(value);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return fallback;
-    return u.origin + u.pathname.replace(/\/+$/, '') || fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -169,15 +140,9 @@ export default async function handler(req, res) {
     // anyway: the client parks the reference in sessionStorage before it
     // leaves for Payonify and reads it back on return (webCheckout.ts), and
     // the webhook carries the reference in session.metadata.
-    const origin = siteOrigin(req);
-    // Return to the current app mount, not the marketing homepage. Only the
-    // fixed /app mount is accepted; never accept arbitrary client return URLs.
-    // Explicit operator overrides still take precedence and must be reviewed
-    // during migration. The pending reference stays on the browser origin.
-    const appBasePath = body.appBasePath === '/app' ? '/app' : '';
-    const appReturnUrl = `${origin}${appBasePath}/`;
-    const successUrl = absoluteUrl(config.successUrl, appReturnUrl);
-    const cancelUrl = absoluteUrl(config.cancelUrl, appReturnUrl);
+    // Guard stale deployment overrides: checkout must return to the same
+    // browser origin and app mount so sessionStorage/Firebase can reconcile.
+    const { successUrl, cancelUrl } = checkoutReturnUrls(req, body.appBasePath, config);
 
     const amountInCents = Math.round(plan.amount * 100);
     const payload = {

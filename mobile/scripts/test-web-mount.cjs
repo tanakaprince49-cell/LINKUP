@@ -9,8 +9,11 @@ const ts = require('typescript');
 const mobile = path.resolve(__dirname, '..');
 const repo = path.resolve(mobile, '..');
 const read = (file) => fs.readFileSync(path.join(mobile, file), 'utf8');
-let navigation;
-before(async () => { navigation = await import('@react-navigation/core'); });
+let navigation, checkoutReturnUrls;
+before(async () => {
+  navigation = await import('@react-navigation/core');
+  ({ checkoutReturnUrls } = await import('../../api/_webReturns.js'));
+});
 
 function evaluateTs(source, globals = {}, mocks = {}) {
   const module = { exports: {} };
@@ -239,15 +242,15 @@ test('notification click only reuses an app tab and stays within its scope', asy
   assert.equal(navigated[1], 'https://example.com/app/alerts');
 });
 
-test('checkout passes only a fixed app mount and preserves explicit operator overrides', async () => {
+test('checkout keeps returns on the browser origin and ignores stale operator overrides', async () => {
   const source = fs.readFileSync(path.join(repo, 'api/payonifyCheckout.js'), 'utf8')
     .replace(/^import .*;\n/gm, '')
     .replace('export default async function handler', 'async function handler');
-  for (const [base, expected] of [['/app', '/app/'], ['', '/'], ['//attacker.example', '/']]) {
+  for (const [base, expected] of [['/app', '/app/'], ['', '/app/'], ['//attacker.example', '/app/']]) {
     let sent;
     const env = { PAYONIFY_PUBLISHABLE_KEY: 'test', PAYONIFY_SECRET_KEY: 'test' };
     const context = {
-      process: { env }, Buffer, URL, AbortController, setTimeout, clearTimeout, console,
+      process: { env }, Buffer, URL, AbortController, setTimeout, clearTimeout, console, checkoutReturnUrls,
       CURRENCY: 'USD', WEB_TERMS: { test: { tier: 'plus', months: 1, amount: 5, label: 'Test' } },
       handleOptions: () => false, setCors: () => {}, readJsonBody: async (req) => req.body,
       verifyRequestUser: async () => ({ uid: 'test-user', email: 'test@example.com' }),
@@ -262,6 +265,9 @@ test('checkout passes only a fixed app mount and preserves explicit operator ove
     assert.equal(sent.success_url, 'https://www.linkupbuild.com' + expected);
     assert.equal(sent.cancel_url, sent.success_url);
     env.PAYONIFY_SUCCESS_URL = 'https://operator.example/approved-return';
+    await context.handlerForTest(req, res);
+    assert.equal(sent.success_url, 'https://www.linkupbuild.com/app/');
+    env.PAYONIFY_SUCCESS_URL = 'https://www.linkupbuild.com/app/landing';
     await context.handlerForTest(req, res);
     assert.equal(sent.success_url, env.PAYONIFY_SUCCESS_URL);
   }

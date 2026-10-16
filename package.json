@@ -9,7 +9,9 @@
     "preview": "npx serve mobile/dist",
     "lint": "npm --prefix mobile run typecheck",
     "test:web-paths": "npm --prefix mobile run test:web-paths",
-    "test:seo": "node --test tests/public-seo.test.mjs"
+    "test:seo": "node --test tests/public-seo.test.mjs",
+    "test:payments": "node --test tests/web-returns.test.mjs tests/payonify-signature.test.mjs",
+    "verify:web-routing": "node scripts/verify-web-routing.mjs"
   },
   "engines": {
     "node": ">=20"
