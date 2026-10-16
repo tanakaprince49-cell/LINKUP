@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  Platform,
   StyleSheet,
   TouchableOpacity,
   Linking,
@@ -100,6 +101,15 @@ export default function LandingScreen({ navigation }: any) {
           >
             <Text style={[styles.emailText, { color: textColor(isDark) }]}>Use email instead</Text>
           </TouchableOpacity>
+
+          <Text
+            {...(Platform.OS === 'web' ? { href: 'https://www.linkupbuild.com/app/builders' } : {}) as any}
+            accessibilityRole="link"
+            style={[styles.legal, styles.link, { color: textColor(isDark, 'muted') }]}
+            onPress={Platform.OS === 'web' ? undefined : () => openLink('https://www.linkupbuild.com/app/builders')}
+          >
+            Explore public builder profiles →
+          </Text>
 
           <Text style={[styles.legal, { color: textColor(isDark, 'muted') }]}>
             By continuing you agree to our{' '}

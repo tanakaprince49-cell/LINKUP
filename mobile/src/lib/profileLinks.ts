@@ -2,6 +2,7 @@ import { webBasePath } from './webPaths';
 import { Platform } from 'react-native';
 
 const DEFAULT_LINKUP_WEB_URL = 'https://linkup-muqu.vercel.app';
+const PUBLIC_PROFILE_BASE = 'https://www.linkupbuild.com/app';
 
 const cleanBaseUrl = (value: string) => value.trim().replace(/\/+$/, '');
 
@@ -16,13 +17,13 @@ export function linkupWebBaseUrl() {
 
 export function profileIdFromLink(value?: string | null) {
   const raw = String(value || '').trim();
-  const match = raw.match(/(?:\/profile\/|linkup:\/\/profile\/)([^/?#]+)/i);
-  return match?.[1] ? decodeURIComponent(match[1]) : '';
+  const match = raw.match(/(?:\/(?:profile|p)\/|linkup:\/\/profile\/)([^/?#]+)/i);
+  try { return match?.[1] ? decodeURIComponent(match[1]) : ''; } catch { return ''; }
 }
 
 export function publicProfileLink(userId?: string | null) {
   const uid = String(userId || '').trim();
-  return uid ? `${linkupWebBaseUrl()}/profile/${encodeURIComponent(uid)}` : '';
+  return uid ? `${PUBLIC_PROFILE_BASE}/p/${encodeURIComponent(uid)}` : '';
 }
 
 export function profileLinkFor(profile: { uid?: string | null; profileLink?: string | null } | null | undefined) {

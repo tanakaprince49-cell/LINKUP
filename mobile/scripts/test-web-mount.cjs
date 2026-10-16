@@ -81,7 +81,7 @@ test('logout route replacement stays inside the active app mount', () => {
   }
 });
 
-test('shared profile links use the current browser mount without changing native defaults', () => {
+test('shared public profiles use the canonical custom domain on every platform', () => {
   const source = read('src/lib/profileLinks.ts');
   for (const [origin, pathname, expected] of [
     ['https://www.linkupbuild.com', '/app/profile/a', 'https://www.linkupbuild.com/app'],
@@ -91,12 +91,15 @@ test('shared profile links use the current browser mount without changing native
     const mod = evaluateTs(source, { location: { origin, pathname }, process: { env: {} } }, {
       'react-native': { Platform: { OS: 'web' } }, './webPaths': paths(pathname),
     }).exports;
-    assert.equal(mod.publicProfileLink('member 1'), `${expected}/profile/member%201`);
+    assert.equal(mod.publicProfileLink('member 1'), 'https://www.linkupbuild.com/app/p/member%201');
   }
   const native = evaluateTs(source, { process: { env: {} } }, {
     'react-native': { Platform: { OS: 'android' } }, './webPaths': paths(),
   }).exports;
   assert.equal(native.linkupWebBaseUrl(), 'https://linkup-muqu.vercel.app');
+  assert.equal(native.profileIdFromLink('https://www.linkupbuild.com/app/p/member-1'), 'member-1');
+  assert.equal(native.profileIdFromLink('linkup://profile/member-1'), 'member-1');
+  assert.equal(native.profileIdFromLink('/profile/%ZZ'), '');
 });
 
 function mountHead(pathname) {
@@ -195,11 +198,11 @@ function worker(scopePath = '/app/', options = {}) {
 const request = (pathname, mode = 'navigate', method = 'GET') => ({ url: `https://example.com${pathname}`, method, mode });
 
 test('service worker precaches only its scope and deletes only its own old caches', async () => {
-  const sw = worker('/app/', { keys: ['marketing-assets', 'linkup-pwa-%2F-v9', 'linkup-pwa-v8', 'linkup-pwa-%2Fapp%2F-v8', 'linkup-pwa-%2Fapp%2F-v9'] });
+  const sw = worker('/app/', { keys: ['marketing-assets', 'linkup-pwa-%2F-v9', 'linkup-pwa-v8', 'linkup-pwa-%2Fapp%2F-v8', 'linkup-pwa-%2Fapp%2F-v9', 'linkup-pwa-%2Fapp%2F-v10'] });
   await sw.fire('install');
   assert.ok(sw.precached.every((url) => new URL(url).pathname.startsWith('/app/')));
   await sw.fire('activate');
-  assert.deepEqual(sw.deleted, ['linkup-pwa-%2Fapp%2F-v8']);
+  assert.deepEqual(sw.deleted, ['linkup-pwa-%2Fapp%2F-v8', 'linkup-pwa-%2Fapp%2F-v9']);
   const root = worker('/', { keys: ['marketing-assets', 'linkup-pwa-v8', 'linkup-pwa-%2Fapp%2F-v9'] });
   await root.fire('activate');
   assert.deepEqual(root.deleted, ['linkup-pwa-v8']);
@@ -207,7 +210,7 @@ test('service worker precaches only its scope and deletes only its own old cache
 
 test('service worker leaves homepage, other apps, APIs, auth and foreign origins untouched', async () => {
   const sw = worker();
-  for (const pathname of ['/', '/assets/landing.js', '/application', '/app-other/', '/app/api/linky', '/app/__/auth/handler']) {
+  for (const pathname of ['/', '/assets/landing.js', '/application', '/app-other/', '/app/api/linky', '/app/__/auth/handler', '/app/p/alice', '/app/builders', '/app/sitemap.xml', '/app/sitemap-profiles-0.xml', '/app/robots.txt']) {
     assert.equal((await sw.fire('fetch', { request: request(pathname) })).intercepted, false, pathname);
   }
   assert.equal((await sw.fire('fetch', { request: request('/app/api/linky', 'cors', 'POST') })).intercepted, false);

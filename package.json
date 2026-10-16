@@ -8,7 +8,8 @@
     "build": "npm --prefix mobile ci && npm --prefix mobile run build:web",
     "preview": "npx serve mobile/dist",
     "lint": "npm --prefix mobile run typecheck",
-    "test:web-paths": "npm --prefix mobile run test:web-paths"
+    "test:web-paths": "npm --prefix mobile run test:web-paths",
+    "test:seo": "node --test tests/public-seo.test.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -49,6 +49,54 @@
   ],
   "rewrites": [
     {
+      "source": "/app/p/:uid",
+      "destination": "/api/publicSeo?mode=profile&uid=:uid"
+    },
+    {
+      "source": "/app/builders",
+      "destination": "/api/publicSeo?mode=directory"
+    },
+    {
+      "source": "/app/sitemap.xml",
+      "destination": "/api/publicSeo?mode=sitemap"
+    },
+    {
+      "source": "/app/sitemap-static.xml",
+      "destination": "/api/publicSeo?mode=static"
+    },
+    {
+      "source": "/app/sitemap-profiles-:page.xml",
+      "destination": "/api/publicSeo?mode=profiles&page=:page"
+    },
+    {
+      "source": "/app/robots.txt",
+      "destination": "/api/publicSeo?mode=robots"
+    },
+    {
+      "source": "/p/:uid",
+      "destination": "/api/publicSeo?mode=profile&uid=:uid"
+    },
+    {
+      "source": "/builders",
+      "destination": "/api/publicSeo?mode=directory"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/publicSeo?mode=sitemap"
+    },
+    {
+      "source": "/sitemap-static.xml",
+      "destination": "/api/publicSeo?mode=static"
+    },
+    {
+      "source": "/sitemap-profiles-:page.xml",
+      "destination": "/api/publicSeo?mode=profiles&page=:page"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api/publicSeo?mode=robots"
+    },
+    {
       "source": "/app/_expo/:path*",
       "destination": "/_expo/:path*"
     },
