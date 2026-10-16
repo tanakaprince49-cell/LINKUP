@@ -178,7 +178,7 @@ const legalLinksScript = [
   '}());',
   '</script>',
 ].join('\n');
-for (const name of ['privacy-policy.html', 'data-deletion.html', 'child-safety-standards.html']) {
+for (const name of ['data-deletion.html', 'child-safety-standards.html']) {
   const file = path.join(distDir, name);
   if (fs.existsSync(file)) {
     fs.writeFileSync(file, injectOnce(fs.readFileSync(file, 'utf8'), 'linkup-legal-mount', legalLinksScript, '</body>'));

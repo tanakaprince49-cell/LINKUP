@@ -45,9 +45,62 @@
           "value": "application/manifest+json"
         }
       ]
+    },
+    {
+      "source": "/privacy(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        }
+      ]
     }
   ],
   "rewrites": [
+    {
+      "source": "/privacy",
+      "destination": "/privacy-policy.html"
+    },
+    {
+      "source": "/privacy/",
+      "destination": "/privacy-policy.html"
+    },
+    {
+      "source": "/privacy.html",
+      "destination": "/privacy-policy.html"
+    },
+    {
+      "source": "/privacy-policy/",
+      "destination": "/privacy-policy.html"
+    },
+    {
+      "source": "/app/privacy",
+      "destination": "/privacy-policy.html"
+    },
+    {
+      "source": "/app/privacy/",
+      "destination": "/privacy-policy.html"
+    },
+    {
+      "source": "/app/privacy-policy/",
+      "destination": "/privacy-policy.html"
+    },
+    {
+      "source": "/app/privacy.html",
+      "destination": "/privacy-policy.html"
+    },
+    {
+      "source": "/app/privacy-policy.html",
+      "destination": "/privacy-policy.html"
+    },
     {
       "source": "/app/p/:uid",
       "destination": "/api/publicSeo?mode=profile&uid=:uid"

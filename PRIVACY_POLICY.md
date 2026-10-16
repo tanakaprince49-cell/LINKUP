@@ -1,80 +1,158 @@
-# LINKUP PRIVACY POLICY
+# LINKUP Privacy Policy
 
-**Effective Date: June 5, 2026**
+Effective: 2026-10-16
 
-LINKUP is an adults-only social and dating platform for founders and builders. This policy explains what data we collect, how we use it, how it is shared, and how you can control or delete it.
+Operator: Tanaka Gaadzikwa (individual)
 
-## 1. Data We Collect
+Contact: tanakaprince49@gmail.com
 
-We may collect the following information when you use LINKUP:
+Canonical policy: https://www.linkupbuild.com/privacy
 
-- Account information such as your name, email address, username, password hash, and authentication details.
-- Profile information such as your bio, profile photo, gallery photos, city, country, age, skills, interests, work style, startup ideas, projects, social links, and preferences.
-- Messaging and community data such as direct messages, reports, blocks, matches, saved profiles, and other content you choose to submit.
-- Device and usage data such as device type, operating system, app version, push tokens, crash logs, IP address, analytics events, and feature usage.
-- Verification and subscription data such as verification status, plan status, subscription status, and billing-related records from app store or payment providers.
-- AI feature input such as prompts, profile text, or other content you send into AI-powered features so we can return the requested result.
+LINKUP is a professional networking and cofounder collaboration service for people aged 16 and older. This policy covers the LINKUP Android app, web app, website, Linky AI features, and optional linked messaging channels. It explains what information we access, why we use it, where it is stored, who receives it, and how to exercise your choices.
 
-## 2. How We Use Data
+## 1. Who is responsible and how to contact us
 
-We use data to:
+LINKUP is operated by Tanaka Gaadzikwa as an individual. This policy applies to linkupbuild.com, the LINKUP web app at www.linkupbuild.com/app, and the Android application with package identifier com.tana.linkup. References to LINKUP, we, or us mean this operator.
 
-- Create and maintain your account.
-- Show your profile to other members when you choose to be discoverable.
-- Support messaging, matching, search, discovery, reporting, blocking, and moderation.
-- Send notifications and account-related messages.
-- Prevent spam, fraud, abuse, impersonation, and unsafe behavior.
-- Power analytics, recommendation, and AI-assisted features that you choose to use.
-- Process subscriptions, entitlement status, and account security checks.
-- Respond to support requests and legal obligations.
+For privacy questions, access or correction requests, Google account-data questions, safety concerns, or account and data deletion requests, email tanakaprince49@gmail.com. Identify the LINKUP account concerned, but do not send your password, authentication token, full payment-card details, or unnecessary identity documents.
 
-## 3. How We Share Data
+## 2. Google sign-in: information accessed and its use
 
-We do not sell your personal data.
+If you choose Sign in with Google, LINKUP requests basic identity access through Google sign-in: openid identity, email, and profile information. Google and Firebase Authentication provide identifiers used to recognize your account, your email address and verification information, and available profile information such as your display name and profile-photo URL. Authentication credentials and session tokens are handled by the sign-in and Firebase authentication systems to establish and maintain your session.
 
-We may share limited data with:
+We use this information to authenticate you, associate your activity with the correct LINKUP account, initialize or update account/profile details, provide account security and support, and deliver the networking features you request. Your display name and profile image can become part of your LINKUP profile; review and edit your profile and visibility settings before publishing it.
 
-- Service providers that help run LINKUP, such as Firebase, cloud hosting, analytics, push notification, image processing, and AI providers.
-- App store and payment providers that process subscriptions or purchases.
-- Other members of LINKUP, when you choose to publish content or message them.
-- Law enforcement or other authorities when required by law or when needed to protect users, the platform, or the public.
+LINKUP does not ask for your Google password. The current sign-in integration does not request Gmail, Google Contacts, Drive, Calendar, or other Google Workspace content permissions. Signing in does not grant LINKUP general access to those services. Email/password registration is also available through Firebase Authentication; Google sign-in is optional.
 
-## 4. Data Retention And Deletion
+Google sign-in information is processed by Google/Firebase and our hosting infrastructure. Profile information you make available can be shown to other members or the public as described below, and relevant professional-profile context can be processed for AI-assisted features. We do not sell Google user data, transfer it to data brokers, or use it for personalized advertising, lending, or creditworthiness decisions.
 
-We keep personal data only for as long as needed to operate LINKUP, meet legal obligations, resolve disputes, enforce our rules, and maintain safety.
+LINKUP's use and transfer of information received from Google APIs will adhere to the Google API Services User Data Policy, including applicable Limited Use requirements. We do not use Google sign-in data to train general-purpose AI or machine-learning models. LINKUP does not access Google Workspace APIs and does not use Google Workspace API data to develop, improve, or train non-personalized AI or machine-learning models. These restrictions also apply to permitted transfers of Google API data to processors; AI-provider configurations and contracts must support the applicable restrictions.
 
-You can request deletion of your account and associated data by using the in-app delete account option or by emailing `linkupp49@gmail.com`.
+You can remove LINKUP's Google account access in your Google Account third-party connections settings. Removing Google access is separate from deleting data already stored in LINKUP or cancelling a paid subscription. Contact us or use account deletion for those additional requests.
 
-When a verified deletion request is received, we aim to remove or anonymize the account and associated data within a reasonable period, subject to any legal, security, anti-fraud, or billing retention obligations.
+[Google Account connections](https://myaccount.google.com/connections)
 
-## 5. Security
+[Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy)
 
-We use reasonable administrative, technical, and organizational safeguards designed to protect your information. No online service is perfectly secure, but we work to reduce risk through access controls, encryption in transit, platform monitoring, and abuse reporting tools.
+## 3. Other information we collect and why
 
-## 6. Your Choices And Rights
 
-Depending on your location, you may have the right to:
 
-- Access the personal data we hold about you.
-- Correct or update your profile information.
-- Delete your account and associated data.
-- Control notifications and visibility settings.
-- Object to or restrict certain processing where applicable law gives you that right.
+- Account and profile information: username, age, biography, profile/gallery images, professional role, city/country, skills, experience, projects, startup interests, collaboration goals, work preferences, and links you add. We use these to display your professional profile and support discovery, recommendations, and collaboration. City and country are supplied by you; the current app does not request device GPS access.
+- Conversations and networking activity: messages and media you send, connection requests and decisions, introductions, saved or skipped profiles, blocks, reports, and conversation metadata. We use these to deliver communications, maintain networking preferences, and address abuse or support requests.
+- Community and promotional content: startup listings, ideas, project progress, challenges, campaign creative, destination links, targeting criteria you select, and campaign performance events. We use these to publish your submissions, deliver eligible promotional placements, and provide performance reporting.
+- Feature activity and account limits: profile views/clicks/saves, response activity, presence or last-active signals, recommendation feedback, activity-based reputation, daily/monthly message counts, and subscription entitlements. Some profile-viewer and engagement details are visible to the relevant profile owner through app features. We use usage records to operate those features, enforce plan limits, and prevent repeated free-allowance resets.
+- Purchase information: product and plan identifiers, purchase tokens or receipts, payment references, transaction/subscription status, and entitlement records supplied by Google Play or Payonify. They are used to verify, activate, restore, support, or reconcile purchases. Payment providers collect the payment credentials required for checkout; LINKUP does not ask you to send full payment-card details in a chat or support email.
+- Technical and support information: device/platform and app-version information, push notification tokens, timestamps, request/diagnostic logs, error information, network/IP information available to infrastructure providers, and support messages you send. We use these to deliver notifications, troubleshoot, protect the service, and respond to requests. Web traffic analytics are described in the storage and analytics section.
 
-## 7. Children And Age Restrictions
+## 4. Public profiles, member visibility, and recipients
 
-LINKUP is intended for adults 18 and older. We do not knowingly allow children to create accounts or use the service.
+When public discovery is enabled and your profile is eligible, selected professional-profile information may appear in member discovery, public profile pages, the website's public builder directory, recommendations, and search-engine results. This can include your name, profile image, role, biography, company, location, skills, projects, collaboration interests, and professional links. Do not put private contact details or confidential business information in fields you intend to publish.
 
-If we learn that an account belongs to a child or that content involving a child has been uploaded, we may disable the account, remove the content, preserve evidence as needed, and take additional action required by law or platform policy.
+A Google-provided name or photo that you use as your LINKUP profile information can be displayed in the same way as information you enter yourself. Your account email and authentication tokens are not fields published by the public builder-directory feed. Messages, billing records, and private Linky notes are not included in that public feed.
 
-## 8. Contact
+Use profile visibility, public discovery, stealth, and online-status controls where available. Turning off public discovery changes eligibility on LINKUP; it does not instantly remove copies already indexed by search engines or saved by other people. Contact us if a profile remains visible after a removal request. Recipients can retain messages they received, and public information or material sent to someone can be copied outside our control.
 
-For privacy questions, data access requests, or account deletion requests, contact:
+## 5. Linky, AI-assisted recommendations, and external searches
 
-`linkupp49@gmail.com`
+AI features process the prompts or startup information you submit and relevant professional-profile context, which may include names, identifiers, profile details, project information, preferences, and the facts needed to explain a recommendation or introduction. Linky also stores conversation turns, notes, recommendations, and feedback so you can review or manage them. Available profile information about potential collaborators may be used when responding to another member's networking request.
 
-## 9. Child Safety Standards
+Depending on the feature and configured routing, requests can be processed through Google Gemini, OpenCode Zen, OpenRouter, and the underlying model provider selected through those services. LINKUP does not operate its own foundation-model training service. Provider retention and processing terms depend on the service, account tier, and configuration; this policy does not claim that every provider has zero retention or that no provider ever retains a request. Google API data remains subject to the restrictions stated above.
 
-See our published child safety standards here:
+If you request an external search, the search provider, including SerpApi where configured, may receive a search phrase and relevant location or professional requirements. Results may refer to publicly available third-party professional profiles. Opening those profiles takes you to another service. Do not submit confidential business information, credentials, sensitive personal information, or other people's private information in AI prompts.
 
-https://linkup-muqu.vercel.app/child-safety-standards
+AI output can be inaccurate and does not guarantee professional compatibility, funding, employment, or business success. Introduction drafts are subject to the app's review/approval steps; a recommendation alone is not proof that a message has been sent. You can edit or hide facts in Linky preferences, clear the visible conversation, disconnect channels, or use Forget. Clear chat and Forget do not reset the message-allowance ledger, remove all historical introduction/billing/safety records, or delete your LINKUP account.
+
+## 6. Optional Telegram and WhatsApp connections
+
+If you explicitly link a supported messaging channel, we associate its chat/account identifier and available channel metadata, such as a username or display name, with your LINKUP account. Messages and commands you send to Linky in that channel, their timestamps, and the responses needed to operate the bot are processed by LINKUP and the channel provider. We use the link to authenticate that channel, return responses, deliver supported notifications, and apply the same account preferences and allowances.
+
+Linking a bot does not give LINKUP general access to your address book or unrelated conversations. You can unlink a channel in Linky settings. Telegram, WhatsApp/Meta, and recipients handle data under their own policies; unlinking LINKUP does not itself erase a message already stored by those services.
+
+## 7. Photos, camera, microphone, and notifications
+
+The app requests device access in connection with features you choose: photo/media access to select an avatar or attachment; camera access to capture supported media; microphone access when recording supported audio/video; and notification permission to send supported account, message, or introduction alerts. Selected media is uploaded when you choose to publish or send it. Push tokens and necessary routing information are used by notification providers to deliver alerts.
+
+You can deny or revoke permissions in device settings. The related feature may then be unavailable. LINKUP does not need your phone contacts or precise device location for its current networking functionality. We do not record through your camera or microphone merely because you open a profile or use Google sign-in.
+
+## 8. Service providers and other disclosures
+
+We disclose information needed to provide the feature or service concerned. The principal provider categories in the current implementation are:
+
+- Google/Firebase for sign-in, account authentication, database services, and related infrastructure; Vercel for website/API hosting and web analytics where enabled.
+- ImageKit and related hosting/CDN services for uploaded profile, campaign, or message media. Loading an externally hosted image can disclose normal network/request information to its host.
+- Google Gemini, OpenCode Zen, OpenRouter, underlying model providers, and SerpApi for the AI/search processing described above when the applicable integration is configured.
+- Expo notification infrastructure and platform delivery services, including Google services on Android, for push notification delivery.
+- Google Play and Payonify for purchases, billing verification, and subscription/payment support.
+- Telegram and WhatsApp/Meta when you choose to link or use those channels; other members and the public when you publish or communicate information through the service.
+- Authorized support/safety personnel and professional advisers when needed to investigate a report, resolve a request, protect accounts, or meet legal obligations; authorities when disclosure is legally required or necessary to address a credible safety threat. A business transfer may involve relevant records, subject to applicable legal protections and notice requirements.
+
+We do not sell personal data. Sponsored placements and campaign reporting do not authorize the sale of Google sign-in data or its use for personalized advertising. Where campaign eligibility uses professional criteria, these are the collaboration/profile criteria supplied through LINKUP, not permission to access a Google mailbox or address book. We do not claim that every provider listed is active for every account or feature.
+
+## 9. Storage, session data, and web analytics choices
+
+Account records, professional profiles, messages, relationship/intro records, preferences, usage counts, and purchase status are stored in the relevant Firebase/cloud services and application databases. Uploaded media can be stored on ImageKit or the configured media host. Infrastructure and providers also process service/diagnostic logs.
+
+Your browser or device can store authentication/session data, local preferences, cached content, PWA/offline assets, trial/payment references, and app activity/review-prompt timing in local storage, IndexedDB, AsyncStorage, or platform-managed storage. Necessary authentication and security storage is separate from optional web traffic analytics. Clearing local storage can sign you out or reset local preferences; it does not delete server records or refund your message allowance.
+
+Optional Vercel web traffic analytics are enabled after acceptance through the website's privacy choices. You can reopen Privacy choices from the website footer and decline optional analytics; a reload may be used to stop an already loaded analytics script. The privacy-policy page itself contains no analytics or third-party scripts. Essential hosting logs and app functionality, including profile-view/response reporting, are not the same as optional marketing-site traffic analytics.
+
+On Android, review-prompt timing can record first recorded use, distinct active days, a count of relevant completed actions, and review-request attempts locally on your device. Google Play controls the actual review dialog and any review you submit. LINKUP does not receive your selected star rating or review text from the in-app review API, and reviewing does not award credits or unlock paid features.
+
+## 10. How long information is kept
+
+We keep information for the purposes described in this policy, taking account of account activity, the feature concerned, safety needs, applicable legal requirements, and valid deletion requests. Account/profile records are generally needed while an account is active; messages and introductions support conversations and their history; payment, usage, dispute, and security records can be needed after an account or visible conversation is removed.
+
+A display limit or allowance reset is not necessarily a database-deletion deadline. Linky may display only recent turns or cards while associated history, cached recommendations, or introduction records remain stored. Clearing a chat removes the visible stored thread/last answer, not all related records. Forget removes Linky state/cards and linked-channel mappings but does not delete the separate usage ledger or all introduction, payment, support, and safety records.
+
+Uploaded files, copies held by recipients or external services, operational logs, and backups may have separate retention or deletion processes. We do not promise immediate deletion of every copy or a provider-wide zero-retention period. We process verified deletion requests without undue delay and within applicable legal deadlines; we will explain verification steps or necessary exceptions rather than claim that all data disappears automatically.
+
+## 11. Account deletion, data requests, and Google access revocation
+
+You can use Profile → Settings & Preferences → Delete Account Permanently, or email tanakaprince49@gmail.com with the subject LINKUP account and data deletion request. Include your account email and, if known, LINKUP user ID. We may verify that you control the account before disclosing or deleting records. Do not include a password or payment-card details.
+
+The current in-app deletion flow deletes the authentication account and attempts to remove the main profile, presence, private-preference records, and local onboarding state. It does not automatically purge every historical message, uploaded file, introduction, purchase, log, backup, or third-party copy. For a broader deletion request, identify the data concerned in your email so the remaining records and any legitimate retention needs can be reviewed. Existing recipients' copies and provider-held records may not be under LINKUP's sole control.
+
+You can also request access, a copy, correction, restriction, objection, or consent withdrawal where applicable law provides those rights. Removing Google account access does not by itself delete LINKUP records. Deleting LINKUP does not automatically cancel a Google Play subscription or reverse a payment; manage billing separately through the relevant provider.
+
+[Account and data deletion instructions](https://www.linkupbuild.com/app/data-deletion)
+
+## 12. Data protection and international processing
+
+LINKUP uses HTTPS/TLS for service communications, authentication checks, application access controls, and server-side handling of sensitive service credentials. Providers supply additional infrastructure protections. Access may be needed for support, security, legal obligations, or delivery of a requested feature. No system is completely secure, and ordinary LINKUP messaging is not represented as end-to-end encrypted.
+
+Our providers may process information in countries other than your own, depending on their infrastructure and the deployment configuration, including the United States and other provider locations. Those countries can have different data-protection laws. Applicable transfer safeguards and processor terms must be maintained where required by law. Contact us for questions about a specific service or request.
+
+## 13. Your privacy choices
+
+
+
+- Edit your professional profile and decide what to publish; manage public discovery, stealth/visibility, and online-status controls where available.
+- Review Linky facts/preferences, hide information from recommendations, clear a conversation, unlink a channel, or request broader deletion by email. Do not treat Clear chat as full account deletion.
+- Manage camera, microphone, media, and notification permissions through your device; manage optional website analytics through Privacy choices.
+- Use email/password registration instead of Google sign-in, or remove LINKUP's Google account access through Google Account connections. Request deletion of stored LINKUP records separately.
+- Where local law applies, contact us to exercise access, correction, deletion, objection, restriction, portability, or consent-withdrawal rights. You may also raise a concern with the relevant data-protection authority.
+
+[Open website privacy choices](https://www.linkupbuild.com/#privacy-choices)
+
+## 14. Age requirements and child safety
+
+LINKUP's minimum age is 16. It is not intended for children under 16, and a higher local minimum applies where required by law. Users must provide accurate age information. If you believe an account belongs to a child below the applicable minimum age, or that a minor's information or safety is at risk, contact tanakaprince49@gmail.com so the account/content can be reviewed and appropriate action taken.
+
+Sexual exploitation, grooming, child sexual abuse material, trafficking, and other abuse of minors are prohibited. Age eligibility does not permit sexualized content involving anyone under 18. Safety reports and related evidence may be retained or disclosed where legally required.
+
+[LINKUP child safety standards](https://www.linkupbuild.com/app/child-safety-standards)
+
+## 15. Policy updates and external services
+
+We update this page and its effective date when the policy changes. Where required, a material change to the collection or use of Google user data or other personal information requires additional notice or consent before the new processing begins. This policy does not replace a third party's own terms when you choose to use that service or follow an external link.
+
+For questions about this policy or a privacy request, contact Tanaka Gaadzikwa at tanakaprince49@gmail.com. The canonical, publicly accessible version of this policy is https://www.linkupbuild.com/privacy.
+
+[Google privacy policy](https://policies.google.com/privacy)
+
+[Firebase privacy and security](https://firebase.google.com/support/privacy)
+
+[Vercel privacy policy](https://vercel.com/legal/privacy-policy)
+
+[ImageKit privacy policy](https://imagekit.io/privacy-policy/)

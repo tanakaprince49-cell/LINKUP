@@ -2730,7 +2730,12 @@
   ],
   "mobile/src/components/VerifiedBadge.tsx": [],
   "mobile/src/components/WebAnalytics.tsx": [],
-  "mobile/src/components/WebAnalytics.web.tsx": [],
+  "mobile/src/components/WebAnalytics.web.tsx": [
+    [
+      "getItem",
+      "linkup_cookie_consent"
+    ]
+  ],
   "mobile/src/lib/dailyLoop.ts": [
     [
       "getItem"

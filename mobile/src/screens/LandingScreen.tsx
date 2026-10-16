@@ -117,7 +117,7 @@ export default function LandingScreen({ navigation }: any) {
               Terms
             </Text>
             {' '}and{' '}
-            <Text style={styles.link} onPress={() => openLink('https://docs.google.com/document/d/1FUTyaNfaBXzYGUiqbfhrKX73H6S6S809kpI00chyWRM/edit?usp=sharing')}>
+            <Text {...(Platform.OS === 'web' ? { href: 'https://www.linkupbuild.com/privacy' } : {}) as any} accessibilityRole="link" style={styles.link} onPress={Platform.OS === 'web' ? undefined : () => openLink('https://www.linkupbuild.com/privacy')}>
               Privacy Policy
             </Text>
             .

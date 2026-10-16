@@ -3164,6 +3164,28 @@ export default function ProfileScreen({ navigation, route }: any) {
             />
           </View>
 
+          {[
+            { label: 'Privacy Policy', help: 'How LINKUP uses, shares, stores, and deletes your information.', url: 'https://www.linkupbuild.com/privacy' },
+            { label: 'Account & Data Deletion', help: 'Deletion instructions and contact for broader data requests.', url: 'https://www.linkupbuild.com/app/data-deletion' },
+          ].map((item) => (
+            <TouchableOpacity
+              key={item.url}
+              accessibilityRole="link"
+              accessibilityLabel={item.label}
+              {...(Platform.OS === 'web' ? { href: item.url, target: '_blank', rel: 'noopener noreferrer' } : {}) as any}
+              style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}
+              onPress={Platform.OS === 'web' ? undefined : () => { void Linking.openURL(item.url).catch(() => notifyUser('Unable to open link', 'Please visit www.linkupbuild.com/privacy or email tanakaprince49@gmail.com.')); }}
+            >
+              <View style={styles.prefLabelContainer}>
+                <SafeIcon name="Shield" size={18} color={COLORS.primaryStrong} />
+                <View style={styles.prefCopy}>
+                  <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>{item.label}</Text>
+                  <Text style={styles.prefHelp}>{item.help}</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
+
           {Platform.OS === 'android' ? (
             <TouchableOpacity
               accessibilityRole="button"

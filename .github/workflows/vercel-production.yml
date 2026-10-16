@@ -72,6 +72,7 @@ jobs:
 
       - name: Verify public SEO, routing and types before promotion
         run: |
+          npm run test:privacy
           npm run test:copy
           npm run test:linky
           npm run test:payments

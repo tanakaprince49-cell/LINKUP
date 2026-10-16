@@ -175,7 +175,7 @@ const close = (server) => new Promise((resolve) => { server.close(resolve); serv
       const legal = await context.newPage();
       await legal.goto(origin + base + '/privacy-policy', { waitUntil: 'load' });
       const legalLinks = await legal.locator('a').evaluateAll((links) => links.map((a) => a.getAttribute('href')));
-      assert.ok(legalLinks.includes(base + '/child-safety-standards'), 'legal-page cross-link escaped the mount');
+      assert.ok(legalLinks.includes('https://www.linkupbuild.com/app/child-safety-standards'), 'legal-page cross-link must point to the canonical app safety page');
       await legal.close();
       // The public CTA may use bare /app, not only /app/landing.
       const entry = await context.newPage();
