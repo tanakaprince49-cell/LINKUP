@@ -114,11 +114,11 @@ test('static sitemap includes the public app landing but not private app routes'
   assert.doesNotMatch(response.body, /\/login|\/chat|\/campaigns|\/profile/);
 });
 
-test('Linky prompts require professional, evidence-based introductions', () => {
+test('Linky has a friendly configurable voice and evidence-based introductions', () => {
   const source = read('api/_linky.js');
-  assert.match(source, /Your voice: professional, approachable, clear, and business-focused/);
+  assert.match(source, /Be a grounded, friendly connector/);
   assert.match(source, /Only use facts from the dossier/);
-  assert.match(source, /Never invent facts/);
-  assert.match(source, /v3-professional/);
+  assert.match(source, /Never invent a fact/);
+  assert.match(source, /v5-companion/);
   assert.doesNotMatch(source, /tease gently|Light teasing is fine|warm, easy, a little funny|haha\. Say the word/);
 });

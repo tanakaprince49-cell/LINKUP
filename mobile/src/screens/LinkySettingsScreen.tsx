@@ -7,7 +7,7 @@ import { ArrowLeft, Check, Copy, Link2, Minus, Plus } from 'lucide-react-native'
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
-import { IntentOffer, LinkyHome, OFFER_LABELS, linkyHome, linkyLinkCode, linkyPrefs, linkyUnlinkChannel } from '../lib/linkyApi';
+import { IntentOffer, LinkyTone, LinkyHome, OFFER_LABELS, linkyHome, linkyLinkCode, linkyPrefs, linkyUnlinkChannel } from '../lib/linkyApi';
 
 const OFFERS: IntentOffer[] = ['paid', 'equity', 'advisory', 'coffee'];
 const TELEGRAM_BOT = String(process.env.EXPO_PUBLIC_LINKY_TELEGRAM_BOT || 'LINKUP_AIBOT').replace(/^@/, '');
@@ -111,6 +111,21 @@ export default function LinkySettingsScreen({ navigation }: any) {
         {saving ? <ActivityIndicator size="small" color={textColor(isDark, 'muted')} /> : <View style={styles.headerBtn} />}
       </SafeAreaView>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.section, { color: textColor(isDark, 'muted') }]}>HOW LINKY TALKS</Text>
+        <View style={styles.chips}>
+          {(['warm', 'direct', 'playful'] as LinkyTone[]).map(tone => (
+            <TouchableOpacity key={tone} accessibilityRole="button" accessibilityLabel={`Use ${tone} tone`} accessibilityState={{selected: (home?.companionTone || 'warm') === tone}} disabled={saving} style={[styles.chip, {borderColor: border, backgroundColor: (home?.companionTone || 'warm') === tone ? COLORS.primary : surface}]} onPress={async () => {
+              setSaving(true);
+              try { await linkyPrefs({companionTone: tone}); setHome(h => h ? {...h, companionTone: tone} : h); }
+              catch (err) { notifyUser('Could not save tone', err instanceof Error ? err.message : 'Try again.'); }
+              finally { setSaving(false); }
+            }}>
+              <Text style={[styles.chipText, {color: (home?.companionTone || 'warm') === tone ? '#000' : textColor(isDark)}]}>{tone.charAt(0).toUpperCase() + tone.slice(1)}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={[styles.fine, {color: textColor(isDark, 'muted')}]}>Same honest answers across the app and your linked channels. Style never changes who qualifies.</Text>
+
         <Text style={[styles.section, { color: textColor(isDark, 'muted') }]}>I AM OPEN TO</Text>
         <View style={styles.chips}>
           {OFFERS.map((o) => {

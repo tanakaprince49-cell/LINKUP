@@ -68,7 +68,7 @@ import {
 
 // Cosmetic only - the server answers when it answers. This just keeps the
 // bubble alive with a different line every couple of seconds while it works.
-const THINKING_LINES = ['Linky is reading profiles…', "Reviewing relevant professional profiles…", "Comparing potential collaborators…"];
+const THINKING_LINES = ['Thinking that through…', 'Putting a reply together…', 'One moment…'];
 
 // Live countdown to the moment today's daily Linky budget resets (the server
 // hands back `asksResetAt` as an ISO instant; dayKey is UTC, so it is the next
@@ -162,8 +162,9 @@ const CardView = ({
         <Text style={[styles.pairNote, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>{card.pairNote}</Text>
       ) : null}
       <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
-        <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>RECOMMENDATION RATIONALE</Text>
+        <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>WHY THIS PERSON</Text>
         <Text style={[styles.whyText, { color: textColor(isDark) }]}>{card.why}</Text>
+        {card.unknowns?.length ? <Text style={[styles.forText, { color: textColor(isDark, 'muted') }]}>Still to check: {card.unknowns[0]}</Text> : null}
         <Text style={[styles.forText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>For: {card.need}</Text>
       </View>
       {requested ? (
@@ -494,7 +495,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
         const byId = new Map(out.cards.map((c) => [c.id, c]));
         const merged = h.cards.map((c) => byId.get(c.id) || c);
         out.cards.forEach((c) => { if (!merged.some((m) => m.id === c.id)) merged.push(c); });
-        const updated = { ...h, cards: merged, lastAsk: out };
+        const updated = { ...h, cards: merged, ...(out.kind === 'chat' ? {} : { lastAsk: out }) };
         return out.messageQuota ? homeWithQuota(updated, out.messageQuota) : { ...updated, limits: { ...h.limits, asksUsedToday: Math.max(h.limits.asksUsedToday, h.limits.asksPerDay - out.asksLeft) } };
       });
     } catch (err) {
@@ -675,8 +676,10 @@ export default function LinkyHomeScreen({ navigation }: any) {
     if (!chip || thinking) return;
     const meet = chip.match(/^meet\s*(\d+)/i);
     if (meet) {
-      const card = answerCards[Number(meet[1]) - 1] || answerCards[0];
+      const card = answerCards[Number(meet[1]) - 1];
       if (card) { onMeet(card); return; }
+      notifyUser('Choose a current card', 'That number is not in these results. I will not choose someone else for you.');
+      return;
     }
     if (/what linky knows/i.test(chip)) { navigation.navigate('LinkyAudit'); return; }
     if (/preferences/i.test(chip)) { navigation.navigate('LinkySettings'); return; }
@@ -857,7 +860,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
                     </View>
                   ) : null}
 
-                  {!thinking && answer?.nearest?.length ? (
+                  {!thinking && answer?.kind === 'ambiguous' && answer?.nearest?.length ? (
                     <View style={styles.nearestRow}>
                       {answer.nearest.map((n) => (
                         <TouchableOpacity
@@ -957,6 +960,16 @@ export default function LinkyHomeScreen({ navigation }: any) {
                   />
                 )) : null}
               </>
+            ) : null}
+
+            {!thinking ? (
+              <View style={styles.chips}>
+                {['search brief', 'tone warm', 'tone direct', 'tone playful'].map(command => (
+                  <TouchableOpacity key={command} accessibilityRole="button" accessibilityLabel={command} style={[styles.chip, {borderColor: border, backgroundColor: surface}]} onPress={() => send(command)}>
+                    <Text style={[styles.chipText, {color: textColor(isDark, 'secondary')}]}>{command}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             ) : null}
 
             {!pendingAsk && !answer ? (

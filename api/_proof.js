@@ -72,7 +72,7 @@ export function proofPoints(facts = {}, record = {}, { skipBio = false } = {}) {
 
   if (record.isVerified) push({ kind: 'verified', weight: 50, label: record.verificationProgram ? `Verified - ${clean(record.verificationProgram, 28)}` : 'Verified LINKUP profile', checked: true, source: 'their LINKUP record' });
   const stage = clean(record.fundingStage, 40);
-  if (/(seed|series|pre-?seed|angel|bootstrapped|raised)/i.test(stage)) push({ kind: 'funding', weight: 65, label: `Funding: ${stage}`, checked: true, source: 'their LINKUP record' });
+  if (/(seed|series|pre-?seed|angel|bootstrapped|raised)/i.test(stage)) push({ kind: 'funding', weight: 65, label: `Funding: ${stage}`, checked: false, source: 'self-reported funding stage' });
 
   // Their words, quoted. Bio/notes are only read when the member has not hidden
   // them from Linky (the matcher already blanks them; skipBio is the belt).

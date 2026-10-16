@@ -5,6 +5,9 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import ts from '../mobile/node_modules/typescript/lib/typescript.js';
 import * as usage from '../api/_linkyUsage.js';
+import * as quality from '../api/_linkyQuality.js';
+import * as companion from '../api/_linkyCompanion.js';
+import {publicEligible} from '../api/_publicSeo.js';
 const read = (file) => fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
 const DELETE = '__DELETE_FIELD__';
 class Database {
@@ -41,7 +44,7 @@ class Database {
 function core(database) {
   const module = { exports: {} }; let aiCalls = 0;
   const mocks = {
-    'node:crypto': crypto, './_linkyUsage.js': usage,
+    'node:crypto': crypto, './_linkyUsage.js': usage, './_linkyQuality.js': quality, './_linkyCompanion.js': companion, './_publicSeo.js': {publicEligible},
     './_firebaseAdmin.js': { getDb: () => database, getAdmin: () => ({ firestore: { FieldValue: { delete: () => DELETE, serverTimestamp: () => Date.now() } } }) },
     './_gemini.js': { aiReady: () => false, geminiText: () => { aiCalls++; throw Error('unexpected AI call'); } },
     './_serpapi.js': {}, './_proof.js': {},

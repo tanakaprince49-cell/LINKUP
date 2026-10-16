@@ -198,8 +198,9 @@ export default function LinkyCardsSection() {
         ) : null}
         {card.why ? (
           <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
-            <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>RECOMMENDATION RATIONALE</Text>
+            <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>WHY THIS PERSON</Text>
             <Text style={[styles.whyText, { color: textColor(isDark) }]}>{card.why}</Text>
+            {card.unknowns?.length ? <Text style={[styles.whyText, { color: textColor(isDark, 'muted') }]}>{card.unknowns.join(' ')}</Text> : null}
           </View>
         ) : null}
         {readonly || requested || accepted ? (

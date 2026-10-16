@@ -591,19 +591,19 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 69,
     "before": "Checking who this could be\u2026",
-    "after": "Reviewing relevant professional profiles\u2026"
+    "after": "Thinking that through\u2026"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 69,
     "before": "Almost - comparing two or three\u2026",
-    "after": "Comparing potential collaborators\u2026"
+    "after": "Putting a reply together\u2026"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 161,
     "before": "WHY LINKY PICKED THEM",
-    "after": "RECOMMENDATION RATIONALE"
+    "after": "WHY THIS PERSON"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
@@ -1245,7 +1245,7 @@
     "file": "mobile/src/components/LinkyCardsSection.tsx",
     "line": 201,
     "before": "WHY LINKY PICKED THEM",
-    "after": "RECOMMENDATION RATIONALE"
+    "after": "WHY THIS PERSON"
   },
   {
     "file": "mobile/src/components/LinkyCardsSection.tsx",

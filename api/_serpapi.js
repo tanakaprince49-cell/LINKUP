@@ -1,3 +1,4 @@
+import {searchBrief, assessCandidate, evidenceReason, contains, assessPublicLead} from './_linkyQuality.js';
 // ---------------------------------------------------------------------------
 // Agent outreach pipeline - LINKUP's "nobody fits in here, so go find them"
 // arm. Called by api/_linky.js pointers() (the app's "Where to look outside
@@ -16,9 +17,8 @@
 //     profiles cost more searches (start=10, 20...). That is what maxPages
 //     budgets, per plan, and why the guard reads the real remaining credits.
 //  2. PROTECT TOKENS. Results are pre-filtered here with plain string/regex
-//     matching, so junk never reaches the model, and what survives goes to
-//     Gemini in BATCHES of 15 profiles per call - one call, one strict JSON
-//     answer, no prose about the ones that were skipped.
+//     matching, so junk never reaches the model, and what survives is scored
+//     deterministically in batches; profile scoring spends no model tokens.
 //  3. DECOUPLE SEARCH FROM ENRICHMENT. Organic results are written to
 //     outreachRuns/{id} as found, and every judgement about them is made from
 //     that saved payload in memory. There is exactly one SerpApi call site in
@@ -333,27 +333,24 @@ export function prefilter(organic, { need = '', roles = [], words = [] } = {}) {
 // Google now wraps result hrefs (google.com/goto?url=...). Resolving the
 // wrapper is a plain redirect follow - it is not a search, so it costs zero
 // SerpApi credits, which is exactly why it is allowed here at all.
-export async function cleanLink(rawLink) {
-  const l = String(rawLink || '');
-  if (/^https?:\/\/(www\.)?linkedin\.com\//i.test(l)) return l;
-  const m = l.match(/\/goto\?url=([^&\s]+)/) || l.match(/[?&]url=([^&\s]+)/);
-  // Fail closed: a direct non-LinkedIn link is a dictionary/news/definition page,
-  // not a person. Returning it would hand a member a fake "profile" URL.
-  if (!m) return '';
-  if (!/\/goto\?/.test(l)) {
-    try { const u = new URL(decodeURIComponent(m[1])); if (/linkedin\.com/i.test(u.hostname)) return u.toString(); } catch { /* fall through */ }
-  }
+export function safeLinkedinProfile(value) {
   try {
-    // a relative /goto?url=... needs Google's host prepended; an absolute
-    // https://www.google.com/url?... must be fetched as it is (real payloads use both)
-    const res = await fetch(/^https?:\/\//i.test(l) ? l : `https://www.google.com${l}`, {
-      redirect: 'manual', signal: AbortSignal.timeout(4000),
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36' },
-    });
-    const loc = res.headers.get('location') || '';
-    if (/^https?:\/\/[^/]*linkedin\.com\//i.test(loc)) return loc;
-  } catch { /* fail open below */ }
-  return '';
+    const u=new URL(String(value));
+    if(u.protocol!=='https:' || u.username || u.password || !(u.hostname==='linkedin.com'||u.hostname.endsWith('.linkedin.com')) || !/^\/in\/[a-z0-9_%\-]+\/?$/i.test(u.pathname))return '';
+    return `https://${u.hostname}${u.pathname}`;
+  } catch{return '';}
+}
+export async function cleanLink(rawLink) {
+  const direct=safeLinkedinProfile(rawLink);
+  if(direct)return direct;
+  try {
+    const u=new URL(rawLink,'https://www.google.com');
+    if(u.protocol!=='https:' || u.username || u.password || !['google.com','www.google.com'].includes(u.hostname) || !['/url','/goto'].includes(u.pathname))return '';
+    const nested=safeLinkedinProfile(u.searchParams.get('url') || u.searchParams.get('q'));
+    if(nested)return nested;
+    const res=await fetch(u.href,{redirect:'manual',signal:AbortSignal.timeout(4000)});
+    return safeLinkedinProfile(res.headers.get('location'));
+  }catch{return '';}
 }
 
 async function cleanLinks(profiles) {
@@ -365,32 +362,13 @@ async function cleanLinks(profiles) {
   });
 }
 
-// One call per batch of 15 (rule 2). The model returns indices plus a score,
-// and is explicitly forbidden from explaining the ones it dropped.
-export async function scoreBatch(profiles, { need = '', place = '' } = {}) {
-  if (!profiles.length) return profiles.map((p, i) => ({ i, fit: 70 - i, why: '' }));
-  // No model at all: keep the local prefilter order and let it through its own
-  // (lower) floor, because "no key" is not evidence that these people are wrong.
-  if (!aiReady()) return profiles.map((p, i) => ({ i, fit: 70 - i, why: p.hits?.[0] ? `matches ${p.hits[0]}` : '', fallback: true }));
-  const prompt = [
-    'You shortlist people for LINKUP, a network of founders, builders and operators. A member needs somebody LINKUP does not have yet.',
-    'Score each public profile on whether THIS person could realistically help. Be strict about the role and generous about adjacent roles.',
-    'Return STRICT JSON only: {"keep":[{"i":0,"fit":82,"why":"Flutter dev who ships fintech apps"}]} - only profiles worth messaging, fit 0-100, and "why" is one short clause (under 8 words) naming what on this profile makes them the right person. No prose, no reasons for the ones you drop, no reformatting the list.',
-    `Need: "${text(need, 200)}"`, place ? `Place: ${text(place, 60)}` : '',
-    `Profiles: ${JSON.stringify(profiles.map((p, i) => ({ i, name: p.name, title: p.title, snippet: p.snippet.slice(0, 200) })))}`,
-  ].filter(Boolean).join('\n');
-  try {
-    const raw = await aiText(prompt, { temperature: 0.1, maxOutputTokens: 300, responseMimeType: 'application/json' }).then((r) => r.text);
-    const parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
-    const keep = Array.isArray(parsed?.keep) ? parsed.keep : [];
-    return keep
-      .map((k) => ({ i: Number(k.i), fit: Math.round(Number(k.fit) || 0), why: text(k.why, 60) }))
-      .filter((k) => Number.isInteger(k.i) && k.i >= 0 && k.i < profiles.length && k.fit >= OUTREACH.keepMin)
-      .sort((a, b) => b.fit - a.fit);
-  } catch (err) {
-    console.warn('[outreach] scoring failed, keeping the local prefilter order', err?.message || err);
-    return profiles.map((p, i) => ({ i, fit: Math.max(56, 80 - i * 3), why: p.hits?.[0] ? `matches ${p.hits[0]}` : '' }));
-  }
+// Evidence-only batch scoring: no model can promote an unsupported profile.
+export async function scoreBatch(profiles, {need='',place=''}={}) {
+  return profiles.flatMap((p,i)=>{
+    const assessment=assessPublicLead(need,p);
+    if(!assessment.eligible)return [];
+    return [{i,fit:assessment.score,why:evidenceReason(p.name,assessment),evidence:assessment.evidence}];
+  }).sort((a,b)=>b.fit-a.fit);
 }
 
 // ---------------------------------------------------------------- entry point
@@ -402,7 +380,7 @@ export async function findLeads(need, { place = '', plus = false, uid = '', aske
   const started = Date.now();
   const queries = buildQueries(need, { place, limit: Math.max(1, OUTREACH.plusMaxPages) });
   const primary = queries[0];
-  const cacheRef = db().collection('linkyOutreach').doc(`q_${hash(`${primary}|${place}`)}`);
+  const cacheRef = db().collection('linkyOutreach').doc(`q6_${hash(`${need}|${primary}|${place}`)}`);
   const cached = await cacheRef.get().catch(() => null);
   if (cached && cached.exists && Date.now() - toMillis(cached.data().at) < OUTREACH.cacheDays * DAY) {
     // Rule 1 of the cheap kind: the same need again costs no search and no token.
@@ -414,7 +392,7 @@ export async function findLeads(need, { place = '', plus = false, uid = '', aske
       name: tidyTitle(l?.name, 60),
       title: tidyTitle(l?.title, 110),
       why: tidyTitle(l?.why, 52),
-    })).filter((l) => l.name && /linkedin\.com\/in\//i.test(String(l.url || '')));
+    })).filter((l) => l.name && safeLinkedinProfile(l.url) && assessPublicLead(need,l).eligible);
     return { leads, searches: 0, cached: true, query: primary, note: 'cached' };
   }
   const budget = await canSearch({ plus, uid });
@@ -487,12 +465,14 @@ export async function findLeads(need, { place = '', plus = false, uid = '', aske
       name: tidyTitle(p.name, 60),
       title: tidyTitle(p.title, 110),
       url: p.url,
+      snippet: String(p.snippet || '').slice(0,1200),
       // the reason is a phrase, not a paragraph - it sits on one line next to a name
       why: tidyTitle(judged.why || p.hits?.[0] || '', 52),
-      fit: Number(judged.fit) || Math.max(56, 84 - idx * 4),
+      fit:Number(judged.fit)||0,
+      evidence:judged.evidence || [],
       resolved: !!p.resolved,
     };
-  }).filter((l) => l.resolved && /linkedin\.com\/in\//i.test(l.url));
+  }).filter(l=>l.resolved && safeLinkedinProfile(l.url));
   await cacheRef.set({ need: text(need, 200), place: text(place, 60), query: primary, leads, searches, at: started, askedBy: text(askedBy, 60) }, { merge: true }).catch(() => {});
   if (uid) {
     await db().collection('linkyOutreach').doc(`member_${uid}`).set({

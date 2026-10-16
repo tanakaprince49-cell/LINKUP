@@ -20,7 +20,12 @@ export type LinkyBadge = {
   source?: string;
 };
 
+export type LinkyTone = 'warm' | 'direct' | 'playful';
+
 export type LinkyCard = {
+  evidence?: {requirement: string; field: string; value: string}[];
+  unknowns?: string[];
+  matcherVersion?: number;
   id: string;
   askId: string;
   need: string;
@@ -207,6 +212,7 @@ export type LinkyMessageQuota = {
 };
 
 export type LinkyHome = {
+  companionTone?: LinkyTone;
   name: string;
   plus: boolean;
   messageQuota?: LinkyMessageQuota;
@@ -301,7 +307,7 @@ export const linkyApproveSquad = (squadId: string, text?: string) => linkyCall<{
   ok: boolean; sent: number; names: string[]; waiting: string[]; note: string;
 }>('approveSquad', text ? { squadId, text } : { squadId });
 export const linkyCancelSquad = (squadId: string) => linkyCall<{ ok: boolean; cancelled: boolean; names?: string[] }>('cancelSquad', { squadId });
-export const linkyPrefs = (prefs: { openTo?: IntentOffer[]; inboundCap?: number }) => linkyCall<{ ok: boolean }>('prefs', prefs);
+export const linkyPrefs = (prefs: { openTo?: IntentOffer[]; inboundCap?: number; companionTone?: LinkyTone }) => linkyCall<{ ok: boolean }>('prefs', prefs);
 export const linkyPointers = (need: string) => linkyCall<{
   text: string; cached: boolean; leads?: LinkyLead[]; searches?: number; note?: string;
   intro?: string; routes?: string[]; found?: number; skipped?: number; oneSearch?: boolean; place?: string;

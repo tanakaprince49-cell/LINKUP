@@ -96,7 +96,11 @@ export const BOT_COMMANDS = [
   { command: 'decline', description: 'Say no quietly - both ways' },
   { command: 'later', description: 'Park an intro for two weeks' },
   { command: 'draft', description: 'Write the first message for your top card' },
-  { command: 'more', description: 'Where to look outside LINKUP' },
+  {command:'more',description:'More matches for your current search'},
+  {command:'tone',description:'Choose warm, direct or playful'},
+  {command:'why',description:'See evidence and unknowns — why 1'},
+  {command:'compare',description:'Compare current cards — compare 1 and 2'},
+  {command:'prep',description:'Prepare a first chat — prep 1'},
   { command: 'prefs', description: 'What you are open to' },
   { command: 'audit', description: 'What Linky knows about you' },
   { command: 'unlink', description: 'Disconnect this chat' },
@@ -107,13 +111,16 @@ const HELP = [
   'Example:  a Flutter developer in Harare for a paid fintech MVP',
   '',
   'cards        your current cards',
+  'tone warm / direct / playful   choose your style',
+  'search brief   see your requirements',
+  'why 1 / compare 1 and 2 / prep 1   use a shortlist',
   'find fred    pull LINKUP profiles by name or @username or role or skill',
   'meet 1       ask for the intro on card 1',
   'skip 1       clear a card',
   'save 1       keep a card for later',
   'accept       answer an intro waiting on you',
   'decline      say no quietly - both ways',
-  'more         where to look outside LINKUP when nobody fits',
+  'more         more matches for the same requirements',
   'yes / no     answer the question I asked instead of searching',
   'draft 2      write the message for person 2 from that search',
   'send         approve what Linky drafted',
@@ -135,9 +142,10 @@ const offerLabel = (o) => ({ paid: 'paid work', equity: 'equity', advisory: 'adv
 function cardLine(c, n) {
   const proof = badgeLine(c.badges);
   const squad = c.squadId ? `\n   Squad${c.squadSize > 1 ? ` of ${c.squadSize}` : ''}${c.squadRole ? ` - ${c.squadRole}` : ''}` : '';
+  const uncertainty = c.unknowns?.length ? `\n   Still to check: ${c.unknowns.join(' ')}` : '';
   const warm = c.pairNote ? `\n   ${c.pairNote}` : '';
   const city = String(c.targetCity || '').replace(/,\s*/g, ' ');
-  return `${n}. ${c.targetName}${c.targetRole ? ` - ${c.targetRole}` : ''}${city ? ` - ${city}` : ''}${squad}\n   Why: ${c.why}${proof ? `\n   ${proof}` : ''}${warm}`;
+  return `${n}. ${c.targetName}${c.targetRole ? ` - ${c.targetRole}` : ''}${city ? ` - ${city}` : ''}${squad}\n   Why: ${c.why}${proof ? `\n   ${proof}` : ''}${uncertainty}${warm}`;
 }
 
 // A member never reads infrastructure. A provider refusing a key, a timeout, a
@@ -285,7 +293,7 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
   // Tapping the chip Linky offered ("Where to look outside LINKUP") must not be
   // treated as a fresh search. Chips are commands wearing a sentence.
   if (/outside linkup|search the web|look outside/.test(cmd) && !/^(meet|skip|save)\b/.test(cmd)) cmd = 'more';
-  const num = (s, d = 1) => { const m = s.match(/\b(\d{1,2})\b/); return m ? Math.max(1, Number(m[1])) : d; };
+  const num = (s, d = 1) => { const m = s.match(/\b(\d{1,2})\b/); return m ? Number(m[1]) : d; };
 
   if (cmd === 'start' || cmd === 'help') return { text: `Hi ${profileFacts(user)?.name?.split(' ')[0] || 'there'} - here is how I work.\n\n${HELP}` };
 
@@ -303,17 +311,11 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
   if (cmd === 'unlink') { await unlinkBot(channel, chatId); return { text: 'Unlinked. Your LINKUP account is untouched.' }; }
   if (cmd === 'forget') { await forget(uid); return { text: 'Linky recommendations and notes deleted; linked chat disconnected. Your message allowance is not reset.' }; }
 
-  const numbered = async () => orderedCards(await loadCards(uid), await loadState(uid)).slice(0, 5);
+  const numbered = async () => {const state=await loadState(uid);return orderedCards(await loadCards(uid),state).filter(c=>(state.lastAsk?.cardIds||[]).includes(c.id)).slice(0,5);};
   // The list Linky last put in front of the member: the directory rows from a
   // find, or the cards from the last ask - whichever is newer. A number or a
   // name in the next message points at one of these - it is not a new search.
-  const lastShown = async () => {
-    const st = await loadState(uid);
-    const findAt = (st.lastFind && Array.isArray(st.lastFind.rows) && st.lastFind.rows.length) ? Number(st.lastFind.at || 0) : 0;
-    const askAt = st.lastAsk ? Number(st.lastAsk.createdAt || 0) : 0;
-    if (findAt > askAt && Date.now() - findAt < 45 * 60 * 1000) return { rows: st.lastFind.rows, cards: [] };
-    return { rows: [], cards: await numbered() };
-  };
+  const lastShown = async () => ({rows:[],cards:await numbered()});
 
   if (cmd === 'brief' || cmd === 'cards' || cmd === 'today') {
     const cards = await numbered();
@@ -454,12 +456,13 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
   const bareNum = /^\d{1,2}$/.test(cmd.trim());
   const bareMeet = /^meet\s*$/i.test(cmd.trim());
   const meetNumM = cmd.match(/^(?:meet(?:\s+(?:with|up\s+with))?|i\s+(?:want|wanna)\s+(?:to\s+)?meet|want\s+to\s+meet|connect\s+me\s+(?:to|with)|connect\s+with|introduce\s+me\s+to|introduce\s+to|intro\s+me\s+to|intro\s+to)\s+(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?\s*$/i);
+  if(bareMeet && shown.cards.length + shown.rows.length > 1) return {text:'Which person? Use meet 1 or meet 2 so I do not pick for you.'};
   if ((bareNum || bareMeet || meetNumM) && (shown.rows.length || shown.cards.length)) {
     return await meetNth(bareNum ? Number(cmd.trim()) : (meetNumM ? Number(meetNumM[1]) : 1));
   }
   // a name from the list, typed instead of a number - "thapelo"
   const nameAsked = cmd.replace(/^(?:meet(?:\s+(?:with|up\s+with))?|connect\s+me\s+(?:to|with)|connect\s+with|introduce\s+me\s+to|introduce\s+to|intro\s+me\s+to|intro\s+to|skip|save|find|show|pick|choose|i\s+(?:want|wanna)\s+(?:to\s+)?(?:meet|pick|choose))\s+/i, '').trim();
-  if (nameAsked && !/\d/.test(nameAsked) && nameAsked.split(/\s+/).length <= 3 && (shown.rows.length || shown.cards.length)) {
+  if (!/^(?:tone|search brief|my search|compare|prep|why|evidence)\b/i.test(cmd) && nameAsked && !/\d/.test(nameAsked) && nameAsked.split(/\s+/).length <= 3 && (shown.rows.length || shown.cards.length)) {
     const row = shown.rows.find((r) => nameLike(r.name, nameAsked));
     if (row?.uid) {
       try { return await meetRow(row); } catch (err) { return { text: `${row.name} - ${memberError(err, 'that one did not work out.')}` }; }
@@ -494,7 +497,7 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
   }
 
   // ---- "more" after a no-match: where to look outside LINKUP
-  if (cmd === 'more' || cmd === 'outside' || cmd === 'where') {
+  if (cmd === 'outside' || cmd === 'where') {
     const state = await loadState(uid);
     const last = state.lastAsk;
     if (!last?.need) return { text: 'Ask me who you need first and then I can go looking outside LINKUP.' };
@@ -510,60 +513,10 @@ Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n
     }
   }
 
-  // ---- pull real LINKUP profiles (a directory lookup, not an intro)
-  if (/^(find|people|members|profiles)\b/.test(cmd)) {
-    const rest = raw.replace(/^\/?(find|people|members|profiles)\b[:\s,-]*/i, '').trim();
-    if (!rest) return { text: 'Who are you looking for on LINKUP? Try find fred for a name or @username. Or find flutter dev for a role or skill.' };
-    try {
-      // "find a sales manager on linkedin" is the open-web lookup, not a directory
-      // read of LINKUP members - the word linkedin is the whole signal. Strip it
-      // and run the same outside search the miss path uses.
-      if (/linked\s?in/i.test(cmd)) {
-        const need = rest.replace(/linked\s?in/gi, ' ').replace(/\s+(?:on|from|for|via)$/i, '').replace(/^(?:a|an|the)\s+/, '').trim() || rest;
-        try {
-          const r = await pointers(uid, need, { userDoc: user, allowSearch: true, assumeKnown: true });
-          if ((r.leads || []).length) {
-            return { text: pointerText(r), buttons: leadsKeyboard(r.leads), chips: ['draft 1', 'not interested 1'], reaction: reactionFor('outside') };
-          }
-          return { text: pointerText(r), chips: ['ask something else', 'help'], reaction: reactionFor('outside') };
-        } catch (err) {
-          return { text: memberError(err, 'That did not work.') };
-        }
-      }
-      const rows = await pullProfiles(rest, { meUid: uid, limit: 5 });
-      if (!rows.length) {
-        // Nobody on LINKUP has that name or role -> use the same words on the
-        // open web (LinkedIn) instead of stopping at "nobody here".
-        let r;
-        try {
-          r = await pointers(uid, rest, { userDoc: user, allowSearch: true, assumeKnown: true });
-        } catch {
-          return { text: `Nobody on LINKUP matches ${rest} right now. Try a first name or an @username or a role like flutter dev.` };
-        }
-        if ((r.leads || []).length) {
-          return { text: pointerText(r), buttons: leadsKeyboard(r.leads), chips: ['draft 1', 'not interested 1'], reaction: reactionFor('outside') };
-        }
-        return { text: pointerText(r), chips: ['ask something else', 'help'], reaction: reactionFor('outside') };
-      }
-      const listTxt = rows
-        .map((r, i) => `${i + 1}. ${r.name}${r.role ? ` - ${r.role}` : ''}${r.city ? ` - ${r.city}` : ''}${r.plus ? '  ⚡PLUS' : ''}\n   ${r.link}`)
-        .join('\n\n');
-      // Remember who was just shown, so a number or a name points at it next.
-      await patchState(uid, {
-        lastFind: { rows: rows.map((r) => ({ uid: r.uid, name: r.name, role: r.role, city: r.city })), need: rest, at: Date.now() },
-      }).catch(() => {});
-      return {
-        text: `Found ${rows.length} ${rows.length === 1 ? 'person' : 'people'} on LINKUP:\n\n${listTxt}\n\nReply meet 1 or the name and I will ask them for you.`,
-        chips: rows.slice(0, 3).map((r) => r.name.split(' ')[0]),
-        reaction: reactionFor('found'),
-      };
-    } catch (err) {
-      return { text: memberError(err, 'That did not work.') };
-    }
-  }
-
+  // All member discovery goes through ask(): same evidence gate, consent,
+  // conversation context and monthly/daily allowance on every channel.
   // ---- everything else is an ask: answered right now
-  const message = cmd.startsWith('new') ? raw.replace(/^\/?new\b[\s:,-]*/i, '').trim() : raw;
+  const message = cmd === 'more' ? 'who else do you have' : cmd.startsWith('new') ? raw.replace(/^\/?new\b[\s:,-]*/i, '').trim() : /^(people|members|profiles)\b/i.test(cmd) ? raw.replace(/^\/?(people|members|profiles)\b/i,'find') : raw;
   try {
     const out = await ask(uid, message, { userDoc: user, source: channel });
     if (out.kind === 'check') {
@@ -946,7 +899,13 @@ async function handleApp(req, res) {
       case 'hideFact': out = await hideFact(uid, { kind: String(body.kind || ''), value: String(body.value || ''), hide: body.hide !== false }); break;
       case 'removeAsk': out = await removeAsk(uid, String(body.id || '')); break;
       case 'clearChat': out = await clearChat(uid); break;
-      case 'pointers': out = await pointers(uid, String(body.need || '')); break;
+      case 'pointers': {
+        // Legacy clients must not bypass the shared message allowance by
+        // calling external discovery directly instead of the ask action.
+        const result=await ask(uid,'search outside LINKUP',{source:'app'});
+        out={...result,intro:result.pointerIntro||result.reply,text:result.reply,leads:result.leads||[],routes:result.routes||[]};
+        break;
+      }
       // Permissioned outreach: draft -> (optionally edit) -> approve -> the member
       // sends. Nothing here talks to LinkedIn or the target on its own.
       case 'meet': out = await meet(uid, String(body.cardId || '')); break;
@@ -969,7 +928,7 @@ async function handleApp(req, res) {
         const decision = ['accept', 'decline', 'later'].includes(body.decision) ? body.decision : 'later';
         out = await respond(uid, String(body.introId || ''), decision); break;
       }
-      case 'prefs': out = await setPrefs(uid, { openTo: body.openTo, inboundCap: body.inboundCap }); break;
+      case 'prefs': out = await setPrefs(uid, {openTo:body.openTo,inboundCap:body.inboundCap,companionTone:body.companionTone}); break;
       case 'audit': out = await audit(uid); break;
       case 'forget': out = await forget(uid); break;
       case 'linkCode': out = await createLinkCode(uid); break;

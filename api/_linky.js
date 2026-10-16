@@ -2,11 +2,11 @@
 // editable "what Linky knows", bot linking. Shared by api/linky.js
 // (app + Telegram + WhatsApp).
 //
-// No intents, no waiting: every ask is answered in the same request from the
-// members who are on LINKUP right now. Gemini is only called when there are
-// at least two plausible candidates to rank (never for greetings, vague asks,
-// zero-candidate asks, repeats of the same ask, or over-budget asks), and a
-// Gemini failure degrades to the cited template path instead of an error.
+// Matching is a deterministic evidence gate. No AI expansion, paid upgrade,
+// avatar or proximity can manufacture a fit. Every search rechecks the live
+// source profile and real blocks. AI may help with language and conversation;
+// it never chooses an unsupported person or rewrites a no-match verdict.
+// All conversational commands share the server-enforced message ledger.
 //
 // Every write in here happens with the Admin SDK, so the client never needs
 // rules for these collections (they stay server-only):
@@ -16,10 +16,13 @@
 //   botUsers/{channel_chat} Telegram / WhatsApp chat -> uid
 //   botLinks/{code}         short-lived codes that link a chat to an account
 import crypto from 'node:crypto';
+import { MATCHER_VERSION, searchBrief, assessCandidate, evidenceReason, refineSearch, assessPublicLead } from './_linkyQuality.js';
+import { toneCommand, socialReply, utilityCommand, utilityReply } from './_linkyCompanion.js';
+import { publicEligible } from './_publicSeo.js';
 import { MESSAGE_LIMITS, reserveMessage, refundMessage, readMessageQuota } from './_linkyUsage.js';
 import { getAdmin, getDb } from './_firebaseAdmin.js';
-import { aiReady, aiStatus, aiText, geminiText, localRank, compactProfile } from './_gemini.js';
-import { findLeads, outreachDraft } from './_serpapi.js';
+import { aiReady, aiStatus, aiText, geminiText } from './_gemini.js';
+import { findLeads, outreachDraft, safeLinkedinProfile } from './_serpapi.js';
 import { proofPoints, proofFromSnippet, badgeLine } from './_proof.js';
 
 export const LIMITS = {
@@ -46,7 +49,7 @@ export const LIMITS = {
 };
 export const OFFERS = ['paid', 'equity', 'advisory', 'coffee'];
 export const CRON_UID = 'linky-cron';
-export const APP_URL = 'https://linkup-muqu.vercel.app';
+export const APP_URL = 'https://www.linkupbuild.com/app';
 const LINKY_FROM = { fromId: 'linky-ai', fromName: 'Linky', fromPic: '' };
 const DAY_MS = 86400000;
 
@@ -634,7 +637,7 @@ const HELPISH_RX = /\b(?:what\s+(?:can|do|are|should)\s+you|how\s+do\s+you\s+wor
 const substance = (words) => String(words || '').replace(SMALL_RX, ' ').replace(/[^a-z0-9+#.\s-]/g, ' ').split(/\s+/).filter((w) => w.length > 2);
 
 export function parseAsk(message) {
-  const need = text(message, 300);
+  const need = text(message, 600);
   const all = need.toLowerCase();
   let offer = '';
   if (OFFER_RX.test(all)) offer = 'paid';
@@ -714,23 +717,28 @@ export function parseAsk(message) {
 
 
 // ---------------------------------------------------------------- matching
-export async function buildMatchContext() {
+// Re-read source profiles and both directions of actual user blocks.
+async function visibleTargets(ids, meUid = '') {
+  const unique = [...new Set(ids)].filter(isValidId);
+  if (!unique.length) return [];
+  const [docs, outgoing, incoming] = await Promise.all([
+    db().getAll(...unique.map(id => db().collection('users').doc(id))),
+    meUid ? db().collection('blocks').where('blockedById', '==', meUid).get() : { docs: [] },
+    meUid ? db().collection('blocks').where('blockedUserId', '==', meUid).get() : { docs: [] },
+  ]);
+  const blocked = new Set([...outgoing.docs.map(d => d.data().blockedUserId), ...incoming.docs.map(d => d.data().blockedById)]);
+  return docs.filter(d => d.exists && !blocked.has(d.id) && publicEligible(d.data(), d.id)).map(d => ({...d.data(), uid:d.id}));
+}
+export async function buildMatchContext(meUid = '') {
   const [pubSnap, stateSnap, pairSnap] = await Promise.all([
     db().collection('publicProfiles').limit(600).get(),
     db().collection('linkyState').limit(2000).get(),
-    // what members told Linky about intros that already happened. It is small by
-    // construction (only answered loops are written) and it is the difference
-    // between a matcher that learns and a search box.
     db().collection('linkyPairs').limit(2000).get().catch(() => null),
   ]);
-  const states = {};
-  stateSnap.docs.forEach((d) => { states[d.id] = d.data(); });
-  const pairs = {};
-  (pairSnap && pairSnap.docs ? pairSnap.docs : []).forEach((d) => { pairs[d.id] = d.data(); });
-  const candidates = pubSnap.docs.map((d) => ({ uid: d.id, ...d.data() })).filter((p) =>
-    p.uid && !p.deleted && p.isVisible !== false && p.isStealthMode !== true && p.onboarded !== false &&
-    !p.uid.startsWith('demo-') && !p.uid.startsWith('bot-') && p.uid !== 'linky-ai');
-  return { candidates, states, pairs, week: weekKey(), day: dayKey() };
+  const states = {}; stateSnap.docs.forEach(d => {states[d.id] = d.data();});
+  const pairs = {}; (pairSnap?.docs || []).forEach(d => {pairs[d.id] = d.data();});
+  const candidates = await visibleTargets(pubSnap.docs.map(d=>d.id), meUid);
+  return {candidates, states, pairs, week:weekKey(), day:dayKey()};
 }
 
 function candidateFacts(p, st) {
@@ -738,7 +746,7 @@ function candidateFacts(p, st) {
   return {
     uid: p.uid,
     name: displayNameOf(p),
-    pic: hosted(p.profilePic),
+    pic: profileFacts(p)?.pic || '',
     role: scrubHidden(text(p.occupation, 100), [...told.hidden.skills, ...told.hidden.industries]),
     country: text(p.country, 80),
     skills: minusHidden(uniq([...list(p.skills, 12), ...told.skills]).slice(0, 20), told.hidden.skills),
@@ -833,6 +841,7 @@ function introBlocker({ meUid, p, st, myState, ctx, prev, offer, now = Date.now(
 // Best name matches over every candidate. Returns null when nothing clears
 // the bar. `others` = near-ties worth showing so "fred" can ask "which Fred?".
 export function findByName(q, ctx, { meUid, exclude = [], myState = {}, existingCards = [] } = {}) {
+  if(searchBrief(q.need).known && !/\b(?:named|called)\b|@/.test(q.need)) return null;
   const attempts = uniq((q.nameAttempts && q.nameAttempts.length ? q.nameAttempts : (q.nameQuery ? [q.nameQuery] : []))
     .map((s) => String(s || '').trim())
     // keep the meaningful words of the name, drop the connective tissue
@@ -900,72 +909,16 @@ function cleanFindQuery(q) {
     .slice(0, 60);
 }
 
-export async function pullProfiles(q, { meUid = '', limit = 5 } = {}) {
-  const needle = cleanFindQuery(q);
-  if (!needle) return [];
-  const want = Math.max(1, Math.min(10, Number(limit) || 5));
-  const hidden = (p) =>
-    !p?.uid || p.deleted || p.isVisible === false || p.isStealthMode === true || p.onboarded === false ||
-    String(p.uid).startsWith('demo-') || String(p.uid).startsWith('bot-') || p.uid === 'linky-ai' || p.uid === meUid;
-  const row = (p) => ({
-    uid: p.uid,
-    name: displayNameOf(p),
-    pic: hosted(p.profilePic),
-    role: text(p.occupation, 100),
-    company: text(p.company, 120),
-    city: text(p.city, 80),
-    country: text(p.country, 80),
-    skills: list(p.skills, 8),
-    plus: plusFromUserDoc(p) || p.turboConnect === true,
-    link: `${APP_URL}/profile/${encodeURIComponent(p.uid)}`,
-  });
-
-  const seen = new Set();
-  const out = [];
-  const add = (p) => { if (!seen.has(p.uid)) { seen.add(p.uid); out.push(row(p)); } };
-
-  // 1) name + @username prefix. orderBy on a single field + startAt/endAt needs
-  //    no composite index, and Firestore auto-indexes single fields.
-  const prefix = (field) =>
-    db().collection('publicProfiles').orderBy(field).startAt(needle).endAt(`${needle}\uf8ff`).limit(want * 2).get()
-      .then((snap) => (snap?.docs || []).map((d) => ({ uid: d.id, ...d.data() })))
-      .catch(() => []);
-  const [nameHits, userHits] = await Promise.all([prefix('searchName'), prefix('searchUsername')]);
-  [...nameHits, ...userHits].filter((p) => !hidden(p)).forEach(add);
-  if (out.length >= want) return out.slice(0, want);
-
-  // 2) role / skill / company / city: a bounded page of the index, matched in
-  //    memory. A term must land on a real field (role, skill, company, city or
-  //    name) to count, and it counts double there - a weak hit buried in a long
-  //    bio is not a person, so it no longer pads a short name list with randoms.
-  const terms = uniq(needle.split(/\s+/).filter((w) => w.length >= 3));
-  if (out.length < want && terms.length) {
-    const page = await db().collection('publicProfiles').limit(400).get().catch(() => null);
-    const scored = [];
-    for (const d of (page?.docs || [])) {
-      const p = { uid: d.id, ...d.data() };
-      if (hidden(p) || seen.has(p.uid)) continue;
-      const fieldHay = [
-        p.displayName, p.occupation, p.company, p.city, p.country,
-        ...(Array.isArray(p.skills) ? p.skills : []),
-        ...(Array.isArray(p.industries) ? p.industries : []),
-      ].map((x) => String(x || '').toLowerCase()).join(' ');
-      const bioHay = String(p.bio || '').toLowerCase();
-      let s = 0;
-      for (const t of terms) {
-        if (fieldHay.includes(t)) s += 2;
-        else if (bioHay.includes(t)) s += 1;
-      }
-      if (s > 0) scored.push({ p, s });
-    }
-    scored.sort((a, b) => b.s - a.s).slice(0, want - out.length).forEach((x) => add(x.p));
-  }
-
-  return out.slice(0, want);
+export async function pullProfiles(need, {meUid='', limit=5}={}) {
+  const ctx = await buildMatchContext(meUid);
+  const state = ctx.states[meUid] || {};
+  const q = parseAsk(need);
+  const named = q.nameQuery ? findByName(q,ctx,{meUid,myState:state}) : null;
+  const facts = named?.match ? named.all.filter(x=>!x.blocked).map(x=>x.facts) :
+    (await findPeople(meUid,q,ctx,{user:{uid:meUid},state})).picks.map(x=>x.facts);
+  return facts.slice(0,Math.min(5,Number(limit)||5)).map(f=>({...f,link:`${APP_URL}/profile/${encodeURIComponent(f.uid)}`}));
 }
 
-// Cite-or-skip guard: the "why" must name something that is actually on the
-// candidate's profile (or what they told Linky), otherwise the card is dropped.
 function whyIsCited(why, c) {
   const w = String(why || '').toLowerCase();
   if (w.length < 12) return false;
@@ -975,39 +928,6 @@ function whyIsCited(why, c) {
   if (c.plus) facts.push('plus');
   const bioHits = tokens(c.bio).filter((t) => t.length >= 6);
   return [...facts, ...bioHits].some((t) => w.includes(t));
-}
-
-function keywordScore(q, c, terms = q.tokens, related = false) {
-  const skills = c.skills.map((s) => s.toLowerCase());
-  const inds = c.industries.map((s) => s.toLowerCase());
-  const role = c.role.toLowerCase();
-  const company = c.company.toLowerCase();
-  const name = c.name.toLowerCase();
-  const bio = c.bio.toLowerCase();
-  const lf = c.lookingFor.map((s) => s.toLowerCase());
-  const w = related ? 0.6 : 1;
-  let score = 0;
-  const hits = [];
-  for (const kw of terms) {
-    if (!related && name.includes(kw)) { score += 5; hits.push(kw); }
-    if (skills.some((s) => s.includes(kw))) { score += 4 * w; hits.push(kw); }
-    if (role.includes(kw)) { score += 3 * w; hits.push(kw); }
-    if (!related && company.includes(kw)) { score += 2; hits.push(kw); }
-    if (inds.some((s) => s.includes(kw))) { score += 2 * w; hits.push(kw); }
-    if (lf.some((s) => s.includes(kw))) { score += 1 * w; }
-    if (bio.includes(kw)) { score += 1 * w; hits.push(kw); }
-  }
-  const loc = String(q.location || '').toLowerCase();
-  if (loc) {
-    if (c.city && loc.includes(c.city.toLowerCase())) score += 3;
-    else if (c.country && loc.includes(c.country.toLowerCase())) score += 1;
-    else if (!q.remote) score -= 4;
-  }
-  if (c.pic) score += 0.5;
-  // Turbo Connect: PLUS members clear the bar more easily and rank higher on
-  // an otherwise equal match. Modest on purpose - relevance still decides.
-  if (c.plus) score += 4;
-  return { score, hits: uniq(hits) };
 }
 
 function templateWhy(c, hits, relatedTo = '') {
@@ -1027,60 +947,8 @@ function templateWhy(c, hits, relatedTo = '') {
   return '';
 }
 
-// Gemini expansion, only when neither the exact words nor the built-in
-// concepts find anyone. Cached per normalised ask for 30 days, across all
-// members, so a given ask costs at most one small call ever.
+// Versioned cache keys for wording and optional external searches only.
 const cacheKey = (prefix, norm) => `${prefix}_${crypto.createHash('sha1').update(norm).digest('hex').slice(0, 32)}`;
-async function aiExpandTerms(q) {
-  if (!aiReady()) return null;
-  const ref = db().collection('linkyCache').doc(cacheKey('x', q.norm));
-  const snap = await ref.get().catch(() => null);
-  if (snap?.exists && Date.now() - toMillis(snap.data().createdAt) < 30 * DAY_MS) return snap.data().terms || [];
-  const prompt = [
-    `A member of LINKUP (a network of builders, founders and operators) asked: "${q.need}".`,
-    'List up to 12 short lowercase terms (skills, roles, tools, industries, word stems) that would appear on the profile of someone able to help with that ask. Prefer stems ("analy", "financ") so plural and verb forms match. No explanations.',
-    'Return STRICT JSON only: {"terms":["...", "..."]}',
-  ].join('\n');
-  const raw = await geminiText(prompt, { temperature: 0.2, maxOutputTokens: 160, responseMimeType: 'application/json' });
-  const parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
-  const terms = uniq((Array.isArray(parsed?.terms) ? parsed.terms : []).map((t) => text(t, 30).toLowerCase()).filter((t) => t.length >= 3 && !STOP.has(t))).slice(0, 12);
-  await ref.set({ need: q.need, terms, createdAt: Date.now() }).catch(() => {});
-  return terms;
-}
-
-// The opener is the first line a stranger reads, so it carries the actual
-// evidence instead of adjectives: who is asking, why THIS person, one small ask.
-const templateOpener = (c, need) => {
-  const bit = [c.role ? `${/^[aeiou]/i.test(c.role) ? 'an' : 'a'} ${c.role}` : '', c.company ? `at ${c.company}` : '', c.city ? `in ${c.city}` : '']
-    .filter(Boolean).join(' ');
-  const hook = c.skills?.length ? `your ${c.skills[0]} is what made me stop on your profile.` : `Linky says you are the closest thing to what I am looking for.`;
-  return `Hi ${firstName(c.name)} - ${bit ? `you are ${bit} ` : ''}and ${hook} Would you be available for a brief discussion this week? Please decline if this is not relevant to your current priorities.`;
-};
-
-// The only Gemini call in the ask flow. Compact on purpose.
-async function geminiRerank(q, requester, shortlist) {
-  if (!aiReady()) return null;
-  const prompt = [
-    'You are Linky, the connector for LINKUP (builders, founders and operators, Harare-first).',
-    'Use clear, concise professional networking language: specific evidence, respectful introductions, no hype, no emojis, and no invented facts.',
-    `A member asked: "${q.need}"${q.offer ? ` (offer: ${q.offer})` : ''}${q.location ? ` (location: ${q.location}${q.remote ? ', remote fine' : ', in person'})` : ''}.`,
-    'Pick which candidates are genuinely worth an introduction for that ask. Cite-or-skip: every "why" must quote a concrete fact from that candidate\'s record (a skill, role, company, city or bio detail). No evidence = leave them out. Never invent facts. Return an empty list rather than guess.',
-    'Return STRICT JSON only: {"picks":[{"uid":"...","score":0-100,"why":"one plain sentence, under 26 words, citing the evidence","opener":"the first line the member sends, under 30 words: says who they are looking for, names ONE true thing about this person from the profile, and asks one small question that is easy to answer yes to"}]}',
-    'An opener must never flatter ("your impressive work"), never sell ("exciting opportunity"), never say "I hope this finds you well". Specific beats charming: "saw you shipped EcoCash in 9 weeks - can I ask how you handled the agent float?" is the bar.',
-    `At most ${Math.min(LIMITS.cardsPerAsk, shortlist.length)} picks, best first. Omit scores under 55.`,
-    'PLUS members (plus: true) pay for the network and get a visibility boost: when fit is otherwise equal, put them first, and it is fine to name it in one short clause like "PLUS member". Never say someone is PLUS unless their record says so.',
-    `Member: ${JSON.stringify(requester)}`,
-    `Candidates: ${JSON.stringify(shortlist.map((c) => ({ uid: c.uid, name: c.name, role: c.role, company: c.company, city: c.city, skills: c.skills.slice(0, 8), industries: c.industries.slice(0, 5), lookingFor: c.lookingFor.slice(0, 4), bio: c.bio.slice(0, 160), plus: !!c.plus })))}`,
-  ].join('\n');
-  const raw = await geminiText(prompt, { temperature: 0.2, maxOutputTokens: 500, responseMimeType: 'application/json' });
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  const parsed = JSON.parse(raw.slice(start, end + 1));
-  return Array.isArray(parsed?.picks) ? parsed.picks : [];
-}
-
-// Who on LINKUP fits this ask, right now. Returns ranked picks (with cited
-// "why"), the nearest people when nobody fits, and how many members were checked.
 /**
  * Everybody this member may be shown right now: visible, not muted, not blocked
  * by an intro rule, not already on the exclusion list from "who else". The 1-on-1
@@ -1101,114 +969,31 @@ function pickEligible({ uid, q, ctx, myState = {}, existingCards = [], exclude =
   return out;
 }
 
-export async function findPeople(uid, q, ctx, { user, state, existingCards = [], exclude = [] } = {}) {
-  const owner = user || (await loadUser(uid));
+const templateOpener = (candidate, need) => {
+  const fact = candidate.skills?.[0] || candidate.role;
+  return `Hi ${firstName(candidate.name)}—${fact ? `your profile mentions ${text(fact, 60)}. ` : ''}I'm exploring ${text(polishNeed(need), 120)}. Would you be open to a short chat to see whether there's a fit?`;
+};
+
+export async function findPeople(uid, q, ctx, {user, state, existingCards = [], exclude = []} = {}) {
   const myState = state || ctx.states[uid] || {};
-  const me = mergedFacts(owner, myState) || { uid, name: 'Member', skills: [], industries: [], lookingFor: [], bio: '', notes: '' };
-  const muted = myState.muted || {};
-  const now = Date.now();
-  const latestByTarget = new Map();
-  existingCards.forEach((c) => latestByTarget.set(c.targetUid, c));
-  const excludeSet = exclude instanceof Set ? exclude : new Set(exclude || []);
-  const eligible = pickEligible({ uid, q, ctx, myState, existingCards, exclude: excludeSet, muted, now });
-  const checked = ctx.candidates.filter((p) => p.uid !== uid).length;
-  const rawByUid = new Map(ctx.candidates.map((p) => [p.uid, p]));
-  const badgesFor = (facts) => proofPoints(facts, rawByUid.get(facts.uid) || {}, { skipBio: !!(ctx.states[facts.uid] || {}).facts?.hidden?.bio });
-  const scan = (terms, related) => {
-    const out = [];
-    for (const facts of eligible) {
-      const { score, hits } = keywordScore(q, facts, terms, related);
-      if (score <= 0 || !hits.length) continue;
-      out.push({ facts, score, hits });
-    }
-    return out;
-  };
-  // Pass 1: the member's own words. Pass 2: built-in related concepts (zero
-  // tokens). Pass 3: one small Gemini expansion, cached. Never more than one
-  // Gemini call per ask: if pass 3 ran, the rerank below is skipped.
-  let pool = scan(q.tokens, false);
-  let expansion = 'none';
-  let relatedTo = '';
-  let usedAi = false;
-  if (!pool.length && q.expanded.length) {
-    pool = scan(q.expanded.map((e) => e.term), true);
-    if (pool.length) { expansion = 'local'; relatedTo = uniq(q.expanded.map((e) => e.from)).join(' '); }
+  const eligible = pickEligible({uid, q, ctx, myState, existingCards, exclude});
+  const brief = searchBrief(q.need);
+  const raw = new Map(ctx.candidates.map(p=>[p.uid,p]));
+  const picks = [];
+  for (const facts of eligible) {
+    const assessment = assessCandidate(brief, facts);
+    if (!assessment.eligible) continue;
+    picks.push({facts, score:assessment.score, why:evidenceReason(facts.name, assessment),
+      evidence:assessment.evidence, unknowns:assessment.unknowns, matcherVersion:MATCHER_VERSION,
+      opener:templateOpener(facts,q.need), badges:proofPoints(facts,raw.get(facts.uid)||{}, {skipBio:!!ctx.states[facts.uid]?.facts?.hidden?.bio})});
   }
-  if (!pool.length && q.tokens.length) {
-    try {
-      const terms = await aiExpandTerms(q);
-      if (Array.isArray(terms)) {
-        usedAi = true;
-        if (terms.length) {
-          pool = scan(terms, true);
-          if (pool.length) { expansion = 'ai'; relatedTo = q.tokens.filter((t) => t.length > 3).slice(0, 3).join(' ') || q.need.slice(0, 40); }
-        }
-      }
-    } catch (err) {
-      console.warn('[linky] ai expansion failed', err?.message || err);
-    }
-  }
-  if (!pool.length) return { picks: [], nearest: nearestPeople(me, q, eligible), checked, usedAi, expansion: 'none' };
-
-  // Blend keyword fit with profile compatibility, then shortlist.
-  const compat = new Map(localRank(compactProfile({ ...owner, uid, skills: me.skills }), pool.map((x) => compactProfile({ ...x.facts, occupation: x.facts.role })), pool.length).map((r) => [r.uid, r.score]));
-  pool.forEach((x) => { x.blend = x.score * 10 + ((compat.get(x.facts.uid) || 40) - 40) * 0.5 + (x.facts.plus ? 18 : 0); });
-  pool.sort((a, b) => b.blend - a.blend);
-  const shortlist = pool.slice(0, LIMITS.shortlist);
-  const byUid = new Map(shortlist.map((x) => [x.facts.uid, x]));
-
-  let picks = null;
-  if (shortlist.length >= 2 && !usedAi) {
-    try {
-      picks = await geminiRerank(q, { role: me.role, company: me.company, city: me.city, skills: me.skills.slice(0, 8), notes: (me.notes || me.bio || '').slice(0, 160) }, shortlist.map((x) => x.facts));
-      usedAi = Array.isArray(picks);
-    } catch (err) {
-      console.warn('[linky] gemini rerank failed, using cited template path', err?.message || err);
-      picks = null;
-    }
-  }
-  const chosen = [];
-  if (Array.isArray(picks)) {
-    for (const p of picks) {
-      const x = byUid.get(String(p?.uid || ''));
-      if (!x || chosen.some((c) => c.facts.uid === x.facts.uid)) continue;
-      const modelScore = Math.round(Number(p?.score || 0));
-      const why = text(p?.why, 220);
-      if (modelScore < 55 || !whyIsCited(why, x.facts)) continue;
-      const score = Math.min(100, modelScore + (x.facts.plus ? 4 : 0));
-      chosen.push({ facts: x.facts, score, why, opener: text(p?.opener, 240) || templateOpener(x.facts, q.need), badges: badgesFor(x.facts) });
-    }
-  }
-  if (!chosen.length) {
-    // Template path: no key, Gemini down/over quota, one candidate, or AI cited nothing.
-    for (const x of shortlist) {
-      const why = templateWhy(x.facts, x.hits, relatedTo);
-      if (!why || x.score < (relatedTo ? 1.5 : 3)) continue;
-      chosen.push({ facts: x.facts, score: Math.max(55, Math.min(95, 50 + Math.round(x.blend) + (x.facts.plus ? 4 : 0))), why, opener: templateOpener(x.facts, q.need), badges: badgesFor(x.facts) });
-    }
-  }
-  // PLUS members hold their place when scores are level - the attention they pay for.
-  chosen.sort((a, b) => b.score - a.score || (Number(b.facts.plus || 0) - Number(a.facts.plus || 0)));
-  return { picks: chosen.slice(0, LIMITS.cardsPerAsk), nearest: [], checked, usedAi, expansion, relatedTo };
-}
-
-// When nobody fits: the 3 most adjacent people (same city as the ask or the
-// member, shared skills / industries). Shown as profiles, never as intros.
-function nearestPeople(me, q, eligible) {
-  const askLoc = String(q.location || '').toLowerCase();
-  const askLocKnown = !!askLoc && eligible.some((c) => c.city && askLoc.includes(c.city.toLowerCase()));
-  const loc = askLocKnown ? askLoc : String(me.city || '').toLowerCase();
-  const compat = new Map(localRank(compactProfile({ uid: me.uid, role: me.role, skills: me.skills, industries: me.industries, goals: me.lookingFor }), eligible.map((c) => compactProfile({ ...c, occupation: c.role })), eligible.length).map((r) => [r.uid, r.score]));
-  return eligible
-    .map((c) => ({ c, s: (loc && c.city && loc.includes(c.city.toLowerCase()) ? 3 : 0) + ((compat.get(c.uid) || 40) - 40) / 10 + (c.pic ? 0.25 : 0) + (c.role ? 0.25 : 0) + (c.plus ? 1.5 : 0) }))
-    .filter((x) => x.s > 0)
-    .sort((a, b) => b.s - a.s)
-    .slice(0, 3)
-    .map(({ c }) => ({ uid: c.uid, name: c.name, pic: c.pic, role: c.role, city: [c.city, c.country].filter(Boolean).join(', ') }));
+  // PLUS can break a genuine relevance tie, never buy eligibility.
+  picks.sort((a,b)=>b.score-a.score || Number(b.facts.plus)-Number(a.facts.plus) || a.facts.uid.localeCompare(b.facts.uid));
+  return {picks:picks.slice(0,LIMITS.cardsPerAsk), nearest:[], checked:ctx.candidates.filter(p=>p.uid!==uid).length, usedAi:false, expansion:'none', relatedTo:'', brief};
 }
 
 // ---------------------------------------------------------------- ask (the whole flow, one request)
-const COACH = 'Describe the professional role, skills, location, or collaboration you need. For example, a Flutter developer in Harare for a paid fintech MVP, a sales cofounder for an equity-based collaboration, or a founder with fundraising experience.';
+const COACH = "I'm Linky, your AI connector on LINKUP. Tell me who you'd like to meet and what you're building. I'll explain real matches—and say so when I don't have one. You can also ask me to compare a shortlist or prep a first chat.";
 
 const personLine = (n) => text(n.name, 40);
 
@@ -1217,7 +1002,7 @@ const personLine = (n) => text(n.name, 40);
 // is unavailable. Bots get commands, the app gets sentences it can send back.
 const COACH_CHIPS = ['A Flutter developer in Harare for a paid fintech MVP', 'A cofounder with sales experience for an equity-based collaboration', 'Someone who has raised from local angels'];
 const BOT_CHIPS = ['a flutter developer in harare', 'a fintech lawyer in harare', 'help'];
-const FOUND_CHIPS = { app: ['meet 1', 'who else do you have', 'write me a first message'], bot: ['meet 1', 'cards', 'more'] };
+const FOUND_CHIPS = {app:['why 1','prep 1','who else do you have'], bot:['why 1','prep 1','who else do you have']};
 const NONE_CHIPS = { app: ['yes, search LinkedIn', 'try a role instead', 'what Linky knows about me'], bot: ['yes search LinkedIn', 'cards', 'prefs'] };
 
 // When nobody on LINKUP fits, Linky must hand the member the LinkedIn option
@@ -1245,29 +1030,28 @@ function threadOf(state) {
 }
 
 async function appendThread(uid, state, turns) {
-  const next = [...threadOf(state), ...turns].slice(-LIMITS.threadTurns);
-  await patchState(uid, { chat: next });
-  return next;
+  const ref=db().collection('linkyState').doc(uid);
+  return db().runTransaction(async tx=>{
+    const snap=await tx.get(ref);
+    const current=snap.exists?snap.data():state;
+    const seen=new Set();
+    const next=[...threadOf(current),...turns].sort((a,b)=>Number(a.at)-Number(b.at)).filter(turn=>{
+      const key=`${turn.id}:${turn.role}`;
+      if(seen.has(key))return false;seen.add(key);return true;
+    }).slice(-LIMITS.threadTurns);
+    tx.set(ref,{chat:next},{merge:true});
+    return next;
+  });
 }
 
 // ---------------------------------------------------------------- how Linky talks
-// Linky's personality is written by Gemini, at answer time, on every channel:
-// the app, Telegram and WhatsApp all call ask(), so one prompt shapes all
-// three. What the matcher decides (who fits, what is on their profile) stays
-// deterministic and cited; Gemini only ever decides the WORDS, from a dossier
-// of proven facts, and is told to add nothing.
-//
-// Cost control, since this runs inside an ask:
-//   - one call per answer, at most ~220 output tokens, no tools, no history;
-//   - the wording is cached in linkyCache/v_* per (kind, ask, channel) and
-//     shared across members, so the 40th person asking for "a flutter
-//     developer in Harare" costs zero tokens;
-//   - the member's own name is prepended locally, never by the model, which is
-//     what makes a shared cache line still read like it was written for you;
-//   - no key, an error, or junk JSON -> plainReply() below answers instead.
-//     A member never sees a failure, they see a shorter, blunter Linky.
+// Common greetings and every factual matching verdict are deterministic.
+// Richer conversation can use AI with recent turns and the member's preferred
+// style. Cache identity includes the full dossier, so private wording is not
+// reused across different member contexts. No provider is required for core
+// discovery, comparisons, explanations or meeting preparation.
 const VOICE_KINDS = {
-  chat: "Respond directly and courteously to the message. Keep a concise professional tone without teasing, jokes, sales pitches, or unsolicited searches. Respect a decision not to search. Never imply a search was performed or profiles were reviewed when it was not.",
+  chat: "Respond directly and courteously to the message. Use a warm conversational tone; light, respectful humor is welcome when invited. No unsolicited pitches, fake intimacy, or pretending to be human. Respect a decision not to search. Never imply a search was performed or profiles were reviewed when it was not.",
   help: "Explain that Linky is LINKUP's AI professional networking assistant. Briefly describe supported discovery and introduction tools, then offer one relevant next step. Do not claim unsupported capabilities.",
   found: "Briefly introduce the recommended professionals. Explain their relevance using only the supplied evidence and let the profile cards provide the detail. Use at most two clear sentences and do not imply guaranteed compatibility.",
   close: "Explain that there are no exact matches and that the recommendations are related alternatives. Be transparent about the difference without presenting a partial match as an exact fit.",
@@ -1278,7 +1062,7 @@ const VOICE_KINDS = {
   check: "Address the actual thought first with a useful, evidence-based observation. Then ask whether to search for relevant professionals. Do not list profiles, imply a completed search, or start searching without agreement.",
   squad: "The member requested a complementary team. Present the supplied group together, identify each person and their documented contribution, and state the remaining expertise gap. Do not offer team discovery unless requested.",
   loop: "Ask a brief professional follow-up about the introduction after 48 hours. Offer the four supplied response choices clearly. Never assume the members met or describe an unconfirmed outcome.",
-  limit: "Explain that today's search allowance is exhausted. State the available no-cost alternatives and when the allowance refreshes, using only the supplied plan information. Avoid pressure to purchase.",
+  limit: "Explain the actual monthly or daily message allowance and reset from the dossier. Do not claim more messages are free or pressure a purchase.",
 };
 
 // Kinds that must be written fresh every time: caching a greeting for fourteen days
@@ -1323,7 +1107,7 @@ async function geminiWording(kind, dossier, { source = 'app', seed = '' } = {}) 
   // A greeting kept for a fortnight is how a personality turns into an answering
   // machine, so chit-chat, follow-up questions and tie-breakers are written fresh.
   if (NO_CACHE_KINDS.has(kind)) return wordingOnce(kind, dossier, source, seed, null);
-  const ref = db().collection('linkyCache').doc(cacheKey('v3-professional', `${kind}|${source}|${seed}`));
+  const ref = db().collection('linkyCache').doc(cacheKey('v5-companion', `${kind}|${source}|${seed}|${JSON.stringify(dossier)}`));
   try {
     const snap = await ref.get().catch(() => null);
     if (snap && snap.exists && Date.now() - toMillis(snap.data().createdAt) < 14 * DAY_MS) {
@@ -1339,12 +1123,12 @@ async function wordingOnce(kind, dossier, source, seed, ref) {
     : `It is a ${source === 'telegram' ? 'Telegram' : 'WhatsApp'} message: plain text, under 260 characters, no links in the reply.`;
   const prompt = [
     'You are Linky, the connector at LINKUP - a network of founders, builders and operators, Harare first.',
-    "Your voice: professional, approachable, clear, and business-focused. Use concise natural sentences. Respect the member's time. Do not use teasing, jokes, slang, hype, inflated claims, or excessive punctuation. Avoid jargon and generic corporate filler.",
+    `Your voice: ${dossier.tonePreference || 'warm'}. Be a grounded, friendly connector, not a form letter. Warm means relaxed and encouraging; direct means brief and straight; playful means light respectful wit, never mocking. Mirror their informality without forcing slang or calling everyone bro. You are an AI, not a human friend. No invented feelings, experiences or exclusive emotional bond.`,
     'At most ONE emoji, and only in chit-chat or a greeting. Never in an answer that lists people, never as decoration.',
     'Style is presentation, never substance: you may not soften, pad, hedge or invent a fact to sound nicer. If the honest answer is "nobody", that is the answer they get - said like a human.',
     VOICE_KINDS[kind] || VOICE_KINDS.chat,
     channelNote,
-    'Write 1-3 short sentences of plain text. Start with a capital letter. No markdown, no asterisks, no bullet symbols, no hashtags, and no emoji unless this is chit-chat (then one at most). Banned corporate filler: "leverage", "I hope this finds you well", "unfortunately", "I am sorry to inform you", "great question", "absolutely!", "feel free to", "rest assured", "at your convenience", "please do not hesitate Do not greet with the member\'s name and do not use any name that is not in the dossier.',
+    'Write 1-3 short sentences of plain text. Start with a capital letter. No markdown, no asterisks, no bullet symbols, no hashtags, and no emoji unless this is chit-chat (then one at most). Banned corporate filler: "leverage", "I hope this finds you well", "unfortunately", "I am sorry to inform you", "great question", "absolutely!", "feel free to", "rest assured", "at your convenience", "please do not hesitate". Do not greet with the member\'s name and do not use any name that is not in the dossier.',
     'Only use facts from the dossier. Never add a person, skill, city, company or number that is not there. Never say a message was sent, an intro was made or a reply arrived - Linky asks, people answer.',
     'Do not advertise features the member did not ask about: the squad finder, the one-page brief, the 48-hour follow-up and proof badges all stay unmentioned unless their own message asked for that thing.',
     'Return STRICT JSON only: {"reply":"the message","suggest":["up to 3 things they might tap next, each under 34 characters, in THEIR voice, e.g. who else do you have"]}',
@@ -1398,10 +1182,10 @@ function plainReply(kind, d = {}) {
   const nearest = Array.isArray(d.closest_instead) ? d.closest_instead : (Array.isArray(d.nearest) ? d.nearest : []);
   const who = nearest.length ? ` Closest here: ${nearest.map(personLine).join('  ')}.` : '';
   switch (kind) {
-    case 'found': return `${count} ${count === 1 ? 'person' : 'people'} on LINKUP ${count === 1 ? 'fits' : 'fit'} what you asked for. ${count === 1 ? 'Their card says why' : 'Each card says why'} - take a look.${d.remote_only_note ? ` ${cap1(d.remote_only_note)}.` : ''}${ctaFor(d)}`;
+    case 'found': return `I've got ${count === 1 ? 'one profile' : `${count} profiles`} with evidence for your requirements. ${count === 1 ? 'The card shows' : 'The cards show'} what matches and what still needs checking—availability and interest aren't confirmed.${ctaFor(d)}`;
     case 'close': return `No exact profile match was found for ${d.need || 'that request'}, but ${count} ${count === 1 ? 'professional has' : 'professionals have'} related expertise - ${d.matched_on || 'related skills'}. The card says exactly what I matched.${ctaFor(d)}`;
     case 'none': {
-      return `No relevant LINKUP profiles were found for ${d.need}. Would you like a public LinkedIn search for potential collaborators?`;
+      return `I don't have a solid match for ${d.need || 'that request'} in the profiles I could check. I'm not going to fill the gap with random people. Want to refine the search, or ask me to search LinkedIn?`;
     }
     case 'person': {
       const f = d.found || d.person || {};
@@ -1412,18 +1196,7 @@ function plainReply(kind, d = {}) {
     }
     case 'ambiguous': return `I have ${(d.people || []).length} members who could be who you mean: ${(d.people || []).map((x) => x.name).join('   ')}. Which one?`;
     case 'check': return `This may benefit from reviewing relevant expertise${d.need ? `: ${text(d.need, 90)}` : ''}. Would you like me to search for relevant professionals? I will explain the evidence behind any recommendations.`;
-    case 'chat': {
-      const lines = [
-        'Hello. How is your work progressing today?',
-        'Understood. What would you like to discuss?',
-        'Understood. No search has been started. How is your project progressing?',
-        'I am available to discuss your professional goals and collaboration plans.',
-      ];
-      const first = firstName(d.name || '');
-      // the streak is in the rotation so two fallback lines in a row differ
-      const pick = lines[(hash32(String(d.seed || '')) + Number(d.streak || 0)) % lines.length];
-      return first ? `${first} - ${pick}` : pick;
-    }
+    case 'chat': return socialReply(d.they_said || d.seed || '', {name:d.name, tone:d.tonePreference || 'warm', streak:d.streak}) || "I'm listening. What's the main thing you want to work through?";
     case 'help': return 'I am Linky, the LINKUP AI professional networking assistant. Describe the expertise you need and I will review relevant available profiles, explain recommendations, and help prepare introductions. If no relevant profiles are found, you can request a public external search.';
     case 'squad': {
       const squads = Array.isArray(d.squads) ? d.squads : [];
@@ -1441,15 +1214,14 @@ function plainReply(kind, d = {}) {
 const pickGreeting = (seed = '', first = '') => [`Hello ${first}`, `${first}`, `Hi ${first}`][hash32(String(seed)) % 3];
 function hash32(s) { let h = 2166136261; for (let i = 0; i < s.length; i += 1) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return Math.abs(h | 0); }
 
-// One call site for every Linky sentence: model first, safety net second, and
-// the member's own name prepended locally so cached wording stays personal.
+// Conversational wording can use AI; all match verdicts use factual templates.
 async function linkySay(kind, dossier, { name = '', source = 'app', seed = '', fallback } = {}) {
-  const said = await geminiWording(kind, { situation: kind, ...dossier }, { source, seed });
+  const said = ['found','close','none','person','ambiguous','squad'].includes(kind) ? null : await geminiWording(kind, {situation:kind,...dossier}, {source,seed});
   const body = said ? said.reply : (fallback || plainReply(kind, dossier));
   const suggest = said && said.suggest.length ? said.suggest : (dossier.suggest || []);
   const first = firstName(name);
   // a member's name belongs on an answer about people, not on every "yoo"
-  const greet = kind === 'found' || kind === 'close' || kind === 'person' || kind === 'draft' || kind === 'squad';
+  const greet = false;
   const alreadyGreeted = /^(hey|hi|hello|good (morning|afternoon|evening)|afternoon|morning|evening|yo)\b/i.test(body);
   const reply = greet && first && first !== 'there' && !alreadyGreeted && !body.toLowerCase().includes(first.toLowerCase())
     ? `${pickGreeting(seed, first)}. ${body}`
@@ -1570,7 +1342,7 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
   // p2: the shape changed (intro + routes + leads instead of one long sentence),
   // so an answer written by the old code is not read at all. The search itself is
   // still served from _serpapi's 7-day result cache, so this costs no credit.
-  const ref = db().collection('linkyCache').doc(cacheKey('p3-professional', q.norm));
+  const ref = db().collection('linkyCache').doc(cacheKey('p6-evidence', `${uid}|${q.need}|${profileFacts(user)?.city || ''}|${profileFacts(user)?.country || ''}`));
   const snap = await ref.get().catch(() => null);
   const me = profileFacts(user) || {};
   const place = q.location || [me.city, me.country].filter(Boolean).join(', ') || 'Zimbabwe';
@@ -1588,24 +1360,25 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
     // LinkedIn profile URLs count as leads: a stale cache from an older build
     // that let a dictionary or news page through is self-healing here.
     const usable = (Array.isArray(d.leads) ? d.leads : [])
-      .filter((l) => l && /linkedin\.com\/in\//i.test(String(l.url || '')));
+      .filter(l=>l && safeLinkedinProfile(l.url) && assessPublicLead(q.need,l).eligible);
     const cached = usable
       .filter((l) => !leadHit(leadKey(l), trail0.muted) && !leadHit(leadKey(l), trail0.sent))
       .map((l) => ({ ...l, key: leadKey(l) }));
     let intro = tidyIntroLine(d.intro) || text(cached.length ? `A LinkedIn search I ran earlier for ${polishNeed(q.need)} - these ${cached.length} are still the ones I would message:` : '', 300);
+    if(!cached.length) intro = `I don't have a confirmed match for ${polishNeed(q.need)} in these saved public snippets. I won't add unrelated profiles.`;
     let routes = list(d.routes, 3, 200);
     const skipped = Math.max(0, usable.length - cached.length);
     // a cached answer the member has since muted people out of must not be left
     // claiming there was somebody to message, with nothing under it
     const total = usable.length;
     if (!cached.length && skipped) {
-      intro = `Nobody on LINKUP does ${polishNeed(q.need)} yet and all ${total} from that LinkedIn search are already in your outreach history - so here is where I would look myself:`;
+      intro = `I did not find a solid LINKUP match for ${polishNeed(q.need)} and all ${total} from that LinkedIn search are already in your outreach history - so here is where I would look myself:`;
       routes = fallbackRoutes(q.need, city || placeShow);
     } else {
       // the saved intro describes the search as it ran; once some leads have been
       // used up it over-promises, so restate the count that is actually on screen
       if (skipped && cached.length) {
-        intro = `Nobody on LINKUP does ${polishNeed(q.need)} yet. That LinkedIn search turned up ${total}: ${cached.length} ${cached.length === 1 ? 'is' : 'are'} new to you - ${skipped} ${skipped === 1 ? 'is' : 'are'} already in your outreach history so they will not be shown twice:`;
+        intro = `I did not find a solid LINKUP match for ${polishNeed(q.need)}. That LinkedIn search turned up ${total}: ${cached.length} ${cached.length === 1 ? 'is' : 'are'} new to you - ${skipped} ${skipped === 1 ? 'is' : 'are'} already in your outreach history so they will not be shown twice:`;
       }
       if (!cached.length && !routes.length) routes = fallbackRoutes(q.need, place);
     }
@@ -1630,7 +1403,7 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
   // The list of people is NOT baked into this prose any more. The app renders
   // rows and the bot renders buttons; every surface that used to print the same
   // five names twice, once in a paragraph and once as links, stopped doing it.
-  const fresh = (outreach.leads || []).filter((l) => l && !leadHit(leadKey(l), trail0.muted) && !leadHit(leadKey(l), trail0.sent));
+  const fresh = (outreach.leads || []).filter((l) => l && safeLinkedinProfile(l.url) && !leadHit(leadKey(l), trail0.muted) && !leadHit(leadKey(l), trail0.sent));
   const skipped = (outreach.leads || []).length - fresh.length;
   // the key travels with the lead: it is what a "not interested" or "sent" refers
   // back to on any surface, and what makes the same person stick next time
@@ -1639,33 +1412,12 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
   const needShort = polishNeed(q.need);
   let intro = '';
   let routes = [];
-  if (aiReady()) {
-    try {
-      const brief = leads.length
-        ? [
-            `You are Linky, the connector for LINKUP. A member in ${city} wanted "${needShort}", LINKUP has nobody for it yet, so you ran one public LinkedIn search and found ${leads.length}.`,
-            `Say ONE short thing before the list, in your own voice: what you did, and the one honest limit (public profiles, no contact details, you have not messaged anybody). Clear, professional, and transparent about the search performed. Max 32 words. Plain sentences, no markdown, no emoji, no "Great news!", no exclamation marks, never invent a fact. Do not start with "Outside LINKUP" - the app already printed that label.`,
-            'Return STRICT JSON only: {"intro":"..."}',
-          ].join('\n')
-        : [
-            `You are Linky, the connector for LINKUP. A member in ${city} wanted "${needShort}" and nobody on LINKUP fits.`,
-            'One short honest line (max 18 words), then two or three concrete ways to find that person in ' + city + ' this week: a named kind of institution, a professional body, a community, the exact search phrase. Practical, professional, evidence-based, with no invented institutions or claims. No markdown, no emoji.',
-            'Return STRICT JSON only: {"intro":"...","routes":["...","..."]} - each route under 26 words, plain sentences, no numbering.',
-          ].join('\n');
-      const raw = await geminiText(brief, { temperature: 0.6, maxOutputTokens: leads.length ? 140 : 320, responseMimeType: 'application/json' });
-      const parsed = readJson(raw);
-      intro = tidyIntroLine(parsed?.intro);
-      if (!leads.length) routes = list(parsed?.routes, 3, 200).map(tidyIntroLine).filter(Boolean);
-    } catch (err) {
-      console.warn('[linky] pointers gemini failed', err?.message || err);
-    }
-  }
   if (!intro) {
     // never claim a search that did not happen - on the free plan that is exactly
     // what it looks like when a member is told nothing and no reason
     const searched = (outreach.searches || 0) > 0;
     if (leads.length) {
-      intro = `Nobody on LINKUP does ${needShort} yet - that one lives outside our walls. ${outreach.cached ? 'The LinkedIn search I ran earlier turned up' : 'I ran one LinkedIn search and pulled'} ${leads.length} ${leads.length === 1 ? 'person' : 'people'} still worth a message. Public profiles only. I never touch emails or phone numbers and I have not written to anybody.`;
+      intro = `I did not find a solid LINKUP match for ${needShort} - that one lives outside our walls. ${outreach.cached ? 'The LinkedIn search I ran earlier turned up' : 'I ran one LinkedIn search and pulled'} ${leads.length} ${leads.length === 1 ? 'person' : 'people'} with matching public-profile evidence. These are search snippets, not verified profiles. I never touch emails or phone numbers and I have not written to anybody.`;
     } else if (!searched && outreach.note && outreach.note !== 'cached') {
       // this is the "Telegram gave me nothing" case: the search never ran, so say
       // why in the member's terms instead of leaving a silent list of routes
@@ -1675,9 +1427,9 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
         'plan-exhausted': 'this month\'s search credits are used up',
         'not-configured': 'no search key is set on this deployment',
       })[outreach.note] || (String(outreach.note).startsWith('search-error') ? 'the search came back wrong' : 'the search was not available');
-      intro = `Nobody on LINKUP does ${needShort} yet. I could not run the LinkedIn search just now - ${why}. Here is where I would look in ${city} anyway:`;
+      intro = `I did not find a solid LINKUP match for ${needShort}. I could not run the LinkedIn search just now - ${why}. Here is where I would look in ${city} anyway:`;
     } else {
-      intro = `Nobody on LINKUP does ${needShort} yet and one LinkedIn search in ${city} turned up nobody I would put in front of you. Not for lack of trying - here is where I would look instead:`;
+      intro = `I did not find a solid LINKUP match for ${needShort} and one LinkedIn search in ${city} turned up nobody I would put in front of you. Not for lack of trying - here is where I would look instead:`;
     }
   }
   if (!leads.length && !routes.length) routes = fallbackRoutes(q.need, city || placeShow);
@@ -1709,11 +1461,11 @@ async function persistCards(uid, existing, picks, { askId, need, now, pairs = {}
   const resultCards = [];
   const updatedIds = new Set();
   const created = [];
-  picks.forEach(({ facts, score, why, opener, badges, squad, pairNote }, i) => {
-    const squadBits = squad ? { squadId: squad.id, squadRole: squad.role, squadSize: squad.size, squadIndex: squad.index } : {};
+  picks.forEach(({facts,score,why,opener,badges,squad,pairNote,evidence=[],unknowns=[],matcherVersion=MATCHER_VERSION,lookup=false}, i) => {
+    const squadBits = squad ? { squadId: squad.id, squadRole: squad.role, squadNeed: squad.need || squad.role, squadSize: squad.size, squadIndex: squad.index } : {};
     const prev = latestByTarget.get(facts.uid);
     if (prev && ['new', 'saved', 'meet'].includes(prev.status)) {
-      const next = { ...prev, askId, need, why: prev.status === 'meet' ? prev.why : why, opener: prev.opener || opener, score, updatedAt: now, badges: badges || prev.badges || [], plus: !!facts.plus || !!prev.plus, ...squadBits };
+      const next = { ...prev, askId, need, why, opener, evidence, unknowns, matcherVersion, lookup, score, updatedAt: now, badges: badges || prev.badges || [], plus: !!facts.plus || !!prev.plus, ...squadBits };
       updatedIds.add(prev.id);
       resultCards.push(next);
       return;
@@ -1725,7 +1477,7 @@ async function persistCards(uid, existing, picks, { askId, need, now, pairs = {}
       ? `You two met${known.at ? ` ${dayKey(known.at).slice(0, 7)}` : ''} and you said it was worth it.`
       : '';
     const card = {
-      id: `${askId.slice(0, 6)}_${facts.uid.slice(0, 8)}_${i}`,
+      id:`c_${crypto.createHash('sha256').update(`${askId}:${facts.uid}:${i}`).digest('hex').slice(0,24)}`,
       askId,
       need,
       targetUid: facts.uid,
@@ -1739,9 +1491,10 @@ async function persistCards(uid, existing, picks, { askId, need, now, pairs = {}
       badges: (badges || []).slice(0, 3),
       // Turbo Connect: a PLUS member's card carries the mark the app renders
       plus: !!facts.plus,
-      ...(squad ? { squadId: squad.id, squadRole: squad.role, squadSize: squad.size, squadIndex: squad.index } : {}),
+      ...(squad ? { squadId: squad.id, squadRole: squad.role, squadNeed: squad.need || squad.role, squadSize: squad.size, squadIndex: squad.index } : {}),
       ...(warm || pairNote ? { pairNote: text(warm || pairNote, 120) } : {}),
       why,
+      evidence, unknowns, matcherVersion, lookup,
       opener,
       score,
       status: 'new',
@@ -1767,10 +1520,10 @@ async function persistCards(uid, existing, picks, { askId, need, now, pairs = {}
 // ask first, or just talk. A word list can only ever guess; "does this contain a
 // request for people" is a meaning question, and meaning is what the model is for.
 const INTENT_MODES = new Set(['search', 'ask_first', 'chat']);
-export async function intentGate(message, { offer = false, lastAsk = '', source = 'app' } = {}) {
-  const said = text(message, 240);
+export async function intentGate(message, {offer=false,lastAsk='',source='app',contextId='',tone='warm'}={}) {
+  const said = text(message, 600);
   if (!said || !aiReady()) return null;
-  const ref = db().collection('linkyCache').doc(cacheKey('i4-professional', `${said.toLowerCase()}|offer:${offer ? 1 : 0}`));
+  const ref = db().collection('linkyCache').doc(cacheKey('i5-context', `${contextId}|${said.toLowerCase()}|last:${lastAsk}|offer:${offer ? 1 : 0}`));
   try {
     const snap = await ref.get();
     if (snap && snap.exists && Date.now() - toMillis(snap.data().createdAt) < 24 * 3600000) {
@@ -1790,7 +1543,7 @@ export async function intentGate(message, { offer = false, lastAsk = '', source 
     '  "chat" - everything else: greetings, laughs, feelings, thanks, banter, a stray word, or anything with no person to look for.',
     'For "search" or "ask_first" also give "topic": 3-8 words naming who or what they want, in their words, no "find me" verbs. Empty string otherwise.',
     'Also set "multi": true when they asked for MORE THAN ONE person at once as a set - a squad, a team, "a dev and someone who can sell", "three of us", "who else should I bring" - and false when they want one human. It changes how many people Linky brings back, nothing else.',
-    'For "ask_first" and "chat" also write "reply" - at most 2 short sentences in the voice of Linky - professional, approachable, and directly relevant to what they actually said. "ask_first" must end by asking whether to search for them. "chat" must NOT offer to search, must not pitch, and must not mention keys, quota, errors, or what it cannot do.',
+    `For "ask_first" and "chat" also write "reply" - at most 2 short sentences in the voice of Linky - ${tone} in style, natural, and directly relevant to what they actually said. "ask_first" must end by asking whether to search for them. "chat" must NOT offer to search, must not pitch, and must not mention keys, quota, errors, or what it cannot do.`,
     'Never invent a person, a number or a fact. Plain text, no markdown, no emoji more than one.',
     'Return STRICT JSON only: {"mode":"search|ask_first|chat","topic":"...","multi":true,"reply":"..."}',
   ].join('\n');
@@ -1815,6 +1568,7 @@ export async function intentGate(message, { offer = false, lastAsk = '', source 
 export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   const user = userDoc || (await loadUser(uid));
   if (!user) throw new Error('Finish your LINKUP profile first.');
+  if(String(message || '').length>600)throw new Error('Keep this message under 600 characters so no requirements get cut off.');
   const msg = text(message, 600);
   if (!msg) throw new Error('Say something first.');
   const now = Date.now();
@@ -1825,7 +1579,7 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
   const quota = await reserveMessage(db(), uid, { plus, now, legacyState: state });
   try {
     const out = await answerAsk(uid, msg, { user, state, source, now, plus, quota });
-    return { ...out, asksLeft: quota.remaining, messageQuota: quota, upgradeRequired: quota.upgradeRequired };
+    return { ...out, free:false, asksLeft: quota.remaining, messageQuota: quota, upgradeRequired: quota.upgradeRequired };
   } catch (error) {
     await refundMessage(db(), uid, quota).catch((err) => console.error('[linky] message refund failed', err));
     throw error;
@@ -1833,15 +1587,34 @@ export async function ask(uid, message, { userDoc, source = 'app' } = {}) {
 }
 
 async function answerAsk(uid, message, { user, state, source, now, plus, quota }) {
-  const msgTyped = message;
+  let msgTyped = message;
+  const companionTone = state.companionTone || 'warm';
+  const say = (kind,dossier,opts) => linkySay(kind,{...dossier,tonePreference:companionTone},opts);
+  const tone = toneCommand(msgTyped);
+  const utility = utilityCommand(msgTyped);
+  const vague = /^(?:find (?:me )?|i need |i want )?(?:a |an )?(?:co ?founder|co-founder|partner|someone|somebody|people|a match)[.!? ]*$/i.test(msgTyped.trim());
+  const quickSocial = socialReply(msgTyped,{name:profileFacts(user)?.name,tone:companionTone,streak:Number(state.chitStreak||0)});
+  if (tone || utility || vague) {
+    const id = `${now.toString(36)}${crypto.randomBytes(3).toString('hex')}`;
+    const cards = utility && utility.kind !== 'brief' ? orderedCards(await loadCards(uid),state).filter(c=>(state.lastAsk?.cardIds||[]).includes(c.id)) : [];
+    const reply = vague ? "Let's make that useful: what's the one skill or role your collaborator needs?" : tone ? `Done—${tone} it is. Same honest answers, different vibe.` : utilityReply(utility,cards,state.lastAsk?.need||'');
+    if(vague) await patchState(uid,{pendingBrief:{need:msgTyped,at:now},pendingIntent:null});
+    if(tone) await patchState(uid,{companionTone:tone});
+    const thread = await appendThread(uid,state,[{id,role:'user',text:msgTyped,at:now},{id,role:'linky',text:reply,kind:'chat',at:now+1}]);
+    return {id,need:msgTyped,reply,kind:'chat',cards,cardIds:cards.map(c=>c.id),nearest:[],none:true,checked:0,expansion:'none',createdAt:now,suggest:cards.length>1?['why 1','compare 1 and 2','prep 1']:['search brief','tone warm','tone direct'],thread,companionTone:tone||companionTone};
+  }
+  const answeringBrief = state.pendingBrief && now-toMillis(state.pendingBrief.at)<40*60*1000 && !quickSocial && !/^(find|search|show|look)\b/i.test(msgTyped);
+  const refined = answeringBrief ? `${state.pendingBrief.need} with ${msgTyped}` : refineSearch(msgTyped,state.lastAsk?.need);
+  if(state.pendingBrief && !quickSocial) await patchState(uid,{pendingBrief:null});
+  if(refined) msgTyped = refined;
   // The 48-hour question, if one is open: an answer in a sentence is still an
   // answer. Only the four known outcomes take the turn over - anything else
   // carries on as the ask it actually is, and the question stays open.
-  if (state.pendingLoop && now - toMillis(state.pendingLoop.at) < 14 * DAY_MS) {
+  if (!quickSocial && !refined && !/^(?:find|search|show me|who else)\b/i.test(msgTyped) && state.pendingLoop && now - toMillis(state.pendingLoop.at) < 14 * DAY_MS) {
     const guess = await classifyLoopAnswer(msgTyped).catch(() => '');
     if (guess) {
       const done = await answerLoop(uid, { choice: guess, words: msgTyped });
-      const id = `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
+      const id = `${now.toString(36)}${crypto.randomBytes(4).toString('hex')}`;
       const thread = await appendThread(uid, state, [
         { id, role: 'user', text: msgTyped, at: now },
         { id, role: 'linky', text: done.note, kind: 'chat', at: now + 1 },
@@ -1857,10 +1630,10 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     // answered, and it is a verb test, not a vocabulary of feelings.
     const isNewAsk = /\b(find|search|look\s+up|message|dm|ping|introduc\w*|connect|draft|write\s+me|who\s+is|who\s+do\s+you\s+have|anyone|somebody|someone)\b/i.test(msgTyped)
       || !!lq.location || !!lq.offer || lq.wantsElse || lq.wantsDraft;
-    if (!guess && !isNewAsk && msgTyped.length <= 200 && substance(msgTyped).length >= 2) {
+    if (!guess && !isNewAsk && /\b(?:we (?:met|talked|spoke)|the intro|they replied|no response|not a fit)\b/i.test(msgTyped) && msgTyped.length<=200) {
       const done = await answerLoop(uid, { words: msgTyped });
       // newId() is not in scope yet at this point in ask(), so the id is made here
-      const id = `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
+      const id = `${now.toString(36)}${crypto.randomBytes(4).toString('hex')}`;
       const thread = await appendThread(uid, state, [
         { id, role: 'user', text: msgTyped, at: now },
         { id, role: 'linky', text: done.note, kind: 'chat', at: now + 1 },
@@ -1874,7 +1647,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   const saidWords = msgTyped.toLowerCase().trim().replace(/^\/+\w*\s*/, '');
   const me = profileFacts(user) || {};
   const asksLeft = () => quota.remaining;
-  const newId = () => `${now.toString(36)}${crypto.randomBytes(2).toString('hex')}`;
+  const newId = () => `${now.toString(36)}${crypto.randomBytes(4).toString('hex')}`;
 
   // only a BARE answer counts as answering him: "please find me a bookkeeper" is
   // a new instruction, and it must not be swallowed by the question before it
@@ -1889,8 +1662,8 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   // "what can you do" - skips the intent gate, so the most common messages
   // never touch the model at all.
   const pre = parseAsk(answeringYes ? pendingIntent.need : msgTyped);
-  const skipGate = !answeringYes && (pre.smallTalk || pre.chitChat || pre.bare || pre.askedWhatYouDo || pre.linkedinLookup);
-  const gate = answeringYes || skipGate ? null : await intentGate(msgTyped, { offer: offerOpen, lastAsk: state.lastAsk?.need || '', source });
+  const skipGate = !answeringYes && (quickSocial || refined || pre.smallTalk || pre.chitChat || pre.bare || pre.askedWhatYouDo || pre.linkedinLookup);
+  const gate = answeringYes || skipGate ? null : await intentGate(msgTyped, { offer: offerOpen, lastAsk: state.lastAsk?.need || '', source, contextId:uid,tone:companionTone });
   let msg = answeringYes ? pendingIntent.need : msgTyped;
   // When the model hears an order our lists cannot read - Shona, slang, a phrase
   // with no role word in it - search what it heard. A member's own well-formed ask
@@ -1899,6 +1672,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     || (pre.command && pre.tokens.length >= 3);
   if (!answeringYes && gate?.mode === 'search' && !wellFormed && substance(gate.topic).length >= 1) msg = text(gate.topic, 160);
   const q = parseAsk(msg);
+  if(searchBrief(msg).known && !/\b(?:named|called)\b|@/.test(msg)){q.nameQuery='';q.nameAttempts=[];}
   // Anything he asks next supersedes the question he left unanswered, so a stray
   // "ok" tomorrow cannot wake an offer he forgot about. (A yes or a no is handled
   // just below; a new musing re-stores its own further down.)
@@ -1909,7 +1683,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   const sayBack = async (askId, reply, opts = {}) => {
     const thread = await appendThread(uid, state, [
       // when they only said "yes", the thread says so and shows what it was yes to
-      { id: askId, role: 'user', text: opts.userText ?? (answeringYes ? `${msgTyped} - so look for "${q.need}"` : q.need), at: now },
+      { id: askId, role: 'user', text: opts.userText ?? message, at: now },
       { id: askId, role: 'linky', text: reply, kind: opts.kind || 'answer', cardIds: opts.cardIds || [], reaction: opts.reaction || '', at: now + 1 },
     ]);
     return thread;
@@ -1966,14 +1740,14 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   // that is just somebody's name. A name is a directory lookup, never small
   // talk - the gate would happily chat "thapelo" away.
   const nameLookupNow = !!q.nameQuery && !q.chitChat && !q.smallTalk && !q.bare;
-  const mode = answeringYes || wantsElseNow || nameLookupNow ? 'search' : (gate?.mode || regexMode);
+  const mode = quickSocial && !answeringYes ? 'chat' : refined || answeringYes || wantsElseNow || nameLookupNow ? 'search' : (gate?.mode || regexMode);
 
   // ---- 1a-ii. a direct answer to the question Linky asked.
   if (pendingIntent && (answeringYes || answeringNo)) {
     await patchState(uid, { pendingIntent: null }).catch(() => {});
     if (answeringNo) {
       const id = newId();
-      const { reply: chat, usedAi } = await linkySay('chat', {
+      const { reply: chat, usedAi } = await say('chat', {
         they_said: `no, do not search - I was thinking out loud about ${text(pendingIntent.need, 90)}`,
         tone: 'They declined the search. Acknowledge their preference respectfully in one concise sentence. Do not repeat the offer or apply sales pressure.',
         member_you: { name: me.name, role: me.role, city: me.city },
@@ -1990,7 +1764,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
       const id = newId();
       const outside = await pointers(uid, pendingIntent.need, { userDoc: user, allowSearch: true, assumeKnown: true });
       const needShort = polishNeed(pendingIntent.need);
-      const reply = outside.intro || text(outside.text, 400) || `Nobody on LINKUP does ${needShort} yet so I went outside the network. Here is who I found on LinkedIn:`;
+      const reply = outside.intro || text(outside.text, 400) || `I did not find a solid LINKUP match for ${needShort} so I went outside the network. Here is who I found on LinkedIn:`;
       const thread = await appendThread(uid, state, [
         { id, role: 'user', text: msgTyped, at: now },
         { id, role: 'linky', text: reply, kind: 'outside', reaction: reactionFor('outside'), at: now + 1 },
@@ -2008,7 +1782,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   }
 
   // ---- 1b. small talk: "yoo", "hey", laughs, "no just wanna chill", "ok".
-  // Free, instant, and never dressed up as a search result. The old version
+  // No search, and never dressed up as a search result. The old version
   // searched for "yoo" and reported that nobody in the network matched it; the
   // member is talking to a friend, so a friend answers - and does not pitch.
   if (mode === 'chat') {
@@ -2024,7 +1798,8 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     // something, and for the very first pitch a new member hears.
     const isPlainChat = q.smallTalk || q.chitChat || q.bare;
     let canned = null;
-    if (q.askedWhatYouDo) canned = COACH;
+    if(quickSocial) canned = quickSocial;
+    else if(q.askedWhatYouDo) canned = COACH;
     else if (isPlainChat && !wantsPitch) canned = plainReply('chat', { name: me.name, seed: q.need, streak });
     // if the intent call already wrote a line, do not spend a second one
     const gateSaid = sayKind === 'chat' && gate?.reply
@@ -2032,26 +1807,26 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
       : null;
     const built = canned
       ? { reply: canned, suggest: [], usedAi: false }
-      : (gateSaid || await linkySay(sayKind, {
+      : (gateSaid || await say(sayKind, {
           they_said: q.need,
           tone: wantsPitch
             ? 'They are open to what you are for. Explain your professional networking purpose concisely and offer one relevant action.'
-            : 'They are not looking for anybody right now. Respond respectfully and professionally to what they actually said. No pitch, no examples, no "tell me what you need".',
+            : 'They are not looking for anybody right now. Respond naturally to what they actually said. Listen first and ask at most one useful question. No pitch, no examples, no "tell me what you need".',
           recent_turns: recent,
           they_asked_what_linky_does: !!q.askedWhatYouDo,
           stop_offering_searches: streak >= 1,
           last_real_ask: state.lastAsk && state.lastAsk.need && now - toMillis(state.lastAsk.createdAt) < 3 * DAY_MS ? text(state.lastAsk.need, 120) : '',
           messages_remaining: asksLeft(), allowance_period: quota.period,
           member_you: { name: me.name, role: me.role, city: me.city },
-          network_size: 'a few dozen visible members',
+          network_size: 'not counted for this conversation',
           what_linky_can_do: wantsPitch ? 'find members by role, skill, city or name; explain the match; ask someone for an intro on your behalf; search the open web when nobody fits' : '',
         }, { name: me.name, source, seed: `${q.need.toLowerCase()}:${streak}`, fallback: wantsPitch ? COACH : plainReply('chat', { seed: q.need, streak }) }));
     const { reply: chat, suggest: chatSuggest, usedAi } = built;
     await patchState(uid, { chitStreak: streak + 1 }).catch(() => {});
     const thread = await sayBack(id, chat, { kind: 'chat' });
     const chillSuggest = source === 'app'
-      ? ['who could be a good co founder for me', 'what Linky knows about me', 'what can you do']
-      : ['what can you do', 'help'];
+      ? ['tone warm', 'tone playful', 'what can you do']
+      : ['tone warm', 'what can you do'];
     return { id, need: q.need, reply: chat, kind: 'chat', intent: gate ? `ai:${mode}` : `words:${mode}`, askingWhat: q.askedWhatYouDo ? 'help' : '', cardIds: [], cards: [], nearest: [], none: true, checked: 0, expansion: 'none', usedAi, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), suggest: chatSuggest.length ? chatSuggest : (wantsPitch ? (source === 'app' ? COACH_CHIPS : BOT_CHIPS) : chillSuggest), thread };
   }
 
@@ -2081,11 +1856,12 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   if (q.wantsDraft) {
     const cards = orderedCards(await loadCards(uid), state);
     const id = newId();
-    const top = cards[0];
+    const n = Number(q.need.match(/\b(?:draft|message|opener)\s+(\d+)\b/i)?.[1] || 1);
+    const top = cards.filter(c=>(state.lastAsk?.cardIds||[]).includes(c.id))[n-1];
     const draft = top
       ? `For ${top.targetName}: ${top.opener || `Hi ${firstName(top.targetName)} - Linky pointed me to you. Open to a quick chat?`} Send it as it is or make it yours. Hit Meet if you would rather I ask for you.`
       : '';
-    const { reply, suggest } = await linkySay('draft', {
+    const { reply, suggest } = await say('draft', {
       asked: q.need,
       draft_for: top ? { name: top.targetName, role: top.targetRole, city: top.targetCity } : null,
       ready_message: draft,
@@ -2095,43 +1871,27 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     return { id, need: q.need, reply, kind: 'draft', cardIds: top ? [top.id] : [], cards: top ? [top] : [], nearest: [], none: !top, checked: 0, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), reaction: reactionFor('draft'), suggest: suggest.length ? suggest : (source === 'app' ? ['meet 1', 'who else do you have', 'what Linky knows about me'] : ['meet 1', 'cards', 'help']), thread };
   }
 
-  // ---- 3. same ask again (any of the last few): same answer, free. A
-  // "nobody fits" answer goes stale faster, because new members join.
-  const recent = [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])].filter(Boolean);
-  const hit = recent.find((a) => a.norm === q.norm && !q.wantsElse && now - toMillis(a.createdAt) < (a.none ? LIMITS.noneCacheHours : LIMITS.askCacheHours) * 3600000);
-  if (hit) {
-    const cards = (await loadCards(uid)).filter((c) => (hit.cardIds || []).includes(c.id));
-    const ordered = (hit.cardIds || []).map((id) => cards.find((c) => c.id === id)).filter(Boolean);
-    if (hit !== state.lastAsk) await patchState(uid, { lastAsk: hit });
-    // A cached "nobody fits" still owes the member a working LinkedIn chip, so
-    // re-arm the pending "outside" intent the same way a fresh miss does.
-    if (hit.none) {
-      await patchState(uid, { pendingIntent: { need: hit.need || q.need, at: now, id: hit.id || newId(), outside: true } }).catch(() => {});
-    }
-    const hitReply = hit.none ? nudgeLinkedIn(hit.reply, source) : hit.reply;
-    const thread = await sayBack(hit.id, hitReply, { kind: hit.none ? 'none' : 'found', cardIds: hit.cardIds || [], reaction: reactionFor(hit.none ? 'none' : 'found') });
-    return { ...publicAsk(hit), reply: hitReply, cards: ordered, cached: true, asksLeft: asksLeft(), free: true, suggest: (hit.none ? NONE_CHIPS : FOUND_CHIPS)[source === 'app' ? 'app' : 'bot'], thread };
-  }
-
+  // Search answers are never reused without fresh eligibility/evidence checks.
   const seed = q.norm || q.need;
   const existing = await loadCards(uid);
-  const ctx = await buildMatchContext();
+  const ctx = await buildMatchContext(uid);
 
   // ---- 4. a name before anything else: "fred", "message Luke Tembani".
   // Names are searched over every visible member (not only the ones open to
-  // an intro), they cost no budget, and an unavailable person is explained
+  // an intro), they use the message ledger, and an unavailable person is explained
   // rather than reported as "nobody". It runs BEFORE the budget check on
   // purpose: "is Fred here?" is reading a directory, not a favour, so it never
-  // costs an ask - not even when the day's ten are already gone.
+  // bypasses the shared allowance. The reservation is made before this branch.
   const nameHit = q.nameQuery ? findByName(q, ctx, { meUid: uid, myState: state, existingCards: existing }) : null;
   if (nameHit?.match) {
     const { facts, blocked } = nameHit.match;
     const id = newId();
     if (nameHit.tie) {
       const who = [nameHit.match, ...nameHit.others].map((m) => m.facts);
-      const { reply } = await linkySay('ambiguous', { people: who.map((f) => ({ name: f.name, role: f.role, city: [f.city, f.country].filter(Boolean).join(', ') })) }, { name: me.name, source, seed: `amb:${q.nameQuery}`, fallback: plainReply('ambiguous', { people: who.map((f) => f.name) }) });
+      const { reply } = await say('ambiguous', { people: who.map((f) => ({ name: f.name, role: f.role, city: [f.city, f.country].filter(Boolean).join(', ') })) }, { name: me.name, source, seed: `amb:${q.nameQuery}`, fallback: plainReply('ambiguous', { people: who.map(f=>({name:f.name})) }) });
       const nearest = who.map((f) => ({ uid: f.uid, name: f.name, pic: f.pic, role: f.role, city: [f.city, f.country].filter(Boolean).join(', ') }));
       const thread = await sayBack(id, reply, { kind: 'ambiguous', cardIds: [], reaction: reactionFor('ambiguous') });
+      await patchState(uid,{lastAsk:{id,need:q.need,kind:'ambiguous',cardIds:[],nearest,none:true,createdAt:now},pendingIntent:null});
       return { id, need: q.need, reply, kind: 'ambiguous', cardIds: [], cards: [], nearest, none: true, checked: ctx.candidates.length, expansion: 'none', usedAi: false, free: true, cached: false, createdAt: now, asksLeft: asksLeft(), reaction: reactionFor('ambiguous'), suggest: ['that one', 'search outside LINKUP', 'no, a role'], thread };
     }
     const matchId = [uid, facts.uid].sort().join('_');
@@ -2142,10 +1902,10 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     let cardIds = [];
     if (!blocked && !connected) {
       const why = `${facts.name} is on LINKUP - you asked for them by name, so here they are - ${[facts.role, facts.city].filter(Boolean).join('  ') || 'profile on file'}. I checked nothing beyond that.`;
-      const need = 'a chat, no agenda';
+      const need = `an intro to ${facts.name}`;
       const who = me.name || 'A member';
       const opener = `Hi ${firstName(facts.name)} - ${firstName(who)} asked me to connect you two. ${me.role ? `They are a ${me.role}${me.city ? ` in ${me.city}` : ''}.` : ''} Nothing heavy - just 15 minutes if you are open to it.`;
-      cards = await persistCards(uid, existing, [{ facts, score: 96, why, opener: text(opener, 240) }], { askId: id, need, now });
+      cards = await persistCards(uid, existing, [{facts, score:0, why, opener:text(opener,240), lookup:true}], { askId: id, need, now });
       cardIds = cards.map((c) => c.id);
     }
     // "send intro to X" wants the next step, not just a name handed over. The
@@ -2155,7 +1915,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     const howTo = !cards.length ? '' : source === 'app'
       ? ' Tap Meet on the card and I will ask them for you - you approve the words first.'
       : ' Reply meet 1 and I will ask them for you - you approve the words first.';
-    const { reply: saidPerson } = await linkySay('person', {
+    const { reply: saidPerson } = await say('person', {
       asked_for: nameHit.match.phrase, found: { ...person, skills: facts.skills.slice(0, 6) },
       already_connected: connected, cannot_introduce_because: blocked || '', channel: source,
       they_want_to_send: wantsSend && !!cards.length,
@@ -2176,7 +1936,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     }
     const thread = await sayBack(id, finalReply, { kind: 'person', cardIds, reaction: reactionFor('person') });
     const foundNearest = [{ uid: facts.uid, name: person.name, pic: facts.pic, role: person.role, city: person.city }];
-    const record = { id, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply: finalReply, cardIds, none: false, nearest: blocked || connected ? foundNearest : [], checked: ctx.candidates.length, usedAi: false, expansion: 'none', source, kind: 'person', createdAt: now, reaction: reactionFor('person') };
+    const record = { id, need: q.need, norm: q.norm, offer: q.offer, location: q.location, remote: q.remote, reply: finalReply, cardIds, none: false, nearest: connected ? foundNearest : [], checked: ctx.candidates.length, usedAi: false, expansion: 'none', source, kind: 'person', createdAt: now, reaction: reactionFor('person') };
     await patchState(uid, { lastAsk: record, chitStreak: 0, recentAsks: [state.lastAsk, ...(Array.isArray(state.recentAsks) ? state.recentAsks : [])].filter((a) => a && a.norm !== q.norm && now - toMillis(a.createdAt) < LIMITS.askCacheHours * 3600000).slice(0, 5) });
     const history = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
     history.push({ id, need: q.need, cards: cards.length, none: false, source, createdAt: now });
@@ -2196,7 +1956,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     await patchState(uid, { pendingIntent: { need: text(gate?.topic && substance(gate.topic).length ? gate.topic : q.need, 160), at: now, id } }).catch(() => {});
     const saidCheck = gate?.reply
       ? { reply: text(gate.reply, 420), suggest: gate.suggest || [], usedAi: true }
-      : await linkySay('check', {
+      : await say('check', {
       they_said: q.need,
       thought: q.need,
       member_you: { name: me.name, role: me.role, company: me.company, city: me.city, skills: list(me.skills, 6, 40) },
@@ -2239,7 +1999,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     const found = await findSquads(uid, q, ctx, { user, state, existingCards: existing, slots });
     if (!found.squads.length) {
       const missing = (found.slots || []).filter((x) => !x.found).map((x) => x.label);
-      const { reply } = await linkySay('squad', {
+      const { reply } = await say('squad', {
         need: q.need, members_checked: found.checked, empty_because: missing, slots: found.slots, channel: source,
       }, { name: me.name, source, seed: `squad:${q.norm}`, fallback: plainReply('squad', { empty_because: missing, channel: source }) });
       // nobody fits the slots -> offer the LinkedIn search out loud, and hand
@@ -2258,11 +2018,12 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
       score: m.score,
       why: `${m.why}${sq.missing ? ` Still missing for the three of you: ${sq.missing}` : ''}`,
       opener: templateOpener(m.facts, q.need),
+      evidence:m.evidence, unknowns:m.unknowns,
       badges: m.badges || [],
-      squad: { id: sq.id, role: m.slot, size: sq.members.length, index: mi + 1 },
+      squad: { id: sq.id, role: m.slot, need: m.slotNeed, size: sq.members.length, index: mi + 1 },
     })));
     const resultCards = await persistCards(uid, existing, picks, { askId, need: q.need, now, pairs: ctx.pairs });
-    const { reply, suggest: sg2 } = await linkySay('squad', {
+    const { reply, suggest: sg2 } = await say('squad', {
       need: q.need,
       members_checked: found.checked,
       squads: found.squads.map((sq) => ({ people: sq.members.map((m) => ({ name: m.facts.name, part: m.why })), missing: sq.missing })),
@@ -2305,7 +2066,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     : '';
   const loc = String(q.location || '').toLowerCase();
   const inLoc = !loc || picks.some((p) => `${p.facts.city} ${p.facts.country}`.toLowerCase().includes(loc));
-  const { reply, suggest: saidSuggest } = await linkySay(kind, {
+  const { reply, suggest: saidSuggest } = await say(kind, {
     need: searchQ.need,
     offer: searchQ.offer || 'not stated',
     location: searchQ.location || 'not stated',
@@ -2326,10 +2087,10 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   // Nobody fits -> the LinkedIn offer is always said out loud, even when the
   // model phrased it as "outside the network" or the cache holds an old line.
   const saidReply = kind === 'none' ? nudgeLinkedIn(reply, source) : reply;
-  const saidSuggest2 = kind === 'none' ? (NONE_CHIPS)[source === 'app' ? 'app' : 'bot'] : saidSuggest;
+  const saidSuggest2 = kind === 'none' ? (NONE_CHIPS)[source === 'app' ? 'app' : 'bot'] : resultCards.length>1 ? ['why 1','compare 1 and 2','prep 1'] : ['why 1','prep 1','who else do you have'];
   const record = {
     id: askId, need: searchQ.need, norm: searchQ.norm, offer: searchQ.offer, location: searchQ.location, remote: searchQ.remote,
-    reply: saidReply, kind, cardIds: resultCards.map((c) => c.id), excludedCardIds: [...exclude], none: !picks.length, nearest, checked, usedAi, expansion, source, createdAt: now,
+    reply: saidReply, kind, cardIds: resultCards.map((c) => c.id), excludedCardIds: [...exclude], matcherVersion:MATCHER_VERSION, none: !picks.length, nearest, checked, usedAi, expansion, source, createdAt: now,
     reaction: reactionFor(kind),
   };
   const history = (Array.isArray(state.askHistory) ? state.askHistory : []).slice(-19);
@@ -2355,7 +2116,7 @@ const publicAsk = (a) => (a ? {
   kind: a.kind || (a.none ? 'none' : 'found'),
   cardIds: Array.isArray(a.cardIds) ? a.cardIds : [],
   none: !!a.none,
-  nearest: Array.isArray(a.nearest) ? a.nearest : [],
+  nearest: ['ambiguous','person'].includes(a.kind) && Array.isArray(a.nearest) ? a.nearest : [],
   checked: Number(a.checked || 0),
   expansion: a.expansion || 'none',
   createdAt: toMillis(a.createdAt),
@@ -2375,7 +2136,30 @@ export function orderedCards(cards, state) {
 export async function loadCards(uid) {
   const snap = await db().collection('introSuggestions').doc(uid).get();
   const cards = snap.exists && Array.isArray(snap.data().cards) ? snap.data().cards : [];
-  return cards;
+  if (!cards.length) return [];
+  const myState = await loadState(uid);
+  const profiles = await visibleTargets(cards.map(c=>c.targetUid),uid);
+  const byId = new Map(profiles.map(p=>[p.uid,p]));
+  if(!profiles.length) return [];
+  const stateDocs = await db().getAll(...profiles.map(p=>db().collection('linkyState').doc(p.uid)));
+  const states = new Map(stateDocs.filter(d=>d.exists).map(d=>[d.id,d.data()]));
+  return cards.flatMap(card=>{
+    const p = byId.get(card.targetUid);
+    if(!p) return [];
+    const state = states.get(p.uid) || {};
+    if(state.muted?.[uid] || myState.muted?.[p.uid]) return [];
+    const facts = candidateFacts(p,state);
+    const q = parseAsk(card.need || '');
+    const named = card.lookup === true || (!searchBrief(card.need).known || /^an intro to /i.test(card.need)) && q.nameAttempts?.some(n=>scoreNameMatch(n,facts.name)>=40);
+    if(card.squadId && !card.squadNeed)return []; // Old squad cards lost their slot constraints.
+    const assessment = assessCandidate(searchBrief(card.squadNeed || card.squadRole || card.need),facts);
+    if(!named && !assessment.eligible) return [];
+    return [{...card,targetName:facts.name,targetPic:facts.pic,targetRole:facts.role,targetCompany:facts.company,
+      targetCity:[facts.city,facts.country].filter(Boolean).join(', '),targetSkills:facts.skills.slice(0,5),
+      ...(named?{unknowns:['This is a name lookup, not a verified collaboration fit.']}:
+        {why:evidenceReason(facts.name,assessment),evidence:assessment.evidence,unknowns:assessment.unknowns,score:assessment.score}),
+      matcherVersion:MATCHER_VERSION}];
+  });
 }
 
 export async function setCardStatus(uid, cardId, status) {
@@ -2804,7 +2588,11 @@ export async function respond(uid, introId, decision) {
   if (intro.status !== 'pending') return { status: intro.status, matchId: intro.matchId || '' };
   const requester = intro.requesterId;
   if (decision === 'accept') {
-    const [meUser, reqUser] = await Promise.all([loadUser(uid), loadUser(requester)]);
+    const [targets, requesters] = await Promise.all([visibleTargets([uid],requester),visibleTargets([requester],uid)]);
+    if(!targets.length || !requesters.length || (toMillis(intro.expiresAt) && toMillis(intro.expiresAt)<Date.now()))throw new Error('That introduction is no longer available.');
+    const [myState, theirState] = await Promise.all([loadState(uid),loadState(requester)]);
+    if(myState.muted?.[requester] || theirState.muted?.[uid])throw new Error('That introduction is no longer available.');
+    const meUser=targets[0], reqUser=requesters[0];
     const matchId = await ensureChat(uid, requester, meUser, reqUser);
     const me = profileFacts(meUser) || { name: 'Builder' };
     const them = profileFacts(reqUser) || { name: intro.requesterName || 'Builder' };
@@ -2887,7 +2675,7 @@ export async function respond(uid, introId, decision) {
 // Linky showed). Turn that person into a normal card so Meet/Skip/Save all
 // behave exactly like any other answer, and remember it on the ask.
 export async function pickPerson(uid, targetUid) {
-  const ctx = await buildMatchContext();
+  const ctx = await buildMatchContext(uid);
   const candidate = ctx.candidates.find((x) => x.uid === targetUid);
   if (!candidate) throw new Error('They are not on LINKUP any more.');
   const facts = candidateFacts(candidate, ctx.states[targetUid] || {});
@@ -2899,7 +2687,7 @@ export async function pickPerson(uid, targetUid) {
   // a person looked up by name is not exempt from what Linky already knows
   const warm = (ctx.pairs || {})[pairId(uid, targetUid)];
   const card = {
-    id: `p_${now.toString(36)}_${String(targetUid).slice(0, 8)}`,
+    id:`p_${crypto.randomUUID()}`,
     badges: proofPoints(facts, candidate, { skipBio: !!(ctx.states[targetUid] || {}).facts?.hidden?.bio }),
     ...(warm && ['met', 'touch'].includes(warm.outcome) ? { pairNote: `You two met${warm.at ? ` ${dayKey(warm.at).slice(0, 7)}` : ''} and you said it was worth it.` } : {}),
     askId: (mine.lastAsk && mine.lastAsk.id) || '',
@@ -2909,7 +2697,7 @@ export async function pickPerson(uid, targetUid) {
     targetSkills: facts.skills.slice(0, 5),
     why: `${facts.name} is the one you picked${[facts.role, facts.city].filter(Boolean).length ? ` - ${[facts.role, facts.city].filter(Boolean).join('  ')}` : ''}. I have not checked fit beyond that - you know what you want.`,
     opener: `Hi ${firstName(facts.name)} - Linky introduced us. Worth 15 minutes this week?`,
-    score: 92, status: 'new', createdAt: now, updatedAt: now,
+    lookup:true, score:0, status:'new', createdAt: now, updatedAt: now,
   };
   const keep = existing.filter((c) => now - toMillis(c.createdAt) < 30 * DAY_MS).slice(-59);
   await db().collection('introSuggestions').doc(uid).set({ cards: [...keep, card], updatedAt: nowTs(), newSince: now }, { merge: true });
@@ -2974,6 +2762,7 @@ export async function home(uid, { userDoc } = {}) {
     cards: liveCards,
     inbound: inboundSnap.docs.map((d) => publicIntro(d.id, d.data())).filter((i) => now - i.createdAt < LIMITS.introDays * DAY_MS),
     sent: sentSnap.docs.map((d) => publicIntro(d.id, d.data())).sort((a, b) => b.createdAt - a.createdAt).slice(0, 10),
+    companionTone:state.companionTone || 'warm',
     prefs: { openTo: Array.isArray(state.openTo) ? state.openTo : OFFERS, inboundCap: Number.isFinite(Number(state.inboundCap)) ? Number(state.inboundCap) : LIMITS.inboundPerWeek },
     channels: { telegram: !!state.channels?.telegram, whatsapp: !!state.channels?.whatsapp },
     lastAsk: state.lastAsk && now - toMillis(state.lastAsk.createdAt) < 14 * DAY_MS ? publicAsk(state.lastAsk) : null,
@@ -2999,8 +2788,9 @@ export async function home(uid, { userDoc } = {}) {
   };
 }
 
-export async function setPrefs(uid, { openTo, inboundCap }) {
+export async function setPrefs(uid, { openTo, inboundCap, companionTone }) {
   const patch = {};
+  if(companionTone !== undefined){if(!['warm','direct','playful'].includes(companionTone))throw new Error('Choose warm, direct or playful.');patch.companionTone=companionTone;}
   if (Array.isArray(openTo)) patch.openTo = openTo.filter((o) => OFFERS.includes(o));
   if (inboundCap !== undefined) patch.inboundCap = Math.max(0, Math.min(20, Math.round(Number(inboundCap) || 0)));
   await patchState(uid, patch);
@@ -3634,19 +3424,26 @@ export async function findSquads(uid, q, ctx, { user, state, existingCards = [],
   const eligible = pickEligible({ uid, q, ctx, myState, existingCards, exclude });
   const rawByUid = new Map(ctx.candidates.map((x) => [x.uid, x]));
   const badgesFor = (facts) => proofPoints(facts, rawByUid.get(facts.uid) || {}, { skipBio: !!(ctx.states[facts.uid] || {}).facts?.hidden?.bio });
+  const globalBrief=searchBrief(q.need);
   const perSlot = slots.map((slot) => {
+    const baseNeed=slot.ask.need || slot.label;
+    const ownBrief=searchBrief(baseNeed);
+    const slotNeed=`${baseNeed}${!ownBrief.location && globalBrief.location ? ` in ${globalBrief.location}` : ''}${globalBrief.remoteAllowed ? ' or remote' : ''}${globalBrief.remoteOnly ? ' remote only' : ''}${globalBrief.excluded.map(t=>` without ${t}`).join('')}`;
+    const brief=searchBrief(slotNeed);
+    brief.unverifiedConstraints=[...new Set([...brief.unverifiedConstraints,...globalBrief.unverifiedConstraints])];
     const ranked = [];
     for (const facts of eligible) {
-      const { score, hits } = keywordScore(slot.ask, facts, slot.ask.tokens.length ? slot.ask.tokens : [slot.label.toLowerCase()], false);
-      if (score <= 0 || !hits.length) continue;
-      ranked.push({ facts, score, hits, slot: slot.label });
+      const assessment = assessCandidate(brief,facts);
+      if(!assessment.eligible) continue;
+      const score = assessment.score, hits = assessment.evidence.map(e=>e.requirement);
+      ranked.push({ facts, score, hits, assessment, slot: slot.label, slotNeed });
     }
     ranked.sort((a, b) => b.score - a.score);
     return { ...slot, ranked: ranked.slice(0, 4) };
   });
   const filled = perSlot.filter((s) => s.ranked.length);
   const checked = ctx.candidates.filter((p) => p.uid !== uid).length;
-  if (filled.length < 2) return { squads: [], filled: filled.length, slots: perSlot.map((s) => ({ label: s.label, found: s.ranked.length })), checked };
+  if (filled.length < 2 || filled.length !== perSlot.length) return { squads: [], filled: filled.length, slots: perSlot.map((s) => ({ label: s.label, found: s.ranked.length })), checked };
 
   const used = new Set();
   const squads = [];
@@ -3674,7 +3471,7 @@ export async function findSquads(uid, q, ctx, { user, state, existingCards = [],
     const score = Math.round(picks.reduce((acc, p) => acc + p.score, 0) / picks.length);
     if (score < 1.5) return;
     picks.forEach((p) => used.add(p.facts.uid));
-    squads.push({ score, members: picks.map((p) => ({ facts: p.facts, score: p.score, hits: p.hits, slot: p.slot })) });
+    squads.push({ score, members: picks.map((p) => ({ facts: p.facts, score: p.score, hits:p.hits, assessment:p.assessment, slot:p.slot, slotNeed:p.slotNeed })) });
   };
   for (let i = 0; i < 3 && squads.length < SQUAD_ANSWERS_MAX; i += 1) {
     tryLane(i, 0, lanes[2] ? 0 : -1);
@@ -3683,60 +3480,21 @@ export async function findSquads(uid, q, ctx, { user, state, existingCards = [],
   }
   if (!squads.length) return { squads: [], filled: filled.length, slots: perSlot.map((s) => ({ label: s.label, found: s.ranked.length })), checked };
 
-  // One call for the whole answer: name each person's role in the trio and what
-  // the squad is still missing. Nothing here decides who is in it.
-  let framed = null;
-  if (aiReady() && squads.length) {
-    const dossier = {
-      requester: { role: text(me.role, 50), skills: list(me.skills, 6, 24), city: text(me.city, 24) },
-      asked: text(q.need, 120),
-      squads: squads.map((s, i) => ({ i, slots: s.members.map((m) => m.slot), people: s.members.map((m) => ({ uid: m.facts.uid, name: m.facts.name, role: text(m.facts.role, 40), company: text(m.facts.company, 30), city: text(m.facts.city, 20), skills: list(m.facts.skills, 4, 20), said: text(m.facts.bio, 90) })) })),
-    };
-    const prompt = [
-      'You are Linky at LINKUP. A member asked for a squad, and the matcher already chose the people - you only write what each one is to the squad. Never add or drop a person.',
-      `The member's ask, in their words: ${JSON.stringify(dossier.asked)}. Their own role: ${JSON.stringify(dossier.requester.role)}.`,
-      'For each squad and each person: one line (6-16 words) naming the part they play in this specific trio, grounded only in what is on their profile; and for each squad one line on what the three of you would still be missing. If a person\'s profile does not support a claim, say less, do not invent.',
-      'Plain sentences, no markdown, no emoji, no "exciting", no "leverage". Address the member as "you".',
-      'Return STRICT JSON only: {"squads":[{"i":0,"missing":"...","people":[{"uid":"...","part":"..."}]}]}',
-      `Dossier: ${JSON.stringify(dossier).slice(0, 1500)}`,
-    ].join('\n');
-    try {
-      const { text: raw } = await aiText(prompt, { temperature: 0.6, maxOutputTokens: 500, responseMimeType: 'application/json', timeoutMs: 9000 });
-      const parsed = readJson(raw) || {};
-      if (Array.isArray(parsed.squads)) framed = parsed.squads;
-    } catch (err) {
-      console.warn('[linky] squad framing failed, using cited template', err?.message || err);
-      await noteAiFault('squad', err).catch(() => {});
-    }
-  }
-  const byUid = new Map();
-  squads.forEach((s, si) => s.members.forEach((m) => byUid.set(m.facts.uid, m)));
-  const framedPeople = new Map();
-  const framedSquads = new Map();
-  (framed || []).forEach((row) => {
-    const idx = Number(row?.i);
-    if (Number.isFinite(idx)) framedSquads.set(idx, text(row?.missing, 160));
-    (Array.isArray(row?.people) ? row.people : []).forEach((p) => {
-      const uidKey = String(p?.uid || '');
-      const facts = byUid.get(uidKey)?.facts;
-      const line = text(p?.part, 200);
-      if (facts && line && whyIsCited(line, facts)) framedPeople.set(uidKey, line);
-    });
-  });
   const out = squads.map((s, i) => ({
     id: `sq${Date.now().toString(36)}${i}`,
     score: s.score,
-    missing: framedSquads.get(i) || '',
+    missing: '',
     members: s.members.map((m) => ({
       facts: m.facts,
-      slot: m.slot,
-      score: Math.max(55, Math.min(96, 50 + Math.round(m.score * 8))),
-      why: framedPeople.get(m.facts.uid) || templateWhy(m.facts, m.hits, ''),
-      whyFromAi: framedPeople.has(m.facts.uid),
+      slot: m.slot, slotNeed:m.slotNeed,
+      score:m.score,
+      why:evidenceReason(m.facts.name,m.assessment),
+      evidence:m.assessment.evidence, unknowns:m.assessment.unknowns,
+      whyFromAi:false,
       badges: badgesFor(m.facts),
     })),
   }));
-  return { squads: out, filled: filled.length, slots: perSlot.map((s) => ({ label: s.label, found: s.ranked.length })), checked, usedAi: !!framed };
+  return { squads: out, filled: filled.length, slots: perSlot.map((s) => ({ label: s.label, found: s.ranked.length })), checked, usedAi:false };
 }
 
 /**
