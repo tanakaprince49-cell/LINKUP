@@ -41,8 +41,10 @@ The browser checks are unauthenticated and use local stubs. Tests do not establi
 
 ## Publication status
 
-**Local changes only; this upgrade is not deployed.** GitHub push authentication is not available in this workspace. A non-interactive HTTPS push attempt was rejected because no username/credential was available. Public branch inspection showed both remote branches at the previous `794d5b2` baseline.
+The tested implementation commit `b1ddab8` has been pushed to **both `main` and `codex/mobile-port`**. `codex/mobile-port` remains the checked-out branch. Initial publication was blocked by missing authentication; temporary authorized credentials subsequently unblocked the push.
 
-After restoring authorized push access, publish the same tested commit to both `main` and `codex/mobile-port`, retain `codex/mobile-port` as the checked-out branch, verify the production workflow, refresh the Telegram command menu, and verify real linked-channel delivery. Updating installed Android clients requires a separate signed native release; the export here is not an APK/AAB.
+The production workflow is triggered by the `codex/mobile-port` push. Check the latest workflow and live assets before treating a build as deployed. Real signed-in app behavior and linked Telegram/WhatsApp delivery still need authorized production test accounts. Updating installed Android clients requires a separate signed native release; the export here is not an APK/AAB.
+
+Credentials are not part of this commit or report. Temporary push credentials must be removed after deployment checks; this workspace is not a secure long-term credential vault.
 
 See `LINKY_SETUP.md` for current architecture, limits, setup and validation commands.
