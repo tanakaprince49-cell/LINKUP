@@ -90,3 +90,40 @@ test('SEO rewrites precede SPA fallback and work after the landing proxy strips 
     }
   }
 });
+
+test('landing member feed serves live public fields only, with canonical links and no fake metrics',async() => {
+  const db=database({alice:{...user,profilePicUrl:'https://example.com/avatar.jpg',isVerified:true}});
+  const res=await request(db,{mode:'members'});
+  assert.equal(res.code,200);assert.match(res.headers['content-type'],/application\/json/);
+  assert.equal(res.headers['cache-control'],'private, no-store');assert.equal(res.headers['x-robots-tag'],'noindex');
+  const body=JSON.parse(res.body);assert.equal(body.profiles.length,1);assert.equal(body.profiles[0].name,'Tanaka Prince');
+  assert.equal(body.profiles[0].url,`${APP}/p/alice`);assert.equal(body.profiles[0].image,'https://example.com/avatar.jpg');assert.equal(body.nextCursor,null);
+  assert.doesNotMatch(res.body,/secret@example|private-phone|private-billing|isVerified|matchScore|repScore|socialLinks|projects/);
+  assert.deepEqual(Object.keys(body.profiles[0]).sort(),['uid','name','bio','occupation','company','location','skills','lookingFor','image','url'].sort());
+});
+test('member feed rechecks hidden, stealth, deleted and synthetic accounts despite stale discovery rows',async() => {
+  const users={alice:{...user},hidden:{...user,isVisible:false},stealth:{...user,isStealthMode:true},deleted:{...user,deleted:true},unfinished:{...user,onboarded:false},bot:{...user,isBot:true},'demo-1':user};
+  const db=database(users,[...Object.keys(users),'missing']);
+  const first=JSON.parse((await request(db,{mode:'members'})).body);
+  assert.deepEqual(first.profiles.map(p=>p.uid),['alice']);
+  users.alice.isVisible=false;
+  assert.deepEqual(JSON.parse((await request(db,{mode:'members'})).body).profiles,[]);
+});
+test('member feed paginates all source candidates, even when a page has no eligible profiles',async() => {
+  const users=Object.fromEntries(Array.from({length:43},(_,i)=>[`user-${String(i).padStart(3,'0')}`,{...user,isVisible:i>=40}]));
+  const db=database(users);
+  const first=JSON.parse((await request(db,{mode:'members'})).body);
+  assert.deepEqual(first.profiles,[]);assert.equal(first.nextCursor,'user-039');
+  const second=JSON.parse((await request(db,{mode:'members',after:first.nextCursor})).body);
+  assert.equal(second.profiles.length,3);assert.equal(second.nextCursor,null);
+  assert.equal(db.queries[0].limit,41);
+});
+test('member API returns JSON errors, respects HEAD and does not manufacture fallback users',async() => {
+  const invalid=await request(database(),{mode:'members',after:'../private'});assert.equal(invalid.code,400);assert.equal(JSON.parse(invalid.body).error,'Invalid page');
+  const post=await request(database(),{mode:'members'},'POST');assert.equal(post.code,405);assert.ok(JSON.parse(post.body).error);
+  assert.equal((await request(database(),{mode:'members'},'HEAD')).body,'');
+  const old=console.error;console.error=()=>{};
+  try {
+    const res=await request({collection:()=>{throw new Error('private error');}},{mode:'members'});assert.equal(res.code,503);assert.deepEqual(JSON.parse(res.body),{error:'Temporarily unavailable'});
+  }finally{console.error=old;}
+});

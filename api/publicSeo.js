@@ -25,12 +25,13 @@ export function createPublicSeoHandler(database = getDb) {
       res.status(code);
       return res.send(req.method === 'HEAD' ? '' : body);
     };
+    const mode = single(req.query?.mode);
     const failure = (code, message) => {
       res.setHeader('X-Robots-Tag','noindex');
+      if (mode === 'members') return send(code, JSON.stringify({ error: message }), 'application/json; charset=utf-8');
       return send(code, documentHtml({title:`${message} | LINKUP`,description:message,canonical:`${APP}/builders`,noindex:true,content:`<h1>${message}</h1><p>This profile may be private or no longer available.</p><a href="${APP}/builders">Explore public builders</a>`}));
     };
     if (!['GET','HEAD'].includes(req.method)) { res.setHeader('Allow','GET, HEAD'); return failure(405,'Method not allowed'); }
-    const mode = single(req.query?.mode);
     try {
       if (mode === 'robots') return send(200,`User-agent: *\nAllow: /\n\nSitemap: ${APP}/sitemap.xml\n`,'text/plain; charset=utf-8');
       if (mode === 'profile') {
@@ -40,7 +41,7 @@ export function createPublicSeoHandler(database = getDb) {
         if (!profiles.length) return failure(404,'Profile not found');
         return send(200, renderProfile(profiles[0]));
       }
-      if (mode === 'directory') {
+      if (mode === 'directory' || mode === 'members') {
         const cursor = single(req.query?.after);
         if (cursor && !validId(cursor)) return failure(400,'Invalid page');
         const db = database();
@@ -50,6 +51,17 @@ export function createPublicSeoHandler(database = getDb) {
         const docs = snap.docs.slice(0, PAGE_SIZE);
         const profiles = await currentProfiles(db, docs.map(d => d.id));
         const next = snap.docs.length > PAGE_SIZE ? docs.at(-1).id : '';
+        if (mode === 'members') {
+          res.setHeader('X-Robots-Tag', 'noindex');
+          // Landing cards use the SAME live eligibility checks as SEO pages.
+          // No scores, billing, activity or invented verification claims.
+          const members = profiles.map(p => ({
+            uid: p.uid, name: p.name, bio: p.bio, occupation: p.occupation,
+            company: p.company, location: p.location, skills: p.skills,
+            lookingFor: p.lookingFor, image: p.image, url: profileUrl(p.uid),
+          }));
+          return send(200, JSON.stringify({ profiles: members, nextCursor: next || null }), 'application/json; charset=utf-8');
+        }
         return send(200,renderDirectory(profiles,cursor,next));
       }
       if (mode === 'sitemap') {
