@@ -1,3 +1,4 @@
+import { webBasePath } from './webPaths';
 import { Platform } from 'react-native';
 
 const DEFAULT_LINKUP_WEB_URL = 'https://linkup-muqu.vercel.app';
@@ -7,7 +8,7 @@ const cleanBaseUrl = (value: string) => value.trim().replace(/\/+$/, '');
 export function linkupWebBaseUrl() {
   if (Platform.OS === 'web') {
     const origin = String((globalThis as any)?.location?.origin || '');
-    if (origin.startsWith('http')) return cleanBaseUrl(origin);
+    if (origin.startsWith('http')) return cleanBaseUrl(origin) + webBasePath();
   }
 
   return cleanBaseUrl(String(process.env.EXPO_PUBLIC_LINKUP_WEB_URL || DEFAULT_LINKUP_WEB_URL));

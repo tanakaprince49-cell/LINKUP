@@ -1,3 +1,4 @@
+import { webAppPath } from './webPaths';
 import * as Device from 'expo-device';
 import { Linking, Platform } from 'react-native';
 import {
@@ -351,7 +352,8 @@ export function subscribeToNotificationToasts(userId: string) {
 
         const title = notificationTitle(data);
         const body = notificationBody(data);
-        const targetUrl = notificationTargetUrl(data);
+        const targetPath = notificationTargetUrl(data);
+        const targetUrl = Platform.OS === 'web' ? webAppPath(targetPath) : targetPath;
 
         if (Platform.OS === 'web') {
           if (!playedSoundForBatch) {
@@ -364,8 +366,8 @@ export function subscribeToNotificationToasts(userId: string) {
 
           const browserNotification = new window.Notification(title, {
             body,
-            icon: '/icons/icon-192.png',
-            badge: '/icons/icon-192.png',
+            icon: webAppPath('/icons/icon-192.png'),
+            badge: webAppPath('/icons/icon-192.png'),
             tag: notificationId,
             data: { targetUrl },
           });

@@ -1,3 +1,4 @@
+import { webAppPath } from '../lib/webPaths';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Alert, AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -169,7 +170,7 @@ const replaceWebRoute = (path: string) => {
   if (Platform.OS !== 'web') return;
   const history = (globalThis as any)?.history;
   if (history?.replaceState) {
-    history.replaceState(null, '', path);
+    history.replaceState(null, '', webAppPath(path));
   }
 };
 

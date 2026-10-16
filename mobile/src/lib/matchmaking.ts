@@ -1,3 +1,4 @@
+import { webAppPath } from './webPaths';
 import { httpsCallable } from 'firebase/functions';
 import { Platform } from 'react-native';
 import { auth, functions } from './firebase';
@@ -109,7 +110,7 @@ async function serverGeminiRank(me: UserProfile | null | undefined, candidates: 
 
   const compactCandidates = candidates.slice(0, Math.min(maxCandidates, 20)).map(compactProfile);
   const token = await auth.currentUser?.getIdToken().catch(() => '');
-  const response = await fetch('/api/rankCandidates', {
+  const response = await fetch(webAppPath('/api/rankCandidates'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

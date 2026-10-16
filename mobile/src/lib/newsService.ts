@@ -1,3 +1,4 @@
+import { webAppPath } from './webPaths';
 import { Platform } from 'react-native';
 
 export interface NewsArticle {
@@ -242,7 +243,7 @@ export const fetchAINews = async (): Promise<NewsArticle[]> => {
   // route has no origin, and it keeps the key out of the bundle.
   if (Platform.OS === 'web') {
     try {
-      const response = await fetch('/api/news');
+      const response = await fetch(webAppPath('/api/news'));
       if (!response.ok) throw new Error(`news route returned ${response.status}`);
       const json = await response.json();
       if (!Array.isArray(json?.articles) || json.articles.length === 0) {

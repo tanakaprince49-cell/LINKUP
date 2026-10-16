@@ -15,7 +15,9 @@
     "build:web": "expo export --platform web && node scripts/postexport-web.js",
     "deps:check": "npx expo install --check",
     "doctor": "npx expo-doctor",
-    "typecheck": "node --stack_size=8192 ./node_modules/typescript/lib/tsc.js --noEmit --pretty false"
+    "typecheck": "node --stack_size=8192 ./node_modules/typescript/lib/tsc.js --noEmit --pretty false",
+    "test:web-paths": "node --test scripts/test-web-mount.cjs",
+    "test:web-browser": "node scripts/smoke-web-mount.cjs"
   },
   "engines": {
     "node": ">=20"

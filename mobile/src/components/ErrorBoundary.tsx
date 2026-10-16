@@ -1,3 +1,4 @@
+import { webAppPath } from '../lib/webPaths';
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { COLORS } from '../theme/theme';
@@ -68,7 +69,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   handleGoHome = () => {
     try {
       if (Platform.OS === 'web') {
-        (globalThis as any)?.location?.assign?.('/');
+        (globalThis as any)?.location?.assign?.(webAppPath('/'));
       }
     } catch {
       // noop

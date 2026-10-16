@@ -1,3 +1,4 @@
+import { webAppPath } from './webPaths';
 import { httpsCallable } from 'firebase/functions';
 import { Platform } from 'react-native';
 import { auth, functions } from './firebase';
@@ -127,9 +128,8 @@ async function directGeminiText(task: string, payload: Record<string, unknown>) 
 
 async function vercelAiText(task: string, payload: Record<string, unknown>) {
   if (!serverAIEnabled() || Platform.OS !== 'web' || typeof fetch !== 'function') return null;
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const token = await auth.currentUser?.getIdToken().catch(() => '');
-  const response = await fetch(`${baseUrl}/api/aiAssist`, {
+  const response = await fetch(webAppPath('/api/aiAssist'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

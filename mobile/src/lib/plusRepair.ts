@@ -1,3 +1,4 @@
+import { webAppPath } from './webPaths';
 // PLUS identity repair.
 //
 // Web PLUS purchases live in webSubscriptions/{uid}, which only the server
@@ -28,7 +29,7 @@ export type PlusRepairResult = {
 };
 
 const endpoint = () =>
-  Platform.OS === 'web' ? '/api/plusRepair' : `${linkupWebBaseUrl()}/api/plusRepair`;
+  Platform.OS === 'web' ? webAppPath('/api/plusRepair') : `${linkupWebBaseUrl()}/api/plusRepair`;
 
 export async function repairPlusIdentity(uid?: string): Promise<PlusRepairResult> {
   const user = auth.currentUser;

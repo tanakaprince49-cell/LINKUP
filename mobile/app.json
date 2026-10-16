@@ -73,6 +73,9 @@
       ],
       "expo-sqlite"
     ],
-    "owner": "talala"
+    "owner": "talala",
+    "experiments": {
+      "baseUrl": "/app"
+    }
   }
 }

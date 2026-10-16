@@ -7,7 +7,8 @@
     "dev": "npm --prefix mobile run web",
     "build": "npm --prefix mobile ci && npm --prefix mobile run build:web",
     "preview": "npx serve mobile/dist",
-    "lint": "npm --prefix mobile run typecheck"
+    "lint": "npm --prefix mobile run typecheck",
+    "test:web-paths": "npm --prefix mobile run test:web-paths"
   },
   "engines": {
     "node": ">=20"

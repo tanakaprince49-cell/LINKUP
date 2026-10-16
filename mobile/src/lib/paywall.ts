@@ -1,3 +1,4 @@
+import { webAppPath } from './webPaths';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PLUS_PRICES, formatUsd } from './pricing';
@@ -240,7 +241,7 @@ export type PlusClaimResult = {
 };
 
 const plusLifecycleEndpoint = () =>
-  Platform.OS === 'web' ? '/api/claimPlus' : `${linkupWebBaseUrl()}/api/claimPlus`;
+  Platform.OS === 'web' ? webAppPath('/api/claimPlus') : `${linkupWebBaseUrl()}/api/claimPlus`;
 
 const plusLifecycleHeaders = async () => {
   const user = auth.currentUser;

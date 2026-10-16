@@ -170,12 +170,14 @@ export default async function handler(req, res) {
     // leaves for Payonify and reads it back on return (webCheckout.ts), and
     // the webhook carries the reference in session.metadata.
     const origin = siteOrigin(req);
-    // Fall back to the app root (the web app is a single-page app, so any
-    // path serves it). The old defaults pointed at the retired Paynow rail's
-    // return routes; the boot reconciler only needs the browser to come back
-    // to the origin — the pending reference lives in sessionStorage.
-    const successUrl = absoluteUrl(config.successUrl, origin + '/');
-    const cancelUrl = absoluteUrl(config.cancelUrl, origin + '/');
+    // Return to the current app mount, not the marketing homepage. Only the
+    // fixed /app mount is accepted; never accept arbitrary client return URLs.
+    // Explicit operator overrides still take precedence and must be reviewed
+    // during migration. The pending reference stays on the browser origin.
+    const appBasePath = body.appBasePath === '/app' ? '/app' : '';
+    const appReturnUrl = `${origin}${appBasePath}/`;
+    const successUrl = absoluteUrl(config.successUrl, appReturnUrl);
+    const cancelUrl = absoluteUrl(config.cancelUrl, appReturnUrl);
 
     const amountInCents = Math.round(plan.amount * 100);
     const payload = {

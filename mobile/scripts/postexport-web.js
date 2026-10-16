@@ -36,19 +36,22 @@ html = html.replace(/<meta\s+name=["']viewport["'][^>]*>\s*/i, '');
 
 // Browsers + installed PWAs pin favicons hard (separate favicon DB), so give
 // the cat mark a fresh URL to bust every cache layer in one move.
-html = html.replace(/href="\/favicon\.ico(\?[^"]*)?"/, 'href="/favicon.ico?v=cat1"');
+html = html.replace(/href="(?:\/app)?\/favicon\.ico(\?[^"]*)?"/, 'href="/app/favicon.ico?v=cat1"');
+
+const webMountScript = '<!-- linkup-web-mount -->\n<script>\n' +
+  fs.readFileSync(path.join(__dirname, 'web-mount.js'), 'utf8') + '\n</script>';
 
 const pwaHead = [
   '<!-- linkup-pwa-meta -->',
   '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />',
   '<meta name="format-detection" content="telephone=no" />',
-  '<link rel="manifest" href="/manifest.webmanifest" />',
+  // Manifest and icons are inserted by web-mount.js with the current public mount.
   '<meta name="theme-color" content="#FBE618" />',
   '<meta name="apple-mobile-web-app-capable" content="yes" />',
   '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />',
   '<meta name="apple-mobile-web-app-title" content="LINKUP" />',
   '<meta name="mobile-web-app-capable" content="yes" />',
-  '<link rel="apple-touch-icon" href="/icons/icon-192.png?v=cat1" />',
+
   '<link rel="preconnect" href="https://firestore.googleapis.com" />',
   '<link rel="preconnect" href="https://identitytoolkit.googleapis.com" />',
   '<link rel="preconnect" href="https://www.googleapis.com" />',
@@ -92,8 +95,10 @@ const pwaScript = [
   '<script>',
   "if ('serviceWorker' in navigator) {",
   "  window.addEventListener('load', function () {",
-  "    navigator.serviceWorker.register('/service-worker.js').then(function (registration) {",
-  '      registration.update();',
+  '    var basePath = window.__LINKUP_BASE_PATH__;',
+  "    if (basePath !== '' && basePath !== '/app') return;",
+  "    navigator.serviceWorker.register(basePath + '/service-worker.js', { scope: basePath + '/', updateViaCache: 'none' }).then(function (registration) {",
+  '      return registration.update();',
   "    }).catch(function (error) {",
   "      console.warn('LINKUP service worker registration failed:', error);",
   '    });',
@@ -147,9 +152,31 @@ const buildScript = [
 ].join('\n');
 
 html = injectOnce(html, 'linkup-pwa-meta', pwaHead, '</head>');
+html = injectOnce(html, 'linkup-web-mount', webMountScript, '</head>');
 html = injectOnce(html, 'linkup-build-id', buildScript, '</body>');
 html = injectOnce(html, 'linkup-pwa-service-worker', pwaScript, '</body>');
 html = injectOnce(html, 'linkup-devtools-guard', devToolsGuard, '</body>');
 
 fs.writeFileSync(indexPath, html);
-console.log('LINKUP PWA assets copied and index.html patched.');
+
+// Legal pages also exist at both mounts. Their root-relative cross-links must
+// not accidentally open the marketing SPA when viewed through /app.
+const legalLinksScript = [
+  '<!-- linkup-legal-mount -->',
+  '<script>',
+  '(function () {',
+  "  if (!/^\\/app(?:\\/|$)/.test(window.location.pathname)) return;",
+  "  document.querySelectorAll('a[href^=\"/\"]').forEach(function (link) {",
+  "    var href = link.getAttribute('href');",
+  "    if (href.indexOf('//') !== 0 && !/^\\/app(?:\\/|$)/.test(href)) link.setAttribute('href', '/app' + href);",
+  '  });',
+  '}());',
+  '</script>',
+].join('\n');
+for (const name of ['privacy-policy.html', 'data-deletion.html', 'child-safety-standards.html']) {
+  const file = path.join(distDir, name);
+  if (fs.existsSync(file)) {
+    fs.writeFileSync(file, injectOnce(fs.readFileSync(file, 'utf8'), 'linkup-legal-mount', legalLinksScript, '</body>'));
+  }
+}
+console.log('LINKUP PWA assets copied and root/subpath HTML patched.');

@@ -26,9 +26,83 @@
           "value": "application/manifest+json"
         }
       ]
+    },
+    {
+      "source": "/app/service-worker.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/app/manifest.webmanifest",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/manifest+json"
+        }
+      ]
     }
   ],
   "rewrites": [
+    {
+      "source": "/app/_expo/:path*",
+      "destination": "/_expo/:path*"
+    },
+    {
+      "source": "/app/assets/:path*",
+      "destination": "/assets/:path*"
+    },
+    {
+      "source": "/app/icons/:path*",
+      "destination": "/icons/:path*"
+    },
+    {
+      "source": "/app/favicon.ico",
+      "destination": "/favicon.ico"
+    },
+    {
+      "source": "/app/manifest.webmanifest",
+      "destination": "/manifest.webmanifest"
+    },
+    {
+      "source": "/app/service-worker.js",
+      "destination": "/service-worker.js"
+    },
+    {
+      "source": "/app/index.html",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/app/__/auth/:path*",
+      "destination": "https://linkup-e0906.firebaseapp.com/__/auth/:path*"
+    },
+    {
+      "source": "/app/__/firebase/:path*",
+      "destination": "https://linkup-e0906.firebaseapp.com/__/firebase/:path*"
+    },
+    {
+      "source": "/app/data-deletion",
+      "destination": "/data-deletion.html"
+    },
+    {
+      "source": "/app/account-deletion",
+      "destination": "/data-deletion.html"
+    },
+    {
+      "source": "/app/privacy-policy",
+      "destination": "/privacy-policy.html"
+    },
+    {
+      "source": "/app/child-safety-standards",
+      "destination": "/child-safety-standards.html"
+    },
+    {
+      "source": "/app/api/:path*",
+      "destination": "/api/:path*"
+    },
     {
       "source": "/__/auth/:path*",
       "destination": "https://linkup-e0906.firebaseapp.com/__/auth/:path*"

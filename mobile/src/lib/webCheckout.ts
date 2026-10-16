@@ -1,3 +1,4 @@
+import { webAppPath, webBasePath } from './webPaths';
 // Web checkout calls. Relative /api URLs on purpose: the web app and the
 // Vercel functions share an origin, so there is nothing to CORS-configure and
 // nothing hard-coded to localhost.
@@ -46,10 +47,10 @@ async function authHeaders(): Promise<Record<string, string>> {
  */
 export async function startPayonifyCheckout(planKey: string): Promise<PayonifyStartResult> {
   const headers = await authHeaders();
-  const res = await fetch('/api/payonifyCheckout', {
+  const res = await fetch(webAppPath('/api/payonifyCheckout'), {
     method: 'POST',
     headers,
-    body: JSON.stringify({ plan: planKey }),
+    body: JSON.stringify({ plan: planKey, appBasePath: webBasePath() }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data?.checkoutUrl) {
@@ -67,7 +68,7 @@ export async function checkPayonifyPayment(reference?: string | null): Promise<P
   const headers = await authHeaders();
   // No reference => the server reconciles this account's recent unsettled
   // payments itself (used by "Restore purchases").
-  const res = await fetch('/api/payonifyStatus', {
+  const res = await fetch(webAppPath('/api/payonifyStatus'), {
     method: 'POST',
     headers,
     body: JSON.stringify(reference ? { reference } : {}),

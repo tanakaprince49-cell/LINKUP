@@ -1,3 +1,4 @@
+import { linkupWebBaseUrl } from './profileLinks';
 /**
  * ImageKit client upload: sends a picked photo (data URI) to the free
  * ImageKit CDN and returns the hosted URL. Pipeline:
@@ -13,8 +14,8 @@ import { auth } from './firebase';
 
 const IMAGEKIT_PUBLIC_KEY = 'public_nCVzK4bEGR6VH/FGJHDvjqB5urQ=';
 const IMAGEKIT_URL_ENDPOINT = 'https://ik.imagekit.io/vjkzaxrro';
-// Prod API origin — same deployment that serves the web app.
-const AUTH_ENDPOINT = 'https://linkup-muqu.vercel.app/api/imagekitAuth';
+// Web uses its current mount; native keeps the configured original origin.
+const authEndpoint = () => `${linkupWebBaseUrl()}/api/imagekitAuth`;
 
 export const IMAGEKIT_AVATAR_FOLDER = '/linkup-avatars';
 export const IMAGEKIT_CAMPAIGN_FOLDER = '/linkup-campaigns';
@@ -39,7 +40,7 @@ export const uploadImageToImageKit = async (
   if (!uid || typeof dataUri !== 'string' || !dataUri.startsWith('data:image')) return null;
   try {
     const idToken = await auth.currentUser?.getIdToken().catch(() => '');
-    const authRes = await fetch(AUTH_ENDPOINT, {
+    const authRes = await fetch(authEndpoint(), {
       headers: idToken ? { Authorization: `Bearer ${idToken}` } : undefined,
     });
     if (!authRes.ok) return null;

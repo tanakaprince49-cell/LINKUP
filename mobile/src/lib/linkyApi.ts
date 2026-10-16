@@ -1,3 +1,4 @@
+import { webAppPath } from './webPaths';
 // Client for /api/linky (ask -> immediate cited answer, intro cards, double
 // opt-in intros, audit, editable facts, bot linking). Server-side only writes:
 // the app never touches the introSuggestions / intros collections directly.
@@ -241,7 +242,7 @@ export class LinkyApiError extends Error {
   }
 }
 
-const endpoint = () => (Platform.OS === 'web' ? '/api/linky' : `${linkupWebBaseUrl()}/api/linky`);
+const endpoint = () => (Platform.OS === 'web' ? webAppPath('/api/linky') : `${linkupWebBaseUrl()}/api/linky`);
 
 export async function linkyCall<T = any>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
   const user = auth.currentUser;

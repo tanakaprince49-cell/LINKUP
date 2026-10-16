@@ -1,7 +1,8 @@
 import 'react-native-gesture-handler';
+import { webBasePath, webAppPath, webRoutePath, scopedNavigationPath } from './src/lib/webPaths';
 import React from 'react';
 import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text, Platform, InteractionManager } from 'react-native';
-import { NavigationContainer, createNavigationContainerRef, DefaultTheme, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef, DefaultTheme, DarkTheme, getPathFromState, getStateFromPath } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -113,9 +114,28 @@ const runAfterStartup = (task: () => void) => {
   };
 };
 
+const WEB_BASE_PATH = Platform.OS === 'web' ? webBasePath() : '';
 const linking: any = {
-  prefixes: [ExpoLinking.createURL('/'), 'linkup://'],
+  prefixes: [
+    ExpoLinking.createURL('/'), 'linkup://',
+    'https://www.linkupbuild.com/app', 'https://linkupbuild.com/app',
+    'https://linkup-muqu.vercel.app/app', 'https://linkup-muqu.vercel.app',
+  ],
+  // Web history uses config.path, not linking.prefixes. Keep the mount out
+  // of native scheme routes while retaining / on the original app origin.
+  getPathFromState: (state: any, options: any) =>
+    scopedNavigationPath(getPathFromState(state, options), WEB_BASE_PATH),
+  getStateFromPath: (path: string, options: any) => {
+    // React Navigation 7 strips a root config.path to an empty string, which
+    // misses its special '/' dashboard matcher. Handle only the mount's home;
+    // regular deep links retain the library's full prefixed path handling.
+    if (WEB_BASE_PATH && /^\/app\/?(?=$|[?#])/.test(path)) {
+      return getStateFromPath(path.replace(/^\/app\/?/, '/'), { ...options, path: '' });
+    }
+    return getStateFromPath(path, options);
+  },
   config: {
+    path: WEB_BASE_PATH.slice(1),
     screens: {
       Landing: 'landing',
       EmailAuth: 'login',
@@ -403,7 +423,7 @@ function AppContent() {
   const online = useOnlineStatus();
   const [offlineRetry, setOfflineRetry] = React.useState(0);
   const webPathname =
-    Platform.OS === 'web' ? String((globalThis as any)?.location?.pathname || '') : '';
+    Platform.OS === 'web' ? webRoutePath() : '';
   const isPublicSharedWebPath =
     webPathname.startsWith('/profile/') || webPathname.startsWith('/opportunity/');
   const navigationStateKey = `${user?.uid || 'guest'}-${isOnboarded ? 'onboarded' : 'new'}-${authVersion}`;
@@ -566,12 +586,12 @@ function AppContent() {
     if (Platform.OS !== 'web' || user?.uid) return;
     const location = (globalThis as any)?.location;
     const history = (globalThis as any)?.history;
-    const pathname = String(location?.pathname || '');
+    const pathname = webRoutePath(String(location?.pathname || '')).replace(/\/+$/, '') || '/';
     const publicPaths = new Set(['', '/', '/landing', '/login']);
     const isPublicSharedPath = pathname.startsWith('/profile/') || pathname.startsWith('/opportunity/');
 
     if (history?.replaceState && !publicPaths.has(pathname) && !isPublicSharedPath) {
-      history.replaceState(null, '', '/landing');
+      history.replaceState(null, '', webAppPath('/landing'));
     }
   }, [user?.uid]);
 
@@ -784,7 +804,7 @@ export default function App() {
         if (!current) return;
         const last = Number(window.sessionStorage?.getItem(RELOAD_KEY) || 0);
         if (Date.now() - last < THROTTLE_MS) return;
-        void fetch('/', { cache: 'no-store', credentials: 'omit' })
+        void fetch(webAppPath('/'), { cache: 'no-store', credentials: 'omit' })
           .then((response) => response.text())
           .then((html) => {
             const match = html.match(/\/_expo\/static\/js\/web\/(index-[A-Za-z0-9_-]+\.js)/);
