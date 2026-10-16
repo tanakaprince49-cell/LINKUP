@@ -3023,7 +3023,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               <SafeIcon name="Ghost" size={18} color="#666" />
               <View style={styles.prefCopy}>
                 <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Stealth Mode</Text>
-                <Text style={styles.prefHelp}>Hides your profile from discovery/search while keeping your account active.</Text>
+                <Text style={styles.prefHelp}>Hides your profile from discovery and removes your public web page. Search engines may take time to remove earlier results.</Text>
               </View>
             </View>
             <PreferenceSwitch
@@ -3039,7 +3039,7 @@ export default function ProfileScreen({ navigation, route }: any) {
               <SafeIcon name="Globe2" size={18} color={COLORS.primaryStrong} />
               <View style={styles.prefCopy}>
                 <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>Public Discovery</Text>
-                <Text style={styles.prefHelp}>When on, your profile can appear in swipe, search, and active opportunity discovery.</Text>
+                <Text style={styles.prefHelp}>When on, your profile can appear in LINKUP discovery and on a public web page that Google can index. Turn off to remove the public page; search results may take time to update.</Text>
               </View>
             </View>
             <PreferenceSwitch
