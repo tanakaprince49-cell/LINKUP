@@ -23,7 +23,7 @@
 
 ## Validation
 
-- **126/126 automated tests pass**, zero skipped, including profile-browse, location-only discovery, explicit-search intent priority, shortlist rendering/privacy and identity regressions.
+- **127/127 automated tests pass**, zero skipped, including profile-browse, location-only discovery, explicit-search intent priority, shortlist rendering/privacy and identity regressions.
 - TypeScript passes.
 - Production web export passes.
 - Android JavaScript/Hermes export passes; this is **not a signed APK/AAB or native store release**.
@@ -63,4 +63,4 @@ All validation above was performed locally against this update. Backend tests ex
 - `LinkyRichText` / `linkyTextParts` highlight known, unambiguous member mentions and make them open the relevant in-app profile. Web URLs, www links and markdown links are highlighted, underlined, selectable and tappable. Only HTTP(S) URLs without embedded credentials can open; unknown or ambiguous member names do not acquire invented profile links. Structured result-card names and linked proof badges are highlighted too.
 - The user explicitly chose **ask before searching LinkedIn**. No-match cards now offer “Yes, search LinkedIn”; confirmation uses the existing search pipeline and returns evidence-filtered, direct public LinkedIn profile URLs, not fabricated search results. Lead names, URLs and Open LinkedIn profile actions are tappable, and external links survive a subsequent chat reply. Unavailable external searches remain retryable rather than cached as empty for seven days. Unavailable and empty results are displayed honestly, including when there are no lead cards.
 - New unit/integration regressions cover transactional 15-message limits, existing-use preservation, link parsing/safe protocols/ambiguous names, no provider call before consent, confirmation with the original role/location, direct profile URLs, declining, unavailable search and retry recovery. The actual-screen browser fixture additionally checks top-counter geometry, profile mentions, external-link clicks, confirmed search, lead-link clicks and preservation after chat. `linky-linkedin-links-390.png` is an isolated mock-provider fixture, not evidence of a live provider query.
-- 126 tests, TypeScript, web export, Android Hermes export, root/subpath browser mounts and isolated-screen browser checks passed. This is not a signed native release or a store submission, and no signed-in production search was performed during local validation.
+- 127 tests, TypeScript, web export, Android Hermes export, root/subpath browser mounts and isolated-screen browser checks passed. This is not a signed native release or a store submission, and no signed-in production search was performed during local validation.

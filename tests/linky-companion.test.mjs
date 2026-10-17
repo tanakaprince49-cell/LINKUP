@@ -352,3 +352,11 @@ test('a temporarily unavailable LinkedIn search is retryable instead of cached e
  const retried=await api.ask('member','search LinkedIn for a Flutter developer in Harare',{userDoc:member});
  assert.equal(calls,2);assert.equal(retried.leads.length,1);
 });
+
+
+test('a failed provider response that consumed a search attempt is not cached as a seven-day no-match',async()=>{
+ const db=new Database();seed(db,[member]);let calls=0;
+ const api=core(db,{externalSearch:async()=>++calls===1?{leads:[],searches:1,note:'search-error:503'}:{leads:[{name:'Alice',title:'Flutter developer',snippet:'Flutter developer in Harare',url:'https://www.linkedin.com/in/alice'}],searches:1}});
+ const first=await api.pointers('member','Flutter developer in Harare',{userDoc:member,assumeKnown:true});assert.equal(first.leads.length,0);
+ const retried=await api.pointers('member','Flutter developer in Harare',{userDoc:member,assumeKnown:true});assert.equal(calls,2);assert.equal(retried.leads.length,1);
+});

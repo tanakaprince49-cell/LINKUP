@@ -1354,6 +1354,7 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
   const trail0 = outreachTrail(state2);
   if (snap?.exists && snap.data().intro && Array.isArray(snap.data().leads)
     && (snap.data().leads.length || snap.data().searches > 0)
+    && !/^search-error|^search-unavailable/.test(snap.data().searchNote || '')
     && Date.now() - toMillis(snap.data().createdAt) < 7 * DAY_MS) {
     const d = snap.data();
     // re-filtered on the way out, so a lead the member already wrote to (or told
@@ -1443,9 +1444,9 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
   }).catch(() => {});
   const rendered = renderPointers({ intro, routes, leads });
   // Configuration/budget/network failures must not suppress retries for seven days.
-  if (leads.length || outreach.searches > 0) await ref.set({
+  if (leads.length || (outreach.searches > 0 && !/^search-error|^search-unavailable/.test(outreach.note || ''))) await ref.set({
     need: q.need, place: text(place, 60), intro, routes: routes || [], leads,
-    searches: outreach.searches || 0, profileFilter: outreach.query || '', createdAt: Date.now(),
+    searches: outreach.searches || 0, searchNote: outreach.note || '', profileFilter: outreach.query || '', createdAt: Date.now(),
   }).catch(() => {});
   return {
     intro, routes, leads, text: rendered, cached: false, skipped,
