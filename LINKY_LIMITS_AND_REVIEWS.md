@@ -6,7 +6,7 @@ Implementation handoff — 16 October 2026.
 
 The user selected **free members only** for the new Linky allowance.
 
-- Free accounts: **10 Linky messages per UTC calendar month**.
+- Free accounts: **15 Linky messages per UTC calendar month**.
 - PLUS: **60 Linky messages per UTC day**, unchanged. Meet limits, prices, billing products, and entitlements are not changed.
 - The tenth successful message is delivered. The shared Android/web UI then opens the PLUS paywall immediately; no eleventh send is required.
 - At exhaustion, entering the Linky screen also opens the paywall. Dismissing it leaves the last response readable but does not restore messages. Further send attempts reopen the paywall without sending another request.
@@ -70,3 +70,8 @@ A separate **Settings & Preferences → Rate LINKUP** button on Android opens th
 - [Testing in-app reviews](https://developer.android.com/guide/playcore/in-app-review/test): use eligible accounts and supported test distribution.
 
 The backend/web deployment and Android/Play Store releases are separate. Check the GitHub production workflow and deployed build identifier for web rollout status; do not interpret a repository push as an Android publication.
+
+
+### Allowance increase
+
+The free limit is now 15/month, preserving the existing UTC-month ledger count. A member at 10 used receives five additional messages, not a new 15-message bucket. PLUS remains 60/day. The counter appears in the Linky header directly after “Big ideas welcome.”

@@ -1205,7 +1205,7 @@ function plainReply(kind, d = {}) {
       return `A squad - not three searches.\n${squads.map(one).join('\n')}${d.channel && d.channel !== 'app' ? '\n\nReply meet squad and I will ask all of them at once - each one still gets to say yes.' : '\n\nTap Meet squad and I will ask all of them at once - each one still gets to say yes.'}`;
     }
     case 'loop': return loopQuestionText((d.other_person && d.other_person.name) || 'them', d.what_the_intro_was_for, d.they_have_messaged);
-    case 'limit': return 'Your Linky message allowance has been used. Free accounts receive 10 messages per calendar month; PLUS includes 60 messages per day.';
+    case 'limit': return 'Your Linky message allowance has been used. Free accounts receive 15 messages per calendar month; PLUS includes 60 messages per day.';
     case 'draft': return d.ready_message || 'Specify the recipient and collaboration purpose. I can prepare a draft for you to review and send from your own account.';
     default: return 'Describe the professional role, skill, location, or name you want to find. I can review available profiles and explain relevant recommendations.';
   }
@@ -1342,7 +1342,7 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
   // p2: the shape changed (intro + routes + leads instead of one long sentence),
   // so an answer written by the old code is not read at all. The search itself is
   // still served from _serpapi's 7-day result cache, so this costs no credit.
-  const ref = db().collection('linkyCache').doc(cacheKey('p6-evidence', `${uid}|${q.need}|${profileFacts(user)?.city || ''}|${profileFacts(user)?.country || ''}`));
+  const ref = db().collection('linkyCache').doc(cacheKey('p7-linked-profiles', `${uid}|${q.need}|${profileFacts(user)?.city || ''}|${profileFacts(user)?.country || ''}`));
   const snap = await ref.get().catch(() => null);
   const me = profileFacts(user) || {};
   const place = q.location || [me.city, me.country].filter(Boolean).join(', ') || 'Zimbabwe';
@@ -1353,6 +1353,7 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
   const state2 = state;
   const trail0 = outreachTrail(state2);
   if (snap?.exists && snap.data().intro && Array.isArray(snap.data().leads)
+    && (snap.data().leads.length || snap.data().searches > 0)
     && Date.now() - toMillis(snap.data().createdAt) < 7 * DAY_MS) {
     const d = snap.data();
     // re-filtered on the way out, so a lead the member already wrote to (or told
@@ -1403,8 +1404,9 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
   // The list of people is NOT baked into this prose any more. The app renders
   // rows and the bot renders buttons; every surface that used to print the same
   // five names twice, once in a paragraph and once as links, stopped doing it.
-  const fresh = (outreach.leads || []).filter((l) => l && safeLinkedinProfile(l.url) && !leadHit(leadKey(l), trail0.muted) && !leadHit(leadKey(l), trail0.sent));
-  const skipped = (outreach.leads || []).length - fresh.length;
+  const qualified = (outreach.leads || []).filter(l => l && safeLinkedinProfile(l.url) && assessPublicLead(q.need,l).eligible);
+  const fresh = qualified.filter(l => !leadHit(leadKey(l), trail0.muted) && !leadHit(leadKey(l), trail0.sent));
+  const skipped = qualified.length - fresh.length;
   // the key travels with the lead: it is what a "not interested" or "sent" refers
   // back to on any surface, and what makes the same person stick next time
   const leads = fresh.slice(0, plus ? 8 : 5).map((l) => ({ ...l, key: leadKey(l) }));
@@ -1440,7 +1442,8 @@ export async function pointers(uid, need, { userDoc, allowSearch = true, assumeK
     lastLeadsAt: Date.now(), lastLeadsNeed: q.need,
   }).catch(() => {});
   const rendered = renderPointers({ intro, routes, leads });
-  await ref.set({
+  // Configuration/budget/network failures must not suppress retries for seven days.
+  if (leads.length || outreach.searches > 0) await ref.set({
     need: q.need, place: text(place, 60), intro, routes: routes || [], leads,
     searches: outreach.searches || 0, profileFilter: outreach.query || '', createdAt: Date.now(),
   }).catch(() => {});

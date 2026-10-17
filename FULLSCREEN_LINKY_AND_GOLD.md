@@ -19,11 +19,11 @@
 - The composer stays pinned to the bottom, with measured clearance and no obsolete tab-bar offset on Android.
 - Introduction requests, pending drafts, follow-ups, clear-chat and tone/search tools remain accessible in the Activity panel rather than occupying the message area.
 - All retained server thread turns are rendered (up to the server's existing 24-turn cap); restored chat opens at the latest turn. Empty-state suggestions do not reappear underneath restored chat history.
-- The 10/month free and 60/day PLUS quotas, exhaustion paywall, privacy gates and introduction approval behavior are unchanged.
+- The 15/month free and 60/day PLUS quotas, exhaustion paywall, privacy gates and introduction approval behavior are unchanged.
 
 ## Validation
 
-- **118/118 automated tests pass**, zero skipped, including profile-browse, location-only discovery, explicit-search intent priority, shortlist rendering/privacy and identity regressions.
+- **126/126 automated tests pass**, zero skipped, including profile-browse, location-only discovery, explicit-search intent priority, shortlist rendering/privacy and identity regressions.
 - TypeScript passes.
 - Production web export passes.
 - Android JavaScript/Hermes export passes; this is **not a signed APK/AAB or native store release**.
@@ -54,3 +54,13 @@ Reproduced and fixed: `show me profiles` incorrectly became a requirement for th
 The screen now separates conversation from the last shortlist, handles card responses without IDs, source-refreshes after chat, hides removed cards and clears the displayed shortlist on a genuine no-match. Cards have an explicit View profile affordance and accessible profile navigation. A mint/lavender/cream welcome, playful mascot, four starter tiles, warm conversation bubbles, a yellow send button and dark-mode counterparts replace the empty, flat layout. Meet builders explicitly browses profiles; skill/name tiles prefill the composer without consuming a message. A blue verification check is immediately beside Linky in the compact header. Quotas, the dedicated full-screen layout and owner-only badge entitlement remain unchanged.
 
 All validation above was performed locally against this update. Backend tests execute the actual API core with an in-memory database; UI tests render the actual screen with mocked auth/API/navigation. They do not prove signed-in production behavior. Deployment is not verified until the updated commit is pushed and the production workflow/live assets are checked. Installed apps still need a native release.
+
+
+## Highlighted links, top counter and confirmed LinkedIn search
+
+- Free allowance is now **15 messages per UTC calendar month** across app, Telegram and WhatsApp; PLUS remains 60/day. Existing usage is preserved, so a member who used 10 has five remaining, not a reset to 15. Paywall, backend/client error wording and store-listing source copy are aligned.
+- The remaining-message counter sits directly beneath “AI connector · Big ideas welcome” in the header, including zero remaining and the reset countdown. It no longer occupies the composer area.
+- `LinkyRichText` / `linkyTextParts` highlight known, unambiguous member mentions and make them open the relevant in-app profile. Web URLs, www links and markdown links are highlighted, underlined, selectable and tappable. Only HTTP(S) URLs without embedded credentials can open; unknown or ambiguous member names do not acquire invented profile links. Structured result-card names and linked proof badges are highlighted too.
+- The user explicitly chose **ask before searching LinkedIn**. No-match cards now offer “Yes, search LinkedIn”; confirmation uses the existing search pipeline and returns evidence-filtered, direct public LinkedIn profile URLs, not fabricated search results. Lead names, URLs and Open LinkedIn profile actions are tappable, and external links survive a subsequent chat reply. Unavailable external searches remain retryable rather than cached as empty for seven days. Unavailable and empty results are displayed honestly, including when there are no lead cards.
+- New unit/integration regressions cover transactional 15-message limits, existing-use preservation, link parsing/safe protocols/ambiguous names, no provider call before consent, confirmation with the original role/location, direct profile URLs, declining, unavailable search and retry recovery. The actual-screen browser fixture additionally checks top-counter geometry, profile mentions, external-link clicks, confirmed search, lead-link clicks and preservation after chat. `linky-linkedin-links-390.png` is an isolated mock-provider fixture, not evidence of a live provider query.
+- 126 tests, TypeScript, web export, Android Hermes export, root/subpath browser mounts and isolated-screen browser checks passed. This is not a signed native release or a store submission, and no signed-in production search was performed during local validation.

@@ -24,13 +24,13 @@ class Database {
   };return q;}
   runTransaction(fn){const result=this.queue.then(async()=>{const writes=[];const result=await fn({get:async ref=>this.snapshot(ref.path),set:(ref,d,o)=>writes.push([ref.path,d,o?.merge])});writes.forEach(args=>this.write(...args));return result;});this.queue=result.catch(()=>{});return result;}
 }
-function core(db,{ai=false,aiMode="search"}={}) {
+function core(db,{ai=false,aiMode="search",externalSearch=null}={}) {
  const module={exports:{}};
  const mocks={
   'node:crypto':crypto,'./_linkyQuality.js':quality,'./_linkyCompanion.js':companion,'./_publicSeo.js':{publicEligible},'./_linkyUsage.js':usage,
   './_firebaseAdmin.js':{getDb:()=>db,getAdmin:()=>({firestore:{FieldValue:{serverTimestamp:()=>Date.now(),delete:()=>null},Timestamp:{fromMillis:ms=>ms}}})},
   './_gemini.js':{aiReady:()=>ai,aiStatus:()=>({gemini:{},zen:{}}),aiText:async()=>({text:JSON.stringify({mode:aiMode,picks:[{uid:'irrelevant',score:100}],reply:'I found ten perfect matches'})}),geminiText:async()=>'{"picks":[{"uid":"irrelevant","score":100}]}'},
-  './_serpapi.js':{safeLinkedinProfile,findLeads:async()=>({leads:[],searches:0,note:'not-configured'})},'./_proof.js':{proofPoints:()=>[],badgeLine:()=>''}
+  './_serpapi.js':{safeLinkedinProfile,findLeads:externalSearch || (async()=>({leads:[],searches:0,note:'not-configured'}))},'./_proof.js':{proofPoints:()=>[],badgeLine:()=>''}
  };
  const code=ts.transpileModule(read('api/_linky.js'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
  vm.runInNewContext(code,{module,exports:module.exports,require:name=>{assert.ok(name in mocks,name);return mocks[name];},console,process:{env:{}},Date,Set,Map,URL,Buffer,setTimeout,clearTimeout});
@@ -281,7 +281,7 @@ test('squads require every slot and retain full slot constraints on reload',asyn
 
 test('legacy app external-search action cannot bypass an exhausted message ledger',async()=>{
  const db=new Database();seed(db,[member]);const api=core(db),route=adapter(db,api);
- for(let i=0;i<10;i++)await usage.reserveMessage(db,'member',{now:Date.now()});
+ for(let i=0;i<15;i++)await usage.reserveMessage(db,'member',{now:Date.now()});
  const response={status(code){this.code=code;return this;},json(body){this.body=body;}};
  await route.default({method:'POST',query:{},body:{action:'pointers',need:'Flutter developer'},headers:{}},response);
  assert.equal(response.code,402);assert.equal(response.body.code,'ask_limit');
@@ -320,4 +320,35 @@ test('browsing does not silently discard unknown skills or explicit constraints'
  }
  assert.equal(quality.assessCandidate(quality.searchBrief('show me profiles in Harare'),fact()).eligible,true);
  assert.equal(quality.assessCandidate(quality.searchBrief('show me profiles in Harare'),fact({city:'London'})).eligible,false);
+});
+
+
+test('no LINKUP match asks permission before LinkedIn; confirmation returns matching direct profile links',async()=>{
+ const db=new Database();seed(db,[member]);const calls=[];
+ const api=core(db,{externalSearch:async(need)=>{calls.push(need);return {leads:[{name:'Alice Public',title:'Flutter developer',snippet:'Flutter developer based in Harare',url:'https://www.linkedin.com/in/alice-public',why:'Public snippet mentions Flutter and Harare.'}],searches:1};}});
+ const none=await api.ask('member','find a Flutter developer in Harare',{userDoc:member});
+ assert.equal(none.kind,'none');assert.equal(calls.length,0);assert.match(none.reply,/LinkedIn/);
+ const out=await api.ask('member','yes, search LinkedIn',{userDoc:member});
+ assert.equal(out.kind,'outside');assert.equal(calls.length,1);assert.match(calls[0],/Flutter/i);assert.match(calls[0],/Harare/i);
+ assert.equal(out.leads.length,1);assert.equal(out.leads[0].url,'https://www.linkedin.com/in/alice-public');
+ assert.equal(db.rows.get('linkyUsage/member').month.count,2);
+});
+test('declining LinkedIn or unavailable search never invents external profiles',async()=>{
+ const db=new Database();seed(db,[member]);let calls=0;
+ const api=core(db,{externalSearch:async()=>{calls++;return {leads:[],searches:0,note:'not-configured'};}});
+ await api.ask('member','find a Flutter developer',{userDoc:member});
+ await api.ask('member','no',{userDoc:member});assert.equal(calls,0);
+ await api.ask('member','find a Flutter developer',{userDoc:member});
+ const out=await api.ask('member','yes',{userDoc:member});
+ assert.equal(calls,1);assert.equal(out.leads.length,0);assert.match(out.reply,/could not run/i);
+});
+
+
+test('a temporarily unavailable LinkedIn search is retryable instead of cached empty for seven days',async()=>{
+ const db=new Database();seed(db,[member]);let calls=0;
+ const api=core(db,{externalSearch:async()=>++calls===1?{leads:[],searches:0,note:'not-configured'}:{leads:[{name:'Alice',title:'Flutter developer',snippet:'Flutter developer in Harare',url:'https://www.linkedin.com/in/alice'}],searches:1}});
+ await api.ask('member','find a Flutter developer in Harare',{userDoc:member});
+ const first=await api.ask('member','yes',{userDoc:member});assert.equal(first.leads.length,0);
+ const retried=await api.ask('member','search LinkedIn for a Flutter developer in Harare',{userDoc:member});
+ assert.equal(calls,2);assert.equal(retried.leads.length,1);
 });

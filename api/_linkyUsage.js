@@ -1,6 +1,6 @@
 // Server-only, transactional allowance shared by app, Telegram and WhatsApp.
 // Kept outside linkyState so Clear chat / Forget cannot refill credits.
-export const MESSAGE_LIMITS = Object.freeze({ freePerMonth: 10, plusPerDay: 60 });
+export const MESSAGE_LIMITS = Object.freeze({ freePerMonth: 15, plusPerDay: 60 });
 export const monthKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 7);
 export const dayKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 export function nextResetAt(plus, now = Date.now()) {
@@ -24,7 +24,7 @@ export function messageQuota(usage = {}, { plus = false, now = Date.now(), legac
 }
 export function quotaMessage(quota) {
   return quota.period === 'month'
-    ? 'You have used all 10 free Linky messages for this calendar month. Upgrade to LINKUP PLUS to continue, or wait until your monthly allowance resets.'
+    ? 'You have used all 15 free Linky messages for this calendar month. Upgrade to LINKUP PLUS to continue, or wait until your monthly allowance resets.'
     : 'You have used your 60 Linky messages for today. Your PLUS allowance resets at midnight UTC.';
 }
 export async function readMessageQuota(database, uid, options) {

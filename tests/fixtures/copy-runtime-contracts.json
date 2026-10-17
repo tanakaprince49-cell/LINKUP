@@ -657,6 +657,10 @@
     ],
     [
       "navigate",
+      "Profile"
+    ],
+    [
+      "navigate",
       "Dashboard"
     ],
     [
@@ -670,14 +674,6 @@
     [
       "navigate",
       "Profile"
-    ],
-    [
-      "replace",
-      ""
-    ],
-    [
-      "replace",
-      ""
     ],
     [
       "navigate",

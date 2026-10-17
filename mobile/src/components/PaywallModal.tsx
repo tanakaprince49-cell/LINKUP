@@ -470,7 +470,7 @@ export default function PaywallModal({
 
             <Text style={[styles.title, { color: textColor(isDark) }]}>Expand your professional networking tools</Text>
             <Text style={[styles.copy, { color: textColor(isDark, 'secondary') }]}>
-              {description || 'Free members receive 10 Linky messages per calendar month and limited professional discovery every 12 hours. LINKUP PLUS unlocks unlimited discovery, smarter AI recommendations, and premium tools to help you find the right co-founder, developer, designer, or investor faster.'}
+              {description || 'Free members receive 15 Linky messages per calendar month and limited professional discovery every 12 hours. LINKUP PLUS unlocks unlimited discovery, smarter AI recommendations, and premium tools to help you find the right co-founder, developer, designer, or investor faster.'}
             </Text>
             <View style={[styles.featurePill, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}> 
               <Text style={[styles.feature, { color: textColor(isDark) }]}>{feature}</Text>

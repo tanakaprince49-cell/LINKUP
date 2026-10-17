@@ -1,6 +1,6 @@
 import type { LinkyHome, LinkyMessageQuota } from './linkyApi';
 
-export const FREE_LINKY_LIMIT_MESSAGE = 'You have used all 10 free Linky messages for this calendar month. Upgrade to LINKUP PLUS to continue, or wait until your monthly allowance resets.';
+export const FREE_LINKY_LIMIT_MESSAGE = 'You have used all 15 free Linky messages for this calendar month. Upgrade to LINKUP PLUS to continue, or wait until your monthly allowance resets.';
 
 export function quotaFromHome(home: LinkyHome): LinkyMessageQuota {
   if (home.messageQuota) return home.messageQuota;

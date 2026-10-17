@@ -81,7 +81,7 @@ export type LinkyAsk = {
   reply: string;
   /** What the answer was, so the UI can dress it: search, a name, chit-chat. */
   /** `check` = Linky asked before searching; answer it with yes / no. */
-  kind?: 'found' | 'close' | 'none' | 'person' | 'ambiguous' | 'chat' | 'draft' | 'check' | 'squad';
+  kind?: 'found' | 'close' | 'none' | 'person' | 'ambiguous' | 'chat' | 'draft' | 'check' | 'squad' | 'outside';
   askingFirst?: boolean;
   /** What decided the turn - `ai:chat` (the model) or `words:chat` (offline lists). */
   intent?: string;

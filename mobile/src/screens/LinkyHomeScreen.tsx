@@ -1,3 +1,4 @@
+import LinkyRichText from '../components/LinkyRichText';
 import { linkyShortlist } from '../lib/linkyShortlist';
 import VerifiedBadge from '../components/VerifiedBadge';
 import MemberBadges from '../components/MemberBadges';
@@ -116,7 +117,7 @@ const CardView = ({
       <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Open ${card.targetName}’s profile`} style={styles.cardTop} onPress={onOpen} activeOpacity={0.75}>
         <Avatar uri={card.targetPic} />
         <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Text style={[styles.cardName, { color: textColor(isDark), flexShrink: 1 }]} numberOfLines={1}>{card.targetName}</Text><MemberBadges userId={card.targetUid} size={18} /></View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Text style={[styles.cardName, { color: isDark ? '#9ED8FF' : '#075EA8', backgroundColor: isDark ? '#203F56' : '#E4F1FF', textDecorationLine: 'underline', flexShrink: 1 }]} numberOfLines={1}>{card.targetName}</Text><MemberBadges userId={card.targetUid} size={18} /></View>
           {card.targetRole || card.targetCompany ? (
             <Text style={[styles.cardRole, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
               {[card.targetRole, card.targetCompany].filter(Boolean).join(' · ')}
@@ -152,7 +153,7 @@ const CardView = ({
               activeOpacity={0.8}
             >
               <Trophy size={11} color={textColor(isDark, 'secondary')} />
-              <Text style={[styles.badgeText, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
+              <Text style={[styles.badgeText, { color: b.url ? (isDark ? '#9ED8FF' : '#075EA8') : textColor(isDark, 'secondary'), textDecorationLine: b.url ? 'underline' : 'none' }]} numberOfLines={1}>
                 {b.label}{b.checked ? '' : ' (their words)'}
               </Text>
             </TouchableOpacity>
@@ -164,7 +165,7 @@ const CardView = ({
       ) : null}
       <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
         <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>WHY THIS PERSON</Text>
-        <Text style={[styles.whyText, { color: textColor(isDark) }]}>{card.why}</Text>
+        <LinkyRichText text={card.why} isDark={isDark} profiles={[{name:card.targetName,uid:card.targetUid}]} onProfile={onOpen} style={[styles.whyText, { color: textColor(isDark) }]} />
         {card.unknowns?.length ? <Text style={[styles.forText, { color: textColor(isDark, 'muted') }]}>Still to check: {card.unknowns[0]}</Text> : null}
         <Text style={[styles.forText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>For: {card.need}</Text>
       </View>
@@ -484,15 +485,17 @@ export default function LinkyHomeScreen({ navigation }: any) {
       const out = await linkyAsk(msg);
       if (user?.uid) void recordReviewAction(user.uid);
       setAnswer(out);
-      setPointerText('');
-      setLeads([]);
-      setPointerRoutes([]);
+      if (out.kind !== 'chat') {
+        setPointerText('');
+        setLeads([]);
+        setPointerRoutes([]);
+      }
       // "yes, look outside LINKUP" -> the LinkedIn leads arrive on the ask
       // itself, so render them the same way the old button did.
-      if (out.leads && out.leads.length) {
+      if (out.kind === 'outside' || out.leads?.length) {
         setPointerText(out.pointerIntro || out.reply || '');
         setPointerRoutes(Array.isArray(out.routes) ? out.routes : []);
-        setLeads(out.leads);
+        setLeads(out.leads || []);
         setPointerMeta({ searches: Number(out.searches || 0), skipped: Number(out.skipped || 0), cached: !!out.cached, place: out.place || '' });
       }
       if (out.thread) setHome((h) => (h ? { ...h, thread: out.thread } : h));
@@ -708,6 +711,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
     setInput(prompt);
     inputRef.current?.focus();
   };
+  const textProfiles = useMemo(()=> (home?.cards || []).filter(c=>['new','saved','meet','accepted'].includes(c.status)).map(c=>({name:c.targetName,uid:c.targetUid})),[home?.cards]);
+  const openProfile = (uid: string) => navigation.navigate('Profile', {userId:uid});
   const firstName = (home?.name || '').split(' ')[0];
   const surface = isDark ? '#182A36' : '#FFFFFF';
   const border = isDark ? '#2A4250' : '#E5E9DF';
@@ -732,6 +737,10 @@ export default function LinkyHomeScreen({ navigation }: any) {
           <Text style={[styles.chatSubtitle, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
             {home ? 'AI connector · Big ideas welcome' : 'Getting ready…'}
           </Text>
+          {home ? <Text accessibilityLabel="Linky message allowance" accessibilityLiveRegion="polite" style={[styles.allowanceText,{color:textColor(isDark,'secondary'),marginTop:3}]}>
+            {home.plus ? `${asksLeft} messages left today · PLUS` : `${asksLeft} of ${messageLimit} free messages left this month`}
+          </Text> : null}
+          {atMessageLimit && resetCountdown ? <Text style={[styles.allowanceText,{color:textColor(isDark,'muted'),marginTop:2}]}>Resets in {resetCountdown}</Text> : null}
         </View>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Preferences & bots" onPress={() => navigation.navigate('LinkySettings')} style={styles.headerIcon}>
           <Settings2 size={20} color={textColor(isDark)} />
@@ -780,14 +789,12 @@ export default function LinkyHomeScreen({ navigation }: any) {
                 <View style={styles.conversation}>
                   {turns.map((t, i) => (t.role === 'user' ? (
                     <View key={`u${t.at}-${i}`} style={[styles.turn, styles.turnUser]}>
-                      <Text style={[styles.turnText, { backgroundColor: isDark ? '#285246' : '#DBF4DC', color: isDark ? '#E6FFEF' : '#183E2C' }]}>
-                        {t.text}
-                      </Text>
+                      <LinkyRichText text={t.text} isDark={isDark} profiles={textProfiles} onProfile={openProfile} style={[styles.turnText, { backgroundColor: isDark ? '#285246' : '#DBF4DC', color: isDark ? '#E6FFEF' : '#183E2C' }]} />
                     </View>
                   ) : (
                     <View key={`l${t.at}-${i}`} style={styles.msgRow}>
                       <BrandMark size={28} style={{borderRadius: 10}} />
-                      <Text style={[styles.turnText, { flexShrink: 1, color: textColor(isDark), backgroundColor: isDark ? '#203744' : '#FFFFFF', borderWidth: 1, borderColor: border }]}>{t.text}</Text>
+                      <LinkyRichText text={t.text} isDark={isDark} profiles={textProfiles} onProfile={openProfile} style={[styles.turnText, { flexShrink: 1, color: textColor(isDark), backgroundColor: isDark ? '#203744' : '#FFFFFF', borderWidth: 1, borderColor: border }]} />
                     </View>
                   )))}
                   {thinking && pendingAsk ? (
@@ -828,11 +835,11 @@ export default function LinkyHomeScreen({ navigation }: any) {
                   {!thinking && (pointerText || leads.length) ? (
                     <View style={[styles.whyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
                         <Text style={[styles.whyLabel, { color: textColor(isDark, 'muted') }]}>OUTSIDE LINKUP</Text>
-                        <Text style={[styles.whyText, { color: textColor(isDark) }]}>{pointerText}</Text>
+                        <LinkyRichText text={pointerText} isDark={isDark} style={[styles.whyText, { color: textColor(isDark) }]} />
                         {pointerRoutes.length ? (
                           <View style={{ marginTop: 8, gap: 6 }}>
                             {pointerRoutes.map((rt, i) => (
-                              <Text key={'r' + i} style={[styles.leadLine, { color: textColor(isDark, 'secondary') }]}>{i + 1}) {rt}</Text>
+                              <LinkyRichText key={'r' + i} text={`${i + 1}) ${rt}`} isDark={isDark} style={[styles.leadLine, { color: textColor(isDark, 'secondary') }]} />
                             ))}
                           </View>
                         ) : null}
@@ -841,7 +848,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
                             {leads.map((l, i) => (
                               <View key={l.url + '-' + i} style={[styles.lead, { borderColor: border }]}>
                                 <View style={{ flex: 1, gap: 2 }}>
-                                  <Text style={[styles.nearestName, { color: textColor(isDark) }]} numberOfLines={1}>{l.name}</Text>
+                                  <LinkyRichText text={`[${l.name}](${l.url})`} isDark={isDark} style={styles.nearestName} />
                                   {l.title ? <Text style={[styles.nearestMeta, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{l.title}</Text> : null}
                                   {l.why ? <Text style={[styles.nearestMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>{l.why}</Text> : null}
                                   {l.proof && l.proof.length ? (
@@ -849,14 +856,11 @@ export default function LinkyHomeScreen({ navigation }: any) {
                                       {`Proof: ${l.proof.slice(0, 2).map((b) => b.label).join(' - ')}`}
                                     </Text>
                                   ) : null}
-                                  <Text style={[styles.leadUrl, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
-                                    {l.resolved === false ? 'no direct link - opens a search: ' : ''}
-                                    {l.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                                  </Text>
+                                  <LinkyRichText text={l.url} isDark={isDark} style={styles.leadUrl} />
                                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-                                    <TouchableOpacity style={[styles.leadBtn, { borderColor: border }]} onPress={() => { Linking.openURL(l.url).catch(() => notifyUser('Could not open that link', 'Copy it from a browser instead.')); }} activeOpacity={0.75}>
+                                    <TouchableOpacity accessibilityRole="link" accessibilityLabel={`Open ${l.name} on LinkedIn`} style={[styles.leadBtn, { borderColor: border, backgroundColor: isDark ? '#203F56' : '#E4F1FF' }]} onPress={() => { Linking.openURL(l.url).catch(() => notifyUser('Could not open that link', 'Copy it from a browser instead.')); }} activeOpacity={0.75}>
                                       <Link2 size={12} color={textColor(isDark, 'secondary')} />
-                                      <Text style={[styles.leadBtnText, { color: textColor(isDark) }]}>Profile</Text>
+                                      <Text style={[styles.leadBtnText, { color: textColor(isDark) }]}>Open LinkedIn profile ↗</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={[styles.leadBtn, { backgroundColor: isDark ? 'rgba(223,251,63,0.14)' : 'rgba(223,251,63,0.24)' }]} onPress={() => openLeadDraft(l, i + 1)} disabled={!!leadBusy} activeOpacity={0.8}>
                                       <Send size={12} color={textColor(isDark)} />
@@ -899,6 +903,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
                   <View style={[styles.noMatchCard,{backgroundColor:isDark?'#25352D':'#F2F7E7',borderColor:border}]}>
                     <Text style={[styles.cardName,{color:textColor(isDark)}]}>No solid match yet</Text>
                     <Text style={[styles.welcomeSub,{color:textColor(isDark,'secondary'),textAlign:'left',marginTop:6}]}>I won’t fill the gap with random people. Tweak the search, or choose to browse the network.</Text>
+                    <Text style={[styles.welcomeSub,{color:textColor(isDark,'secondary'),textAlign:'left',marginTop:8}]}>Want me to search public LinkedIn profiles for this person or skill? I’ll only search after you choose below.</Text>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Yes, search LinkedIn" onPress={()=>send('yes, search LinkedIn')} style={[styles.ghostBtn,{alignSelf:'flex-start',marginTop:12,backgroundColor:'#E4F1FF',borderColor:'#B9D9F4'}]}><Link2 size={15} color="#075EA8" /><Text style={[styles.ghostBtnText,{color:'#075EA8'}]}>Yes, search LinkedIn ↗</Text></TouchableOpacity>
                     <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:12}}>
                       <TouchableOpacity accessibilityRole="button" accessibilityLabel="Edit this search" onPress={()=>prepareInput(answer.need)} style={[styles.ghostBtn,{borderColor:border}]}><Text style={[styles.ghostBtnText,{color:textColor(isDark)}]}>Edit search</Text></TouchableOpacity>
                       <TouchableOpacity accessibilityRole="button" accessibilityLabel="Browse builders" onPress={()=>send('show me profiles')} style={[styles.ghostBtn,{backgroundColor:'#FBE618',borderColor:'#E5D31B'}]}><Text style={[styles.ghostBtnText,{color:'#243A2E'}]}>Browse builders</Text></TouchableOpacity>
@@ -970,14 +976,6 @@ export default function LinkyHomeScreen({ navigation }: any) {
         backgroundColor: isDark ? '#142530' : '#FFFDF6',
         borderTopColor: border,
       }]}>
-        {home && !atMessageLimit ? (
-          <View style={styles.allowanceRow}><Sparkles size={12} color={isDark?'#E2D67A':'#7D7226'} /><Text style={[styles.allowanceText,{color:textColor(isDark,'muted')}]}>{home.plus ? `${asksLeft} messages left today · PLUS` : `${asksLeft} of ${messageLimit} free messages left this month`}</Text></View>
-        ) : null}
-        {atMessageLimit && resetCountdown ? (
-          <Text style={[styles.resetLine, { color: textColor(isDark, 'muted') }]}>
-            Your 10 free monthly messages are used up — resets in {resetCountdown}.
-          </Text>
-        ) : null}
         <View style={[styles.composer, { backgroundColor: surface, borderColor: border }]}>
           <TextInput
             ref={inputRef}
@@ -1156,7 +1154,6 @@ const styles = StyleSheet.create({
   starterTile: { width: '48%', flexGrow: 1, borderRadius: 20, padding: 16, minHeight: 116, gap: 7 },
   starterTitle: { fontSize: 15, fontWeight: '800' },
   starterSub: { fontSize: 11, lineHeight: 16 },
-  allowanceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginBottom: 7 },
   allowanceText: { fontSize: 10, fontWeight: '600' },
   resultHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, marginTop: 10 },
   resultCount: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#E2F3DC' },

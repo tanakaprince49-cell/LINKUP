@@ -111,8 +111,8 @@ test('per-account action counters serialize updates and do not carry another mem
 
 test('quota UI ignores out-of-order count refunds but accepts calendar rollover and PLUS quotas', () => {
   const module = evaluate('mobile/src/lib/linkyQuota.ts');
-  const quota = { period: 'month', periodKey: '2026-10', used: 10, remaining: 0, limit: 10, resetAt: '2026-11-01', exhausted: true, upgradeRequired: true };
-  assert.equal(module.mergeMessageQuota(quota, { ...quota, used: 9, remaining: 1 }).used, 10);
-  assert.equal(module.mergeMessageQuota(quota, { ...quota, periodKey: '2026-11', used: 1, remaining: 9 }).used, 1);
+  const quota = { period: 'month', periodKey: '2026-10', used: 15, remaining: 0, limit: 15, resetAt: '2026-11-01', exhausted: true, upgradeRequired: true };
+  assert.equal(module.mergeMessageQuota(quota, { ...quota, used: 14, remaining: 1 }).used, 15);
+  assert.equal(module.mergeMessageQuota(quota, { ...quota, periodKey: '2026-11', used: 1, remaining: 14 }).used, 1);
   assert.equal(module.mergeMessageQuota(quota, { ...quota, period: 'day', used: 1, remaining: 59, limit: 60 }).limit, 60);
 });
