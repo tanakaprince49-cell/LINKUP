@@ -1,1 +1,6 @@
-Free members now receive 15 Linky messages per calendar month, with an upgrade prompt when the allowance is used. PLUS keeps 60 messages per day. Android adds optional Google Play review requests after meaningful use and a Rate LINKUP option in settings.
+What’s new in LINKUP 15.0.0:
+• A brighter, full-screen Linky experience.
+• Improved profile discovery with highlighted, tappable profile names and links.
+• Search public LinkedIn profiles after confirming when there’s no LINKUP match.
+• 15 free Linky messages per month, with your remaining allowance at the top.
+• Updated verification badges and clearer profile access.
