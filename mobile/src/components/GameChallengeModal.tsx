@@ -1,3 +1,4 @@
+import MemberBadges from './MemberBadges';
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal, ActivityIndicator, FlatList, Image,
@@ -150,6 +151,7 @@ const GameChallengeModal: React.FC<GameChallengeModalProps> = ({ visible, gameTy
                       </View>
                     )}
                     <Text style={[styles.connName, { color: textColor(isDark) }]}>{name}</Text>
+                    <MemberBadges userId={item.otherId} verified={!!item.profile?.isVerified} size={18} />
                     {sending === item.otherId ? (
                       <ActivityIndicator size="small" color={COLORS.primaryStrong} />
                     ) : (

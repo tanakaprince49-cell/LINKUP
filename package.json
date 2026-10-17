@@ -15,7 +15,8 @@
     "test:copy": "node --test tests/professional-copy.test.mjs",
     "test:linky": "node --test tests/linky-usage.test.mjs tests/app-review.test.mjs tests/linky-companion.test.mjs",
     "privacy:render": "node scripts/render-privacy-policy.cjs",
-    "test:privacy": "node --test tests/privacy-policy.test.mjs"
+    "test:privacy": "node --test tests/privacy-policy.test.mjs",
+    "test:identity": "node --test tests/member-badges.test.mjs"
   },
   "engines": {
     "node": ">=20"

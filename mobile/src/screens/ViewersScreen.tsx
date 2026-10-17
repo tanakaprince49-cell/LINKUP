@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +8,6 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
-import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
 import { hasLinkupPro } from '../lib/paywall';
 
@@ -415,7 +415,7 @@ function ViewersScreen({ navigation, route }: any) {
               <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>
                 {item.displayName || '@builder'}
               </Text>
-              {!!item.isVerified && <VerifiedBadge size={16} />}
+              <MemberBadges userId={item.uid} verified={!!item.isVerified} size={16} />
             </View>
             <Text style={[styles.viewerEvent, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
               {item.eventLabel || item.bio || 'Building the future'}

@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import { recordReviewAction } from '../lib/appReview';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal, Pressable, ScrollView, Linking, ActivityIndicator, Animated, PanResponder } from 'react-native';
@@ -12,7 +13,6 @@ import { ChevronLeft, Send, Camera, WandSparkles, MoreVertical, BellOff, Pin, Ar
 import { generateWarmIntro } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { profileLinkFor, publicProfileLink } from '../lib/profileLinks';
-import VerifiedBadge from '../components/VerifiedBadge';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { imageAssetToDataUri } from '../lib/imageUploadLimits';
 import { uploadImageToImageKit } from '../lib/imagekitUpload';
@@ -1142,7 +1142,7 @@ export default function ChatScreen({ route, navigation }: any) {
               <View>
                 <View style={styles.chatNameRow}>
                   <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>{otherUser.displayName || 'Builder'}</Text>
-                  {!!otherUser.isVerified && <VerifiedBadge size={20} />}
+                  <MemberBadges userId={otherUser.uid} verified={!!otherUser.isVerified} size={20} />
                 </View>
                 {headerStatus ? (
                   <Text style={[styles.status, { color: headerStatusColor }]}>

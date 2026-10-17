@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,7 +18,6 @@ import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, Bel
 import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS, websiteDisplay } from '../lib/campaigns';
 import { SponsoredSlot } from '../components/SponsoredCard';
 import { shareLinkupInvite } from '../lib/activation';
-import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { IS_LOW_END_ANDROID, MOBILE_HORIZONTAL_CARD_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
@@ -335,7 +335,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>
               {displayNameFor(item)}
             </Text>
-            {item.isVerified && <VerifiedBadge size={18} />}
+            <MemberBadges userId={item.uid} verified={!!item.isVerified} size={18} />
           </View>
           <Text style={[styles.handle, { color: HOME_GOLD_DEEP }]} numberOfLines={1}>{handleFor(item)}</Text>
           <Text style={[styles.meta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>

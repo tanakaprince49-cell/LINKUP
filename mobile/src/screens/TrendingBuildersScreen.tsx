@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
 import { doc, getDoc } from 'firebase/firestore';
@@ -17,7 +18,6 @@ import { displayNameFor } from '../lib/discovery';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
 import { ikAvatar } from '../lib/ikImage';
-import VerifiedBadge from '../components/VerifiedBadge';
 import { loadLeaguePool } from '../lib/leaguePool';
 import { COLORS, textColor } from '../theme/theme';
 // FROZEN BY USER DECREE: the Builder League screen keeps the OG acid-yellow
@@ -211,9 +211,8 @@ export default function TrendingBuildersScreen({ navigation }: any) {
             </Text>
             {item.uid === me?.uid ? (
               <View style={styles.youPill}><Text style={styles.youPillText}>YOU</Text></View>
-            ) : item.isVerified ? (
-              <VerifiedBadge size={18} />
             ) : null}
+            <MemberBadges userId={item.uid} verified={!!item.isVerified} size={18} />
           </View>
           <Text style={styles.meta} numberOfLines={1}>
             {(item.occupation || 'Builder')} · {location}

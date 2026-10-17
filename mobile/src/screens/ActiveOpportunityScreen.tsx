@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { doc, getDoc } from 'firebase/firestore';
@@ -9,7 +10,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { earnedScore, handleFor, opportunityDetails } from '../lib/discovery';
 import { ensureDirectMatch } from '../lib/chat';
-import VerifiedBadge from '../components/VerifiedBadge';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { requestGeminiText } from '../lib/aiDiagnostics';
 
@@ -143,7 +143,7 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
             <View style={{ flex: 1 }}>
               <View style={styles.nameRow}>
                 <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>{profile?.displayName || 'Builder'}</Text>
-                {!!profile?.isVerified && <VerifiedBadge size={22} />}
+                <MemberBadges userId={profile?.uid} verified={!!profile?.isVerified} size={22} />
               </View>
               <Text style={styles.handle}>{handleFor(profile)}</Text>
             </View>

@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions,
@@ -174,9 +175,10 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
               <View key={c.id} style={[styles.challengeCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
                 <View style={styles.challengeTop}>
                   <View style={styles.challengeInfo}>
-                    <Text style={[styles.challengeTitle, { color: textColor(isDark) }]}>
-                      {c.senderName}
-                    </Text>
+                    <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
+                      <Text style={[styles.challengeTitle, { color: textColor(isDark), flexShrink: 1 }]}>{c.senderName}</Text>
+                      <MemberBadges userId={c.senderId} size={16} />
+                    </View>
                     <Text style={[styles.challengeBody, { color: textColor(isDark, 'secondary') }]}>
                       challenged you to {gameLabel(c.gameType)}
                     </Text>

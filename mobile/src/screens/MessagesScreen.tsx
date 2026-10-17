@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +8,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
 import { MessageSquare, Pin, Star, Archive, ChevronLeft } from 'lucide-react-native';
-import VerifiedBadge from '../components/VerifiedBadge';
 import { buildConversationProfileSnapshot, conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
 import { AppImage } from '../components/AppImage';
 import { ikAvatar } from '../lib/ikImage';
@@ -168,7 +168,7 @@ const ConversationItem = React.memo(({ match, navigation }: { match: Match, navi
         <View style={styles.chatHeader}>
           <View style={styles.chatNameRow}>
             <Text style={[styles.chatName, { color: textColor(isDark) }]} numberOfLines={1}>{otherUser.displayName}</Text>
-            {!!otherUser.isVerified && <VerifiedBadge size={20} />}
+            <MemberBadges userId={otherUser.uid} verified={!!otherUser.isVerified} size={20} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isPinned && <Pin size={12} color={COLORS.primaryStrong} />}

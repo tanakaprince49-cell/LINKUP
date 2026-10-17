@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -220,6 +221,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           <Text style={[styles.fromName, { color: textColor(isDark) }]} numberOfLines={1}>
             {notification.fromName || 'Someone'}
           </Text>
+          <MemberBadges userId={notification.fromId} size={16} />
           <Text style={[styles.timeText, { color: textColor(isDark, 'muted') }]}>{formatTimeAgo(notification.timestamp)}</Text>
         </View>
         <Text style={[styles.contentText, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>

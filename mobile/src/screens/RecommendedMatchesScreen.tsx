@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,7 +12,6 @@ import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } fro
 import { resolveConnectionGate, startTalkOrRequest } from '../lib/connectionRequests';
 import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
-import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { consumeWeeklyUsage, FREE_LIMITS, getCurrentWeekKey, getWeeklyUsage, hasLinkupPro } from '../lib/paywall';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -265,7 +265,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
               <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>
                 {item.displayName || 'Builder'}
               </Text>
-              {item.isVerified && <VerifiedBadge size={22} />}
+              <MemberBadges userId={item.uid} verified={!!item.isVerified} size={22} />
             </View>
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
             <Text style={styles.meta} numberOfLines={2}>

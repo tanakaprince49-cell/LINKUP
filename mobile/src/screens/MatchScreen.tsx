@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, Dimensions, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,7 +10,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
 import { MessageSquare, User, Zap, Sparkles, ChevronRight, Briefcase } from 'lucide-react-native';
 import { ensureDirectMatch } from '../lib/chat';
-import VerifiedBadge from '../components/VerifiedBadge';
 import ProCrownBadge from '../components/ProCrownBadge';
 import { conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
@@ -71,7 +71,7 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
         <View style={styles.infoContainer}>
           <View style={styles.nameRow}>
             <Text style={[styles.nameText, { color: textColor(isDark) }]}>{otherUser.displayName}</Text>
-            {!!otherUser.isVerified && <VerifiedBadge size={20} />}
+            <MemberBadges userId={otherUser.uid} verified={!!otherUser.isVerified} size={20} />
             <View style={styles.roleBadge}>
               <Text style={styles.roleText}>{otherUser.ambition?.toUpperCase() || 'FOUNDER'}</Text>
             </View>

@@ -6,9 +6,11 @@ type VerifiedBadgeProps = {
   size?: number;
   color?: string;
   style?: ViewStyle;
+  checkColor?: string;
+  accessibilityLabel?: string;
 };
 
-export default function VerifiedBadge({ size = 22, color = '#0A84FF', style }: VerifiedBadgeProps) {
+export default function VerifiedBadge({ size = 22, color = '#0A84FF', checkColor = '#FFFFFF', accessibilityLabel = 'Verified', style }: VerifiedBadgeProps) {
   const raySize = Math.max(4, size * 0.24);
   const coreInset = size * 0.12;
   const radius = size * 0.39;
@@ -22,7 +24,7 @@ export default function VerifiedBadge({ size = 22, color = '#0A84FF', style }: V
   });
 
   return (
-    <View style={[styles.root, { width: size, height: size }, style]} accessibilityLabel="Verified">
+    <View style={[styles.root, { width: size, height: size, shadowColor: color }, style]} accessible accessibilityRole="image" accessibilityLabel={accessibilityLabel}>
       {rays.map((ray, index) => (
         <View
           key={index}
@@ -54,7 +56,7 @@ export default function VerifiedBadge({ size = 22, color = '#0A84FF', style }: V
       />
       <Check
         size={size * 0.55}
-        color="#FFFFFF"
+        color={checkColor}
         strokeWidth={4}
         style={[
           styles.check,

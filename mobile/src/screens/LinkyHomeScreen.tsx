@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import { recordReviewAction } from '../lib/appReview';
 import { FREE_LINKY_LIMIT_MESSAGE, quotaFromHome, homeWithQuota } from '../lib/linkyQuota';
 // Linky tab — replaces the swipe deck.
@@ -26,16 +27,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trash2, Trophy, X } from 'lucide-react-native';
+import { ArrowLeft, Bell, Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trash2, Trophy, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
 import PaywallModal from '../components/PaywallModal';
-import VerifiedBadge from '../components/VerifiedBadge';
 import BrandMark from '../components/BrandMark';
-import { SponsoredSlot } from '../components/SponsoredCard';
-import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 import {
   LinkyApiError,
   LinkyAsk,
@@ -116,7 +114,7 @@ const CardView = ({
       <TouchableOpacity style={styles.cardTop} onPress={onOpen} activeOpacity={0.75}>
         <Avatar uri={card.targetPic} />
         <View style={{ flex: 1 }}>
-          <Text style={[styles.cardName, { color: textColor(isDark) }]} numberOfLines={1}>{card.targetName}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Text style={[styles.cardName, { color: textColor(isDark), flexShrink: 1 }]} numberOfLines={1}>{card.targetName}</Text><MemberBadges userId={card.targetUid} size={18} /></View>
           {card.targetRole || card.targetCompany ? (
             <Text style={[styles.cardRole, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
               {[card.targetRole, card.targetCompany].filter(Boolean).join(' · ')}
@@ -136,7 +134,7 @@ const CardView = ({
       ) : null}
       {card.plus ? (
         <View style={styles.squadRow}>
-          <VerifiedBadge size={14} />
+          <Trophy size={14} color={COLORS.primaryStrong} />
           <Text style={[styles.plusText, { color: textColor(isDark, 'secondary') }]}>PLUS member</Text>
         </View>
       ) : null}
@@ -216,7 +214,7 @@ const InboundView = ({
       <TouchableOpacity style={styles.cardTop} onPress={onOpen} activeOpacity={0.75}>
         <Avatar uri={intro.requesterPic} />
         <View style={{ flex: 1 }}>
-          <Text style={[styles.cardName, { color: textColor(isDark) }]} numberOfLines={1}>{intro.requesterName}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Text style={[styles.cardName, { color: textColor(isDark), flexShrink: 1 }]} numberOfLines={1}>{intro.requesterName}</Text><MemberBadges userId={intro.requesterId} size={18} /></View>
           <Text style={[styles.cardRole, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
             {[intro.requesterRole, intro.requesterCity].filter(Boolean).join(' · ') || 'wants to meet you'}
           </Text>
@@ -254,10 +252,9 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const isDark = theme === 'dark';
   const insets = useSafeAreaInsets();
   // On Android 15+ (edge-to-edge) the window does NOT resize when the keyboard
-  // opens — the keyboard simply draws over the bottom of the screen, including
-  // the tab bar. KeyboardAvoidingView's 'height' behaviour is unreliable there,
+  // opens — the keyboard simply draws over the bottom of the screen, at the bottom of this full-screen view. KeyboardAvoidingView's 'height' behaviour is unreliable there,
   // so we measure the keyboard directly and lift the composer by the exact
-  // amount it overlaps the screen above the tab bar.
+  // amount it overlaps the full-screen conversation.
   const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -275,6 +272,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [input, setInput] = useState('');
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [composerHeight, setComposerHeight] = useState(96);
   const [thinking, setThinking] = useState(false);
   const [pendingAsk, setPendingAsk] = useState('');
   // the chips and the lead list only ever arrive on an ask result, so the state
@@ -377,6 +376,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
   };
 
   const onLoop = async (choice: LinkyLoopChoice) => {
+    setActivityOpen(false);
     setBusyId('loop');
     try {
       const r = await linkyLoopAnswer(choice);
@@ -446,6 +446,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
   };
 
   const onDecision = async (intro: LinkyIntro, decision: 'accept' | 'decline' | 'later') => {
+    setActivityOpen(false);
     if (busyId) return;
     setBusyId(intro.id);
     try {
@@ -546,6 +547,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
   // A draft left half-finished (on Telegram, or by a previous visit) is still the
   // most important thing on this screen, so it gets a line of its own.
   const openPending = () => {
+    setActivityOpen(false);
     const p = home?.pending?.meet;
     if (p?.cardId) {
       setDraft({
@@ -642,7 +644,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
   // Linky writes the reply; the app shows it as a conversation, oldest first.
   const turns: LinkyTurn[] = useMemo(() => {
     const t = (home?.thread || []).filter((x) => x && x.text);
-    if (t.length) return t.slice(-10);
+    if (t.length) return t;
     if (answer?.need) {
       return [
         { id: answer.id, role: 'user', text: answer.need, at: answer.createdAt },
@@ -654,23 +656,14 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const lastLinkyTurn = [...turns].reverse().find((t) => t.role === 'linky');
   const chips = (lastLinkyTurn?.id === answer?.id ? answer?.suggest : undefined) || [];
 
-  // Keep the newest message in view. The conversation sits above the fixed
-  // composer, so when a message is sent (thinking turns on) and when the reply
-  // lands (the turn count grows) the view follows instead of stranding the
-  // user at the top of a long page. A baseline turn count is captured right
-  // after the first load so we never auto-scroll past the pending intros.
-  const turnCount = turns.length;
-  const baselineTurnRef = useRef<number | null>(null);
+  // A dedicated chat opens at its latest message, including restored history.
+  // Follow turn identity (not just count) because the server caps the thread.
+  const lastTurnKey = turns.length ? `${turns[turns.length - 1].id}:${turns[turns.length - 1].at}` : '';
   useEffect(() => {
     if (!hydratedRef.current) return;
-    if (baselineTurnRef.current === null) {
-      baselineTurnRef.current = turnCount;
-      return;
-    }
-    if (turnCount === baselineTurnRef.current && !thinking) return;
-    const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
-    return () => clearTimeout(t);
-  }, [turnCount, thinking]);
+    const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+    return () => clearTimeout(timer);
+  }, [lastTurnKey, thinking]);
 
   const onChip = (chip: string) => {
     if (!chip || thinking) return;
@@ -711,6 +704,27 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
   return (
     <View style={[styles.root, appBackground(isDark)]}>
+      <View style={[styles.chatHeader, { paddingTop: insets.top + 6, borderBottomColor: border }]}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to network" onPress={() => navigation.navigate('Dashboard')} style={styles.headerIcon}>
+          <ArrowLeft size={22} color={textColor(isDark)} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.chatTitle, { color: textColor(isDark) }]}>Linky</Text>
+          <Text style={[styles.chatSubtitle, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
+            {home && !home.plus && messageLimit ? `${asksLeft} of ${messageLimit} free messages left this month` : 'Your AI connector'}
+          </Text>
+        </View>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Preferences & bots" onPress={() => navigation.navigate('LinkySettings')} style={styles.headerIcon}>
+          <Settings2 size={20} color={textColor(isDark)} />
+        </TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="What Linky knows" onPress={() => navigation.navigate('LinkyAudit')} style={styles.headerIcon}>
+          <ShieldCheck size={20} color={textColor(isDark)} />
+        </TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Linky activity and chat tools" onPress={() => setActivityOpen(true)} style={styles.headerIcon}>
+          <Bell size={20} color={textColor(isDark)} />
+          {home && (home.inbound.length > 0 || home.pending?.meet || home.pending?.lead || home.loop) ? <View style={styles.activityDot} /> : null}
+        </TouchableOpacity>
+      </View>
       {/* Keyboard keeps the composer visible:
           - iOS: KeyboardAvoidingView 'height' shrinks the container so the
             absolute-bottom composer ends at the keyboard top. The offset is
@@ -726,33 +740,11 @@ export default function LinkyHomeScreen({ navigation }: any) {
       >
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={[styles.content, { paddingBottom: 140 + insets.bottom }]}
+        contentContainerStyle={[styles.content, { paddingBottom: composerHeight + 16 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} tintColor={textColor(isDark, 'muted')} />}
       >
-        <View style={styles.hero}>
-          <View style={styles.heroRow}>
-            <BrandMark size={44} style={{ borderRadius: 14 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>{firstName ? `Hey ${firstName}.` : 'Hey.'} Meet Linky, your AI networking assistant.</Text>
-              <Text style={[styles.heroSub, { color: textColor(isDark, 'secondary') }]}>
-                Describe your business goals and the expertise you need. Linky recommends relevant LINKUP professionals and explains the profile information behind each recommendation.
-              </Text>
-            </View>
-          </View>
-          <View style={styles.heroLinks}>
-            <TouchableOpacity style={[styles.heroLink, { borderColor: border }]} onPress={() => navigation.navigate('LinkySettings')}>
-              <Settings2 size={13} color={textColor(isDark, 'secondary')} />
-              <Text style={[styles.heroLinkText, { color: textColor(isDark, 'secondary') }]}>Preferences & bots</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.heroLink, { borderColor: border }]} onPress={() => navigation.navigate('LinkyAudit')}>
-              <ShieldCheck size={13} color={textColor(isDark, 'secondary')} />
-              <Text style={[styles.heroLinkText, { color: textColor(isDark, 'secondary') }]}>What Linky knows</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {loading && !home ? (
           <View style={styles.center}><ActivityIndicator color={textColor(isDark, 'muted')} /></View>
         ) : error && !home ? (
@@ -764,78 +756,9 @@ export default function LinkyHomeScreen({ navigation }: any) {
           </View>
         ) : home ? (
           <>
-            {home.inbound.length ? (
-              <>
-                <SectionTitle title="Waiting on you" hint={`${home.inbound.length} intro ${home.inbound.length === 1 ? 'request' : 'requests'}`} isDark={isDark} />
-                {home.inbound.map((intro) => (
-                  <InboundView key={intro.id} intro={intro} isDark={isDark} busy={busyId === intro.id} onDecision={(d) => onDecision(intro, d)} onOpen={() => navigation.navigate('Profile', { userId: intro.requesterId })} />
-                ))}
-              </>
-            ) : null}
-
-            {(home.pending?.meet || home.pending?.lead) && !draft ? (
-              <TouchableOpacity
-                style={[styles.pendingBar, { borderColor: border, backgroundColor: isDark ? 'rgba(223,251,63,0.1)' : 'rgba(223,251,63,0.22)' }]}
-                onPress={openPending}
-                activeOpacity={0.85}
-              >
-                <Send size={14} color={textColor(isDark)} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.pendingBarTitle, { color: textColor(isDark) }]}>
-                    {home.pending?.meet
-                      ? `A message to ${home.pending.meet.targetName || 'them'} is waiting on you`
-                      : `A message to ${home.pending?.lead?.lead?.name || 'them'} is written and waiting`}
-                  </Text>
-                  <Text style={[styles.pendingBarSub, { color: textColor(isDark, 'secondary') }]}>This draft has not been sent. Review and edit it before sending from your own account.</Text>
-                </View>
-              </TouchableOpacity>
-            ) : null}
-
-            {home.loop ? (
-              <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
-                <View style={styles.loopHead}>
-                  <Clock size={14} color={COLORS.primaryStrong} />
-                  <Text style={[styles.sectionTitle, { color: textColor(isDark), marginLeft: 6 }]}>How did it go?</Text>
-                </View>
-                <Text style={[styles.whyText, { color: textColor(isDark), marginTop: 6 }]}>{home.loop.question}</Text>
-                <View style={styles.loopChoices}>
-                  {home.loop.choices.map((c) => (
-                    <TouchableOpacity
-                      key={c.key}
-                      style={[styles.loopBtn, { borderColor: border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
-                      onPress={() => onLoop(c.key)}
-                      disabled={busyId === 'loop'}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>{c.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={[styles.loopFoot, { color: textColor(isDark, 'muted') }]}>
-                  Share brief feedback to help Linky improve future introduction recommendations.
-                </Text>
-              </View>
-            ) : null}
-
             {(pendingAsk || turns.length) ? (
               <>
-                <SectionTitle
-                  title="Linky"
-                  hint={!home.plus && messageLimit ? (asksLeft > 0 ? `${asksLeft} of ${messageLimit} free messages left this month` : `0 of ${messageLimit} free messages left this month · resets in ${resetCountdown || '…'}`) : undefined}
-                  action={turns.length ? (
-                    <TouchableOpacity
-                      onPress={clearConversation}
-                      disabled={busyId === 'clearChat'}
-                      activeOpacity={0.75}
-                      style={[styles.clearBtn, { borderColor: border }]}
-                    >
-                      {busyId === 'clearChat' ? <ActivityIndicator size="small" color={textColor(isDark, 'muted')} /> : <Trash2 size={12} color={textColor(isDark, 'muted')} />}
-                      <Text style={[styles.clearBtnText, { color: textColor(isDark, 'muted') }]}>Clear chat</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                  isDark={isDark}
-                />
-                <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
+                <View style={styles.conversation}>
                   {turns.map((t, i) => (t.role === 'user' ? (
                     <View key={`u${t.at}-${i}`} style={[styles.turn, styles.turnUser]}>
                       <Text style={[styles.turnText, { backgroundColor: COLORS.primary, color: '#000' }, COLORS.primary === '#FFFFFF' ? { borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)' } : null]}>
@@ -962,20 +885,14 @@ export default function LinkyHomeScreen({ navigation }: any) {
               </>
             ) : null}
 
-            {!thinking ? (
+            {!pendingAsk && !answer && !turns.length ? (
               <View style={styles.chips}>
-                {['search brief', 'tone warm', 'tone direct', 'tone playful'].map(command => (
-                  <TouchableOpacity key={command} accessibilityRole="button" accessibilityLabel={command} style={[styles.chip, {borderColor: border, backgroundColor: surface}]} onPress={() => send(command)}>
-                    <Text style={[styles.chipText, {color: textColor(isDark, 'secondary')}]}>{command}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : null}
-
-            {!pendingAsk && !answer ? (
-              <View style={styles.chips}>
-                <Text style={[styles.emptyLine, { color: textColor(isDark, 'muted') }]}>Select an example or describe your collaboration requirements.</Text>
-                {['A Flutter developer in Harare for a paid fintech MVP', 'A cofounder with sales experience for an equity-based collaboration', 'A founder with experience raising investment from local angel investors'].map((s) => (
+                <View style={styles.welcome}>
+                  <BrandMark size={48} style={{ borderRadius: 16 }} />
+                  <Text style={[styles.welcomeTitle, { color: textColor(isDark) }]}>What’s on your mind?</Text>
+                  <Text style={[styles.welcomeSub, { color: textColor(isDark, 'muted') }]}>Talk it through, or tell me who you’d like to meet.</Text>
+                </View>
+                {['Find a Flutter developer in Harare', 'How’s it going?', 'What can you do?'].map((s) => (
                   <TouchableOpacity key={s} style={[styles.chip, { borderColor: border, backgroundColor: surface }]} onPress={() => send(s)} activeOpacity={0.75}>
                     <Text style={[styles.chipText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{s}</Text>
                   </TouchableOpacity>
@@ -985,22 +902,13 @@ export default function LinkyHomeScreen({ navigation }: any) {
           </>
         ) : null}
 
-        {/* Free plan sees a single rotating sponsored card here (never stacked);
-            PLUS is ad-free. Profile stays exempt by the global rule. */}
-        <View style={{ marginTop: 14 }}>
-          <SponsoredSlot
-            placement="linky"
-            viewerUid={user?.uid}
-            enabled={!isSponsoredHiddenForViewer(profile, { email: user?.email, isAdmin: (profile as any)?.isAdmin })}
-          />
-        </View>
       </ScrollView>
 
-      <View style={[styles.composerWrap, {
+      <View onLayout={event => setComposerHeight(event.nativeEvent.layout.height)} style={[styles.composerWrap, {
         // Android edge-to-edge: lift the composer above the keyboard by the
-        // amount the keyboard covers the area above the tab bar (54 + inset).
-        bottom: Platform.OS === 'android' ? Math.max(0, androidKeyboardHeight - (54 + insets.bottom)) : 0,
-        paddingBottom: Math.max(10, insets.bottom + 6),
+        // amount covered by the keyboard; this dedicated screen has no tab bar.
+        bottom: Platform.OS === 'android' ? androidKeyboardHeight : 0,
+        paddingBottom: androidKeyboardHeight ? 10 : Math.max(10, insets.bottom + 6),
         backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg,
         borderTopColor: border,
       }]}>
@@ -1012,7 +920,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
         <View style={[styles.composer, { backgroundColor: surface, borderColor: border }]}>
           <TextInput
             style={[styles.input, { color: textColor(isDark) }]}
-            placeholder="Describe the cofounder or collaborator you need…"
+            accessibilityLabel="Message Linky"
+            placeholder="Message Linky…"
             placeholderTextColor="#999"
             value={input}
             onChangeText={setInput}
@@ -1022,12 +931,93 @@ export default function LinkyHomeScreen({ navigation }: any) {
             maxLength={600}
             editable={!thinking}
           />
-          <TouchableOpacity style={[styles.sendBtn, { backgroundColor: COLORS.primary, borderColor: isDark ? 'transparent' : 'rgba(0,0,0,0.12)', opacity: input.trim() && !thinking ? 1 : 0.4 }]} onPress={() => send()} disabled={!input.trim() || thinking}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Send message" style={[styles.sendBtn, { backgroundColor: COLORS.primary, borderColor: isDark ? 'transparent' : 'rgba(0,0,0,0.12)', opacity: input.trim() && !thinking ? 1 : 0.4 }]} onPress={() => send()} disabled={!input.trim() || thinking}>
             {thinking ? <ActivityIndicator size="small" color="#000" /> : <ArrowUp size={16} color="#000" />}
           </TouchableOpacity>
         </View>
       </View>
       </KeyboardAvoidingView>
+
+      <Modal visible={activityOpen} transparent animationType="fade" onRequestClose={() => setActivityOpen(false)}>
+        <View style={styles.sheetWrap}>
+          <View style={[styles.sheet, { borderColor: border, backgroundColor: surface }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={[styles.sheetTitle, { color: textColor(isDark) }]}>Linky activity</Text>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close Linky activity" onPress={() => setActivityOpen(false)} style={styles.headerIcon}><X size={22} color={textColor(isDark)} /></TouchableOpacity>
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 16 }}>
+              {home ? <>
+            {home.inbound.length ? (
+              <>
+                <SectionTitle title="Waiting on you" hint={`${home.inbound.length} intro ${home.inbound.length === 1 ? 'request' : 'requests'}`} isDark={isDark} />
+                {home.inbound.map((intro) => (
+                  <InboundView key={intro.id} intro={intro} isDark={isDark} busy={busyId === intro.id} onDecision={(d) => onDecision(intro, d)} onOpen={() => navigation.navigate('Profile', { userId: intro.requesterId })} />
+                ))}
+              </>
+            ) : null}
+
+            {(home.pending?.meet || home.pending?.lead) && !draft ? (
+              <TouchableOpacity
+                style={[styles.pendingBar, { borderColor: border, backgroundColor: isDark ? 'rgba(223,251,63,0.1)' : 'rgba(223,251,63,0.22)' }]}
+                onPress={openPending}
+                activeOpacity={0.85}
+              >
+                <Send size={14} color={textColor(isDark)} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.pendingBarTitle, { color: textColor(isDark) }]}>
+                    {home.pending?.meet
+                      ? `A message to ${home.pending.meet.targetName || 'them'} is waiting on you`
+                      : `A message to ${home.pending?.lead?.lead?.name || 'them'} is written and waiting`}
+                  </Text>
+                  <Text style={[styles.pendingBarSub, { color: textColor(isDark, 'secondary') }]}>This draft has not been sent. Review and edit it before sending from your own account.</Text>
+                </View>
+              </TouchableOpacity>
+            ) : null}
+
+            {home.loop ? (
+              <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
+                <View style={styles.loopHead}>
+                  <Clock size={14} color={COLORS.primaryStrong} />
+                  <Text style={[styles.sectionTitle, { color: textColor(isDark), marginLeft: 6 }]}>How did it go?</Text>
+                </View>
+                <Text style={[styles.whyText, { color: textColor(isDark), marginTop: 6 }]}>{home.loop.question}</Text>
+                <View style={styles.loopChoices}>
+                  {home.loop.choices.map((c) => (
+                    <TouchableOpacity
+                      key={c.key}
+                      style={[styles.loopBtn, { borderColor: border, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }]}
+                      onPress={() => onLoop(c.key)}
+                      disabled={busyId === 'loop'}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>{c.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={[styles.loopFoot, { color: textColor(isDark, 'muted') }]}>
+                  Share brief feedback to help Linky improve future introduction recommendations.
+                </Text>
+              </View>
+            ) : null}
+
+              </> : null}
+              <TouchableOpacity onPress={() => { setActivityOpen(false); clearConversation(); }} disabled={thinking || !turns.length || busyId === 'clearChat'} style={[styles.ghostBtn, {borderColor: border}]} accessibilityRole="button" accessibilityLabel="Clear chat">
+                <Text style={[styles.ghostBtnText, {color: textColor(isDark)}]}>Clear chat</Text>
+              </TouchableOpacity>
+            {!thinking ? (
+              <View style={styles.chips}>
+                {['search brief', 'tone warm', 'tone direct', 'tone playful'].map(command => (
+                  <TouchableOpacity key={command} accessibilityRole="button" accessibilityLabel={command} style={[styles.chip, {borderColor: border, backgroundColor: surface}]} onPress={() => { setActivityOpen(false); send(command); }}>
+                    <Text style={[styles.chipText, {color: textColor(isDark, 'secondary')}]}>{command}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null}
+
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={!!draft} transparent animationType="fade" onRequestClose={dropDraft}>
         {draft ? (
@@ -1093,7 +1083,16 @@ export default function LinkyHomeScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   fill: { flex: 1 },
-  content: { paddingHorizontal: 16, paddingTop: 14 },
+  content: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 16 },
+  chatHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingBottom: 6, borderBottomWidth: 1 },
+  headerIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  chatTitle: { fontSize: 19, fontWeight: '900' },
+  chatSubtitle: { fontSize: 10, marginTop: 2 },
+  activityDot: { position: 'absolute', right: 8, top: 8, width: 7, height: 7, borderRadius: 4, backgroundColor: '#D6A329' },
+  conversation: { paddingVertical: 8, marginBottom: 8 },
+  welcome: { alignItems: 'center', paddingVertical: 38, gap: 14 },
+  welcomeTitle: { fontSize: 26, fontWeight: '800', textAlign: 'center' },
+  welcomeSub: { fontSize: 14, lineHeight: 21, textAlign: 'center', maxWidth: 300 },
   center: { paddingVertical: 40, alignItems: 'center' },
   hero: { marginBottom: 14 },
   heroRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
@@ -1157,7 +1156,7 @@ const styles = StyleSheet.create({
   leadBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   leadBtnText: { fontSize: 11, fontWeight: '800' },
   sheetWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
-  sheet: { margin: 12, padding: 16, borderRadius: 18, borderWidth: 1, gap: 8 },
+  sheet: { maxHeight: '88%', margin: 12, padding: 16, borderRadius: 18, borderWidth: 1, gap: 8 },
   sheetTitle: { fontSize: 15, fontWeight: '900', flexShrink: 1 },
   sheetSub: { fontSize: 12, fontWeight: '700' },
   sheetInput: { borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 150, fontSize: 14, lineHeight: 21, fontWeight: '600', textAlignVertical: 'top' },

@@ -1,3 +1,4 @@
+import MemberBadges from './MemberBadges';
 // "Asked" - the Linky card list that lives on the Explore page now instead of
 // the Linky tab. Self-contained: it loads its own data,
 // runs the Meet -> review/edit -> send flow (the same double opt-in the Linky
@@ -22,7 +23,6 @@ import { COLORS, textColor } from '../theme/theme';
 import { notifyUser } from '../lib/notify';
 import PaywallModal from './PaywallModal';
 import { Trophy, Check, Clock, Send, X } from 'lucide-react-native';
-import VerifiedBadge from './VerifiedBadge';
 import {
   LinkyApiError,
   LinkyCard,
@@ -152,7 +152,7 @@ export default function LinkyCardsSection() {
         <TouchableOpacity style={styles.cardTop} onPress={() => navigation.navigate('Profile', { userId: card.targetUid })} activeOpacity={0.75}>
           <Avatar uri={card.targetPic} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.cardName, { color: textColor(isDark) }]} numberOfLines={1}>{card.targetName}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Text style={[styles.cardName, { color: textColor(isDark), flexShrink: 1 }]} numberOfLines={1}>{card.targetName}</Text><MemberBadges userId={card.targetUid} size={18} /></View>
             {card.targetRole || card.targetCompany ? (
               <Text style={[styles.cardRole, { color: textColor(isDark, 'secondary') }]} numberOfLines={1}>
                 {[card.targetRole, card.targetCompany].filter(Boolean).join(' · ')}
@@ -170,7 +170,7 @@ export default function LinkyCardsSection() {
         {card.plus ? (
           <View style={styles.plusTagRow}>
             <View style={styles.plusTag}>
-              <VerifiedBadge size={13} />
+              <Trophy size={13} color={COLORS.primaryStrong} />
               <Text style={styles.plusTagText} numberOfLines={1}>PLUS member</Text>
             </View>
           </View>

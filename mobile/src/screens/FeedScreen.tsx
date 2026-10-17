@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
@@ -44,7 +45,6 @@ import { Post } from '../types';
 import * as Icons from 'lucide-react-native';
 import { generateFeedback } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
-import VerifiedBadge from '../components/VerifiedBadge';
 import { SponsoredCard, useSponsoredSlots } from '../components/SponsoredCard';
 import { Campaign, interleaveSponsored, isSponsoredHiddenForViewer } from '../lib/campaigns';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
@@ -226,7 +226,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
           <View key={reply.id} style={[styles.commentItem, { marginBottom: 4 }]}>
             <Image source={{ uri: reply.userPic || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }} style={[styles.commentAvatar, { width: 28, height: 28 }]} />
             <View style={styles.commentBody}>
-              <Text style={[styles.commentUser, { color: textColor(isDark), fontSize: 11 }]}>{reply.userName}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Text style={[styles.commentUser, { color: textColor(isDark), fontSize: 11 }]}>{reply.userName}</Text><MemberBadges userId={reply.userId} size={14} /></View>
               <Text style={[styles.commentText, { color: textColor(isDark, 'secondary'), fontSize: 12 }]}>{reply.content}</Text>
             </View>
           </View>
@@ -262,7 +262,7 @@ const CommentModal = ({ visible, onClose, post, user, profile, isDark }: any) =>
                     <Image source={{ uri: item.userPic || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }} style={styles.commentAvatar} />
                     <View style={styles.commentBody}>
                       <View style={styles.commentHeader}>
-                        <Text style={[styles.commentUser, { color: textColor(isDark) }]}>{item.userName}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Text style={[styles.commentUser, { color: textColor(isDark) }]}>{item.userName}</Text><MemberBadges userId={item.userId} size={14} /></View>
                         {item.userId === user?.uid && (
                           <TouchableOpacity onPress={() => handleDeleteComment(item.id)}>
                             <SafeIcon name="Trash2" size={14} color="#FF4444" />
@@ -525,9 +525,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
           <View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Text style={[styles.authorName, { color: textColor(isDark) }]}>{post.authorName}</Text>
-            {!!(post as any).authorVerified && (
-              <VerifiedBadge size={18} />
-            )}
+            <MemberBadges userId={post.authorId} verified={!!(post as any).authorVerified} size={18} />
           </View>
           <Text style={styles.postTime}>{formatTimeAgo(post.timestamp)}</Text>
           </View>

@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
@@ -27,7 +28,6 @@ import { Search, SlidersHorizontal, X, Star, MapPin, Briefcase, Clock } from 'lu
 import { geminiToSearchFilters } from '../lib/gemini';
 import { localCommonalityRank, rankCandidatesHybrid } from '../lib/matchmaking';
 import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
-import VerifiedBadge from '../components/VerifiedBadge';
 import { isDiscoverableProfile } from '../lib/discovery';
 import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
 import PaywallModal from '../components/PaywallModal';
@@ -1150,7 +1150,7 @@ export default function SearchScreen({ navigation, route }: any) {
                     <Text style={[styles.resultName, { color: textColor(isDark) }]} numberOfLines={1}>
                       {item.displayName || 'Builder'}
                     </Text>
-                    {!!(item as any).isVerified && <VerifiedBadge size={20} />}
+                    <MemberBadges userId={item.uid} verified={!!(item as any).isVerified} size={20} />
                   </View>
                   </View>
                 <Text style={styles.resultHandle} numberOfLines={1}>{profileHandle(item)}</Text>

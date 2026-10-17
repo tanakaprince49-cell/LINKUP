@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -30,7 +31,6 @@ import { collectIdeaDeck, IdeaDeckItem, safeIdeaId } from '../lib/ideas';
 import { StartupIdea, UserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import VerifiedBadge from '../components/VerifiedBadge';
 import PaywallModal from '../components/PaywallModal';
 import { IDEA_DECK_FREE_FOREVER, PRO_FEATURES, hasLinkupPro } from '../lib/paywall';
 import {
@@ -646,7 +646,7 @@ export default function IdeaDeckScreen({ navigation }: any) {
             <Text style={[styles.ownerName, { color: textColor(isDark) }]} numberOfLines={1}>
               {idea.ownerName}
             </Text>
-            {idea.ownerVerified ? <VerifiedBadge size={18} /> : null}
+            <MemberBadges userId={idea.ownerId} verified={!!idea.ownerVerified} size={18} />
           </View>
           <Text style={styles.ownerMeta} numberOfLines={1}>
             {[idea.ownerOccupation || 'Builder', [idea.ownerCity, idea.ownerCountry].filter(Boolean).join(', ')].filter(Boolean).join(' - ')}

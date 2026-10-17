@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -742,7 +743,7 @@ export default function CampaignsScreen({ navigation }: any) {
                 <Text style={s.meta} numberOfLines={1}>
                   {campaign.creative?.tagline || campaign.creative?.description}
                 </Text>
-                <Text style={s.meta} numberOfLines={1}>{`by ${campaign.ownerName}`}</Text>
+                <View style={{flexDirection: 'row', alignItems: 'center', gap: 5}}><Text style={s.meta} numberOfLines={1}>{`by ${campaign.ownerName}`}</Text><MemberBadges userId={campaign.ownerId} size={14} /></View>
               </View>
               <View style={s.adminActions}>
                 <TouchableOpacity

@@ -657,6 +657,10 @@
     ],
     [
       "navigate",
+      "Dashboard"
+    ],
+    [
+      "navigate",
       "LinkySettings"
     ],
     [
@@ -668,16 +672,16 @@
       "Profile"
     ],
     [
+      "replace",
+      ""
+    ],
+    [
+      "replace",
+      ""
+    ],
+    [
       "navigate",
       "Profile"
-    ],
-    [
-      "replace",
-      ""
-    ],
-    [
-      "replace",
-      ""
     ],
     [
       "navigate",

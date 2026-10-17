@@ -1,0 +1,46 @@
+// Optional isolated UI regression fixture. Install Playwright + Chromium and esbuild.
+// Uses mocked auth, API, navigation hooks and header icons; it never writes a real account.
+import fs from 'node:fs';import path from 'node:path';import http from 'node:http';import assert from 'node:assert/strict';
+import esbuild from 'esbuild';
+import {chromium} from 'playwright';
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('../../',import.meta.url)).replace(/\/$/,''), mobile=root+'/mobile', qa=root+'/docs/qa';fs.mkdirSync(qa,{recursive:true});
+const uid='FvxIfciyHMfQZbLwziZpseMNKxC3';
+const home={name:'Tanaka',plus:false,cards:[],inbound:[{id:'fixture-intro',requesterId:uid,requesterName:'Tanaka Gaadzikwa',requesterRole:'Founder',need:'A relevant collaboration',why:'Fixture data only',status:'pending'}],pending:{},prefs:{openTo:['paid'],inboundCap:5},thread:[],lastAsk:null,outreach:[],limits:{asksPerDay:10,asksUsedToday:0,asksPeriod:'month',asksResetAt:'2099-01-01T00:00:00.000Z'},messageQuota:{period:'month',periodKey:'fixture-month',limit:10,used:0,remaining:10,resetAt:'2099-01-01T00:00:00.000Z',exhausted:false,upgradeRequired:false}};
+const fixture=`const h=${JSON.stringify(home)};if(location.search.includes('history=1'))h.thread=Array.from({length:24},(_,i)=>({id:'history-'+i,role:i%2?'linky':'user',text:(i===23?'Latest restored reply.':'Earlier conversation '+i+'. ')+('A grounded reply with useful context. '.repeat(3)),at:i+1}));export class LinkyApiError extends Error{};export async function linkyHome(){return h;}export async function linkyAsk(message){h.thread=[...h.thread,{id:'new',role:'user',text:message,at:100},{id:'new',role:'linky',text:'Hey! What’s on your mind?',at:101}];return{id:'new',need:message,reply:'Hey! What’s on your mind?',kind:'chat',cards:[],cardIds:[],thread:h.thread,asksLeft:9,messageQuota:{...h.messageQuota,remaining:9,used:1}};}export async function linkyClearChat(){h.thread=[];return{};}export const linkyLoopAnswer=async()=>({note:'Fixture feedback saved.'});`+
+ ['linkyMeetSquad','linkyApproveSquad','linkyCancelSquad','linkyCard','linkyApproveLead','linkyApproveMeet','linkyCancelMeet','linkyDraftLead','linkyMarkLead','linkyMeet','linkyPickPerson','linkyRespond'].map(n=>`export const ${n}=async()=>({});`).join('\n');
+const icons=['ArrowLeft','Bell','Link2','ArrowUp','Check','Clock','Compass','Send','Settings2','ShieldCheck','Trash2','Trophy','X'];
+const iconCode=`import React from 'react';import {View,StyleSheet} from 'react-native';const make=(d)=>({size=20,color='currentColor',style,strokeWidth=2})=>React.createElement(View,{style:[{width:size,height:size},style]},React.createElement('svg',{width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:color,strokeWidth,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d})));`+icons.map(n=>`export const ${n}=make('${n==='Check'?'m5 12 4 4L19 6':n==='ArrowLeft'?'M19 12H5m7 7-7-7 7-7':n==='X'?'m6 6 12 12M18 6 6 18':'M5 12a7 7 0 1 0 14 0 7 7 0 1 0-14 0'}');`).join('\n');
+const mocks={
+ 'AuthContext':`export const useAuth=()=>({user:{uid:'${uid}'},profile:{uid:'${uid}',isVerified:true}});`,
+ 'ThemeContext':`export const useTheme=()=>({theme:'light'});`,
+ 'linkyApi':fixture,
+ 'appReview':'export const recordReviewAction=async()=>{};',
+ 'notify':`export const notifyUser=(...a)=>console.log('Fixture notification',...a);`,
+ 'PaywallModal':'export default function PaywallModal(){return null;}',
+ 'flavorStorage':'export const kvGetSync=()=>null;export const kvSetSync=()=>{};',
+ '@react-navigation/native':`import {useEffect} from 'react';export const useIsFocused=()=>true;export const useFocusEffect=(cb)=>useEffect(cb,[cb]);`,
+ 'react-native-safe-area-context':'export const useSafeAreaInsets=()=>({top:0,bottom:0,left:0,right:0});',
+ 'lucide-react-native':iconCode};
+const entry=`import React from 'react';import{createRoot}from'react-dom/client';import{View,Text}from'react-native';import Chat from '${mobile}/src/screens/LinkyHomeScreen.tsx';import MemberBadges from '${mobile}/src/components/MemberBadges.tsx';const owner='${uid}';const nav={navigate:(...args)=>window.fixtureNavigation=args};const Badge=()=> <View style={{padding:24,gap:20}}><Text style={{fontSize:12}}>IDENTITY COMPONENT FIXTURE — no production account writes</Text><View style={{flexDirection:'row',alignItems:'center',gap:8}}><Text style={{fontSize:21,fontWeight:'800'}}>Tanaka Gaadzikwa</Text><MemberBadges userId={owner} size={26}/></View><Text>This verified builder has been marked by LINKUP as a trusted, high-signal voice in the network.</Text><Text style={{color:'#76520B',fontWeight:'800'}}>GOLD member CEO</Text><View style={{flexDirection:'row',gap:8}}><Text>Other verified builder</Text><MemberBadges userId="other" verified size={22}/></View></View>;createRoot(document.getElementById('root')).render(location.pathname==='/badges'?<Badge/>:<Chat navigation={nav}/>);`;
+const built=await esbuild.build({stdin:{contents:entry,resolveDir:root,loader:'tsx'},bundle:true,write:false,format:'iife',platform:'browser',nodePaths:[mobile+'/node_modules',root+'/node_modules'],define:{'process.env.NODE_ENV':'"production"','__DEV__':'false'},loader:{'.png':'dataurl'},plugins:[{name:'fixture-isolation',setup(build){build.onResolve({filter:/.*/},args=>{const key=Object.keys(mocks).find(k=>args.path===k||args.path.endsWith('/'+k));if(key)return{path:key,namespace:'fixture'};if(args.path==='react-native')return{path:mobile+'/node_modules/react-native-web/dist/index.js'};if(args.path==='react'||args.path.startsWith('react/'))return{path:args.path==='react'?mobile+'/node_modules/react/index.js':mobile+'/node_modules/'+args.path+'.js'};});build.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:mocks[args.path],loader:'jsx',resolveDir:root}));}}]});
+const js=built.outputFiles[0].text;
+const html='<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,#root{height:100%;margin:0}#root{display:flex;flex-direction:column;overflow:hidden}</style><div id="root"></div><script src="/fixture.js"></script>';
+const server=http.createServer((req,res)=>{res.setHeader('Content-Type',req.url.startsWith('/fixture.js')?'application/javascript':'text/html');res.end(req.url.startsWith('/fixture.js')?js:html);});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+server.address().port;
+const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+try{
+ const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:1});
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
+ await page.goto(base+'/chat');await page.getByText('What’s on your mind?',{exact:true}).waitFor();
+ const box=await page.getByLabel('Message Linky',{exact:true}).boundingBox();assert.ok(box.y>650&&box.y+box.height<=844);assert.ok(await page.getByLabel('Back to network',{exact:true}).isVisible());
+ await page.screenshot({path:qa+'/linky-fullscreen-390.png'});
+ await page.getByLabel('Message Linky',{exact:true}).fill('hello');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('Hey! What’s on your mind?',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Linky activity and chat tools',exact:true}).click();await page.getByText('Waiting on you',{exact:true}).waitFor();assert.equal(await page.getByLabel('Gold verified — LINKUP CEO',{exact:true}).count(),1);await page.getByRole('button',{name:'Close Linky activity',exact:true}).click();
+ await page.getByRole('button',{name:'Back to network',exact:true}).click();assert.deepEqual(await page.evaluate(()=>window.fixtureNavigation),['Dashboard']);
+ await page.goto(base+'/chat?history=1');await page.getByText(/Latest restored reply/).waitFor();await page.waitForTimeout(1200);assert.equal(await page.getByText('What’s on your mind?',{exact:true}).count(),0);
+ const last=await page.getByText(/Latest restored reply/).boundingBox();const composer=await page.getByLabel('Message Linky',{exact:true}).boundingBox();console.log('History geometry:',JSON.stringify({last,composer}));await page.screenshot({path:qa+'/linky-fullscreen-history-390.png'});assert.ok(last.y>=40&&last.y+last.height<composer.y,'restored reply must remain above the composer');
+ await page.screenshot({path:qa+'/linky-fullscreen-history-390.png'});
+ await page.goto(base+'/badges');await page.getByText('GOLD member CEO',{exact:true}).waitFor();assert.equal(await page.getByLabel('Gold verified — LINKUP CEO',{exact:true}).count(),1);assert.equal(await page.getByLabel('Verified',{exact:true}).count(),2);await page.screenshot({path:qa+'/exclusive-gold-badge-390.png'});
+ assert.deepEqual(errors,[]);console.log('PASS isolated UI fixtures: full-height chat, pinned composer, message send, activity sheet, owner double badge, back navigation, restored-history scrolling.');
+}finally{await browser.close();await new Promise(r=>server.close(r));}

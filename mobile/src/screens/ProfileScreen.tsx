@@ -1,3 +1,4 @@
+import MemberBadges, { isGoldMember } from '../components/MemberBadges';
 import { openPlayReview } from '../lib/appReview';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
@@ -1716,7 +1717,7 @@ export default function ProfileScreen({ navigation, route }: any) {
     .filter((idea: any) => String(idea?.title || idea?.description || '').trim())
     .slice(0, 20);
   const profileBio = String(profile?.bio || '').trim();
-  const showHighVoiceNotice = isViewingOther && !!(profile as any)?.isVerified;
+  const showHighVoiceNotice = isViewingOther && (!!(profile as any)?.isVerified || isGoldMember(profile?.uid));
   const editedProjects = isEditing
     ? (Array.isArray(editData?.projects) && editData.projects.length
         ? editData.projects
@@ -2486,9 +2487,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 >
                   {displayNameFor(profile)}
                 </Text>
-                {profile?.isVerified && (
-                  <VerifiedBadge size={30} style={styles.inlineVerifiedBadge} />
-                )}
+                <MemberBadges userId={profile?.uid} verified={!!profile?.isVerified} size={30} style={styles.inlineVerifiedBadge} />
                 {isProPlanActive && <ProCrownBadge size={17} active={isProPlanActive} />}
               </View>
               <Text style={styles.handleText}>
@@ -2635,6 +2634,13 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
           </View>
         )}
+
+        {isViewingOther && isGoldMember(profile?.uid) && !isEditing ? (
+          <View style={[styles.highVoiceCard, { backgroundColor: isDark ? '#2A2210' : '#FFF8E3', borderColor: '#D6A329' }]}>
+            <VerifiedBadge size={32} color="#D6A329" checkColor="#382600" accessibilityLabel="Gold verified — LINKUP CEO" />
+            <Text style={[styles.highVoiceTitle, { color: isDark ? '#F4D47C' : '#76520B' }]}>GOLD member CEO</Text>
+          </View>
+        ) : null}
 
         {!isEditing && (
           <>

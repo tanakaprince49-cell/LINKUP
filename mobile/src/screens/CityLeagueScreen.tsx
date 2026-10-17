@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,7 +11,6 @@ import { decayingRepScore, daysSince, normalizeShipLogs } from '../lib/dailyLoop
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
 import { ikAvatar } from '../lib/ikImage';
-import VerifiedBadge from '../components/VerifiedBadge';
 import ScreenHeader from '../components/ScreenHeader';
 
 export default function CityLeagueScreen({ navigation }: any) {
@@ -99,7 +99,7 @@ export default function CityLeagueScreen({ navigation }: any) {
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>{displayNameFor(item)}</Text>
-                  {item.isVerified ? <VerifiedBadge size={16} /> : null}
+                  <MemberBadges userId={item.uid} verified={!!item.isVerified} size={16} />
                 </View>
                 <Text style={[styles.meta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{item.occupation || 'Builder'} · {item.city || item.country || 'Remote'}</Text>
               </View>

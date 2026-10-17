@@ -1,3 +1,4 @@
+import { isGoldMember, GOLD_MEMBER_LABEL } from '../shared/member-badges.js';
 // Public web SEO only. Never serialize a Firestore document into a response.
 export const SITE = 'https://www.linkupbuild.com';
 export const APP = `${SITE}/app`;
@@ -18,7 +19,7 @@ export function projectProfile(uid, p) {
   // This allowlist deliberately excludes email, telephone, age, activity,
   // billing, messages, relationship data and all internal fields.
   return {
-    uid, name: text(p.displayName || p.fullName || p.name, 100), username: text(p.username, 40),
+    uid, verified: p.isVerified === true || isGoldMember(uid), name: text(p.displayName || p.fullName || p.name, 100), username: text(p.username, 40),
     bio: text(p.bio), occupation: text(p.occupation, 100), company: text(p.company, 120),
     location: [text(p.city, 80), text(p.country, 80)].filter(Boolean).join(', '),
     skills: list(p.skills), lookingFor: list(p.lookingFor, 16),
@@ -33,6 +34,12 @@ export function documentHtml({ title, description, canonical, content, schema, n
   const json = schema ? `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>` : '';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${e(title)}</title><meta name="description" content="${e(description)}"><meta name="robots" content="${noindex ? 'noindex,follow' : 'index,follow,max-image-preview:large'}"><link rel="canonical" href="${e(canonical)}"><meta property="og:type" content="${schema?.['@type'] === 'ProfilePage' ? 'profile' : 'website'}"><meta property="og:site_name" content="LINKUP"><meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(description)}"><meta property="og:url" content="${e(canonical)}"><meta property="og:image" content="${e(schema?.mainEntity?.image || APP + '/icons/icon-512.png')}"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="${e(title)}"><meta name="twitter:description" content="${e(description)}">${json}<style>${css}</style></head><body><header><a href="${SITE}/">LINKUP<span aria-hidden="true"> ↗</span></a><nav aria-label="Main"><a href="${APP}/builders">Meet builders</a><a href="${APP}/landing">Join LINKUP</a></nav></header><main>${content}</main><footer><p>LINKUP connects cofounders, collaborators and people who build.</p><a href="${SITE}/privacy">Privacy policy</a> · <a href="${APP}/landing">Open the app</a></footer></body></html>`;
 }
+export function memberBadgeHtml(uid, verified = false) {
+  const gold=isGoldMember(uid);
+  if(!gold && !verified)return '';
+  const icon=(color,check,label)=>`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" role="img" aria-label="${label}" style="display:inline-block;vertical-align:middle;margin-left:5px;flex-shrink:0"><path fill="${color}" d="M12 1l2.5 2 3.2-.1.9 3.1 2.7 1.7-1 3.1 1 3.1-2.7 1.7-.9 3.1-3.2-.1L12 21l-2.5-2-3.2.1-.9-3.1-2.7-1.7 1-3.1-1-3.1L5.4 6l.9-3.1 3.2.1z"/><path d="m7.8 10.8 2.7 2.7 5.7-5.6" fill="none" stroke="${check}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return icon('#0A84FF','#fff','Verified')+(gold?icon('#D6A329','#382600','Gold verified — LINKUP CEO'):'');
+}
 export function renderProfile(p) {
   const e = escapeHtml;
   const url = profileUrl(p.uid);
@@ -45,13 +52,13 @@ export function renderProfile(p) {
     ...(p.company && {worksFor:{'@type':'Organization',name:p.company}}) };
   return documentHtml({title: `${p.name}${p.occupation ? ' — ' + p.occupation : ''} | LINKUP`, description, canonical:url,
     schema: {'@context':'https://schema.org','@type':'ProfilePage',url,mainEntity:person},
-    content:`<article>${p.image ? `<img class="avatar" src="${e(p.image)}" alt="${e(p.name)}" width="100" height="100">` : ''}<h1>${e(p.name)}</h1>${p.username ? `<p class="muted">@${e(p.username)}</p>` : ''}${headline ? `<p>${e(headline)}</p>` : ''}${p.location ? `<p class="muted">${e(p.location)}</p>` : ''}${p.bio ? `<section><h2>About ${e(p.name)}</h2><p>${e(p.bio)}</p></section>` : ''}${p.skills.length ? `<section><h2>Skills</h2>${p.skills.map(s => `<span class="tag">${e(s)}</span>`).join('')}</section>` : ''}${p.projects.length ? `<section><h2>Projects</h2>${p.projects.map(v => `<h3>${e(v.title)}</h3><p>${e(v.description)}</p>`).join('')}</section>` : ''}${p.socialLinks?.length ? `<section><h2>Elsewhere online</h2><ul>${p.socialLinks.map(url => `<li><a rel="me nofollow noopener noreferrer" href="${e(url)}">${e(new URL(url).hostname)}</a></li>`).join('')}</ul></section>` : ''}${p.lookingFor.length ? `<section><h2>Looking to connect with</h2><p>${e(p.lookingFor.join(', '))}</p></section>` : ''}<a class="button" href="${APP}/profile/${encodeURIComponent(p.uid)}">Connect with ${e(p.name)} in the app ↗</a></article>` });
+    content:`<article>${p.image ? `<img class="avatar" src="${e(p.image)}" alt="${e(p.name)}" width="100" height="100">` : ''}<h1>${e(p.name)}${memberBadgeHtml(p.uid,p.verified)}</h1>${isGoldMember(p.uid) ? `<section aria-label="Member verification"><p>This verified builder has been marked by LINKUP as a trusted, high-signal voice in the network.</p><p style="color:#76520B;font-weight:800">${GOLD_MEMBER_LABEL}</p></section>` : ''}${p.username ? `<p class="muted">@${e(p.username)}</p>` : ''}${headline ? `<p>${e(headline)}</p>` : ''}${p.location ? `<p class="muted">${e(p.location)}</p>` : ''}${p.bio ? `<section><h2>About ${e(p.name)}</h2><p>${e(p.bio)}</p></section>` : ''}${p.skills.length ? `<section><h2>Skills</h2>${p.skills.map(s => `<span class="tag">${e(s)}</span>`).join('')}</section>` : ''}${p.projects.length ? `<section><h2>Projects</h2>${p.projects.map(v => `<h3>${e(v.title)}</h3><p>${e(v.description)}</p>`).join('')}</section>` : ''}${p.socialLinks?.length ? `<section><h2>Elsewhere online</h2><ul>${p.socialLinks.map(url => `<li><a rel="me nofollow noopener noreferrer" href="${e(url)}">${e(new URL(url).hostname)}</a></li>`).join('')}</ul></section>` : ''}${p.lookingFor.length ? `<section><h2>Looking to connect with</h2><p>${e(p.lookingFor.join(', '))}</p></section>` : ''}<a class="button" href="${APP}/profile/${encodeURIComponent(p.uid)}">Connect with ${e(p.name)} in the app ↗</a></article>` });
 }
 export function renderDirectory(profiles, cursor = '', next = '') {
   const canonical = `${APP}/builders${cursor ? '?after=' + encodeURIComponent(cursor) : ''}`;
   return documentHtml({title:'Meet founders, cofounders and builders | LINKUP', description:'Discover public LINKUP profiles. Meet founders, explore their skills and projects, and find people to build with.',canonical,
     schema:{'@context':'https://schema.org','@type':'CollectionPage',url:canonical,name:'LINKUP builders',mainEntity:{'@type':'ItemList',itemListElement:profiles.map((p,i) => ({'@type':'ListItem',position:i+1,url:profileUrl(p.uid),name:p.name}))}},
-    content:`<h1>Meet the people building what’s next.</h1><p class="muted">Explore founders, collaborators and builders on LINKUP.</p><div class="grid">${profiles.map(p => `<article class="card"><h2><a href="${profileUrl(p.uid)}">${escapeHtml(p.name)}</a></h2><p>${escapeHtml(p.occupation || p.bio.slice(0,160))}</p><p class="muted">${escapeHtml(p.location)}</p></article>`).join('')}</div>${next ? `<a class="button" rel="next" href="${APP}/builders?after=${encodeURIComponent(next)}">More builders →</a>` : ''}`});
+    content:`<h1>Meet the people building what’s next.</h1><p class="muted">Explore founders, collaborators and builders on LINKUP.</p><div class="grid">${profiles.map(p => `<article class="card"><h2><a href="${profileUrl(p.uid)}">${escapeHtml(p.name)}</a>${memberBadgeHtml(p.uid,p.verified)}</h2><p>${escapeHtml(p.occupation || p.bio.slice(0,160))}</p><p class="muted">${escapeHtml(p.location)}</p></article>`).join('')}</div>${next ? `<a class="button" rel="next" href="${APP}/builders?after=${encodeURIComponent(next)}">More builders →</a>` : ''}`});
 }
 export const xmlUrls = urls => `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map(url => `<url><loc>${escapeHtml(url)}</loc></url>`).join('')}</urlset>`;
 export const xmlIndex = urls => `<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map(url => `<sitemap><loc>${escapeHtml(url)}</loc></sitemap>`).join('')}</sitemapindex>`;

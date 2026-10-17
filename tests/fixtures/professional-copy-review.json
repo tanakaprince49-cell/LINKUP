@@ -663,13 +663,13 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 706,
     "before": "I'm Linky.",
-    "after": "Meet Linky, your AI networking assistant."
+    "after": "What\u2019s on your mind?"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 708,
     "before": "Tell me who you need and I answer right away with the people on LINKUP I can cite a reason for. No guessing, no waiting.",
-    "after": "Describe your business goals and the expertise you need. Linky recommends relevant LINKUP professionals and explains the profile information behind each recommendation."
+    "after": "Talk it through, or tell me who you\u2019d like to meet."
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
@@ -687,7 +687,7 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 973,
     "before": "Who do you need? Ask Linky\u2026",
-    "after": "Describe the cofounder or collaborator you need\u2026"
+    "after": "Message Linky\u2026"
   },
   {
     "file": "mobile/src/screens/LinkyProfileScreen.tsx",
@@ -1483,21 +1483,21 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 936,
     "before": "A co-founder with sales experience, equity",
-    "after": "A cofounder with sales experience for an equity-based collaboration",
+    "after": "How\u2019s it going?",
     "kind": "fragment"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 936,
     "before": "Someone who has raised from local angels, coffee",
-    "after": "A founder with experience raising investment from local angel investors",
+    "after": "What can you do?",
     "kind": "fragment"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 935,
     "before": "Try one of these, or type your own below.",
-    "after": "Select an example or describe your collaboration requirements.",
+    "after": "Find a Flutter developer in Harare",
     "kind": "fragment"
   },
   {

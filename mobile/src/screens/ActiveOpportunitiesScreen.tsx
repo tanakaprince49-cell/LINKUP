@@ -1,3 +1,4 @@
+import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,7 +11,6 @@ import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { activeOpportunityScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { getBestProjectRecommendations, scoreProjectFit } from '../lib/projectRecommendations';
-import VerifiedBadge from '../components/VerifiedBadge';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 
@@ -87,7 +87,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
               <Text style={[styles.title, { color: textColor(isDark) }]} numberOfLines={1}>
                 {details.title}
               </Text>
-              {!!item.isVerified && <VerifiedBadge size={20} />}
+              <MemberBadges userId={item.uid} verified={!!item.isVerified} size={20} />
             </View>
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
           </View>

@@ -75,6 +75,7 @@ jobs:
           npm run test:privacy
           npm run test:copy
           npm run test:linky
+          npm run test:identity
           npm run test:payments
           npm run test:seo
           npm run test:web-paths
@@ -86,4 +87,13 @@ jobs:
       - name: Verify production routing, PWA and payment handler reachability
         env:
           EXPECTED_APP_SHA: ${{ github.sha }}
-        run: npm run verify:web-routing
+        run: |
+          # Marketing proxies can briefly serve the previous app HTML while
+          # production aliases/edge caches converge. Keep SHA/content checks
+          # strict, but allow bounded propagation before declaring failure.
+          for attempt in 1 2 3 4 5 6; do
+            if npm run verify:web-routing; then exit 0; fi
+            if [ "$attempt" -eq 6 ]; then exit 1; fi
+            echo "Live routing has not converged yet; retrying in 10 seconds."
+            sleep 10
+          done
