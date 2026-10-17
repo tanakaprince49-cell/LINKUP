@@ -2637,7 +2637,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         {isViewingOther && isGoldMember(profile?.uid) && !isEditing ? (
           <View style={[styles.highVoiceCard, { backgroundColor: isDark ? '#2A2210' : '#FFF8E3', borderColor: '#D6A329' }]}>
-            <VerifiedBadge size={32} color="#D6A329" checkColor="#382600" accessibilityLabel="Gold verified — LINKUP CEO" />
+            <VerifiedBadge size={32} color="#F1E5AC" checkColor="#382600" accessibilityLabel="Gold verified — LINKUP CEO" />
             <Text style={[styles.highVoiceTitle, { color: isDark ? '#F4D47C' : '#76520B' }]}>GOLD member CEO</Text>
           </View>
         ) : null}

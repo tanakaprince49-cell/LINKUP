@@ -28,7 +28,7 @@ test('exclusive owner gets exactly blue and gold checks even with an old missing
  for(const verified of [true,false,undefined]){
   const badges=children(MemberBadges({userId:GOLD_MEMBER_UID,verified,size:22}));
   assert.equal(badges.length,2);assert.equal(badges[0].props.color,undefined);
-  assert.equal(badges[1].props.color,'#D6A329');assert.equal(badges[1].props.checkColor,'#382600');
+  assert.equal(badges[1].props.color,'#F1E5AC');assert.equal(badges[1].props.checkColor,'#382600');
   assert.match(badges[1].props.accessibilityLabel,/Gold verified/);
  }
 });
@@ -38,15 +38,16 @@ test('ordinary verified members keep one blue check and everyone else gets none'
  assert.equal(MemberBadges({verified:false}),null);
 });
 test('gold artwork actually uses gold fill, dark check and an accessible label',()=>{
- const art=VerifiedBadge({size:24,color:'#D6A329',checkColor:'#382600',accessibilityLabel:'Gold verified — LINKUP CEO'});
+ const art=VerifiedBadge({size:24,color:'#F1E5AC',checkColor:'#382600',accessibilityLabel:'Gold verified — LINKUP CEO'});
  assert.equal(art.props.accessibilityLabel,'Gold verified — LINKUP CEO');
  const shapes=children(art);assert.equal(shapes.length,16);
  assert.equal(shapes.at(-1).props.color,'#382600');
- assert.ok(shapes.slice(0,-1).every(s=>s.props.style.some(x=>x?.backgroundColor==='#D6A329')));
+ assert.ok(shapes.slice(0,-1).every(s=>s.props.style.some(x=>x?.backgroundColor==='#F1E5AC')));
 });
 test('public profile and directory render the same exclusive pair and exact CEO label',()=>{
  const owner=projectProfile(GOLD_MEMBER_UID,{...base,isVerified:false});
  const html=renderProfile(owner);
+ assert.match(html,/fill="#F1E5AC"/);
  assert.equal((html.match(/aria-label="Verified"/g)||[]).length,1);
  assert.equal((html.match(/aria-label="Gold verified/g)||[]).length,1);
  assert.ok(html.indexOf(GOLD_MEMBER_LABEL)>html.indexOf('trusted, high-signal voice'));

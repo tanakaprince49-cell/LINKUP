@@ -38,7 +38,7 @@ export function memberBadgeHtml(uid, verified = false) {
   const gold=isGoldMember(uid);
   if(!gold && !verified)return '';
   const icon=(color,check,label)=>`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" role="img" aria-label="${label}" style="display:inline-block;vertical-align:middle;margin-left:5px;flex-shrink:0"><path fill="${color}" d="M12 1l2.5 2 3.2-.1.9 3.1 2.7 1.7-1 3.1 1 3.1-2.7 1.7-.9 3.1-3.2-.1L12 21l-2.5-2-3.2.1-.9-3.1-2.7-1.7 1-3.1-1-3.1L5.4 6l.9-3.1 3.2.1z"/><path d="m7.8 10.8 2.7 2.7 5.7-5.6" fill="none" stroke="${check}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-  return icon('#0A84FF','#fff','Verified')+(gold?icon('#D6A329','#382600','Gold verified — LINKUP CEO'):'');
+  return icon('#0A84FF','#fff','Verified')+(gold?icon('#F1E5AC','#382600','Gold verified — LINKUP CEO'):'');
 }
 export function renderProfile(p) {
   const e = escapeHtml;
