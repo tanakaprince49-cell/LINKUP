@@ -16,7 +16,9 @@
     "test:linky": "node --test tests/linky-usage.test.mjs tests/app-review.test.mjs tests/linky-companion.test.mjs tests/linky-shortlist.test.mjs tests/linky-text.test.mjs",
     "privacy:render": "node scripts/render-privacy-policy.cjs",
     "test:privacy": "node --test tests/privacy-policy.test.mjs",
-    "test:identity": "node --test tests/member-badges.test.mjs"
+    "test:identity": "node --test tests/member-badges.test.mjs",
+    "test:profile": "node --test tests/profile-save.test.mjs",
+    "test:firestore": "npx --yes firebase-tools@13 emulators:exec --config firebase.emulator.json --project demo-linkup --only firestore \"node --test tests/firestore-profile/rules.test.cjs\""
   },
   "engines": {
     "node": ">=20"

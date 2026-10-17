@@ -118,77 +118,29 @@ service cloud.firestore {
           ((data[field] is int || data[field] is float) && data[field] >= 0 && data[field] <= 1000000);
       }
 
+      function boundedMetric(value) {
+        return value is number && value >= 0 && value <= 100;
+      }
+
       function validOptionalReputationMetrics(data) {
-        return !data.keys().hasAny(['reputationMetrics']) ||
-          (data.reputationMetrics is map &&
-            data.reputationMetrics.keys().size() <= 20 &&
-            validOptionalScore(data.reputationMetrics, 'reliability') &&
-            validOptionalScore(data.reputationMetrics, 'responseRate') &&
-            validOptionalScore(data.reputationMetrics, 'collaboration') &&
-            validOptionalScore(data.reputationMetrics, 'consistency') &&
-            validOptionalScore(data.reputationMetrics, 'completion'));
-      }
-
-      function validChangedString(field, maxSize) {
-        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
-          (incoming()[field] is string && incoming()[field].size() <= maxSize);
-      }
-
-      function validChangedList(field, maxSize) {
-        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
-          (incoming()[field] is list && incoming()[field].size() <= maxSize);
-      }
-
-      function validChangedMap(field, maxSize) {
-        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
-          (incoming()[field] is map && incoming()[field].keys().size() <= maxSize);
-      }
-
-      function validChangedBool(field) {
-        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
-          incoming()[field] is bool;
-      }
-
-      function validChangedScore(field) {
-        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
-          ((incoming()[field] is int || incoming()[field] is float) && incoming()[field] >= 0 && incoming()[field] <= 100);
-      }
-
-      function validChangedPoints(field) {
-        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
-          ((incoming()[field] is int || incoming()[field] is float) && incoming()[field] >= 0 && incoming()[field] <= 1000000);
-      }
-
-      function validChangedTimestamp(field) {
-        return !incoming().diff(existing()).affectedKeys().hasAny([field]) ||
-          incoming()[field] is timestamp;
-      }
-
-      function validChangedReputationMetrics() {
-        return !incoming().diff(existing()).affectedKeys().hasAny(['reputationMetrics']) ||
-          validOptionalReputationMetrics(incoming());
-      }
-
-      function validChangedSettings() {
-        return !incoming().diff(existing()).affectedKeys().hasAny(['settings']) ||
-          validOptionalSettings(incoming());
+        let metrics = data.get('reputationMetrics', {});
+        return metrics is map && metrics.size() <= 20 &&
+          boundedMetric(metrics.get('reliability', 0)) &&
+          boundedMetric(metrics.get('responseRate', 0)) &&
+          boundedMetric(metrics.get('collaboration', 0)) &&
+          boundedMetric(metrics.get('consistency', 0)) &&
+          boundedMetric(metrics.get('completion', 0));
       }
 
       function validOptionalSettings(data) {
-        return !data.keys().hasAny(['settings']) ||
-          (data.settings is map &&
-            data.settings.keys().hasOnly([
-              'publicDiscovery',
-              'stealthMode',
-              'turboConnect',
-              'hideOnlineStatus',
-              'darkMode'
-            ]) &&
-            (!data.settings.keys().hasAny(['publicDiscovery']) || data.settings.publicDiscovery is bool) &&
-            (!data.settings.keys().hasAny(['stealthMode']) || data.settings.stealthMode is bool) &&
-            (!data.settings.keys().hasAny(['turboConnect']) || data.settings.turboConnect is bool) &&
-            (!data.settings.keys().hasAny(['hideOnlineStatus']) || data.settings.hideOnlineStatus is bool) &&
-            (!data.settings.keys().hasAny(['darkMode']) || data.settings.darkMode is bool));
+        let settings = data.get('settings', {});
+        return settings is map &&
+          settings.keys().hasOnly(['publicDiscovery', 'stealthMode', 'turboConnect', 'hideOnlineStatus', 'darkMode']) &&
+          settings.get('publicDiscovery', false) is bool &&
+          settings.get('stealthMode', false) is bool &&
+          settings.get('turboConnect', false) is bool &&
+          settings.get('hideOnlineStatus', false) is bool &&
+          settings.get('darkMode', false) is bool;
       }
 
       function validProfileShape(data) {
@@ -458,74 +410,65 @@ service cloud.firestore {
         ]);
       }
 
-      function validProfileUpdateShape() {
-        return validChangedString('username', 30) &&
-          validChangedString('profileLink', 180) &&
-          validChangedString('occupation', 80) &&
-          validChangedString('company', 120) &&
-          validChangedString('bio', 2000) &&
-          validChangedString('country', 80) &&
-          validChangedString('city', 80) &&
-          validChangedString('goals', 500) &&
-          validChangedString('experience', 80) &&
-          validChangedString('personalityType', 80) &&
-          validChangedString('commitmentLevel', 80) &&
-          validChangedString('startupStage', 80) &&
-          validChangedString('fundingStage', 80) &&
-          validChangedString('availability', 80) &&
-          validChangedString('timezone', 80) &&
-          validChangedString('workStyle', 80) &&
-          validChangedString('networkingIntent', 120) &&
-          validChangedString('education', 80) &&
-          validChangedString('teamSizePreference', 80) &&
-          validChangedString('ambition', 120) &&
-          validChangedString('profilePic', 900000) &&
-          validChangedString('coverPhoto', 900000) &&
-          validChangedString('vibeMedia', 900000) &&
-          validChangedString('verificationProgram', 80) &&
-          validChangedString('verifiedBy', 128) &&
-          validChangedList('photos', 3) &&
-          validChangedList('skills', 50) &&
-          validChangedList('interests', 50) &&
-          validChangedList('industries', 40) &&
-          validChangedList('lookingFor', 30) &&
-          validChangedList('languages', 20) &&
-          validChangedList('badges', 50) &&
-          validChangedList('projects', 20) &&
-          validChangedList('startupIdeas', 20) &&
-          validChangedList('circles', 20) &&
-          validChangedList('shipLogs', 20) &&
-          validChangedPoints('shipCount') &&
-          (!incoming().diff(existing()).affectedKeys().hasAny(['lastShippedAt']) ||
-            incoming().lastShippedAt is string ||
-            incoming().lastShippedAt == null) &&
-          validChangedMap('personalityAnswers', 30) &&
-          validChangedMap('roleAnswers', 30) &&
-          validChangedMap('resume', 10) &&
-          validChangedMap('socialLinks', 10) &&
-          validChangedBool('isVisible') &&
-          validChangedBool('isStealthMode') &&
-          validChangedBool('turboConnect') &&
-          validChangedBool('hideOnlineStatus') &&
-          validChangedBool('remoteOnly') &&
-          validChangedBool('willingToRelocate') &&
-          validChangedBool('hasExit') &&
-          validChangedBool('isPro') &&
-          validChangedString('plan', 40) &&
-          validChangedString('subscriptionPlan', 40) &&
-          validChangedString('subscriptionStatus', 40) &&
-          validChangedBool('isVerified') &&
-          validChangedTimestamp('verifiedAt') &&
-          validChangedTimestamp('lastActiveAt') &&
-          validChangedTimestamp('proUnlockedAt') &&
-          validChangedTimestamp('subscriptionUpdatedAt') &&
-          validChangedPoints('reputationScore') &&
-          validChangedPoints('streakCount') &&
-          validChangedScore('founderScore') &&
-          validChangedReputationMetrics() &&
-          validChangedSettings() &&
-          (!incoming().diff(existing()).affectedKeys().hasAny(['age']) ||
-            (incoming().age is int && (incoming().age == 0 || (incoming().age >= 13 && incoming().age <= 120))));
+      function validProfileUpdateShape(changed, data) {
+        // The caller computes changed keys once; entitlement/verification
+        // fields are guarded there rather than redundantly checked here.
+        return (!changed.hasAny(['username']) || (data.username.matches('(?s)^.{0,30}$'))) &&
+          (!changed.hasAny(['profileLink']) || (data.profileLink.matches('(?s)^.{0,180}$'))) &&
+          (!changed.hasAny(['occupation']) || (data.occupation.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['company']) || (data.company.matches('(?s)^.{0,120}$'))) &&
+          (!changed.hasAny(['bio']) || (data.bio is string && data.bio.size() <= 2000)) &&
+          (!changed.hasAny(['country']) || (data.country.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['city']) || (data.city.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['goals']) || (data.goals.matches('(?s)^.{0,500}$'))) &&
+          (!changed.hasAny(['experience']) || (data.experience.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['personalityType']) || (data.personalityType.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['commitmentLevel']) || (data.commitmentLevel.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['startupStage']) || (data.startupStage.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['fundingStage']) || (data.fundingStage.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['availability']) || (data.availability.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['timezone']) || (data.timezone.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['workStyle']) || (data.workStyle.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['networkingIntent']) || (data.networkingIntent.matches('(?s)^.{0,120}$'))) &&
+          (!changed.hasAny(['education']) || (data.education.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['teamSizePreference']) || (data.teamSizePreference.matches('(?s)^.{0,80}$'))) &&
+          (!changed.hasAny(['ambition']) || (data.ambition.matches('(?s)^.{0,120}$'))) &&
+          (!changed.hasAny(['profilePic']) || (data.profilePic is string && data.profilePic.size() <= 900000)) &&
+          (!changed.hasAny(['coverPhoto']) || (data.coverPhoto is string && data.coverPhoto.size() <= 900000)) &&
+          (!changed.hasAny(['vibeMedia']) || (data.vibeMedia is string && data.vibeMedia.size() <= 900000)) &&
+          (!changed.hasAny(['photos']) || (data.photos is list && data.photos.size() <= 3)) &&
+          (!changed.hasAny(['skills']) || (data.skills is list && data.skills.size() <= 50)) &&
+          (!changed.hasAny(['interests']) || (data.interests is list && data.interests.size() <= 50)) &&
+          (!changed.hasAny(['industries']) || (data.industries is list && data.industries.size() <= 40)) &&
+          (!changed.hasAny(['lookingFor']) || (data.lookingFor is list && data.lookingFor.size() <= 30)) &&
+          (!changed.hasAny(['languages']) || (data.languages is list && data.languages.size() <= 20)) &&
+          (!changed.hasAny(['badges']) || (data.badges is list && data.badges.size() <= 50)) &&
+          (!changed.hasAny(['projects']) || (data.projects is list && data.projects.size() <= 20)) &&
+          (!changed.hasAny(['startupIdeas']) || (data.startupIdeas is list && data.startupIdeas.size() <= 20)) &&
+          (!changed.hasAny(['circles']) || (data.circles is list && data.circles.size() <= 20)) &&
+          (!changed.hasAny(['shipLogs']) || (data.shipLogs is list && data.shipLogs.size() <= 20)) &&
+          (!changed.hasAny(['shipCount']) || (data.shipCount is number && data.shipCount >= 0 && data.shipCount <= 1000000)) &&
+          (!changed.hasAny(['lastShippedAt']) ||
+            data.lastShippedAt is string ||
+            data.lastShippedAt == null) &&
+          (!changed.hasAny(['personalityAnswers']) || (data.personalityAnswers is map && data.personalityAnswers.size() <= 30)) &&
+          (!changed.hasAny(['roleAnswers']) || (data.roleAnswers is map && data.roleAnswers.size() <= 30)) &&
+          (!changed.hasAny(['resume']) || (data.resume is map && data.resume.size() <= 10)) &&
+          (!changed.hasAny(['socialLinks']) || (data.socialLinks is map && data.socialLinks.size() <= 10)) &&
+          (!changed.hasAny(['isVisible']) || (data.isVisible is bool)) &&
+          (!changed.hasAny(['isStealthMode']) || (data.isStealthMode is bool)) &&
+          (!changed.hasAny(['turboConnect']) || (data.turboConnect is bool)) &&
+          (!changed.hasAny(['hideOnlineStatus']) || (data.hideOnlineStatus is bool)) &&
+          (!changed.hasAny(['remoteOnly']) || (data.remoteOnly is bool)) &&
+          (!changed.hasAny(['willingToRelocate']) || (data.willingToRelocate is bool)) &&
+          (!changed.hasAny(['lastActiveAt']) || (data.lastActiveAt is timestamp)) &&
+          (!changed.hasAny(['reputationScore']) || (data.reputationScore is number && data.reputationScore >= 0 && data.reputationScore <= 1000000)) &&
+          (!changed.hasAny(['streakCount']) || (data.streakCount is number && data.streakCount >= 0 && data.streakCount <= 1000000)) &&
+          (!changed.hasAny(['founderScore']) || (data.founderScore is number && data.founderScore >= 0 && data.founderScore <= 100)) &&
+          (!changed.hasAny(['reputationMetrics']) || validOptionalReputationMetrics(data)) &&
+          (!changed.hasAny(['settings']) || validOptionalSettings(data)) &&
+          (!changed.hasAny(['age']) ||
+            (data.age is int && (data.age == 0 || (data.age >= 13 && data.age <= 120))));
       }
 
       function safePushTokenCleanup() {
@@ -590,9 +533,9 @@ service cloud.firestore {
       // the key whitelist + escalation guards stop a first write from minting
       // PLUS, a tick, Turbo Connect or an admin role.
       allow create: if isOwner(userId) &&
+        !incoming().keys().hasAny(profileEntitlementFields()) &&
         validOwnProfileWrite(incoming()) &&
         incoming().keys().hasOnly(safeProfileKeys()) &&
-        !incoming().keys().hasAny(profileEntitlementFields()) &&
         (!incoming().keys().hasAny(['turboConnect']) || incoming().turboConnect == false) &&
         (!incoming().keys().hasAny(['settings']) ||
           (!incoming().settings.keys().hasAny(['turboConnect']) || incoming().settings.turboConnect == false)) &&
@@ -600,15 +543,32 @@ service cloud.firestore {
         (!incoming().keys().hasAny(['verificationProgram']) || incoming().verificationProgram == '') &&
         (!incoming().keys().hasAny(['verifiedBy']) || incoming().verifiedBy == '');
 
-      // Update: the normal profile edit, the self-service cancel, or the
-      // legacy push-token cleanup. Paid/verification/admin fields can only be
-      // DE-escalated here; every escalation is server-side (Admin SDK).
+      function ordinaryProfileUpdate() {
+        let data = request.resource.data;
+        let old = resource.data;
+        let changed = data.diff(old).affectedKeys();
+        return changed.hasOnly(safeProfileKeys()) &&
+          !changed.hasAny(profileEntitlementFields()) &&
+          (!changed.hasAny(['uid']) || data.uid == userId) &&
+          (!changed.hasAny(['isVerified', 'verificationProgram', 'verifiedBy', 'verifiedAt']) ||
+            ((!data.keys().hasAny(['isVerified']) || data.isVerified == false) &&
+              (!data.keys().hasAny(['verificationProgram']) || data.verificationProgram == '') &&
+              (!data.keys().hasAny(['verifiedBy']) || data.verifiedBy == '') &&
+              !data.keys().hasAny(['verifiedAt'])) ||
+            (data.get('isVerified', false) == true &&
+              data.get('verificationProgram', '') == 'SHIPPED' &&
+              data.get('verifiedBy', '') == 'SHIP LOG' &&
+              (!data.keys().hasAny(['verifiedAt']) || data.verifiedAt is timestamp))) &&
+          (!changed.hasAny(['turboConnect']) || data.turboConnect == false || existingPlus()) &&
+          (!changed.hasAny(['settings']) || !data.settings.keys().hasAny(['turboConnect']) ||
+            data.settings.turboConnect == false || existingPlus()) &&
+          validProfileUpdateShape(changed, data);
+      }
+
+      // Normal profile edits, explicit self-service cancellation, and legacy
+      // token cleanup. Paid/admin authority remains server-owned.
       allow update: if isOwner(userId) && (
-        (validProfileUpdateShape() &&
-          safeProfileUpdateKeys() &&
-          verificationSafe() &&
-          paidEscalationSafe() &&
-          turboConnectSafe()) ||
+        ordinaryProfileUpdate() ||
         (validProCancelData(incoming()) && safeProCancelUpdateKeys()) ||
         safePushTokenCleanup()
       );

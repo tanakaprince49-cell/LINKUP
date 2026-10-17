@@ -1,0 +1,10 @@
+{
+  "name": "linkup-profile-rules-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Isolated Firestore Emulator security regressions; not production dependencies",
+  "dependencies": {
+    "@firebase/rules-unit-testing": "3.0.4",
+    "firebase": "10.14.1"
+  }
+}

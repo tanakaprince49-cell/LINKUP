@@ -1,3 +1,4 @@
+import {saveProfileSections, ProfileSectionSaveError} from '../lib/saveProfileSections';
 import MemberBadges, { isGoldMember } from '../components/MemberBadges';
 import { openPlayReview } from '../lib/appReview';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
@@ -1395,12 +1396,7 @@ export default function ProfileScreen({ navigation, route }: any) {
         ...optionalProfilePatch,
         uid: ownerUid,
       });
-      await updateOwnProfileDoc({ ...coreProfilePatch, ...reputationPatch });
-      try {
-        await updateOwnProfileDoc(optionalProfilePatch);
-      } catch (optionalError) {
-        console.warn('Optional profile sections were not saved:', optionalError);
-      }
+      await saveProfileSections(updateOwnProfileDoc, { ...coreProfilePatch, ...reputationPatch }, optionalProfilePatch);
       updateLocalProfile({ ...coreProfilePatch, ...optionalProfilePatch, ...reputationPatch });
       setLocalPreferences(nextPreferences);
       setIsEditing(false);
@@ -1418,9 +1414,9 @@ export default function ProfileScreen({ navigation, route }: any) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${ownerUid}`);
       const code = String((err as any)?.code || '');
       const message = String((err as any)?.message || '').toLowerCase();
-      const friendlyMessage =
+      const friendlyMessage = err instanceof ProfileSectionSaveError ? err.message :
         code.includes('permission-denied') || message.includes('missing or insufficient permissions')
-          ? 'Firestore blocked this profile save. The app needs the latest rules deployed.'
+          ? 'Your changes were not saved because profile access was denied. Please refresh the app and try again. If it continues, contact support.'
           : code.includes('resource-exhausted') || code.includes('invalid-argument') || code.includes('failed-precondition') || message.includes('document too large') || message.includes('too large')
             ? 'This profile still has too much image data for Firestore. Remove one photo or use a smaller image.'
             : code.includes('unavailable') || code.includes('deadline-exceeded') || code.includes('aborted') || message.includes('network')
