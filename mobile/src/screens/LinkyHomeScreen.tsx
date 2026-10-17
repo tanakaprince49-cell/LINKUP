@@ -1,3 +1,5 @@
+import { linkyShortlist } from '../lib/linkyShortlist';
+import VerifiedBadge from '../components/VerifiedBadge';
 import MemberBadges from '../components/MemberBadges';
 import { recordReviewAction } from '../lib/appReview';
 import { FREE_LINKY_LIMIT_MESSAGE, quotaFromHome, homeWithQuota } from '../lib/linkyQuota';
@@ -27,7 +29,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { ArrowLeft, Bell, Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trash2, Trophy, X } from 'lucide-react-native';
+import { Sparkles, Users, MessageCircle, ArrowLeft, Bell, Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trash2, Trophy, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
@@ -111,7 +113,7 @@ const CardView = ({
   const accepted = card.status === 'accepted';
   return (
     <View style={[styles.card, { backgroundColor: surface, borderColor: border }]}>
-      <TouchableOpacity style={styles.cardTop} onPress={onOpen} activeOpacity={0.75}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Open ${card.targetName}’s profile`} style={styles.cardTop} onPress={onOpen} activeOpacity={0.75}>
         <Avatar uri={card.targetPic} />
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Text style={[styles.cardName, { color: textColor(isDark), flexShrink: 1 }]} numberOfLines={1}>{card.targetName}</Text><MemberBadges userId={card.targetUid} size={18} /></View>
@@ -121,6 +123,7 @@ const CardView = ({
             </Text>
           ) : null}
           {card.targetCity ? <Text style={[styles.cardMeta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{card.targetCity}</Text> : null}
+          <Text style={{fontSize:11,fontWeight:'700',color:isDark?'#8BC9F9':'#176BA6',marginTop:4}}>View profile →</Text>
         </View>
         {card.status === 'saved' ? <Text style={[styles.pill, { color: textColor(isDark, 'muted'), borderColor: border }]}>Saved</Text> : null}
       </TouchableOpacity>
@@ -274,6 +277,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const [input, setInput] = useState('');
   const [activityOpen, setActivityOpen] = useState(false);
   const [composerHeight, setComposerHeight] = useState(96);
+  const inputRef = useRef<TextInput>(null);
   const [thinking, setThinking] = useState(false);
   const [pendingAsk, setPendingAsk] = useState('');
   // the chips and the lead list only ever arrive on an ask result, so the state
@@ -349,6 +353,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
         : null));
     } catch (err) {
       if (!mounted.current) return;
+      setHome(h => h ? {...h,cards:[]} : h);
       setError(err instanceof Error ? err.message : 'Linky is unavailable right now.');
     } finally {
       if (mounted.current) { setLoading(false); setRefreshing(false); }
@@ -464,7 +469,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
   const send = async (text?: string) => {
     const msg = (text ?? input).trim();
-    if (!msg || thinking) return;
+    if (!msg || thinking || !home) return;
     if (atMessageLimit && (!quota?.resetAt || Date.parse(quota.resetAt) > Date.now())) {
       setPaywall(FREE_LINKY_LIMIT_MESSAGE);
       return;
@@ -499,6 +504,9 @@ export default function LinkyHomeScreen({ navigation }: any) {
         const updated = { ...h, cards: merged, ...(out.kind === 'chat' ? {} : { lastAsk: out }) };
         return out.messageQuota ? homeWithQuota(updated, out.messageQuota) : { ...updated, limits: { ...h.limits, asksUsedToday: Math.max(h.limits.asksUsedToday, h.limits.asksPerDay - out.asksLeft) } };
       });
+      // Refresh source-checked cards after chat so the last shortlist remains
+      // usable without reviving a profile hidden or blocked since that search.
+      if (out.kind === 'chat') await load(true);
     } catch (err) {
       fail(err, 'Linky could not answer');
       // A server failure can refund a reserved message. Refresh authoritative use.
@@ -694,24 +702,35 @@ export default function LinkyHomeScreen({ navigation }: any) {
     }
   };
 
-  const answerIds = useMemo(() => new Set(answer?.cardIds || []), [answer?.cardIds]);
-  const answerCards = useMemo(() => (answer?.cardIds || []).map((id) => (home?.cards || []).find((c) => c.id === id)).filter((c): c is LinkyCard => !!c && c.status !== 'skip'), [answer?.cardIds, home?.cards]);
+  const shortlist = useMemo(() => linkyShortlist(answer, home), [answer, home]);
+  const answerCards = shortlist.cards;
+  const prepareInput = (prompt: string) => {
+    setInput(prompt);
+    inputRef.current?.focus();
+  };
   const firstName = (home?.name || '').split(' ')[0];
-  const surface = isDark ? COLORS.darkBgSec : '#FFFFFF';
-  const border = isDark ? COLORS.darkBorder : COLORS.lightBorder;
+  const surface = isDark ? '#182A36' : '#FFFFFF';
+  const border = isDark ? '#2A4250' : '#E5E9DF';
   const inputBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
   const outreachCount = (home?.outreach || []).length;
 
   return (
-    <View style={[styles.root, appBackground(isDark)]}>
-      <View style={[styles.chatHeader, { paddingTop: insets.top + 6, borderBottomColor: border }]}>
+    <View style={[styles.root, appBackground(isDark), {backgroundColor: isDark ? '#101E29' : '#FFFBEE'}]}>
+      <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.playfulBackdrop}>
+        <View style={[styles.backdropCircle, {top: 80, left: -85, backgroundColor: isDark ? '#234A45' : '#E2F3DF'}]} />
+        <View style={[styles.backdropCircle, {bottom: 70, right: -100, backgroundColor: isDark ? '#342F48' : '#EEE7FF'}]} />
+      </View>
+      <View style={[styles.chatHeader, { paddingTop: insets.top + 6, borderBottomColor: border, backgroundColor: isDark ? '#142530' : '#FFFDF6' }]}>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to network" onPress={() => navigation.navigate('Dashboard')} style={styles.headerIcon}>
           <ArrowLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.chatTitle, { color: textColor(isDark) }]}>Linky</Text>
+          <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
+            <Text style={[styles.chatTitle, { color: textColor(isDark) }]}>Linky</Text>
+            <VerifiedBadge size={18} accessibilityLabel="Verified Linky AI" />
+          </View>
           <Text style={[styles.chatSubtitle, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
-            {home && !home.plus && messageLimit ? `${asksLeft} of ${messageLimit} free messages left this month` : 'Your AI connector'}
+            {home ? 'AI connector · Big ideas welcome' : 'Getting ready…'}
           </Text>
         </View>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Preferences & bots" onPress={() => navigation.navigate('LinkySettings')} style={styles.headerIcon}>
@@ -761,24 +780,24 @@ export default function LinkyHomeScreen({ navigation }: any) {
                 <View style={styles.conversation}>
                   {turns.map((t, i) => (t.role === 'user' ? (
                     <View key={`u${t.at}-${i}`} style={[styles.turn, styles.turnUser]}>
-                      <Text style={[styles.turnText, { backgroundColor: COLORS.primary, color: '#000' }, COLORS.primary === '#FFFFFF' ? { borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)' } : null]}>
+                      <Text style={[styles.turnText, { backgroundColor: isDark ? '#285246' : '#DBF4DC', color: isDark ? '#E6FFEF' : '#183E2C' }]}>
                         {t.text}
                       </Text>
                     </View>
                   ) : (
                     <View key={`l${t.at}-${i}`} style={styles.msgRow}>
-                      <View style={[styles.msgDot, { backgroundColor: COLORS.primary }]}><Text style={styles.msgDotText}>L</Text></View>
-                      <Text style={[styles.turnText, { flexShrink: 1, color: textColor(isDark), backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>{t.text}</Text>
+                      <BrandMark size={28} style={{borderRadius: 10}} />
+                      <Text style={[styles.turnText, { flexShrink: 1, color: textColor(isDark), backgroundColor: isDark ? '#203744' : '#FFFFFF', borderWidth: 1, borderColor: border }]}>{t.text}</Text>
                     </View>
                   )))}
                   {thinking && pendingAsk ? (
                     <View style={[styles.turn, styles.turnUser]}>
-                      <Text style={[styles.turnText, { backgroundColor: COLORS.primary, color: '#000' }]}>{pendingAsk}</Text>
+                      <Text style={[styles.turnText, { backgroundColor: isDark ? '#285246' : '#DBF4DC', color: isDark ? '#E6FFEF' : '#183E2C' }]}>{pendingAsk}</Text>
                     </View>
                   ) : null}
                   {thinking ? (
                     <View style={styles.msgRow}>
-                      <View style={[styles.msgDot, { backgroundColor: COLORS.primary }]}><Text style={styles.msgDotText}>L</Text></View>
+                      <BrandMark size={28} style={{borderRadius: 10}} />
                       <Text style={[styles.turnThinking, { color: textColor(isDark, 'muted') }]}>{THINKING_LINES[thinkingTick % THINKING_LINES.length]}</Text>
                     </View>
                   ) : null}
@@ -870,6 +889,22 @@ export default function LinkyHomeScreen({ navigation }: any) {
                     </View>
                   ) : null}
                 </View>
+                {!thinking && answerCards.length ? (
+                  <View style={styles.resultHeading}>
+                    <View style={styles.resultCount}><Users size={14} color="#305C45" /><Text style={styles.resultCountText}>{answerCards.length} {answerCards.length === 1 ? 'profile' : 'profiles'}</Text></View>
+                    <Text style={[styles.resultCaption,{color:textColor(isDark,'muted')}]}>{shortlist.previous ? 'Your last shortlist' : 'Real people. Your next step.'}</Text>
+                  </View>
+                ) : null}
+                {!thinking && answer?.kind === 'none' ? (
+                  <View style={[styles.noMatchCard,{backgroundColor:isDark?'#25352D':'#F2F7E7',borderColor:border}]}>
+                    <Text style={[styles.cardName,{color:textColor(isDark)}]}>No solid match yet</Text>
+                    <Text style={[styles.welcomeSub,{color:textColor(isDark,'secondary'),textAlign:'left',marginTop:6}]}>I won’t fill the gap with random people. Tweak the search, or choose to browse the network.</Text>
+                    <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:12}}>
+                      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Edit this search" onPress={()=>prepareInput(answer.need)} style={[styles.ghostBtn,{borderColor:border}]}><Text style={[styles.ghostBtnText,{color:textColor(isDark)}]}>Edit search</Text></TouchableOpacity>
+                      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Browse builders" onPress={()=>send('show me profiles')} style={[styles.ghostBtn,{backgroundColor:'#FBE618',borderColor:'#E5D31B'}]}><Text style={[styles.ghostBtnText,{color:'#243A2E'}]}>Browse builders</Text></TouchableOpacity>
+                    </View>
+                  </View>
+                ) : null}
                 {!thinking ? answerCards.map((card) => (
                   <CardView
                     key={card.id}
@@ -886,17 +921,40 @@ export default function LinkyHomeScreen({ navigation }: any) {
             ) : null}
 
             {!pendingAsk && !answer && !turns.length ? (
-              <View style={styles.chips}>
+              <View style={styles.emptyState}>
                 <View style={styles.welcome}>
-                  <BrandMark size={48} style={{ borderRadius: 16 }} />
-                  <Text style={[styles.welcomeTitle, { color: textColor(isDark) }]}>What’s on your mind?</Text>
-                  <Text style={[styles.welcomeSub, { color: textColor(isDark, 'muted') }]}>Talk it through, or tell me who you’d like to meet.</Text>
+                  <View style={styles.brandOrbit}>
+                    <View style={[styles.orbitDot,{left:0,top:16,backgroundColor:'#BBDDB0'}]} />
+                    <View style={[styles.orbitDot,{right:0,bottom:15,backgroundColor:'#CFC1F4',width:19,height:19}]} />
+                    <BrandMark size={76} style={{borderRadius:25,transform:[{rotate:'-7deg'}]}} />
+                    <View style={styles.sparkleBubble}><Sparkles size={19} color="#79631D" /></View>
+                  </View>
+                  <View style={styles.welcomePill}><Text style={styles.welcomePillText}>{firstName ? `HEY ${firstName.toUpperCase()}, LET’S CONNECT` : 'SMALL WORLD. BIG IDEAS.'}</Text></View>
+                  <Text style={[styles.welcomeTitle, { color: textColor(isDark) }]}>Let’s find your people.</Text>
+                  <Text style={[styles.welcomeSub, { color: textColor(isDark, 'muted') }]}>A collaborator, a fresh perspective, or just a good chat. What’s the move?</Text>
                 </View>
-                {['Find a Flutter developer in Harare', 'How’s it going?', 'What can you do?'].map((s) => (
-                  <TouchableOpacity key={s} style={[styles.chip, { borderColor: border, backgroundColor: surface }]} onPress={() => send(s)} activeOpacity={0.75}>
-                    <Text style={[styles.chipText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>{s}</Text>
+                <View style={styles.starterGrid}>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Meet builders — browse LINKUP profiles" onPress={()=>send('show me profiles')} style={[styles.starterTile,{backgroundColor:isDark?'#243F38':'#E2F3DC'}]}>
+                    <Users size={23} color={isDark?'#C9EDCE':'#305C45'} />
+                    <Text style={[styles.starterTitle,{color:isDark?'#E2F7E4':'#244330'}]}>Meet builders</Text>
+                    <Text style={[styles.starterSub,{color:isDark?'#B7CFC2':'#57705E'}]}>Browse real profiles</Text>
                   </TouchableOpacity>
-                ))}
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Find people by skill" onPress={()=>prepareInput('Find a ')} style={[styles.starterTile,{backgroundColor:isDark?'#35324E':'#EDE6FF'}]}>
+                    <Compass size={23} color={isDark?'#DDD1FA':'#65518A'} />
+                    <Text style={[styles.starterTitle,{color:isDark?'#F1EAFF':'#4C3C6A'}]}>Find a skill</Text>
+                    <Text style={[styles.starterSub,{color:isDark?'#C6BBD9':'#76638E'}]}>Who does your idea need?</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Find someone by name" onPress={()=>prepareInput('Find ')} style={[styles.starterTile,{backgroundColor:isDark?'#443629':'#FFF0D9'}]}>
+                    <Check size={23} color={isDark?'#F5D4AC':'#947047'} />
+                    <Text style={[styles.starterTitle,{color:isDark?'#FFEAD4':'#795534'}]}>Got a name?</Text>
+                    <Text style={[styles.starterSub,{color:isDark?'#D6BEA3':'#8F775D'}]}>Let’s look them up</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Just chat with Linky" onPress={()=>send('How’s it going?')} style={[styles.starterTile,{backgroundColor:isDark?'#253C49':'#E2F1FA'}]}>
+                    <MessageCircle size={23} color={isDark?'#C2E1F5':'#43738A'} />
+                    <Text style={[styles.starterTitle,{color:isDark?'#E3F5FF':'#2D5F78'}]}>Just talk</Text>
+                    <Text style={[styles.starterSub,{color:isDark?'#B9D5E4':'#608498'}]}>Big idea or tiny question</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ) : null}
           </>
@@ -909,9 +967,12 @@ export default function LinkyHomeScreen({ navigation }: any) {
         // amount covered by the keyboard; this dedicated screen has no tab bar.
         bottom: Platform.OS === 'android' ? androidKeyboardHeight : 0,
         paddingBottom: androidKeyboardHeight ? 10 : Math.max(10, insets.bottom + 6),
-        backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg,
+        backgroundColor: isDark ? '#142530' : '#FFFDF6',
         borderTopColor: border,
       }]}>
+        {home && !atMessageLimit ? (
+          <View style={styles.allowanceRow}><Sparkles size={12} color={isDark?'#E2D67A':'#7D7226'} /><Text style={[styles.allowanceText,{color:textColor(isDark,'muted')}]}>{home.plus ? `${asksLeft} messages left today · PLUS` : `${asksLeft} of ${messageLimit} free messages left this month`}</Text></View>
+        ) : null}
         {atMessageLimit && resetCountdown ? (
           <Text style={[styles.resetLine, { color: textColor(isDark, 'muted') }]}>
             Your 10 free monthly messages are used up — resets in {resetCountdown}.
@@ -919,9 +980,10 @@ export default function LinkyHomeScreen({ navigation }: any) {
         ) : null}
         <View style={[styles.composer, { backgroundColor: surface, borderColor: border }]}>
           <TextInput
+            ref={inputRef}
             style={[styles.input, { color: textColor(isDark) }]}
             accessibilityLabel="Message Linky"
-            placeholder="Message Linky…"
+            placeholder="An idea, a name, a skill…"
             placeholderTextColor="#999"
             value={input}
             onChangeText={setInput}
@@ -929,10 +991,10 @@ export default function LinkyHomeScreen({ navigation }: any) {
             returnKeyType="send"
             multiline={Platform.OS !== 'web'}
             maxLength={600}
-            editable={!thinking}
+            editable={!!home && !thinking}
           />
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Send message" style={[styles.sendBtn, { backgroundColor: COLORS.primary, borderColor: isDark ? 'transparent' : 'rgba(0,0,0,0.12)', opacity: input.trim() && !thinking ? 1 : 0.4 }]} onPress={() => send()} disabled={!input.trim() || thinking}>
-            {thinking ? <ActivityIndicator size="small" color="#000" /> : <ArrowUp size={16} color="#000" />}
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Send message" style={[styles.sendBtn, { backgroundColor: '#FBE618', borderColor: '#E3D01B', opacity: input.trim() && !thinking && home ? 1 : 0.5 }]} onPress={() => send()} disabled={!home || !input.trim() || thinking}>
+            {thinking ? <ActivityIndicator size="small" color="#000" /> : <ArrowUp size={19} color="#263A2E" />}
           </TouchableOpacity>
         </View>
       </View>
@@ -1082,16 +1144,35 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  playfulBackdrop: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, overflow: 'hidden' },
+  backdropCircle: { position: 'absolute', width: 230, height: 230, borderRadius: 115, opacity: 0.55 },
+  emptyState: { flexGrow: 1, justifyContent: 'center', paddingVertical: 18 },
+  brandOrbit: { width: 128, height: 102, alignItems: 'center', justifyContent: 'center' },
+  orbitDot: { position: 'absolute', width: 13, height: 13, borderRadius: 10 },
+  sparkleBubble: { position: 'absolute', right: 2, top: 0, backgroundColor: '#FFF0AF', borderRadius: 14, padding: 7 },
+  welcomePill: { backgroundColor: '#FFF0AD', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
+  welcomePillText: { fontSize: 9, fontWeight: '900', color: '#78682B', letterSpacing: 0.7 },
+  starterGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  starterTile: { width: '48%', flexGrow: 1, borderRadius: 20, padding: 16, minHeight: 116, gap: 7 },
+  starterTitle: { fontSize: 15, fontWeight: '800' },
+  starterSub: { fontSize: 11, lineHeight: 16 },
+  allowanceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginBottom: 7 },
+  allowanceText: { fontSize: 10, fontWeight: '600' },
+  resultHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, marginTop: 10 },
+  resultCount: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#E2F3DC' },
+  resultCountText: { fontSize: 11, fontWeight: '800', color: '#305C45' },
+  resultCaption: { fontSize: 10, flexShrink: 1 },
+  noMatchCard: { borderWidth: 1, padding: 16, borderRadius: 20, marginBottom: 12 },
   fill: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 16 },
   chatHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingBottom: 6, borderBottomWidth: 1 },
-  headerIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerIcon: { width: 40, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   chatTitle: { fontSize: 19, fontWeight: '900' },
   chatSubtitle: { fontSize: 10, marginTop: 2 },
   activityDot: { position: 'absolute', right: 8, top: 8, width: 7, height: 7, borderRadius: 4, backgroundColor: '#D6A329' },
   conversation: { paddingVertical: 8, marginBottom: 8 },
-  welcome: { alignItems: 'center', paddingVertical: 38, gap: 14 },
-  welcomeTitle: { fontSize: 26, fontWeight: '800', textAlign: 'center' },
+  welcome: { alignItems: 'center', paddingTop: 8, paddingBottom: 26, gap: 12 },
+  welcomeTitle: { fontSize: 29, fontWeight: '800', textAlign: 'center' },
   welcomeSub: { fontSize: 14, lineHeight: 21, textAlign: 'center', maxWidth: 300 },
   center: { paddingVertical: 40, alignItems: 'center' },
   hero: { marginBottom: 14 },
@@ -1108,7 +1189,7 @@ const styles = StyleSheet.create({
   sectionRight: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 },
   clearBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
   clearBtnText: { fontSize: 11, fontWeight: '800' },
-  card: { borderRadius: 18, borderWidth: 1, padding: 14, marginBottom: 10 },
+  card: { borderRadius: 22, borderWidth: 1, padding: 14, marginBottom: 10 },
   cardTop: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   cardName: { fontSize: 15, fontWeight: '900' },
   cardRole: { fontSize: 12, fontWeight: '600', marginTop: 1 },
@@ -1140,7 +1221,7 @@ const styles = StyleSheet.create({
   emptyLine: { fontSize: 12, fontWeight: '600', lineHeight: 18 },
   turn: { marginBottom: 8, alignItems: 'flex-start' },
   turnUser: { alignItems: 'flex-end' },
-  turnText: { fontSize: 13, lineHeight: 19, fontWeight: '600', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, maxWidth: '88%', overflow: 'hidden' },
+  turnText: { fontSize: 14, lineHeight: 21, fontWeight: '500', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, maxWidth: '88%', overflow: 'hidden' },
   turnThinking: { fontSize: 12, fontWeight: '700', marginTop: 2 },
   nearestRow: { gap: 8, marginTop: 4 },
   nearest: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },

@@ -7,13 +7,22 @@ import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../../',import.meta.url)).replace(/\/$/,''), mobile=root+'/mobile', qa=root+'/docs/qa';fs.mkdirSync(qa,{recursive:true});
 const uid='FvxIfciyHMfQZbLwziZpseMNKxC3';
 const home={name:'Tanaka',plus:false,cards:[],inbound:[{id:'fixture-intro',requesterId:uid,requesterName:'Tanaka Gaadzikwa',requesterRole:'Founder',need:'A relevant collaboration',why:'Fixture data only',status:'pending'}],pending:{},prefs:{openTo:['paid'],inboundCap:5},thread:[],lastAsk:null,outreach:[],limits:{asksPerDay:10,asksUsedToday:0,asksPeriod:'month',asksResetAt:'2099-01-01T00:00:00.000Z'},messageQuota:{period:'month',periodKey:'fixture-month',limit:10,used:0,remaining:10,resetAt:'2099-01-01T00:00:00.000Z',exhausted:false,upgradeRequired:false}};
-const fixture=`const h=${JSON.stringify(home)};if(location.search.includes('history=1'))h.thread=Array.from({length:24},(_,i)=>({id:'history-'+i,role:i%2?'linky':'user',text:(i===23?'Latest restored reply.':'Earlier conversation '+i+'. ')+('A grounded reply with useful context. '.repeat(3)),at:i+1}));export class LinkyApiError extends Error{};export async function linkyHome(){return h;}export async function linkyAsk(message){h.thread=[...h.thread,{id:'new',role:'user',text:message,at:100},{id:'new',role:'linky',text:'Hey! What’s on your mind?',at:101}];return{id:'new',need:message,reply:'Hey! What’s on your mind?',kind:'chat',cards:[],cardIds:[],thread:h.thread,asksLeft:9,messageQuota:{...h.messageQuota,remaining:9,used:1}};}export async function linkyClearChat(){h.thread=[];return{};}export const linkyLoopAnswer=async()=>({note:'Fixture feedback saved.'});`+
+const fixture=`const h=${JSON.stringify(home)};if(location.search.includes('history=1'))h.thread=Array.from({length:24},(_,i)=>({id:'history-'+i,role:i%2?'linky':'user',text:(i===23?'Latest restored reply.':'Earlier conversation '+i+'. ')+('A grounded reply with useful context. '.repeat(3)),at:i+1}));export class LinkyApiError extends Error{};export async function linkyHome(){return h;}export async function linkyAsk(message){
+ const browse=message==='show me profiles',none=message.includes('quantum');
+ const id='ask-'+h.thread.length;
+ const cards=browse?[{id:'alice',targetUid:'alice-fixture',targetName:'Alice Fixture',targetRole:'Developer',targetCity:'Harare',need:message,status:'new',score:0,why:'A discoverable member. Profile browse, not a confirmed collaboration fit.',unknowns:['Availability is not confirmed.']}]:[];
+ const reply=browse?'Here is a profile to explore.':none?'I don’t have a solid match for that specialty yet.':'Hey! What’s on your mind?';
+ h.thread=[...h.thread,{id,role:'user',text:message,at:Date.now()},{id,role:'linky',text:reply,at:Date.now()+1}];
+ h.messageQuota={...h.messageQuota,remaining:h.messageQuota.remaining-1,used:h.messageQuota.used+1};
+ const out={id,need:message,reply,kind:browse?'found':none?'none':'chat',cards,cardIds:cards.map(c=>c.id),thread:h.thread,asksLeft:h.messageQuota.remaining,messageQuota:h.messageQuota};
+ if(browse||none){h.lastAsk=out;h.cards=cards;}return out;
+}export async function linkyClearChat(){h.thread=[];return{};}export const linkyLoopAnswer=async()=>({note:'Fixture feedback saved.'});`+
  ['linkyMeetSquad','linkyApproveSquad','linkyCancelSquad','linkyCard','linkyApproveLead','linkyApproveMeet','linkyCancelMeet','linkyDraftLead','linkyMarkLead','linkyMeet','linkyPickPerson','linkyRespond'].map(n=>`export const ${n}=async()=>({});`).join('\n');
-const icons=['ArrowLeft','Bell','Link2','ArrowUp','Check','Clock','Compass','Send','Settings2','ShieldCheck','Trash2','Trophy','X'];
+const icons=['Sparkles','Users','MessageCircle','ArrowLeft','Bell','Link2','ArrowUp','Check','Clock','Compass','Send','Settings2','ShieldCheck','Trash2','Trophy','X'];
 const iconCode=`import React from 'react';import {View,StyleSheet} from 'react-native';const make=(d)=>({size=20,color='currentColor',style,strokeWidth=2})=>React.createElement(View,{style:[{width:size,height:size},style]},React.createElement('svg',{width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:color,strokeWidth,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d})));`+icons.map(n=>`export const ${n}=make('${n==='Check'?'m5 12 4 4L19 6':n==='ArrowLeft'?'M19 12H5m7 7-7-7 7-7':n==='X'?'m6 6 12 12M18 6 6 18':'M5 12a7 7 0 1 0 14 0 7 7 0 1 0-14 0'}');`).join('\n');
 const mocks={
  'AuthContext':`export const useAuth=()=>({user:{uid:'${uid}'},profile:{uid:'${uid}',isVerified:true}});`,
- 'ThemeContext':`export const useTheme=()=>({theme:'light'});`,
+ 'ThemeContext':`export const useTheme=()=>({theme:location.search.includes('dark=1')?'dark':'light'});`,
  'linkyApi':fixture,
  'appReview':'export const recordReviewAction=async()=>{};',
  'notify':`export const notifyUser=(...a)=>console.log('Fixture notification',...a);`,
@@ -32,15 +41,24 @@ const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 try{
  const page=await browser.newPage({viewport:{width:390,height:844},deviceScaleFactor:1});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
- await page.goto(base+'/chat');await page.getByText('What’s on your mind?',{exact:true}).waitFor();
+ await page.goto(base+'/chat');await page.getByText('Let’s find your people.',{exact:true}).waitFor();assert.ok(await page.getByLabel('Verified Linky AI',{exact:true}).isVisible());
  const box=await page.getByLabel('Message Linky',{exact:true}).boundingBox();assert.ok(box.y>650&&box.y+box.height<=844);assert.ok(await page.getByLabel('Back to network',{exact:true}).isVisible());
  await page.screenshot({path:qa+'/linky-fullscreen-390.png'});
  await page.getByLabel('Message Linky',{exact:true}).fill('hello');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('Hey! What’s on your mind?',{exact:true}).waitFor();
+ await page.getByLabel('Message Linky',{exact:true}).fill('show me profiles');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('Alice Fixture',{exact:true}).waitFor();
+ await page.getByText('Alice Fixture',{exact:true}).click();assert.deepEqual(await page.evaluate(()=>window.fixtureNavigation),['Profile',{userId:'alice-fixture'}]);
+ await page.getByLabel('Message Linky',{exact:true}).fill('thanks');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('Your last shortlist',{exact:true}).waitFor();assert.ok(await page.getByText('Alice Fixture',{exact:true}).isVisible());
+ await page.screenshot({path:qa+'/linky-profile-shortlist-390.png'});
+ await page.getByLabel('Message Linky',{exact:true}).fill('find a quantum cryptographer');await page.getByRole('button',{name:'Send message',exact:true}).click();await page.getByText('No solid match yet',{exact:true}).waitFor();assert.equal(await page.getByText('Alice Fixture',{exact:true}).count(),0);
+ await page.getByRole('button',{name:'Browse builders',exact:true}).click();await page.getByText('Alice Fixture',{exact:true}).waitFor();
  await page.getByRole('button',{name:'Linky activity and chat tools',exact:true}).click();await page.getByText('Waiting on you',{exact:true}).waitFor();assert.equal(await page.getByLabel('Gold verified — LINKUP CEO',{exact:true}).count(),1);await page.getByRole('button',{name:'Close Linky activity',exact:true}).click();
  await page.getByRole('button',{name:'Back to network',exact:true}).click();assert.deepEqual(await page.evaluate(()=>window.fixtureNavigation),['Dashboard']);
- await page.goto(base+'/chat?history=1');await page.getByText(/Latest restored reply/).waitFor();await page.waitForTimeout(1200);assert.equal(await page.getByText('What’s on your mind?',{exact:true}).count(),0);
+ await page.goto(base+'/chat?history=1');await page.getByText(/Latest restored reply/).waitFor();await page.waitForTimeout(1200);assert.equal(await page.getByText('Let’s find your people.',{exact:true}).count(),0);
  const last=await page.getByText(/Latest restored reply/).boundingBox();const composer=await page.getByLabel('Message Linky',{exact:true}).boundingBox();console.log('History geometry:',JSON.stringify({last,composer}));await page.screenshot({path:qa+'/linky-fullscreen-history-390.png'});assert.ok(last.y>=40&&last.y+last.height<composer.y,'restored reply must remain above the composer');
  await page.screenshot({path:qa+'/linky-fullscreen-history-390.png'});
+ await page.goto(base+'/chat?dark=1');await page.getByText('Let’s find your people.',{exact:true}).waitFor();await page.screenshot({path:qa+'/linky-fullscreen-dark-390.png'});
+ await page.getByRole('button',{name:'Find people by skill',exact:true}).click();assert.equal(await page.getByLabel('Message Linky',{exact:true}).inputValue(),'Find a ');assert.equal(await page.getByText('Alice Fixture',{exact:true}).count(),0);
+ await page.getByRole('button',{name:'Meet builders — browse LINKUP profiles',exact:true}).click();await page.getByText('Alice Fixture',{exact:true}).waitFor();
  await page.goto(base+'/badges');await page.getByText('GOLD member CEO',{exact:true}).waitFor();assert.equal(await page.getByLabel('Gold verified — LINKUP CEO',{exact:true}).count(),1);assert.equal(await page.getByLabel('Verified',{exact:true}).count(),2);await page.screenshot({path:qa+'/exclusive-gold-badge-390.png'});
- assert.deepEqual(errors,[]);console.log('PASS isolated UI fixtures: full-height chat, pinned composer, message send, activity sheet, owner double badge, back navigation, restored-history scrolling.');
+ assert.deepEqual(errors,[]);console.log('PASS isolated UI fixtures: full-height chat, pinned composer, profile browse, profile navigation, shortlist retention, honest no-match, explicit browse recovery, dark mode, skill prefill, message send, activity sheet, owner double badge, back navigation, restored-history scrolling.');
 }finally{await browser.close();await new Promise(r=>server.close(r));}

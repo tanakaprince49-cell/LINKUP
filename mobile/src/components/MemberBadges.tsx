@@ -19,7 +19,7 @@ export default function MemberBadges({ userId, verified = false, size = 20, styl
   return (
     <View style={[{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 }, style]}>
       <VerifiedBadge size={size} />
-      {gold ? <VerifiedBadge size={size} color="#F1E5AC" checkColor="#FFFFFF" accessibilityLabel="Gold verified — LINKUP CEO" /> : null}
+      {gold ? <VerifiedBadge size={size} color="#e0be1b" checkColor="#FFFFFF" accessibilityLabel="Gold verified — LINKUP CEO" /> : null}
     </View>
   );
 }

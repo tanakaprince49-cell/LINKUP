@@ -24,12 +24,12 @@ class Database {
   };return q;}
   runTransaction(fn){const result=this.queue.then(async()=>{const writes=[];const result=await fn({get:async ref=>this.snapshot(ref.path),set:(ref,d,o)=>writes.push([ref.path,d,o?.merge])});writes.forEach(args=>this.write(...args));return result;});this.queue=result.catch(()=>{});return result;}
 }
-function core(db,{ai=false}={}) {
+function core(db,{ai=false,aiMode="search"}={}) {
  const module={exports:{}};
  const mocks={
   'node:crypto':crypto,'./_linkyQuality.js':quality,'./_linkyCompanion.js':companion,'./_publicSeo.js':{publicEligible},'./_linkyUsage.js':usage,
   './_firebaseAdmin.js':{getDb:()=>db,getAdmin:()=>({firestore:{FieldValue:{serverTimestamp:()=>Date.now(),delete:()=>null},Timestamp:{fromMillis:ms=>ms}}})},
-  './_gemini.js':{aiReady:()=>ai,aiStatus:()=>({gemini:{},zen:{}}),aiText:async()=>({text:'{"mode":"search","picks":[{"uid":"irrelevant","score":100}],"reply":"I found ten perfect matches"}'}),geminiText:async()=>'{"picks":[{"uid":"irrelevant","score":100}]}'},
+  './_gemini.js':{aiReady:()=>ai,aiStatus:()=>({gemini:{},zen:{}}),aiText:async()=>({text:JSON.stringify({mode:aiMode,picks:[{uid:'irrelevant',score:100}],reply:'I found ten perfect matches'})}),geminiText:async()=>'{"picks":[{"uid":"irrelevant","score":100}]}'},
   './_serpapi.js':{safeLinkedinProfile,findLeads:async()=>({leads:[],searches:0,note:'not-configured'})},'./_proof.js':{proofPoints:()=>[],badgeLine:()=>''}
  };
  const code=ts.transpileModule(read('api/_linky.js'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
@@ -285,4 +285,39 @@ test('legacy app external-search action cannot bypass an exhausted message ledge
  const response={status(code){this.code=code;return this;},json(body){this.body=body;}};
  await route.default({method:'POST',query:{},body:{action:'pointers',need:'Flutter developer'},headers:{}},response);
  assert.equal(response.code,402);assert.equal(response.body.code,'ask_limit');
+});
+
+
+test('explicit profile browse works without claiming specialist fit, and still rechecks privacy',async()=>{
+ const db=new Database();seed(db,[person('Alice'),person('Bo',{occupation:'Accountant',skills:['Finance']}),person('Hidden'),person('Blocked')]);
+ db.rows.get('users/Hidden').isVisible=false;
+ db.rows.set('blocks/Blocked_member',{blockedById:'Blocked',blockedUserId:'member'});
+ const api=core(db,{ai:true,aiMode:'chat'});
+ const out=await api.ask('member','show me profiles',{userDoc:member});
+ assert.deepEqual(Array.from(out.cards,c=>c.targetUid).sort(),['Alice','Bo']);
+ assert.ok(out.cards.every(c=>c.score===0));
+ assert.ok(out.cards.every(c=>/profile browse/i.test(c.why)));
+ assert.equal((await api.loadCards('member')).length,2);
+});
+test('location-only discovery returns local profiles and never a wrong-city fallback',async()=>{
+ const db=new Database();seed(db,[person('Alice'),person('Bo',{city:'Bulawayo'})]);const api=core(db);
+ const out=await api.ask('member','find someone in Harare',{userDoc:member});
+ assert.deepEqual(Array.from(out.cards,c=>c.targetUid),['Alice']);
+ const none=await api.ask('member','find someone in London',{userDoc:member});
+ assert.equal(none.cards.length,0);
+});
+test('explicit skill search cannot be downgraded to chat by the intent model',async()=>{
+ const db=new Database();seed(db,[person('Alice'),person('Wrong',{occupation:'Accountant',skills:['Finance']})]);
+ const api=core(db,{ai:true,aiMode:'chat'});
+ const out=await api.ask('member','show me developers',{userDoc:member});
+ assert.deepEqual(Array.from(out.cards,c=>c.targetUid),['Alice']);
+ const none=await api.ask('member','find a Flutter developer with Rust',{userDoc:member});
+ assert.equal(none.cards.length,0);
+});
+test('browsing does not silently discard unknown skills or explicit constraints',()=>{
+ for(const query of ['find people with quantum cryptography','show me profiles with Rust','find a developer with Rust']) {
+  assert.equal(quality.assessCandidate(quality.searchBrief(query),fact()).eligible,false,query);
+ }
+ assert.equal(quality.assessCandidate(quality.searchBrief('show me profiles in Harare'),fact()).eligible,true);
+ assert.equal(quality.assessCandidate(quality.searchBrief('show me profiles in Harare'),fact({city:'London'})).eligible,false);
 });

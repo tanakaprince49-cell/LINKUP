@@ -1,6 +1,6 @@
 // Deterministic evidence gate. AI, paid visibility and profile completeness
 // cannot manufacture eligibility or silently relax a member's requirements.
-export const MATCHER_VERSION = 5;
+export const MATCHER_VERSION = 6;
 export const norm = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export const contains = (value, term) => new RegExp(`(^|[^a-z0-9])${escape(norm(term))}(?=$|[^a-z0-9])`, 'i').test(norm(value));
@@ -29,6 +29,9 @@ export function searchBrief(message) {
   const input=norm(message).slice(0,600);
   const excluded=negativeTerms(input);
   const positive=input.replace(/\b(?:not|without|exclude|excluding|avoid|no)\s+[a-z0-9+#.]+(?:\s+native)?/g,' ');
+  // Browsing is explicit consent to view the network, not permission to pad
+  // a failed specialist search with arbitrary people.
+  let browse=/^(?:(?:please )?(?:show|find|browse|list|see|explore|discover|pull up|bring up|get)(?: me)?(?: some| all| the| a few)? )?(?:profiles|people|members|builders)(?:(?: in| from| near| around| based in) [a-z][a-z ]{1,40}| on linkup)?[.!?]*$/.test(positive.trim());
   const required=[];
   const unverifiedConstraints=[];
   if(/\b(?:\d{1,2}\+?\s*(?:years?|yrs?))\b/.test(input))unverifiedConstraints.push('Minimum years of relevant experience are not confirmed.');
@@ -56,17 +59,19 @@ export function searchBrief(message) {
       required[i]={label:`${a.label} or ${b.label}`,terms:[...a.terms,...b.terms]};required.splice(j,1);j--;
     }
   }
-  const known = required.length>0;
+  let known = required.length>0;
   const locationMatch=positive.match(/\b(?:based in|must be in|only in|in|from|near|around)\s+([a-z][a-z ]{1,40})/);
   let location=locationMatch?.[1]?.split(/\s+(?:for|with|and|or|who|that|to|on|must|only)\b/)[0]?.trim() || '';
   if([...tech,...domains,...roles.keys()].some(t=>contains(location,t))) location='';
   const remoteAllowed=/\b(?:remote (?:is )?(?:fine|ok|okay|welcome)|or remote|anywhere|any location)\b/.test(input);
   const remoteOnly=/\bremote only\b/.test(input);
-  if(!required.length) {
+  if(!required.length && !browse) {
     const words=positive.replace(location,' ').match(/[a-z0-9][a-z0-9+#.]*/g)||[];
     for(const word of [...new Set(words)].filter(w=>w.length>2&&!fillers.has(w)).slice(0,6)) required.push({label:word,terms:[word]});
   }
-  return {need:String(message).slice(0,600),required,excluded,location,remoteAllowed,remoteOnly,known,unverifiedConstraints,version:MATCHER_VERSION};
+  if(!required.length && location)browse=true;
+  known=known||browse;
+  return {need:String(message).slice(0,600),required,excluded,location,remoteAllowed,remoteOnly,known,browse,unverifiedConstraints,version:MATCHER_VERSION};
 }
 function factsForEvidence(candidate) {
   const entries=[['role',candidate.role],...((candidate.skills||[]).map(s=>['skill',s])),...((candidate.industries||[]).map(s=>['industry',s]))];
@@ -88,11 +93,14 @@ export function assessCandidate(brief, candidate) {
   if(!inLocation && !(brief.remoteAllowed&&candidate.remoteOnly)) missing.push(`location: ${brief.location}`);
   if(brief.remoteOnly&&!candidate.remoteOnly)missing.push('remote availability');
   if(brief.location&&inLocation)evidence.push({requirement:brief.location,field:'location',value:[candidate.city,candidate.country].filter(Boolean).join(', ')});
-  const eligible=brief.required.length>0&&!missing.length&&!excluded;
-  return {eligible,evidence,missing,excluded,score:eligible?Math.min(90,65+evidence.filter(e=>e.field==='skill'||e.field==='role').length*4):0,
-    unknowns:['Current availability and interest are not confirmed.','Rates, funding and willingness to collaborate need a conversation.']};
+  const browsing=!!brief.browse && !brief.required.length;
+  if(browsing && candidate.role)evidence.push({requirement:'member profile',field:'role',value:String(candidate.role).slice(0,180)});
+  const eligible=(brief.required.length>0||browsing)&&!missing.length&&!excluded;
+  return {eligible,browse:browsing,evidence,missing,excluded,score:eligible&&!browsing?Math.min(90,65+evidence.filter(e=>e.field==='skill'||e.field==='role').length*4):0,
+    unknowns:[...(browsing?['This is a profile browse, not a confirmed collaboration fit.']:[]),'Current availability and interest are not confirmed.','Rates, funding and willingness to collaborate need a conversation.']};
 }
 export function evidenceReason(name, assessment) {
+  if(assessment.browse)return `${name} is a discoverable LINKUP member${assessment.evidence.some(e=>e.field==='location')?' in your requested location':''}. This is a profile browse, not a verified project match.`;
   return `${name}: ${assessment.evidence.slice(0,4).map(e=>`${e.requirement} — ${e.field}: “${e.value}”`).join('; ')}.`.slice(0,550);
 }
 // Cached external leads must still satisfy the current full brief. Old entries

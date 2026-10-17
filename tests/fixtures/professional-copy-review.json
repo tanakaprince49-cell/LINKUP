@@ -663,13 +663,13 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 706,
     "before": "I'm Linky.",
-    "after": "What\u2019s on your mind?"
+    "after": "Let’s find your people."
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 708,
     "before": "Tell me who you need and I answer right away with the people on LINKUP I can cite a reason for. No guessing, no waiting.",
-    "after": "Talk it through, or tell me who you\u2019d like to meet."
+    "after": "A collaborator, a fresh perspective, or just a good chat. What’s the move?"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
@@ -687,7 +687,7 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 973,
     "before": "Who do you need? Ask Linky\u2026",
-    "after": "Message Linky\u2026"
+    "after": "An idea, a name, a skill…"
   },
   {
     "file": "mobile/src/screens/LinkyProfileScreen.tsx",
@@ -1490,14 +1490,14 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 936,
     "before": "Someone who has raised from local angels, coffee",
-    "after": "What can you do?",
+    "after": "Just talk",
     "kind": "fragment"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 935,
     "before": "Try one of these, or type your own below.",
-    "after": "Find a Flutter developer in Harare",
+    "after": "Find a skill",
     "kind": "fragment"
   },
   {

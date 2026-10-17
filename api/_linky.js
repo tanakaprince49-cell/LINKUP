@@ -1592,7 +1592,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   const say = (kind,dossier,opts) => linkySay(kind,{...dossier,tonePreference:companionTone},opts);
   const tone = toneCommand(msgTyped);
   const utility = utilityCommand(msgTyped);
-  const vague = /^(?:find (?:me )?|i need |i want )?(?:a |an )?(?:co ?founder|co-founder|partner|someone|somebody|people|a match)[.!? ]*$/i.test(msgTyped.trim());
+  const vague = !searchBrief(msgTyped).browse && /^(?:find (?:me )?|i need |i want )?(?:a |an )?(?:co ?founder|co-founder|partner|someone|somebody|people|a match)[.!? ]*$/i.test(msgTyped.trim());
   const quickSocial = socialReply(msgTyped,{name:profileFacts(user)?.name,tone:companionTone,streak:Number(state.chitStreak||0)});
   if (tone || utility || vague) {
     const id = `${now.toString(36)}${crypto.randomBytes(3).toString('hex')}`;
@@ -1662,7 +1662,9 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   // "what can you do" - skips the intent gate, so the most common messages
   // never touch the model at all.
   const pre = parseAsk(answeringYes ? pendingIntent.need : msgTyped);
-  const skipGate = !answeringYes && (quickSocial || refined || pre.smallTalk || pre.chitChat || pre.bare || pre.askedWhatYouDo || pre.linkedinLookup);
+  const initialBrief=searchBrief(msgTyped);
+  const explicitDiscovery=initialBrief.browse || (pre.command && (initialBrief.known || !!initialBrief.location));
+  const skipGate = !answeringYes && (explicitDiscovery || quickSocial || refined || pre.smallTalk || pre.chitChat || pre.bare || pre.askedWhatYouDo || pre.linkedinLookup);
   const gate = answeringYes || skipGate ? null : await intentGate(msgTyped, { offer: offerOpen, lastAsk: state.lastAsk?.need || '', source, contextId:uid,tone:companionTone });
   let msg = answeringYes ? pendingIntent.need : msgTyped;
   // When the model hears an order our lists cannot read - Shona, slang, a phrase
@@ -1735,12 +1737,12 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   // what the word lists would have decided, for the case where no model answered
   const regexMode = (q.chitChat || q.smallTalk || q.bare || !q.tokens.length) && !wantsElseNow ? 'chat'
     : q.reflective && !q.command && !wantsElseNow ? 'ask_first' : 'search';
-  // The model's read wins - except on the three things a word list can see for
+  // The model's read wins except for explicit discovery and things a word list can see for
   // certain: a "yes" to the question he just asked, "who else", and a message
   // that is just somebody's name. A name is a directory lookup, never small
   // talk - the gate would happily chat "thapelo" away.
   const nameLookupNow = !!q.nameQuery && !q.chitChat && !q.smallTalk && !q.bare;
-  const mode = quickSocial && !answeringYes ? 'chat' : refined || answeringYes || wantsElseNow || nameLookupNow ? 'search' : (gate?.mode || regexMode);
+  const mode = quickSocial && !answeringYes ? 'chat' : refined || answeringYes || wantsElseNow || nameLookupNow || explicitDiscovery ? 'search' : (gate?.mode || regexMode);
 
   // ---- 1a-ii. a direct answer to the question Linky asked.
   if (pendingIntent && (answeringYes || answeringNo)) {
@@ -2054,7 +2056,7 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     });
     searchQ.excludedCardIds = [...exclude];
   }
-  const { picks, nearest, checked, usedAi, expansion = 'none', relatedTo = '' } = await findPeople(uid, searchQ, ctx, { user, state, existingCards: existing, exclude });
+  const { picks, nearest, checked, usedAi, expansion = 'none', relatedTo = '', brief: matchedBrief } = await findPeople(uid, searchQ, ctx, { user, state, existingCards: existing, exclude });
 
   const askId = newId();
   const resultCards = await persistCards(uid, existing, picks, { askId, need: searchQ.need, now, pairs: ctx.pairs });
@@ -2066,7 +2068,8 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
     : '';
   const loc = String(q.location || '').toLowerCase();
   const inLoc = !loc || picks.some((p) => `${p.facts.city} ${p.facts.country}`.toLowerCase().includes(loc));
-  const { reply, suggest: saidSuggest } = await say(kind, {
+  const browsing = matchedBrief?.browse && !matchedBrief.required.length;
+  const { reply, suggest: saidSuggest } = browsing && kind !== 'none' ? {reply:'',suggest:FOUND_CHIPS[source === 'app' ? 'app' : 'bot']} : await say(kind, {
     need: searchQ.need,
     offer: searchQ.offer || 'not stated',
     location: searchQ.location || 'not stated',
@@ -2086,7 +2089,9 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   }, { name: me.name, source, seed: q.wantsElse ? `${searchQ.norm}:else:${[...exclude].join(',')}` : searchQ.norm });
   // Nobody fits -> the LinkedIn offer is always said out loud, even when the
   // model phrased it as "outside the network" or the cache holds an old line.
-  const saidReply = kind === 'none' ? nudgeLinkedIn(reply, source) : reply;
+  const saidReply = kind === 'none' ? nudgeLinkedIn(reply, source) : browsing
+    ? `Here ${resultCards.length === 1 ? 'is 1 discoverable profile' : `are ${resultCards.length} discoverable profiles`}${matchedBrief.location ? ` in ${matchedBrief.location}` : ''} to explore. This is a network browse, not a confirmed collaboration fit. Open a profile, or tell me a skill to narrow it down.`
+    : reply;
   const saidSuggest2 = kind === 'none' ? (NONE_CHIPS)[source === 'app' ? 'app' : 'bot'] : resultCards.length>1 ? ['why 1','compare 1 and 2','prep 1'] : ['why 1','prep 1','who else do you have'];
   const record = {
     id: askId, need: searchQ.need, norm: searchQ.norm, offer: searchQ.offer, location: searchQ.location, remote: searchQ.remote,

@@ -13,7 +13,7 @@
     "test:payments": "node --test tests/web-returns.test.mjs tests/payonify-signature.test.mjs",
     "verify:web-routing": "node scripts/verify-web-routing.mjs",
     "test:copy": "node --test tests/professional-copy.test.mjs",
-    "test:linky": "node --test tests/linky-usage.test.mjs tests/app-review.test.mjs tests/linky-companion.test.mjs",
+    "test:linky": "node --test tests/linky-usage.test.mjs tests/app-review.test.mjs tests/linky-companion.test.mjs tests/linky-shortlist.test.mjs",
     "privacy:render": "node scripts/render-privacy-policy.cjs",
     "test:privacy": "node --test tests/privacy-policy.test.mjs",
     "test:identity": "node --test tests/member-badges.test.mjs"
