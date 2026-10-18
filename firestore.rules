@@ -165,6 +165,7 @@ service cloud.firestore {
           validOptionalString(data, 'teamSizePreference', 80) &&
           validOptionalString(data, 'ambition', 120) &&
           validOptionalString(data, 'profilePic', 900000) &&
+          validOptionalString(data, 'profilePicUrl', 2048) &&
           validOptionalString(data, 'coverPhoto', 900000) &&
           validOptionalString(data, 'vibeMedia', 900000) &&
           validOptionalList(data, 'photos', 3) &&
@@ -225,7 +226,7 @@ service cloud.firestore {
           'commitmentLevel', 'startupStage', 'fundingStage',
           'availability', 'timezone', 'languages', 'workStyle',
           'lookingFor', 'networkingIntent',
-          'profilePic', 'photos', 'coverPhoto', 'vibeMedia',
+          'profilePic', 'profilePicUrl', 'photos', 'coverPhoto', 'vibeMedia',
           'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'badges',
           'socialLinks', 'education', 'remoteOnly', 'willingToRelocate',
           'teamSizePreference', 'ambition',
@@ -261,7 +262,7 @@ service cloud.firestore {
           'commitmentLevel', 'startupStage', 'fundingStage',
           'availability', 'timezone', 'languages', 'workStyle',
           'lookingFor', 'networkingIntent',
-          'profilePic', 'photos', 'coverPhoto', 'vibeMedia',
+          'profilePic', 'profilePicUrl', 'photos', 'coverPhoto', 'vibeMedia',
           'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'badges',
           'socialLinks',
           'education', 'remoteOnly', 'willingToRelocate', 'teamSizePreference',
@@ -434,6 +435,7 @@ service cloud.firestore {
           (!changed.hasAny(['teamSizePreference']) || (data.teamSizePreference.matches('(?s)^.{0,80}$'))) &&
           (!changed.hasAny(['ambition']) || (data.ambition.matches('(?s)^.{0,120}$'))) &&
           (!changed.hasAny(['profilePic']) || (data.profilePic is string && data.profilePic.size() <= 900000)) &&
+          (!changed.hasAny(['profilePicUrl']) || (data.profilePicUrl is string && data.profilePicUrl.size() <= 2048 && (data.profilePicUrl == '' || data.profilePicUrl.matches('^https://[^ ]+$')))) &&
           (!changed.hasAny(['coverPhoto']) || (data.coverPhoto is string && data.coverPhoto.size() <= 900000)) &&
           (!changed.hasAny(['vibeMedia']) || (data.vibeMedia is string && data.vibeMedia.size() <= 900000)) &&
           (!changed.hasAny(['photos']) || (data.photos is list && data.photos.size() <= 3)) &&

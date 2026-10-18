@@ -57,3 +57,13 @@ test('new normal profiles remain creatable without minting paid or verification 
  await env.clearFirestore();const db=env.authenticatedContext('new-member').firestore();await assertSucceeds(setDoc(doc(db,'users/new-member'),{uid:'new-member',displayName:'New Member',bio:'Hello',turboConnect:false}));
  await assertFails(setDoc(doc(env.authenticatedContext('imposter').firestore(),'users/imposter'),{uid:'imposter',displayName:'Imposter',isPro:true,isVerified:true}));
 });
+
+test('owners can persist their hosted avatar URL but cannot write oversized or non-HTTPS aliases',async()=>{
+ const db=await seed();const ref=doc(db,'users/owner');
+ await assertSucceeds(setDoc(ref,{...identity,profilePic:'https://ik.imagekit.io/example/avatar.jpg',profilePicUrl:'https://ik.imagekit.io/example/avatar.jpg'},{merge:true}));
+ assert.equal((await getDoc(ref)).data().profilePicUrl,'https://ik.imagekit.io/example/avatar.jpg');
+ await assertSucceeds(setDoc(ref,{profilePic:'data:image/png;base64,iVBORw0KGgo=',profilePicUrl:''},{merge:true}));
+ assert.equal((await getDoc(ref)).data().profilePicUrl,'');
+ for(const value of ['http://example.com/a.jpg','javascript:alert(1)',42,'https://example.com/'+'a'.repeat(2048)])await assertFails(setDoc(ref,{profilePicUrl:value},{merge:true}));
+ await assertFails(setDoc(doc(env.authenticatedContext('stranger').firestore(),'users/owner'),{profilePicUrl:'https://example.com/other.jpg'},{merge:true}));
+});

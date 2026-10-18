@@ -73,7 +73,9 @@ export const uploadAvatarToImageKit = (uid: string, dataUri: string) =>
   uploadImageToImageKit(uid, dataUri, {
     folder: IMAGEKIT_AVATAR_FOLDER,
     fileName: `${uid}.jpg`,
-    useUniqueFileName: false,
+    // New URLs prevent CDN/search caches (or another device's late upload)
+    // from replacing the contents of an already-published profile photo.
+    useUniqueFileName: true,
   });
 
 /** Advertiser logos for LinkUp Campaigns. Unique names so a re-uploaded logo

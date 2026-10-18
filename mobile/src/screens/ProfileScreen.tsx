@@ -388,6 +388,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [isEditing, setIsEditing] = useState(false);
   const [editFocus, setEditFocus] = useState<'all' | 'bio' | 'skills' | 'project' | 'idea' | 'photos'>('all');
   const [isSaving, setIsSaving] = useState(false);
+  const avatarUploadPending = useRef(false);
   const [connectionGate, setConnectionGate] = useState<ConnectionGate | null>(null);
   const [editData, setEditData] = useState<any>(null);
   const [viewedProfile, setViewedProfile] = useState<any>(null);
@@ -1090,59 +1091,69 @@ export default function ProfileScreen({ navigation, route }: any) {
   };
 
   const pickProfilePic = async () => {
-    if (isViewingOther) return;
+    if (isViewingOther || avatarUploadPending.current) return;
     if (!myProfile) {
       notifyUser('Profile not ready', 'Give it a second to finish loading, then tap again.');
       return;
     }
-    const ImagePicker = await import('expo-image-picker');
-    const { imageAssetToDataUri } = await import('../lib/imageUploadLimits');
-    if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        notifyUser('Permission Denied', 'We need access to your photos to update your profile picture.');
-        return;
-      }
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: (ImagePicker as any).MediaType?.Images ? [(ImagePicker as any).MediaType.Images] : ['images'],
-      allowsEditing: Platform.OS !== 'web',
-      aspect: [1, 1],
-      quality: 0.7,
-      base64: true,
-    });
-
-    if (!result.canceled) {
-    const { dataUri, error } = await imageAssetToDataUri(result.assets?.[0]);
-      if (!dataUri) {
-        notifyUser('Photo too large', error || 'Please choose a smaller photo.');
-        return;
-      }
-      setIsSaving(true);
-      try {
-        await updateOwnProfileDoc({ profilePic: dataUri });
-        updateLocalProfile({ profilePic: dataUri });
-        syncOwnPublicProfileIndex(myProfile.uid, { ...(profile || {}), profilePic: dataUri, uid: myProfile.uid }).catch(() => {});
-
-        // CDN lane: host the new avatar on ImageKit (free). Saves the hosted
-        // URL as profilePicUrl — the lean index prefers hosted photos first,
-        // so lists/lists stay featherweight automatically.
-        void uploadAvatarToImageKit(myProfile.uid, dataUri).then((url) => {
-          if (!url) return;
-          updateOwnProfileDoc({ profilePicUrl: url }).catch(() => {});
-          updateLocalProfile({ profilePicUrl: url });
-        });
-
-        if (isEditing) {
-          setEditData({ ...editData, profilePic: dataUri });
+    avatarUploadPending.current = true;
+    try {
+      const ImagePicker = await import('expo-image-picker');
+      const { imageAssetToDataUri } = await import('../lib/imageUploadLimits');
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          notifyUser('Permission Denied', 'We need access to your photos to update your profile picture.');
+          return;
         }
-      } catch (e: any) {
-        handleFirestoreError(e, OperationType.UPDATE, `users/${myProfile.uid}`);
-        notifyUser("Upload failed", e?.message || "Failed to update profile picture.");
-      } finally {
-        setIsSaving(false);
       }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: (ImagePicker as any).MediaType?.Images ? [(ImagePicker as any).MediaType.Images] : ['images'],
+        allowsEditing: Platform.OS !== 'web',
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (!result.canceled) {
+        const { dataUri, error } = await imageAssetToDataUri(result.assets?.[0]);
+        if (!dataUri) {
+          notifyUser('Photo too large', error || 'Please choose a smaller photo.');
+          return;
+        }
+        setIsSaving(true);
+        try {
+          await updateOwnProfileDoc({ profilePic: dataUri, profilePicUrl: '' });
+          updateLocalProfile({ profilePic: dataUri, profilePicUrl: '' });
+          syncOwnPublicProfileIndex(myProfile.uid, { ...(profile || {}), profilePic: dataUri, profilePicUrl: '', uid: myProfile.uid }).catch(() => {});
+
+          if (isEditing) {
+            setEditData((current: any) => current ? { ...current, profilePic: dataUri, profilePicUrl: '' } : current);
+          }
+          // Keep selections serialized until hosting finishes: an older upload
+          // must not publish over a newer selection. Inline persistence above
+          // remains the fallback if the optional CDN lane is unavailable.
+          await uploadAvatarToImageKit(myProfile.uid, dataUri).then(async (url) => {
+            if (!url) return;
+            // Persist before updating local state. The canonical HTTPS avatar is
+            // usable by both app clients and public profile/search metadata.
+            await updateOwnProfileDoc({ profilePic: url, profilePicUrl: url });
+            updateLocalProfile({ profilePic: url, profilePicUrl: url });
+            setEditData((current: any) => current?.profilePic === dataUri
+              ? { ...current, profilePic: url, profilePicUrl: url } : current);
+            await syncOwnPublicProfileIndex(myProfile.uid, { ...(profile || {}), profilePic: url, profilePicUrl: url, uid: myProfile.uid });
+          }).catch((error) => console.warn('Hosted avatar sync skipped; the saved profile photo remains available.', error));
+
+        } catch (e: any) {
+          handleFirestoreError(e, OperationType.UPDATE, `users/${myProfile.uid}`);
+          notifyUser("Upload failed", e?.message || "Failed to update profile picture.");
+        } finally {
+          setIsSaving(false);
+        }
+      }
+    } finally {
+      avatarUploadPending.current = false;
     }
   };
 

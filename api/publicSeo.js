@@ -1,7 +1,8 @@
+import {selectProfileImage} from './_publicProfileImage.js';
 import { getDb } from './_firebaseAdmin.js';
-import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, validId, publicEligible, projectProfile, profileUrl, renderProfile, renderDirectory, documentHtml, xmlIndex, xmlUrls } from './_publicSeo.js';
+import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, safeUrl, validId, publicEligible, projectProfile, profileUrl, renderProfile, renderDirectory, documentHtml, xmlIndex, xmlUrls } from './_publicSeo.js';
 
-const PUBLIC_FIELDS = ['displayName','fullName','name','username','bio','occupation','company','city','country','skills','lookingFor','profilePicUrl','photoURL','profilePic','socialLinks','projects','deleted','isBot','onboarded','isVisible','isStealthMode'];
+const PUBLIC_FIELDS = ['displayName','fullName','name','username','bio','occupation','company','city','country','skills','lookingFor','profilePicUrl','photoURL','profilePic','avatarUrl','socialLinks','projects','deleted','isBot','onboarded','isVisible','isStealthMode'];
 async function currentProfiles(db, ids) {
   if (!ids.length) return [];
   // The source of truth is users, NOT the eventually consistent discovery
@@ -34,6 +35,22 @@ export function createPublicSeoHandler(database = getDb) {
     if (!['GET','HEAD'].includes(req.method)) { res.setHeader('Allow','GET, HEAD'); return failure(405,'Method not allowed'); }
     try {
       if (mode === 'robots') return send(200,`User-agent: *\nAllow: /\n\nSitemap: ${APP}/sitemap.xml\n`,'text/plain; charset=utf-8');
+      if (mode === 'image') {
+        const uid = single(req.query?.uid);
+        if (!validId(uid)) return failure(404,'Profile image not found');
+        const db = database();
+        const [source] = await db.getAll(db.collection('users').doc(uid), {fieldMask: PUBLIC_FIELDS});
+        if (!source?.exists || !publicEligible(source.data(), uid)) return failure(404,'Profile image not found');
+        const photo = selectProfileImage(uid, source.data(), safeUrl);
+        if (!photo) return failure(404,'Profile image not found');
+        // No remote proxy or arbitrary fetch: redirect a hosted avatar or serve
+        // a bounded, magic-checked raster legacy image from this visible owner.
+        if (!photo.bytes) { res.setHeader('Location',photo.url); return send(302,''); }
+        res.setHeader('Content-Length',String(photo.bytes.length));
+        res.setHeader('Content-Disposition','inline');
+        if (req.method === 'HEAD') { res.setHeader('Content-Type',photo.contentType); res.status(200); return res.end(); }
+        return send(200, photo.bytes, photo.contentType);
+      }
       if (mode === 'profile') {
         const uid = single(req.query?.uid);
         if (!validId(uid)) return failure(404,'Profile not found');
@@ -84,7 +101,7 @@ export function createPublicSeoHandler(database = getDb) {
         // URLs. At very large scale replace this with stored cursor manifests.
         const snap = await db.collection('publicProfiles').orderBy('__name__').select().offset(page * SITEMAP_SIZE).limit(SITEMAP_SIZE).get();
         const profiles = await currentProfiles(db,snap.docs.map(d => d.id));
-        return send(200,xmlUrls(profiles.map(p => profileUrl(p.uid))),'application/xml; charset=utf-8');
+        return send(200,xmlUrls(profiles.map(p => ({url:profileUrl(p.uid),image:p.image}))),'application/xml; charset=utf-8');
       }
       return failure(404,'Page not found');
     } catch (error) {
