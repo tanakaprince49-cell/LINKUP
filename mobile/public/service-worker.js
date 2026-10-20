@@ -4,7 +4,7 @@
 const SCOPE_URL = new URL(self.registration.scope);
 const SCOPE_PATH = SCOPE_URL.pathname.replace(/\/?$/, '/');
 const CACHE_PREFIX = `linkup-pwa-${encodeURIComponent(SCOPE_PATH)}-`;
-const CACHE_NAME = `${CACHE_PREFIX}v10`;
+const CACHE_NAME = `${CACHE_PREFIX}v11`;
 const appUrl = (path = '') => new URL(path.replace(/^\/+/, ''), SCOPE_URL).href;
 const inScope = (url) => url.origin === SCOPE_URL.origin && url.pathname.startsWith(SCOPE_PATH);
 const SHELL_URL = appUrl('index.html');
@@ -39,7 +39,7 @@ self.addEventListener('fetch', (event) => {
   if (!inScope(url)) return;
   const relativePath = url.pathname.slice(SCOPE_PATH.length);
   // Never cache personalized API responses or Firebase authentication helpers.
-  if (/^(?:p(?:\/|$)|builders(?:\/|$)|sitemap(?:[.-]|$)|robots\.txt$)/.test(relativePath)) return;
+  if (/^(?:p(?:\/|$)|builders(?:\/|$)|campaigns(?:\/|$)|startups(?:\/|$)|news(?:\/|$)|sitemap(?:[.-]|$)|robots\.txt$)/.test(relativePath)) return;
   if (relativePath === 'api' || relativePath.startsWith('api/') || relativePath.startsWith('__/')) return;
 
   if (request.mode === 'navigate') {

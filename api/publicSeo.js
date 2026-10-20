@@ -1,3 +1,5 @@
+import {serveContentSeo,contentSitemapIndex} from './_contentSeo.js';
+import {getNewsFeed} from './_newsFeed.js';
 import {selectProfileImage} from './_publicProfileImage.js';
 import { getDb } from './_firebaseAdmin.js';
 import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, safeUrl, validId, publicEligible, projectProfile, profileUrl, renderProfile, renderDirectory, documentHtml, xmlIndex, xmlUrls } from './_publicSeo.js';
@@ -11,7 +13,7 @@ async function currentProfiles(db, ids) {
   return docs.filter(d => d.exists && publicEligible(d.data(), d.id)).map(d => projectProfile(d.id, d.data()));
 }
 const single = value => typeof value === 'string' ? value : '';
-export function createPublicSeoHandler(database = getDb) {
+export function createPublicSeoHandler(database = getDb, news = getNewsFeed) {
   return async (req, res) => {
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
@@ -35,6 +37,7 @@ export function createPublicSeoHandler(database = getDb) {
     if (!['GET','HEAD'].includes(req.method)) { res.setHeader('Allow','GET, HEAD'); return failure(405,'Method not allowed'); }
     try {
       if (mode === 'robots') return send(200,`User-agent: *\nAllow: /\n\nSitemap: ${APP}/sitemap.xml\n`,'text/plain; charset=utf-8');
+      if (await serveContentSeo(req,{database,send,failure,news})) return;
       if (mode === 'image') {
         const uid = single(req.query?.uid);
         if (!validId(uid)) return failure(404,'Profile image not found');
@@ -87,9 +90,11 @@ export function createPublicSeoHandler(database = getDb) {
         const pages = Math.max(1,Math.ceil(count / SITEMAP_SIZE));
         // Sitemap indexes may contain at most 50,000 child sitemaps.
         if (pages > 50000) throw new Error('Sitemap index capacity exceeded');
-        return send(200,xmlIndex([`${APP}/sitemap-static.xml`,...Array.from({length:pages},(_,i) => `${APP}/sitemap-profiles-${i}.xml`)]),'application/xml; charset=utf-8');
+        const urls=[`${APP}/sitemap-static.xml`,...Array.from({length:pages},(_,i) => `${APP}/sitemap-profiles-${i}.xml`),...await contentSitemapIndex(db)];
+        if(urls.length>50000)throw new Error('Sitemap index capacity exceeded');
+        return send(200,xmlIndex(urls),'application/xml; charset=utf-8');
       }
-      if (mode === 'static') return send(200,xmlUrls([`${APP}/landing`,`${APP}/builders`]),'application/xml; charset=utf-8');
+      if (mode === 'static') return send(200,xmlUrls([`${APP}/landing`,`${APP}/builders`,`${APP}/campaigns`,`${APP}/startups`,`${APP}/news`]),'application/xml; charset=utf-8');
       if (mode === 'profiles') {
         const raw = single(req.query?.page);
         if (!/^(0|[1-9]\d{0,4})$/.test(raw)) return failure(400,'Invalid sitemap');

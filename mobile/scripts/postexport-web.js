@@ -161,7 +161,7 @@ html = injectOnce(html, 'linkup-devtools-guard', devToolsGuard, '</body>');
 // Export distinct public and private shells without changing app routes or assets.
 fs.writeFileSync(indexPath, withHead(html, false));
 const publicLanding = withHead(html, true).replace(/<noscript>[\s\S]*?<\/noscript>/i,
-  '<noscript><main><h1>LINKUP: Cofounder Matching and Startup Networking</h1><p>' + searchCopy.description + '</p><p><a href="https://www.linkupbuild.com/app/builders">Explore public professional profiles</a>. Enable JavaScript to use the app.</p></main></noscript>');
+  '<noscript><main><h1>LINKUP: Cofounder Matching and Startup Networking</h1><p>' + searchCopy.description + '</p><p><a href="https://www.linkupbuild.com/app/builders">Explore public professional profiles</a>, <a href="https://www.linkupbuild.com/app/campaigns">discover products</a>, <a href="https://www.linkupbuild.com/app/startups">explore startups</a> and <a href="https://www.linkupbuild.com/app/news">read AI and startup news</a>. Enable JavaScript to use the app.</p></main></noscript>');
 fs.writeFileSync(path.join(distDir, 'landing.html'), publicLanding);
 
 // Legal pages also exist at both mounts. Their root-relative cross-links must

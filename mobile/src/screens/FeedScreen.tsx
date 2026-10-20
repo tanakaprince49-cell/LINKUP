@@ -1,3 +1,4 @@
+import { publicStartupLink } from '../lib/profileLinks';
 import MemberBadges from '../components/MemberBadges';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -443,6 +444,7 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
       name,
       tagline,
       website,
+      publicStartupLink(post.id),
       "Discover cofounders and startup collaborators on LINKUP.",
     ].filter(Boolean).join('\n');
     try {

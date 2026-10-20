@@ -4,6 +4,7 @@ import {
   Alert,
   Linking,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -23,8 +24,10 @@ import {
   Pause,
   Play,
   Square,
+  Share2,
   TrendingUp,
 } from 'lucide-react-native';
+import { publicCampaignLink } from '../lib/profileLinks';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -35,6 +38,7 @@ import {
   CAMPAIGN_PLACEMENT_OPTIONS,
   Campaign,
   campaignStatusMeta,
+  isCampaignServable,
   normalizeWebsite,
   setCampaignStatus,
   websiteDisplay,
@@ -104,7 +108,12 @@ export default function CampaignDetailScreen({ navigation, route }: any) {
             {campaign?.name || ''}
           </Text>
         </View>
-        <View style={styles.headerBtn} />
+        {isCampaignServable(campaign) ? (
+          <TouchableOpacity accessibilityLabel="Share public product page" style={styles.headerBtn}
+            onPress={() => { void Share.share({ message: publicCampaignLink(campaignId) }).catch(() => {}); }}>
+            <Share2 size={20} color={textColor(isDark)} />
+          </TouchableOpacity>
+        ) : <View style={styles.headerBtn} />}
       </View>
 
       {loading ? (

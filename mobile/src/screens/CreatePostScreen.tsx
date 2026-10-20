@@ -383,6 +383,9 @@ export default function CreatePostScreen({ navigation }: any) {
               {media.length}/{MAX_POST_MEDIA} photos — screenshots, team, or the product.
             </Text>
 
+            <Text style={[styles.hint, { color: textColor(isDark, 'muted') }]}>
+              Startup introductions from public profiles may appear on public LINKUP pages and in search engines.
+            </Text>
             {/* Weekly budget */}
             <View style={[styles.budgetBar, liquidGlass(isDark)]}>
               <Text style={[styles.budgetText, { color: textColor(isDark, 'secondary') }]}>

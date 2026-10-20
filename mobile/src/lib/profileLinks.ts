@@ -29,3 +29,12 @@ export function publicProfileLink(userId?: string | null) {
 export function profileLinkFor(profile: { uid?: string | null; profileLink?: string | null } | null | undefined) {
   return publicProfileLink(profile?.uid || profileIdFromLink(profile?.profileLink));
 }
+
+// Stable public URLs are shared across native and web. Public content pages
+// do not require the recipient to install the app or sign in.
+export function publicStartupLink(id: string) {
+  return id ? `${PUBLIC_PROFILE_BASE}/startups/${encodeURIComponent(id)}` : '';
+}
+export function publicCampaignLink(id: string) {
+  return id ? `${PUBLIC_PROFILE_BASE}/campaigns/${encodeURIComponent(id)}` : '';
+}

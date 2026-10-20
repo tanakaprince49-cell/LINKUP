@@ -9,7 +9,7 @@ function database(users = {alice:user}, ids = Object.keys(users)) {
   return {queries, collection(name) {
     let offset = 0, limit = Infinity, after = '';
     const q = {doc:id => ({id}),orderBy:() => q,select:() => q,
-      startAfter:id => {after=id;return q;},offset:n => {offset=n;return q;},limit:n => {limit=n;return q;},
+      where:() => q,startAfter:id => {after=id;return q;},offset:n => {offset=n;return q;},limit:n => {limit=n;return q;},
       count:() => ({get:async() => ({data:() => ({count:ids.length})})}),
       get:async() => {queries.push({name,offset,limit,after});return {docs:ids.slice().sort().filter(id => !after || id > after).slice(offset,offset+limit).map(id => ({id}))};}};
     return q;

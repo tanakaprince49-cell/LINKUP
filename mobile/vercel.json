@@ -48,6 +48,62 @@
   ],
   "rewrites": [
     {
+      "source": "/app/campaigns",
+      "destination": "/api/publicSeo?mode=campaigns"
+    },
+    {
+      "source": "/app/campaigns/:id",
+      "destination": "/api/publicSeo?mode=campaign&id=:id"
+    },
+    {
+      "source": "/app/startups",
+      "destination": "/api/publicSeo?mode=startups"
+    },
+    {
+      "source": "/app/startups/:id",
+      "destination": "/api/publicSeo?mode=startup&id=:id"
+    },
+    {
+      "source": "/app/news",
+      "destination": "/api/publicSeo?mode=news"
+    },
+    {
+      "source": "/app/sitemap-campaigns-:page.xml",
+      "destination": "/api/publicSeo?mode=campaign-sitemap&page=:page"
+    },
+    {
+      "source": "/app/sitemap-startups-:page.xml",
+      "destination": "/api/publicSeo?mode=startup-sitemap&page=:page"
+    },
+    {
+      "source": "/campaigns",
+      "destination": "/api/publicSeo?mode=campaigns"
+    },
+    {
+      "source": "/campaigns/:id",
+      "destination": "/api/publicSeo?mode=campaign&id=:id"
+    },
+    {
+      "source": "/startups",
+      "destination": "/api/publicSeo?mode=startups"
+    },
+    {
+      "source": "/startups/:id",
+      "destination": "/api/publicSeo?mode=startup&id=:id"
+    },
+    {
+      "source": "/news",
+      "destination": "/api/publicSeo?mode=news"
+    },
+    {
+      "source": "/sitemap-campaigns-:page.xml",
+      "destination": "/api/publicSeo?mode=campaign-sitemap&page=:page"
+    },
+    {
+      "source": "/sitemap-startups-:page.xml",
+      "destination": "/api/publicSeo?mode=startup-sitemap&page=:page"
+    },
+    {
       "source": "/app/p/:uid",
       "destination": "/api/publicSeo?mode=profile&uid=:uid"
     },

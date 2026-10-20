@@ -201,11 +201,11 @@ function worker(scopePath = '/app/', options = {}) {
 const request = (pathname, mode = 'navigate', method = 'GET') => ({ url: `https://example.com${pathname}`, method, mode });
 
 test('service worker precaches only its scope and deletes only its own old caches', async () => {
-  const sw = worker('/app/', { keys: ['marketing-assets', 'linkup-pwa-%2F-v9', 'linkup-pwa-v8', 'linkup-pwa-%2Fapp%2F-v8', 'linkup-pwa-%2Fapp%2F-v9', 'linkup-pwa-%2Fapp%2F-v10'] });
+  const sw = worker('/app/', { keys: ['marketing-assets', 'linkup-pwa-%2F-v9', 'linkup-pwa-v8', 'linkup-pwa-%2Fapp%2F-v8', 'linkup-pwa-%2Fapp%2F-v9', 'linkup-pwa-%2Fapp%2F-v10', 'linkup-pwa-%2Fapp%2F-v11'] });
   await sw.fire('install');
   assert.ok(sw.precached.every((url) => new URL(url).pathname.startsWith('/app/')));
   await sw.fire('activate');
-  assert.deepEqual(sw.deleted, ['linkup-pwa-%2Fapp%2F-v8', 'linkup-pwa-%2Fapp%2F-v9']);
+  assert.deepEqual(sw.deleted, ['linkup-pwa-%2Fapp%2F-v8', 'linkup-pwa-%2Fapp%2F-v9', 'linkup-pwa-%2Fapp%2F-v10']);
   const root = worker('/', { keys: ['marketing-assets', 'linkup-pwa-v8', 'linkup-pwa-%2Fapp%2F-v9'] });
   await root.fire('activate');
   assert.deepEqual(root.deleted, ['linkup-pwa-v8']);
@@ -213,7 +213,7 @@ test('service worker precaches only its scope and deletes only its own old cache
 
 test('service worker leaves homepage, other apps, APIs, auth and foreign origins untouched', async () => {
   const sw = worker();
-  for (const pathname of ['/', '/assets/landing.js', '/application', '/app-other/', '/app/api/linky', '/app/__/auth/handler', '/app/p/alice', '/app/builders', '/app/sitemap.xml', '/app/sitemap-profiles-0.xml', '/app/robots.txt']) {
+  for (const pathname of ['/', '/assets/landing.js', '/application', '/app-other/', '/app/api/linky', '/app/__/auth/handler', '/app/p/alice', '/app/builders', '/app/campaigns', '/app/campaigns/product', '/app/startups', '/app/startups/startup', '/app/news', '/app/sitemap-campaigns-0.xml', '/app/sitemap-startups-0.xml', '/app/sitemap.xml', '/app/sitemap-profiles-0.xml', '/app/robots.txt']) {
     assert.equal((await sw.fire('fetch', { request: request(pathname) })).intercepted, false, pathname);
   }
   assert.equal((await sw.fire('fetch', { request: request('/app/api/linky', 'cors', 'POST') })).intercepted, false);

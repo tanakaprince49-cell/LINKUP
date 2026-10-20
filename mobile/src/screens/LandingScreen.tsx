@@ -111,6 +111,19 @@ export default function LandingScreen({ navigation }: any) {
             Explore public professional profiles →
           </Text>
 
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 16 }}>
+            {[
+              { label: 'Discover products', path: 'campaigns' },
+              { label: 'Explore startups', path: 'startups' },
+              { label: 'AI & startup news', path: 'news' },
+            ].map((item) => {
+              const url = `https://www.linkupbuild.com/app/${item.path}`;
+              return <Text key={item.path} {...(Platform.OS === 'web' ? { href: url } : {}) as any}
+                accessibilityRole="link" style={[styles.legal, styles.link]}
+                onPress={Platform.OS === 'web' ? undefined : () => openLink(url)}>{item.label}</Text>;
+            })}
+          </View>
+
           <Text style={[styles.legal, { color: textColor(isDark, 'muted') }]}>
             By continuing you agree to our{' '}
             <Text style={styles.link} onPress={() => openLink('https://docs.google.com/document/d/1SPu2VZchQfmWQT0gr2QuvmHbiuLpBZX-aFpmVd-ph2E/edit?usp=sharing')}>

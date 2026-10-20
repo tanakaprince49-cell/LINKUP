@@ -411,6 +411,9 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
             </View>
           </View>
 
+          <Text style={{ color: textColor(isDark, 'secondary'), fontSize: 13, marginBottom: 12 }}>
+            Approved, active campaigns from public profiles may appear on public LINKUP pages and in search engines.
+          </Text>
           <TouchableOpacity
             onPress={submit}
             disabled={!canSubmit}

@@ -21,6 +21,7 @@ const NEWS_FIRST_AD_AFTER = 1;
 const NEWS_AD_EVERY = 2;
 
 function timeAgo(dateStr: string): string {
+  if (!dateStr || !Number.isFinite(Date.parse(dateStr))) return 'Date unavailable';
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 60) return `${mins}m`;

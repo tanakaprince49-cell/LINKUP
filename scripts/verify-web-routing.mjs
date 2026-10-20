@@ -31,4 +31,19 @@ for(const base of [original,app]) {
 }
 const robots=await get(marketing+'/robots.txt');assert.match(robots.body,/Sitemap: https:\/\/www.linkupbuild.com\/app\/sitemap.xml/);console.log('PASS authoritative robots advertises app sitemap');
 for(const path of ['/sitemap.xml','/sitemap-profiles-0.xml']) {const result=await get(app+path);assert.equal(result.res.status,200);assert.match(result.res.headers.get('content-type'),/xml/);assert.match(result.body,/<(?:sitemapindex|urlset)\b/);console.log('PASS profile sitemap',path);}
+for(const section of ['campaigns','startups','news']) {
+  const result=await get(app+'/'+section);assert.equal(result.res.status,200,section);
+  assert.match(result.res.headers.get('content-type'),/text\/html/);
+  assert.match(result.body,/<h1>/);assert.ok(result.body.includes('rel="canonical" href="'+app+'/'+section+'"'));
+  assert.match(result.body,/name="robots" content="index,follow/);
+  assert.doesNotMatch(result.body,/<script[^>]+src=/);
+  console.log('PASS crawlable public content',section);
+}
+const sitemapIndex=await get(app+'/sitemap.xml');
+for(const section of ['campaigns','startups']) {
+  assert.ok(sitemapIndex.body.includes('sitemap-'+section+'-0.xml'));
+  const result=await get(app+'/sitemap-'+section+'-0.xml');assert.equal(result.res.status,200);
+  assert.match(result.res.headers.get('content-type'),/xml/);assert.match(result.body,/<urlset\b/);
+  console.log('PASS automatic content sitemap',section);
+}
 console.log('ALL LIVE ROUTING CHECKS PASSED. This does NOT prove sign-in or a paid checkout/webhook delivery.');
