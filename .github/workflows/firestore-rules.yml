@@ -45,6 +45,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Builder API tests import the real service and use firebase-admin from
+      # the root lockfile; rules-unit-testing remains isolated below.
+      - name: Install server dependencies for API emulator tests
+        run: npm ci --no-audit --no-fund
+
       - name: Install isolated Firestore test dependencies
         run: npm --prefix tests/firestore-profile ci --no-audit --no-fund
 
