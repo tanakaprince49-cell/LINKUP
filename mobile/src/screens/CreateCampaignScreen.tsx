@@ -14,21 +14,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  CheckCircle2,
-  ChevronLeft,
-  ExternalLink,
-  Globe,
-  ImagePlus,
-  LayoutGrid,
-  Lightbulb,
-  Megaphone,
-  Search,
-  Send,
-  Sparkles,
-  X as XIcon,
-  Zap,
-} from 'lucide-react-native';
+import { CheckCircle2, ChevronLeft, ExternalLink, Globe, ImagePlus, LayoutGrid, Lightbulb, Megaphone, Search, Send, X as XIcon, Zap, MessageCircle } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdminEmail } from '../lib/admin';
 import { useTheme } from '../contexts/ThemeContext';
@@ -54,7 +40,7 @@ const PLACEMENT_ICONS: Record<string, any> = {
   ideas: Lightbulb,
   search: Search,
   hub: LayoutGrid,
-  linky: Sparkles,
+  linky: MessageCircle,
   discover: Zap,
 };
 

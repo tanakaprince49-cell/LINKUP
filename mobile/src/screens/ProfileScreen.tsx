@@ -1,4 +1,5 @@
 import {saveProfileSections, ProfileSectionSaveError} from '../lib/saveProfileSections';
+import ContributionCalendar from '../components/ContributionCalendar';
 import MemberBadges, { isGoldMember } from '../components/MemberBadges';
 import { openPlayReview } from '../lib/appReview';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
@@ -2651,6 +2652,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         {!isEditing && (
           <>
+            {profile?.uid && <View style={styles.section}><ContributionCalendar userId={profile.uid} key={profile.uid} isDark={isDark} refreshKey={String(profile.lastShippedAt||'')} onPublish={!isViewingOther?()=>navigation.navigate('ShipLog'):undefined}/></View>}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>About</Text>
               <View style={[styles.profileStoryCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>

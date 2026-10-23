@@ -613,7 +613,7 @@ export default function CampaignsScreen({ navigation }: any) {
   const renderPaywall = () => (
     <View>
       <View style={s.arena}>
-        {/* No black pill and no sparkle here — just a microphone and the
+        {/* No black pill and no decoration here — just a microphone and the
             words, in ink so they read against the yellow arena. */}
         <View style={s.trialRow}>
           <Megaphone size={14} color={INK} strokeWidth={2.5} />

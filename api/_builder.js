@@ -1,6 +1,7 @@
 import {DAY,id,clean,requireText,problem,validId,safeLink,stateOf,freshState,contextOf,sanitizePrefs,weekKey,localTime,brief,relevantPeople,coachPrompt,nextDelivery,relevantLeads,weeklySummary} from './_builderCore.js';
 import {publicEligible} from './_publicSeo.js';
 import {reserveMessage,refundMessage,readMessageQuota} from './_linkyUsage.js';
+import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,contributionInsight,containsCredential,normalizeUpdate} from '../shared/contributions.js';
 import {EXTERNAL_LEADS} from '../shared/builder-leads.js';
 const fields=['displayName','fullName','name','occupation','skills','industries','city','country','onboarded','deleted','isBot','isVisible','isStealthMode','startupStage','remoteOnly'];
 const row=d=>({id:d.id,...d.data()});
@@ -92,6 +93,42 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
    await event(uid,'coach_completed');return {...result,messageQuota:reservation};
   }catch(error){if(reservation)await refundMessage(db,uid,reservation);await change(uid,current=>{current.coachRuns=current.coachRuns.map(r=>r.key===key?{...r,status:'failed'}:r);});if(error.code==='ask_limit'||error.builder)throw error;throw problem('The review could not finish. Your reserved chat message was refunded.',503);}
  }
+ function contributionHistory(c,person){
+  const legacy=(Array.isArray(person.shipLogs)?person.shipLogs:[]).slice(0,20).map(u=>({id:clean(u.id,128),text:clean(u.text,180),link:safeLink(u.link),createdAt:clean(u.createdAt,32)})).filter(u=>u.id&&u.text);
+  return [...(c.updates||[]),...legacy].filter((u,i,all)=>all.findIndex(v=>v.id===u.id)===i).slice(0,20);
+ }
+ async function contributionData(uid,target){
+  const own=target===uid,person=await db.collection('users').doc(target).get();
+  if(!person.exists||person.data().deleted||person.data().banned||(!own&&(!publicEligible(person.data(),target)||await blocked(uid,target))))throw problem('This contribution calendar is not available.',403);
+  const d=await db.collection('builderContributions').doc(target).get(),c=d.exists?d.data():{};
+  return {days:Array.isArray(c.days)?c.days:[],points:Number(c.points)||0,totalUpdates:Number(c.totalUpdates)||0,timezone:'UTC',today:contributionDay(now()),
+   ...(own?{updates:c.updates||[],shipLogs:contributionHistory(c,person.data())}:{}),
+   notice:'Self-reported progress, recorded by LINKUP; not proof of skill, trust, verification or investment quality.'};
+ }
+ async function publishContribution(uid,input){
+  const text=requireText(input.text,180,12),key=ownId(input.key),link=input.link?safeLink(input.link):'';
+  if(input.link&&!link)throw problem('Use an HTTPS link without embedded credentials, or leave the link empty.');
+  if(containsCredential(text)||containsCredential(link))throw problem('Remove credentials, API keys and passwords before publishing.');
+  const at=now(),day=contributionDay(at),createdAt=new Date(at).toISOString(),cr=db.collection('builderContributions').doc(uid),ur=db.collection('users').doc(uid);
+  return db.runTransaction(async tx=>{
+   const [cd,ud,sd]=await Promise.all([tx.get(cr),tx.get(ur),tx.get(ref(uid))]);
+   if(!ud.exists||ud.data().deleted||ud.data().banned||ud.data().onboarded!==true)throw problem('Your profile is no longer available.',403);
+   const c=cd.exists?cd.data():{days:[],updates:[],points:0,totalUpdates:0},previous=(c.updates||[]).find(u=>u.key===key);
+   if(previous){if(previous.text!==text||previous.link!==link)throw problem('This request was already used for a different update.',409);return {...previous,days:c.days,contributionPoints:c.points,totalUpdates:c.totalUpdates,shipLogs:contributionHistory(c,ud.data()),today:day,replayed:true};}
+   if(c.lastDay===day)throw problem('Your contribution is already recorded today; your next square opens at midnight UTC.',409);
+   if((c.updates||[]).some(u=>normalizeUpdate(u.text)===normalizeUpdate(text)))throw problem('This update is already recorded; share a new result or next step.',409);
+   const entry={id:id(),key,text,link,createdAt,day,pointsAwarded:CONTRIBUTION_POINTS,insight:contributionInsight(text)},cutoff=contributionDay(at-(CONTRIBUTION_HISTORY_DAYS-1)*DAY);
+   const days=[...new Set([...(c.days||[]).filter(d=>typeof d==='string'&&d>=cutoff&&d<=day),day])].sort().slice(-CONTRIBUTION_HISTORY_DAYS);
+   const updates=[entry,...(c.updates||[])].slice(0,20),points=(Number(c.points)||0)+CONTRIBUTION_POINTS,totalUpdates=(Number(c.totalUpdates)||0)+1;
+   // New text/insights stay private in the server-owned collection, never in
+   // public profile fields. Neither activity nor posting grants verification.
+   const shipLogs=contributionHistory({updates},ud.data());
+   const state=stateOf(sd.data(),at);state.momentumDays=[...new Set([...state.momentumDays,localTime(at,state.prefs.timezone).day])].slice(-90);state.updatedAt=at;
+   tx.set(cr,{version:1,days,updates,points,totalUpdates,lastDay:day,updatedAt:at});
+   tx.set(ref(uid),state);
+   return {...entry,days,contributionPoints:points,totalUpdates,shipLogs,today:day,replayed:false};
+  });
+ }
  async function handle(uid,op,input={}){
   if(!input||typeof input!=='object'||Array.isArray(input))throw problem('Use an object for this action.');
   blockCache.clear();
@@ -99,6 +136,8 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
   const me=await db.collection('users').doc(uid).get();if(!me.exists||me.data().deleted||me.data().banned||me.data().onboarded!==true)throw problem('Finish your profile before opening the builder workspace.',403);
   // Bounded server-owned request counter, separate from the paid AI ledger.
   await db.runTransaction(async tx=>{const r=db.collection('builderRates').doc(uid),d=await tx.get(r),v=d.exists?d.data():{};const key=Math.floor(now()/60000),count=v.key===key?v.count:0;if(count>=60)throw problem('Please pause for a moment before trying again.',429);tx.set(r,{key,count:count+1});});
+  if(op==='contributions')return contributionData(uid,input.targetUid?ownId(input.targetUid):uid);
+  if(op==='shipUpdate')return publishContribution(uid,input);
   if(['home','visit'].includes(op))return loadHome(uid,op);
   if(op==='context'){await change(uid,s=>{const context=contextOf(input);if(context.project!==s.context.project||context.goal!==s.context.goal||context.needs!==s.context.needs)s.feedback={};s.context=context;});await event(uid,'context_set');return {ok:true};}
   if(op==='prefs'){await change(uid,s=>{s.prefs=sanitizePrefs(input,s.prefs);});return {ok:true,emailAvailable:false};}
@@ -185,7 +224,7 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
  }
  async function runReminderPage({after='',limit=40}={}){
   let query=db.collection('builderStates').orderBy('__name__').limit(Math.min(40,limit));if(after)query=query.startAfter(after);const docs=(await query.get()).docs;let delivered=0,lastProcessed=after;const started=Date.now();
-  for(const d of docs){if(Date.now()-started>40000)return {delivered,nextCursor:lastProcessed};lastProcessed=d.id;const user=await db.collection('users').doc(d.id).get();if(!user.exists||user.data().deleted||user.data().banned||user.data().onboarded!==true)continue;
+  for(const d of docs){if(Date.now()-started>40000)return {delivered,nextCursor:lastProcessed};lastProcessed=d.id;const user=await db.collection('users').doc(d.id).get();if(!user.exists||user.data().deleted){await db.collection('builderContributions').doc(d.id).delete();continue;}if(user.data().banned||user.data().onboarded!==true)continue;
    const prior=stateOf(d.data(),now()),clock=localTime(now(),prior.prefs.timezone);
    const eligibleReview=!prior.lastDeliveryAt||now()-prior.lastDeliveryAt>=20*3600000;
    const needsReview=eligibleReview&&((prior.prefs.friday&&prior.lastFriday!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Fri'&&clock.hour>=9&&clock.hour<19)||(prior.prefs.digest&&prior.lastDigest!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Sun'&&clock.hour>=17&&clock.hour<20));

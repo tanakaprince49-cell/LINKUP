@@ -2,7 +2,7 @@ import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { doc, getDoc } from 'firebase/firestore';
-import { ChevronLeft, Briefcase, MapPin, Target, Clock, MessageSquare, User, Sparkles } from 'lucide-react-native';
+import { ChevronLeft, Briefcase, MapPin, Target, Clock, MessageSquare, User } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -174,7 +174,7 @@ export default function ActiveOpportunityScreen({ route, navigation }: any) {
         </View>
 
         <View style={[styles.insightCard, liquidGlass(isDark)]}>
-          <Sparkles size={18} color={COLORS.primaryStrong} />
+
           <View style={{ flex: 1 }}>
             <Text style={[styles.insightTitle, { color: textColor(isDark) }]}>Why this matters</Text>
             {aiLoadingReason ? (

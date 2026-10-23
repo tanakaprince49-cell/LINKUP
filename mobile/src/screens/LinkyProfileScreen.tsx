@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, MessageSquare, Sparkles, Zap, Globe, Lightbulb, Target } from 'lucide-react-native';
+import { ChevronLeft, MessageSquare, Zap, Globe, Lightbulb, Target } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, liquidGlass, textColor } from '../theme/theme';
 import VerifiedBadge from '../components/VerifiedBadge';
@@ -60,7 +60,7 @@ export default function LinkyProfileScreen({ navigation }: any) {
         </View>
 
         <View style={[styles.insightCard, liquidGlass(isDark)]}>
-          <Sparkles size={18} color={COLORS.primaryStrong} />
+
           <View style={{ flex: 1 }}>
             <Text style={[styles.insightTitle, { color: textColor(isDark) }]}>Why Linky AI</Text>
             <Text style={styles.insightText}>

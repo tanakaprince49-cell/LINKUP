@@ -30,7 +30,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { Sparkles, Users, MessageCircle, ArrowLeft, Bell, Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trash2, Trophy, X } from 'lucide-react-native';
+import { Users, MessageCircle, ArrowLeft, Bell, Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trash2, Trophy, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
@@ -944,7 +944,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
                     <View style={[styles.orbitDot,{left:0,top:16,backgroundColor:'#BBDDB0'}]} />
                     <View style={[styles.orbitDot,{right:0,bottom:15,backgroundColor:'#CFC1F4',width:19,height:19}]} />
                     <BrandMark size={76} style={{borderRadius:25,transform:[{rotate:'-7deg'}]}} />
-                    <View style={styles.sparkleBubble}><Sparkles size={19} color="#79631D" /></View>
+
                   </View>
                   <View style={styles.welcomePill}><Text style={styles.welcomePillText}>{firstName ? `HEY ${firstName.toUpperCase()}, LET’S CONNECT` : 'SMALL WORLD. BIG IDEAS.'}</Text></View>
                   <Text style={[styles.welcomeTitle, { color: textColor(isDark) }]}>Let’s find your people.</Text>
@@ -1158,7 +1158,6 @@ const styles = StyleSheet.create({
   emptyState: { flexGrow: 1, justifyContent: 'center', paddingVertical: 18 },
   brandOrbit: { width: 128, height: 102, alignItems: 'center', justifyContent: 'center' },
   orbitDot: { position: 'absolute', width: 13, height: 13, borderRadius: 10 },
-  sparkleBubble: { position: 'absolute', right: 2, top: 0, backgroundColor: '#FFF0AF', borderRadius: 14, padding: 7 },
   welcomePill: { backgroundColor: '#FFF0AD', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
   welcomePillText: { fontSize: 9, fontWeight: '900', color: '#78682B', letterSpacing: 0.7 },
   starterGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

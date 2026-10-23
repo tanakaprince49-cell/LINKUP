@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { builderCall } from './builder';
 import { db } from './firebase';
 import { displayNameFor, earnedScore, hasActiveOpportunityIntent } from './discovery';
 
@@ -120,7 +121,7 @@ export const normalizeShipLogs = (value: unknown): ShipLogEntry[] => {
     .map((entry, index) => ({
       id: String(entry?.id || `ship_${index}`),
       text: String(entry?.text || '').trim().slice(0, 180),
-      link: String(entry?.link || '').trim().slice(0, 180),
+      link: String(entry?.link || '').trim().slice(0, 2048),
       createdAt: String(entry?.createdAt || ''),
     }))
     .filter((entry) => entry.text);
@@ -131,28 +132,12 @@ export const uniqueShipDays = (logs: ShipLogEntry[]) =>
 
 export const SHIP_VERIFY_DAYS = 3;
 
+/** Legacy callers use the same authoritative contribution transaction. */
 export async function persistShipAndRep(uid: string, profile: any, nextLogs: ShipLogEntry[]) {
-  const lastShip = nextLogs[0]?.createdAt;
-  const idleDays = daysSince(lastShip);
-  const reputationScore = decayingRepScore({ ...profile, shipLogs: nextLogs }, { shipCount: nextLogs.length, idleDays });
-  const shippedDays = uniqueShipDays(nextLogs);
-  const alreadyPlus = String(profile?.verificationProgram || '').includes('PLUS') || String(profile?.verifiedBy || '').includes('PLUS');
-  const earnedShipBadge = shippedDays >= SHIP_VERIFY_DAYS;
-  const patch: Record<string, unknown> = {
-    shipLogs: nextLogs.slice(0, 20),
-    shipCount: nextLogs.length,
-    reputationScore,
-    lastShippedAt: lastShip || null,
-    lastActiveAt: serverTimestamp(),
-  };
-  if (earnedShipBadge && !alreadyPlus) {
-    patch.isVerified = true;
-    patch.verificationProgram = 'SHIPPED';
-    patch.verifiedBy = 'SHIP LOG';
-    patch.verifiedAt = serverTimestamp();
-  }
-  await setDoc(doc(db, 'users', uid), patch, { merge: true });
-  return { reputationScore, shippedDays, earnedShipBadge: earnedShipBadge && !alreadyPlus };
+  if(!uid||!nextLogs[0])throw new Error('Add a progress update first.');
+  const first=nextLogs[0];
+  const result=await builderCall('shipUpdate',{key:first.id,text:first.text,link:first.link||''});
+  return {...result,reputationScore:Number(profile?.reputationScore)||0,shippedDays:result.days.length,earnedShipBadge:false};
 }
 
 export async function syncDecayingRep(uid: string, profile: any) {

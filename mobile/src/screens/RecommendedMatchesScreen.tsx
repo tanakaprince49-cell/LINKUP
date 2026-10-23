@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import { ChevronLeft, MessageSquare, Search, Sparkles, Target, User, Zap } from 'lucide-react-native';
+import { ChevronLeft, MessageSquare, Search, Target, User, Zap } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
@@ -246,7 +246,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
             onPress={() => notifyUser('Compatibility', `${match.score}%\n\n${match.reason}`)}
             activeOpacity={0.85}
           >
-            <Sparkles size={12} color="#000" />
+
             <Text style={styles.scoreText}>{match.score}%</Text>
           </TouchableOpacity>
         </View>
@@ -347,7 +347,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
 
       <View style={[styles.heroCard, liquidGlass(isDark)]}>
         <View style={styles.heroRow}>
-          <Sparkles size={20} color={COLORS.primaryStrong} />
+
           <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Professionals recommended for you</Text>
         </View>
         <Text style={styles.heroSub}>

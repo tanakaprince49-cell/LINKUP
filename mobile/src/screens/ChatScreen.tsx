@@ -9,7 +9,7 @@ import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, u
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { ChevronLeft, Send, Camera, WandSparkles, MoreVertical, BellOff, Pin, Archive, Star, Users, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X, Flag } from 'lucide-react-native';
+import { ChevronLeft, Send, Camera, Users, MoreVertical, BellOff, Pin, Archive, Star, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X, Flag } from 'lucide-react-native';
 import { generateWarmIntro } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { profileLinkFor, publicProfileLink } from '../lib/profileLinks';
@@ -1235,7 +1235,7 @@ export default function ChatScreen({ route, navigation }: any) {
             onPress={handleDraftIntro}
             disabled={introBusy}
           >
-            {introBusy ? <ActivityIndicator size="small" color={COLORS.primaryStrong} /> : <WandSparkles size={20} color={COLORS.primaryStrong} />}
+            {introBusy ? <ActivityIndicator size="small" color={COLORS.primaryStrong} /> : <Users size={20} color={COLORS.primaryStrong} />}
           </TouchableOpacity>
           <TouchableOpacity style={[styles.toolBtn, liquidGlass(isDark, false), mediaBusy && styles.toolBtnDisabled, { backgroundColor: isDark ? COLORS.darkGlassStrong : COLORS.lightGlassStrong }]} onPress={openMediaPicker} disabled={mediaBusy}>
             {mediaBusy ? <ActivityIndicator size="small" color="#666" /> : <Camera size={20} color="#666" />}

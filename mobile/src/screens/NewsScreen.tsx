@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, Linking, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ExternalLink, RefreshCw, Bell, Sparkles } from 'lucide-react-native';
+import { ExternalLink, RefreshCw, Bell } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useTheme } from '../contexts/ThemeContext';
@@ -222,7 +222,7 @@ function LinkyHouseCard({ isDark, onPress }: { isDark: boolean; onPress: () => v
             Explore AI-assisted recommendations based on professional profiles and your collaboration goals.
           </Text>
           <View style={styles.houseCtaRow}>
-            <Sparkles size={12} color={COLORS.primaryStrong} />
+
             <Text style={[styles.houseCta, { color: COLORS.primaryStrong }]}>Unlock Linky</Text>
           </View>
         </View>

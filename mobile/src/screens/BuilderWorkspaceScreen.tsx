@@ -3,7 +3,7 @@ import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Alert,Linking,Platform,RefreshControl,ScrollView,StyleSheet,Switch,Text,TextInput,TouchableOpacity,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
-import {Sparkles,CheckCircle2,ChevronRight,Users,Target,ArrowUpRight} from 'lucide-react-native';
+import { CheckCircle2, ChevronRight, Users, Target, ArrowUpRight } from 'lucide-react-native';
 import {useAuth} from '../contexts/AuthContext';
 import {useTheme} from '../contexts/ThemeContext';
 import {COLORS,appBackground,textColor} from '../theme/theme';
@@ -36,6 +36,7 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
  const refresh=useCallback(async(visit=false)=>{const g=++generation.current;setError('');try{const h=await builderCall(visit?'visit':'home');if(!alive.current||g!==generation.current)return;setHome(h);setContext(h.state.context);setPrefs(h.state.prefs);setAvailability(h.state.availability.purpose||'');}catch(e:any){if(alive.current&&g===generation.current)setError(e.message||'Could not load your workspace.');}},[]);
  useEffect(()=>{setHome(null);setRoom(null);setSelectedAsk(null);setWeekly(null);setReview('');setDraft('');void refresh(true);},[refresh,user?.uid]);
  useEffect(()=>{if(route?.params?.intent)setContext((c:any)=>({...c,intent:route.params.intent}));if(route?.params?.coachKind)setCoachKind(route.params.coachKind);},[route?.params?.intent,route?.params?.coachKind,!!home]);
+ useEffect(()=>{if(typeof route?.params?.material==='string')setMaterial(route.params.material.slice(0,6000));},[route?.params?.material]);
  useEffect(()=>{if(route?.params?.section)setSection(builderSection(route.params.section));},[route?.params?.section]);
  const panel=useCallback(async(tab:BuilderSection)=>{
   const g=++panelGeneration.current,live=()=>alive.current&&g===panelGeneration.current;
@@ -75,7 +76,7 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
   <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async()=>{setRefreshing(true);await refresh();await panel(section);setRefreshing(false);}}/>}>
    {error?<View accessibilityRole="alert" style={styles.error}><Text style={{color:'#9f1239'}}>{error}</Text></View>:null}{busy?<ActivityIndicator color={COLORS.primaryStrong}/>:null}
    {section==='Today'&&<>
-    <View style={styles.hero}><View style={styles.row}><Sparkles color="#15304a" size={20}/><Text style={styles.eyebrow}>YOUR NEXT MOVE</Text></View><Text style={styles.heroTitle}>{b.next.label}</Text>{text(s.context.project?`Working on ${s.context.project}`:'You do not need an active network to make progress today.')}{button('Take the next step',()=>choose(builderSection(b.next.section)))}</View>
+    <View style={styles.hero}><View style={styles.row}><Text style={styles.eyebrow}>YOUR NEXT MOVE</Text></View><Text style={styles.heroTitle}>{b.next.label}</Text>{text(s.context.project?`Working on ${s.context.project}`:'You do not need an active network to make progress today.')}{button('Take the next step',()=>choose(builderSection(b.next.section)))}</View>
     {!s.context.project&&card('Start with what matters to you',<>{text('Choose a goal, add a little context, then get a useful first action. You can skip networking and start with your own project.')}{button('Set up my building context',()=>choose('Plan'))}</>)}
     {b.returningAfterBreak&&card('Welcome back — no catching up required',<>{text('Still building the same thing? Keep your plan, adjust it or start fresh. Your old activity is not a debt.')}{button('Continue my current goal',()=>choose('Plan'),true)}{button('Adjust my plan',()=>choose('Plan'))}{button('Refresh my availability',()=>choose('People'),true)}{button('Reset private context',()=>confirmed('Reset','Clear private goals, follow-ups and reviews? Shared rooms and feedback remain shared.',()=>void act('forget')),true)}</>)}
     {card('Your real progress',<>{text(`${b.completed} goals completed this week · ${b.due} follow-ups due · ${b.roomUpdates} rooms updated · ${b.invitations} invitations`)}{text(`${b.momentumDays} contribution days in the last seven days. This is activity, not proof of expertise or investment quality.`)}{button('Make this week count',()=>choose('Plan'),true)}</>)}

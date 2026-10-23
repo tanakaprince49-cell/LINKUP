@@ -2540,6 +2540,10 @@
     ],
     [
       "navigate",
+      "ShipLog"
+    ],
+    [
+      "navigate",
       "Viewers"
     ]
   ],
@@ -2607,7 +2611,15 @@
       "Profile"
     ]
   ],
-  "mobile/src/screens/ShipLogScreen.tsx": [],
+  "mobile/src/screens/ShipLogScreen.tsx": [
+    [
+      "get"
+    ],
+    [
+      "navigate",
+      "BuilderWorkspace"
+    ]
+  ],
   "mobile/src/screens/TrendingBuildersScreen.tsx": [
     [
       "doc",
@@ -2789,10 +2801,6 @@
     ],
     [
       "setItem"
-    ],
-    [
-      "doc",
-      "users"
     ],
     [
       "getItem"

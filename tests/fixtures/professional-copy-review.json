@@ -663,13 +663,13 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 706,
     "before": "I'm Linky.",
-    "after": "Let’s find your people."
+    "after": "Let\u2019s find your people."
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 708,
     "before": "Tell me who you need and I answer right away with the people on LINKUP I can cite a reason for. No guessing, no waiting.",
-    "after": "A collaborator, a fresh perspective, or just a good chat. What’s the move?"
+    "after": "A collaborator, a fresh perspective, or just a good chat. What\u2019s the move?"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
@@ -687,7 +687,7 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 973,
     "before": "Who do you need? Ask Linky\u2026",
-    "after": "An idea, a name, a skill…"
+    "after": "An idea, a name, a skill\u2026"
   },
   {
     "file": "mobile/src/screens/LinkyProfileScreen.tsx",
@@ -1161,13 +1161,13 @@
     "file": "mobile/src/screens/ShipLogScreen.tsx",
     "line": 24,
     "before": "Write what you shipped today in one line.",
-    "after": "Summarize your latest product or business milestone."
+    "after": "Add at least 12 characters describing a result, learning or next step."
   },
   {
     "file": "mobile/src/screens/ShipLogScreen.tsx",
     "line": 28,
     "before": "One log per day keeps Rep honest.",
-    "after": "You can publish one progress update per day."
+    "after": "One rewarded update per UTC day. Retries never double-count. No missed-day penalties or automatic skill badges."
   },
   {
     "file": "mobile/src/screens/ShipLogScreen.tsx",
@@ -1179,19 +1179,19 @@
     "file": "mobile/src/screens/ShipLogScreen.tsx",
     "line": 66,
     "before": "Shipped today: launched waitlist / talked to 3 users",
-    "after": "Progress update: launched a waitlist or completed customer interviews"
+    "after": "Tightened Firestore rules and added tests for blocked reads"
   },
   {
     "file": "mobile/src/screens/ShipLogScreen.tsx",
     "line": 81,
     "before": "Log ship",
-    "after": "Publish update"
+    "after": "Publish update \u00b7 +10 contribution points"
   },
   {
     "file": "mobile/src/screens/ShipLogScreen.tsx",
     "line": 94,
     "before": "No ships yet. One line. Today.",
-    "after": "No progress updates yet. Record your latest product or business milestone."
+    "after": "Your first useful update starts the calendar. There is no streak to catch up on."
   },
   {
     "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
@@ -1427,7 +1427,7 @@
     "file": "mobile/src/screens/ShipLogScreen.tsx",
     "line": 58,
     "before": "${days}/${SHIP_VERIFY_DAYS} days toward ship verification",
-    "after": "Progress recorded on ${days}/${SHIP_VERIFY_DAYS} days toward your activity badge",
+    "after": "Record a step. Get a useful next one.",
     "kind": "fragment"
   },
   {

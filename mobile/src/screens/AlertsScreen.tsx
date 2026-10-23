@@ -16,7 +16,7 @@ import { respondToConnectionRequest } from '../lib/connectionRequests';
 import { notifyUser } from '../lib/notify';
 import { challengeId as makeChallengeId } from '../lib/gameChallenges';
 import { MOBILE_LIST_IMAGE_LIMIT, MOBILE_NOTIFICATION_QUERY_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
-import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X, Sparkles, Megaphone, ThumbsDown } from 'lucide-react-native';
+import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X, Megaphone, ThumbsDown } from 'lucide-react-native';
 import ScreenHeader from '../components/ScreenHeader';
 
 const formatTimeAgo = (timestamp: any) => {
@@ -107,7 +107,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
       case 'intro_request':
       case 'intro_accepted':
       case 'daily_brief':
-        return badgeFor('#16A34A', Sparkles);
+        return badgeFor('#16A34A', Check);
       default:
         return { Icon: Bell, color: glyphFor('#64748B'), bg: '#64748B', fill: 'transparent' };
     }
@@ -341,7 +341,7 @@ export default function AlertsScreen({ navigation }: any) {
                 Connection requests, profile interest, and network updates will appear here. Explore relevant professionals to grow your network.
               </Text>
               <View style={[styles.emptyHint, liquidGlass(isDark, false)]}>
-                <Sparkles size={13} color={COLORS.primaryStrong} />
+
                 <Text style={[styles.emptyHintText, { color: textColor(isDark, 'secondary') }]}>
                   Keep your profile complete and share project updates to help relevant professionals discover you.
                 </Text>

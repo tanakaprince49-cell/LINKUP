@@ -19,7 +19,7 @@ const fixture=`const h=${JSON.stringify(home)};if(location.search.includes('hist
  if(browse||none){h.lastAsk=out;h.cards=cards;}return out;
 }export async function linkyClearChat(){h.thread=[];return{};}export const linkyLoopAnswer=async()=>({note:'Fixture feedback saved.'});`+
  ['linkyMeetSquad','linkyApproveSquad','linkyCancelSquad','linkyCard','linkyApproveLead','linkyApproveMeet','linkyCancelMeet','linkyDraftLead','linkyMarkLead','linkyMeet','linkyPickPerson','linkyRespond'].map(n=>`export const ${n}=async()=>({});`).join('\n');
-const icons=['Sparkles','Users','MessageCircle','ArrowLeft','Bell','Link2','ArrowUp','Check','Clock','Compass','Send','Settings2','ShieldCheck','Trash2','Trophy','X'];
+const icons=['Users','MessageCircle','ArrowLeft','Bell','Link2','ArrowUp','Check','Clock','Compass','Send','Settings2','ShieldCheck','Trash2','Trophy','X'];
 const iconCode=`import React from 'react';import {View,StyleSheet} from 'react-native';const make=(d)=>({size=20,color='currentColor',style,strokeWidth=2})=>React.createElement(View,{style:[{width:size,height:size},style]},React.createElement('svg',{width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:color,strokeWidth,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d})));`+icons.map(n=>`export const ${n}=make('${n==='Check'?'m5 12 4 4L19 6':n==='ArrowLeft'?'M19 12H5m7 7-7-7 7-7':n==='X'?'m6 6 12 12M18 6 6 18':'M5 12a7 7 0 1 0 14 0 7 7 0 1 0-14 0'}');`).join('\n');
 const mocks={
  'AuthContext':`export const useAuth=()=>({user:{uid:'${uid}'},profile:{uid:'${uid}',isVerified:true}});`,

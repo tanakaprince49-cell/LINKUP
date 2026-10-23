@@ -8,7 +8,7 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Match, UserProfile } from '../types';
-import { MessageSquare, User, Zap, Sparkles, ChevronRight, Briefcase } from 'lucide-react-native';
+import { MessageSquare, User, Zap, ChevronRight, Briefcase } from 'lucide-react-native';
 import { ensureDirectMatch } from '../lib/chat';
 import ProCrownBadge from '../components/ProCrownBadge';
 import { conversationAvatarUri, loadConversationProfile, normalizeConversationProfile } from '../lib/conversationProfiles';
@@ -67,7 +67,7 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
           <Image source={{ uri: conversationAvatarUri(otherUser.profilePic) || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256' }} style={styles.avatar} />
           <View style={styles.statusDot} />
         </View>
-        
+
         <View style={styles.infoContainer}>
           <View style={styles.nameRow}>
             <Text style={[styles.nameText, { color: textColor(isDark) }]}>{otherUser.displayName}</Text>
@@ -77,9 +77,9 @@ const MatchItem = React.memo(({ match, navigation }: { match: Match, navigation:
             </View>
           </View>
           <Text style={styles.lastMsg} numberOfLines={1}>{match.lastMessage || "Connection confirmed. Introduce yourself and discuss your collaboration goals."}</Text>
-          
+
           <View style={styles.aiReasonBox}>
-            <Sparkles size={10} color={COLORS.primaryStrong} />
+
             <Text style={styles.aiReasonText}>SYNERGY: {otherUser.skills?.[0] || 'Innovation'} + {otherUser.skills?.[1] || 'Growth'}</Text>
           </View>
         </View>

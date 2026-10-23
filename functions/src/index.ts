@@ -792,6 +792,7 @@ export const cleanupDeletedUser = onDocumentWritten(
     const db = admin.firestore();
     const batch = db.batch();
     batch.delete(db.collection('builderStates').doc(userId));
+    batch.delete(db.collection('builderContributions').doc(userId));
     batch.delete(db.collection('builderRates').doc(userId));
     batch.delete(db.collection('builderEvents').doc(userId));
     batch.delete(db.collection('userPrivate').doc(userId));
