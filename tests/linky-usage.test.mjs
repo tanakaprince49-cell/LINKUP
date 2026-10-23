@@ -165,7 +165,7 @@ test('authenticated app API returns structured 402 quota data without losing the
   for (let i = 0; i < 15; i++) await usage.reserveMessage(db, 'member', { now: Date.now() });
   const module = { exports: {} };
   const mocks = {
-    'node:crypto': crypto, './_linky.js': api, './_proof.js': {},
+    './_builderRuntime.js': {}, 'node:crypto': crypto, './_linky.js': api, './_proof.js': {},
     './_firebaseAdmin.js': { getDb: () => db, verifyRequestUser: async () => ({ uid: 'member' }) },
     './_gemini.js': { handleOptions: () => false, readJsonBody: (req) => req.body, setCors: () => {}, sendError: (res, code, message) => res.status(code).json({ error: message }) },
   };

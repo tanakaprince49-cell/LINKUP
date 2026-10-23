@@ -43,6 +43,10 @@
     ],
     [
       "navigate",
+      "BuilderWorkspace"
+    ],
+    [
+      "navigate",
       "Chat"
     ],
     [
@@ -256,10 +260,6 @@
   ],
   "mobile/src/screens/DailyFiveScreen.tsx": [
     [
-      "trackAction",
-      "daily_login"
-    ],
-    [
       "navigate"
     ],
     [
@@ -269,6 +269,10 @@
     [
       "navigate",
       "ShipLog"
+    ],
+    [
+      "navigate",
+      "BuilderWorkspace"
     ]
   ],
   "mobile/src/screens/DiscoveryDashboardScreen.tsx": [
@@ -297,6 +301,10 @@
     [
       "navigate",
       "ActiveOpportunity"
+    ],
+    [
+      "navigate",
+      "BuilderWorkspace"
     ],
     [
       "navigate",
@@ -670,6 +678,14 @@
     [
       "navigate",
       "LinkyAudit"
+    ],
+    [
+      "navigate",
+      "BuilderWorkspace"
+    ],
+    [
+      "navigate",
+      "BuilderWorkspace"
     ],
     [
       "navigate",

@@ -1503,6 +1503,17 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------
+    // V16 builder workspace: exclusively accessed through authenticated,
+    // ownership-checked server actions. Never expose private notes or allow a
+    // client to add itself to a room or forge accepted invitations.
+    match /builderStates/{id} { allow read, write: if false; }
+    match /builderRooms/{id} { allow read, write: if false; }
+    match /builderInvites/{id} { allow read, write: if false; }
+    match /builderAsks/{id} { allow read, write: if false; }
+    match /builderEvents/{id} { allow read, write: if false; }
+    match /builderRates/{id} { allow read, write: if false; }
+    match /builderScheduler/{id} { allow read, write: if false; }
+
     // Legacy per-user profile aux store (Linky score etc.)
     // ------------------------------------------------------------
     match /profiles/{userId} {

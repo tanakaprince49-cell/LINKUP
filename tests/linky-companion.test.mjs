@@ -24,12 +24,12 @@ class Database {
   };return q;}
   runTransaction(fn){const result=this.queue.then(async()=>{const writes=[];const result=await fn({get:async ref=>this.snapshot(ref.path),set:(ref,d,o)=>writes.push([ref.path,d,o?.merge])});writes.forEach(args=>this.write(...args));return result;});this.queue=result.catch(()=>{});return result;}
 }
-function core(db,{ai=false,aiMode="search",externalSearch=null}={}) {
+function core(db,{ai=false,aiMode="search",externalSearch=null,prompts=null}={}) {
  const module={exports:{}};
  const mocks={
   'node:crypto':crypto,'./_linkyQuality.js':quality,'./_linkyCompanion.js':companion,'./_publicSeo.js':{publicEligible},'./_linkyUsage.js':usage,
   './_firebaseAdmin.js':{getDb:()=>db,getAdmin:()=>({firestore:{FieldValue:{serverTimestamp:()=>Date.now(),delete:()=>null},Timestamp:{fromMillis:ms=>ms}}})},
-  './_gemini.js':{aiReady:()=>ai,aiStatus:()=>({gemini:{},zen:{}}),aiText:async()=>({text:JSON.stringify({mode:aiMode,picks:[{uid:'irrelevant',score:100}],reply:'I found ten perfect matches'})}),geminiText:async()=>'{"picks":[{"uid":"irrelevant","score":100}]}'},
+  './_gemini.js':{aiReady:()=>ai,aiStatus:()=>({gemini:{},zen:{}}),aiText:async(prompt)=>{prompts?.push(prompt);return {text:JSON.stringify({mode:aiMode,picks:[{uid:'irrelevant',score:100}],reply:'I found ten perfect matches'})}},geminiText:async()=>'{"picks":[{"uid":"irrelevant","score":100}]}'},
   './_serpapi.js':{safeLinkedinProfile,findLeads:externalSearch || (async()=>({leads:[],searches:0,note:'not-configured'}))},'./_proof.js':{proofPoints:()=>[],badgeLine:()=>''}
  };
  const code=ts.transpileModule(read('api/_linky.js'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
@@ -226,7 +226,7 @@ test('own quiet-decline mutes remove stale cards from the approval path',async()
 });
 function adapter(db,api) {
  const module={exports:{}};
- const mocks={'node:crypto':crypto,'./_linky.js':api,'./_proof.js':{badgeLine:()=>''},
+ const mocks={'./_builderRuntime.js':{},'node:crypto':crypto,'./_linky.js':api,'./_proof.js':{badgeLine:()=>''},
   './_firebaseAdmin.js':{getDb:()=>db,verifyRequestUser:async()=>({uid:'member'})},
   './_gemini.js':{handleOptions:()=>false,readJsonBody:req=>req.body,setCors:()=>{},sendError:(res,code,message)=>res.status(code).json({error:message})}};
  const code=ts.transpileModule(read('api/linky.js'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
@@ -359,4 +359,14 @@ test('a failed provider response that consumed a search attempt is not cached as
  const api=core(db,{externalSearch:async()=>++calls===1?{leads:[],searches:1,note:'search-error:503'}:{leads:[{name:'Alice',title:'Flutter developer',snippet:'Flutter developer in Harare',url:'https://www.linkedin.com/in/alice'}],searches:1}});
  const first=await api.pointers('member','Flutter developer in Harare',{userDoc:member,assumeKnown:true});assert.equal(first.leads.length,0);
  const retried=await api.pointers('member','Flutter developer in Harare',{userDoc:member,assumeKnown:true});assert.equal(calls,2);assert.equal(retried.leads.length,1);
+});
+
+test('ordinary app chat uses approved builder context only with consent and never caches it or shares it with bots',async()=>{
+ const db=new Database();seed(db,[member]);const prompts=[],api=core(db,{ai:true,aiMode:'chat',prompts});
+ db.rows.set('builderStates/member',{context:{project:'PRIVATE BUILDER CONTEXT'},prefs:{useContextForAI:false}});
+ await api.ask('member','How should I test my business idea?',{userDoc:member});assert.ok(!prompts.some(p=>p.includes('PRIVATE BUILDER CONTEXT')));
+ prompts.length=0;db.rows.get('builderStates/member').prefs.useContextForAI=true;
+ await api.ask('member','How should I test my business idea?',{userDoc:member});assert.ok(prompts.some(p=>p.includes('PRIVATE BUILDER CONTEXT')));
+ assert.ok(![...db.rows.entries()].filter(([key])=>key.startsWith('linkyCache/')).some(([,value])=>JSON.stringify(value).includes('PRIVATE BUILDER CONTEXT')));
+ prompts.length=0;await api.ask('member','What experiment should I try next?',{userDoc:member,source:'telegram'});assert.ok(!prompts.some(p=>p.includes('PRIVATE BUILDER CONTEXT')));
 });

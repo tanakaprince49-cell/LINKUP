@@ -77,6 +77,7 @@ jobs:
           npm run test:linky
           npm run test:identity
           npm run test:profile
+          npm run test:builder
           npm run test:payments
           npm run test:seo
           npm run test:web-paths

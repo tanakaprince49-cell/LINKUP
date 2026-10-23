@@ -181,6 +181,8 @@ export interface Message {
 }
 
 export interface AppNotification {
+  section?: string;
+  serverPushManaged?: boolean;
   id: string;
   userId: string;
   type:
@@ -202,7 +204,8 @@ export interface AppNotification {
     | 'intro_request'
     | 'intro_accepted'
     | 'intro_declined'
-    | 'daily_brief';
+    | 'daily_brief'
+    | 'builder';
   content: string;
   timestamp: Timestamp | FieldValue;
   isRead: boolean;

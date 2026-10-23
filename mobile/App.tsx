@@ -42,6 +42,7 @@ const CreatePostScreen = lazyScreen(() => import('./src/screens/CreatePostScreen
 const FounderFlipScreen = lazyScreen(() => import('./src/screens/FounderFlipScreen'));
 const PitchPerfectScreen = lazyScreen(() => import('./src/screens/PitchPerfectScreen'));
 const NetworkQuizScreen = lazyScreen(() => import('./src/screens/NetworkQuizScreen'));
+const BuilderWorkspaceScreen = lazyScreen(() => import('./src/screens/BuilderWorkspaceScreen'));
 const DailyFiveScreen = lazyScreen(() => import('./src/screens/DailyFiveScreen'));
 const ShipLogScreen = lazyScreen(() => import('./src/screens/ShipLogScreen'));
 const CityLeagueScreen = lazyScreen(() => import('./src/screens/CityLeagueScreen'));
@@ -173,6 +174,7 @@ const linking: any = {
       FounderFlip: 'FounderFlip',
       PitchPerfect: 'PitchPerfect',
       NetworkQuiz: 'NetworkQuiz',
+      BuilderWorkspace: 'builder',
       DailyFive: 'daily-five',
       ShipLog: 'ship',
       CityLeague: 'league',
@@ -319,7 +321,7 @@ function TabNavigator({ navigation }: any) {
 
   return (
     <Tab.Navigator
-      initialRouteName="Dashboard"
+      initialRouteName="LinkyHome"
       detachInactiveScreens={Platform.OS !== 'web'}
       screenOptions={({ route }) => ({
         lazy: true,
@@ -471,6 +473,12 @@ function AppContent() {
   const openNotificationTarget = React.useCallback((data: any) => {
     if (!navigationRef.isReady()) return;
     const targetUrl = String(data?.url || data?.targetUrl || '');
+
+    if (targetUrl.startsWith('/builder') || data?.type === 'builder') {
+      const section = new URL(targetUrl || '/builder', 'https://www.linkupbuild.com').searchParams.get('section') || 'Today';
+      navigationRef.navigate('BuilderWorkspace', {section});
+      return;
+    }
 
     if (data?.matchId || targetUrl.startsWith('/chat/')) {
       const matchId = String(data?.matchId || targetUrl.replace('/chat/', '')).trim();
@@ -746,6 +754,7 @@ function AppContent() {
             <Stack.Screen name="LinkyProfile" component={LinkyProfileScreen} options={{ animation: Platform.OS === 'android' ? 'fade' : 'slide_from_right' }} />
             <Stack.Screen name="LinkySettings" component={LinkySettingsScreen} />
             <Stack.Screen name="LinkyAudit" component={LinkyAuditScreen} />
+            <Stack.Screen name="BuilderWorkspace" component={BuilderWorkspaceScreen} />
             <Stack.Screen name="DailyFive" component={DailyFiveScreen} />
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
             <Stack.Screen name="CityLeague" component={CityLeagueScreen} />

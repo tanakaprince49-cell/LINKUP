@@ -110,6 +110,7 @@ function notificationBody(data: any) {
 }
 
 function notificationTargetUrl(data: any) {
+  if (data?.type === 'builder') return '/builder?section='+encodeURIComponent(String(data.section || 'Today'));
   if (data?.matchId) return `/chat/${data.matchId}`;
   if (data?.type === 'game_challenge') {
     const gameMap: Record<string, string> = {
@@ -350,6 +351,9 @@ export function subscribeToNotificationToasts(userId: string) {
         if (seenIds.has(notificationId)) return;
         seenIds.add(notificationId);
 
+        // Builder reminders have their own explicit OS/browser alert opt-in.
+        // The in-app inbox still displays them when push is disabled.
+        if (data.type === 'builder' && data.pushRequested !== true) return;
         const title = notificationTitle(data);
         const body = notificationBody(data);
         const targetPath = notificationTargetUrl(data);
@@ -380,6 +384,7 @@ export function subscribeToNotificationToasts(userId: string) {
           return;
         }
 
+        if (data.type === 'builder' && data.serverPushManaged) return;
         void ensureNativeNotificationRuntime()
           .then((Notifications) => {
             if (!Notifications) return;

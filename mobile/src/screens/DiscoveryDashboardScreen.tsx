@@ -519,6 +519,10 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 </Text>
               </View>
 
+              <TouchableOpacity accessibilityRole="button" onPress={() => navigation.navigate('BuilderWorkspace', { section: 'Today' })}
+                style={{padding:14,borderRadius:14,backgroundColor:HOME_GOLD_TINT,marginTop:12}}>
+                <Text style={{fontWeight:'800',color:HOME_GOLD_DEEP}}>Your next move · Build with Linky ↗</Text>
+              </TouchableOpacity>
               <View style={styles.heroActions}>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('DailyFive')}

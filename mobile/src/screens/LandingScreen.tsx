@@ -94,6 +94,9 @@ export default function LandingScreen({ navigation }: any) {
             </View>
           ) : null}
 
+          <Text style={[styles.sub, {color:textColor(isDark,'secondary')}]}>
+            Build with Linky: clarify your next step, review your pitch and find people to build with. Useful even before your first connection.
+          </Text>
           <TouchableOpacity
             style={[styles.emailBtn, { borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)' }]}
             onPress={() => navigation.navigate('EmailAuth')}

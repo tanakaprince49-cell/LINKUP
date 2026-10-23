@@ -291,7 +291,7 @@
     "file": "mobile/src/screens/DailyFiveScreen.tsx",
     "line": 78,
     "before": "Done. Come back tomorrow.",
-    "after": "Daily briefing complete. New recommendations are available tomorrow."
+    "after": "You have reviewed these suggestions. Matching stays available all week."
   },
   {
     "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",

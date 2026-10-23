@@ -1,3 +1,4 @@
+import { builderCall } from '../lib/builder';
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,18 +7,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { SponsoredSlot } from '../components/SponsoredCard';
 import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 import { useTheme } from '../contexts/ThemeContext';
-import { useGamification } from '../contexts/GamificationContext';
 import { COLORS, appBackground, hairline, liquidGlass, textColor } from '../theme/theme';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { isDiscoverableProfile } from '../lib/discovery';
-import { buildDailyFive, DailyFiveCard, loadDailyFiveProgress, saveDailyFiveProgress } from '../lib/dailyLoop';
+import { DailyFiveCard, loadDailyFiveProgress, saveDailyFiveProgress } from '../lib/dailyLoop';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import ScreenHeader from '../components/ScreenHeader';
 
 export default function DailyFiveScreen({ navigation }: any) {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
-  const { trackAction } = useGamification();
   const isDark = theme === 'dark';
   const [cards, setCards] = useState<DailyFiveCard[]>([]);
   const [doneIds, setDoneIds] = useState<string[]>([]);
@@ -29,22 +28,10 @@ export default function DailyFiveScreen({ navigation }: any) {
     loadDailyFiveProgress(user.uid).then((progress) => {
       if (mounted) setDoneIds(progress.doneIds);
     });
-    const unsub = subscribeToDiscoveryProfiles({
-      userId: user.uid,
-      onData: (profiles) => {
-        const people = profiles.filter((p: any) => p.uid !== user.uid && isDiscoverableProfile(p));
-        setCards(buildDailyFive(profile, people));
-        setLoading(false);
-      },
-      onError: () => {
-        setCards(buildDailyFive(profile, []));
-        setLoading(false);
-      },
-    });
-    return () => {
-      mounted = false;
-      unsub();
-    };
+    void builderCall('recommendations').then(({people:matches}) => {
+      if(mounted)setCards(matches.map((p:any)=>({id:`person_${p.uid}`,kind:'person' as const,title:p.name,subtitle:p.why+(p.available?' Available this week.':''),userId:p.uid})));
+    }).catch(()=>{if(mounted)setCards([]);}).finally(()=>{if(mounted)setLoading(false);});
+    return()=>{mounted=false;};
   }, [user?.uid, profile?.uid]);
 
   const markDone = async (id: string) => {
@@ -53,7 +40,6 @@ export default function DailyFiveScreen({ navigation }: any) {
     setDoneIds(next);
     const completed = next.length >= Math.min(5, cards.length || 5);
     await saveDailyFiveProgress(user.uid, next, completed);
-    trackAction('daily_login');
   };
 
   const openCard = (card: DailyFiveCard) => {
@@ -69,13 +55,13 @@ export default function DailyFiveScreen({ navigation }: any) {
     navigation.navigate('ShipLog');
   };
 
-  const remaining = Math.max(0, (cards.length || 5) - doneIds.length);
+  const remaining = cards.filter(card => !doneIds.includes(card.id)).length;
 
   return (
     <SafeAreaView style={[styles.root, appBackground(isDark)]}>
       <ScreenHeader
         title="Daily briefing"
-        subtitle={remaining === 0 ? "Daily briefing complete. New recommendations are available tomorrow." : `${remaining} left · about 90 seconds`}
+        subtitle={cards.length === 0 ? 'Set your building context to find relevant people.' : remaining === 0 ? "You have reviewed these suggestions. Matching stays available all week." : `${remaining} left · about 90 seconds`}
         onBack={() => navigation.goBack()}
         isDark={isDark}
       />
@@ -90,6 +76,9 @@ export default function DailyFiveScreen({ navigation }: any) {
             viewerUid={user?.uid}
             enabled={!isSponsoredHiddenForViewer(profile, { email: user?.email, isAdmin: (profile as any)?.isAdmin })}
           />
+          <TouchableOpacity onPress={() => navigation.navigate('BuilderWorkspace', {section:'People'})} style={{padding:16,borderRadius:14,backgroundColor:'#e6f0be'}}>
+            <Text style={{fontWeight:'800',color:'#17332b'}}>Refine my needs, availability & recommendations →</Text>
+          </TouchableOpacity>
           {cards.map((card, index) => {
             const done = doneIds.includes(card.id);
             return (

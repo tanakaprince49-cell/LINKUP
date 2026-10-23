@@ -63,6 +63,8 @@ type LinkupNotification = {
   content?: string;
   matchId?: string;
   campaignId?: string;
+  section?: string;
+  serverPushManaged?: boolean;
 };
 
 function normalize(v: unknown) {
@@ -183,6 +185,7 @@ function notificationBody(data: LinkupNotification) {
 }
 
 function notificationUrl(data: LinkupNotification) {
+  if (data.type === 'builder') return `/builder?section=${encodeURIComponent(data.section || 'Today')}`;
   if (data.matchId) return `/chat/${data.matchId}`;
   if (['campaign_review', 'campaign_approved', 'campaign_rejected'].includes(String(data.type || ''))) {
     return '/campaigns';
@@ -350,6 +353,7 @@ export const sendPushForNotification = onDocumentCreated(
 
     const notificationId = event.params.notificationId;
     const notification = snap.data() as LinkupNotification;
+    if (notification.type === 'builder' && notification.serverPushManaged) return;
     const userId = String(notification.userId || '').trim();
     if (!userId) {
       logger.warn('Notification missing userId; push skipped.', { notificationId });
@@ -787,6 +791,9 @@ export const cleanupDeletedUser = onDocumentWritten(
 
     const db = admin.firestore();
     const batch = db.batch();
+    batch.delete(db.collection('builderStates').doc(userId));
+    batch.delete(db.collection('builderRates').doc(userId));
+    batch.delete(db.collection('builderEvents').doc(userId));
     batch.delete(db.collection('userPrivate').doc(userId));
     batch.delete(db.collection('publicProfiles').doc(userId));
 
@@ -796,6 +803,35 @@ export const cleanupDeletedUser = onDocumentWritten(
     swipesTo.forEach((d) => batch.delete(d.ref));
 
     await batch.commit();
+    // V16 shared access is revoked as well as deleting private builder state.
+    const writer = db.bulkWriter();
+    const rooms = await db.collection('builderRooms').where('memberIds', 'array-contains', userId).get();
+    for (const doc of rooms.docs) {
+      const room = doc.data();
+      const remaining = (room.memberIds || []).filter((id: string) => id !== userId);
+      if (!remaining.length) { writer.delete(doc.ref); continue; }
+      writer.update(doc.ref, {
+        memberIds: remaining,
+        ...(room.ownerId === userId ? {ownerId: '', archived: true} : {}),
+        tasks: (room.tasks || []).map((t: any) => ({...t, ownerId: t.ownerId === userId ? '' : t.ownerId, assignee: t.assignee === userId ? '' : t.assignee})),
+        messages: (room.messages || []).filter((v: any) => v.ownerId !== userId),
+        logs: (room.logs || []).filter((v: any) => v.ownerId !== userId),
+        links: (room.links || []).filter((v: any) => v.ownerId !== userId),
+        updatedAt: Date.now(),
+      });
+    }
+    for (const field of ['senderId','recipientId']) {
+      const invites = await db.collection('builderInvites').where(field, '==', userId).get();
+      for (const doc of invites.docs) writer.delete(doc.ref);
+    }
+    const authored = await db.collection('builderAsks').where('ownerId','==',userId).get();
+    for (const doc of authored.docs) writer.delete(doc.ref);
+    const feedback = await db.collection('builderAsks').where('feedbackAuthorIds','array-contains',userId).get();
+    for (const doc of feedback.docs) {
+      if (doc.data().ownerId === userId) continue;
+      writer.update(doc.ref, {feedback:(doc.data().feedback || []).filter((f: any) => f.authorId !== userId), feedbackAuthorIds: admin.firestore.FieldValue.arrayRemove(userId)});
+    }
+    await writer.close();
     logger.info('Cleanup complete for deleted user:', userId);
   }
 );

@@ -1,3 +1,4 @@
+import {builderService,builderCron} from './_builderRuntime.js';
 // Linky endpoint: app actions, housekeeping cron, Telegram + WhatsApp webhooks.
 // One function on purpose (Vercel Hobby caps a deployment at 12).
 //
@@ -891,6 +892,7 @@ async function handleApp(req, res) {
   try {
     let out;
     switch (action) {
+      case 'builder': out = await builderService().handle(uid,String(body.op || 'home'),body.input || {}); break;
       case 'home': out = await home(uid); break;
       case 'ask': out = await ask(uid, body.message, { source: 'app' }); break;
       case 'facts': out = await setFacts(uid, { notes: body.notes, skills: body.skills, lookingFor: body.lookingFor, hidden: body.hidden }); break;
@@ -951,6 +953,7 @@ async function handleApp(req, res) {
       res.status(402).json({ error: message, code: err.code, messageQuota: err.messageQuota, upgradeRequired: err.messageQuota.upgradeRequired });
       return;
     }
+    if (err?.builder) { sendError(res,err.status || 400,err.message); return; }
     sendError(res, err?.code === 'ask_limit' || err?.code === 'meet_limit' ? 402 : 400, message, message);
   }
 }
@@ -961,6 +964,13 @@ export default async function handler(req, res) {
   if (channel === 'telegram') { if (req.method !== 'POST') { res.status(405).end(); return; } await handleTelegram(req, res); return; }
   if (channel === 'whatsapp') { await handleWhatsApp(req, res); return; }
 
+  if(String(req.query?.action || '') === 'builderCron') {
+    if(req.method !== 'POST') { sendError(res,405,'Use POST.'); return; }
+    if(!(await cronAuthorized(req))) { sendError(res,401,'Bad cron token.'); return; }
+    try { setCors(res); res.status(200).json(await builderCron(readJsonBody(req))); }
+    catch { sendError(res,503,'Builder delivery is temporarily unavailable.'); }
+    return;
+  }
   const wantsCron = String(req.query?.action || '') === 'cron' || (req.method === 'POST' && readJsonBody(req)?.action === 'cron');
   if (wantsCron) {
     if (!(await cronAuthorized(req))) { sendError(res, 401, 'Bad cron token.'); return; }
