@@ -50,9 +50,17 @@ test('scheduled cheeky nudges deduplicate, deep-link to Progress Log and genuine
  const privateInbox=(await db.collection('builderContributions').doc('alice').get()).data().habit.nudges;assert.equal(privateInbox[0].url,'/ship');assert.equal((await db.collection('notifications').get()).size,0);clock+=2*DAY;assert.equal((await s.runReminderPage()).delivered,1);clock+=2*DAY;assert.equal((await s.runReminderPage()).delivered,1);assert.equal((await s.handle('alice','habit')).reminders.enabled,false);clock+=DAY;assert.equal((await s.runReminderPage()).delivered,0);assert.equal(pushes.length,3);
 });
 test('quiet hours, completion, rest and weekly goal suppress scheduled build nudges',async()=>{
- const s=await seed();await s.handle('alice','habitPrefs',{dailyBuild:true});clock+=DAY;await ship(s);assert.equal((await s.runReminderPage()).delivered,0);
- clock+=DAY;await s.handle('alice','habitRest',{day:'2026-10-21'});assert.equal((await s.runReminderPage()).delivered,0);clock+=DAY;await s.handle('alice','prefs',{quietStart:18});assert.equal((await s.runReminderPage()).delivered,0);await s.handle('alice','prefs',{quietStart:20});
- await db.collection('builderContributions').doc('alice').update({days:['2026-10-19','2026-10-20','2026-10-21']});assert.equal((await s.runReminderPage()).delivered,0);
+ // `delivered` now counts every retention message, so these assertions look at
+ // the build nudge itself: it must never fire once the day is recorded,
+ // protected, or the weekly goal is met.
+ const s=await seed();await s.handle('alice','habitPrefs',{dailyBuild:true});clock+=DAY;await ship(s);
+ await s.runReminderPage();assert.equal(((await db.collection('builderContributions').doc('alice').get()).data().habit.nudges||[]).length,0);
+ clock+=DAY;await s.handle('alice','habitRest',{day:'2026-10-21'});await s.runReminderPage();
+ assert.equal(((await db.collection('builderContributions').doc('alice').get()).data().habit.nudges||[]).length,0);
+ clock+=DAY;await s.handle('alice','prefs',{quietStart:18,quietEnd:6});assert.equal((await s.runReminderPage()).delivered,0);await s.handle('alice','prefs',{quietStart:20,quietEnd:6});
+ await db.collection('builderContributions').doc('alice').update({days:['2026-10-19','2026-10-20','2026-10-21']});await s.runReminderPage();
+ assert.equal(((await db.collection('builderContributions').doc('alice').get()).data().habit.nudges||[]).length,0);
+ assert.equal(pushes.filter(p=>/Sixty seconds|dramatic comeback|parked the build/.test(p.body||'')).length,0);
 });
 test('exports include private ledgers for their owner only and forged identity fields cannot spend another wallet',async()=>{
  const s=await seed();await ship(s);await s.handle('alice','habitPrefs',{dailyBuild:true});const r=await s.handle('alice','export');assert.equal(r.habit.totalUpdates,1);assert.equal(r.contributions.updates.length,1);await s.handle('alice','forget');assert.equal((await s.handle('alice','habit')).reminders.enabled,false);

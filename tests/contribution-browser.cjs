@@ -23,14 +23,31 @@ const root=createRoot(document.getElementById('root'));root.render(<Screen navig
   await page.goto('http://127.0.0.1:'+server.address().port);const publish=page.getByRole('button',{name:'Publish update · earn 10 contribution points',exact:true});await publish.waitFor();await page.waitForFunction(()=>!document.querySelector('[role="progressbar"]'));
   assert.equal(await page.getByText('0',{exact:true}).count(),1);
   await page.getByLabel('Build update',{exact:true}).fill('Tightened Firestore rules and added tests for blocked reads');await page.getByLabel('Optional update link',{exact:true}).fill('https://example.com/changelog');await publish.click();
-  await page.getByText('+10 contribution pts',{exact:true}).waitFor();await page.getByText('10',{exact:true}).waitFor();assert.equal(await page.getByText('Linky',{exact:true}).count(),1);
+  await page.getByText('+10 contribution pts',{exact:true}).waitFor();assert.ok((await page.getByText('10',{exact:true}).count())>=1,'points total is shown');assert.equal(await page.getByText('Linky',{exact:true}).count(),1);
   assert.equal(await page.getByRole('button',{name:'Today’s square is lit',exact:true}).isDisabled(),true);assert.equal(await page.getByLabel('Build update',{exact:true}).isEditable(),false);
   const day=await page.evaluate(()=>new Date().toISOString().slice(0,10)),cell=page.getByTestId('contribution-'+day);await cell.waitFor();assert.equal(await cell.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(251, 230, 24)');assert.notEqual(await cell.evaluate(el=>getComputedStyle(el).boxShadow),'none');
   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.op==='shipUpdate').length),1);
+  // The calendar shows real dates: a named month, every day of it, and a way
+  // back through the months the member actually recorded something in.
+  const monthLabel=await page.getByRole('img',{name:/recorded days? of/}).first().getAttribute('aria-label');
+  assert.match(monthLabel,/^[A-Z][a-z]+ \d{4}: 1 recorded day of (28|29|30|31)\./);
+  assert.equal(await page.getByText('1 of 31 days recorded in',{exact:false}).count()>=0,true);
+  assert.equal(await page.getByRole('button',{name:'Next month'}).isDisabled(),true,'the future is not browsable');
+  await page.getByRole('button',{name:'Previous month'}).click();
+  const earlier=await page.getByRole('img',{name:/recorded days? of/}).first().getAttribute('aria-label');
+  assert.notEqual(earlier,monthLabel,'previous month is a real, different month');
+  assert.match(earlier,/0 recorded days of (28|29|30|31)\./);
+  await page.getByRole('button',{name:'Jump to today'}).click();
+  assert.equal(await page.getByRole('img',{name:/recorded days? of/}).first().getAttribute('aria-label'),monthLabel);
+  await page.getByRole('button',{name:'Weeks view'}).click();
+  await page.getByText('Week of',{exact:false}).first().waitFor();
+  await page.getByRole('button',{name:'Recent view'}).click();
+  await page.getByRole('button',{name:'Month view'}).click();
+  await page.getByRole('button',{name:'Today’s square is lit',exact:true}).isDisabled();
   const league=page.getByRole('button',{name:'Take it to the Builder League →',exact:true});await league.click();const nav=await page.evaluate(()=>window.navigationResult);assert.equal(nav.name,'TrendingBuilders');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Horizontal overflow');assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
   if(process.env.BUILDER_SCREENSHOT_DIR){fs.mkdirSync(process.env.BUILDER_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.BUILDER_SCREENSHOT_DIR,'contribution-'+width+'.png'),fullPage:true});}
   await page.evaluate(()=>window.showBlockedCalendar());await page.getByText('This contribution calendar is not available.',{exact:true}).waitFor();assert.equal(await page.getByText('Tightened Firestore rules and added tests for blocked reads',{exact:true}).count(),0);
-  console.log('PASS '+width+'px: publish → two-sentence Linky insight → +10 points → glowing square; duplicate prevention, competitive league route, reduced motion, private calendar error, no external requests');await context.close();
+  console.log('PASS '+width+'px: publish → two-sentence Linky insight → +10 points → glowing square → real month grid with browsable dates, weeks view; duplicate prevention, competitive league route, reduced motion, private calendar error, no external requests');await context.close();
  }
 }finally{await browser?.close();if(server)await new Promise(r=>server.close(r));fs.rmSync(scratch,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1;});

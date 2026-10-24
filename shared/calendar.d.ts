@@ -1,0 +1,11 @@
+export declare const MONTH_NAMES: readonly string[];
+export declare const WEEKDAY_INITIALS: readonly string[];
+export type MonthCell = {day:string;active:boolean;today:boolean;future:boolean;inMonth:boolean;label:number};
+export type MonthGrid = {key:string;label:string;rows:MonthCell[][];recorded:number;daysInMonth:number;firstRecorded:string;lastRecorded:string};
+export declare function monthKeyOf(value:string|number):string;
+export declare function addMonth(key:string,delta?:number):string;
+export declare function monthLabel(key:string):string;
+export declare function monthGrid(activeDays:string[],monthKey:string,now?:number):MonthGrid;
+export declare function monthsWithActivity(days:string[],now?:number):string[];
+export declare function weeksWithActivity(days:string[]):{weekStart:string;days:string[];buildDays:number}[];
+export declare function dayLabel(day:string):string;

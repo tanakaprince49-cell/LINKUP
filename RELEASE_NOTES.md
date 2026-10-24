@@ -1,5 +1,18 @@
 # LINKUP Release Notes
 
+## 16.6.0 (versionCode 29)
+
+- Daily messages are now planned from real facts: up to four a day, each a
+  different idea, never the same category twice in a day, at least 2.5 hours
+  apart, inside quiet hours only, and switchable off. A follow-up message never
+  carries the follow-up's private title.
+- Linky: 5 free messages per day inside the 15-a-month allowance, 25 per day for
+  PLUS, and the over-limit message now quotes the member's real numbers.
+- The calendar has a month grid of real dates, a week-by-week history and a jump
+  list of every month that has recorded days.
+- Activity competition avatars read real profile photos from the board row.
+- A downloadable League card with numbers 1, 2 and 3 and a crown on #1 only.
+
 ## 14.0.0 (versionCode 20)
 
 **Play Console (paste into "What's new in this release"):**

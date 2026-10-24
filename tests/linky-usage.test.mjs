@@ -55,6 +55,15 @@ function core(database) {
   return { ...module.exports, aiCalls: () => aiCalls };
 }
 const october = Date.parse('2026-10-16T12:00:00Z');
+const DAY = 86_400_000;
+// Free members get 5 a day inside a 15-a-month allowance, so a full month takes
+// three consecutive days. Adding `days` moves to the next UTC day.
+const dayAt = (day) => october + day * DAY;
+async function spendFree(db, uid, count, { plus = false } = {}) {
+  const out = [];
+  for (let i = 0; i < count; i++) out.push(await usage.reserveMessage(db, uid, { now: dayAt(Math.floor(i / 5)), plus }));
+  return out;
+}
 const member = { uid: 'member', displayName: 'Member', occupation: 'Founder', skills: ['React'], onboarded: true };
 
 test('free allowance is exactly 15 per UTC calendar month, including year and leap-year boundaries', () => {
@@ -66,41 +75,48 @@ test('free allowance is exactly 15 per UTC calendar month, including year and le
 
 test('fifteenth reservation signals immediate paywall and sixteenth cannot spend or invoke an answer', async () => {
   const db = new Database(); let quota;
-  for (let i = 0; i < 15; i++) quota = await usage.reserveMessage(db, 'member', { now: october });
+  const spent = await spendFree(db, 'member', 15);
+  quota = spent.at(-1);
   assert.equal(quota.remaining, 0); assert.equal(quota.upgradeRequired, true);
-  await assert.rejects(usage.reserveMessage(db, 'member', { now: october }), (e) => e.code === 'ask_limit' && e.messageQuota.used === 15);
+  await assert.rejects(usage.reserveMessage(db, 'member', { now: dayAt(3) }), (e) => e.code === 'ask_limit' && e.messageQuota.used === 15);
   assert.equal(db.rows.get('linkyUsage/member').month.count, 15);
+  // The fifth message of a single day is the daily cap, not the monthly one.
+  const fresh = new Database(); await spendFree(fresh, 'member', 5);
+  await assert.rejects(usage.reserveMessage(fresh, 'member', { now: october }), (e) => e.code === 'ask_limit' && /today's 5/.test(e.message));
 });
 
 test('simultaneous requests share a single transactional monthly allowance', async () => {
   const db = new Database();
+  // Within one day the 5-message burst cap holds; over three days the 15-message
+  // monthly allowance holds.
   const results = await Promise.allSettled(Array.from({ length: 30 }, () => usage.reserveMessage(db, 'member', { now: october })));
-  assert.equal(results.filter((r) => r.status === 'fulfilled').length, 15);
-  assert.equal(results.filter((r) => r.status === 'rejected').length, 15);
+  assert.equal(results.filter((r) => r.status === 'fulfilled').length, 5);
+  assert.equal(results.filter((r) => r.status === 'rejected').length, 25);
+  for (const day of [1, 2]) for (let i = 0; i < 5; i++) await usage.reserveMessage(db, 'member', { now: dayAt(day) });
   assert.equal(db.rows.get('linkyUsage/member').month.count, 15);
 });
 
 test('midnight does not replenish free messages; next month does, with separate member ledgers', async () => {
   const db = new Database();
-  for (let i = 0; i < 15; i++) await usage.reserveMessage(db, 'a', { now: october });
-  await assert.rejects(usage.reserveMessage(db, 'a', { now: october + 86_400_000 }));
+  await spendFree(db, 'a', 15);
+  await assert.rejects(usage.reserveMessage(db, 'a', { now: dayAt(3) }));
   assert.equal((await usage.reserveMessage(db, 'b', { now: october })).remaining, 14);
   assert.equal((await usage.reserveMessage(db, 'a', { now: Date.parse('2026-11-01T00:00:00Z') })).remaining, 14);
 });
 
-test('PLUS retains 60 daily messages and migration preserves existing daily usage', async () => {
-  const db = new Database(); const options = { plus: true, now: october, legacyState: { asks: { day: '2026-10-16', count: 59 } } };
+test('PLUS allows 25 a day and migration preserves existing daily usage', async () => {
+  const db = new Database(); const options = { plus: true, now: october, legacyState: { asks: { day: '2026-10-16', count: 24 } } };
   const quota = await usage.reserveMessage(db, 'member', options);
-  assert.equal(quota.limit, 60); assert.equal(quota.used, 60); assert.equal(quota.upgradeRequired, false);
+  assert.equal(quota.limit, 25); assert.equal(quota.used, 25); assert.equal(quota.upgradeRequired, false);
   await assert.rejects(usage.reserveMessage(db, 'member', options));
-  assert.equal((await usage.reserveMessage(db, 'member', { plus: true, now: october + 86_400_000 })).remaining, 59);
+  assert.equal((await usage.reserveMessage(db, 'member', { plus: true, now: october + DAY })).remaining, 24);
 });
 
 test('upgrade/downgrade does not erase exhausted free monthly use', async () => {
   const db = new Database();
-  for (let i = 0; i < 15; i++) await usage.reserveMessage(db, 'member', { now: october });
-  assert.equal((await usage.reserveMessage(db, 'member', { plus: true, now: october })).remaining, 59);
-  await assert.rejects(usage.reserveMessage(db, 'member', { plus: false, now: october }));
+  await spendFree(db, 'member', 15);
+  assert.equal((await usage.reserveMessage(db, 'member', { plus: true, now: dayAt(3) })).remaining, 24);
+  await assert.rejects(usage.reserveMessage(db, 'member', { plus: false, now: dayAt(3) }));
 });
 
 test('failed message reservation is refundable only within its original bucket', async () => {
@@ -114,12 +130,16 @@ test('failed message reservation is refundable only within its original bucket',
   assert.equal(db.rows.get('linkyUsage/member').month.count, 1);
 });
 
-test('real ask wrapper counts greetings from every channel, immediately signals fifteenth, and blocks before AI', async () => {
+test('real ask wrapper counts greetings from every channel, stops at the daily five, and blocks before AI', async () => {
   const db = new Database(); const api = core(db);
-  for (let i = 0; i < 15; i++) {
+  // Every channel draws from the same ledger, and the fifth message of the day
+  // is the burst cap. `ask()` uses the real clock, so this stays in one day.
+  for (let i = 0; i < 5; i++) {
     const out = await api.ask('member', 'hello', { userDoc: member, source: ['app', 'telegram', 'whatsapp'][i % 3] });
-    assert.equal(out.asksLeft, 14 - i); assert.equal(out.upgradeRequired, i === 14);
+    assert.equal(out.asksLeft, 14 - i); assert.equal(out.upgradeRequired, false);
   }
+  assert.equal(db.rows.get('linkyUsage/member').month.count, 5);
+  assert.equal(db.rows.get('linkyUsage/member').daily.count, 5);
   db.rows.set('linkyState/member', { pendingLoop: { at: Date.now(), introId: 'intro' } });
   await assert.rejects(api.ask('member', 'we met', { userDoc: member }), (e) => e.code === 'ask_limit');
   assert.equal(api.aiCalls(), 0);
@@ -127,9 +147,9 @@ test('real ask wrapper counts greetings from every channel, immediately signals 
 
 test('clear chat and forget cannot reset the allowance ledger', async () => {
   const db = new Database(); const api = core(db);
-  for (let i = 0; i < 15; i++) await api.ask('member', 'hello', { userDoc: member });
+  for (let i = 0; i < 5; i++) await api.ask('member', 'hello', { userDoc: member });
   await api.clearChat('member'); await api.forget('member');
-  assert.equal(db.rows.get('linkyUsage/member').month.count, 15);
+  assert.equal(db.rows.get('linkyUsage/member').month.count, 5);
   assert.ok(!db.rows.has('linkyState/member'));
   await assert.rejects(api.ask('member', 'hello', { userDoc: member }), (e) => e.code === 'ask_limit');
 });
@@ -149,6 +169,7 @@ test('home publishes monthly allowance and legacy aliases without reading user-e
   await usage.reserveMessage(db, 'member', { now: Date.now() });
   const home = await api.home('member', { userDoc: member });
   assert.equal(home.messageQuota.period, 'month'); assert.equal(home.messageQuota.used, 1);
+  assert.equal(home.messageQuota.dailyLimit, 5); assert.equal(home.messageQuota.dailyRemaining, 4);
   assert.equal(home.limits.asksPerDay, 15); assert.equal(home.limits.asksUsedToday, 1);
   assert.equal(home.limits.asksPeriod, 'month');
 });
@@ -163,7 +184,7 @@ test('client opens paywall from exhaustion state and guards further sends, not j
 test('authenticated app API returns structured 402 quota data without losing the upgrade signal', async () => {
   const db = new Database(); const api = core(db);
   db.rows.set('users/member', member);
-  for (let i = 0; i < 15; i++) await usage.reserveMessage(db, 'member', { now: Date.now() });
+  await spendFree(db, 'member', 15);
   const module = { exports: {} };
   const mocks = {
     './_builderRuntime.js': {}, 'node:crypto': crypto, './_linky.js': api, './_proof.js': {},

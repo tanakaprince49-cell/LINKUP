@@ -1,4 +1,3 @@
-import {habitReminder} from '../shared/build-habit.js';
 import crypto from 'node:crypto';
 export const DAY=86400000;
 export const id=()=>crypto.randomUUID();
@@ -13,10 +12,10 @@ export function localTime(now,tz='UTC'){
  return {day:`${p.year}-${p.month}-${p.day}`,hour:Number(p.hour),weekday:p.weekday};
 }
 export function weekKey(now,tz='UTC'){const d=new Date(localTime(now,tz).day+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));return d.toISOString().slice(0,10);}
-export const DEFAULT_PREFS={reminders:false,digest:false,friday:false,inApp:true,push:false,email:false,timezone:'UTC',quietStart:20,quietEnd:8,useContextForAI:false,allowInvites:true,dailyBuild:false,buildHour:18};
+export const DEFAULT_PREFS={reminders:false,digest:false,friday:false,inApp:true,push:false,email:false,timezone:'UTC',quietStart:20,quietEnd:8,useContextForAI:false,allowInvites:true,dailyBuild:false,buildHour:18,retention:true};
 export function sanitizePrefs(input,previous={}){
  const p={...DEFAULT_PREFS,...previous};
- for(const k of ['reminders','digest','friday','inApp','push','allowInvites','dailyBuild'])if(k in input){if(typeof input[k]!=='boolean')throw problem('Invalid preference.');p[k]=input[k];}
+ for(const k of ['reminders','digest','friday','inApp','push','allowInvites','dailyBuild','retention'])if(k in input){if(typeof input[k]!=='boolean')throw problem('Invalid preference.');p[k]=input[k];}
  if(input.email===true)throw problem('Email delivery is not configured. Use in-app or push reminders for now.');p.email=false;p.useContextForAI=false;
  if('timezone'in input)p.timezone=timezone(input.timezone);
  for(const k of ['quietStart','quietEnd','buildHour'])if(k in input){if(!Number.isInteger(input[k])||input[k]<0||input[k]>23)throw problem('Quiet hours must be hours from 0 to 23.');p[k]=input[k];}
@@ -75,15 +74,4 @@ export function weeklySummary(state,now,{asks=[],ownedAsks=[],leads=[],rooms=[],
  meaningful:!!(completed.length||followedThrough||replies||roomMilestones||due||opportunities.length),
  summary:`Last seven days: ${completed.length} completed outcomes, ${followedThrough} completed follow-ups, ${helpReplies} help-board replies, ${chatReplies} recent chat messages, ${roomMilestones} room tasks completed. ${due} follow-ups due. ${opportunities.length} sourced opportunities. Next: ${next.label}.`,
  scope:'Bounded review: first 40 board records, last 10 messages in up to 20 approved chats, up to 30 accepted rooms, plus manually reviewed sources. Counts are observed activity, not exhaustive totals. No background searches, fabricated replies or events.'};
-}
-export function nextDelivery(state,now,review=null,contributions={}){
- const p=state.prefs;if(quiet(now,p)||(!p.inApp&&!p.push))return null;
- const local=localTime(now,p.timezone),week=weekKey(now,p.timezone);
- if(state.lastDeliveryAt&&now-state.lastDeliveryAt<20*3600000)return null;
- if(p.reminders&&state.followups.some(f=>f.status==='open'&&f.dueAt<=now&&!f.notifiedAt))return {key:'followup-'+local.day,section:'Follow-ups',content:'You have a follow-up ready to review. Open your private builder workspace.'};
- const hasWork=review?.meaningful===true;
- if(review?.newOpportunities?.length&&p.friday&&local.weekday==='Fri'&&local.hour>=9&&local.hour<19&&state.lastFriday!==week)return {key:'friday-'+week,section:'Today',content:`Your Friday drop has ${review.newOpportunities.length} newly curated opportunities for your review. Open your workspace for sources.`};
- if(hasWork&&p.digest&&local.weekday==='Sun'&&local.hour>=17&&local.hour<20&&state.lastDigest!==week)return {key:'digest-'+week,section:'Today',content:review.summary};
- if(local.hour>=(p.buildHour??18))return habitReminder(state,contributions,now);
- return null;
 }

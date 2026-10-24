@@ -2,7 +2,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {habitSnapshot,habitReminder,weekOf} from '../shared/build-habit.js';
-import {freshState,nextDelivery,sanitizePrefs} from '../api/_builderCore.js';
+import {freshState,sanitizePrefs} from '../api/_builderCore.js';
+import {nextRetention} from '../shared/retention.js';
 const at=Date.parse('2026-10-24T18:00:00Z');
 test('mission is one real update, optional and zero activity is never manufactured',()=>{
  const h=habitSnapshot({},at);assert.equal(h.weekly.target,3);assert.equal(h.mission.done,false);assert.deepEqual(h.milestones,[]);assert.equal(h.credits,0);assert.equal(h.tokens,0);assert.equal(h.canRestToday,false);
@@ -30,11 +31,17 @@ test('nudges use day one/three/five, genuinely pause on the third, and never fab
  assert.match(habitReminder(s,{},at+2*86400000).content,/dramatic comeback/);s.buildReminderCount=2;
  const last=habitReminder(s,{},at+4*86400000);assert.equal(last.pause,true);assert.match(last.content,/parked/);assert.doesNotMatch(last.content,/competitors|give up|moldy|impatient/);s.buildReminderCount=3;assert.equal(habitReminder(s,{},at+9*86400000),null);
 });
-test('scheduler honors local hour, quiet hours, frequency cap and delivery opt-out',()=>{
- const s=freshState(at);Object.assign(s.prefs,{dailyBuild:true,buildOptInDay:'2026-10-23',buildHour:20,timezone:'Africa/Harare',quietStart:22});
- assert.equal(nextDelivery(s,at,null,{}).kind,'build');s.prefs.quietStart=20;assert.equal(nextDelivery(s,at,null,{}),null);
- s.prefs.quietStart=22;s.lastDeliveryAt=at-3600000;assert.equal(nextDelivery(s,at,null,{}),null);
- s.lastDeliveryAt=0;s.prefs.inApp=false;assert.equal(nextDelivery(s,at,null,{}),null);
+test('the evening build nudge still honours quiet hours, spacing and delivery opt-out',()=>{
+ const at=Date.parse('2026-10-24T18:00:00Z'),s=freshState(at);
+ Object.assign(s.prefs,{dailyBuild:true,buildOptInDay:'2026-10-23',buildHour:18,timezone:'Africa/Harare',quietStart:22,retention:true});
+ const facts={localDay:'2026-10-24',localHour:18,weekDays:0,weekTarget:3,totalUpdates:3,lastUpdateDay:'2026-10-23',streakDays:1,todayRecorded:false};
+ assert.equal(nextRetention({state:s,facts,now:at,contributions:{}}).kind,'build');
+ const quiet={...s,prefs:{...s.prefs,quietStart:17,quietEnd:22}};
+ assert.equal(nextRetention({state:quiet,facts,now:at,contributions:{}}),null,'quiet hours win');
+ s.lastDeliveryAt=at-60000;
+ assert.equal(nextRetention({state:s,facts,now:at,contributions:{}}),null,'no second message within the gap');
+ s.lastDeliveryAt=0;s.prefs.inApp=false;
+ assert.equal(nextRetention({state:s,facts,now:at,contributions:{}}),null,'no in-app and no push means no delivery');
  assert.throws(()=>sanitizePrefs({buildHour:24}));assert.throws(()=>sanitizePrefs({dailyBuild:'yes'}));
 });
 test('retention routes preserve private server-owned scoring and add no AI quota or match penalty',()=>{

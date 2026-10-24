@@ -209,6 +209,8 @@ export type LinkyBrief = {
 export type LinkyMessageQuota = {
   period: 'day' | 'month'; periodKey: string; limit: number; used: number;
   remaining: number; resetAt: string; exhausted: boolean; upgradeRequired: boolean;
+  /** Per-day burst cap actually enforced (free 5, PLUS 25 by default). */
+  dailyLimit?: number; dailyUsed?: number; dailyRemaining?: number;
 };
 
 export type LinkyHome = {

@@ -96,13 +96,17 @@ test('group credentials are rejected before persistence and never enter the mode
 
 test('scheduled reminders are opt-in, content-private, deep-linked and idempotent under concurrent workers',async()=>{
  let pushes=0;const s=await seed({push:async()=>{pushes++;}});
+ // `reminders` is the opt-in that governs the follow-up path; without it the
+ // due follow-up produces nothing at all.
+ const followups=async()=>(await db.collection('notifications').get()).docs.filter(d=>d.data().section==='Follow-ups');
  await s.handle('alice','followup',{targetUid:'bob',title:'PRIVATE PROJECT ACTION',note:'PRIVATE NOTE',dueAt:NOW});
- assert.equal((await s.runReminderPage()).delivered,0);
+ assert.equal((await followups()).length,0);
  await s.handle('alice','prefs',{reminders:true,inApp:true,push:true,timezone:'UTC'});
  await Promise.all([s.runReminderPage(),s.runReminderPage()]);
- const notifications=await db.collection('notifications').get();assert.equal(notifications.docs.length,1);assert.equal(pushes,1);
- const n=notifications.docs[0].data();assert.equal(n.section,'Follow-ups');assert.ok(!JSON.stringify(n).includes('PRIVATE'));assert.equal(n.serverPushManaged,true);
- assert.equal((await s.runReminderPage()).delivered,0);
+ const docs=await followups();assert.equal(docs.length,1);assert.equal(pushes,1);
+ const n=docs[0].data();assert.ok(!JSON.stringify(n).includes('PRIVATE'));assert.equal(n.serverPushManaged,true);
+ assert.ok(String(n.url||'').startsWith('/'),'deep link into the app');
+ await s.runReminderPage();assert.equal((await followups()).length,1);assert.equal(pushes,1);
 });
 test('public help requests respect current owner visibility and only the author can close or recognise feedback',async()=>{
  const s=await seed();const {askId}=await s.handle('alice','askCreate',{title:'Review our signup flow',details:'We need help understanding our onboarding friction.',question:'Where would you get stuck?',kind:'launch',compensation:'voluntary',minutes:10});
@@ -139,7 +143,11 @@ test('real userIds match documents satisfy mutual connection without an older co
 test('Friday drop requires real sourced opportunities and concurrent workers produce a single snapshot',async()=>{
  const s=await seed();await s.handle('alice','prefs',{friday:true});await s.handle('alice','context',{project:'Real build',intent:'investors',needs:'angel funding'});
  const review=await s.handle('alice','weeklyReview');assert.ok(review.review.opportunities.length>0);assert.ok(review.review.opportunities.every(o=>o.sourceUrl.startsWith('https://')));
- await Promise.all([s.runReminderPage(),s.runReminderPage()]);const notes=await db.collection('notifications').get();assert.equal(notes.docs.length,1);assert.match(notes.docs[0].data().content,/newly curated/);
+ await Promise.all([s.runReminderPage(),s.runReminderPage()]);
+ // Retention may also deliver one truthful midday message; the Friday drop
+ // itself must still appear exactly once across two concurrent workers.
+ const drops=(await db.collection('notifications').get()).docs.filter(d=>d.data().section==='Leads');
+ assert.equal(drops.length,1);
  const state=(await db.collection('builderStates').doc('alice').get()).data();assert.ok(state.deliveredOpportunityKeys.length>0);assert.equal((await s.runReminderPage()).delivered,0);
 });
 test('a blocked member can leave without gaining access to room contents',async()=>{

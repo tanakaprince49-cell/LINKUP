@@ -234,7 +234,11 @@ function adapter(db,api) {
  vm.runInNewContext(code,{module,exports:module.exports,require:name=>{assert.ok(name in mocks,name);return mocks[name];},console,process:{env:{}},Date,Set,Map,URL,Buffer});
  return module.exports;
 }
+// This suite exercises adapter behaviour, not the daily burst cap (which has
+// its own tests in linky-usage.test.mjs), so it raises the cap for its own run.
 for(const channel of ['telegram','whatsapp'])test(`${channel} adapter shares strict search, tone, explanations, comparison and prep`,async()=>{
+ const previousCap=process.env.LINKY_FREE_DAILY;process.env.LINKY_FREE_DAILY='50';
+ try{
  const db=new Database();seed(db,[member,person('Alice'),person('Bo')]);db.rows.set(`botUsers/${channel}_chat`,{uid:'member'});
  const api=core(db),bot=adapter(db,api);
  assert.match((await bot.botReply(channel,'chat','tone playful')).text,/playful/);
@@ -247,6 +251,7 @@ for(const channel of ['telegram','whatsapp'])test(`${channel} adapter shares str
  const none=await bot.botReply(channel,'chat','find a quantum cryptographer');
  assert.match(none.text,/don't have a solid match/);assert.ok(!none.cards?.length);
  assert.equal(db.rows.get('linkyUsage/member').month.count,6);
+ }finally{ if(previousCap===undefined)delete process.env.LINKY_FREE_DAILY;else process.env.LINKY_FREE_DAILY=previousCap; }
 });
 test('authenticated app prefs route persists the shared companion tone',async()=>{
  const db=new Database();seed(db,[member]);const api=core(db),route=adapter(db,api);
@@ -282,7 +287,8 @@ test('squads require every slot and retain full slot constraints on reload',asyn
 
 test('legacy app external-search action cannot bypass an exhausted message ledger',async()=>{
  const db=new Database();seed(db,[member]);const api=core(db),route=adapter(db,api);
- for(let i=0;i<15;i++)await usage.reserveMessage(db,'member',{now:Date.now()});
+ // An exhausted monthly ledger, exactly as three days at the cap would leave it.
+ db.rows.set('linkyUsage/member',{month:{key:usage.monthKey(Date.now()),count:15}});
  const response={status(code){this.code=code;return this;},json(body){this.body=body;}};
  await route.default({method:'POST',query:{},body:{action:'pointers',need:'Flutter developer'},headers:{}},response);
  assert.equal(response.code,402);assert.equal(response.body.code,'ask_limit');

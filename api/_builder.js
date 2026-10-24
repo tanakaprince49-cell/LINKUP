@@ -4,7 +4,9 @@ import {readCampaignReward,claimCampaignReward} from './_campaignReward.js';
 import {cleanupDeletedGroupData,sweepDeletedGroupData,sweepDeletingGroups,createGroupService} from './_groups.js';
 import {createHabitActions} from './_builderHabit.js';
 import {habitSnapshot,habitState} from '../shared/build-habit.js';
-import {DAY,id,clean,requireText,problem,validId,safeLink,stateOf,freshState,contextOf,sanitizePrefs,weekKey,localTime,brief,relevantPeople,nextDelivery,relevantLeads,weeklySummary} from './_builderCore.js';
+import {DAY,id,clean,requireText,problem,validId,safeLink,stateOf,freshState,contextOf,sanitizePrefs,weekKey,localTime,brief,relevantPeople,relevantLeads,weeklySummary} from './_builderCore.js';
+import {planRetention,leagueSummary,retentionKey} from './_retention.js';
+import {loadActivityLeague} from './_leagueSeo.js';
 import {publicEligible} from './_publicSeo.js';
 import {readMessageQuota} from './_linkyUsage.js';
 import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,contributionInsight,containsCredential,normalizeUpdate} from '../shared/contributions.js';
@@ -96,7 +98,12 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   const own=target===uid,person=await db.collection('users').doc(target).get();
   if(!person.exists||person.data().deleted||person.data().banned||(!own&&(!publicEligible(person.data(),target)||await blocked(uid,target))))throw problem('This contribution calendar is not available.',403);
   const d=await db.collection('builderContributions').doc(target).get(),c=d.exists?d.data():{};
-  return {days:Array.isArray(c.days)?c.days:[],points:Number(c.points)||0,totalUpdates:Number(c.totalUpdates)||0,publicMomentum:c.publicMomentum===true,publicUrl:c.publicMomentum===true?'https://www.linkupbuild.com/app/momentum/'+encodeURIComponent(target):'',timezone:'UTC',today:contributionDay(now()),
+  // The full recorded-date history (bounded server-side), plus which days in it
+ // have a private update. Dates only: no update text is ever returned to a
+ // viewer who is not the owner.
+ const allDays=(Array.isArray(c.days)?c.days:[]).filter(d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d));
+ const updatedDays=new Set([...(c.updates||[]).map(u=>u.day),...(person.data().shipLogs||[]).map(u=>String(u?.createdAt||'').slice(0,10))].filter(d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)));
+ return {days:allDays,points:Number(c.points)||0,totalUpdates:Number(c.totalUpdates)||0,firstDay:allDays[0]||'',lastDay:allDays.at(-1)||'',historyDays:Number(c.totalUpdates)||allDays.length,updatedDays:[...updatedDays].slice(0,366),publicMomentum:c.publicMomentum===true,publicUrl:c.publicMomentum===true?'https://www.linkupbuild.com/app/momentum/'+encodeURIComponent(target):'',timezone:'UTC',today:contributionDay(now()),
    ...(own?{updates:c.updates||[],shipLogs:contributionHistory(c,person.data())}:{}),
    notice:'Self-reported progress, recorded by LINKUP; not proof of skill, trust, verification or investment quality.'};
  }
@@ -204,25 +211,71 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
  }
  async function runReminderPage({after='',limit=40}={}){
   await sweepDeletedGroupData(db,now());await sweepDeletingGroups(db,now());
+  // One public board read per run serves every member on this page: the rank
+  // facts in the midday messages are then real for everyone, not estimated.
+  const league=await loadActivityLeague(db,{period:'week',at:now()}).then(board=>leagueSummary(board)).catch(()=>null);
   let query=db.collection('builderStates').orderBy('__name__').limit(Math.min(40,limit));if(after)query=query.startAfter(after);const docs=(await query.get()).docs;let delivered=0,lastProcessed=after;const started=Date.now();
-  for(const d of docs){if(Date.now()-started>40000)return {delivered,nextCursor:lastProcessed};lastProcessed=d.id;const user=await db.collection('users').doc(d.id).get();if(!user.exists||user.data().deleted){await db.collection('builderContributions').doc(d.id).delete();await cleanupDeletedGroupData(db,d.id,now());continue;}if(user.data().banned||user.data().onboarded!==true)continue;
+  for(const d of docs){
+   if(Date.now()-started>40000)return {delivered,nextCursor:lastProcessed};
+   lastProcessed=d.id;const user=await db.collection('users').doc(d.id).get();
+   if(!user.exists||user.data().deleted){await db.collection('builderContributions').doc(d.id).delete();await cleanupDeletedGroupData(db,d.id,now());continue;}
+   if(user.data().banned||user.data().onboarded!==true)continue;
+   // The weekly review costs several reads, so it is only computed when one of
+   // the member's own opt-ins is actually due right now. It is also the only
+   // source of the Friday drop and the Sunday digest, so neither can be
+   // fabricated when the review found nothing.
    const prior=stateOf(d.data(),now()),clock=localTime(now(),prior.prefs.timezone);
-   const eligibleReview=!prior.lastDeliveryAt||now()-prior.lastDeliveryAt>=20*3600000;
-   const needsReview=eligibleReview&&((prior.prefs.friday&&prior.lastFriday!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Fri'&&clock.hour>=9&&clock.hour<19)||(prior.prefs.digest&&prior.lastDigest!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Sun'&&clock.hour>=17&&clock.hour<20));
-   const review=needsReview?await reviewFor(d.id,prior):null;
-   let delivery=null,prefs;
-   await db.runTransaction(async tx=>{delivery=null;prefs=null;const fresh=await tx.get(d.ref),s=stateOf(fresh.data(),now()),contrib=s.prefs.dailyBuild?(await tx.get(db.collection('builderContributions').doc(d.id))).data()||{}:{};if(review&&(s.epoch!==prior.epoch||s.updatedAt!==prior.updatedAt))return;const n=nextDelivery(s,now(),review,contrib);if(!n)return;
-    const nr=db.collection('notifications').doc('builder_'+d.id+'_'+n.key);if(n.kind==='build'){if((habitState(contrib).nudges||[]).some(v=>v.key===n.key))return;}else if((await tx.get(nr)).exists)return;
-    prefs={...s.prefs};delivery=n;s.lastDeliveryAt=now();if(n.kind==='build'){s.buildReminderCount=(s.buildReminderCount||0)+1;if(n.pause)s.prefs.dailyBuild=false;}if(n.key.startsWith('followup'))s.followups=s.followups.map(f=>f.status==='open'&&f.dueAt<=now()?{...f,notifiedAt:now()}:f);if(n.key.startsWith('digest'))s.lastDigest=weekKey(now(),s.prefs.timezone);if(n.key.startsWith('friday')){s.lastFriday=weekKey(now(),s.prefs.timezone);s.deliveredOpportunityKeys=[...new Set([...(s.deliveredOpportunityKeys||[]),...review.newOpportunities.map(o=>o.key)])].slice(-100);}if(review)s.latestSummary={...review,summaryAt:now()};
+   const needsReview=(prior.prefs.friday===true&&prior.lastFriday!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Fri'&&clock.hour>=9&&clock.hour<19)||(prior.prefs.digest===true&&prior.lastDigest!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Sun'&&clock.hour>=17&&clock.hour<20);
+   const review=needsReview?await reviewFor(d.id,prior).catch(()=>null):null;
+   let delivery=null,prefs=null,notifyRef=null;
+   await db.runTransaction(async tx=>{
+    delivery=null;prefs=null;notifyRef=null;
+    const fresh=await tx.get(d.ref),s=stateOf(fresh.data(),now());
+    // Someone changed the account while the review was being read: use the next
+    // run's review instead of delivering a stale one.
+    if(review&&(s.epoch!==prior.epoch||s.updatedAt!==prior.updatedAt))return;
+    const contrib=(await tx.get(db.collection('builderContributions').doc(d.id))).data()||{};
+    const {message,facts}=planRetention({uid:d.id,state:s,contributions:contrib,user:user.data(),now:now(),league,review});
+    if(!message)return;
+    const nr=db.collection('notifications').doc(retentionKey(d.id,facts,message));
+    if((await tx.get(nr)).exists)return;
+    notifyRef=nr;
+    // Build nudges keep the existing pause rule and private habit inbox.
+    if(message.kind==='build'&&(habitState(contrib).nudges||[]).some(v=>v.key===message.key))return;
+    prefs={...s.prefs};delivery=message;s.lastDeliveryAt=now();
+    const sent=(s.retention&&s.retention.day===facts.localDay&&Array.isArray(s.retention.sent)?s.retention.sent:[]);
+    s.retention={day:facts.localDay,sent:[...sent,{category:message.category,at:now()}].slice(-8)};
+    if(message.kind==='build'){s.buildReminderCount=(s.buildReminderCount||0)+1;if(message.pause)s.prefs.dailyBuild=false;}
+    if(message.category==='followup')s.followups=s.followups.map(f=>f.status==='open'&&f.dueAt<=now()?{...f,notifiedAt:now()}:f);
+    if(message.category==='weekly'||message.category==='digest')s.lastDigest=weekKey(now(),s.prefs.timezone);
+    if(message.category==='friday'){
+     s.lastFriday=weekKey(now(),s.prefs.timezone);
+     s.deliveredOpportunityKeys=[...new Set([...(s.deliveredOpportunityKeys||[]),...(review?.newOpportunities||[]).map(o=>o.key)])].slice(-100);
+    }
+    if(review)s.latestSummary={...review,summaryAt:now()};
     tx.set(d.ref,s);
-    // Private habit inbox avoids legacy notifications triggers: only this service
-    // sends build pushes, and only with explicit push permission.
-    if(n.kind==='build'){const h=habitState(contrib);h.nudges=[{key:n.key,content:n.content,at:now(),url:'/ship'},...(h.nudges||[])].slice(0,10);tx.set(db.collection('builderContributions').doc(d.id),{...contrib,habit:h,updatedAt:now()});}
-    else if(prefs.inApp)tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',fromPic:'',type:'builder',content:n.content,section:n.section,serverPushManaged:true,pushRequested:prefs.push,...(review?{builderSummary:review.summary}:{}),isRead:false,timestamp:new Date(now())});
-    else tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',type:'builder',content:n.content,section:n.section,serverPushManaged:true,pushRequested:prefs.push,...(review?{builderSummary:review.summary}:{}),isRead:true,timestamp:new Date(now())});
+    if(message.kind==='build'){
+     const h=habitState(contrib);h.nudges=[{key:message.key,content:message.content,at:now(),url:'/ship'},...(h.nudges||[])].slice(0,10);
+     tx.set(db.collection('builderContributions').doc(d.id),{...contrib,habit:h,updatedAt:now()});
+    }else{
+     // One document per member, per UTC day, per category: a replayed cron run
+     // can never duplicate a message the member already received.
+     tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',fromPic:'',type:'builder',category:message.category,slot:message.slot,title:message.title,content:message.content,section:message.section,url:message.url,serverPushManaged:true,pushRequested:prefs.push,...(review?{builderSummary:review.summary}:{}),isRead:prefs.inApp===false,timestamp:new Date(now())});
+    }
    });
-   if(delivery){delivered++;if(prefs.push){const nr=delivery.kind==='build'?db.collection('builderContributions').doc(d.id):db.collection('notifications').doc('builder_'+d.id+'_'+delivery.key);const status=delivery.kind==='build'?v=>({buildPushStatus:{key:delivery.key,...v}}):v=>v;try{const result=await push(d.id,{title:'LINKUP · Your next move',body:delivery.kind==='build'?delivery.content:'Your private building update is ready. Open LINKUP to review it.',url:delivery.kind==='build'?'/ship':'/builder?section='+encodeURIComponent(delivery.section)});await nr.set(status({pushStatus:result?.sent>0?'provider_accepted':'not_accepted',pushAttemptAt:now()}),{merge:true});}catch{await nr.set(status({pushStatus:'failed',pushAttemptAt:now()}),{merge:true});}}}
-  }return {delivered,nextCursor:docs.length===Math.min(40,limit)?docs.at(-1).id:null};
+   if(delivery){
+    delivered++;
+    if(prefs.push){
+     const nr=delivery.kind==='build'?db.collection('builderContributions').doc(d.id):notifyRef;
+     const patch=v=>delivery.kind==='build'?{buildPushStatus:{key:delivery.key,...v}}:v;
+     try{
+      const result=await push(d.id,{title:'LINKUP · '+delivery.title,body:delivery.body,url:delivery.url||'/ship'});
+      await nr.set(patch({pushStatus:result?.sent>0?'provider_accepted':'not_accepted',pushAttemptAt:now()}),{merge:true});
+     }catch{await nr.set(patch({pushStatus:'failed',pushAttemptAt:now()}),{merge:true});}
+    }
+   }
+  }
+  return {delivered,nextCursor:docs.length===Math.min(40,limit)?docs.at(-1).id:null};
  }
  return {handle,runReminderPage};
 }

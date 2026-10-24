@@ -24,8 +24,11 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed) {
     res.setHeader('Vercel-CDN-Cache-Control','no-store');
     res.setHeader('CDN-Cache-Control','no-store');
     res.setHeader('Content-Type','text/html; charset=utf-8');
-    const send = (code, body, type = 'text/html; charset=utf-8') => {
+    const send = (code, body, type = 'text/html; charset=utf-8', headers = null) => {
       res.setHeader('Content-Type', type);
+      // League cards are the one public asset that may be cached briefly; they
+      // carry no private fields. Everything else stays no-store.
+      if (headers) for (const [key, value] of Object.entries(headers)) res.setHeader(key, value);
       res.status(code);
       return res.send(req.method === 'HEAD' ? '' : body);
     };

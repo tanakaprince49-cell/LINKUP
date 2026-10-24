@@ -8,6 +8,7 @@ import {useAuth} from '../contexts/AuthContext';
 import {useTheme} from '../contexts/ThemeContext';
 import {fetchBuilderLeague,fetchActivityLeague,type LeaguePeriod} from '../lib/activityLeague';
 import {builderCall} from '../lib/builder';
+import {downloadLeagueCard} from '../lib/leagueCard';
 import ScreenHeader from '../components/ScreenHeader';
 import MemberBadges from '../components/MemberBadges';
 
@@ -22,6 +23,9 @@ function resetLabel(period:string){
  const hours=Math.max(0,Math.floor((end-Date.now())/3600000));
  return `Resets in ${Math.floor(hours/24)}d ${hours%24}h · UTC`;
 }
+
+/** Every row carries its public photo; older payloads used `profilePic`. */
+const photoOf=(row:any):string=>String(row?.image||row?.profilePic||row?.photoURL||row?.avatarUrl||'');
 
 const PERIODS:[string,string][]=[['week','This week'],['month','This month'],['year','This year']];
 
@@ -38,7 +42,7 @@ function Podium({rows,onOpen,dark,period}:{rows:any[];onOpen:(uid:string)=>void;
     <Text numberOfLines={1} style={{color:INK,fontSize:11,fontWeight:'900',letterSpacing:1.4}}>NUMBER 1 · {label.toUpperCase()}</Text>
    </View>
    <View style={{flexDirection:'row',alignItems:'center',gap:14,width:'100%'}}>
-    <View style={styles.championAvatar}><ProfileAvatar uri={first.image} name={first.name} size={72} dark={false}/></View>
+    <View style={styles.championAvatar}><ProfileAvatar uri={photoOf(first)} name={first.name} size={76} dark={false}/></View>
     <View style={{flex:1,gap:3}}>
      <View style={{flexDirection:'row',alignItems:'center',gap:5}}><Text numberOfLines={1} style={{color:INK,fontWeight:'900',fontSize:23,flexShrink:1}}>{first.name}</Text><MemberBadges userId={first.uid} verified={first.verified} size={16}/></View>
      <Text numberOfLines={1} style={{color:'#4B4415',fontSize:12}}>{first.occupation||'LINKUP builder'}</Text>
@@ -52,7 +56,7 @@ function Podium({rows,onOpen,dark,period}:{rows:any[];onOpen:(uid:string)=>void;
    {challengers.map((p:any)=>(
     <TouchableOpacity key={p.uid} accessibilityRole="button" accessibilityLabel={`Open ${p.name}, number ${p.rank}`} onPress={()=>onOpen(p.uid)} style={[styles.runnerUp,{backgroundColor:dark?'#171A21':'#FFFFFF',borderColor:dark?'#35373D':'#E6E1CB'}]}>
      <View style={styles.rankChip}><Text style={{color:INK,fontSize:12,fontWeight:'900'}}>{p.rank}</Text></View>
-     <ProfileAvatar uri={p.image} name={p.name} size={44} dark={dark}/>
+     <ProfileAvatar uri={photoOf(p)} name={p.name} size={52} dark={dark}/>
      <Text numberOfLines={1} style={{color:ink,fontSize:12,fontWeight:'900',textAlign:'center'}}>{p.name.split(' ')[0]}</Text>
      <Text style={{color:muted,fontSize:12,fontWeight:'800'}}>{p.points}</Text>
     </TouchableOpacity>
@@ -64,7 +68,7 @@ function Podium({rows,onOpen,dark,period}:{rows:any[];onOpen:(uid:string)=>void;
 export default function TrendingBuildersScreen({navigation,local=false}:any){
  const {user,profile}=useAuth(),{theme}=useTheme(),dark=theme==='dark',focused=useIsFocused();
  const [view,setView]=useState('builders'); // Builders is the first page; positions load with it.
- const [period,setPeriod]=useState<LeaguePeriod>('week'),[board,setBoard]=useState<any>(null),[habit,setHabit]=useState<any>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[joining,setJoining]=useState(false),[clock,tick]=useState(0);
+ const [period,setPeriod]=useState<LeaguePeriod>('week'),[board,setBoard]=useState<any>(null),[habit,setHabit]=useState<any>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[joining,setJoining]=useState(false),[clock,tick]=useState(0),[cardBusy,setCardBusy]=useState(false),[cardNote,setCardNote]=useState('');
  const city=local?String(profile?.city||''):'',country=local?String(profile?.country||''):'';
  const builders=view==='builders';
  const scope=[view,period,user?.uid,city,country].join('|'),identity=useRef(scope);identity.current=scope;const generation=useRef(0);
@@ -75,9 +79,10 @@ export default function TrendingBuildersScreen({navigation,local=false}:any){
    const data=builders
     ? await fetchBuilderLeague({uid:user?.uid,city,country}).then(async b=>{
        const act=await fetchActivityLeague(period,{uid:user?.uid,city,country}).catch(()=>null);
-       const ranks:Record<string,{rank:number;points:number}>={};
-       for(const r of act?.rows||[])ranks[r.uid]={rank:r.rank,points:r.points};
-       return {...b,ranks,champions:act?.champions||b.champions||null};
+       const ranks:Record<string,{rank:number;points:number}>={},photos:Record<string,any>={};
+       for(const r of act?.rows||[]){ranks[r.uid]={rank:r.rank,points:r.points};photos[r.uid]=r.image||photos[r.uid]||'';}
+       const rows=(b.rows||[]).map((r:any)=>({...r,image:photoOf(r)||photos[r.uid]||''}));
+       return {...b,rows,ranks,champions:act?.champions||b.champions||null};
       })
     : await fetchActivityLeague(period,{uid:user?.uid,city,country});
    const h=user?.uid?await builderCall('habit').catch(()=>null):null;
@@ -145,13 +150,23 @@ export default function TrendingBuildersScreen({navigation,local=false}:any){
      {button('Open my campaigns',()=>navigation.navigate('Campaigns'),true)}
     </View>
 
+    {!builders&&<View style={[styles.card,panel]}>
+     <View style={{flexDirection:'row',alignItems:'center',gap:8}}><Crown size={16} color={ink}/><Text style={{color:ink,fontWeight:'900',fontSize:15}}>Top three card</Text></View>
+     <Text style={{color:muted,fontSize:12,lineHeight:19}}>A shareable card of the three leaders with a crown on number one only. Anyone can open or download it at any time — no sign-in needed.</Text>
+     <View style={styles.row}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Download the top three builders card" disabled={cardBusy} onPress={()=>{setCardBusy(true);setCardNote('');void downloadLeagueCard(period==='all'?'week':period as any).then(()=>setCardNote('Card saved.')).catch((e:any)=>setCardNote(e.message)).finally(()=>setCardBusy(false));}} style={[styles.button,{backgroundColor:YELLOW,flex:1}]}><Text style={{color:INK,fontSize:13,fontWeight:'900',textAlign:'center'}}>{cardBusy?'Preparing…':'Download card'}</Text></TouchableOpacity>
+      <TouchableOpacity accessibilityRole="link" accessibilityLabel="See the public top three card page" onPress={()=>void Linking.openURL('https://www.linkupbuild.com/app/builder-league/card'+(period==='week'?'':'?period='+period))} style={[styles.button,{backgroundColor:dark?'#2A2D34':'#EFEAD5',flex:1}]}><Text style={{color:ink,fontSize:13,fontWeight:'900',textAlign:'center'}}>Open page ↗</Text></TouchableOpacity>
+     </View>
+     {!!cardNote&&<Text style={{color:muted,fontSize:12}}>{cardNote}</Text>}
+    </View>}
+
     <View style={[styles.row,{justifyContent:'space-between'}]}><Text style={{color:ink,fontWeight:'900',fontSize:18}}>{builders?'Meet the builders':'Full board'}</Text><Text style={{color:muted,fontSize:11}}>{current?.participants??'—'} participants</Text></View>
    </View>}
    renderItem={({item:r}:any)=>{
     const standing=builders?current?.ranks?.[r.uid]:null;
     return <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Open ${r.name} profile`} onPress={()=>openProfile(r.uid)} style={[styles.standing,panel,r.uid===user?.uid&&{borderColor:'#A49B52'}]}>
      <View style={[styles.listRank,{backgroundColor:builders&&!standing?'transparent':YELLOW}]}><Text style={{color:INK,fontSize:13,fontWeight:'900'}}>{builders?(standing?`#${standing.rank}`:'—'):`${r.rank}`}</Text></View>
-     <ProfileAvatar uri={r.image} name={r.name} size={54} dark={dark}/>
+     <ProfileAvatar uri={photoOf(r)} name={r.name} size={56} dark={dark}/>
      <View style={{flex:1,gap:4}}>
       <View style={{flexDirection:'row',alignItems:'center',gap:5}}><Text numberOfLines={1} style={{color:ink,fontWeight:'900',fontSize:15,flexShrink:1}}>{r.name}</Text><MemberBadges userId={r.uid} verified={r.verified} size={14}/></View>
       <Text numberOfLines={1} style={{color:muted,fontSize:12}}>{r.occupation||'LINKUP builder'}</Text>

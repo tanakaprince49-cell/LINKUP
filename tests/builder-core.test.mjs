@@ -1,7 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {DAY,brief,freshState,contextOf,sanitizePrefs,quiet,weekKey,relevantPeople,nextDelivery,weeklySummary,relevantLeads} from '../api/_builderCore.js';
+import {DAY,brief,freshState,contextOf,sanitizePrefs,quiet,weekKey,relevantPeople,weeklySummary,relevantLeads} from '../api/_builderCore.js';
+import {nextRetention} from '../shared/retention.js';
 const at=Date.parse('2026-10-23T12:00:00Z');
 test('builder context is explicit and defaults to private, optional AI use and opt-in reminders',()=>{
  const s=freshState(at);assert.equal(s.prefs.push,false);assert.equal(s.prefs.email,false);assert.equal(s.prefs.useContextForAI,false);assert.equal(s.prefs.reminders,false);assert.equal(s.version,16);
@@ -32,16 +33,32 @@ test('expired availability is never advertised as currently available',()=>{
 test('retired Coach context is never re-enabled through preferences',()=>{
  assert.equal(sanitizePrefs({useContextForAI:true}).useContextForAI,false);
 });
-test('reminder scheduling is opt-in, meaningful, frequency capped and never sends during quiet hours',()=>{
- const s=freshState(at);s.followups=[{status:'open',dueAt:at-1,notifiedAt:0}];assert.equal(nextDelivery(s,at),null);
- s.prefs.reminders=true;assert.equal(nextDelivery(s,at).section,'Follow-ups');s.lastDeliveryAt=at-1000;assert.equal(nextDelivery(s,at),null);
- s.lastDeliveryAt=0;assert.equal(nextDelivery(s,Date.parse('2026-10-23T23:00:00Z')),null);
+test('retention messages are opt-in, honest and quiet when there is nothing true to say',()=>{
+ const s=freshState(at);s.prefs.retention=true;
+ const facts={localDay:'2026-10-23',localHour:9,weekDays:0,weekTarget:3,totalUpdates:0,points:0,streakDays:0,todayRecorded:false,followupsDue:0,profileMissing:[]};
+ assert.equal(nextRetention({state:s,facts:{localDay:'2026-10-23',localHour:9}}),null,'no facts means no message, never an invented one');
+ assert.match(nextRetention({state:s,facts}).body,/still empty/,'an empty calendar is itself a true fact');
+ s.prefs.retention=false;assert.equal(nextRetention({state:{...s,prefs:{...s.prefs,retention:false}},facts:{...facts,totalUpdates:9,lastUpdateDay:'2026-10-22'}}),null);
+ s.prefs.retention=true;
+ const real=nextRetention({state:s,facts:{...facts,totalUpdates:9,lastUpdateDay:'2026-10-22',weekDays:2}});
+ assert.equal(real.category,'kickoff');assert.match(real.body,/2 build days this week, target 3/);
 });
-test('Friday reviews do not manufacture a drop for an empty workspace and matching stays unlocked',()=>{
- const s=freshState(at);s.prefs.friday=true;assert.equal(nextDelivery(s,at),null);s.context.project='Real project';assert.equal(nextDelivery(s,at),null);const review={newOpportunities:[{key:'real-source'}],meaningful:true};assert.equal(nextDelivery(s,at,review).section,'Today');s.lastFriday='2026-10-19';assert.equal(nextDelivery(s,at,review),null);
+test('a due follow-up is the only thing that can claim the morning slot, and only when opted in',()=>{
+ const s=freshState(at);const facts={localDay:'2026-10-23',localHour:9,weekDays:1,weekTarget:3,totalUpdates:4,lastUpdateDay:'2026-10-22',followupsDue:1,nextFollowupTitle:'Send the revised quote'};
+ assert.equal(nextRetention({state:s,facts}).category,'kickoff');
+ const opted={...s,prefs:{...s.prefs,reminders:true}};
+ const due=nextRetention({state:opted,facts});
+ assert.equal(due.category,'followup');
+ // The title and note stay in the private workspace; the notification only
+ // says that a real item reached its date.
+ assert.doesNotMatch(due.body,/Send the revised quote/);
+ assert.match(due.body,/reached its date/);assert.equal(due.section,'Follow-ups');
 });
-test('Sunday progress summaries are source-based, opt-in and once per local week',()=>{
- const time=Date.parse('2026-10-25T18:00:00Z'),s=freshState(time);s.context.project='A';s.prefs.digest=true;assert.equal(nextDelivery(s,time),null);const review=weeklySummary(s,time);assert.equal(review.meaningful,false);s.goals=[{text:'Interview customers',doneAt:time-1000}];const actual=weeklySummary(s,time);assert.equal(nextDelivery(s,time,actual).section,'Today');assert.match(nextDelivery(s,time,actual).content,/1 completed outcomes/);s.lastDigest=weekKey(time);assert.equal(nextDelivery(s,time,actual),null);
+test('the same member cannot receive the same idea twice in a day',()=>{
+ const s=freshState(at);const facts={localDay:'2026-10-23',localHour:9,weekDays:1,weekTarget:3,totalUpdates:4,lastUpdateDay:'2026-10-22',followupsDue:0};
+ const first=nextRetention({state:s,facts});assert.equal(first.category,'kickoff');
+ const after={...s,retention:{day:'2026-10-23',sent:[{category:'kickoff',at:at}]}};
+ assert.equal(nextRetention({state:after,facts}),null);
 });
 test('V16 does not add a serverless function, bypass the existing ledger, or enable unsolicited email',()=>{
  const service=fs.readFileSync(new URL('../api/_builder.js',import.meta.url),'utf8');assert.doesNotMatch(service,/reserveMessage|refundMessage|await generate/);assert.match(service,/op==='coach'\)throw problem[^\n]+410/);

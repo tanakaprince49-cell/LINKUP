@@ -326,6 +326,7 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
   const quota = home ? quotaFromHome(home) : null;
   const messageLimit = quota?.limit ?? 15;
   const asksLeft = quota?.remaining ?? 0;
+  const dailyLeft = quota?.dailyRemaining ?? null;
   const resetCountdown = formatCountdown(quota?.resetAt, nowTick);
   const atMessageLimit = !!home && !home.plus && !!quota?.upgradeRequired && (!quota.resetAt || Date.parse(quota.resetAt) > nowTick);
   const quotaPaywallShown = useRef('');
@@ -747,7 +748,7 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
             {home ? 'AI building partner · Big ideas welcome' : 'Getting ready…'}
           </Text>
           {home ? <Text accessibilityLabel="Linky message allowance" accessibilityLiveRegion="polite" style={[styles.allowanceText,{color:textColor(isDark,'secondary'),marginTop:3}]}>
-            {home.plus ? `${asksLeft} messages left today · PLUS` : `${asksLeft} of ${messageLimit} free messages left this month`}
+            {home.plus ? `${asksLeft} messages left today · PLUS` : `${asksLeft} of ${messageLimit} free messages left this month${dailyLeft===null?'':` · ${dailyLeft} today`}`}
           </Text> : null}
           {atMessageLimit && resetCountdown ? <Text style={[styles.allowanceText,{color:textColor(isDark,'muted'),marginTop:2}]}>Resets in {resetCountdown}</Text> : null}
         </View>

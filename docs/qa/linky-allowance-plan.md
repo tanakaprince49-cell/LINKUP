@@ -48,8 +48,8 @@ The free tier covers roughly **11 messages per member per month** if all 500 use
 | Setting | Value | Why |
 | --- | --- | --- |
 | Free monthly | **15** (unchanged) | Keep the promise you already made. |
-| Free daily cap | **3** (`LINKY_FREE_DAILY=3`) | Stops one member spending a whole day's shared budget in ten minutes. 15/month still fits: 3/day × 5 days. |
-| PLUS daily | **20–30** (`LINKY_PLUS_DAILY=20`) | 60/day is only honest once billing is on. |
+| Free daily cap | **5** (`LINKY_FREE_DAILY=5`, the shipped default) | Stops one member spending a whole day's shared budget in minutes. 15/month still fits exactly: 3 days at 5. |
+| PLUS daily | **25** (`LINKY_PLUS_DAILY=25`, the shipped default) | 60/day was only honest once billing is on; 25 is what the free key can carry. |
 | Shared ceiling | **200/day** (`LINKY_GLOBAL_DAILY_MESSAGES=200`) | Already shipped. When hit, the member is told, and **their allowance is not spent**. |
 | Headroom | 20% | Retries, provider failover, the occasional 3-call path. |
 
@@ -70,7 +70,7 @@ that the promise costs cents:
 
 (Range spans published Flash-Lite pricing tiers; check the current pricing page before
 budgeting.) With billing on, set `LINKY_MODEL_RPD` to the plan's limit, keep the shared
-ceiling as a runaway guard, and raise `LINKY_PLUS_DAILY` back toward 60.
+ceiling as a runaway guard, and raise `LINKY_PLUS_DAILY` toward 60.
 
 ## 6. Fairness rules that do not depend on the provider
 
@@ -80,3 +80,23 @@ ceiling as a runaway guard, and raise `LINKY_PLUS_DAILY` back toward 60.
 3. Only delivered answers count; a blocked request costs nobody anything.
 4. Deterministic paths (greetings, quota, saved cards) never need the model.
 5. The global counter resets at 00:00 UTC; the member's monthly counter resets on the 1st.
+
+
+## Shipped defaults (16.5.0 onward)
+
+| Allowance | Value | Where |
+|---|---|---|
+| Free | **5 messages per UTC day** inside **15 per calendar month** | `BUDGET_DEFAULTS.freeDaily`, `freePerMonth` |
+| PLUS | **25 messages per UTC day** | `BUDGET_DEFAULTS.plusDaily`, `plusPerDay` |
+| Shared ceiling | 200 messages per UTC day across every member | `LINKY_GLOBAL_DAILY_MESSAGES` |
+| Provider budget | 500 requests/day ÷ 2.1 calls, 20% headroom → **190 messages/day** | `LINKY_MODEL_RPD`, `LINKY_CALLS_PER_MESSAGE` |
+
+A free member reaches the monthly 15 in three days at the cap. The 5/day cap is a
+burst limit, not a second allowance: the message that trips it says the monthly
+allowance is unchanged and quotes what is left.
+
+The honest arithmetic at 500 members: five a day each is 2,500 potential messages
+against a 190-a-day provider ceiling. The shared ceiling is therefore the binding
+constraint — around 38 members can use a full free day, and everyone else is told
+"allowance not used, try after midnight UTC" rather than silently getting a
+template reply. Paid billing is what raises 190/day, not the per-member caps.

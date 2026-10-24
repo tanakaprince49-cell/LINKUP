@@ -5,16 +5,16 @@
 // derived, not guessed: see docs/qa/linky-allowance-plan.md for the arithmetic.
 //
 // Overrides (Vercel env, no redeploy of code needed):
-//   LINKY_FREE_DAILY              free members, messages per UTC day (0 = no daily cap)
-//   LINKY_PLUS_DAILY              PLUS members, messages per UTC day (0 = use the plan)
+//   LINKY_FREE_DAILY              free members, messages per UTC day (default 5)
+//   LINKY_PLUS_DAILY              PLUS members, messages per UTC day (default 25)
 //   LINKY_GLOBAL_DAILY_MESSAGES   shared ceiling across every member (0 = disabled)
 //   LINKY_MODEL_RPD               the provider's requests/day for the wired model
 //   LINKY_CALLS_PER_MESSAGE       average model calls per delivered message
 export const BUDGET_DEFAULTS = Object.freeze({
   freePerMonth: 15,
-  plusPerDay: 60,
-  freeDaily: 0,
-  plusDaily: 60,
+  plusPerDay: 25,
+  freeDaily: 5,
+  plusDaily: 25,
   globalDailyMessages: 200,
   modelRequestsPerDay: 500,
   callsPerMessage: 2.1,

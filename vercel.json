@@ -70,6 +70,10 @@
       "destination": "/api/publicSeo?mode=league"
     },
     {
+      "source": "/app/builder-league/card",
+      "destination": "/api/publicSeo?mode=league-card"
+    },
+    {
       "source": "/app/builder-league/month",
       "destination": "/api/publicSeo?mode=league&period=month"
     },
@@ -104,6 +108,10 @@
     {
       "source": "/builder-league",
       "destination": "/api/publicSeo?mode=league"
+    },
+    {
+      "source": "/builder-league/card",
+      "destination": "/api/publicSeo?mode=league-card"
     },
     {
       "source": "/builder-league/month",
