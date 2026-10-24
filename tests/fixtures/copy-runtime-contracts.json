@@ -2464,6 +2464,13 @@
       "users"
     ],
     [
+      "get"
+    ],
+    [
+      "doc",
+      "users"
+    ],
+    [
       "property",
       "action",
       "profile"
