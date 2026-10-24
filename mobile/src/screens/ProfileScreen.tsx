@@ -2127,7 +2127,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             )}
           </View>
 
-          {!isViewingOther && (isEditing || profileDetailsReady) && showEdit('photos') && (
+          {!isViewingOther && isEditing && showEdit('photos') && (
             <View style={{ marginTop: 18 }}>
               <Text style={[styles.sectionHeader, { color: textColor(isDark) }]}>Photos</Text>
               <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 10 }}>
@@ -2138,7 +2138,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                     <TouchableOpacity
                       key={idx}
                       activeOpacity={0.85}
-                      onPress={() => (isEditing ? pickGalleryPhoto(idx) : startEditing('all'))}
+                      onPress={() => pickGalleryPhoto(idx)}
                       style={[styles.photoSlot, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
                     >
                       {uri && shouldRenderProfileImages ? (
@@ -2165,7 +2165,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 })}
               </View>
               <Text style={{ marginTop: 8, fontSize: 10, color: '#666', fontWeight: '900', textAlign: 'center' }}>
-                {isEditing ? 'Tap a slot to change it or X to delete it' : 'Tap to edit your swipe photos'}
+                {'Tap a slot to change it or X to delete it'}
               </Text>
             </View>
           )}
@@ -3678,7 +3678,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginHorizontal: -24,
     marginTop: -24,
-    height: 148,
+    height: 220,
     borderTopLeftRadius: 15,
     borderTopRightRadius: 15,
     overflow: 'hidden',
