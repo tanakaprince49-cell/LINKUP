@@ -539,6 +539,31 @@ export default function ProfileScreen({ navigation, route }: any) {
       const fromSnap = (snap: any) =>
         snap?.exists?.() ? compactProfileForList({ uid: snap.id, ...(snap.data() as any) }) : null;
 
+      // Banner top-up: the public index is the fast path, but it only carries
+      // the banner when the owner's publish succeeded (fresh rules + hosted
+      // URL). The users doc is directly readable by any signed-in visitor and
+      // ALWAYS has the banner (URL or data URI), so when the index copy lacks
+      // one, merge it from there — banners stay visible to everyone no matter
+      // what. This only ever ADDS a missing banner, never removes one.
+      const topUpBannerFromUserDoc = (base: UserProfile) => {
+        if ((base as any)?.coverPhoto) return;
+        const userRef = doc(db, 'users', uid);
+        const bannerFrom = (snap: any) =>
+          safeProfileImageUri((snap?.data() as any)?.coverPhoto, MOBILE_LIST_IMAGE_LIMIT);
+        const mergeBanner = (banner: string) => {
+          if (!banner) return;
+          const current = profileCacheRef.current.get(uid) as any;
+          if (!current || current.coverPhoto) return;
+          const merged = { ...current, coverPhoto: banner } as UserProfile;
+          profileCacheRef.current.set(uid, merged);
+          onFresh?.(merged);
+        };
+        // Instant + free when the doc is already cached...
+        void getDocFromCache(userRef).then((snap) => mergeBanner(bannerFrom(snap))).catch(() => {});
+        // ...authoritative copy from the server right after.
+        void getDoc(userRef).then((snap) => mergeBanner(bannerFrom(snap))).catch(() => {});
+      };
+
       // 1) Serve instantly from the local Firestore cache when we have the
       //    doc (repeat views / after discovery), while the network copy
       //    refreshes the cache in the background.
@@ -555,12 +580,16 @@ export default function ProfileScreen({ navigation, route }: any) {
           // the moment it arrives so it renders without needing a revisit.
           if (JSON.stringify(freshProfile) !== JSON.stringify(cachedProfile)) onFresh?.(freshProfile);
         });
+        topUpBannerFromUserDoc(cachedProfile);
         return remember(cachedProfile);
       }
 
       // 2) Otherwise wait for the live public index...
       const publicProfile = fromSnap(await serverSnapPromise);
-      if (publicProfile) return remember(publicProfile);
+      if (publicProfile) {
+        topUpBannerFromUserDoc(publicProfile);
+        return remember(publicProfile);
+      }
 
       // 3) ...and finally the full user doc so profiles never dead-end on a
       //    missing public index entry.
