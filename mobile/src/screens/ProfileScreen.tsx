@@ -3681,6 +3681,8 @@ const styles = StyleSheet.create({
     height: 220,
     borderTopLeftRadius: 15,
     borderTopRightRadius: 15,
+    borderBottomLeftRadius: 15,
+    borderBottomRightRadius: 15,
     overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.06)',
   },
