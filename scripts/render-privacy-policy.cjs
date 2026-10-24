@@ -31,7 +31,7 @@ const html = `<!doctype html>
 <a class="skip" href="#policy">Skip to privacy policy</a>
 <header><a class="brand" href="https://www.linkupbuild.com/"><span>L</span>LINKUP</a><nav aria-label="Website"><a href="https://www.linkupbuild.com/">Home</a><a href="https://www.linkupbuild.com/app/landing">Open app</a></nav></header>
 <main id="policy">
-<div class="hero"><p class="eyebrow">Legal &amp; privacy · Public policy</p><h1>Privacy Policy</h1><p class="lead">${esc(policy.summary)}</p><div class="meta"><span>Effective: <time datetime="${esc(policy.effectiveDate)}">16 October 2026</time></span><span>Operator: ${esc(policy.operator)}</span><span>Minimum age: 16+</span></div><div class="contact"><p><strong>Privacy &amp; deletion contact</strong><br><a href="mailto:${esc(policy.contact)}">${esc(policy.contact)}</a></p></div></div>
+<div class="hero"><p class="eyebrow">Legal &amp; privacy · Public policy</p><h1>Privacy Policy</h1><p class="lead">${esc(policy.summary)}</p><div class="meta"><span>Effective: <time datetime="${esc(policy.effectiveDate)}">${esc(new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(policy.effectiveDate+'T00:00:00Z')))}</time></span><span>Operator: ${esc(policy.operator)}</span><span>Minimum age: 16+</span></div><div class="contact"><p><strong>Privacy &amp; deletion contact</strong><br><a href="mailto:${esc(policy.contact)}">${esc(policy.contact)}</a></p></div></div>
 <nav class="contents" id="contents" aria-label="Policy contents"><h2>In this policy</h2><ol>${policy.sections.map(s => `<li><a href="#${esc(s.id)}">${esc(s.title)}</a></li>`).join('\n')}</ol></nav>
 ${sections}
 </main>

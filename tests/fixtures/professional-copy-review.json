@@ -174,24 +174,6 @@
     "after": "Send a connection request to begin. Messaging becomes available after approval."
   },
   {
-    "file": "mobile/src/screens/CityLeagueScreen.tsx",
-    "line": 76,
-    "before": "City league",
-    "after": "Local rankings"
-  },
-  {
-    "file": "mobile/src/screens/CityLeagueScreen.tsx",
-    "line": 76,
-    "before": "Global league",
-    "after": "Global rankings"
-  },
-  {
-    "file": "mobile/src/screens/CityLeagueScreen.tsx",
-    "line": 92,
-    "before": "No ranked builders yet.",
-    "after": "No professional rankings are available yet."
-  },
-  {
     "file": "mobile/src/screens/CreateCampaignScreen.tsx",
     "line": 167,
     "before": "Your campaign is still live with the new creative. Moderation has been told to look at it.",
@@ -1194,30 +1176,6 @@
     "after": "Your first useful update starts the calendar. There is no streak to catch up on."
   },
   {
-    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
-    "line": 250,
-    "before": "Who\u2019s winning LINKUP right now",
-    "after": "Active professionals in your network"
-  },
-  {
-    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
-    "line": 252,
-    "before": "Fair live top 3 \u2014 profile quality, views, and recent activity. No Plus boost. Podium people get a notification.",
-    "after": "The top three profiles are ranked by profile quality, views, and recent activity. PLUS visibility boosts do not affect these rankings."
-  },
-  {
-    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
-    "line": 315,
-    "before": "Board is empty",
-    "after": "No ranked profiles yet"
-  },
-  {
-    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
-    "line": 316,
-    "before": "When more builders go public, the league starts here.",
-    "after": "Rankings become available as more members enable public discovery."
-  },
-  {
     "file": "mobile/src/screens/ViewersScreen.tsx",
     "line": 489,
     "before": "See who's checking you out",
@@ -1410,20 +1368,6 @@
     "after": "Professional progress"
   },
   {
-    "file": "mobile/src/screens/CityLeagueScreen.tsx",
-    "line": 77,
-    "before": " \u00b7 ranked by Rep that can decay",
-    "after": " \u00b7 activity-based reputation ranking",
-    "kind": "fragment"
-  },
-  {
-    "file": "mobile/src/screens/CityLeagueScreen.tsx",
-    "line": 91,
-    "before": "No ranked builders in ${city || country} yet \u2014 invite builders from your area and take the crown first.",
-    "after": "No ranked professionals in ${city || country} yet. Invite relevant contacts from your local business community.",
-    "kind": "fragment"
-  },
-  {
     "file": "mobile/src/screens/ShipLogScreen.tsx",
     "line": 58,
     "before": "${days}/${SHIP_VERIFY_DAYS} days toward ship verification",
@@ -1506,5 +1450,55 @@
     "before": "Ideas are free forever - swipe and post as many as you like. LINKUP PLUS unlocks discovery, Who Viewed You, advanced search and removes every sponsored card.",
     "after": "Startup idea discovery and publishing are included in the free plan. LINKUP PLUS adds discovery tools, profile viewer insights, advanced search, and an ad-free experience.",
     "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "before": "Retired profile-quality rankings",
+    "after": "Builder League"
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "before": "Retired profile-quality rankings",
+    "after": "Real progress. Real competition."
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "before": "Retired profile-quality rankings",
+    "after": "This week"
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "before": "Retired profile-quality rankings",
+    "after": "This month"
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "before": "Retired profile-quality rankings",
+    "after": "All time"
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "before": "Retired profile-quality rankings",
+    "after": "THE STANDINGS"
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "before": "Retired profile-quality rankings",
+    "after": "YOUR PLACE IN THE RACE"
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "before": "Retired profile-quality rankings",
+    "after": "WIN ON CONTRIBUTION, NOT HYPE."
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "before": "Retired profile-quality rankings",
+    "after": "Enter the public league"
+  },
+  {
+    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
+    "before": "Retired profile-quality rankings",
+    "after": "No eligible public participants with points in this period yet. No fake leaders or filler profiles."
   }
 ]

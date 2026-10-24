@@ -22,7 +22,7 @@ async function seed(options={}){
 }
 async function roomWithBob(service){const {roomId}=await service.handle('alice','roomCreate',{title:'An actual project',kind:'project'});await service.handle('alice','roomInvite',{roomId,targetUid:'bob'});return roomId;}
 test('builder collections are server-only even for their apparent owner',async()=>{
- await seed();const client=env.authenticatedContext('alice').firestore();
+ await seed();const client=env.authenticatedContext('alice').firestore();await assertFails(getDoc(doc(client,'builderRooms/secret/messages/secret')));await assertFails(setDoc(doc(client,'builderRooms/secret/messages/secret'),{authorId:'alice',text:'Forged'}));
  for(const collection of ['builderStates','builderRooms','builderInvites','builderAsks','builderEvents','builderRates','builderScheduler']){
   await assertFails(setDoc(doc(client,collection,'alice'),{ownerId:'alice',memberIds:['alice'],status:'accepted'}));
   await assertFails(getDoc(doc(client,collection,'alice')));
@@ -50,22 +50,22 @@ test('blocking after acceptance revokes access in both directions',async()=>{
  await db.collection('blocks').doc('bob_alice').set({blockedById:'bob',blockedUserId:'alice'});
  await assert.rejects(s.handle('bob','room',{roomId}),/blocked/);await assert.rejects(s.handle('alice','room',{roomId}),/blocked/);
 });
-test('accountability rooms have two members and participant lists cannot be forged',async()=>{
- const s=await seed();const {roomId}=await s.handle('alice','roomCreate',{title:'Weekly accountability',kind:'accountability',memberIds:['mallory']});
- assert.deepEqual((await s.handle('alice','room',{roomId})).room.memberIds,['alice']);
- await s.handle('alice','roomInvite',{roomId,targetUid:'bob'});await s.handle('bob','invitationRespond',{id:roomId+'_bob',decision:'accept'});
- await db.collection('connectionRequests').doc('alice_mallory').set({senderId:'alice',recipientId:'mallory',status:'approved'});
- await s.handle('alice','roomInvite',{roomId,targetUid:'mallory'});await assert.rejects(s.handle('mallory','invitationRespond',{id:roomId+'_mallory',decision:'accept'}),/full/);
+test('groups replace accountability forms and only accepted members are added',async()=>{
+ const s=await seed(),{groupId}=await s.handle('alice','groupCreate',{title:'A private group',kind:'accountability',memberIds:['mallory']});
+ assert.equal((await s.handle('alice','groupGet',{groupId})).group.memberCount,1);
+ await s.handle('alice','groupInvite',{groupId,targetUid:'bob'});await s.handle('bob','groupRespond',{id:groupId+'_bob',decision:'accept'});
+ assert.equal((await s.handle('bob','groupGet',{groupId})).group.memberCount,2);
+ await assert.rejects(s.handle('mallory','groupGet',{groupId}),e=>e.status===403);
 });
-test('room task assignments, useful logs, archive and leave permissions are enforced',async()=>{
- const s=await seed(),roomId=await roomWithBob(s);await s.handle('bob','invitationRespond',{id:roomId+'_bob',decision:'accept'});
- await assert.rejects(s.handle('alice','roomAction',{roomId,action:'task',text:'Do a useful thing',assignee:'mallory'}),/accepted members/);
- await s.handle('bob','roomAction',{roomId,action:'log',text:'Finished the signup test.'});
- assert.equal((await s.handle('bob','home')).brief.momentumDays,1);
- await assert.rejects(s.handle('bob','roomAction',{roomId,action:'archive'}),/owner/);
- await s.handle('bob','roomAction',{roomId,action:'leave'});await assert.rejects(s.handle('bob','room',{roomId}),/not available/);
- await s.handle('alice','roomAction',{roomId,action:'archive'});await assert.rejects(s.handle('alice','roomAction',{roomId,action:'message',text:'This is not allowed'}),/archived/);
+
+test('project mutations retire with 410; group admin, leave and archive permissions remain enforced',async()=>{
+ const s=await seed(),roomId=await roomWithBob(s),groupId=roomId;await s.handle('bob','invitationRespond',{id:roomId+'_bob',decision:'accept'});
+ await assert.rejects(s.handle('alice','roomAction',{roomId,action:'task',text:'Retired form'}),e=>e.status===410);
+ await assert.rejects(s.handle('bob','groupAction',{groupId,action:'archive'}),/admin/);
+ await s.handle('bob','groupAction',{groupId,action:'leave'});await assert.rejects(s.handle('bob','groupGet',{groupId}),/not available/);
+ await s.handle('alice','groupAction',{groupId,action:'archive'});await assert.rejects(s.handle('alice','groupSend',{groupId,key:'archived_message',text:'Not allowed'}),/archived/);
 });
+
 test('followups require approved connections and cannot send, read or update somebody else\'s note',async()=>{
  const s=await seed();await assert.rejects(s.handle('alice','followup',{targetUid:'mallory',title:'Follow up',note:'Private',dueAt:NOW}),/Connect mutually/);
  await s.handle('alice','followup',{targetUid:'bob',title:'Review the demo',note:'PRIVATE RELATIONSHIP NOTE',dueAt:NOW});
@@ -74,29 +74,26 @@ test('followups require approved connections and cannot send, read or update som
  const exported=await s.handle('bob','export');assert.ok(!JSON.stringify(exported).includes('PRIVATE RELATIONSHIP NOTE'));
  await s.handle('alice','followupStatus',{id:f.id,status:'snooze'});assert.equal((await s.handle('alice','home')).state.followups[0].dueAt,NOW+86400000);
 });
-test('AI reviews reserve the shared quota once per request and enforce the fifteenth-message boundary',async()=>{
- let calls=0;const s=await seed({generate:async()=>{calls++;return 'A grounded review';}});
- const request={kind:'pitch',text:'A sufficiently detailed startup pitch for review',key:'review_1'};
- await s.handle('alice','coach',request);await s.handle('alice','coach',request);assert.equal(calls,1);
- for(let i=2;i<=15;i++)await s.handle('alice','coach',{...request,key:'review_'+i});
- await assert.rejects(s.handle('alice','coach',{...request,key:'review_16'}),e=>e.code==='ask_limit');
- assert.equal(calls,15);assert.equal((await db.collection('linkyUsage').doc('alice').get()).data().month.count,15);
+test('retired Coach cannot call a model or spend the shared main-Linky quota',async()=>{
+ let calls=0;const s=await seed({generate:async()=>{calls++;return 'Never run';}});
+ for(const kind of ['pitch','blocker','plan'])await assert.rejects(s.handle('alice','coach',{kind,text:'Old-client Coach request',key:'review_1'}),e=>e.status===410);
+ assert.equal(calls,0);assert.equal((await db.collection('linkyUsage').doc('alice').get()).exists,false);
 });
-test('failed AI processing refunds the reserved period and does not store a fake successful review',async()=>{
- const s=await seed({generate:async()=>{throw Error('provider error SECRET');}});
- await assert.rejects(s.handle('alice','coach',{kind:'pitch',text:'A sufficiently detailed pitch to review',key:'failure'}),/refunded/);
- assert.equal((await db.collection('linkyUsage').doc('alice').get()).data().month.count,0);
- assert.equal((await s.handle('alice','home')).state.coachRuns[0].status,'failed');
-});
-test('secret detection happens before quota use and context erasure discards in-flight output',async()=>{
- let release,started;const signal=new Promise(r=>{started=r;});
- const s=await seed({generate:async()=>{started();return new Promise(r=>release=r);}});
- await assert.rejects(s.handle('alice','coach',{kind:'blocker',text:'Please review my github_pat_private_token_example',key:'secret'}),/Remove credentials/);
+
+test('retired Coach creates neither a failed review nor provider work',async()=>{
+ const s=await seed({generate:async()=>{throw Error('Never call the provider');}});
+ await assert.rejects(s.handle('alice','coach',{key:'failure'}),e=>e.status===410);
  assert.equal((await db.collection('linkyUsage').doc('alice').get()).exists,false);
- const pending=s.handle('alice','coach',{kind:'pitch',text:'A sufficiently detailed pitch to review',key:'inflight'});await signal;
- await s.handle('alice','forget');release('This should not reappear');await assert.rejects(pending,/discarded/);
- assert.equal((await s.handle('alice','home')).state.coachRuns.length,0);assert.equal((await db.collection('linkyUsage').doc('alice').get()).data().month.count,0);
+ assert.equal((await s.handle('alice','home')).state.coachRuns.length,0);
 });
+
+test('group credentials are rejected before persistence and never enter the model ledger',async()=>{
+ const s=await seed(),{groupId}=await s.handle('alice','groupCreate',{title:'A private group'});
+ await assert.rejects(s.handle('alice','groupSend',{groupId,key:'secret',text:'Please review github_pat_private_token_example'}),/Remove credentials/);
+ assert.equal((await db.collection('builderRooms').doc(groupId).collection('messages').get()).size,0);
+ assert.equal((await db.collection('linkyUsage').doc('alice').get()).exists,false);
+});
+
 test('scheduled reminders are opt-in, content-private, deep-linked and idempotent under concurrent workers',async()=>{
  let pushes=0;const s=await seed({push:async()=>{pushes++;}});
  await s.handle('alice','followup',{targetUid:'bob',title:'PRIVATE PROJECT ACTION',note:'PRIVATE NOTE',dueAt:NOW});
@@ -123,7 +120,7 @@ test('meaningful momentum cannot grant blue verification, paid entitlements or c
 });
 test('email remains disabled and clear-context cannot refill the paid AI ledger',async()=>{
  const s=await seed();await assert.rejects(s.handle('alice','prefs',{email:true}),/not configured/);
- await s.handle('alice','coach',{kind:'pitch',key:'kept_quota',text:'A sufficiently detailed startup pitch to review'});await s.handle('alice','forget');
+ await db.collection('linkyUsage').doc('alice').set({month:{count:1}});await s.handle('alice','forget');
  assert.equal((await db.collection('linkyUsage').doc('alice').get()).data().month.count,1);assert.equal((await s.handle('alice','home')).emailAvailable,false);
 });
 
@@ -173,10 +170,67 @@ test('private follow-ups can be edited and permanently removed without modifying
  await s.handle('alice','followupDelete',{id:f.id});assert.equal((await s.handle('alice','export')).state.followups.length,0);
 });
 
-test('recompleting the same room task on a later day cannot farm momentum',async()=>{
- let clock=NOW;const s=await seed({now:()=>clock}),{roomId}=await s.handle('alice','roomCreate',{title:'A real workspace'});
- await s.handle('alice','roomAction',{roomId,action:'task',text:'Complete a real milestone',assignee:'alice'});
- const task=(await s.handle('alice','room',{roomId})).room.tasks[0];await s.handle('alice','roomAction',{roomId,action:'taskDone',taskId:task.id});
- clock+=86400000;await s.handle('alice','roomAction',{roomId,action:'taskDone',taskId:task.id});
- assert.equal((await s.handle('alice','export')).state.momentumDays.length,1);
+test('retired room tasks and group chat never farm contribution points',async()=>{
+ const s=await seed(),{groupId}=await s.handle('alice','groupCreate',{title:'A private group'});
+ await assert.rejects(s.handle('alice','roomAction',{roomId:groupId,action:'taskDone',taskId:'old_task'}),e=>e.status===410);
+ await s.handle('alice','groupSend',{groupId,key:'a_message',text:'An ordinary private conversation'});
+ assert.equal((await db.collection('builderContributions').doc('alice').get()).exists,false);
+});
+
+test('group sends are idempotent, paginated in stable cursor order, private and non-AI',async()=>{
+ const s=await seed(),{groupId}=await s.handle('alice','groupCreate',{title:'Private group'}),r=await s.handle('alice','groupSend',{groupId,key:'-first',text:'PRIVATE GROUP TEXT'});
+ assert.equal((await s.handle('alice','groupSend',{groupId,key:'-first',text:'PRIVATE GROUP TEXT'})).replayed,true);
+ await assert.rejects(s.handle('alice','groupSend',{groupId,key:'-first',text:'Different'}),e=>e.status===409);
+ const rr=db.collection('builderRooms').doc(groupId),batch=db.batch();for(let i=0;i<56;i++)batch.set(rr.collection('messages').doc('page_'+String(i).padStart(3,'0')),{authorId:'alice',text:'Message '+i,at:NOW+i+1});await batch.commit();
+ const latest=await s.handle('alice','groupMessages',{groupId});assert.equal(latest.messages.length,50);assert.equal(latest.more,true);assert.equal(latest.messages.at(-1).text,'Message 55');
+ const earlier=await s.handle('alice','groupMessages',{groupId,before:latest.nextBefore});assert.equal(earlier.messages.length,7);assert.equal(earlier.messages[0].id,r.message.id);
+ const newer=await s.handle('alice','groupMessages',{groupId,after:r.message.id});assert.equal(newer.messages.length,50);assert.equal(newer.messages[0].text,'Message 0');assert.equal(newer.more,true);
+ await assert.rejects(s.handle('mallory','groupMessages',{groupId}),e=>e.status===403);
+ const exported=await s.handle('alice','groupExport',{groupId});assert.equal(exported.messages.length,50);assert.match(exported.exportScope,/Latest 50/);
+ assert.equal((await db.collection('linkyUsage').doc('alice').get()).exists,false);
+});
+test('block revokes group text in both directions but leaves safe membership controls',async()=>{
+ const s=await seed(),groupId=await roomWithBob(s);await s.handle('bob','groupRespond',{id:groupId+'_bob',decision:'accept'});await s.handle('alice','groupSend',{groupId,key:'before_block',text:'PRIVATE GROUP TEXT'});
+ await db.collection('blocks').doc('bob_alice').set({blockedById:'bob',blockedUserId:'alice'});
+ for(const uid of ['alice','bob']){await assert.rejects(s.handle(uid,'groupMessages',{groupId}),e=>e.status===403);await assert.rejects(s.handle(uid,'groupSend',{groupId,key:'blocked_send',text:'No access'}),e=>e.status===403);}
+ const owner=await s.handle('alice','groupGet',{groupId});assert.equal(owner.group.blocked,true);assert.deepEqual(owner.messages,[]);
+ const list=await s.handle('bob','groups');assert.equal(list.groups[0].canLeave,true);assert.doesNotMatch(JSON.stringify(list),/PRIVATE GROUP TEXT|An actual project/);
+ await s.handle('bob','groupAction',{groupId,action:'leave'});assert.equal((await s.handle('alice','groupGet',{groupId})).group.blocked,false);
+});
+test('only admin can transfer/remove/invite, and removed members cannot retrieve history',async()=>{
+ const s=await seed(),groupId=await roomWithBob(s);await s.handle('bob','groupRespond',{id:groupId+'_bob',decision:'accept'});
+ await assert.rejects(s.handle('bob','groupInvite',{groupId,targetUid:'mallory'}),/admin/);await assert.rejects(s.handle('bob','groupAction',{groupId,action:'transfer',targetUid:'alice'}),/admin/);
+ await s.handle('alice','groupAction',{groupId,action:'transfer',targetUid:'bob'});await s.handle('bob','groupAction',{groupId,action:'remove',targetUid:'alice'});
+ await assert.rejects(s.handle('alice','groupGet',{groupId}),e=>e.status===403);
+ await assert.rejects(s.handle('alice','groupExport',{groupId}),e=>e.status===403);
+});
+test('a member limit of 32 cannot be bypassed by accepting an old pending invitation',async()=>{
+ const s=await seed(),groupId=await roomWithBob(s),r=db.collection('builderRooms').doc(groupId);await r.update({memberIds:['alice',...Array.from({length:31},(_,i)=>'member_'+i)]});
+ await assert.rejects(s.handle('bob','groupRespond',{id:groupId+'_bob',decision:'accept'}),/full/);assert.equal((await r.get()).data().memberIds.length,32);
+});
+test('invitation settings, bans and other-member blocks are checked before consent commits',async()=>{
+ const s=await seed(),{groupId}=await s.handle('alice','groupCreate',{title:'Private group'});
+ await s.handle('bob','prefs',{allowInvites:false});await assert.rejects(s.handle('alice','groupInvite',{groupId,targetUid:'bob'}),/paused/);
+ await s.handle('bob','prefs',{allowInvites:true});await s.handle('alice','groupInvite',{groupId,targetUid:'bob'});
+ await db.collection('blocks').doc('bob_alice').set({blockedById:'bob',blockedUserId:'alice'});await assert.rejects(s.handle('bob','groupRespond',{id:groupId+'_bob',decision:'accept'}),e=>e.status===403);
+ await s.handle('bob','groupRespond',{id:groupId+'_bob',decision:'decline'});
+});
+test('public momentum is explicit, persists through publishing, and opt-out is immediate',async()=>{
+ const s=await seed();assert.equal((await s.handle('alice','habit')).publicMomentum,false);
+ await assert.rejects(s.handle('alice','habitPrefs',{publicMomentum:'true'}));
+ await s.handle('alice','habitPrefs',{publicMomentum:true});await s.handle('alice','shipUpdate',{key:'public_test',text:'Tested signup and removed one unnecessary field.'});
+ assert.equal((await s.handle('alice','habit')).publicMomentum,true);
+ await s.handle('alice','habitPrefs',{publicMomentum:false});assert.equal((await db.collection('builderContributions').doc('alice').get()).data().publicMomentum,false);
+ await db.collection('users').doc('alice').update({isVisible:false});await assert.rejects(s.handle('alice','habitPrefs',{publicMomentum:true}),/profile public/);
+});
+test('public SSR filters real source visibility, omits private text, and removes opted-out calendars',async()=>{
+ const s=await seed(),{createPublicSeoHandler}=await import('../../api/publicSeo.js');await s.handle('alice','habitPrefs',{publicMomentum:true});await s.handle('alice','shipUpdate',{key:'public_render',text:'PRIVATE UPDATE TEXT that must never be indexed.'});
+ const handler=createPublicSeoHandler(()=>db),request=async query=>{const r={headers:{},setHeader(k,v){this.headers[k]=v;},status(v){this.code=v;return this;},send(v){this.body=v;return this;}};await handler({method:'GET',query},r);return r;};
+ const p=await request({mode:'momentum-profile',uid:'alice'});assert.equal(p.code,200);assert.match(p.body,/#FBE618/);assert.doesNotMatch(p.body,/PRIVATE UPDATE TEXT/);assert.equal(p.headers['Cache-Control'],'private, no-store');
+ const board=await request({mode:'league-json',period:'week',uid:'alice'});assert.equal(JSON.parse(board.body).me.uid,'alice');assert.doesNotMatch(board.body,/PRIVATE UPDATE TEXT/);
+ await s.handle('alice','habitPrefs',{publicMomentum:false});assert.equal((await request({mode:'momentum-profile',uid:'alice'})).code,404);assert.equal(JSON.parse((await request({mode:'league-json'})).body).rows.length,0);
+});
+test('deleted accounts lose authored group data even after leaving; other members retain their conversation',async()=>{
+ const s=await seed(),groupId=await roomWithBob(s);await s.handle('bob','groupRespond',{id:groupId+'_bob',decision:'accept'});await s.handle('bob','groupSend',{groupId,key:'erase_me',text:'PRIVATE DELETED TEXT'});await s.handle('bob','groupAction',{groupId,action:'leave'});
+ await db.collection('users').doc('bob').delete();await db.collection('builderStates').doc('bob').delete();await s.runReminderPage();const r=db.collection('builderRooms').doc(groupId);assert.equal((await r.collection('messages').get()).size,0);assert.doesNotMatch(JSON.stringify((await r.get()).data()),/PRIVATE DELETED TEXT/);assert.deepEqual((await r.get()).data().memberIds,['alice']);
 });

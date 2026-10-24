@@ -1,15 +1,17 @@
+import {cleanupDeletedGroupData,sweepDeletedGroupData,createGroupService} from './_groups.js';
 import {createHabitActions} from './_builderHabit.js';
 import {habitSnapshot,habitState} from '../shared/build-habit.js';
-import {DAY,id,clean,requireText,problem,validId,safeLink,stateOf,freshState,contextOf,sanitizePrefs,weekKey,localTime,brief,relevantPeople,coachPrompt,nextDelivery,relevantLeads,weeklySummary} from './_builderCore.js';
+import {DAY,id,clean,requireText,problem,validId,safeLink,stateOf,freshState,contextOf,sanitizePrefs,weekKey,localTime,brief,relevantPeople,nextDelivery,relevantLeads,weeklySummary} from './_builderCore.js';
 import {publicEligible} from './_publicSeo.js';
-import {reserveMessage,refundMessage,readMessageQuota} from './_linkyUsage.js';
+import {readMessageQuota} from './_linkyUsage.js';
 import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,contributionInsight,containsCredential,normalizeUpdate} from '../shared/contributions.js';
 import {EXTERNAL_LEADS} from '../shared/builder-leads.js';
 const fields=['displayName','fullName','name','occupation','skills','industries','city','country','onboarded','deleted','isBot','isVisible','isStealthMode','startupStage','remoteOnly'];
 const row=d=>({id:d.id,...d.data()});
 const ownId=value=>{if(!validId(value))throw problem('Invalid item identifier.');return value;};
-export function createBuilderService({db,now=Date.now,generate,plus=async()=>false,push=async()=>({sent:0})}){
+export function createBuilderService({db,now=Date.now,plus=async()=>false,push=async()=>({sent:0})}){
  const habits=createHabitActions({db,now});
+ const groups=createGroupService({db,now,blocked,connectable,notify});
  const ref=uid=>db.collection('builderStates').doc(uid);
  async function state(uid){const d=await ref(uid).get();return stateOf(d.exists?d.data():{},now());}
  async function change(uid,edit){return db.runTransaction(async tx=>{const d=await tx.get(ref(uid));const s=stateOf(d.exists?d.data():{},now());const result=edit(s);s.updatedAt=now();tx.set(ref(uid),s);return result===undefined?s:result;});}
@@ -82,20 +84,6 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
   const quota=await readMessageQuota(db,uid,{plus:await plus(uid,me.data()),now:now()});
   return {state:s,brief:brief(s,now(),rooms,invitations),rooms,invitations,messageQuota:quota,emailAvailable:false};
  }
- async function coach(uid,input){
-  const kind=clean(input.kind,20),key=ownId(input.key),s=await state(uid),prompt=coachPrompt(kind,input.text,s);
-  const existing=s.coachRuns.find(r=>r.key===key);if(existing){if(existing.status==='complete')return existing;if(existing.status==='pending')throw problem('This review is still processing. Refresh shortly.',409);throw problem('Retry this review with a new request.',409);}
-  const epoch=await change(uid,current=>{if(current.coachRuns.some(r=>r.key===key))throw problem('This review is already processing.',409);current.coachRuns=[{key,kind,status:'pending',at:now()},...current.coachRuns].slice(0,15);return current.epoch;});
-  let reservation;
-  try{
-   const me=await db.collection('users').doc(uid).get();reservation=await reserveMessage(db,uid,{plus:await plus(uid,me.data()),now:now()});
-   if(!generate)throw new Error('Model unavailable');
-   const text=clean(await generate(prompt),12000);if(!text)throw new Error('Empty response');
-   const result={key,kind,status:'complete',at:now(),text};
-   await change(uid,current=>{if(current.epoch!==epoch)throw problem('Your context was cleared while the review was running. The result was discarded.',409);current.coachRuns=current.coachRuns.map(r=>r.key===key?result:r);});
-   await event(uid,'coach_completed');return {...result,messageQuota:reservation};
-  }catch(error){if(reservation)await refundMessage(db,uid,reservation);await change(uid,current=>{current.coachRuns=current.coachRuns.map(r=>r.key===key?{...r,status:'failed'}:r);});if(error.code==='ask_limit'||error.builder)throw error;throw problem('The review could not finish. Your reserved chat message was refunded.',503);}
- }
  function contributionHistory(c,person){
   const legacy=(Array.isArray(person.shipLogs)?person.shipLogs:[]).slice(0,20).map(u=>({id:clean(u.id,128),text:clean(u.text,180),link:safeLink(u.link),createdAt:clean(u.createdAt,32)})).filter(u=>u.id&&u.text);
   return [...(c.updates||[]),...legacy].filter((u,i,all)=>all.findIndex(v=>v.id===u.id)===i).slice(0,20);
@@ -128,9 +116,9 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
    const shipLogs=contributionHistory({updates},ud.data());
    const habit=habitState(c),rest=habit.rests.find(r=>r.day===day);if(rest?.kind==='token'){if(habit.tokens<3)habit.tokens++;else habit.credits+=20;}habit.rests=habit.rests.filter(r=>r.day!==day);
    const state=stateOf(sd.data(),at);state.momentumDays=[...new Set([...state.momentumDays,localTime(at,state.prefs.timezone).day])].slice(-90);state.updatedAt=at;state.buildReminderCount=0;
-   tx.set(cr,{version:1,days,updates,points,totalUpdates,lastDay:day,habit,updatedAt:at});
+   tx.set(cr,{version:1,days,updates,points,totalUpdates,lastDay:day,habit,publicMomentum:c.publicMomentum===true,updatedAt:at});
    tx.set(ref(uid),state);
-   return {...entry,days,contributionPoints:points,totalUpdates,shipLogs,today:day,habit:habitSnapshot({days,totalUpdates,habit},at,state.prefs),replayed:false};
+   return {...entry,days,contributionPoints:points,totalUpdates,shipLogs,today:day,habit:habitSnapshot({days,totalUpdates,habit,publicMomentum:c.publicMomentum},at,state.prefs),replayed:false};
   });
  }
  async function handle(uid,op,input={}){
@@ -140,6 +128,7 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
   const me=await db.collection('users').doc(uid).get();if(!me.exists||me.data().deleted||me.data().banned||me.data().onboarded!==true)throw problem('Finish your profile before opening the builder workspace.',403);
   // Bounded server-owned request counter, separate from the paid AI ledger.
   await db.runTransaction(async tx=>{const r=db.collection('builderRates').doc(uid),d=await tx.get(r),v=d.exists?d.data():{};const key=Math.floor(now()/60000),count=v.key===key?v.count:0;if(count>=60)throw problem('Please pause for a moment before trying again.',429);tx.set(r,{key,count:count+1});});
+  if(['groups','groupCreate','groupGet','groupMessages','groupSend','groupRead','groupInvite','groupRespond','groupAction','groupExport'].includes(op))return groups.handle(uid,op,input);
   if(op==='habit')return habits.read(uid);
   if(['habitPrefs','habitRest','habitToken'].includes(op))return habits.act(uid,op,input);
   if(op==='contributions')return contributionData(uid,input.targetUid?ownId(input.targetUid):uid);
@@ -173,42 +162,19 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
   if(op==='followupDelete'){await change(uid,s=>{s.followups=s.followups.filter(f=>f.id!==input.id);});return {ok:true};}
   if(op==='followupStatus'){await change(uid,s=>{const f=s.followups.find(f=>f.id===input.id);if(!f)throw problem('Follow-up not found.',404);if(input.status==='snooze'){f.dueAt=now()+DAY;f.notifiedAt=0;}else if(['done','dismissed'].includes(input.status)){if(f.status==='open'&&input.status==='done')s.momentumDays=[...new Set([...s.momentumDays,localTime(now(),s.prefs.timezone).day])].slice(-90);f.status=input.status;f.closedAt=f.closedAt||now();}else throw problem('Choose a valid follow-up action.');});return {ok:true};}
   if(op==='followupDraft'){const s=await state(uid),f=s.followups.find(f=>f.id===input.id);if(!f)throw problem('Follow-up not found.',404);await connectable(uid,f.targetUid);return {text:`Hi ${f.targetName}, following up on ${f.title}. Would you be open to agreeing on a useful next step?`,sent:false};}
-  if(op==='coach')return coach(uid,input);
+  if(op==='coach')throw problem('The extra Coach has been removed. Main Linky chat is unchanged.',410);
   if(op==='leads'){
    const s=await state(uid);return {leads:relevantLeads(s,EXTERNAL_LEADS,now()),note:'External public sources, not LINKUP members. Source access does not establish current availability or acceptance of pitches.'};
   }
   if(op==='leadSave'){if(!EXTERNAL_LEADS.some(l=>l.id===input.id))throw problem('Lead not found.',404);await change(uid,s=>{s.savedLeads=input.saved===false?s.savedLeads.filter(k=>k!==input.id):[...new Set([input.id,...s.savedLeads])].slice(0,50);});return {ok:true};}
-  if(op==='roomCreate'){const title=requireText(input.title,120,3),kind=input.kind==='accountability'?'accountability':'project';const roomId=id();await db.runTransaction(async tx=>{const ownerState=await tx.get(ref(uid)),rooms=await tx.get(db.collection('builderRooms').where('ownerId','==',uid));if(rooms.docs.filter(d=>!d.data().archived).length>=12)throw problem('Archive an existing room before creating another.');tx.set(ref(uid),{...stateOf(ownerState.data(),now()),updatedAt:now()});tx.set(db.collection('builderRooms').doc(roomId),{ownerId:uid,title,kind,goal:clean(input.goal,300),milestone:clean(input.milestone,300),memberIds:[uid],tasks:[],logs:[],messages:[],links:[],archived:false,createdAt:now(),updatedAt:now()});});await event(uid,'room_created');return {roomId};}
+  // Old room URLs remain readable; project/task mutations are retired.
+  if(op==='roomCreate'){const r=await groups.handle(uid,'groupCreate',input);return {roomId:r.groupId};}
   if(op==='room')return {room:await roomFor(uid,input.roomId)};
-  if(op==='roomInvite'){
-   const r=await roomFor(uid,input.roomId);if(r.archived)throw problem('This room is archived.');await connectable(uid,input.targetUid);const otherState=await state(input.targetUid);if(!otherState.prefs.allowInvites)throw problem('This member has paused workspace invitations.');
-   if(r.memberIds.includes(input.targetUid))throw problem('This member is already in the room.');
-   const inviteId=r.id+'_'+input.targetUid,iref=db.collection('builderInvites').doc(inviteId);
-   await db.runTransaction(async tx=>{const prev=await tx.get(iref);if(prev.exists&&['pending','declined'].includes(prev.data().status)&&now()-prev.data().createdAt<7*DAY)throw problem('An invitation was already sent recently.');tx.set(iref,{roomId:r.id,senderId:uid,recipientId:input.targetUid,status:'pending',createdAt:now(),expiresAt:now()+7*DAY});});
-   await notify(input.targetUid,inviteId,'Rooms','A connected member invited you to a building room. Review the invitation before joining.');return {ok:true};
-  }
-  if(op==='invitationRespond'){
-   const iref=db.collection('builderInvites').doc(ownId(input.id)),first=await iref.get();if(!first.exists||first.data().recipientId!==uid)throw problem('Invitation not found.',404);if(!['accept','decline'].includes(input.decision))throw problem('Choose accept or decline.');await connectable(uid,first.data().senderId);
-   await db.runTransaction(async tx=>{const inv=await tx.get(iref),rr=db.collection('builderRooms').doc(inv.data().roomId),rd=await tx.get(rr),v=inv.data(),r=rd.exists?rd.data():null;
-    if(v.recipientId!==uid||v.status!=='pending'||v.expiresAt<=now()||!r||r.archived||!r.memberIds.includes(v.senderId))throw problem('This invitation is no longer active.',409);
-    if(input.decision==='accept'){if(r.memberIds.length>=(r.kind==='accountability'?2:8))throw problem('This room is full.');tx.update(rr,{memberIds:[...new Set([...r.memberIds,uid])],updatedAt:now()});}
-    tx.update(iref,{status:input.decision==='accept'?'accepted':'declined',respondedAt:now()});});await event(uid,'invitation_'+input.decision);return {ok:true};
-  }
+  if(op==='roomInvite')return groups.handle(uid,'groupInvite',{...input,groupId:input.roomId});
+  if(op==='invitationRespond')return groups.handle(uid,'groupRespond',input);
   if(op==='roomAction'){
-   if(!['leave','archive'].includes(input.action))await roomFor(uid,input.roomId);else ownId(input.roomId);let meaningful=false;const rr=db.collection('builderRooms').doc(input.roomId);
-   await db.runTransaction(async tx=>{meaningful=false;const doc=await tx.get(rr);if(!doc.exists||!doc.data().memberIds.includes(uid))throw problem('Room access was removed.',403);const r=doc.data();if(r.archived)throw problem('This room is archived.');const action=input.action;
-    if(action==='archive'){if(r.ownerId!==uid)throw problem('Only the room owner can archive it.',403);r.archived=true;}
-    else if(action==='leave'){if(r.ownerId===uid)throw problem('Archive your room instead of leaving it.');r.memberIds=r.memberIds.filter(k=>k!==uid);}
-    else if(action==='remove'){if(r.ownerId!==uid||input.targetUid===uid)throw problem('Only the owner can remove another member.',403);r.memberIds=r.memberIds.filter(k=>k!==input.targetUid);}
-    else if(action==='plan'){if(r.ownerId!==uid)throw problem('Only the owner can edit the room plan.',403);r.goal=requireText(input.goal,300,4);r.milestone=requireText(input.milestone,300,4);}
-    else if(action==='task'){if(r.tasks.length>=40)throw problem('This room has reached its task limit.');const assignee=clean(input.assignee,128);if(assignee&&!r.memberIds.includes(assignee))throw problem('Assign tasks only to accepted members.');r.tasks.push({id:id(),text:requireText(input.text,250,3),assignee,ownerId:uid,doneAt:0,at:now()});}
-    else if(action==='taskDone'){const task=r.tasks.find(t=>t.id===input.taskId);if(!task)throw problem('Task not found.',404);if(task.assignee&&task.assignee!==uid&&r.ownerId!==uid)throw problem('Only the assignee or owner can complete this task.',403);if(!task.doneAt){task.doneAt=now();meaningful=true;}}
-    else if(action==='log'){r.logs=[{id:id(),ownerId:uid,text:requireText(input.text,300,4),at:now()},...r.logs].slice(0,60);}
-    else if(action==='message'){r.messages=[...r.messages,{id:id(),ownerId:uid,text:requireText(input.text,1500,1),at:now()}].slice(-80);}
-    else if(action==='link'){const url=safeLink(input.url);if(!url)throw problem('Use a public HTTPS link.');r.links=[{id:id(),ownerId:uid,title:requireText(input.text,120),url,at:now()},...r.links].slice(0,20);}
-    else throw problem('Unknown room action.');r.updatedAt=now();tx.set(rr,r);
-   });
-   if(input.action==='log'||meaningful)await change(uid,s=>{s.momentumDays=[...new Set([...s.momentumDays,localTime(now(),s.prefs.timezone).day])].slice(-90);});return {ok:true};
+   if(['leave','archive','remove'].includes(input.action))return groups.handle(uid,'groupAction',{...input,groupId:input.roomId});
+   throw problem('Project rooms have been replaced by private group chat. Open Groups to continue.',410);
   }
   if(op==='asks')return listAsks(uid,input);
   if(op==='askCreate'){
@@ -229,8 +195,9 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
   throw problem('Unsupported builder action.');
  }
  async function runReminderPage({after='',limit=40}={}){
+  await sweepDeletedGroupData(db,now());
   let query=db.collection('builderStates').orderBy('__name__').limit(Math.min(40,limit));if(after)query=query.startAfter(after);const docs=(await query.get()).docs;let delivered=0,lastProcessed=after;const started=Date.now();
-  for(const d of docs){if(Date.now()-started>40000)return {delivered,nextCursor:lastProcessed};lastProcessed=d.id;const user=await db.collection('users').doc(d.id).get();if(!user.exists||user.data().deleted){await db.collection('builderContributions').doc(d.id).delete();continue;}if(user.data().banned||user.data().onboarded!==true)continue;
+  for(const d of docs){if(Date.now()-started>40000)return {delivered,nextCursor:lastProcessed};lastProcessed=d.id;const user=await db.collection('users').doc(d.id).get();if(!user.exists||user.data().deleted){await db.collection('builderContributions').doc(d.id).delete();await cleanupDeletedGroupData(db,d.id,now());continue;}if(user.data().banned||user.data().onboarded!==true)continue;
    const prior=stateOf(d.data(),now()),clock=localTime(now(),prior.prefs.timezone);
    const eligibleReview=!prior.lastDeliveryAt||now()-prior.lastDeliveryAt>=20*3600000;
    const needsReview=eligibleReview&&((prior.prefs.friday&&prior.lastFriday!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Fri'&&clock.hour>=9&&clock.hour<19)||(prior.prefs.digest&&prior.lastDigest!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Sun'&&clock.hour>=17&&clock.hour<20));

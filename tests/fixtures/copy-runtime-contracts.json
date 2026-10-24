@@ -236,12 +236,7 @@
       "Profile"
     ]
   ],
-  "mobile/src/screens/CityLeagueScreen.tsx": [
-    [
-      "navigate",
-      "Profile"
-    ]
-  ],
+  "mobile/src/screens/CityLeagueScreen.tsx": [],
   "mobile/src/screens/CreateCampaignScreen.tsx": [],
   "mobile/src/screens/CreatePostScreen.tsx": [
     [
@@ -2621,25 +2616,13 @@
     ],
     [
       "navigate",
-      "BuilderWorkspace"
+      "TrendingBuilders"
     ]
   ],
   "mobile/src/screens/TrendingBuildersScreen.tsx": [
     [
-      "doc",
-      "users"
-    ],
-    [
       "navigate",
-      "EmailAuth"
-    ],
-    [
-      "navigate",
-      "Chat"
-    ],
-    [
-      "navigate",
-      "Alerts"
+      "ShipLog"
     ],
     [
       "navigate",
@@ -2648,6 +2631,13 @@
     [
       "navigate",
       "Profile"
+    ],
+    [
+      "navigate",
+      "ShipLog"
+    ],
+    [
+      "navigate"
     ]
   ],
   "mobile/src/screens/ViewersScreen.tsx": [

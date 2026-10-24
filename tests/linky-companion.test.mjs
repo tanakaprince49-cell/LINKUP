@@ -361,12 +361,12 @@ test('a failed provider response that consumed a search attempt is not cached as
  const retried=await api.pointers('member','Flutter developer in Harare',{userDoc:member,assumeKnown:true});assert.equal(calls,2);assert.equal(retried.leads.length,1);
 });
 
-test('ordinary app chat uses approved builder context only with consent and never caches it or shares it with bots',async()=>{
+test('pre-V16 main chat never injects removed Coach context, including old opted-in states',async()=>{
  const db=new Database();seed(db,[member]);const prompts=[],api=core(db,{ai:true,aiMode:'chat',prompts});
  db.rows.set('builderStates/member',{context:{project:'PRIVATE BUILDER CONTEXT'},prefs:{useContextForAI:false}});
  await api.ask('member','How should I test my business idea?',{userDoc:member});assert.ok(!prompts.some(p=>p.includes('PRIVATE BUILDER CONTEXT')));
  prompts.length=0;db.rows.get('builderStates/member').prefs.useContextForAI=true;
- await api.ask('member','How should I test my business idea?',{userDoc:member});assert.ok(prompts.some(p=>p.includes('PRIVATE BUILDER CONTEXT')));
+ await api.ask('member','How should I test my business idea?',{userDoc:member});assert.ok(!prompts.some(p=>p.includes('PRIVATE BUILDER CONTEXT')));
  assert.ok(![...db.rows.entries()].filter(([key])=>key.startsWith('linkyCache/')).some(([,value])=>JSON.stringify(value).includes('PRIVATE BUILDER CONTEXT')));
  prompts.length=0;await api.ask('member','What experiment should I try next?',{userDoc:member,source:'telegram'});assert.ok(!prompts.some(p=>p.includes('PRIVATE BUILDER CONTEXT')));
 });

@@ -1508,7 +1508,10 @@ service cloud.firestore {
     // client to add itself to a room or forge accepted invitations.
     match /builderContributions/{id} { allow read, write: if false; }
     match /builderStates/{id} { allow read, write: if false; }
-    match /builderRooms/{id} { allow read, write: if false; }
+    match /builderRooms/{id} {
+      allow read, write: if false;
+      match /messages/{messageId} { allow read, write: if false; }
+    }
     match /builderInvites/{id} { allow read, write: if false; }
     match /builderAsks/{id} { allow read, write: if false; }
     match /builderEvents/{id} { allow read, write: if false; }

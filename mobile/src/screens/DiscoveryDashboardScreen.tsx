@@ -268,7 +268,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
   // The Builder League preview uses the shared league pool + the exact same
   // ranker as the full league screen, so standings match on every device.
   const trending = useMemo(() => {
-    const pool = leaguePeople.length > 0 ? leaguePeople : people;
+    const pool = leaguePeople;
     return rankLeague(pool as any, me).slice(0, MOBILE_HORIZONTAL_CARD_LIMIT);
   }, [leaguePeople, people, me]);
 

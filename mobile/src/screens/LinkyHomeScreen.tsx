@@ -756,13 +756,13 @@ export default function LinkyHomeScreen({ navigation }: any) {
       </View>
       <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open your builder workspace" onPress={() => navigation.navigate('BuilderWorkspace', { section: 'Today' })}
         style={{marginHorizontal:14,marginBottom:6,paddingHorizontal:14,paddingVertical:11,borderRadius:16,backgroundColor:isDark?'#25483b':'#e6f0be',flexDirection:'row',justifyContent:'space-between'}}>
-        <Text style={{fontWeight:'800',color:textColor(isDark)}}>Your next move · goals, coach & rooms</Text>
+        <Text style={{fontWeight:'800',color:textColor(isDark)}}>Your next move · progress & groups</Text>
         <Text style={{fontWeight:'900',color:textColor(isDark)}}>↗</Text>
       </TouchableOpacity>
       {home&&!home.thread?.length&&<View style={{paddingHorizontal:14,paddingBottom:8}}>
         <Text style={{color:textColor(isDark),fontWeight:'800',marginBottom:8}}>What would help you move forward today?</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>
-          {[{label:'Find a collaborator',intent:'cofounder',section:'Plan'},{label:'Find investors',intent:'investors',section:'Plan'},{label:'Review my pitch',intent:'pitch',section:'Coach',coachKind:'pitch'},{label:'Validate an idea',intent:'validation',section:'Coach',coachKind:'validation'},{label:'Unblock my build',intent:'unblock',section:'Coach',coachKind:'blocker'},{label:'Get launch feedback',intent:'build',section:'Help board'}].map(goal=><TouchableOpacity key={goal.label} accessibilityRole="button" onPress={()=>navigation.navigate('BuilderWorkspace',goal)} style={{padding:11,borderRadius:15,backgroundColor:isDark?'#263649':'#eef2f6'}}><Text style={{color:textColor(isDark),fontWeight:'700'}}>{goal.label}</Text></TouchableOpacity>)}
+          {[{label:'Find a collaborator',intent:'cofounder',section:'Plan'},{label:'Find investors',intent:'investors',section:'Plan'},{label:'Get launch feedback',intent:'build',section:'Help board'}].map(goal=><TouchableOpacity key={goal.label} accessibilityRole="button" onPress={()=>navigation.navigate('BuilderWorkspace',goal)} style={{padding:11,borderRadius:15,backgroundColor:isDark?'#263649':'#eef2f6'}}><Text style={{color:textColor(isDark),fontWeight:'700'}}>{goal.label}</Text></TouchableOpacity>)}
         </ScrollView>
       </View>}
       {/* Keyboard keeps the composer visible:

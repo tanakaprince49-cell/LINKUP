@@ -57,7 +57,8 @@ test('public profile and directory render the same exclusive pair and exact CEO 
  assert.equal(publicEligible({...base,isStealthMode:true},GOLD_MEMBER_UID),false);
 });
 test('every existing member-name badge surface uses the identity-aware renderer',()=>{
- const expected={MatchScreen:'otherUser.uid',MessagesScreen:'otherUser.uid',ChatScreen:'otherUser.uid',SearchScreen:'item.uid',CityLeagueScreen:'item.uid',ActiveOpportunitiesScreen:'item.uid',RecommendedMatchesScreen:'item.uid',ActiveOpportunityScreen:'profile?.uid',IdeaDeckScreen:'idea.ownerId',DiscoveryDashboardScreen:'item.uid',FeedScreen:'post.authorId',ViewersScreen:'item.uid',TrendingBuildersScreen:'item.uid',ProfileScreen:'profile?.uid',LinkyHomeScreen:'card.targetUid',AlertsScreen:'notification.fromId',GamificationHubScreen:'c.senderId',CampaignsScreen:'campaign.ownerId'};
+ assert.match(read('mobile/src/screens/CityLeagueScreen.tsx'),/TrendingBuildersScreen/);
+ const expected={MatchScreen:'otherUser.uid',MessagesScreen:'otherUser.uid',ChatScreen:'otherUser.uid',SearchScreen:'item.uid',ActiveOpportunitiesScreen:'item.uid',RecommendedMatchesScreen:'item.uid',ActiveOpportunityScreen:'profile?.uid',IdeaDeckScreen:'idea.ownerId',DiscoveryDashboardScreen:'item.uid',FeedScreen:'post.authorId',ViewersScreen:'item.uid',TrendingBuildersScreen:'r.uid',ProfileScreen:'profile?.uid',LinkyHomeScreen:'card.targetUid',AlertsScreen:'notification.fromId',GamificationHubScreen:'c.senderId',CampaignsScreen:'campaign.ownerId'};
  for(const [name,id] of Object.entries(expected))assert.ok(read(`mobile/src/screens/${name}.tsx`).includes(`MemberBadges userId={${id}}`),name);
  assert.match(read('mobile/src/components/LinkyCardsSection.tsx'),/MemberBadges userId=\{card.targetUid\}/);
  assert.match(read('mobile/src/screens/FeedScreen.tsx'),/MemberBadges userId=\{reply.userId\}/);

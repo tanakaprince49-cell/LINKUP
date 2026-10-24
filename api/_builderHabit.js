@@ -12,6 +12,8 @@ export function createHabitActions({db,now}){
    if(!user.exists||user.data().deleted||user.data().banned||user.data().onboarded!==true)throw problem('Your profile is unavailable.',403);
    const c=cd.data()||{},s=stateOf(sd.data(),now()),h=habitState(c),today=dayOf(now()),week=weekOf(today);
    if(op==='habitPrefs'){
+    if('publicMomentum'in input){if(typeof input.publicMomentum!=='boolean')throw problem('Choose public visibility explicitly.');if(input.publicMomentum&&!publicEligible(user.data(),uid))throw problem('Make your profile public before publishing momentum.');c.publicMomentum=input.publicMomentum;}
+
     if('target'in input){if(![3,5,7].includes(input.target))throw problem('Choose 3, 5 or 7 build days per week.');const effective=!c.totalUpdates?week:dayOf(Date.parse(week)+7*DAY);h.goals=[...h.goals.filter(g=>g.week!==effective),{week:effective,target:input.target}].sort((a,b)=>a.week.localeCompare(b.week)).slice(-54);}
     const before=s.prefs.dailyBuild;s.prefs=sanitizePrefs(input,s.prefs);
     if(s.prefs.dailyBuild&&!before){s.prefs.buildOptInDay=today;s.buildReminderCount=0;}

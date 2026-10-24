@@ -12,7 +12,7 @@ export function habitSnapshot(c={},at=Date.now(),prefs={}){
  for(let i=0;i<366;i++,cursor=shift(cursor,-1)){if(days.has(cursor))actual++;else if(rests.has(cursor))protectedDays++;else break;}
  const restDay=shift(today,-1),canProtectYesterday=!days.has(restDay)&&!rests.has(restDay)&&[1,2].some(n=>days.has(shift(restDay,-n)));
  const total=Number(c.totalUpdates)||0,done=days.has(today),resting=rests.has(today),pending=h.goals.find(g=>g.week>week);
- return {today,week,weekly:{target:goal,progress,complete:progress>=goal,pending:pending||null},rhythm:{actualDays:actual,protectedDays},
+ return {publicMomentum:c.publicMomentum===true,publicUrl:'https://www.linkupbuild.com/app/momentum/',today,week,weekly:{target:goal,progress,complete:progress>=goal,pending:pending||null},rhythm:{actualDays:actual,protectedDays},
  milestones:MILESTONES.filter(n=>total>=n),nextMilestone:MILESTONES.find(n=>n>total)||null,totalUpdates:total,
  credits:h.credits,earnedCredits:h.earnedCredits,tokens:h.tokens,tokenCost:20,maxTokens:3,
  canRestToday:!done&&!resting&&[1,2].some(n=>days.has(shift(today,-n))),freeYesterdayAvailable:!h.rests.some(r=>r.kind==='free'&&weekOf(r.day)===weekOf(restDay)),freeRestAvailable:!h.rests.some(r=>r.kind==='free'&&weekOf(r.day)===week),resting,canProtectYesterday,yesterday:restDay,

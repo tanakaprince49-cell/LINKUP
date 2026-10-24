@@ -1,5 +1,4 @@
 import {getDb} from './_firebaseAdmin.js';
-import {geminiText} from './_gemini.js';
 import {isPlusUser} from './_linky.js';
 import {createBuilderService} from './_builder.js';
 import {validId,problem} from './_builderCore.js';
@@ -12,7 +11,7 @@ async function nativePush(uid,{title,body,url}){
   const result=await response.json();return {sent:response.ok&&Array.isArray(result.data)?result.data.filter(t=>t.status==='ok').length:0};
  }catch{return {sent:0};}
 }
-export function builderService(){return createBuilderService({db:getDb(),plus:isPlusUser,generate:prompt=>geminiText(prompt,{temperature:0.25,maxOutputTokens:1100}),push:nativePush});}
+export function builderService(){return createBuilderService({db:getDb(),plus:isPlusUser,push:nativePush});}
 export async function builderCron(input={}){
  const db=getDb(),r=db.collection('builderScheduler').doc('hourly'),snapshot=await r.get();
  const after=Object.hasOwn(input,'after')?input.after:(snapshot.exists?snapshot.data().after:'');

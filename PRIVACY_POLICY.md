@@ -1,6 +1,6 @@
 # LINKUP Privacy Policy
 
-Effective: 2026-10-16
+Effective: 2026-10-24
 
 Operator: Tanaka Gaadzikwa (individual)
 
@@ -52,6 +52,10 @@ When public discovery is enabled and your profile is eligible, selected professi
 A Google-provided name or photo that you use as your LINKUP profile information can be displayed in the same way as information you enter yourself. Your account email and authentication tokens are not fields published by the public builder-directory feed. Messages, billing records, and private Linky notes are not included in that public feed.
 
 Use profile visibility, public discovery, stealth, and online-status controls where available. Turning off public discovery changes eligibility on LINKUP; it does not instantly remove copies already indexed by search engines or saved by other people. Contact us if a profile remains visible after a removal request. Recipients can retain messages they received, and public information or material sent to someone can be copied outside our control.
+
+Builder Momentum and Builder League publication is a separate, optional choice, off by default. If you enable it in Progress Log or enter the public league, LINKUP may publish your public name, city/country, earned activity totals, ranks, and recorded calendar dates on search-friendly pages and sitemaps. The score reflects recorded activity, not verified skill or investment quality. This setting never publishes private update text or update links, wallet balances, feedback notes, or private group conversations. You can disable it in Progress Log; LINKUP stops serving the public momentum page on the next request, while search-engine caches may take time to refresh. Existing profile visibility controls also apply.
+
+Private groups require invitation and acceptance. Only accepted members can read group messages through LINKUP; admins can invite, remove members, transfer administration, or archive the group. Blocking a member restricts conversation access until membership or the block is resolved. Group conversations are not included in public SEO pages and the group-chat feature does not send them to an AI provider. Account deletion revokes access immediately; removal of retained authored group messages can complete asynchronously. Other members may retain copies they previously received.
 
 ## 5. Linky, AI-assisted recommendations, and external searches
 

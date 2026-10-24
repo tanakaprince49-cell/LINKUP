@@ -32,7 +32,7 @@ test('profile and progress log use the actual calendar and authoritative publish
  const root=new URL('../',import.meta.url),read=p=>fs.readFileSync(new URL(p,root),'utf8');
  const profile=read('mobile/src/screens/ProfileScreen.tsx'),ship=read('mobile/src/screens/ShipLogScreen.tsx'),calendar=read('mobile/src/components/ContributionCalendar.tsx');
  assert.match(profile,/<ContributionCalendar userId=\{profile.uid\}/);assert.match(ship,/builderCall\('shipUpdate',pending.current\)/);assert.match(ship,/no chat credit used/);
- assert.doesNotMatch(ship,/isVerified:|verificationProgram:|top 5%/);assert.match(calendar,/isReduceMotionEnabled/);assert.match(calendar,/shadowRadius:7/);
+ assert.doesNotMatch(ship,/isVerified:|verificationProgram:|top 5%/);assert.doesNotMatch(calendar,/Animated|isReduceMotionEnabled/);assert.match(calendar,/#FBE618/);assert.match(calendar,/shadowRadius:7/);
  const loop=read('mobile/src/lib/dailyLoop.ts').split('export async function persistShipAndRep')[1].split('export async function syncDecayingRep')[0];assert.doesNotMatch(loop,/patch\.isVerified|SHIPPED|verifiedBy|setDoc\(/);
 });
 test('no decorative sparkle glyph or sparkle-icon import remains anywhere in application source',()=>{

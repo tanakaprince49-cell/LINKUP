@@ -1,3 +1,4 @@
+import {serveLeagueSeo} from './_leagueSeo.js';
 import {serveContentSeo,contentSitemapIndex} from './_contentSeo.js';
 import {getNewsFeed} from './_newsFeed.js';
 import {selectProfileImage} from './_publicProfileImage.js';
@@ -37,6 +38,8 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed) {
     if (!['GET','HEAD'].includes(req.method)) { res.setHeader('Allow','GET, HEAD'); return failure(405,'Method not allowed'); }
     try {
       if (mode === 'robots') return send(200,`User-agent: *\nAllow: /\n\nSitemap: ${APP}/sitemap.xml\n`,'text/plain; charset=utf-8');
+      if (mode==='league-json') res.setHeader('X-Robots-Tag','noindex');
+      if (await serveLeagueSeo(req,{database,send,failure})) return;
       if (await serveContentSeo(req,{database,send,failure,news})) return;
       if (mode === 'image') {
         const uid = single(req.query?.uid);
@@ -90,11 +93,11 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed) {
         const pages = Math.max(1,Math.ceil(count / SITEMAP_SIZE));
         // Sitemap indexes may contain at most 50,000 child sitemaps.
         if (pages > 50000) throw new Error('Sitemap index capacity exceeded');
-        const urls=[`${APP}/sitemap-static.xml`,...Array.from({length:pages},(_,i) => `${APP}/sitemap-profiles-${i}.xml`),...await contentSitemapIndex(db)];
+        const urls=[`${APP}/sitemap-static.xml`,...Array.from({length:pages},(_,i) => `${APP}/sitemap-profiles-${i}.xml`),`${APP}/sitemap-momentum.xml`,...await contentSitemapIndex(db)];
         if(urls.length>50000)throw new Error('Sitemap index capacity exceeded');
         return send(200,xmlIndex(urls),'application/xml; charset=utf-8');
       }
-      if (mode === 'static') return send(200,xmlUrls([`${APP}/landing`,`${APP}/builders`,`${APP}/campaigns`,`${APP}/startups`,`${APP}/news`]),'application/xml; charset=utf-8');
+      if (mode === 'static') return send(200,xmlUrls([`${APP}/landing`,`${APP}/builders`,`${APP}/campaigns`,`${APP}/startups`,`${APP}/news`,`${APP}/builder-league`,`${APP}/builder-league/month`,`${APP}/builder-league/all`,`${APP}/momentum`]),'application/xml; charset=utf-8');
       if (mode === 'profiles') {
         const raw = single(req.query?.page);
         if (!/^(0|[1-9]\d{0,4})$/.test(raw)) return failure(400,'Invalid sitemap');

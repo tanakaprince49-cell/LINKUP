@@ -45,6 +45,7 @@ const NetworkQuizScreen = lazyScreen(() => import('./src/screens/NetworkQuizScre
 const BuilderWorkspaceScreen = lazyScreen(() => import('./src/screens/BuilderWorkspaceScreen'));
 const DailyFiveScreen = lazyScreen(() => import('./src/screens/DailyFiveScreen'));
 const ShipLogScreen = lazyScreen(() => import('./src/screens/ShipLogScreen'));
+const GroupChatScreen = lazyScreen(() => import('./src/screens/GroupChatScreen'));
 const CityLeagueScreen = lazyScreen(() => import('./src/screens/CityLeagueScreen'));
 const LinkyProfileScreen = lazyScreen(() => import('./src/screens/LinkyProfileScreen'));
 const LinkySettingsScreen = lazyScreen(() => import('./src/screens/LinkySettingsScreen'));
@@ -178,6 +179,7 @@ const linking: any = {
       DailyFive: 'daily-five',
       ShipLog: 'ship',
       CityLeague: 'league',
+      GroupChat: 'groups/:groupId',
     },
   },
 };
@@ -474,6 +476,8 @@ function AppContent() {
     if (!navigationRef.isReady()) return;
     const targetUrl = String(data?.url || data?.targetUrl || '');
 
+    if (targetUrl.startsWith('/groups/')) { const groupId=targetUrl.split('/')[2]?.split('?')[0]; if(groupId)navigationRef.navigate('GroupChat',{groupId}); return; }
+
     if (targetUrl === '/ship' || targetUrl.startsWith('/ship?')) { navigationRef.navigate('ShipLog'); return; }
 
     if (targetUrl.startsWith('/builder') || data?.type === 'builder') {
@@ -759,6 +763,7 @@ function AppContent() {
             <Stack.Screen name="BuilderWorkspace" component={BuilderWorkspaceScreen} />
             <Stack.Screen name="DailyFive" component={DailyFiveScreen} />
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
+            <Stack.Screen name="GroupChat" component={GroupChatScreen} />
             <Stack.Screen name="CityLeague" component={CityLeagueScreen} />
           </>
         ) : null}

@@ -66,6 +66,54 @@
   ],
   "rewrites": [
     {
+      "source": "/app/builder-league",
+      "destination": "/api/publicSeo?mode=league"
+    },
+    {
+      "source": "/app/builder-league/month",
+      "destination": "/api/publicSeo?mode=league&period=month"
+    },
+    {
+      "source": "/app/builder-league/all",
+      "destination": "/api/publicSeo?mode=league&period=all"
+    },
+    {
+      "source": "/app/momentum",
+      "destination": "/api/publicSeo?mode=momentum"
+    },
+    {
+      "source": "/app/momentum/:uid",
+      "destination": "/api/publicSeo?mode=momentum-profile&uid=:uid"
+    },
+    {
+      "source": "/app/sitemap-momentum.xml",
+      "destination": "/api/publicSeo?mode=momentum-sitemap"
+    },
+    {
+      "source": "/builder-league",
+      "destination": "/api/publicSeo?mode=league"
+    },
+    {
+      "source": "/builder-league/month",
+      "destination": "/api/publicSeo?mode=league&period=month"
+    },
+    {
+      "source": "/builder-league/all",
+      "destination": "/api/publicSeo?mode=league&period=all"
+    },
+    {
+      "source": "/momentum",
+      "destination": "/api/publicSeo?mode=momentum"
+    },
+    {
+      "source": "/momentum/:uid",
+      "destination": "/api/publicSeo?mode=momentum-profile&uid=:uid"
+    },
+    {
+      "source": "/sitemap-momentum.xml",
+      "destination": "/api/publicSeo?mode=momentum-sitemap"
+    },
+    {
       "source": "/app/campaigns",
       "destination": "/api/publicSeo?mode=campaigns"
     },

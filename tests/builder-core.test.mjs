@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {DAY,brief,freshState,contextOf,sanitizePrefs,quiet,weekKey,relevantPeople,coachPrompt,nextDelivery,weeklySummary,relevantLeads} from '../api/_builderCore.js';
+import {DAY,brief,freshState,contextOf,sanitizePrefs,quiet,weekKey,relevantPeople,nextDelivery,weeklySummary,relevantLeads} from '../api/_builderCore.js';
 const at=Date.parse('2026-10-23T12:00:00Z');
 test('builder context is explicit and defaults to private, optional AI use and opt-in reminders',()=>{
  const s=freshState(at);assert.equal(s.prefs.push,false);assert.equal(s.prefs.email,false);assert.equal(s.prefs.useContextForAI,false);assert.equal(s.prefs.reminders,false);assert.equal(s.version,16);
@@ -29,12 +29,8 @@ test('Daily 5 requires evidence, respects negative feedback and does not pad mis
 test('expired availability is never advertised as currently available',()=>{
  const s=freshState(at);s.context.needs='Python';assert.equal(relevantPeople(s,[{uid:'a',name:'A',skills:['Python'],availability:{enabled:true,until:at-1}}],at)[0].available,false);
 });
-test('AI workflows reject secrets and use saved context only with consent',()=>{
- const s=freshState(at);s.context.project='PRIVATE PROJECT';const prompt=coachPrompt('pitch','A sufficiently detailed real pitch for review',s);assert.ok(!prompt.includes('PRIVATE PROJECT'));
- s.prefs.useContextForAI=true;assert.ok(coachPrompt('pitch','A sufficiently detailed real pitch for review',s).includes('PRIVATE PROJECT'));
- assert.throws(()=>coachPrompt('invalid','A sufficiently detailed real pitch for review',s));
- assert.throws(()=>coachPrompt('blocker','My code contains github_pat_secret_example_please_remove',s));
- assert.throws(()=>coachPrompt('blocker','-----BEGIN PRIVATE KEY----- something secret',s));
+test('retired Coach context is never re-enabled through preferences',()=>{
+ assert.equal(sanitizePrefs({useContextForAI:true}).useContextForAI,false);
 });
 test('reminder scheduling is opt-in, meaningful, frequency capped and never sends during quiet hours',()=>{
  const s=freshState(at);s.followups=[{status:'open',dueAt:at-1,notifiedAt:0}];assert.equal(nextDelivery(s,at),null);
@@ -48,13 +44,13 @@ test('Sunday progress summaries are source-based, opt-in and once per local week
  const time=Date.parse('2026-10-25T18:00:00Z'),s=freshState(time);s.context.project='A';s.prefs.digest=true;assert.equal(nextDelivery(s,time),null);const review=weeklySummary(s,time);assert.equal(review.meaningful,false);s.goals=[{text:'Interview customers',doneAt:time-1000}];const actual=weeklySummary(s,time);assert.equal(nextDelivery(s,time,actual).section,'Today');assert.match(nextDelivery(s,time,actual).content,/1 completed outcomes/);s.lastDigest=weekKey(time);assert.equal(nextDelivery(s,time,actual),null);
 });
 test('V16 does not add a serverless function, bypass the existing ledger, or enable unsolicited email',()=>{
- const service=fs.readFileSync(new URL('../api/_builder.js',import.meta.url),'utf8');assert.match(service,/reserveMessage\(db,uid/);assert.match(service,/refundMessage\(db,uid/);
+ const service=fs.readFileSync(new URL('../api/_builder.js',import.meta.url),'utf8');assert.doesNotMatch(service,/reserveMessage|refundMessage|await generate/);assert.match(service,/op==='coach'\)throw problem[^\n]+410/);
  const runtime=fs.readFileSync(new URL('../api/_builderRuntime.js',import.meta.url),'utf8');assert.match(runtime,/available:false/);
  const handler=fs.readFileSync(new URL('../api/linky.js',import.meta.url),'utf8');assert.match(handler,/case 'builder'/);assert.match(handler,/cronAuthorized\(req\)/);
 });
 test('private workspace is reachable, noindex, and both native and in-app notifications deep-link correctly',()=>{
  const app=fs.readFileSync(new URL('../mobile/App.tsx',import.meta.url),'utf8');assert.match(app,/BuilderWorkspace: 'builder'/);assert.match(app,/name="BuilderWorkspace"/);assert.match(app,/targetUrl.startsWith\('\/builder'\)/);
- const ui=fs.readFileSync(new URL('../mobile/src/screens/BuilderWorkspaceScreen.tsx',import.meta.url),'utf8');for(const feature of ['Follow-ups','Rooms','Help board','Coach','Plan','Leads','Settings'])assert.ok(ui.includes(feature));assert.ok(!ui.includes('mailto:'));
+ const ui=fs.readFileSync(new URL('../mobile/src/screens/BuilderWorkspaceScreen.tsx',import.meta.url),'utf8');for(const feature of ['Follow-ups','Groups','Help board','Plan','Leads','Settings'])assert.ok(ui.includes(feature));assert.ok(!ui.includes('mailto:'));assert.doesNotMatch(ui,/['"]Coach['"]|section===['"]Rooms['"]/);
  const metadata=fs.readFileSync(new URL('../mobile/src/lib/webMetadata.ts',import.meta.url),'utf8');assert.match(metadata,/const isPublic = routeName === 'Landing'/);
 });
 
