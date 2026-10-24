@@ -1,6 +1,12 @@
 # LINKUP 16.6.0 — honest daily retention, real dates, a downloadable League card
 
-Android version 16.6.0 / versionCode 29. Branch `codex/mobile-port` and `main`.
+Android version 16.6.0 / versionCode 29. Both branches at `eed8961` (`044beec`
+is the release commit; `eed8961` fixes the League card's singulars).
+CI: `Deploy Expo Web to Vercel Production` success for `eed8961`, and for
+`044beec`: Vercel production success, Firestore rules success on
+`codex/mobile-port` and `main`. Live: `/app/builder-league` renders the download
+link, `/app/builder-league/card` returns `200 image/png`, 167 816 B, 1080×1080,
+and `/app` is 200.
 
 This release is about one promise: **every notification and every number is
 true, and every date is real.** Nothing in it invents activity, points, people
