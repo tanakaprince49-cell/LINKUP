@@ -11,7 +11,7 @@ import {builderCall} from '../lib/builder';
 import ScreenHeader from '../components/ScreenHeader';
 import MemberBadges from '../components/MemberBadges';
 
-const YELLOW='#FBE618',INK='#0A0B0D',CREAM='#FFFCEB';
+const YELLOW='#FBE618',INK='#0A0B0D';
 
 function resetLabel(period:string){
  if(period==='all')return 'Lifetime points · no reset';
@@ -33,11 +33,13 @@ function Podium({rows,onOpen,dark,period}:{rows:any[];onOpen:(uid:string)=>void;
  const label=period==='week'?'this week':period==='month'?'this month':'this year';
  return <View style={{gap:10}}>
   <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Open ${first.name}, number 1 ${label}`} onPress={()=>onOpen(first.uid)} style={styles.championCard}>
-   <View style={styles.crownWrap}><Crown size={18} color={INK} fill={INK}/></View>
+   <View style={{flexDirection:'row',alignItems:'center',gap:7}}>
+    <Crown size={16} color={INK} fill={INK}/>
+    <Text numberOfLines={1} style={{color:INK,fontSize:11,fontWeight:'900',letterSpacing:1.4}}>NUMBER 1 · {label.toUpperCase()}</Text>
+   </View>
    <View style={{flexDirection:'row',alignItems:'center',gap:14,width:'100%'}}>
     <View style={styles.championAvatar}><ProfileAvatar uri={first.image} name={first.name} size={72} dark={false}/></View>
     <View style={{flex:1,gap:3}}>
-     <Text numberOfLines={1} style={{color:INK,fontSize:12,fontWeight:'900',letterSpacing:1.4}}>NUMBER 1 · {label.toUpperCase()}</Text>
      <View style={{flexDirection:'row',alignItems:'center',gap:5}}><Text numberOfLines={1} style={{color:INK,fontWeight:'900',fontSize:23,flexShrink:1}}>{first.name}</Text><MemberBadges userId={first.uid} verified={first.verified} size={16}/></View>
      <Text numberOfLines={1} style={{color:'#4B4415',fontSize:12}}>{first.occupation||'LINKUP builder'}</Text>
     </View>
@@ -61,7 +63,7 @@ function Podium({rows,onOpen,dark,period}:{rows:any[];onOpen:(uid:string)=>void;
 
 export default function TrendingBuildersScreen({navigation,local=false}:any){
  const {user,profile}=useAuth(),{theme}=useTheme(),dark=theme==='dark',focused=useIsFocused();
- const [view,setView]=useState('activity');
+ const [view,setView]=useState('builders'); // Builders is the first page; positions load with it.
  const [period,setPeriod]=useState<LeaguePeriod>('week'),[board,setBoard]=useState<any>(null),[habit,setHabit]=useState<any>(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[joining,setJoining]=useState(false),[clock,tick]=useState(0);
  const city=local?String(profile?.city||''):'',country=local?String(profile?.country||''):'';
  const builders=view==='builders';
@@ -181,7 +183,6 @@ const styles=StyleSheet.create({
  button:{padding:14,minHeight:46,borderRadius:14,justifyContent:'center'},
  card:{padding:17,borderWidth:1,borderRadius:20,gap:10},
  championCard:{backgroundColor:YELLOW,borderRadius:24,padding:18,gap:12,borderWidth:2,borderColor:INK},
- crownWrap:{position:'absolute',top:-1,right:16,backgroundColor:CREAM,borderWidth:2,borderColor:INK,borderRadius:16,width:32,height:32,alignItems:'center',justifyContent:'center'},
  championAvatar:{borderWidth:3,borderColor:INK,borderRadius:26,padding:2},
  championDivider:{height:2,backgroundColor:'#00000022',borderRadius:2},
  runnerUp:{flex:1,padding:12,borderRadius:18,borderWidth:1,alignItems:'center',gap:6},
