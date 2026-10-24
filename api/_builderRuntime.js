@@ -2,6 +2,8 @@ import {getDb} from './_firebaseAdmin.js';
 import {isPlusUser} from './_linky.js';
 import {createBuilderService} from './_builder.js';
 import {validId,problem} from './_builderCore.js';
+import {awardWeeklyChampion,reconcileCampaignRewards} from './_campaignReward.js';
+import {awardSeasonChampions} from './_leagueChampions.js';
 async function nativePush(uid,{title,body,url}){
  const db=getDb(),snap=await db.collection('userPrivate').doc(uid).get();
  const tokens=[...new Set((snap.exists?snap.data().pushTokens:[] )||[])].filter(t=>typeof t==='string'&&/^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$/.test(t)).slice(0,20);
@@ -18,11 +20,13 @@ export async function builderCron(input={}){
  if(after&& !validId(after))throw problem('Invalid schedule cursor.');
  const result=await builderService().runReminderPage({after:after||'',limit:30});
  await r.set({after:result.nextCursor||'',at:Date.now()});
- // Builder League reward: grant last week's champion once, then enforce the
- // seven-day claim window and delete finished reward campaigns for good.
- const reward=await awardWeeklyChampion(db).catch(()=>null);
- const rewardSweep=await reconcileCampaignRewards(db).catch(()=>null);
- return {...result,reward,rewardSweep};
+ // Builder League prizes. Reminders must still be delivered if a league job
+ // fails, so each block is isolated: a throw here can never 500 the cron.
+ let reward=null,rewardSweep=null,seasons=null;
+ try{reward=await awardWeeklyChampion(db);}catch{reward=null;}
+ try{rewardSweep=await reconcileCampaignRewards(db);}catch{rewardSweep=null;}
+ try{seasons=await awardSeasonChampions(db);}catch{seasons=null;}
+ return {...result,reward,rewardSweep,seasons};
 }
 // Email is intentionally fail-closed until a verified provider is configured.
 // A future adapter must enforce opt-in, suppression, signed unsubscribe URLs,

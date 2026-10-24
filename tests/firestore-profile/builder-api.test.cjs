@@ -361,3 +361,31 @@ test('rewards are server-write only and private to their winner',async()=>{
  await assertFails(getDoc(doc(bob,'campaignRewards/2026-10-12')));
  await assertFails(getDoc(doc(bob,'campaignRewardsAudit/2026-10-12')));
 });
+
+test('the weekly grant and the monthly title are decided from real opt-in activity, once',async()=>{
+ const {awardWeeklyChampion}=await import('../../api/_campaignReward.js');
+ const {awardSeasonChampion}=await import('../../api/_leagueChampions.js');
+ const {awardWeek}=await import('../../shared/campaign-reward.js');
+ const {assertSucceeds}=require('@firebase/rules-unit-testing');
+ await seed();
+ // Two opted-in builders: alice recorded three days last week, bob two.
+ const week=Date.parse('2026-10-24T09:00:00Z'),award=awardWeek(week);
+ await db.collection('builderContributions').doc('alice').set({publicMomentum:true,points:30,totalUpdates:3,days:['2026-10-12','2026-10-14','2026-10-16'],habit:{earnedCredits:0,credits:0,awards:[]}});
+ await db.collection('builderContributions').doc('bob').set({publicMomentum:true,points:20,totalUpdates:2,days:['2026-10-13','2026-10-15'],habit:{earnedCredits:0,credits:0,awards:[]}});
+ await db.collection('users').doc('bob').update({isVisible:false});
+ const granted=await awardWeeklyChampion(db,week);assert.equal(granted.granted,true);assert.equal(granted.weekKey,award.weekKey);
+ const reward=(await db.collection('campaignRewards').doc(award.weekKey).get()).data();
+ assert.equal(reward.uid,'alice');assert.equal(reward.status,'available');assert.equal(reward.points,30);
+ // A hidden profile is excluded even if it opted in.
+ const again=await awardWeeklyChampion(db,week);assert.equal(again.skipped,true);
+ // A week with nothing recorded gets no invented champion.
+ const empty=await awardWeeklyChampion(db,award.end+8*86400000);assert.equal(empty.granted,false);
+ assert.equal((await db.collection('campaignRewards').doc(awardWeek(award.end+8*86400000).weekKey).get()).data().status,'no-winner');
+ // Same for a month: September has no activity in this fixture.
+ await db.collection('users').doc('bob').update({isVisible:true});
+ const month=await awardSeasonChampion(db,'month',week);assert.equal(month.granted,false);
+ const client=env.authenticatedContext('alice').firestore();
+ await assertSucceeds(getDoc(doc(client,'leagueChampions/month-2026-09')));
+ await assertFails(setDoc(doc(client,'leagueChampions/month-2026-09'),{uid:'alice',status:'champion',points:9999}));
+ await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'leagueChampions/month-2026-09')));
+});

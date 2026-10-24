@@ -1421,6 +1421,18 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------
+    // Monthly and yearly Builder League champions (server-write only)
+    //
+    // Same public facts as the leaderboard: week/month/year, the member's
+    // public name, recorded totals and the season dates. Nobody can write a
+    // trophy from a client, and a member cannot edit their own record.
+    // ------------------------------------------------------------
+    match /leagueChampions/{seasonId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ------------------------------------------------------------
     // Feed posts (+ nested comments/replies)
     // Anyone signed in can read and react (counters/likes/viewedBy);
     // only the author can create-as-self, edit content, or delete.

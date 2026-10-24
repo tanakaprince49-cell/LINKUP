@@ -2630,11 +2630,15 @@
   "mobile/src/screens/TrendingBuildersScreen.tsx": [
     [
       "navigate",
+      "Profile"
+    ],
+    [
+      "navigate",
       "ShipLog"
     ],
     [
       "navigate",
-      "Profile"
+      "Campaigns"
     ],
     [
       "navigate",

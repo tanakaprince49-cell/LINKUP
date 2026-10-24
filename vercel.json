@@ -74,6 +74,10 @@
       "destination": "/api/publicSeo?mode=league&period=month"
     },
     {
+      "source": "/app/builder-league/year",
+      "destination": "/api/publicSeo?mode=league&period=year"
+    },
+    {
       "source": "/app/builder-league/all",
       "destination": "/api/publicSeo?mode=league&period=all"
     },
@@ -104,6 +108,10 @@
     {
       "source": "/builder-league/month",
       "destination": "/api/publicSeo?mode=league&period=month"
+    },
+    {
+      "source": "/builder-league/year",
+      "destination": "/api/publicSeo?mode=league&period=year"
     },
     {
       "source": "/builder-league/all",
