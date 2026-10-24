@@ -52,7 +52,7 @@ ${crowned ? `<circle cx="${x + 144}" cy="${y - 26}" r="42" fill="${INK}"/>${crow
 <text x="${x + 148}" y="${y + 218}" text-anchor="middle" font-size="26" fill="${crowned ? GOLD : INK}">#${row.rank}</text>
 <text x="${x + 148}" y="${y + 274}" text-anchor="middle" font-size="28" fill="${INK}">${esc(String(row.name || 'LINKUP builder').slice(0, 18))}</text>
 <text x="${x + 148}" y="${y + 312}" text-anchor="middle" font-size="20" fill="${MUTED}">${esc(`${row.points} points`)}</text>
-<text x="${x + 148}" y="${y + 342}" text-anchor="middle" font-size="15" letter-spacing="0.6" fill="${DIM}">${esc(`${row.buildDays} build days`)}</text>
+<text x="${x + 148}" y="${y + 342}" text-anchor="middle" font-size="15" letter-spacing="0.6" fill="${DIM}">${esc(`${row.buildDays} build ${Number(row.buildDays) === 1 ? 'day' : 'days'}`)}</text>
 </g>`;
   };
 
@@ -71,7 +71,7 @@ ${crowned ? `<circle cx="${x + 144}" cy="${y - 26}" r="42" fill="${INK}"/>${crow
 <rect x="56" y="128" width="968" height="196" rx="30" fill="url(#sun)"/>
 <text x="88" y="196" font-size="16" letter-spacing="2.6" fill="#4B4415">BUILD · HELP · CLIMB</text>
 <text x="88" y="262" font-size="56" fill="${INK}">Top 3 · ${esc(title)}</text>
-<text x="88" y="300" font-size="19" fill="#4B4415">${esc(`${participants} builder${participants === 1 ? '' : 's'} recorded points · `)}${esc(dayLabel(at).toUpperCase())}</text>
+<text x="88" y="300" font-size="19" fill="#4B4415">${esc(`${participants} builder${participants === 1 ? '' : 's'} recorded ${participants === 1 ? 'a point' : 'points'} · `)}${esc(dayLabel(at).toUpperCase())}</text>
 ${crown(950, 210, 0.9, INK)}
 </g>
 ${podium.map(card).join('')}

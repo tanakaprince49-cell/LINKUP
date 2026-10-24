@@ -144,6 +144,11 @@ test('the league top-three card exists, crowns only number one and is a real PNG
   // Fewer than three entrants still renders, with no invented names.
   const two = leagueCardSvg({ period: 'month', rows: board.rows.slice(0, 2), participants: 2, at });
   assert.doesNotMatch(two, /Cara/);
+  // Singulars are real English on a card with one builder.
+  const solo = leagueCardSvg({ period: 'week', rows: [{ name: 'Solo', rank: 1, points: 10, buildDays: 1 }], participants: 1, at });
+  assert.match(solo, /1 builder recorded a point/);
+  assert.match(solo, /1 build day</);
+  assert.doesNotMatch(solo, /1 build days/);
   // Wiring: public route, download button, app button, no auth required.
   const seo = read('api/_leagueSeo.js');
   assert.match(seo, /mode==='league-card'/);
