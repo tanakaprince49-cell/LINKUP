@@ -163,6 +163,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           await markRead();
         } catch {}
         if (isRequest) return;
+        if (notification.type === 'builder' && (notification as any).builderAction === 'ship') { navigation.navigate('ShipLog'); return; }
         if (notification.type === 'builder') { navigation.navigate('BuilderWorkspace', { section: (notification as any).section || 'Today' }); return; }
         if (notification.matchId) {
           navigation.navigate('Chat', {

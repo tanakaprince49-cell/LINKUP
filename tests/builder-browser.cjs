@@ -8,10 +8,12 @@ const tools=process.env.BUILDER_BROWSER_TOOLS||path.resolve('node_modules');
 const {build}=require(path.join(tools,'esbuild')),{chromium}=require(path.join(tools,'playwright'));
 const root=path.resolve(__dirname,'..'),mobile=path.join(root,'mobile'),scratch=fs.mkdtempSync(path.join(os.tmpdir(),'linkup-builder-browser-'));
 const source=`import React from 'react';import {createRoot} from 'react-dom/client';import Screen from '${mobile}/src/screens/BuilderWorkspaceScreen.tsx';
+import {habitSnapshot} from '${root}/shared/build-habit.js';
 window.calls=[];const now=Date.now();const s={context:{project:'',stage:'',goal:'',needs:'',skills:'',constraints:'',intent:'build'},prefs:{inApp:true,timezone:'UTC',quietStart:20,quietEnd:8},availability:{enabled:false,purpose:''},goals:[],followups:[],coachRuns:[],momentumDays:[]};
 const rooms=[],asks=[];let quota=15;
 const brief=()=>({next:{label:s.context.project?'Choose one outcome for this week':'Tell Linky what you are building',section:'Plan'},completed:s.goals.filter(g=>g.doneAt).length,due:0,roomUpdates:0,invitations:0,momentumDays:0});
 window.builderCall=async(op,input={})=>{window.calls.push({op,input});
+ if(op==='habit')return habitSnapshot({},now,s.prefs);
  if(op==='visit'||op==='home')return {state:structuredClone(s),brief:brief(),rooms:structuredClone(rooms),invitations:[],messageQuota:{remaining:quota,period:'month'}};
  if(op==='weeklyReview')return {review:{summary:'No completed outcomes yet.',completed:[],opportunities:[],meaningful:false,scope:'Offline browser adapter — no production data'}};
  if(op==='context'){s.context={...s.context,...input};return {ok:true};}

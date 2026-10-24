@@ -1,3 +1,5 @@
+import {createHabitActions} from './_builderHabit.js';
+import {habitSnapshot,habitState} from '../shared/build-habit.js';
 import {DAY,id,clean,requireText,problem,validId,safeLink,stateOf,freshState,contextOf,sanitizePrefs,weekKey,localTime,brief,relevantPeople,coachPrompt,nextDelivery,relevantLeads,weeklySummary} from './_builderCore.js';
 import {publicEligible} from './_publicSeo.js';
 import {reserveMessage,refundMessage,readMessageQuota} from './_linkyUsage.js';
@@ -7,6 +9,7 @@ const fields=['displayName','fullName','name','occupation','skills','industries'
 const row=d=>({id:d.id,...d.data()});
 const ownId=value=>{if(!validId(value))throw problem('Invalid item identifier.');return value;};
 export function createBuilderService({db,now=Date.now,generate,plus=async()=>false,push=async()=>({sent:0})}){
+ const habits=createHabitActions({db,now});
  const ref=uid=>db.collection('builderStates').doc(uid);
  async function state(uid){const d=await ref(uid).get();return stateOf(d.exists?d.data():{},now());}
  async function change(uid,edit){return db.runTransaction(async tx=>{const d=await tx.get(ref(uid));const s=stateOf(d.exists?d.data():{},now());const result=edit(s);s.updatedAt=now();tx.set(ref(uid),s);return result===undefined?s:result;});}
@@ -114,7 +117,7 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
    const [cd,ud,sd]=await Promise.all([tx.get(cr),tx.get(ur),tx.get(ref(uid))]);
    if(!ud.exists||ud.data().deleted||ud.data().banned||ud.data().onboarded!==true)throw problem('Your profile is no longer available.',403);
    const c=cd.exists?cd.data():{days:[],updates:[],points:0,totalUpdates:0},previous=(c.updates||[]).find(u=>u.key===key);
-   if(previous){if(previous.text!==text||previous.link!==link)throw problem('This request was already used for a different update.',409);return {...previous,days:c.days,contributionPoints:c.points,totalUpdates:c.totalUpdates,shipLogs:contributionHistory(c,ud.data()),today:day,replayed:true};}
+   if(previous){if(previous.text!==text||previous.link!==link)throw problem('This request was already used for a different update.',409);return {...previous,days:c.days,contributionPoints:c.points,totalUpdates:c.totalUpdates,shipLogs:contributionHistory(c,ud.data()),today:day,habit:habitSnapshot(c,at,sd.data()?.prefs),replayed:true};}
    if(c.lastDay===day)throw problem('Your contribution is already recorded today; your next square opens at midnight UTC.',409);
    if((c.updates||[]).some(u=>normalizeUpdate(u.text)===normalizeUpdate(text)))throw problem('This update is already recorded; share a new result or next step.',409);
    const entry={id:id(),key,text,link,createdAt,day,pointsAwarded:CONTRIBUTION_POINTS,insight:contributionInsight(text)},cutoff=contributionDay(at-(CONTRIBUTION_HISTORY_DAYS-1)*DAY);
@@ -123,10 +126,11 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
    // New text/insights stay private in the server-owned collection, never in
    // public profile fields. Neither activity nor posting grants verification.
    const shipLogs=contributionHistory({updates},ud.data());
-   const state=stateOf(sd.data(),at);state.momentumDays=[...new Set([...state.momentumDays,localTime(at,state.prefs.timezone).day])].slice(-90);state.updatedAt=at;
-   tx.set(cr,{version:1,days,updates,points,totalUpdates,lastDay:day,updatedAt:at});
+   const habit=habitState(c),rest=habit.rests.find(r=>r.day===day);if(rest?.kind==='token'){if(habit.tokens<3)habit.tokens++;else habit.credits+=20;}habit.rests=habit.rests.filter(r=>r.day!==day);
+   const state=stateOf(sd.data(),at);state.momentumDays=[...new Set([...state.momentumDays,localTime(at,state.prefs.timezone).day])].slice(-90);state.updatedAt=at;state.buildReminderCount=0;
+   tx.set(cr,{version:1,days,updates,points,totalUpdates,lastDay:day,habit,updatedAt:at});
    tx.set(ref(uid),state);
-   return {...entry,days,contributionPoints:points,totalUpdates,shipLogs,today:day,replayed:false};
+   return {...entry,days,contributionPoints:points,totalUpdates,shipLogs,today:day,habit:habitSnapshot({days,totalUpdates,habit},at,state.prefs),replayed:false};
   });
  }
  async function handle(uid,op,input={}){
@@ -136,11 +140,13 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
   const me=await db.collection('users').doc(uid).get();if(!me.exists||me.data().deleted||me.data().banned||me.data().onboarded!==true)throw problem('Finish your profile before opening the builder workspace.',403);
   // Bounded server-owned request counter, separate from the paid AI ledger.
   await db.runTransaction(async tx=>{const r=db.collection('builderRates').doc(uid),d=await tx.get(r),v=d.exists?d.data():{};const key=Math.floor(now()/60000),count=v.key===key?v.count:0;if(count>=60)throw problem('Please pause for a moment before trying again.',429);tx.set(r,{key,count:count+1});});
+  if(op==='habit')return habits.read(uid);
+  if(['habitPrefs','habitRest','habitToken'].includes(op))return habits.act(uid,op,input);
   if(op==='contributions')return contributionData(uid,input.targetUid?ownId(input.targetUid):uid);
   if(op==='shipUpdate')return publishContribution(uid,input);
   if(['home','visit'].includes(op))return loadHome(uid,op);
   if(op==='context'){await change(uid,s=>{const context=contextOf(input);if(context.project!==s.context.project||context.goal!==s.context.goal||context.needs!==s.context.needs)s.feedback={};s.context=context;});await event(uid,'context_set');return {ok:true};}
-  if(op==='prefs'){await change(uid,s=>{s.prefs=sanitizePrefs(input,s.prefs);});return {ok:true,emailAvailable:false};}
+  if(op==='prefs'){await change(uid,s=>{const before=s.prefs.dailyBuild;s.prefs=sanitizePrefs(input,s.prefs);if(s.prefs.dailyBuild&&!before){s.prefs.buildOptInDay=contributionDay(now());s.buildReminderCount=0;}});return {ok:true,emailAvailable:false};}
   if(op==='goal'){
    const text=requireText(input.text,300,4);await change(uid,s=>{const week=weekKey(now(),s.prefs.timezone);s.goals=[{id:id(),text,week,at:now(),doneAt:0},...s.goals.filter(g=>g.week!==week||g.doneAt)].slice(0,24);});await event(uid,'goal_set');return {ok:true};
   }
@@ -211,14 +217,14 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
   if(['askClose','askFeedback','askFeedbackStatus'].includes(op)){
    const ar=db.collection('builderAsks').doc(ownId(input.id)),first=await ar.get();if(!first.exists)throw problem('Request not found.',404);
    const ownerDoc=await db.collection('users').doc(first.data().ownerId).get();if(first.data().ownerId!==uid&&(!ownerDoc.exists||!publicEligible(ownerDoc.data(),first.data().ownerId)||await blocked(uid,first.data().ownerId)))throw problem('This request is unavailable.',403);
-   const recognized=await db.runTransaction(async tx=>{let recognizedUid='';const doc=await tx.get(ar),a=doc.data();if(op==='askClose'){if(a.ownerId!==uid)throw problem('Only the author can close a request.',403);a.status='closed';a.closedAt=now();}
+   const recognized=await db.runTransaction(async tx=>{let recognizedUid='';let reward=null;const doc=await tx.get(ar),a=doc.data();if(op==='askClose'){if(a.ownerId!==uid)throw problem('Only the author can close a request.',403);a.status='closed';a.closedAt=now();}
     if(op==='askFeedback'){if(a.status!=='open'||a.expiresAt<=now()||a.ownerId===uid)throw problem('This request cannot receive your feedback.');if(a.feedback.length>=40||a.feedback.some(f=>f.authorId===uid))throw problem('Feedback already exists or this round is full.');a.feedback.push({id:id(),authorId:uid,authorName:clean(me.data().displayName||me.data().fullName||me.data().name,100),text:requireText(input.text,1200,12),at:now(),useful:false});}
-    if(op==='askFeedbackStatus'){if(a.ownerId!==uid)throw problem('Only the author can recognise feedback.',403);const f=a.feedback.find(f=>f.id===input.feedbackId);if(!f)throw problem('Feedback not found.',404);if(!f.useful)recognizedUid=f.authorId;f.useful=true;f.outcome=requireText(input.outcome,300,4);}
-    a.feedbackAuthorIds=[...new Set(a.feedback.map(f=>f.authorId))];tx.set(ar,a);return recognizedUid;});if(validId(recognized)){const author=await db.collection('users').doc(recognized).get();if(author.exists&&!author.data().deleted)await change(recognized,s=>{s.momentumDays=[...new Set([...s.momentumDays,localTime(now(),s.prefs.timezone).day])].slice(-90);});}await event(uid,op);return {ok:true};
+    if(op==='askFeedbackStatus'){if(a.ownerId!==uid)throw problem('Only the author can recognise feedback.',403);const f=a.feedback.find(f=>f.id===input.feedbackId);if(!f)throw problem('Feedback not found.',404);const outcome=requireText(input.outcome,300,4);if(!f.useful){recognizedUid=f.authorId;reward=await habits.rewardFeedback(tx,{...a,id:ar.id},f,uid,outcome);f.reward={amount:reward.amount,at:now()};}f.useful=true;f.outcome=outcome;}
+    a.feedbackAuthorIds=[...new Set(a.feedback.map(f=>f.authorId))];tx.set(ar,a);return {uid:recognizedUid,reward};});if(validId(recognized.uid)){const author=await db.collection('users').doc(recognized.uid).get();if(author.exists&&!author.data().deleted)await change(recognized.uid,s=>{s.momentumDays=[...new Set([...s.momentumDays,localTime(now(),s.prefs.timezone).day])].slice(-90);});}await event(uid,op);return {ok:true,reward:recognized.reward};
   }
-  if(op==='export'){const s=await state(uid);return {state:s,notice:'Shared room content is visible to accepted members. Private building context and notes are never part of the public profile.'};}
+  if(op==='export'){const s=await state(uid);return {state:s,contributions:await contributionData(uid,uid),habit:await habits.read(uid),notice:'Shared room content is visible to accepted members. Private building context and notes are never part of the public profile.'};}
   if(op==='forget'){
-   await change(uid,s=>{const prefs={...s.prefs,reminders:false,digest:false,friday:false,push:false};Object.keys(s).forEach(k=>delete s[k]);Object.assign(s,freshState(now()),{prefs});});return {ok:true,notice:'Private context, notes and saved reviews cleared. Shared rooms and posted feedback remain shared; archive rooms or close requests separately.'};
+   await change(uid,s=>{const prefs={...s.prefs,reminders:false,digest:false,friday:false,push:false,dailyBuild:false};Object.keys(s).forEach(k=>delete s[k]);Object.assign(s,freshState(now()),{prefs});});return {ok:true,notice:'Private context, notes and saved reviews cleared. Shared rooms and posted feedback remain shared; archive rooms or close requests separately.'};
   }
   throw problem('Unsupported builder action.');
  }
@@ -230,13 +236,17 @@ export function createBuilderService({db,now=Date.now,generate,plus=async()=>fal
    const needsReview=eligibleReview&&((prior.prefs.friday&&prior.lastFriday!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Fri'&&clock.hour>=9&&clock.hour<19)||(prior.prefs.digest&&prior.lastDigest!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Sun'&&clock.hour>=17&&clock.hour<20));
    const review=needsReview?await reviewFor(d.id,prior):null;
    let delivery=null,prefs;
-   await db.runTransaction(async tx=>{delivery=null;prefs=null;const fresh=await tx.get(d.ref),s=stateOf(fresh.data(),now());if(review&&(s.epoch!==prior.epoch||s.updatedAt!==prior.updatedAt))return;const n=nextDelivery(s,now(),review);if(!n)return;
-    const nr=db.collection('notifications').doc('builder_'+d.id+'_'+n.key),previous=await tx.get(nr);if(previous.exists)return;
-    prefs=s.prefs;delivery=n;s.lastDeliveryAt=now();if(n.key.startsWith('followup'))s.followups=s.followups.map(f=>f.status==='open'&&f.dueAt<=now()?{...f,notifiedAt:now()}:f);if(n.key.startsWith('digest'))s.lastDigest=weekKey(now(),s.prefs.timezone);if(n.key.startsWith('friday')){s.lastFriday=weekKey(now(),s.prefs.timezone);s.deliveredOpportunityKeys=[...new Set([...(s.deliveredOpportunityKeys||[]),...review.newOpportunities.map(o=>o.key)])].slice(-100);}if(review)s.latestSummary={...review,summaryAt:now()};
-    tx.set(d.ref,s);if(prefs.inApp)tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',fromPic:'',type:'builder',content:n.content,section:n.section,serverPushManaged:true,pushRequested:prefs.push,...(review?{builderSummary:review.summary}:{}),isRead:false,timestamp:new Date(now())});
+   await db.runTransaction(async tx=>{delivery=null;prefs=null;const fresh=await tx.get(d.ref),s=stateOf(fresh.data(),now()),contrib=s.prefs.dailyBuild?(await tx.get(db.collection('builderContributions').doc(d.id))).data()||{}:{};if(review&&(s.epoch!==prior.epoch||s.updatedAt!==prior.updatedAt))return;const n=nextDelivery(s,now(),review,contrib);if(!n)return;
+    const nr=db.collection('notifications').doc('builder_'+d.id+'_'+n.key);if(n.kind==='build'){if((habitState(contrib).nudges||[]).some(v=>v.key===n.key))return;}else if((await tx.get(nr)).exists)return;
+    prefs={...s.prefs};delivery=n;s.lastDeliveryAt=now();if(n.kind==='build'){s.buildReminderCount=(s.buildReminderCount||0)+1;if(n.pause)s.prefs.dailyBuild=false;}if(n.key.startsWith('followup'))s.followups=s.followups.map(f=>f.status==='open'&&f.dueAt<=now()?{...f,notifiedAt:now()}:f);if(n.key.startsWith('digest'))s.lastDigest=weekKey(now(),s.prefs.timezone);if(n.key.startsWith('friday')){s.lastFriday=weekKey(now(),s.prefs.timezone);s.deliveredOpportunityKeys=[...new Set([...(s.deliveredOpportunityKeys||[]),...review.newOpportunities.map(o=>o.key)])].slice(-100);}if(review)s.latestSummary={...review,summaryAt:now()};
+    tx.set(d.ref,s);
+    // Private habit inbox avoids legacy notifications triggers: only this service
+    // sends build pushes, and only with explicit push permission.
+    if(n.kind==='build'){const h=habitState(contrib);h.nudges=[{key:n.key,content:n.content,at:now(),url:'/ship'},...(h.nudges||[])].slice(0,10);tx.set(db.collection('builderContributions').doc(d.id),{...contrib,habit:h,updatedAt:now()});}
+    else if(prefs.inApp)tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',fromPic:'',type:'builder',content:n.content,section:n.section,serverPushManaged:true,pushRequested:prefs.push,...(review?{builderSummary:review.summary}:{}),isRead:false,timestamp:new Date(now())});
     else tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',type:'builder',content:n.content,section:n.section,serverPushManaged:true,pushRequested:prefs.push,...(review?{builderSummary:review.summary}:{}),isRead:true,timestamp:new Date(now())});
    });
-   if(delivery){delivered++;if(prefs.push){const nr=db.collection('notifications').doc('builder_'+d.id+'_'+delivery.key);try{const result=await push(d.id,{title:'LINKUP · Your next move',body:'Your private building update is ready. Open LINKUP to review it.',url:'/builder?section='+encodeURIComponent(delivery.section)});await nr.set({pushStatus:result?.sent>0?'provider_accepted':'not_accepted',pushAttemptAt:now()},{merge:true});}catch{await nr.set({pushStatus:'failed',pushAttemptAt:now()},{merge:true});}}}
+   if(delivery){delivered++;if(prefs.push){const nr=delivery.kind==='build'?db.collection('builderContributions').doc(d.id):db.collection('notifications').doc('builder_'+d.id+'_'+delivery.key);const status=delivery.kind==='build'?v=>({buildPushStatus:{key:delivery.key,...v}}):v=>v;try{const result=await push(d.id,{title:'LINKUP · Your next move',body:delivery.kind==='build'?delivery.content:'Your private building update is ready. Open LINKUP to review it.',url:delivery.kind==='build'?'/ship':'/builder?section='+encodeURIComponent(delivery.section)});await nr.set(status({pushStatus:result?.sent>0?'provider_accepted':'not_accepted',pushAttemptAt:now()}),{merge:true});}catch{await nr.set(status({pushStatus:'failed',pushAttemptAt:now()}),{merge:true});}}}
   }return {delivered,nextCursor:docs.length===Math.min(40,limit)?docs.at(-1).id:null};
  }
  return {handle,runReminderPage};

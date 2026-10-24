@@ -5,8 +5,9 @@ const tools=process.env.BUILDER_BROWSER_TOOLS||path.resolve('node_modules');
 const {build}=require(path.join(tools,'esbuild')),{chromium}=require(path.join(tools,'playwright'));
 const mobile=path.resolve(__dirname,'../mobile'),scratch=fs.mkdtempSync(path.join(os.tmpdir(),'linkup-contribution-'));
 const source=`import React from 'react';import {createRoot} from 'react-dom/client';import Screen from '${mobile}/src/screens/ShipLogScreen.tsx';import Calendar from '${mobile}/src/components/ContributionCalendar.tsx';import {contributionInsight} from '${path.resolve(__dirname,'../shared/contributions.js')}';
+import {habitSnapshot} from '${path.resolve(__dirname,'../shared/build-habit.js')}';
 window.calls=[];const day=new Date().toISOString().slice(0,10),state={days:[],points:0,totalUpdates:0,today:day,updates:[],shipLogs:[]};
-window.builderCall=async(op,input={})=>{window.calls.push({op,input});if(op==='contributions'){if(input.targetUid==='blocked')throw Error('This contribution calendar is not available.');return structuredClone(state);}
+window.builderCall=async(op,input={})=>{window.calls.push({op,input});if(op==='habit')return habitSnapshot(state,Date.now());if(op==='contributions'){if(input.targetUid==='blocked')throw Error('This contribution calendar is not available.');return structuredClone(state);}
 if(op==='shipUpdate'){if(state.updates.length)return {...state.updates[0],days:state.days,contributionPoints:10,totalUpdates:1,shipLogs:state.shipLogs,replayed:true};const entry={...input,id:'recorded-update',day,createdAt:new Date().toISOString(),pointsAwarded:10,insight:contributionInsight(input.text)};Object.assign(state,{days:[day],points:10,totalUpdates:1,updates:[entry],shipLogs:[entry]});return {...entry,days:[day],contributionPoints:10,totalUpdates:1,shipLogs:[entry],replayed:false};}throw Error('Unexpected test action: '+op);};
 const root=createRoot(document.getElementById('root'));root.render(<Screen navigation={{goBack(){},navigate(name,params){window.navigationResult={name,params};}}}/>);window.showBlockedCalendar=()=>root.render(<Calendar userId="blocked"/>);`;
 (async()=>{let browser,server;try{

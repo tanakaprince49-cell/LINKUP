@@ -43,6 +43,10 @@
     ],
     [
       "navigate",
+      "ShipLog"
+    ],
+    [
+      "navigate",
       "BuilderWorkspace"
     ],
     [

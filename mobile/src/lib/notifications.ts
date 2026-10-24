@@ -110,6 +110,7 @@ function notificationBody(data: any) {
 }
 
 function notificationTargetUrl(data: any) {
+  if (data?.type === 'builder' && data.builderAction === 'ship') return '/ship';
   if (data?.type === 'builder') return '/builder?section='+encodeURIComponent(String(data.section || 'Today'));
   if (data?.matchId) return `/chat/${data.matchId}`;
   if (data?.type === 'game_challenge') {

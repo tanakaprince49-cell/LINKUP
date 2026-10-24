@@ -7,6 +7,7 @@ import {useTheme} from '../contexts/ThemeContext';
 import {COLORS,appBackground,textColor} from '../theme/theme';
 import {normalizeShipLogs} from '../lib/dailyLoop';
 import {builderCall,coachRequestKey} from '../lib/builder';
+import BuildHabitCard from '../components/BuildHabitCard';
 import ContributionCalendar from '../components/ContributionCalendar';
 import ScreenHeader from '../components/ScreenHeader';
 import VerifiedBadge from '../components/VerifiedBadge';
@@ -39,7 +40,7 @@ export default function ShipLogScreen({navigation}:any){
    ListHeaderComponent={<View style={{gap:16}}>
     {receipt&&<View accessibilityRole="alert" style={[styles.insight,{backgroundColor:dark?'#203B28':'#EBF6D9',borderColor:dark?'#527445':'#BED796'}]}>
      <View style={styles.row}><Text style={[styles.insightTitle,{color:ink}]}>Linky</Text><VerifiedBadge size={16}/><Text style={[styles.reward,{color:ink}]}>+{receipt.pointsAwarded} contribution pts{receipt.replayed?' · already recorded':''}</Text></View>
-     <Text style={[styles.insightText,{color:ink}]}>{receipt.insight}</Text><Text style={{color:muted,fontSize:11}}>Instant topic-based coaching · no chat credit used · not a code audit</Text>
+     <Text style={[styles.insightText,{color:ink}]}>{receipt.insight}</Text>{[1,3,7,14,30,50,100,365].includes(receipt.habit?.totalUpdates)&&<Text style={{color:ink,fontWeight:'900'}}>Milestone unlocked · {receipt.habit.totalUpdates} recorded build {receipt.habit.totalUpdates===1?'day':'days'}</Text>}<Text style={{color:muted,fontSize:11}}>Instant topic-based coaching · no chat credit used · not a code audit</Text>
      <TouchableOpacity accessibilityRole="button" onPress={()=>navigation.navigate('BuilderWorkspace',{section:'Coach',coachKind:'blocker',material:receipt.text})}><Text style={{color:ink,fontWeight:'800',marginTop:6}}>Go deeper with Linky · uses your existing allowance →</Text></TouchableOpacity>
     </View>}
     <View style={[styles.composer,panel]}>
@@ -51,6 +52,7 @@ export default function ShipLogScreen({navigation}:any){
      <TouchableOpacity accessibilityRole="button" accessibilityLabel={doneToday?'Today’s square is lit':'Publish update · earn 10 contribution points'} onPress={()=>void submit()} disabled={saving||loading||doneToday} style={[styles.button,{opacity:saving||loading||doneToday?0.6:1}]}>{saving?<ActivityIndicator color="#183522"/>:<Text style={styles.buttonText}>{doneToday?'Today’s square is lit':'Publish update · +10 contribution points'}</Text>}</TouchableOpacity>
      <Text style={{fontSize:11,lineHeight:17,color:muted}}>One rewarded update per UTC day. Retries never double-count. No missed-day penalties or automatic skill badges.</Text>
     </View>
+    <BuildHabitCard navigation={navigation} isDark={dark} refreshKey={`${summary?.today||''}:${summary?.points||0}`}/>
     {user?.uid&&<ContributionCalendar userId={user.uid} isDark={dark} snapshot={summary||undefined}/>}
     <Text style={[styles.historyTitle,{color:ink}]}>Your build history</Text>
    </View>}

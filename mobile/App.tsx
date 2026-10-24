@@ -474,6 +474,8 @@ function AppContent() {
     if (!navigationRef.isReady()) return;
     const targetUrl = String(data?.url || data?.targetUrl || '');
 
+    if (targetUrl === '/ship' || targetUrl.startsWith('/ship?')) { navigationRef.navigate('ShipLog'); return; }
+
     if (targetUrl.startsWith('/builder') || data?.type === 'builder') {
       const section = new URL(targetUrl || '/builder', 'https://www.linkupbuild.com').searchParams.get('section') || 'Today';
       navigationRef.navigate('BuilderWorkspace', {section});

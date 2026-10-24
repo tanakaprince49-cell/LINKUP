@@ -1,3 +1,4 @@
+import BuildHabitCard from '../components/BuildHabitCard';
 import LinkyRichText from '../components/LinkyRichText';
 import { linkyShortlist } from '../lib/linkyShortlist';
 import VerifiedBadge from '../components/VerifiedBadge';
@@ -939,6 +940,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
             {!pendingAsk && !answer && !turns.length ? (
               <View style={styles.emptyState}>
+                <BuildHabitCard navigation={navigation} isDark={isDark} compact/>
                 <View style={styles.welcome}>
                   <View style={styles.brandOrbit}>
                     <View style={[styles.orbitDot,{left:0,top:16,backgroundColor:'#BBDDB0'}]} />

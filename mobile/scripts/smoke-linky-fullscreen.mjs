@@ -4,7 +4,7 @@ import fs from 'node:fs';import path from 'node:path';import http from 'node:htt
 import esbuild from 'esbuild';
 import {chromium} from 'playwright';
 import {fileURLToPath} from 'node:url';
-const root=fileURLToPath(new URL('../../',import.meta.url)).replace(/\/$/,''), mobile=root+'/mobile', qa=root+'/docs/qa';fs.mkdirSync(qa,{recursive:true});
+const root=fileURLToPath(new URL('../../',import.meta.url)).replace(/\/$/,''), mobile=root+'/mobile', qa=process.env.LINKY_SCREENSHOT_DIR||root+'/docs/qa';fs.mkdirSync(qa,{recursive:true});
 const uid='FvxIfciyHMfQZbLwziZpseMNKxC3';
 const home={name:'Tanaka',plus:false,cards:[],inbound:[{id:'fixture-intro',requesterId:uid,requesterName:'Tanaka Gaadzikwa',requesterRole:'Founder',need:'A relevant collaboration',why:'Fixture data only',status:'pending'}],pending:{},prefs:{openTo:['paid'],inboundCap:5},thread:[],lastAsk:null,outreach:[],limits:{asksPerDay:15,asksUsedToday:0,asksPeriod:'month',asksResetAt:'2099-01-01T00:00:00.000Z'},messageQuota:{period:'month',periodKey:'fixture-month',limit:15,used:0,remaining:15,resetAt:'2099-01-01T00:00:00.000Z',exhausted:false,upgradeRequired:false}};
 const fixture=`const h=${JSON.stringify(home)};if(location.search.includes('history=1'))h.thread=Array.from({length:24},(_,i)=>({id:'history-'+i,role:i%2?'linky':'user',text:(i===23?'Latest restored reply.':'Earlier conversation '+i+'. ')+('A grounded reply with useful context. '.repeat(3)),at:i+1}));export class LinkyApiError extends Error{};export async function linkyHome(){return h;}export async function linkyAsk(message){
@@ -25,6 +25,7 @@ const mocks={
  'AuthContext':`export const useAuth=()=>({user:{uid:'${uid}'},profile:{uid:'${uid}',isVerified:true}});`,
  'ThemeContext':`export const useTheme=()=>({theme:location.search.includes('dark=1')?'dark':'light'});`,
  'linkyApi':fixture,
+ 'builder':`import {habitSnapshot} from '${root}/shared/build-habit.js';export const builderCall=async()=>habitSnapshot({},Date.now());export const coachRequestKey=()=>crypto.randomUUID();`,
  'appReview':'export const recordReviewAction=async()=>{};',
  'notify':`export const notifyUser=(...a)=>console.log('Fixture notification',...a);`,
  'PaywallModal':'export default function PaywallModal(){return null;}',
