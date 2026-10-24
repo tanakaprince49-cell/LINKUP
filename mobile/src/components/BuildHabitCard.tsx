@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Linking,StyleSheet,Switch,Text,TouchableOpacity,View} from 'react-native';
 import {useAuth} from '../contexts/AuthContext';
 import {useIsFocused} from '@react-navigation/native';
+import {momentumVisibilityChanged} from '../lib/momentumEvents';
 import {builderCall,coachRequestKey} from '../lib/builder';
 export default function BuildHabitCard({navigation,isDark=false,compact=false,refreshKey=''}:{navigation:any;isDark?:boolean;compact?:boolean;refreshKey?:string}){
  const {user}=useAuth(),uid=user?.uid;
@@ -11,7 +12,7 @@ export default function BuildHabitCard({navigation,isDark=false,compact=false,re
  useEffect(()=>{purchase.current=null;setH(null);},[uid]);
  useEffect(()=>{if(!focused||!uid)return;const g=++generation.current;setError('');void builderCall('habit').then(r=>{if(g===generation.current)setH({...r,owner:uid});}).catch(e=>{if(g===generation.current)setError(e.message||'Could not load your build rhythm.');});return()=>{generation.current++;};},[focused,refreshKey,reload,uid]);
  useEffect(()=>{if(!focused)return;const timer=setTimeout(()=>setReload(n=>n+1),86400000-Date.now()%86400000+500);return()=>clearTimeout(timer);},[focused,h?.today]);
- const act=async(op:string,input:any={})=>{if(busy||!uid)return;setBusy(true);setError('');const g=generation.current;try{const r=await builderCall(op,input);if(g===generation.current)setH({...r,owner:uid});if(op==='habitToken')purchase.current=null;}catch(e:any){if(g===generation.current)setError(e.message||'Please retry.');}finally{setBusy(false);}};
+ const act=async(op:string,input:any={})=>{if(busy||!uid)return;setBusy(true);setError('');const g=generation.current;try{const r=await builderCall(op,input);if(g===generation.current){setH({...r,owner:uid});if(op==='habitPrefs'&&'publicMomentum'in input)momentumVisibilityChanged(uid);}if(op==='habitToken')purchase.current=null;}catch(e:any){if(g===generation.current)setError(e.message||'Please retry.');}finally{setBusy(false);}};
  const ink=isDark?'#F4F5F7':'#0A0B0D',muted=isDark?'#A8B0BD':'#575B60';
  const label=(s:string)=> <Text style={{color:muted,fontSize:13,lineHeight:20}}>{s}</Text>;
  const button=(title:string,onPress:()=>void,disabled=false)=> <TouchableOpacity accessibilityRole="button" accessibilityLabel={title} disabled={busy||disabled} onPress={onPress} style={[styles.button,{opacity:(busy||disabled)?0.5:1}]}><Text style={{color:'#0A0B0D',fontWeight:'800',fontSize:13,textAlign:'center'}}>{title}</Text></TouchableOpacity>;

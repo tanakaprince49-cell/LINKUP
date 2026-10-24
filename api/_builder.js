@@ -11,7 +11,7 @@ const row=d=>({id:d.id,...d.data()});
 const ownId=value=>{if(!validId(value))throw problem('Invalid item identifier.');return value;};
 export function createBuilderService({db,now=Date.now,plus=async()=>false,push=async()=>({sent:0})}){
  const habits=createHabitActions({db,now});
- const groups=createGroupService({db,now,blocked,connectable,notify});
+ const groups=createGroupService({db,now,blocked,connectable,notify,plus});
  const ref=uid=>db.collection('builderStates').doc(uid);
  async function state(uid){const d=await ref(uid).get();return stateOf(d.exists?d.data():{},now());}
  async function change(uid,edit){return db.runTransaction(async tx=>{const d=await tx.get(ref(uid));const s=stateOf(d.exists?d.data():{},now());const result=edit(s);s.updatedAt=now();tx.set(ref(uid),s);return result===undefined?s:result;});}
@@ -32,10 +32,10 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   const names=await db.getAll(...d.data().memberIds.map(k=>db.collection('users').doc(k)),{fieldMask:['displayName','fullName','name','deleted']});
   return {...row(d),members:names.map(n=>({uid:n.id,name:n.exists&&!n.data().deleted?clean(n.data().displayName||n.data().fullName||n.data().name,100):'Former member'}))};
  }
- async function notify(uid,key,section,content,enabledPush=false){
+ async function notify(uid,key,section,content,enabledPush=false,targetUrl=''){
   const n=db.collection('notifications').doc('builder_'+uid+'_'+key);
-  const created=await db.runTransaction(async tx=>{const d=await tx.get(n);if(d.exists)return false;tx.set(n,{userId:uid,fromId:uid,fromName:'Linky',fromPic:'',type:'builder',content,section,serverPushManaged:true,pushRequested:enabledPush,isRead:false,timestamp:new Date(now())});return true;});
-  if(created&&enabledPush)await push(uid,{title:'LINKUP · Your next move',body:content,url:'/builder?section='+encodeURIComponent(section)});
+  const created=await db.runTransaction(async tx=>{const d=await tx.get(n);if(d.exists)return false;tx.set(n,{userId:uid,fromId:uid,fromName:'Linky',fromPic:'',type:'builder',content,section,...(targetUrl?{targetUrl,url:targetUrl}:{}),serverPushManaged:true,pushRequested:enabledPush,isRead:false,timestamp:new Date(now())});return true;});
+  if(created&&enabledPush)await push(uid,{title:'LINKUP · Your next move',body:content,url:targetUrl||'/builder?section='+encodeURIComponent(section)});
  }
  async function event(uid,type){
   // One bounded audit document per user; analytics must never refund a finished AI review.
@@ -92,7 +92,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   const own=target===uid,person=await db.collection('users').doc(target).get();
   if(!person.exists||person.data().deleted||person.data().banned||(!own&&(!publicEligible(person.data(),target)||await blocked(uid,target))))throw problem('This contribution calendar is not available.',403);
   const d=await db.collection('builderContributions').doc(target).get(),c=d.exists?d.data():{};
-  return {days:Array.isArray(c.days)?c.days:[],points:Number(c.points)||0,totalUpdates:Number(c.totalUpdates)||0,timezone:'UTC',today:contributionDay(now()),
+  return {days:Array.isArray(c.days)?c.days:[],points:Number(c.points)||0,totalUpdates:Number(c.totalUpdates)||0,publicMomentum:c.publicMomentum===true,publicUrl:c.publicMomentum===true?'https://www.linkupbuild.com/app/momentum/'+encodeURIComponent(target):'',timezone:'UTC',today:contributionDay(now()),
    ...(own?{updates:c.updates||[],shipLogs:contributionHistory(c,person.data())}:{}),
    notice:'Self-reported progress, recorded by LINKUP; not proof of skill, trust, verification or investment quality.'};
  }
@@ -128,7 +128,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   const me=await db.collection('users').doc(uid).get();if(!me.exists||me.data().deleted||me.data().banned||me.data().onboarded!==true)throw problem('Finish your profile before opening the builder workspace.',403);
   // Bounded server-owned request counter, separate from the paid AI ledger.
   await db.runTransaction(async tx=>{const r=db.collection('builderRates').doc(uid),d=await tx.get(r),v=d.exists?d.data():{};const key=Math.floor(now()/60000),count=v.key===key?v.count:0;if(count>=60)throw problem('Please pause for a moment before trying again.',429);tx.set(r,{key,count:count+1});});
-  if(['groups','groupCreate','groupGet','groupMessages','groupSend','groupRead','groupInvite','groupRespond','groupAction','groupExport'].includes(op))return groups.handle(uid,op,input);
+  if(['groups','groupCreate','groupGet','groupMessages','groupSend','groupRead','groupInvite','groupRespond','groupAction','groupExport','groupUpdate','groupMessageAction','groupPrefs','groupBlock'].includes(op))return groups.handle(uid,op,input);
   if(op==='habit')return habits.read(uid);
   if(['habitPrefs','habitRest','habitToken'].includes(op))return habits.act(uid,op,input);
   if(op==='contributions')return contributionData(uid,input.targetUid?ownId(input.targetUid):uid);

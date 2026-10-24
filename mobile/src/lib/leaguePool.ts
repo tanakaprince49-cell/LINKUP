@@ -1,6 +1,6 @@
-import {fetchActivityLeague} from './activityLeague';
-// No cached/stale private profiles, raw users scans, fake attention heat or paid boosts.
+import {fetchBuilderLeague} from './activityLeague';
+// Real eligible profiles; public activity publication is not required.
 export const invalidateLeaguePoolCache=()=>{};
 export const loadLeaguePool=async(_options:{force?:boolean}={}):Promise<any[]>=>{
- const board=await fetchActivityLeague('week');return board.rows.map((r:any)=>({...r,displayName:r.name,leagueRecorded:true,leaguePoints:r.points,profilePic:'',photos:[],skills:[],industries:[],lookingFor:[],onboarded:true,isVisible:true,isVerified:r.verified}));
+ const board=await fetchBuilderLeague();return board.rows.map((r:any)=>({...r,displayName:r.name,leagueKind:'builders',leagueRecorded:true,leaguePoints:r.points,profilePic:r.image||'',photos:[],industries:[],onboarded:true,isVisible:true,isVerified:r.verified}));
 };

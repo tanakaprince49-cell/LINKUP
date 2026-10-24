@@ -1,0 +1,31 @@
+import {readFileSync} from 'node:fs';
+import {Resvg} from '@resvg/resvg-js';
+import {momentumCardStats} from '../shared/momentum-card.js';
+import {calendarWeeks} from '../shared/contributions.js';
+import {isGoldMember} from '../shared/member-badges.js';
+import {selectProfileImage,decodeProfileImage} from './_publicProfileImage.js';
+const esc=v=>String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
+const safeUrl=v=>{try{const u=new URL(v);return u.protocol==='https:'&&!u.username&&!u.password?u.href:'';}catch{return '';}};
+const allowedHost=h=>h==='ik.imagekit.io'||h==='firebasestorage.googleapis.com'||h==='storage.googleapis.com'||h==='lh3.googleusercontent.com'||/^lh[1-6]\.googleusercontent\.com$/.test(h);
+// No arbitrary photo proxy: fixed public-CDN allowlist, no redirects, bounded
+// response and timeout. Unsupported hosts use the member's initial instead.
+export function safeCardRaster(bytes){
+ let w=0,h=0;try{if(bytes.length>=24&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))){w=bytes.readUInt32BE(16);h=bytes.readUInt32BE(20);}
+ else if(bytes[0]===255&&bytes[1]===216){for(let p=2;p+4<bytes.length;){if(bytes[p++]!==255)break;while(bytes[p]===255)p++;const marker=bytes[p++];if(marker===217||marker===218)break;if(marker===1||(marker>=208&&marker<=215))continue;const len=bytes.readUInt16BE(p);if(len<2||p+len>bytes.length)break;if([192,193,194,195,197,198,199,201,202,203,205,206,207].includes(marker)&&len>=8){h=bytes.readUInt16BE(p+3);w=bytes.readUInt16BE(p+5);break;}p+=len;}}
+ else if(bytes.length>=30&&bytes.subarray(0,4).toString()==='RIFF'&&bytes.subarray(8,12).toString()==='WEBP'){const kind=bytes.subarray(12,16).toString();if(kind==='VP8X'){w=1+bytes.readUIntLE(24,3);h=1+bytes.readUIntLE(27,3);}else if(kind==='VP8 '){w=bytes.readUInt16LE(26)&16383;h=bytes.readUInt16LE(28)&16383;}else if(kind==='VP8L'&&bytes[20]===47){const n=bytes.readUInt32LE(21);w=1+(n&16383);h=1+((n>>>14)&16383);}}
+ }catch{return false;}return w>0&&h>0&&w<=4096&&h<=4096&&w*h<=4194304;
+}
+export async function cardAvatar(uid,user,{fetcher=fetch}={}){
+ const selected=selectProfileImage(uid,user,safeUrl);if(selected?.bytes&&safeCardRaster(selected.bytes))return 'data:'+selected.contentType+';base64,'+selected.bytes.toString('base64');
+ if(selected?.bytes||!selected?.url)return '';const url=new URL(selected.url);if(!allowedHost(url.hostname)||url.port)return '';
+ try{const r=await fetcher(url.href,{redirect:'error',signal:AbortSignal.timeout(4000)});if(!r.ok||!/^image\/(png|jpe?g|webp|gif)(?:;|$)/i.test(r.headers.get('content-type')||'')||Number(r.headers.get('content-length'))>650000)return '';
+ const reader=r.body.getReader();let size=0,chunks=[];try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>650000){await reader.cancel();return '';}chunks.push(value);}}finally{reader.releaseLock();}
+ const data='data:'+r.headers.get('content-type').split(';')[0]+';base64,'+Buffer.concat(chunks).toString('base64');const decoded=decodeProfileImage(data);return decoded&&safeCardRaster(decoded.bytes)?data:'';
+ }catch{return '';}
+}
+export function momentumCardSvg({uid,user,c,at=Date.now(),avatar='',verified=false}){
+ const stats=momentumCardStats(c,at),name=String(user.displayName||user.fullName||user.name||'Builder').slice(0,34),gold=isGoldMember(uid),blue=verified||gold,check=(x,color)=>`<g transform="translate(${x} 202)"><circle r="19" fill="${color}"/><path d="m-8 0 6 6 12-13" fill="none" stroke="white" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+ const cells=calendarWeeks(c.days,at).map((w,x)=>w.map((d,y)=>`<rect x="${100+x*69}" y="${605+y*36}" width="52" height="24" rx="5" fill="${d.active?'#FBE618':'#32343B'}"/>`).join('')).join('');
+ return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1080" height="1080" viewBox="0 0 1080 1080"><defs><clipPath id="avatar"><rect x="76" y="168" width="130" height="130" rx="42"/></clipPath></defs><rect width="1080" height="1080" rx="48" fill="#F1F0EC"/><rect x="38" y="38" width="1004" height="1004" rx="40" fill="#0A0B0D"/><rect x="76" y="76" width="290" height="56" rx="16" fill="#FBE618"/><g font-family="DejaVu Sans" font-weight="700"><text x="101" y="115" font-size="34" fill="#0A0B0D">LINKUP</text><text x="1000" y="110" text-anchor="end" font-size="18" fill="#C4C5CB">BUILDER MOMENTUM</text><rect x="76" y="168" width="130" height="130" rx="42" fill="#FBE618"/>${avatar?`<image x="76" y="168" width="130" height="130" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatar)" xlink:href="${esc(avatar)}"/>`:`<text x="141" y="253" text-anchor="middle" font-size="70" fill="#0A0B0D">${esc(name[0])}</text>`}<text x="238" y="215" font-size="${Math.min(32,Math.floor(640/(Math.max(name.length,1)*1.12)))}" fill="white">${esc(name)}</text><text x="238" y="267" font-size="18" fill="#ACAFB8">BUILDING. LEARNING. MOVING FORWARD.</text>${blue?check(930,'#2485F5'):''}${gold?check(982,'#e0be1b'):''}<rect x="76" y="338" width="928" height="206" rx="30" fill="#FBE618"/><text x="108" y="449" font-size="${stats.streak>=100?82:100}" fill="#0A0B0D">${stats.streak}</text><text x="290" y="418" font-size="36" fill="#0A0B0D">DAY BUILD STREAK</text><text x="290" y="470" font-size="22" fill="#353422">${stats.totalUpdates} recorded days · ${stats.points} build points</text><text x="108" y="516" font-size="15" fill="#353422">ACTUAL CONSECUTIVE UPDATE DAYS · UTC · REST IS NOT COUNTED AS WORK</text>${cells}<text x="100" y="899" font-size="20" fill="#A9ABB3">LAST 12 WEEKS · YELLOW IS A RECORDED BUILD DAY</text><path d="M76 936 H1004" stroke="#35373F"/><text x="76" y="992" font-size="30" fill="#FBE618">linkupbuild.com</text><text x="1004" y="990" text-anchor="end" font-size="17" fill="#B7BAC2">${stats.today} · Activity, not verified skill</text></g></svg>`;
+}
+export function renderMomentumCard(options){const font=readFileSync(new URL('./_assets/LinkupSans-Bold.ttf',import.meta.url));return new Resvg(momentumCardSvg(options),{font:{fontBuffers:[font],loadSystemFonts:false,defaultFontFamily:'DejaVu Sans'},fitTo:{mode:'width',value:1080}}).render().asPng();}

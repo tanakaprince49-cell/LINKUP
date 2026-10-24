@@ -1,3 +1,4 @@
+import GroupInbox from '../components/GroupInbox';
 import MemberBadges from '../components/MemberBadges';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
@@ -313,10 +314,8 @@ export default function MessagesScreen({ navigation, route }: any) {
           </TouchableOpacity>
         )}
       </View>
-      {loading ? (
-        <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 50 }} />
-      ) : (
         <FlatList
+          ListHeaderComponent={<><GroupInbox navigation={navigation} isDark={isDark} archivedOnly={archivedOnly}/>{loading&&<ActivityIndicator color={COLORS.primaryStrong}/>}</>}
           data={matches}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <ConversationItem match={item} navigation={navigation} />}
@@ -341,7 +340,7 @@ export default function MessagesScreen({ navigation, route }: any) {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <MessageSquare size={48} color="#222" />
-              <Text style={styles.emptyText}>{archivedOnly ? 'NO ARCHIVED CHATS' : 'NO CONVERSATIONS YET'}</Text>
+              <Text style={styles.emptyText}>{archivedOnly ? 'NO ARCHIVED DIRECT CHATS' : 'NO DIRECT MESSAGES YET'}</Text>
               {!archivedOnly ? (
                 <>
                   <Text style={{ fontSize: 12, fontWeight: '700', color: '#777', textAlign: 'center', lineHeight: 18 }}>
@@ -358,7 +357,6 @@ export default function MessagesScreen({ navigation, route }: any) {
             </View>
           }
         />
-      )}
     </SafeAreaView>
   );
 }

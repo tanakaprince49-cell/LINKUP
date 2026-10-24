@@ -82,6 +82,14 @@
       "destination": "/api/publicSeo?mode=momentum"
     },
     {
+      "source": "/app/momentum/:uid/card",
+      "destination": "/api/publicSeo?mode=momentum-card&uid=:uid"
+    },
+    {
+      "source": "/momentum/:uid/card",
+      "destination": "/api/publicSeo?mode=momentum-card&uid=:uid"
+    },
+    {
       "source": "/app/momentum/:uid",
       "destination": "/api/publicSeo?mode=momentum-profile&uid=:uid"
     },
@@ -369,6 +377,9 @@
   "functions": {
     "api/linky.js": {
       "maxDuration": 60
+    },
+    "api/publicSeo.js": {
+      "includeFiles": "api/_assets/**"
     }
   }
 }

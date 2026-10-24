@@ -1,10 +1,10 @@
 import React,{useEffect,useMemo,useState} from 'react';
-import {ActivityIndicator,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
+import {ActivityIndicator,Linking,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 import {useIsFocused} from '@react-navigation/native';
 import {builderCall} from '../lib/builder';
 import {calendarWeeks} from '../../../shared/contributions.js';
 
-type Snapshot={days:string[];points:number;totalUpdates:number;today:string};
+type Snapshot={days:string[];points:number;totalUpdates:number;today:string;publicMomentum?:boolean;publicUrl?:string};
 export default function ContributionCalendar({userId,isDark=false,refreshKey='',onPublish,snapshot}:{userId:string;isDark?:boolean;refreshKey?:string;onPublish?:()=>void;snapshot?:Snapshot}){
  const focused=useIsFocused(),[data,setData]=useState<Snapshot|null>(snapshot||null),[error,setError]=useState(''),[reload,setReload]=useState(0);
  useEffect(()=>{if(snapshot){setData(snapshot);setError('');return;}if(!focused)return;let active=true;setData(null);setError('');void builderCall('contributions',{targetUid:userId}).then(r=>{if(active)setData(r);}).catch(e=>{if(active)setError(e.message||'Contribution calendar unavailable.');});return()=>{active=false;};},[focused,userId,refreshKey,snapshot,reload]);
@@ -24,6 +24,7 @@ export default function ContributionCalendar({userId,isDark=false,refreshKey='',
    <Text style={{color:muted,fontSize:12,lineHeight:18}}>{todayActive?'Today is lit up. Your next useful step can be small.':'Your next progress update lights up a square. No streak to lose.'}</Text>
   </>}
   <Text style={{color:muted,fontSize:10,lineHeight:16}}>UTC calendar · 10 points per recorded update, at most one per day. Self-reported activity, not a skill score or verification.</Text>
+  {data?.publicMomentum&&data?.publicUrl&&<TouchableOpacity accessibilityRole="link" onPress={()=>void Linking.openURL(data.publicUrl!)}><Text style={{color:ink,fontWeight:'800'}}>View searchable Momentum & streak card ↗</Text></TouchableOpacity>}
   {onPublish&&<TouchableOpacity accessibilityRole="button" accessibilityLabel="Share a build update" onPress={onPublish} style={styles.action}><Text style={{color:'#0A0B0D',fontWeight:'800',fontSize:14}}>Share a build update →</Text></TouchableOpacity>}
  </View>;
 }

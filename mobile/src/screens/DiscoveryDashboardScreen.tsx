@@ -140,6 +140,8 @@ function DiscoveryDashboardScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [people, setPeople] = useState<UserProfile[]>([]);
   const [leaguePeople, setLeaguePeople] = useState<any[]>([]);
+  const [leagueLoading, setLeagueLoading] = useState(true);
+  const [leagueError, setLeagueError] = useState(false);
   const [aiRank, setAiRank] = useState<Record<string, { score: number; reason: string }>>({});
   const [aiLoading, setAiLoading] = useState(false);
   const [opportunityRadar, setOpportunityRadar] = useState<OpportunityAlert[]>([]);
@@ -184,11 +186,13 @@ function DiscoveryDashboardScreen({ navigation }: any) {
   useEffect(() => {
     if (!user?.uid || !isFocused) return;
     let alive = true;
+    setLeagueLoading(true);setLeagueError(false);
     loadLeaguePool()
       .then((rows) => {
         if (alive) setLeaguePeople(rows);
       })
-      .catch(() => {});
+      .catch(() => {if(alive)setLeagueError(true);})
+      .finally(() => {if(alive)setLeagueLoading(false);});
     return () => {
       alive = false;
     };
@@ -483,10 +487,10 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
         ListEmptyComponent={
           <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}>
-            <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No professionals to display</Text>
-            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>No relevant profiles are available in this view yet. Search the member directory or invite professionals from your network.</Text>
-            <TouchableOpacity onPress={() => void shareLinkupInvite()} style={styles.emptyBtn}>
-              <Text style={styles.emptyBtnText}>Invite Builders</Text>
+            <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>{title==='Builder League'?(leagueLoading?'Loading real builders…':leagueError?'Builder profiles could not load':'Meet the builders'):'No professionals to display'}</Text>
+            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>{title==='Builder League'?(leagueLoading?'Fetching eligible public builder profiles. Activity sharing is not required.':'Open Builder League to refresh eligible public profiles. No fake members or automatic activity publication.'):'No relevant profiles are available in this view yet. Search the member directory or invite professionals from your network.'}</Text>
+            <TouchableOpacity onPress={() => title==='Builder League'?navigation.navigate('TrendingBuilders'):void shareLinkupInvite()} style={styles.emptyBtn}>
+              <Text style={styles.emptyBtnText}>{title==='Builder League'?'Open Builder League':'Invite Builders'}</Text>
             </TouchableOpacity>
           </View>
         }

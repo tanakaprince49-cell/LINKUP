@@ -6,6 +6,7 @@ import {useAuth} from '../contexts/AuthContext';
 import {useTheme} from '../contexts/ThemeContext';
 import {COLORS,appBackground,textColor} from '../theme/theme';
 import {normalizeShipLogs} from '../lib/dailyLoop';
+import MomentumShareCard from '../components/MomentumShareCard';
 import {builderCall,coachRequestKey} from '../lib/builder';
 import BuildHabitCard from '../components/BuildHabitCard';
 import ContributionCalendar from '../components/ContributionCalendar';
@@ -53,6 +54,7 @@ export default function ShipLogScreen({navigation}:any){
      <Text style={{fontSize:11,lineHeight:17,color:muted}}>One rewarded update per UTC day. Retries never double-count. No missed-day penalties or automatic skill badges.</Text>
     </View>
     <BuildHabitCard navigation={navigation} isDark={dark} refreshKey={`${summary?.today||''}:${summary?.points||0}`}/>
+    <MomentumShareCard isDark={dark} refreshKey={`${summary?.today||''}:${summary?.points||0}`}/>
     {user?.uid&&<ContributionCalendar userId={user.uid} isDark={dark} snapshot={summary||undefined}/>}
     <Text style={[styles.historyTitle,{color:ink}]}>Your build history</Text>
    </View>}

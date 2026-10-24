@@ -1,11 +1,11 @@
-import {serveLeagueSeo} from './_leagueSeo.js';
+import {publicMomentumSection,serveLeagueSeo} from './_leagueSeo.js';
 import {serveContentSeo,contentSitemapIndex} from './_contentSeo.js';
 import {getNewsFeed} from './_newsFeed.js';
 import {selectProfileImage} from './_publicProfileImage.js';
 import { getDb } from './_firebaseAdmin.js';
 import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, safeUrl, validId, publicEligible, projectProfile, profileUrl, renderProfile, renderDirectory, documentHtml, xmlIndex, xmlUrls } from './_publicSeo.js';
 
-const PUBLIC_FIELDS = ['displayName','fullName','name','username','bio','occupation','company','city','country','skills','lookingFor','profilePicUrl','photoURL','profilePic','avatarUrl','socialLinks','projects','deleted','isBot','onboarded','isVisible','isStealthMode'];
+const PUBLIC_FIELDS = ['displayName','fullName','name','username','bio','occupation','company','city','country','skills','lookingFor','profilePicUrl','photoURL','profilePic','avatarUrl','socialLinks','projects','deleted','banned','isBot','onboarded','isVisible','isStealthMode'];
 async function currentProfiles(db, ids) {
   if (!ids.length) return [];
   // The source of truth is users, NOT the eventually consistent discovery
@@ -38,7 +38,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed) {
     if (!['GET','HEAD'].includes(req.method)) { res.setHeader('Allow','GET, HEAD'); return failure(405,'Method not allowed'); }
     try {
       if (mode === 'robots') return send(200,`User-agent: *\nAllow: /\n\nSitemap: ${APP}/sitemap.xml\n`,'text/plain; charset=utf-8');
-      if (mode==='league-json') res.setHeader('X-Robots-Tag','noindex');
+      if (['league-json','builders-league-json','momentum-card'].includes(mode)) res.setHeader('X-Robots-Tag','noindex');
       if (await serveLeagueSeo(req,{database,send,failure})) return;
       if (await serveContentSeo(req,{database,send,failure,news})) return;
       if (mode === 'image') {
@@ -62,7 +62,8 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed) {
         if (!validId(uid)) return failure(404,'Profile not found');
         const profiles = await currentProfiles(database(), [uid]);
         if (!profiles.length) return failure(404,'Profile not found');
-        return send(200, renderProfile(profiles[0]));
+        const contributionRef=database().collection('builderContributions').doc(uid);const c=typeof contributionRef.get==='function'?await contributionRef.get():null;
+        return send(200, renderProfile(profiles[0],publicMomentumSection(uid,c?.data()||{})));
       }
       if (mode === 'directory' || mode === 'members') {
         const cursor = single(req.query?.after);
