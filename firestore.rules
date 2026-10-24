@@ -1403,6 +1403,24 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------
+    // Builder League weekly champion reward (server-write only)
+    //
+    // Seven days after the week closes the claim locks forever; a claimed
+    // reward buys one campaign, which is deleted permanently after its
+    // seven-day run. The client may read its OWN reward and nothing else.
+    // Every grant, stamp and deletion happens in the API with the Admin SDK.
+    // ------------------------------------------------------------
+    match /campaignRewards/{weekKey} {
+      allow get, list: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
+    match /campaignRewardsAudit/{weekKey} {
+      allow read: if isCampaignAdmin();
+      allow write: if false;
+    }
+
+    // ------------------------------------------------------------
     // Feed posts (+ nested comments/replies)
     // Anyone signed in can read and react (counters/likes/viewedBy);
     // only the author can create-as-self, edit content, or delete.

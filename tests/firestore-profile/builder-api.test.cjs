@@ -314,3 +314,50 @@ test('permanent deletion revokes access before a bounded background sweep erases
  const s=await seed(),groupId=await roomWithBob(s);await s.handle('bob','groupRespond',{id:groupId+'_bob',decision:'accept'});const rr=db.collection('builderRooms').doc(groupId);for(let start=0;start<1220;start+=400){const batch=db.batch();for(let i=start;i<Math.min(1220,start+400);i++)batch.set(rr.collection('messages').doc('bulk_'+i),{authorId:'alice',text:'Private retained history',at:NOW+i});await batch.commit();}
  await assert.rejects(s.handle('bob','groupDelete',{groupId}),e=>e.status===403);const remaining=(await rr.collection('messages').get()).size;assert.ok(remaining>0);await s.handle('alice','groupDelete',{groupId});const after=(await rr.get()).exists?((await rr.collection('messages').get()).size):0;assert.ok(after===0||after<remaining);await assert.rejects(s.handle('bob','groupMessages',{groupId}),e=>e.status===403);await s.handle('alice','groupDelete',{groupId});const {sweepDeletingGroups}=await import('../../api/_groups.js');await sweepDeletingGroups(db);assert.equal((await rr.get()).exists,false);assert.equal((await rr.collection('messages').get()).size,0);
 });
+
+test('weekly champion reward: one winner, one claim, seven days, then locked forever',async()=>{
+ const s=await seed(),weekEnd=Date.parse('2026-10-19T00:00:00Z'),DAY=86400000;
+ await db.collection('campaignRewards').doc('2026-10-12').set({weekKey:'2026-10-12',uid:'alice',status:'available',points:40,buildDays:4,helpful:0,weekEnd,claimBy:weekEnd+7*DAY,awardedAt:weekEnd});
+ const read=await s.handle('alice','campaignReward');assert.equal(read.status,'available');assert.equal(read.runDays,7);assert.equal(read.placementsMax,2);
+ const creative={productName:'Alice app',tagline:'Invoices in one minute',description:'A real description of the product.',website:'https://example.com/app'};
+ await assert.rejects(s.handle('bob','campaignRewardClaim',{weekKey:'2026-10-12',name:'Bob launch',creative,industries:[],placements:['ideas']}),e=>e.status===403);
+ await assert.rejects(s.handle('alice','campaignRewardClaim',{weekKey:'2026-10-12',name:'No link',creative:{...creative,website:'javascript:alert(1)'},placements:['ideas']}),/https/);
+ const claimed=await s.handle('alice','campaignRewardClaim',{weekKey:'2026-10-12',name:'Alice launch',creative,industries:['SaaS'],placements:['ideas','search','news']});
+ const campaign=(await db.collection('campaigns').doc(claimed.campaignId).get()).data();
+ assert.equal(campaign.status,'pending_review');assert.equal(campaign.reward,true);assert.equal(campaign.rewardWeek,'2026-10-12');assert.deepEqual(campaign.placements,['ideas','search']);assert.equal(campaign.statsImpressions,0);
+ const again=await s.handle('alice','campaignReward');assert.equal(again.status,'claimed');assert.equal(again.campaign.id,claimed.campaignId);
+ await assert.rejects(s.handle('alice','campaignRewardClaim',{weekKey:'2026-10-12',name:'Second launch',creative,placements:['ideas']}),e=>e.status===409);
+ const old=await seed();await db.collection('campaignRewards').doc('2026-10-05').set({weekKey:'2026-10-05',uid:'alice',status:'available',points:10,buildDays:1,weekEnd:weekEnd-7*DAY,claimBy:weekEnd-DAY,awardedAt:weekEnd-7*DAY});
+ assert.equal((await old.handle('alice','campaignReward')).status,'expired');
+ await assert.rejects(old.handle('alice','campaignRewardClaim',{weekKey:'2026-10-05',name:'Too late',creative,placements:['ideas']}),e=>e.status===410);
+});
+
+test('reward campaigns start a seven-day clock, are deleted permanently and never linger unapproved',async()=>{
+ const {reconcileCampaignRewards}=await import('../../api/_campaignReward.js');
+ const s=await seed(),DAY=86400000,weekEnd=Date.parse('2026-10-19T00:00:00Z'),creative={productName:'Product',tagline:'A tagline long enough',description:'',website:'https://example.com'};
+ await db.collection('campaignRewards').doc('2026-10-12').set({weekKey:'2026-10-12',uid:'alice',status:'available',points:30,buildDays:3,weekEnd,claimBy:weekEnd+7*DAY,awardedAt:weekEnd});
+ const {campaignId}=await s.handle('alice','campaignRewardClaim',{weekKey:'2026-10-12',name:'Reward ad',creative,placements:['ideas']});
+ await db.collection('campaigns').doc(campaignId).update({status:'active'});
+ const started=await reconcileCampaignRewards(db,NOW);assert.equal(started.started,1);
+ const live=(await db.collection('campaigns').doc(campaignId).get()).data();assert.equal(live.expiresAtSource,'league-reward');assert.equal(live.expiresAt.toMillis()-NOW,7*DAY);
+ const stillThere=await reconcileCampaignRewards(db,NOW+6*DAY);assert.equal(stillThere.deleted,0);
+ const done=await reconcileCampaignRewards(db,NOW+8*DAY);assert.equal(done.deleted,1);
+ assert.equal((await db.collection('campaigns').doc(campaignId).get()).exists,false);
+ assert.equal((await db.collection('campaignRewards').doc('2026-10-12').get()).data().status,'completed');
+ const audit=(await db.collection('campaignRewardsAudit').doc('2026-10-12').get()).data();
+ assert.equal(audit.uid,'alice');assert.equal(audit.campaignId,campaignId);assert.ok(!JSON.stringify(audit).includes('Reward ad'),'audit keeps no creative text');
+ // Never approved in time: removed, not parked in review forever.
+ await seed();await db.collection('campaignRewards').doc('2026-10-12').set({weekKey:'2026-10-12',uid:'alice',status:'claimed',weekEnd,claimBy:weekEnd+7*DAY,claimedAt:weekEnd,activationDeadline:weekEnd+2*DAY,campaignId:'pending-one'});
+ await db.collection('campaigns').doc('pending-one').set({ownerId:'alice',name:'Pending ad',status:'pending_review',reward:true,rewardWeek:'2026-10-12',statsImpressions:0,statsClicks:0});
+ const swept=await reconcileCampaignRewards(db,weekEnd+3*DAY);assert.equal(swept.deleted,1);
+ assert.equal((await db.collection('campaigns').doc('pending-one').get()).exists,false);
+ assert.equal((await db.collection('campaignRewards').doc('2026-10-12').get()).data().completion,'not-approved-in-time');
+});
+
+test('rewards are server-write only and private to their winner',async()=>{
+ const s=await seed();await db.collection('campaignRewards').doc('2026-10-12').set({weekKey:'2026-10-12',uid:'alice',status:'available',points:10,claimBy:NOW+86400000});
+ const alice=env.authenticatedContext('alice').firestore(),bob=env.authenticatedContext('bob').firestore();
+ await assertFails(setDoc(doc(alice,'campaignRewards/2026-10-12'),{uid:'alice',status:'available',points:9999}));
+ await assertFails(getDoc(doc(bob,'campaignRewards/2026-10-12')));
+ await assertFails(getDoc(doc(bob,'campaignRewardsAudit/2026-10-12')));
+});

@@ -115,6 +115,10 @@
     ],
     [
       "navigate",
+      "CreateCampaign"
+    ],
+    [
+      "navigate",
       "CampaignDetail"
     ],
     [

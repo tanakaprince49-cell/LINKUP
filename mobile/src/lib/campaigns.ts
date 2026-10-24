@@ -499,8 +499,18 @@ export const setCampaignStatus = async (
   if (options.revalidateExpiry) {
     try {
       const snap = await getDoc(doc(db, 'campaigns', campaignId));
-      const ownerId = String(snap.data()?.ownerId || '');
-      if (ownerId) {
+      const data = snap.data() || {};
+      const ownerId = String(data.ownerId || '');
+      // Builder League reward: seven days from approval, not the paid window.
+      // Admin-only write (Firestore rules), with the hourly sweep as backstop.
+      if (data.rewardWeek) {
+        const started = Date.now();
+        expiryPatch = {
+          expiresAt: new Date(started + 7 * 24 * 60 * 60 * 1000),
+          expiresAtSource: 'league-reward',
+          rewardStartedAt: started,
+        };
+      } else if (ownerId) {
         expiryPatch = {
           expiresAt: new Date(await computeCampaignExpiryMs(ownerId)),
           expiresAtSource: 'client',

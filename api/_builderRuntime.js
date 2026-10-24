@@ -17,7 +17,12 @@ export async function builderCron(input={}){
  const after=Object.hasOwn(input,'after')?input.after:(snapshot.exists?snapshot.data().after:'');
  if(after&& !validId(after))throw problem('Invalid schedule cursor.');
  const result=await builderService().runReminderPage({after:after||'',limit:30});
- await r.set({after:result.nextCursor||'',at:Date.now()});return result;
+ await r.set({after:result.nextCursor||'',at:Date.now()});
+ // Builder League reward: grant last week's champion once, then enforce the
+ // seven-day claim window and delete finished reward campaigns for good.
+ const reward=await awardWeeklyChampion(db).catch(()=>null);
+ const rewardSweep=await reconcileCampaignRewards(db).catch(()=>null);
+ return {...result,reward,rewardSweep};
 }
 // Email is intentionally fail-closed until a verified provider is configured.
 // A future adapter must enforce opt-in, suppression, signed unsubscribe URLs,

@@ -185,3 +185,59 @@ test('raising the free limit preserves existing monthly use and adds only five c
  assert.equal(quota.limit,15);assert.equal(quota.used,10);assert.equal(quota.remaining,5);
  assert.equal((await usage.reserveMessage(db,'member',{now:october})).remaining,4);
 });
+
+test('a shared daily ceiling protects the provider quota without spending anyone\'s allowance', async () => {
+  const previous = { ...process.env };
+  try {
+    process.env.LINKY_GLOBAL_DAILY_MESSAGES = '2';
+    const db = new Database();
+    await usage.reserveMessage(db, 'a', { now: Date.parse('2026-10-24T08:00:00Z') });
+    await usage.reserveMessage(db, 'b', { now: Date.parse('2026-10-24T09:00:00Z') });
+    await assert.rejects(
+      usage.reserveMessage(db, 'c', { now: Date.parse('2026-10-24T10:00:00Z') }),
+      error => error.code === 'capacity'
+    );
+    const untouched = await usage.readMessageQuota(db, 'c', { plus: false, now: Date.parse('2026-10-24T10:00:00Z') });
+    assert.equal(untouched.remaining, 15);
+    // A failed delivery gives the shared slot back.
+    const reservation = await usage.reserveMessage(db, 'd', { now: Date.parse('2026-10-25T00:00:00Z') });
+    assert.equal(reservation.remaining, 14);
+    await usage.refundMessage(db, 'd', reservation);
+    const after = await usage.readMessageQuota(db, 'd', { plus: false, now: Date.parse('2026-10-25T00:00:00Z') });
+    assert.equal(after.remaining, 15);
+  } finally {
+    process.env = previous;
+  }
+});
+
+test('an optional per-member daily cap spreads the monthly allowance without changing it', async () => {
+  const previous = { ...process.env };
+  try {
+    process.env.LINKY_FREE_DAILY = '2';
+    const db = new Database(), now = Date.parse('2026-10-24T08:00:00Z');
+    await usage.reserveMessage(db, 'member', { now });
+    await usage.reserveMessage(db, 'member', { now });
+    await assert.rejects(usage.reserveMessage(db, 'member', { now }), error => error.code === 'ask_limit');
+    const quota = await usage.readMessageQuota(db, 'member', { plus: false, now });
+    assert.equal(quota.limit, 15);
+    assert.equal(quota.remaining, 13);
+    assert.equal(quota.dailyLimit, 2);
+    // Tomorrow starts with a fresh daily counter, monthly use is preserved.
+    const tomorrow = await usage.readMessageQuota(db, 'member', { plus: false, now: now + 86400000 });
+    assert.equal(tomorrow.dailyUsed, 0);
+    assert.equal(tomorrow.remaining, 13);
+  } finally {
+    process.env = previous;
+  }
+});
+
+test('budget arithmetic matches the documented plan', async () => {
+  const { budgetConfig, sustainableMessages, fairShare } = await import('../shared/linky-budget.js');
+  const config = budgetConfig({ LINKY_MODEL_RPD: '500', LINKY_CALLS_PER_MESSAGE: '2.1' });
+  const messages = sustainableMessages(config);
+  assert.equal(messages, 190);
+  assert.equal(fairShare({ messagesPerDay: messages, members: 500 }), 1);
+  const paid = budgetConfig({ LINKY_MODEL_RPD: '100000' });
+  assert.ok(sustainableMessages(paid) > 30_000);
+  assert.equal(budgetConfig({ LINKY_GLOBAL_DAILY_MESSAGES: '0' }).globalDailyMessages, 0);
+});

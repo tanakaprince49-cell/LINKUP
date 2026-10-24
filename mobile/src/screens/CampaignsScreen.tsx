@@ -42,6 +42,7 @@ import { notifyUser } from '../lib/notify';
 import { ikAvatar } from '../lib/ikImage';
 import ProCrownBadge from '../components/ProCrownBadge';
 import { isAdminIdentity } from '../lib/admin';
+import { fetchCampaignReward, rewardHeadline, rewardWhen, type CampaignRewardState } from '../lib/campaignReward';
 import {
   CAMPAIGNS_PRODUCT_IDS,
   CAMPAIGN_PLACEMENT_OPTIONS,
@@ -176,6 +177,7 @@ export default function CampaignsScreen({ navigation }: any) {
   const [rejectBusy, setRejectBusy] = useState(false);
   const [campaignsTrial, setCampaignsTrial] = useState<TrialRecord | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<CampaignsPlan['id']>('monthly');
+  const [reward, setReward] = useState<CampaignRewardState | null>(null);
   const processedPurchases = useRef(new Set<string>());
 
   const identity = { email: user?.email, isAdmin: (profile as any)?.isAdmin };
@@ -421,12 +423,79 @@ export default function CampaignsScreen({ navigation }: any) {
   const placementsLabel = (c: Campaign) =>
     (c.placements || []).map((id) => CAMPAIGN_PLACEMENT_OPTIONS.find((o) => o.id === id)?.label || id).join(', ');
 
+  // The weekly Builder League reward lives outside the paid plan: a champion
+  // must be able to claim it without subscribing, and nobody else sees it.
+  useEffect(() => {
+    let alive = true;
+    if (!user?.uid) { setReward(null); return; }
+    void fetchCampaignReward()
+      .then((next) => { if (alive) setReward(next); })
+      .catch(() => { if (alive) setReward(null); });
+    return () => { alive = false; };
+  }, [user?.uid, campaigns.length]);
+
   const capacityPct = Math.round((Math.min(liveCount, MAX_ACTIVE_CAMPAIGNS) / MAX_ACTIVE_CAMPAIGNS) * 100);
 
   const shareOfVoice = [...campaigns]
     .map((c, i) => ({ id: c.id, name: c.creative?.productName || c.creative?.title || c.name || 'Untitled', views: c.statsImpressions || 0, color: BAR_PALETTE[i % BAR_PALETTE.length] }))
     .filter((e) => e.views > 0).sort((a, b) => b.views - a.views).slice(0, 5);
   const shareLead = shareOfVoice[0]?.views || 1;
+
+  const renderReward = () => {
+    if (!reward || reward.status === 'none' || reward.status === 'no-winner') return null;
+    const available = reward.status === 'available';
+    const live = reward.status === 'claimed' && reward.campaign?.status === 'active';
+    const inReview = reward.status === 'claimed' && reward.campaign?.status === 'pending_review';
+    const closed = !available && !live && !inReview;
+    return (
+      <View style={[s.card, {
+        backgroundColor: available ? (isDark ? '#1C2413' : '#FBFFDF') : cardBg,
+        borderColor: available ? LEAGUE_YELLOW : border,
+        borderWidth: available ? 2 : 1,
+        marginBottom: 14,
+      }]}>
+        <View style={s.cardTop}>
+          <Text style={[s.cardTitle, { color: textColor(isDark) }]}>
+            {available ? 'Builder League champion' : closed ? 'Weekly reward · locked' : 'Weekly reward campaign'}
+          </Text>
+          <Text style={[s.cardValue, { color: available ? LEAGUE_YELLOW : textColor(isDark) }]}>
+            {available ? '7 DAYS' : live ? 'LIVE' : inReview ? 'REVIEW' : 'LOCKED'}
+          </Text>
+        </View>
+        <Text style={[s.cardHint, { color: textColor(isDark, 'muted') }]}>{rewardHeadline(reward)}</Text>
+        {available && (
+          <>
+            <Text style={[s.cardHint, { color: textColor(isDark, 'muted') }]}>
+              {reward.points || 0} activity points · {reward.buildDays || 0} build days · claim by {rewardWhen(reward.claimBy)}. One campaign, no renewals.
+            </Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={[s.ctaBtn, { marginTop: 10 }]}
+              onPress={() => navigation.navigate('CreateCampaign', { rewardWeek: reward.weekKey })}
+            >
+              <Megaphone size={16} color={INK} />
+              <Text style={s.ctaText}>Claim your 7-day campaign</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {live && reward.campaign?.expiresAt ? (
+          <Text style={[s.cardHint, { color: textColor(isDark, 'muted') }]}>
+            Runs until {rewardWhen(reward.campaign.expiresAt)} and is then deleted permanently. {reward.remainingMs > 0 ? '' : ''}
+          </Text>
+        ) : null}
+        {inReview ? (
+          <Text style={[s.cardHint, { color: textColor(isDark, 'muted') }]}>
+            Review must finish by {rewardWhen(reward.activationDeadline)} or the campaign is removed. Approved campaigns run for exactly seven days.
+          </Text>
+        ) : null}
+        {closed ? (
+          <Text style={[s.cardHint, { color: textColor(isDark, 'muted') }]}>
+            Rewards cannot be extended, re-issued or moved to another week.
+          </Text>
+        ) : null}
+      </View>
+    );
+  };
 
   // ─── Dashboard ─────────────────────────────────────────────
   const renderDashboard = () => (
@@ -786,10 +855,11 @@ export default function CampaignsScreen({ navigation }: any) {
           <View style={s.center}>
             <ActivityIndicator color={LEAGUE_YELLOW} />
           </View>
-        ) : hasPlan ? (
-          renderDashboard()
         ) : (
-          renderPaywall()
+          <>
+            {renderReward()}
+            {hasPlan ? renderDashboard() : renderPaywall()}
+          </>
         )}
         {renderAdmin()}
       </ScrollView>

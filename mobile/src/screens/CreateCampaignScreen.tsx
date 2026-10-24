@@ -20,6 +20,7 @@ import { isAdminEmail } from '../lib/admin';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { displayNameFor } from '../lib/discovery';
+import { claimCampaignReward, rewardWhen } from '../lib/campaignReward';
 import { notifyUser } from '../lib/notify';
 import { uploadCampaignLogoToImageKit } from '../lib/imagekitUpload';
 import { ikAvatar } from '../lib/ikImage';
@@ -49,6 +50,9 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const editCampaign: Campaign | null = route?.params?.editCampaign || null;
+  // Builder League reward: one campaign, seven days, then deleted for good.
+  const rewardWeek: string = String(route?.params?.rewardWeek || '');
+  const rewardMode = !!rewardWeek;
   // a live campaign is the one that most needs an edit, so the form is open for
   // active and paused too - the status never changes here, only the creative
   const isEditing = !!editCampaign && ['pending_review', 'active', 'paused'].includes(editCampaign.status);
@@ -156,6 +160,18 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
         navigation.goBack();
         return;
       }
+      if (rewardMode) {
+        await claimCampaignReward({
+          weekKey: rewardWeek,
+          name: name.trim(),
+          creative: creativePayload,
+          industries: category,
+          placements,
+        });
+        notifyUser('Reward claimed 🏁', 'Your weekly champion campaign is in review. Approved campaigns run for exactly seven days, then are deleted permanently.');
+        navigation.goBack();
+        return;
+      }
       await createCampaign({
         ownerId: user.uid,
         ownerName: displayNameFor(myProfile || user),
@@ -224,6 +240,14 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {rewardMode && (
+            <View style={[styles.rewardBanner, { borderColor: COLORS.primary, backgroundColor: isDark ? 'rgba(223,251,63,0.10)' : COLORS.primaryGlow }]}>
+              <Text style={styles.rewardTitle}>BUILDER LEAGUE · WEEKLY CHAMPION</Text>
+              <Text style={[styles.rewardBody, { color: textColor(isDark, 'secondary') }]}>
+                One campaign, exactly seven days once approved, then deleted permanently. No renewal and no second campaign from this reward.
+              </Text>
+            </View>
+          )}
           {/* Section 1 — identity */}
           <View style={styles.sectionHeader}>
             <View style={[styles.stepDot, { backgroundColor: COLORS.primary }]}>
@@ -422,6 +446,9 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
 }
 
 const styles = StyleSheet.create({
+  rewardBanner: { borderWidth: 2, borderRadius: 16, padding: 14, gap: 6, marginBottom: 16 },
+  rewardTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 1.4, color: COLORS.primaryStrong },
+  rewardBody: { fontSize: 13, lineHeight: 19, fontWeight: '600' },
   container: { flex: 1 },
   header: {
     height: 74,

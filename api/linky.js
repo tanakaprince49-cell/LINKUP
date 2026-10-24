@@ -948,6 +948,10 @@ async function handleApp(req, res) {
     res.status(200).json(out);
   } catch (err) {
     const message = memberError(err, 'Linky hit a snag - say that again and I will have another go.');
+    if (err?.code === 'capacity') {
+      res.status(503).json({ error: err.message, code: 'capacity', retryAt: err.retryAt, messageQuota: err.messageQuota });
+      return;
+    }
     if (err?.code === 'ask_limit' && err.messageQuota) {
       setCors(res);
       res.status(402).json({ error: message, code: err.code, messageQuota: err.messageQuota, upgradeRequired: err.messageQuota.upgradeRequired });
