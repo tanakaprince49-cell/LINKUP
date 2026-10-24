@@ -1,6 +1,8 @@
 # LINKUP 16.5.0 — streak card rebuild, League redesign, monthly and yearly champions
 
-Branch `codex/mobile-port` + `main`. Android version 16.5.0 / versionCode 28.
+Branch `codex/mobile-port` + `main`, final commit `69923b6213462c755c43b43cf8e7d391eff5ab1f`.
+Android version 16.5.0 / versionCode 28. CI: `40079689872` (rules, codex), `40079689899`
+(rules, main), `40079689895` (Vercel prod) and `40080260457` (Vercel prod, follow-up) all success.
 
 ## 1. The streak card was blank — root cause and fix
 
@@ -31,7 +33,9 @@ Warm cream sheet, not a black slab:
 Champion cards add a crown on the avatar and a ribbon: `WEEK CHAMPION 12 OCT – 18 OCT`,
 `MONTH CHAMPION SEP 2026`, or `YEAR CHAMPION 2025`.
 
-Samples: `docs/qa/league-16-5/streak-card.png`, `streak-card-champion.png`.
+Samples: `docs/qa/league-16-5/streak-card.png`, `streak-card-champion.png` — and the live
+`https://www.linkupbuild.com/app/momentum/FvxIfciyHMfQZbLwziZpseMNKxC3/card` is the
+same artwork for the real CEO profile (verified after deploy).
 
 ## 3. Builder League, rebuilt
 
@@ -88,12 +92,14 @@ lists the current champions and explains the weekly prize.
 - `activity-league-browser.cjs` (390/1150 px, light + dark) → pass, including the
   crowned number 1, the Builders positions, period switching and profile opens.
   `builder-browser`, `build-habit-browser`, `contribution-browser` → pass.
-- Screenshots: `docs/qa/league-16-5/`.
+- Screenshots: `docs/qa/league-16-5/` — `builders-light/dark`, `activity-light/dark`,
+  `board-light`, `streak-card`, `streak-card-champion`.
 
 ## 6. Still open
 
 - Monthly/yearly awards have been exercised only against the emulator and unit
   fixtures; the first real season close is 1 Nov 2026 for October.
-- The card is verified as rendered bytes locally; production confirmation is the
-  live URL after deploy.
+- Production confirmed for the card endpoint and the `/builder-league/year` page;
+  the signed-in app screens are verified against the shared components in the
+  browser harness, not against a signed-in production session.
 - No native APK/AAB build in this release.
