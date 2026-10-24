@@ -61,6 +61,9 @@ type LinkupNotification = {
   fromPic?: string;
   type?: string;
   content?: string;
+  title?: string;
+  body?: string;
+  campaign?: string;
   matchId?: string;
   campaignId?: string;
   section?: string;
@@ -170,10 +173,12 @@ function sortedPairId(a: string, b: string) {
 }
 
 function notificationTitle(data: LinkupNotification) {
+  if (data.campaign === 'linky_reengagement' && data.title) return `Linky · ${data.title}`;
   return 'LINKUP';
 }
 
 function notificationBody(data: LinkupNotification) {
+  if (data.campaign === 'linky_reengagement' && data.body) return String(data.body).trim();
   const content = String(data.content || '').trim();
   if (data.type === 'message') return `${data.fromName || 'Someone'} ${content || 'sent you a message.'}`;
   if (data.type === 'like') return `${data.fromName || 'Someone'} ${content || 'liked your profile.'}`;

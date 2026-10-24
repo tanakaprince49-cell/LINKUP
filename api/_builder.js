@@ -6,6 +6,7 @@ import {createHabitActions} from './_builderHabit.js';
 import {habitSnapshot,habitState} from '../shared/build-habit.js';
 import {DAY,id,clean,requireText,problem,validId,safeLink,stateOf,freshState,contextOf,sanitizePrefs,weekKey,localTime,brief,relevantPeople,relevantLeads,weeklySummary} from './_builderCore.js';
 import {planRetention,leagueSummary,retentionKey} from './_retention.js';
+import {nextLinkyHeadlineIndex} from '../shared/linky-reengagement.js';
 import {loadActivityLeague} from './_leagueSeo.js';
 import {publicEligible} from './_publicSeo.js';
 import {readMessageQuota} from './_linkyUsage.js';
@@ -217,7 +218,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   let query=db.collection('builderStates').orderBy('__name__').limit(Math.min(40,limit));if(after)query=query.startAfter(after);const docs=(await query.get()).docs;let delivered=0,lastProcessed=after;const started=Date.now();
   for(const d of docs){
    if(Date.now()-started>40000)return {delivered,nextCursor:lastProcessed};
-   lastProcessed=d.id;const user=await db.collection('users').doc(d.id).get();
+   lastProcessed=d.id;const [user,presence]=await Promise.all([db.collection('users').doc(d.id).get(),db.collection('presence').doc(d.id).get()]);
    if(!user.exists||user.data().deleted){await db.collection('builderContributions').doc(d.id).delete();await cleanupDeletedGroupData(db,d.id,now());continue;}
    if(user.data().banned||user.data().onboarded!==true)continue;
    // The weekly review costs several reads, so it is only computed when one of
@@ -235,7 +236,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
     // run's review instead of delivering a stale one.
     if(review&&(s.epoch!==prior.epoch||s.updatedAt!==prior.updatedAt))return;
     const contrib=(await tx.get(db.collection('builderContributions').doc(d.id))).data()||{};
-    const {message,facts}=planRetention({uid:d.id,state:s,contributions:contrib,user:user.data(),now:now(),league,review});
+    const {message,facts}=planRetention({uid:d.id,state:s,contributions:contrib,user:user.data(),presence:presence.exists?presence.data():{},now:now(),league,review});
     if(!message)return;
     const nr=db.collection('notifications').doc(retentionKey(d.id,facts,message));
     if((await tx.get(nr)).exists)return;
@@ -246,6 +247,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
     const sent=(s.retention&&s.retention.day===facts.localDay&&Array.isArray(s.retention.sent)?s.retention.sent:[]);
     s.retention={day:facts.localDay,sent:[...sent,{category:message.category,at:now()}].slice(-8)};
     if(message.kind==='build'){s.buildReminderCount=(s.buildReminderCount||0)+1;if(message.pause)s.prefs.dailyBuild=false;}
+    if(message.category==='comeback'){s.lastComebackAt=now();s.comebackSequence=nextLinkyHeadlineIndex(message.headlineIndex);}
     if(message.category==='followup')s.followups=s.followups.map(f=>f.status==='open'&&f.dueAt<=now()?{...f,notifiedAt:now()}:f);
     if(message.category==='weekly'||message.category==='digest')s.lastDigest=weekKey(now(),s.prefs.timezone);
     if(message.category==='friday'){
@@ -260,7 +262,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
     }else{
      // One document per member, per UTC day, per category: a replayed cron run
      // can never duplicate a message the member already received.
-     tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',fromPic:'',type:'builder',category:message.category,slot:message.slot,title:message.title,content:message.content,section:message.section,url:message.url,serverPushManaged:true,pushRequested:prefs.push,...(review?{builderSummary:review.summary}:{}),isRead:prefs.inApp===false,timestamp:new Date(now())});
+     tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',fromPic:'',type:'builder',category:message.category,slot:message.slot,title:message.title,body:message.body,content:message.content,section:message.section,url:message.url,...(message.campaign?{campaign:message.campaign,headlineKey:message.headlineKey}:{}),serverPushManaged:true,pushRequested:prefs.push,...(review?{builderSummary:review.summary}:{}),isRead:prefs.inApp===false,timestamp:new Date(now())});
     }
    });
    if(delivery){
@@ -269,7 +271,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
      const nr=delivery.kind==='build'?db.collection('builderContributions').doc(d.id):notifyRef;
      const patch=v=>delivery.kind==='build'?{buildPushStatus:{key:delivery.key,...v}}:v;
      try{
-      const result=await push(d.id,{title:'LINKUP · '+delivery.title,body:delivery.body,url:delivery.url||'/ship'});
+      const result=await push(d.id,{title:delivery.pushTitle||'LINKUP · '+delivery.title,body:delivery.body,url:delivery.url||'/ship',campaign:delivery.campaign||'builder_retention',category:delivery.category});
       await nr.set(patch({pushStatus:result?.sent>0?'provider_accepted':'not_accepted',pushAttemptAt:now()}),{merge:true});
      }catch{await nr.set(patch({pushStatus:'failed',pushAttemptAt:now()}),{merge:true});}
     }

@@ -4,12 +4,12 @@ import {createBuilderService} from './_builder.js';
 import {validId,problem} from './_builderCore.js';
 import {awardWeeklyChampion,reconcileCampaignRewards} from './_campaignReward.js';
 import {awardSeasonChampions} from './_leagueChampions.js';
-async function nativePush(uid,{title,body,url}){
+async function nativePush(uid,{title,body,url,campaign='builder_retention',category=''}){
  const db=getDb(),snap=await db.collection('userPrivate').doc(uid).get();
  const tokens=[...new Set((snap.exists?snap.data().pushTokens:[] )||[])].filter(t=>typeof t==='string'&&/^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$/.test(t)).slice(0,20);
  if(!tokens.length)return {sent:0};
  try{
-  const response=await fetch('https://exp.host/--/api/v2/push/send',{method:'POST',headers:{'Content-Type':'application/json',...(process.env.EXPO_ACCESS_TOKEN?{Authorization:'Bearer '+process.env.EXPO_ACCESS_TOKEN}:{})},body:JSON.stringify(tokens.map(to=>({to,title,body,data:{url,targetUrl:url,type:'builder'},sound:'default',channelId:'default'}))),signal:AbortSignal.timeout(8000)});
+  const response=await fetch('https://exp.host/--/api/v2/push/send',{method:'POST',headers:{'Content-Type':'application/json',...(process.env.EXPO_ACCESS_TOKEN?{Authorization:'Bearer '+process.env.EXPO_ACCESS_TOKEN}:{})},body:JSON.stringify(tokens.map(to=>({to,title:String(title).slice(0,100),body:String(body).slice(0,180),data:{url,targetUrl:url,type:'builder',campaign,category},sound:'default',priority:'high',channelId:'default'}))),signal:AbortSignal.timeout(8000)});
   const result=await response.json();return {sent:response.ok&&Array.isArray(result.data)?result.data.filter(t=>t.status==='ok').length:0};
  }catch{return {sent:0};}
 }

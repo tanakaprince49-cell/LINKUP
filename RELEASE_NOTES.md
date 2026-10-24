@@ -1,10 +1,18 @@
 # LINKUP Release Notes
 
+## 16.7.0 (versionCode 30)
+
+- Linky can now invite inactive members back with eight rotating, attention-grabbing headlines. Invitations start after three days without observed app/workspace activity and have their own three-day cooldown.
+- Welcome-back copy uses real activity timestamps and never claims there is a new match, message, profile view or other activity that did not happen.
+- A dedicated **Linky welcome-back invitations** switch joins the existing global retention, push/in-app, timezone and quiet-hour controls. Native push remains opt-in and requires a registered Expo push token.
+- Notifications deep-link to the welcome-back workspace, carry campaign/headline metadata, and remain idempotent under concurrent scheduler workers.
+- Added pure planner tests and Firestore Emulator coverage for inactivity, opt-outs, cooldowns, headline rotation, concurrent delivery and recent-presence suppression.
+
 ## 16.6.0 (versionCode 29)
 
 - Daily messages are now planned from real facts: up to four a day, each a
   different idea, never the same category twice in a day, at least 2.5 hours
-  apart, inside quiet hours only, and switchable off. A follow-up message never
+  apart, never during quiet hours, and switchable off. A follow-up message never
   carries the follow-up's private title.
 - Linky: 5 free messages per day inside the 15-a-month allowance, 25 per day for
   PLUS, and the over-limit message now quotes the member's real numbers.

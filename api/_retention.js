@@ -11,6 +11,36 @@ import { nextRetention, sentToday, RETENTION } from '../shared/retention.js';
 const DAY = 86_400_000;
 const dayOf = ms => new Date(ms).toISOString().slice(0, 10);
 
+/** Accept the timestamp shapes returned by Firestore, Auth and our own state. */
+export function activityTimestamp(value) {
+  if (typeof value?.toMillis === 'function') {
+    const millis = Number(value.toMillis());
+    return Number.isFinite(millis) ? millis : 0;
+  }
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && value.trim()) return numeric;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  const seconds = Number(value?.seconds);
+  return Number.isFinite(seconds) ? seconds * 1000 + Math.floor((Number(value?.nanoseconds) || 0) / 1e6) : 0;
+}
+
+/**
+ * Last observed app/workspace activity. Scheduler writes to builderStates are
+ * intentionally excluded: a notification job must never keep a member "active".
+ */
+export function lastActivityAt({ state = {}, user = {}, presence = {} } = {}) {
+  return Math.max(
+    activityTimestamp(user.lastActiveAt),
+    activityTimestamp(presence.lastActiveAt),
+    activityTimestamp(state.lastVisitAt),
+  );
+}
+
 /** Monday 00:00 UTC of the week containing `ms`. */
 export function utcWeekStart(ms) {
   const d = new Date(ms);
@@ -57,9 +87,11 @@ export function profileMissing(user = {}) {
  * `league` is the week board summary computed once per cron run:
  *   {byUid:{uid:{rank,points,nextRankGap}}, participants, top:{name,points}}
  */
-export function retentionFacts({ uid = '', state = {}, contributions = {}, user = {}, now = Date.now(), league = null, review = null } = {}) {
+export function retentionFacts({ uid = '', state = {}, contributions = {}, user = {}, presence = {}, now = Date.now(), league = null, review = null } = {}) {
   const prefs = state.prefs || {};
   const clock = localTime(now, prefs.timezone || 'UTC');
+  const lastActiveAt = lastActivityAt({ state, user, presence });
+  const daysSinceActive = lastActiveAt > 0 ? Math.max(0, Math.floor((now - lastActiveAt) / DAY)) : null;
   const days = Array.isArray(contributions.days) ? contributions.days.filter(d => typeof d === 'string') : [];
   const today = dayOf(now);
   const weekStart = dayOf(utcWeekStart(now));
@@ -93,6 +125,8 @@ export function retentionFacts({ uid = '', state = {}, contributions = {}, user 
     points: Number(contributions.points) || 0,
     lastUpdateDay,
     daysSinceUpdate,
+    lastActiveAt,
+    daysSinceActive,
     publicMomentum: contributions.publicMomentum === true,
     rank: mine ? mine.rank : null,
     points7d: mine ? mine.points : 0,
@@ -138,8 +172,8 @@ export function leagueSummary(board = null) {
  * Decide and describe this member's next message. Returns `{message, facts}`
  * where `message` is null when nothing is both true and due.
  */
-export function planRetention({ uid, state, contributions, user, now = Date.now(), league = null, review = null }) {
-  const facts = retentionFacts({ uid, state, contributions, user, now, league, review });
+export function planRetention({ uid, state, contributions, user, presence, now = Date.now(), league = null, review = null }) {
+  const facts = retentionFacts({ uid, state, contributions, user, presence, now, league, review });
   const message = nextRetention({ state, facts, now, contributions });
   return { message, facts };
 }

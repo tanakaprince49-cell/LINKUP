@@ -12,10 +12,10 @@ export function localTime(now,tz='UTC'){
  return {day:`${p.year}-${p.month}-${p.day}`,hour:Number(p.hour),weekday:p.weekday};
 }
 export function weekKey(now,tz='UTC'){const d=new Date(localTime(now,tz).day+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));return d.toISOString().slice(0,10);}
-export const DEFAULT_PREFS={reminders:false,digest:false,friday:false,inApp:true,push:false,email:false,timezone:'UTC',quietStart:20,quietEnd:8,useContextForAI:false,allowInvites:true,dailyBuild:false,buildHour:18,retention:true};
+export const DEFAULT_PREFS={reminders:false,digest:false,friday:false,inApp:true,push:false,email:false,timezone:'UTC',quietStart:20,quietEnd:8,useContextForAI:false,allowInvites:true,dailyBuild:false,buildHour:18,retention:true,welcomeBack:true};
 export function sanitizePrefs(input,previous={}){
  const p={...DEFAULT_PREFS,...previous};
- for(const k of ['reminders','digest','friday','inApp','push','allowInvites','dailyBuild','retention'])if(k in input){if(typeof input[k]!=='boolean')throw problem('Invalid preference.');p[k]=input[k];}
+ for(const k of ['reminders','digest','friday','inApp','push','allowInvites','dailyBuild','retention','welcomeBack'])if(k in input){if(typeof input[k]!=='boolean')throw problem('Invalid preference.');p[k]=input[k];}
  if(input.email===true)throw problem('Email delivery is not configured. Use in-app or push reminders for now.');p.email=false;p.useContextForAI=false;
  if('timezone'in input)p.timezone=timezone(input.timezone);
  for(const k of ['quietStart','quietEnd','buildHour'])if(k in input){if(!Number.isInteger(input[k])||input[k]<0||input[k]>23)throw problem('Quiet hours must be hours from 0 to 23.');p[k]=input[k];}

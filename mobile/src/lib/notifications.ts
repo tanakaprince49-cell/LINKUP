@@ -84,10 +84,12 @@ export async function setupNativeNotificationRuntimeAsync() {
 }
 
 function notificationTitle(data: any) {
+  if (data?.campaign === 'linky_reengagement' && data?.title) return `Linky · ${String(data.title).slice(0, 80)}`;
   return 'LINKUP';
 }
 
 function notificationBody(data: any) {
+  if (data?.campaign === 'linky_reengagement' && data?.body) return String(data.body).trim();
   const content = String(data?.content || '').trim();
   if (data?.type === 'message') return `${data.fromName || 'Someone'} ${content || 'sent you a message.'}`;
   if (data?.type === 'match') return content || 'You have a new match.';

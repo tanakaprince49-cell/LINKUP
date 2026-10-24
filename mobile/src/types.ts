@@ -182,6 +182,10 @@ export interface Message {
 
 export interface AppNotification {
   section?: string;
+  title?: string;
+  body?: string;
+  campaign?: string;
+  headlineKey?: string;
   serverPushManaged?: boolean;
   id: string;
   userId: string;

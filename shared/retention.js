@@ -10,7 +10,7 @@
 //
 //   08:00–11:00  a private kickoff from their own calendar
 //   12:00–15:00  the league (their real rank/points) or real discovery numbers
-//   17:00–20:00  their own calendar for today (unrecorded → nudge, recorded → win)
+//   17:00–20:00  Linky's welcome-back invitation, or their own calendar for today
 //   20:00–22:00  Sunday week recap, or a comeback line after a real gap
 //
 // A due follow-up and the member's own Friday drop follow the event, not the
@@ -19,11 +19,13 @@
 // Two more guards keep the product honest: at most four a day, at least
 // `MIN_GAP_MS` between any two, and one message per category per local day.
 import { habitReminder } from './build-habit.js';
+import { linkyComebackCandidate, LINKY_REENGAGEMENT } from './linky-reengagement.js';
 
 export const RETENTION = Object.freeze({
   maxPerDay: 4,
   minGapMs: 2.5 * 60 * 60 * 1000,
-  comebackAfterDays: 3,
+  comebackAfterDays: LINKY_REENGAGEMENT.afterDays,
+  comebackCooldownMs: LINKY_REENGAGEMENT.cooldownMs,
 });
 
 export const RETENTION_CATEGORIES = Object.freeze(['followup', 'friday', 'kickoff', 'league', 'discover', 'profile', 'build', 'progress', 'digest', 'weekly', 'comeback']);
@@ -37,7 +39,7 @@ export const ANY_SLOT_CATEGORIES = Object.freeze(['followup', 'friday']);
 export const SLOTS = Object.freeze([
   { id: 'morning', from: 8, to: 11, prefer: ['followup', 'kickoff'] },
   { id: 'midday', from: 12, to: 15, prefer: ['league', 'discover', 'profile'] },
-  { id: 'evening', from: 17, to: 20, prefer: ['build', 'progress'] },
+  { id: 'evening', from: 17, to: 20, prefer: ['comeback', 'build', 'progress'] },
   { id: 'night', from: 20, to: 22, prefer: ['weekly', 'comeback'] },
 ]);
 
@@ -149,7 +151,14 @@ export function retentionCandidates({ state = {}, facts = {}, now = Date.now(), 
       '/profile', ['profileMissing']);
   }
 
-  // 5. Their own evening: unrecorded day vs a real recorded day.
+  // 5. Linky's dedicated welcome-back campaign. It uses actual app/workspace
+  //    activity, never a missing build post as a proxy for somebody being away.
+  //    Its own preference and three-day cooldown live in the pure campaign
+  //    module; the shared planner still applies every global delivery guard.
+  const comeback = linkyComebackCandidate({ state, facts, now });
+  if (comeback) out.push(comeback);
+
+  // 6. Their own evening: unrecorded day vs a real recorded day.
   const recordedToday = facts.todayRecorded === true;
   if (recordedToday) {
     add('progress', `Day ${Math.max(1, n(facts.streakDays))} is recorded`,
@@ -162,13 +171,6 @@ export function retentionCandidates({ state = {}, facts = {}, now = Date.now(), 
     add('progress', `${plural(n(facts.streakDays), 'day', 'days')} in a row is still open`,
       'Today is not recorded yet. One honest step keeps the run alive — and nothing is lost if you rest instead.',
       '/ship', ['streakDays', 'todayRecorded']);
-  }
-
-  // 6. A real gap, measured from their own last recorded day.
-  if (n(facts.daysSinceUpdate) >= RETENTION.comebackAfterDays) {
-    add('comeback', `${plural(n(facts.daysSinceUpdate), 'quiet day', 'quiet days')} on your calendar`,
-      `Your last recorded day was ${facts.lastUpdateDay}. Your ${plural(n(facts.points), 'point', 'points')} are still there. Pick the smallest next step.`,
-      '/ship', ['daysSinceUpdate', 'lastUpdateDay']);
   }
 
   // 7. Sunday recap with the member's own numbers for the closing UTC week.
