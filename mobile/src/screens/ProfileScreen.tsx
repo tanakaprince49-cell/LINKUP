@@ -523,7 +523,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
   const profileCacheRef = useRef<Map<string, UserProfile>>(new Map());
   const pendingProfileFetches = useRef<Map<string, Promise<UserProfile | null>>>(new Map());
-  const fetchVisibleProfileDoc = async (uid: string) => {
+  const fetchVisibleProfileDoc = async (uid: string, onFresh?: (profile: UserProfile) => void) => {
     const cached = profileCacheRef.current.get(uid);
     if (cached) return cached;
 
@@ -548,7 +548,12 @@ export default function ProfileScreen({ navigation, route }: any) {
       if (cachedProfile) {
         void serverSnapPromise.then((freshSnap) => {
           const freshProfile = fromSnap(freshSnap);
-          if (freshProfile) profileCacheRef.current.set(uid, freshProfile);
+          if (!freshProfile) return;
+          profileCacheRef.current.set(uid, freshProfile);
+          // A repeat visitor may be looking at a cached copy from before the
+          // banner (or anything else) changed — hand the screen the live copy
+          // the moment it arrives so it renders without needing a revisit.
+          if (JSON.stringify(freshProfile) !== JSON.stringify(cachedProfile)) onFresh?.(freshProfile);
         });
         return remember(cachedProfile);
       }
@@ -596,7 +601,9 @@ export default function ProfileScreen({ navigation, route }: any) {
     let cancelled = false;
     setViewedLoading(true);
     setViewedError('');
-    fetchVisibleProfileDoc(targetUserId).then((profileDoc) => {
+    fetchVisibleProfileDoc(targetUserId, (freshDoc) => {
+      if (!cancelled) setViewedProfile(freshDoc);
+    }).then((profileDoc) => {
       if (cancelled) return;
       if (profileDoc) setViewedProfile(profileDoc);
       else setViewedError('This profile is unavailable.');

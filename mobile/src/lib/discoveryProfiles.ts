@@ -177,8 +177,27 @@ export const syncOwnPublicProfileIndex = async (uid: string, profile: any) => {
   // — the stored crown/tick/boost simply persist.
   const signature = JSON.stringify({ ...index, updatedAt: '' });
   if (lastOwnPublicProfileSignature[uid] === signature) return;
+  const payload = { ...index, updatedAt: new Date().toISOString() };
+  try {
+    await setDoc(ref, payload, { merge: true });
+  } catch (indexError) {
+    // A rejected index write must never freeze the whole public profile
+    // (search, discovery, avatar, bio). The usual cause is deployed
+    // firestore.rules that predate the newest index keys — retry once
+    // without the banner so everything else stays visible to everyone.
+    if (!index.coverPhoto) throw indexError;
+    const withoutBanner = { ...(payload as Record<string, unknown>) };
+    delete withoutBanner.coverPhoto;
+    await setDoc(ref, withoutBanner, { merge: true });
+    console.warn(
+      'Public profile index saved without the banner (write rejected — ' +
+      'deploy the latest firestore.rules so banners are visible to everyone).'
+    );
+    return;
+  }
+  // Only remember the signature on success: a failed publish retries on the
+  // next sync instead of being skipped for the rest of the session.
   lastOwnPublicProfileSignature[uid] = signature;
-  await setDoc(ref, { ...index, updatedAt: new Date().toISOString() }, { merge: true });
 };
 
 type SubscribeOptions = {
