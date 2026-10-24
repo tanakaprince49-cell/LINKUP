@@ -57,6 +57,15 @@ test('new normal profiles remain creatable without minting paid or verification 
  await env.clearFirestore();const db=env.authenticatedContext('new-member').firestore();await assertSucceeds(setDoc(doc(db,'users/new-member'),{uid:'new-member',displayName:'New Member',bio:'Hello',turboConnect:false}));
  await assertFails(setDoc(doc(env.authenticatedContext('imposter').firestore(),'users/imposter'),{uid:'imposter',displayName:'Imposter',isPro:true,isVerified:true}));
 });
+test('owners can publish a hosted banner URL to the public index but not oversized values',async()=>{
+ await env.clearFirestore();
+ const db=env.authenticatedContext('owner').firestore(),ref=doc(db,'publicProfiles/owner');
+ await assertSucceeds(setDoc(ref,{uid:'owner',displayName:'Tanaka Fixture',coverPhoto:'https://ik.imagekit.io/example/banner.jpg'}));
+ assert.equal((await getDoc(ref)).data().coverPhoto,'https://ik.imagekit.io/example/banner.jpg');
+ await assertSucceeds(setDoc(ref,{coverPhoto:''},{merge:true}));
+ for(const value of ['https://example.com/'+'a'.repeat(2048),42])await assertFails(setDoc(ref,{coverPhoto:value},{merge:true}));
+ await assertFails(setDoc(doc(env.authenticatedContext('stranger').firestore(),'publicProfiles/owner'),{coverPhoto:'https://example.com/other.jpg'},{merge:true}));
+});
 
 test('owners can persist their hosted avatar URL but cannot write oversized or non-HTTPS aliases',async()=>{
  const db=await seed();const ref=doc(db,'users/owner');

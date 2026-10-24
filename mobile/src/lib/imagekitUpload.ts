@@ -19,6 +19,7 @@ const authEndpoint = () => `${linkupWebBaseUrl()}/api/imagekitAuth`;
 
 export const IMAGEKIT_AVATAR_FOLDER = '/linkup-avatars';
 export const IMAGEKIT_CAMPAIGN_FOLDER = '/linkup-campaigns';
+export const IMAGEKIT_BANNER_FOLDER = '/linkup-banners';
 
 export type ImageKitAuthParams = {
   token: string;
@@ -75,6 +76,15 @@ export const uploadAvatarToImageKit = (uid: string, dataUri: string) =>
     fileName: `${uid}.jpg`,
     // New URLs prevent CDN/search caches (or another device's late upload)
     // from replacing the contents of an already-published profile photo.
+    useUniqueFileName: true,
+  });
+
+/** Profile banners (cover photos). Unique names so a re-uploaded banner never
+ *  collides with a cached one on the CDN. */
+export const uploadBannerToImageKit = (uid: string, dataUri: string) =>
+  uploadImageToImageKit(uid, dataUri, {
+    folder: IMAGEKIT_BANNER_FOLDER,
+    fileName: `${uid}-banner.jpg`,
     useUniqueFileName: true,
   });
 

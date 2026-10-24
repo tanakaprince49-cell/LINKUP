@@ -1,10 +1,12 @@
 import type { LinkyHome, LinkyMessageQuota } from './linkyApi';
 
-export const FREE_LINKY_LIMIT_MESSAGE = 'You have used all of this month\'s free Linky messages. Upgrade to LINKUP PLUS to continue, or wait until your monthly allowance resets.';
+export const FREE_LINKY_LIMIT_MESSAGE = 'You have used your 5 free Linky messages for today. Upgrade to LINKUP PLUS to keep chatting, or come back tomorrow when your allowance resets.';
 
 export function quotaFromHome(home: LinkyHome): LinkyMessageQuota {
   if (home.messageQuota) return home.messageQuota;
-  const period: LinkyMessageQuota['period'] = home.plus ? 'day' : (home.limits.asksPeriod || 'month');
+  // Daily-only allowance: the monthly bucket is retired, so the legacy
+  // fallback derives a day-shaped quota from the home limits.
+  const period: LinkyMessageQuota['period'] = home.plus ? 'day' : (home.limits.asksPeriod || 'day');
   const limit = home.limits.asksPerDay;
   const used = home.limits.asksUsedToday;
   const unlimited = home.plus && limit === null;
@@ -15,8 +17,8 @@ export function quotaFromHome(home: LinkyHome): LinkyMessageQuota {
     resetAt: unlimited ? '' : (home.limits.asksResetAt || ''),
     exhausted: unlimited ? false : used >= finiteLimit,
     upgradeRequired: !home.plus && used >= finiteLimit,
-    dailyLimit: unlimited ? null : undefined,
-    dailyRemaining: unlimited ? null : undefined,
+    dailyLimit: unlimited ? null : limit ?? undefined,
+    dailyRemaining: unlimited ? null : Math.max(0, finiteLimit - used),
   };
 }
 // Concurrent replies cannot restore credits just because an earlier request

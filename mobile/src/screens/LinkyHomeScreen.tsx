@@ -33,7 +33,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { Users, MessageCircle, ArrowLeft, Bell, Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trash2, Trophy, X } from 'lucide-react-native';
+import { Users, MessageCircle, ArrowLeft, Bell, Link2, ArrowUp, Check, Clock, Compass, Send, Settings2, ShieldCheck, Trash2, Trophy, X, Lock } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
@@ -324,11 +324,13 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
   }, [isFocused]);
 
   const quota = home ? quotaFromHome(home) : null;
-  const messageLimit = quota?.limit ?? 15;
+  const messageLimit = quota?.limit ?? 5;
   const asksLeft = quota?.remaining ?? 0;
-  const dailyLeft = quota?.dailyRemaining ?? null;
   const resetCountdown = formatCountdown(quota?.resetAt, nowTick);
   const atMessageLimit = !!home && !home.plus && !!quota?.upgradeRequired && (!quota.resetAt || Date.parse(quota.resetAt) > nowTick);
+  // The composer locks the moment today's 5 free messages are used up; it
+  // unlocks itself when the UTC-day reset passes (see the reset refresher).
+  const composerLocked = !!home && !home.plus && !!quota?.upgradeRequired && (!quota.resetAt || Date.parse(quota.resetAt) > Date.now());
   const quotaPaywallShown = useRef('');
   useEffect(() => {
     if (!isFocused || !atMessageLimit || !quota) return;
@@ -753,7 +755,7 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
             {home ? 'AI building partner · Big ideas welcome' : 'Getting ready…'}
           </Text>
           {home ? <Text accessibilityLabel="Linky message allowance" accessibilityLiveRegion="polite" style={[styles.allowanceText,{color:textColor(isDark,'secondary'),marginTop:3}]}>
-            {home.plus ? 'Unlimited messages · PLUS' : `${asksLeft} of ${messageLimit} free messages left this month${dailyLeft===null?'':` · ${dailyLeft} today`}`}
+            {home.plus ? 'Unlimited messages · PLUS' : atMessageLimit ? `Today's free messages are used up` : `${asksLeft} of ${messageLimit} free messages today`}
           </Text> : null}
           {atMessageLimit && resetCountdown ? <Text style={[styles.allowanceText,{color:textColor(isDark,'muted'),marginTop:2}]}>Resets in {resetCountdown}</Text> : null}
         </View>
@@ -1000,6 +1002,25 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
         borderTopColor: border,
       }]}>
         <View style={[styles.composer, { backgroundColor: surface, borderColor: border }]}>
+          {composerLocked ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Today's free Linky messages are used up. Open upgrade options."
+              onPress={() => setPaywall(FREE_LINKY_LIMIT_MESSAGE)}
+              style={[styles.lockedComposer, { backgroundColor: isDark ? 'rgba(251,230,24,0.10)' : '#FFF6D6', borderColor: isDark ? '#4a4426' : '#E3D01B' }]}
+            >
+              <View style={styles.lockedIcon}>
+                <Lock size={17} color="#0A0B0D" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.lockedTitle, { color: textColor(isDark) }]}>Today's 5 free messages are used up</Text>
+                <Text style={[styles.lockedSub, { color: textColor(isDark, 'muted') }]}>
+                  {resetCountdown ? `Resets in ${resetCountdown} · ` : ''}Tap to keep chatting with PLUS
+                </Text>
+              </View>
+              <Text style={styles.lockedCta}>Upgrade</Text>
+            </TouchableOpacity>
+          ) : (<>
           <TextInput
             ref={inputRef}
             style={[styles.input, { color: textColor(isDark) }]}
@@ -1017,6 +1038,7 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Send message" style={[styles.sendBtn, { backgroundColor: '#FBE618', borderColor: '#E3D01B', opacity: input.trim() && !thinking && home ? 1 : 0.5 }]} onPress={() => send()} disabled={!home || !input.trim() || thinking}>
             {thinking ? <ActivityIndicator size="small" color="#000" /> : <ArrowUp size={19} color="#263A2E" />}
           </TouchableOpacity>
+          </>)}
         </View>
       </View>
       </KeyboardAvoidingView>
@@ -1153,10 +1175,10 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
         visible={!!paywall}
         onClose={() => { setPaywall(null); void load(true); }}
         onUnlocked={() => { setPaywall(null); void load(true); }}
-        feature="Linky monthly message allowance"
+        feature="Linky daily message allowance"
         description={(() => {
           const base = paywall || FREE_LINKY_LIMIT_MESSAGE;
-          return resetCountdown ? `${base}\n\nYour monthly allowance resets in ${resetCountdown} (00:00 UTC on the first of the month).` : base;
+          return resetCountdown ? `${base}\n\nYour daily allowance resets in ${resetCountdown} (00:00 UTC).` : base;
         })()}
       />
     </View>
@@ -1276,6 +1298,11 @@ const styles = StyleSheet.create({
   composerWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 12, paddingTop: 8, borderTopWidth: 1 },
   resetLine: { fontSize: 11, fontWeight: '800', textAlign: 'center', paddingBottom: 8 },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, borderRadius: 18, borderWidth: 1, paddingLeft: 14, paddingRight: 6, paddingVertical: 6 },
+  lockedComposer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
+  lockedIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#FBE618', alignItems: 'center', justifyContent: 'center' },
+  lockedTitle: { fontSize: 13, fontWeight: '800' },
+  lockedSub: { fontSize: 11, marginTop: 2 },
+  lockedCta: { fontSize: 12, fontWeight: '900', color: '#0A0B0D', backgroundColor: '#FBE618', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, overflow: 'hidden' },
   input: { flex: 1, fontSize: 14, fontWeight: '500', maxHeight: 96, paddingVertical: 6 },
   sendBtn: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
 });

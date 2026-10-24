@@ -82,6 +82,41 @@ const compressDataUriOnWeb = async (dataUri: string, savedLimit: number) => {
   return smallest.length <= savedLimit ? smallest : null;
 };
 
+// Native lane: resize + recompress with expo-image-manipulator so full-
+// resolution phone photos (especially wide 16:9 banners) fit the app's image
+// budget instead of failing with "Photo too large".
+const compressAssetOnNative = async (asset: PickedImageAsset | undefined, savedLimit: number) => {
+  if (hasWebCanvas() || !asset?.uri || asset.uri.startsWith('data:image/')) return null;
+  let manipulator: any = null;
+  try {
+    manipulator = await import('expo-image-manipulator');
+  } catch {
+    return null;
+  }
+  const manipulateAsync = manipulator?.manipulateAsync;
+  if (typeof manipulateAsync !== 'function') return null;
+  const format = manipulator?.SaveFormat?.JPEG || 'jpeg';
+  let smallest = '';
+  for (const width of [1400, 1000, 700]) {
+    for (const compress of [0.72, 0.55]) {
+      try {
+        const out = await manipulateAsync(
+          asset.uri,
+          [{ resize: { width } }],
+          { compress, format, base64: true }
+        );
+        const candidate = out?.base64 ? `data:image/jpeg;base64,${out.base64}` : '';
+        if (!candidate) continue;
+        if (!smallest || candidate.length < smallest.length) smallest = candidate;
+        if (candidate.length <= savedLimit) return candidate;
+      } catch {
+        // Try the next size down.
+      }
+    }
+  }
+  return smallest && smallest.length <= savedLimit ? smallest : null;
+};
+
 export async function imageAssetToDataUri(
   asset: PickedImageAsset | undefined,
   savedLimit = MAX_APP_IMAGE_CHARS
@@ -108,6 +143,11 @@ export async function imageAssetToDataUri(
     const compressed = await compressDataUriOnWeb(dataUri, savedLimit);
     if (compressed) {
       return { dataUri: compressed };
+    }
+
+    const nativeCompressed = await compressAssetOnNative(asset, savedLimit);
+    if (nativeCompressed) {
+      return { dataUri: nativeCompressed };
     }
 
     const encodedBytes = Math.ceil(dataUri.length * 0.75);

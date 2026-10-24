@@ -140,7 +140,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   const me=await db.collection('users').doc(uid).get();if(!me.exists||me.data().deleted||me.data().banned||me.data().onboarded!==true)throw problem('Finish your profile before opening the builder workspace.',403);
   // Bounded server-owned request counter, separate from the paid AI ledger.
   await db.runTransaction(async tx=>{const r=db.collection('builderRates').doc(uid),d=await tx.get(r),v=d.exists?d.data():{};const key=Math.floor(now()/60000),count=v.key===key?v.count:0;if(count>=60)throw problem('Please pause for a moment before trying again.',429);tx.set(r,{key,count:count+1});});
-  if(['groups','groupCreate','groupGet','groupMessages','groupSend','groupRead','groupInvite','groupRespond','groupAction','groupExport','groupUpdate','groupMessageAction','groupPrefs','groupBlock','groupDelete'].includes(op))return groups.handle(uid,op,input);
+  if(['groups','groupCreate','groupGet','groupDiscover','groupJoin','groupMessages','groupSend','groupRead','groupInvite','groupRespond','groupAction','groupExport','groupUpdate','groupMessageAction','groupPrefs','groupBlock','groupDelete'].includes(op))return groups.handle(uid,op,input);
   if(op==='campaignReward')return readCampaignReward(db,uid,now());
   if(op==='campaignRewardClaim')return claimCampaignReward(db,uid,input,now());
   if(op==='habit')return habits.read(uid);

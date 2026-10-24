@@ -595,7 +595,7 @@ service cloud.firestore {
       function validPublicProfile(d) {
         return d.uid == userId &&
           d.keys().hasOnly([
-            'uid', 'displayName', 'username', 'searchName', 'searchUsername', 'bio', 'profilePic',
+            'uid', 'displayName', 'username', 'searchName', 'searchUsername', 'bio', 'profilePic', 'coverPhoto',
             'occupation', 'company', 'country', 'city', 'age',
             'skills', 'interests', 'industries', 'lookingFor',
             'goals', 'experience', 'personalityType', 'commitmentLevel',
@@ -616,6 +616,7 @@ service cloud.firestore {
           d.get('searchUsername', '') is string && d.get('searchUsername', '').size() <= 40 &&
           d.get('bio', '') is string && d.get('bio', '').size() <= 700 &&
           d.get('profilePic', '') is string && d.get('profilePic', '').size() <= 2048 &&
+          d.get('coverPhoto', '') is string && d.get('coverPhoto', '').size() <= 2048 &&
           d.get('goals', '') is string && d.get('goals', '').size() <= 420 &&
           d.get('occupation', '') is string &&
           d.get('company', '') is string &&

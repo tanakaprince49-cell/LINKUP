@@ -211,7 +211,7 @@ export type LinkyMessageQuota = {
   period: 'day' | 'month'; periodKey: string; limit: number | null; used: number;
   remaining: number | null; resetAt: string; exhausted: boolean; upgradeRequired: boolean;
   unlimited?: boolean;
-  /** Free keeps its daily burst cap; PLUS has no daily cap. */
+  /** Free is daily-only now, so these mirror the main day-shaped allowance; PLUS has no cap. */
   dailyLimit?: number | null; dailyUsed?: number; dailyRemaining?: number | null;
 };
 

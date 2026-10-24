@@ -98,7 +98,7 @@ test('successful search produces evidence, uncertainties, comparisons and prep a
  assert.equal(found.cards.length,2);assert.ok(found.cards[0].evidence.length>=2);assert.match(found.cards[0].unknowns[0],/not confirmed/);
  const compare=await api.ask('member','compare 1 and 2',{userDoc:member,source:'whatsapp'});assert.match(compare.reply,/Alice/);assert.match(compare.reply,/Bo/);
  const prep=await api.ask('member','prep 1',{userDoc:member});assert.match(prep.reply,/not a scheduled meeting/);assert.equal(prep.cards.length,2);assert.equal(prep.cardIds.length,2);
- assert.equal(db.rows.get('linkyUsage/member').month.count,3);
+ assert.equal(db.rows.get('linkyUsage/member').daily.count,3);
 });
 test('source privacy and real bidirectional blocks override stale public index',async()=>{
  const db=new Database();seed(db,[person('Alice'),person('Bo'),person('Hidden'),person('Deleted')]);
@@ -132,7 +132,7 @@ test('tone persists across channels; preference changes validate supported value
 test('source read failure is not reported as no match and the reserved message is refunded',async()=>{
  const db=new Database();seed(db,[person('Alice')]);db.failRead=true;const api=core(db);
  await assert.rejects(api.ask('member','find a Flutter developer',{userDoc:member}),/source unavailable/);
- assert.equal(db.rows.get('linkyUsage/member').month.count,0);
+ assert.equal(db.rows.get('linkyUsage/member').daily.count,0);
 });
 test('external results have no fabricated fit fallback when evidence is absent',async()=>{
  const profiles=[{name:'Alice',title:'Flutter developer',snippet:'Based in Harare'},{name:'Bo',title:'Accountant',snippet:'Based in Harare'}];
@@ -234,8 +234,8 @@ function adapter(db,api) {
  vm.runInNewContext(code,{module,exports:module.exports,require:name=>{assert.ok(name in mocks,name);return mocks[name];},console,process:{env:{}},Date,Set,Map,URL,Buffer});
  return module.exports;
 }
-// This suite exercises adapter behaviour, not the daily burst cap (which has
-// its own tests in linky-usage.test.mjs), so it raises the cap for its own run.
+// This suite exercises adapter behaviour, not the daily allowance (which has
+// its own tests in linky-usage.test.mjs), so it raises the allowance for its own run.
 for(const channel of ['telegram','whatsapp'])test(`${channel} adapter shares strict search, tone, explanations, comparison and prep`,async()=>{
  const previousCap=process.env.LINKY_FREE_DAILY;process.env.LINKY_FREE_DAILY='50';
  try{
@@ -250,7 +250,7 @@ for(const channel of ['telegram','whatsapp'])test(`${channel} adapter shares str
  assert.match((await bot.botReply(channel,'chat','meet 99')).text,/number|current|card/i);
  const none=await bot.botReply(channel,'chat','find a quantum cryptographer');
  assert.match(none.text,/don't have a solid match/);assert.ok(!none.cards?.length);
- assert.equal(db.rows.get('linkyUsage/member').month.count,6);
+ assert.equal(db.rows.get('linkyUsage/member').daily.count,6);
  }finally{ if(previousCap===undefined)delete process.env.LINKY_FREE_DAILY;else process.env.LINKY_FREE_DAILY=previousCap; }
 });
 test('authenticated app prefs route persists the shared companion tone',async()=>{
@@ -287,8 +287,8 @@ test('squads require every slot and retain full slot constraints on reload',asyn
 
 test('legacy app external-search action cannot bypass an exhausted message ledger',async()=>{
  const db=new Database();seed(db,[member]);const api=core(db),route=adapter(db,api);
- // An exhausted monthly ledger, exactly as three days at the cap would leave it.
- db.rows.set('linkyUsage/member',{month:{key:usage.monthKey(Date.now()),count:15}});
+ // An exhausted daily ledger: all five of today's messages are spent.
+ db.rows.set('linkyUsage/member',{daily:{key:usage.dayKey(Date.now()),count:5}});
  const response={status(code){this.code=code;return this;},json(body){this.body=body;}};
  await route.default({method:'POST',query:{},body:{action:'pointers',need:'Flutter developer'},headers:{}},response);
  assert.equal(response.code,402);assert.equal(response.body.code,'ask_limit');
@@ -338,7 +338,7 @@ test('no LINKUP match asks permission before LinkedIn; confirmation returns matc
  const out=await api.ask('member','yes, search LinkedIn',{userDoc:member});
  assert.equal(out.kind,'outside');assert.equal(calls.length,1);assert.match(calls[0],/Flutter/i);assert.match(calls[0],/Harare/i);
  assert.equal(out.leads.length,1);assert.equal(out.leads[0].url,'https://www.linkedin.com/in/alice-public');
- assert.equal(db.rows.get('linkyUsage/member').month.count,2);
+ assert.equal(db.rows.get('linkyUsage/member').daily.count,2);
 });
 test('declining LinkedIn or unavailable search never invents external profiles',async()=>{
  const db=new Database();seed(db,[member]);let calls=0;
@@ -379,8 +379,8 @@ test('pre-V16 main chat never injects removed Coach context, including old opted
 });
 
 test('Linky workbench gives a useful artifact and continuation without a member match or extra AI calls',async()=>{
- const db=new Database();seed(db,[member]);const lk=core(db);const first=await lk.ask('member','Help me price my new app',{userDoc:member});assert.equal(first.kind,'chat');assert.equal(first.cards.length,0);assert.match(first.reply,/pricing|price|hypotheses/i);assert.equal(first.messageQuota.remaining,14);const next=await lk.ask('member','Delivery costs me three dollars per customer',{userDoc:member});assert.equal(next.thread.at(-1).workTask,'pricing');assert.equal(next.messageQuota.remaining,13);
+ const db=new Database();seed(db,[member]);const lk=core(db);const first=await lk.ask('member','Help me price my new app',{userDoc:member});assert.equal(first.kind,'chat');assert.equal(first.cards.length,0);assert.match(first.reply,/pricing|price|hypotheses/i);assert.equal(first.messageQuota.remaining,4);const next=await lk.ask('member','Delivery costs me three dollars per customer',{userDoc:member});assert.equal(next.thread.at(-1).workTask,'pricing');assert.equal(next.messageQuota.remaining,3);
 });
 test('workbench credentials fail before model calls and refund the reserved message',async()=>{
- const db=new Database();seed(db,[member]);const prompts=[],lk=core(db,{ai:true,prompts});await assert.rejects(lk.ask('member','Help me code with api_key=abcdefghijklmnopqrstuv',{userDoc:member}),/Remove passwords/);assert.equal(prompts.length,0);const h=await lk.home('member',{userDoc:member});assert.equal(h.messageQuota.remaining,15);
+ const db=new Database();seed(db,[member]);const prompts=[],lk=core(db,{ai:true,prompts});await assert.rejects(lk.ask('member','Help me code with api_key=abcdefghijklmnopqrstuv',{userDoc:member}),/Remove passwords/);assert.equal(prompts.length,0);const h=await lk.home('member',{userDoc:member});assert.equal(h.messageQuota.remaining,5);
 });

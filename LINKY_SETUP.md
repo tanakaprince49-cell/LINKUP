@@ -46,7 +46,7 @@ The API runs with the Admin SDK. `introSuggestions`, `intros`, `linkyState`, `bo
 
 ## Message allowances
 
-- Free: **15 conversational messages per UTC calendar month**, with a default **5-message daily burst cap**. The daily cap does not increase the monthly allowance.
+- Free: **5 conversational messages per UTC day**, resetting at midnight UTC. The allowance is daily-only; there is no monthly bucket.
 - PLUS: **unlimited conversational messages**—no member daily/monthly allowance and no shared-cap rejection. `LINKY_PLUS_DAILY` is retired and ignored.
 - One shared reservation/refund ledger across the app and linked channels. Conversational tone commands, explanations, comparison, preparation, greetings and name lookups sent through `ask` are metered for usage accounting; PLUS usage is counted but not capped. Settings changes and navigation/approval actions are not extra conversational turns.
 - `LINKY_GLOBAL_DAILY_MESSAGES` still rejects free asks when the shared deployment ceiling is reached. PLUS asks continue and remain in the same global usage count; failed processing is refunded from member and global counters.

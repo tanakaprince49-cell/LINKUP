@@ -50,7 +50,7 @@ test('real Firestore transactions keep PLUS unlimited while the free shared guar
     );
     const free = await usage.readMessageQuota(db, 'free', { plus: false, now });
     assert.equal(free.used, 0);
-    assert.equal(free.remaining, 15);
+    assert.equal(free.remaining, 5);
   } finally {
     process.env = previous;
   }

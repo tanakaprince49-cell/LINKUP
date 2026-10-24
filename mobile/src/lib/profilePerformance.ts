@@ -93,6 +93,7 @@ export const compactProfileForList = (profile: any): UserProfile =>
     username: text(profile?.username, 40),
     bio: text(profile?.bio, 700),
     profilePic: safeProfileImageUri(profile?.profilePic),
+    coverPhoto: safeProfileImageUri(profile?.coverPhoto),
     photos: Array.isArray(profile?.photos)
       ? profile.photos.map((uri: unknown) => safeProfileImageUri(uri)).filter(Boolean).slice(0, 3)
       : [],
@@ -159,6 +160,7 @@ export const compactProfileForList = (profile: any): UserProfile =>
 export const compactProfileForCache = (profileData: any) => {
   const next = { ...(profileData || {}) };
   next.profilePic = safeProfileImageUri(next.profilePic, CACHE_IMAGE_CHAR_LIMIT);
+  next.coverPhoto = safeProfileImageUri(next.coverPhoto, CACHE_IMAGE_CHAR_LIMIT);
   next.photos = Array.isArray(next.photos)
     ? next.photos.map((uri: unknown) => safeProfileImageUri(uri, CACHE_IMAGE_CHAR_LIMIT)).filter(Boolean).slice(0, 3)
     : [];

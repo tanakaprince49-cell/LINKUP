@@ -1,14 +1,14 @@
 # Linky message allowance and Android app reviews
 
-Implementation handoff — originally 16 October 2026; allowance updated for 16.8.0 on 24 October 2026.
+Implementation handoff — originally 16 October 2026; daily-only allowance shipped in 16.9.0 on 24 October 2026.
 
 ## Current behavior
 
-- Free accounts: **15 Linky messages per UTC calendar month**, with a default **5-message daily burst cap**.
-- PLUS: **unlimited Linky messages**. There is no member daily/monthly allowance or shared-cap rejection. Meet limits, prices, billing products, and other entitlements are not changed by this update.
-- The fifteenth successful free message is delivered. The shared Android/web UI then opens the PLUS paywall immediately; no sixteenth send is required.
-- At free exhaustion, entering the Linky screen also opens the paywall. Dismissing it leaves the last response readable but does not restore messages. Further send attempts reopen the paywall without sending another request.
-- The next free monthly reset is **00:00 UTC on the first day of the next month**. Calendar rollover refreshes the client allowance. PLUS has no allowance reset countdown and displays **Unlimited messages · PLUS**.
+- Free accounts: **5 Linky messages per UTC day**, resetting at **midnight UTC**. There is no monthly bucket anymore.
+- PLUS: **unlimited Linky messages**. There is no member daily allowance or shared-cap rejection. Meet limits, prices, billing products, and other entitlements are not changed by this update.
+- The fifth successful free message is delivered. The shared Android/web UI then opens the PLUS paywall immediately and locks the composer; no sixth send is possible.
+- At free exhaustion, entering the Linky screen also opens the paywall. Dismissing it leaves the last response readable but does not restore messages. The locked composer shows the live reset countdown and reopens the paywall on tap without sending another request.
+- The next free daily reset is **00:00 UTC**. UTC-day rollover refreshes the client allowance. PLUS has no allowance reset countdown and displays **Unlimited messages · PLUS**.
 
 ## Server enforcement
 
@@ -56,7 +56,7 @@ A separate **Settings & Preferences → Rate LINKUP** button on Android opens th
 
 1. Confirm the highest uploaded versionCode in Play Console and select a higher code. Source version for this update is `16.8.0` / `31`; EAS production auto-increment is disabled.
 2. Build a signed Android release containing the newly linked `expo-store-review` module. Upload through an internal/closed track before production.
-3. Verify free monthly usage at 14 → 15 → blocked, immediate paywall, dismiss/retry, reload, multiple devices/channels, upgrade/restore, PLUS usage beyond the retired daily cap with an Unlimited label, and UTC rollover using dedicated test accounts. Never spend real members' credits for release verification.
+3. Verify free daily usage at 4 → 5 → blocked, immediate paywall plus locked composer, dismiss/retry, reload, multiple devices/channels, upgrade/restore, PLUS unlimited usage with an Unlimited label, and UTC-midnight rollover using dedicated test accounts. Never spend real members' credits for release verification.
 4. Follow Google's review-testing requirements on a Google Play-enabled device and an eligible test account. Do not assume a sideloaded APK or a suppressed dialog proves the flow is broken.
 5. Confirm that manual Rate LINKUP opens the correct `com.tana.linkup` listing, cancellation returns to the app, and review attempts never grant credits or rewards.
 6. Recheck privacy/Data safety disclosures for local review-timing state and the server usage ledger. Existing app copy and this technical handoff are not a policy certification.
@@ -70,6 +70,6 @@ A separate **Settings & Preferences → Rate LINKUP** button on Android opens th
 The backend/web deployment and Android/Play Store releases are separate. Check the GitHub production workflow and deployed build identifier for web rollout status; do not interpret a repository push as an Android publication.
 
 
-### Allowance increase
+### Allowance change (16.9.0)
 
-The free limit remains 15/month, preserving the existing UTC-month ledger count. A member at 10 used receives five additional messages, not a new 15-message bucket. As of 16.8.0, PLUS is unlimited and the header displays that state directly after “Big ideas welcome.”
+The free allowance is now daily-only: 5 messages per UTC day, resetting at midnight UTC. The 15/month bucket is retired and historical monthly ledgers are ignored, so every free member starts each UTC day fresh. PLUS remains unlimited and the header displays that state directly after “Big ideas welcome.”

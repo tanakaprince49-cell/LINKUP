@@ -4,6 +4,11 @@
 // per-member allowance has to fit inside one shared ceiling. These numbers are
 // derived, not guessed: see docs/qa/linky-allowance-plan.md for the arithmetic.
 //
+// The free allowance is DAILY-ONLY: 5 messages per UTC day, resetting at
+// midnight UTC. There is no monthly bucket anymore: the header shows
+// "5 free messages today" and the composer locks when they are used up.
+// PLUS messages are unlimited and cannot be capped.
+//
 // Overrides (Vercel env, no redeploy of code needed):
 //   LINKY_FREE_DAILY              free members, messages per UTC day (default 5)
 //   LINKY_GLOBAL_DAILY_MESSAGES   shared free-plan ceiling (0 = disabled)
@@ -11,7 +16,7 @@
 //   LINKY_MODEL_RPD               the provider's requests/day for the wired model
 //   LINKY_CALLS_PER_MESSAGE       average model calls per delivered message
 export const BUDGET_DEFAULTS = Object.freeze({
-  freePerMonth: 15,
+  freePerDay: 5,
   plusPerDay: null,
   freeDaily: 5,
   plusDaily: null,
@@ -31,6 +36,7 @@ export function budgetConfig(env = {}) {
   return {
     ...BUDGET_DEFAULTS,
     freeDaily: num(env.LINKY_FREE_DAILY, BUDGET_DEFAULTS.freeDaily, 0, 500),
+    freePerDay: num(env.LINKY_FREE_DAILY, BUDGET_DEFAULTS.freePerDay, 0, 500),
     // Deliberately ignore legacy LINKY_PLUS_DAILY values: an environment
     // override must not turn an advertised unlimited plan back into a cap.
     globalDailyMessages: num(env.LINKY_GLOBAL_DAILY_MESSAGES, BUDGET_DEFAULTS.globalDailyMessages, 0, 100_000),
@@ -58,7 +64,7 @@ export function budgetReport(env = {}) {
   for (const members of [100, 500, 1_000]) {
     report[`active_${members}`] = fairShare({ messagesPerDay, members });
   }
-  report.monthlyFor500 = Math.floor(messagesPerDay * 30 / 500);
-  report.freeMonthsCovered = Math.floor(messagesPerDay * 30 / Math.max(1, 500 * config.freePerMonth));
+  report.dailyFor500 = Math.floor(messagesPerDay / 500);
+  report.membersCoveredDaily = Math.floor(messagesPerDay / Math.max(1, config.freeDaily));
   return report;
 }

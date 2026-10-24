@@ -54,7 +54,7 @@ import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { buildConversationProfileSnapshot } from '../lib/conversationProfiles';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
 import { applyPlusIdentityFlags, repairPlusIdentity } from '../lib/plusRepair';
-import { uploadAvatarToImageKit } from '../lib/imagekitUpload';
+import { uploadAvatarToImageKit, uploadBannerToImageKit } from '../lib/imagekitUpload';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
 import { normalizeIdeaDraft } from '../lib/ideas';
@@ -390,6 +390,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [editFocus, setEditFocus] = useState<'all' | 'bio' | 'skills' | 'project' | 'idea' | 'photos'>('all');
   const [isSaving, setIsSaving] = useState(false);
   const avatarUploadPending = useRef(false);
+  const bannerUploadPending = useRef(false);
   const [connectionGate, setConnectionGate] = useState<ConnectionGate | null>(null);
   const [editData, setEditData] = useState<any>(null);
   const [viewedProfile, setViewedProfile] = useState<any>(null);
@@ -1158,6 +1159,86 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
+  const pickBannerPhoto = async () => {
+    if (isViewingOther || bannerUploadPending.current) return;
+    if (!myProfile) {
+      notifyUser('Profile not ready', 'Give it a second to finish loading, then tap again.');
+      return;
+    }
+    bannerUploadPending.current = true;
+    try {
+      const ImagePicker = await import('expo-image-picker');
+      const { imageAssetToDataUri } = await import('../lib/imageUploadLimits');
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          notifyUser('Permission Denied', 'We need access to your photos to update your banner.');
+          return;
+        }
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: (ImagePicker as any).MediaType?.Images ? [(ImagePicker as any).MediaType.Images] : ['images'],
+        allowsEditing: Platform.OS !== 'web',
+        aspect: [16, 9],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (!result.canceled) {
+        const { dataUri, error } = await imageAssetToDataUri(result.assets?.[0]);
+        if (!dataUri) {
+          notifyUser('Photo too large', error || 'Please choose a smaller photo.');
+          return;
+        }
+        setIsSaving(true);
+        try {
+          await updateOwnProfileDoc({ coverPhoto: dataUri });
+          updateLocalProfile({ coverPhoto: dataUri });
+          syncOwnPublicProfileIndex(myProfile.uid, { ...(profile || {}), coverPhoto: dataUri, uid: myProfile.uid }).catch(() => {});
+
+          if (isEditing) {
+            setEditData((current: any) => current ? { ...current, coverPhoto: dataUri } : current);
+          }
+          // Same serialized CDN lane as the avatar: the inline save above is
+          // the fallback, the hosted URL below is what everyone else sees.
+          await uploadBannerToImageKit(myProfile.uid, dataUri).then(async (url) => {
+            if (!url) return;
+            await updateOwnProfileDoc({ coverPhoto: url });
+            updateLocalProfile({ coverPhoto: url });
+            setEditData((current: any) => current?.coverPhoto === dataUri
+              ? { ...current, coverPhoto: url } : current);
+            await syncOwnPublicProfileIndex(myProfile.uid, { ...(profile || {}), coverPhoto: url, uid: myProfile.uid });
+          }).catch((error) => console.warn('Hosted banner sync skipped; the saved banner remains available.', error));
+
+        } catch (e: any) {
+          handleFirestoreError(e, OperationType.UPDATE, `users/${myProfile.uid}`);
+          notifyUser("Upload failed", e?.message || "Failed to update banner picture.");
+        } finally {
+          setIsSaving(false);
+        }
+      }
+    } finally {
+      bannerUploadPending.current = false;
+    }
+  };
+
+  const removeBannerPhoto = async () => {
+    if (isViewingOther || !myProfile) return;
+    setIsSaving(true);
+    try {
+      await updateOwnProfileDoc({ coverPhoto: '' });
+      updateLocalProfile({ coverPhoto: '' });
+      setEditData((current: any) => current ? { ...current, coverPhoto: '' } : current);
+      syncOwnPublicProfileIndex(myProfile.uid, { ...(profile || {}), coverPhoto: '', uid: myProfile.uid }).catch(() => {});
+    } catch (e: any) {
+      handleFirestoreError(e, OperationType.UPDATE, `users/${myProfile.uid}`);
+      notifyUser('Delete failed', e?.message || 'Failed to remove banner picture.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const openChat = async () => {
     if (!myProfile?.uid) {
       notifyUser('Sign in to message', 'Create or sign in to a LINKUP account to message this builder.');
@@ -1819,6 +1900,13 @@ export default function ProfileScreen({ navigation, route }: any) {
     isEditing ? editData?.profilePic : profile?.profilePic,
     MOBILE_LIST_IMAGE_LIMIT
   );
+  const heroBanner = safeProfileImageUri(
+    isEditing ? (editData as any)?.coverPhoto : (profile as any)?.coverPhoto,
+    MOBILE_LIST_IMAGE_LIMIT
+  );
+  // Owners always see the banner slot (with an "Add banner" prompt when it is
+  // empty); visitors only see it when there is a banner to show.
+  const bannerVisible = !isViewingOther || !!heroBanner;
   const shouldRenderProfileImages = profileImagesReady || isEditing;
   const profileInitial = (displayNameFor(profile).trim()[0] || 'L').toUpperCase();
   const openFullPhoto = (uri: string) => {
@@ -1978,7 +2066,51 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         {/* PROFILE HERO */}
         <View style={styles.heroSection}>
-          <View style={styles.avatarContainer}>
+          {bannerVisible && (
+            <View style={styles.bannerWrap}>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                accessibilityRole="button"
+                accessibilityLabel={heroBanner ? 'View banner picture' : 'Add a banner picture'}
+                onPress={() => {
+                  if (heroBanner) openFullPhoto(heroBanner);
+                  else if (!isViewingOther) void pickBannerPhoto();
+                }}
+                style={styles.bannerTouch}
+              >
+                {shouldRenderProfileImages && !!heroBanner ? (
+                  <AppImage uri={ikImage(heroBanner, 1200, 80)} style={styles.bannerImage} />
+                ) : (
+                  <View style={[styles.bannerPlaceholder, { backgroundColor: isDark ? '#1C2836' : '#EDE8D2' }]}>
+                    <View style={[styles.bannerDeco, styles.bannerDecoA, { backgroundColor: isDark ? 'rgba(251,230,24,0.22)' : 'rgba(251,230,24,0.85)' }]} />
+                    <View style={[styles.bannerDeco, styles.bannerDecoB, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(10,11,13,0.07)' }]} />
+                    <View style={[styles.bannerDeco, styles.bannerDecoC, { backgroundColor: isDark ? 'rgba(251,230,24,0.10)' : 'rgba(10,11,13,0.05)' }]} />
+                    {!isViewingOther && (
+                      <View style={[styles.bannerPrompt, { backgroundColor: isDark ? 'rgba(10,11,13,0.55)' : 'rgba(255,255,255,0.60)', borderColor: isDark ? 'rgba(251,230,24,0.35)' : 'rgba(10,11,13,0.10)' }]}>
+                        <SafeIcon name="ImagePlus" size={22} color={isDark ? '#FBE618' : '#0A0B0D'} />
+                        <Text style={[styles.bannerPromptText, { color: isDark ? '#FBE618' : '#0A0B0D' }]}>Add a banner picture</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+                {!!heroBanner && <View style={styles.bannerShade} pointerEvents="none" />}
+              </TouchableOpacity>
+              {!isViewingOther && (
+                <View style={styles.bannerActions} pointerEvents="box-none">
+                  {!!heroBanner && (
+                    <TouchableOpacity style={styles.bannerIconBtn} onPress={removeBannerPhoto} accessibilityRole="button" accessibilityLabel="Remove banner picture" activeOpacity={0.85}>
+                      <SafeIcon name="X" size={14} color="#FFF" />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={styles.bannerEditBtn} onPress={pickBannerPhoto} accessibilityRole="button" accessibilityLabel={heroBanner ? 'Change banner picture' : 'Add banner picture'} activeOpacity={0.85}>
+                    <SafeIcon name="Camera" size={14} color="#000" />
+                    <Text style={styles.bannerEditText}>{heroBanner ? 'Change' : 'Add banner'}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+          <View style={[styles.avatarContainer, bannerVisible && styles.avatarOverlap]}>
             <TouchableOpacity activeOpacity={0.9} onPress={() => { if (heroProfilePic) openFullPhoto(heroProfilePic); }}>
               {shouldRenderProfileImages && !!heroProfilePic ? (
                 <AppImage uri={ikImage(heroProfilePic, 640, 85)} style={styles.avatar} />
@@ -3541,6 +3673,109 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
     backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  bannerWrap: {
+    alignSelf: 'stretch',
+    marginHorizontal: -24,
+    marginTop: -24,
+    height: 148,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  bannerTouch: {
+    flex: 1,
+  },
+  bannerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  bannerPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  bannerDeco: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  bannerDecoA: {
+    width: 190,
+    height: 190,
+    top: -105,
+    left: -55,
+  },
+  bannerDecoB: {
+    width: 150,
+    height: 150,
+    bottom: -95,
+    right: -40,
+  },
+  bannerDecoC: {
+    width: 90,
+    height: 90,
+    bottom: -50,
+    left: '38%',
+  },
+  bannerPrompt: {
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  bannerPromptText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  bannerShade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 60,
+    backgroundColor: 'rgba(0,0,0,0.14)',
+  },
+  bannerActions: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bannerEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FBE618',
+    borderWidth: 2,
+    borderColor: '#000',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  bannerEditText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#000',
+  },
+  bannerIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  avatarOverlap: {
+    marginTop: -46,
+    zIndex: 5,
   },
   sectionHeader: {
     fontSize: 10,

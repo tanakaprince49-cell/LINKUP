@@ -67,6 +67,13 @@ export const buildPublicProfileIndex = (profile: any) => {
   const indexPic = storedProfileImageUri(
     photoCandidates.find((v) => typeof v === 'string' && v.trim())
   );
+  // Profile banner: same hosted-URLs-only rule as the avatar. A freshly
+  // picked banner shows on the owner's own profile immediately (users doc
+  // keeps the data URI until the ImageKit upload lands), and appears for
+  // everyone else as soon as the hosted URL is indexed here.
+  const indexBanner = storedProfileImageUri(
+    (profile as any).coverPhoto || (compact as any).coverPhoto
+  );
 
   return {
     uid: compact.uid,
@@ -78,6 +85,7 @@ export const buildPublicProfileIndex = (profile: any) => {
     searchUsername: text((compact as any).username, 40).toLowerCase(),
     bio: text(compact.bio, 700),
     profilePic: indexPic,
+    coverPhoto: indexBanner,
     occupation: text((compact as any).occupation, 100),
     company: text((compact as any).company, 120),
     country: text(compact.country, 80),

@@ -28,8 +28,8 @@ import { proofPoints, proofFromSnippet, badgeLine } from './_proof.js';
 
 export const LIMITS = {
   // All member messages count, including greetings, drafts and follow-up replies.
-  // Free: one shared UTC calendar-month allowance across every channel.
-  free: { asksPerMonth: MESSAGE_LIMITS.freePerMonth, meetsPerDay: 2 },
+  // Free: one shared UTC-day allowance across every channel (daily-only, no monthly bucket).
+  free: { asksPerDay: MESSAGE_LIMITS.freePerDay, meetsPerDay: 2 },
   plus: { asksPerDay: MESSAGE_LIMITS.plusPerDay, meetsPerDay: 100000 },
   inboundPerWeek: 5,
   introDays: 7,
@@ -1063,7 +1063,7 @@ const VOICE_KINDS = {
   check: "Address the actual thought first with a useful, evidence-based observation. Then ask whether to search for relevant professionals. Do not list profiles, imply a completed search, or start searching without agreement.",
   squad: "The member requested a complementary team. Present the supplied group together, identify each person and their documented contribution, and state the remaining expertise gap. Do not offer team discovery unless requested.",
   loop: "Ask a brief professional follow-up about the introduction after 48 hours. Offer the four supplied response choices clearly. Never assume the members met or describe an unconfirmed outcome.",
-  limit: "Explain the actual free monthly/daily allowance and reset, or unlimited PLUS access, from the dossier. Do not claim more messages are free or pressure a purchase.",
+  limit: "Explain the actual free daily allowance (5 messages a day, resets at midnight UTC) and reset, or unlimited PLUS access, from the dossier. Do not claim more messages are free or pressure a purchase.",
 };
 
 // Kinds that must be written fresh every time: caching a greeting for fourteen days
@@ -1206,7 +1206,7 @@ function plainReply(kind, d = {}) {
       return `A squad - not three searches.\n${squads.map(one).join('\n')}${d.channel && d.channel !== 'app' ? '\n\nReply meet squad and I will ask all of them at once - each one still gets to say yes.' : '\n\nTap Meet squad and I will ask all of them at once - each one still gets to say yes.'}`;
     }
     case 'loop': return loopQuestionText((d.other_person && d.other_person.name) || 'them', d.what_the_intro_was_for, d.they_have_messaged);
-    case 'limit': return 'Free accounts receive 15 Linky messages per calendar month, with a daily burst limit. PLUS includes unlimited Linky messages.';
+    case 'limit': return 'Free accounts receive 5 Linky messages per day, resetting at midnight UTC. PLUS includes unlimited Linky messages.';
     case 'draft': return d.ready_message || 'Specify the recipient and collaboration purpose. I can prepare a draft for you to review and send from your own account.';
     default: return 'Describe the professional role, skill, location, or name you want to find. I can review available profiles and explain relevant recommendations.';
   }
@@ -2774,7 +2774,7 @@ export async function home(uid, { userDoc } = {}) {
     name: profileFacts(user)?.name || '',
     plus,
     messageQuota: quota,
-    limits: { meetsPerDay: plus ? null : limits.meetsPerDay, meetsUsedToday: meetsUsed, asksPerDay: quota.limit, asksUsedToday: quota.used, asksPeriod: quota.period, asksPerMonth: plus ? null : quota.limit, asksUsedThisMonth: plus ? null : quota.used, asksResetAt: quota.resetAt },
+    limits: { meetsPerDay: plus ? null : limits.meetsPerDay, meetsUsedToday: meetsUsed, asksPerDay: quota.limit, asksUsedToday: quota.used, asksPeriod: quota.period, asksPerMonth: null, asksUsedThisMonth: null, asksResetAt: quota.resetAt },
     cards: liveCards,
     inbound: inboundSnap.docs.map((d) => publicIntro(d.id, d.data())).filter((i) => now - i.createdAt < LIMITS.introDays * DAY_MS),
     sent: sentSnap.docs.map((d) => publicIntro(d.id, d.data())).sort((a, b) => b.createdAt - a.createdAt).slice(0, 10),
@@ -2885,7 +2885,7 @@ export async function removeAsk(uid, askId) {
  * "Clear the chat" — wipe the on-screen conversation in one go. Removes the
  * thread and the last answer, but deliberately keeps the message allowance
  * ledger, what Linky knows (facts), the ask cache and the cards he found —
- * clearing the chat must never refund the free monthly budget or lose a saved
+ * clearing the chat must never refund the free daily budget or lose a saved
  * card. The full wipe that also forgets everything is `forget`.
  */
 export async function clearChat(uid) {

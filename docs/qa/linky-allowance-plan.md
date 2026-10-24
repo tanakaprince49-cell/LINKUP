@@ -36,12 +36,13 @@ recovered failures:
 
 | Plan | Promise | Worst case per day | Fits in 190/day? |
 | --- | --- | --- | --- |
-| Free | 15 / month | 7,500/month ÷ 30 = **250/day** | No |
+| Free | 5 / day | 500 × 5 = **2,500/day potential** | No — the shared ceiling binds first |
 | PLUS | Unlimited | **Unbounded member demand** | No |
 | Free + PLUS mix | — | well above 190 and not bounded by the free ceiling | No |
 
 So these promises **cannot** be guaranteed by a 500-request free tier at 500 engaged members.
-The free tier covers roughly **11 messages per member per month** if all 500 use Linky.
+The free tier covers roughly **11 messages per member per month** if all 500 use Linky every
+day; the shared ceiling is what keeps real use inside the provider budget.
 Unlimited is the PLUS product entitlement, not a guarantee that an external model provider
 will never be unavailable; provider quotas, billing and monitoring remain operational requirements.
 
@@ -49,8 +50,7 @@ will never be unavailable; provider quotas, billing and monitoring remain operat
 
 | Setting | Value | Why |
 | --- | --- | --- |
-| Free monthly | **15** (unchanged) | Keep the existing free allowance. |
-| Free daily cap | **5** (`LINKY_FREE_DAILY=5`, the shipped default) | Stops one free member spending a whole day's shared budget in minutes. 15/month still fits exactly: 3 days at 5. |
+| Free daily | **5** (`LINKY_FREE_DAILY=5`, the shipped default) | The whole free allowance, daily-only: 5 messages per UTC day, resetting at midnight UTC. The monthly bucket is retired. Stops one free member spending a whole day's shared budget in minutes. |
 | PLUS | **Unlimited** | No member daily/monthly cap. `LINKY_PLUS_DAILY` is retired and ignored. |
 | Shared ceiling | **200/day for free asks** (`LINKY_GLOBAL_DAILY_MESSAGES=200`) | Free asks are rejected at the ceiling without spending allowance. PLUS asks are counted but never rejected by this guard. |
 | Headroom | 20% | Retries, provider failover, the occasional 3-call path. |
@@ -67,7 +67,7 @@ that the promise costs cents:
 | Volume | Tokens (in/out) | Estimated cost |
 | --- | --- | --- |
 | 1,000 messages/month | ~2.4M / 0.3M | **$0.4 – $1.3** |
-| 7,500 messages/month (500 free members at 15) | ~18M / 2.3M | **$3 – $9** |
+| 7,500 messages/month (500 free members averaging 15) | ~18M / 2.3M | **$3 – $9** |
 | 30,000 messages/month | ~72M / 9M | **$11 – $35** |
 
 (Range spans published Flash-Lite pricing tiers; check the current pricing page before
@@ -82,21 +82,22 @@ arithmetic only and is not a request-enforcement mechanism.
 2. A message that fails is refunded from both the member bucket and the shared bucket.
 3. Only delivered answers count; a blocked request costs nobody anything.
 4. Deterministic paths (greetings, quota, saved cards) never need the model.
-5. The global counter resets at 00:00 UTC; the member's monthly counter resets on the 1st.
+5. The global counter and every member's daily counter reset at 00:00 UTC.
 
 
-## Shipped defaults (16.8.0 onward)
+## Shipped defaults (16.9.0 onward)
 
 | Allowance | Value | Where |
 |---|---|---|
-| Free | **5 messages per UTC day** inside **15 per calendar month** | `BUDGET_DEFAULTS.freeDaily`, `freePerMonth` |
+| Free | **5 messages per UTC day**, daily-only (no monthly bucket) | `BUDGET_DEFAULTS.freeDaily`, `freePerDay` |
 | PLUS | **Unlimited**; null limit/remaining, explicit `unlimited: true` | `BUDGET_DEFAULTS.plusUnlimited` |
 | Shared ceiling | 200 free messages per UTC day; PLUS is counted but not rejected | `LINKY_GLOBAL_DAILY_MESSAGES` |
 | Provider budget | 500 requests/day ÷ 2.1 calls, 20% headroom → **190 messages/day** | `LINKY_MODEL_RPD`, `LINKY_CALLS_PER_MESSAGE` |
 
-A free member reaches the monthly 15 in three days at the cap. The 5/day cap is a
-burst limit, not a second allowance: the message that trips it says the monthly
-allowance is unchanged and quotes what is left.
+The free allowance is one bucket: 5 messages per UTC day, resetting at midnight UTC.
+The header shows "N of 5 free messages today" and the composer locks when the five
+are used up. Historical monthly ledgers are ignored, so every free member starts
+each UTC day fresh.
 
 The honest arithmetic at 500 members: five a day each is 2,500 potential messages
 against a 190-a-day provider ceiling. The shared ceiling is therefore the binding

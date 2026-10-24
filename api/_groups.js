@@ -20,7 +20,7 @@ export function createGroupService({db,now,blocked,connectable,notify,plus=async
   const users=await db.getAll(...g.memberIds.map(u=>db.collection('users').doc(u)),{fieldMask:['displayName','fullName','name','profilePicUrl','photoURL','isVerified','deleted','banned','isPro','plan','subscriptionPlan','subscriptionStatus','entitlements']});
   const members=await Promise.all(users.map(async u=>{const p=u.data()||{},unavailable=!u.exists||p.deleted||p.banned||g.unavailable.includes(u.id);return {uid:u.id,name:unavailable?'Unavailable member':clean(p.displayName||p.fullName||p.name,100),avatar:unavailable?'':safePhoto(p.profilePic||p.profilePicUrl||p.photoURL),verified:!unavailable&&(isGoldMember(u.id)||p.isVerified===true||await plus(u.id,p)),admin:groupIsAdmin(g,u.id),unavailable};}));
   const badges=await badgesFor(g);
-  return {id:g.id,title:g.title,description:g.description||'',photo:safePhoto(g.photo),rules:g.rules||'',ownerId:g.ownerId,adminIds:g.adminIds||[],creatorId:g.creatorId||'',...badges,archived:!!g.archived,announcementsOnly:!!g.announcementsOnly,pinnedMessage:g.pinnedMessage||null,preferences:g.preferences?.[uid]||{},bannedIds:groupIsAdmin(g,uid)?g.bannedIds||[]:[],memberCount:g.memberIds.length,blocked:!!g.unavailable.length,legacy:g.kind!=='group',members,createdAt:g.createdAt,updatedAt:g.updatedAt};
+  return {id:g.id,title:g.title,description:g.description||'',photo:safePhoto(g.photo),rules:g.rules||'',ownerId:g.ownerId,adminIds:g.adminIds||[],creatorId:g.creatorId||'',...badges,archived:!!g.archived,announcementsOnly:!!g.announcementsOnly,discoverable:g.discoverable!==false,pinnedMessage:g.pinnedMessage||null,preferences:g.preferences?.[uid]||{},bannedIds:groupIsAdmin(g,uid)?g.bannedIds||[]:[],memberCount:g.memberIds.length,blocked:!!g.unavailable.length,legacy:g.kind!=='group',members,createdAt:g.createdAt,updatedAt:g.updatedAt};
  }
  async function messages(uid,input){
   const g=await access(uid,input.groupId);const collection=ref(g.id).collection('messages');let q;
@@ -37,14 +37,66 @@ export function createGroupService({db,now,blocked,connectable,notify,plus=async
  async function handle(uid,op,input){
   if(op==='groups'){
    const [r,i]=await Promise.all([db.collection('builderRooms').where('memberIds','array-contains',uid).limit(50).get(),db.collection('builderInvites').where('recipientId','==',uid).limit(100).get()]);const groups=[],invitations=[];
-   for(const d of r.docs){try{const g=await access(uid,d.id,{manage:true});groups.push({id:g.id,title:g.title,ownerId:g.ownerId,photo:safePhoto(g.photo),...await badgesFor(g),preferences:g.preferences?.[uid]||{},memberCount:g.memberIds.length,archived:!!g.archived,updatedAt:g.updatedAt,preview:g.unavailable.length?'Manage an unavailable member before chatting.':clean(g.lastMessage?.text,100),unread:!!g.lastMessage&&g.lastMessage.authorId!==uid&&g.lastMessage.at>(g.readAt?.[uid]||0),blocked:!!g.unavailable.length});}catch(e){if(e.status===403)groups.push({id:d.id,title:'Unavailable group',ownerId:'',memberCount:0,archived:false,updatedAt:d.data().updatedAt,preview:'Leave or resolve your blocked connection before chatting.',blocked:true,canLeave:true});}}
+   for(const d of r.docs){try{const g=await access(uid,d.id,{manage:true});groups.push({id:g.id,title:g.title,ownerId:g.ownerId,photo:safePhoto(g.photo),...await badgesFor(g),preferences:g.preferences?.[uid]||{},memberCount:g.memberIds.length,archived:!!g.archived,discoverable:g.discoverable!==false,updatedAt:g.updatedAt,preview:g.unavailable.length?'Manage an unavailable member before chatting.':clean(g.lastMessage?.text,100),unread:!!g.lastMessage&&g.lastMessage.authorId!==uid&&g.lastMessage.at>(g.readAt?.[uid]||0),blocked:!!g.unavailable.length});}catch(e){if(e.status===403)groups.push({id:d.id,title:'Unavailable group',ownerId:'',memberCount:0,archived:false,updatedAt:d.data().updatedAt,preview:'Leave or resolve your blocked connection before chatting.',blocked:true,canLeave:true});}}
    for(const d of i.docs){const inv=d.data();if(inv.status!=='pending'||inv.expiresAt<=now())continue;try{await connectable(uid,inv.senderId);const r=await ref(inv.roomId).get();if(r.exists&&!r.data().archived&&groupIsAdmin(r.data(),inv.senderId))invitations.push({id:d.id,groupId:r.id,title:r.data().title,senderId:inv.senderId,description:r.data().description||'',rules:r.data().rules||'',role:inv.role||'member',expiresAt:inv.expiresAt});}catch{}}
    return {groups:groups.sort((a,b)=>Number(!!b.preferences?.pinned)-Number(!!a.preferences?.pinned)||b.updatedAt-a.updatedAt),invitations};
   }
   if(op==='groupCreate'){
    const creator=await db.collection('users').doc(uid).get(),creatorPlus=await plus(uid,creator.data());
    const title=requireText(input.title,80,3),description=clean(input.description,240),gid=id();if(containsCredential(title)||containsCredential(description))throw problem('Remove credentials before sharing.');
-   await db.runTransaction(async tx=>{await assertActor(tx,uid);const stateRef=db.collection('builderStates').doc(uid),[s,existing]=await Promise.all([tx.get(stateRef),tx.get(db.collection('builderRooms').where('ownerId','==',uid))]);if(existing.docs.filter(d=>!d.data().archived).length>=12)throw problem('Archive an existing group first.');tx.set(stateRef,{...stateOf(s.data(),now()),updatedAt:now()});tx.set(ref(gid),{title,description,kind:'group',creatorId:uid,creatorPlus,ownerId:uid,adminIds:[uid],bannedIds:[],rules:'',photo:'',announcementsOnly:false,preferences:{},memberIds:[uid],readAt:{},createdAt:now(),updatedAt:now(),archived:false});});return {groupId:gid};
+   await db.runTransaction(async tx=>{await assertActor(tx,uid);const stateRef=db.collection('builderStates').doc(uid),[s,existing]=await Promise.all([tx.get(stateRef),tx.get(db.collection('builderRooms').where('ownerId','==',uid))]);if(existing.docs.filter(d=>!d.data().archived).length>=12)throw problem('Archive an existing group first.');tx.set(stateRef,{...stateOf(s.data(),now()),updatedAt:now()});tx.set(ref(gid),{title,description,kind:'group',creatorId:uid,creatorPlus,ownerId:uid,adminIds:[uid],bannedIds:[],rules:'',photo:'',announcementsOnly:false,discoverable:true,preferences:{},memberIds:[uid],readAt:{},createdAt:now(),updatedAt:now(),archived:false});});return {groupId:gid};
+  }
+  if(op==='groupDiscover'){
+   // Anyone with a live onboarded profile can browse. The listing exposes
+   // SAFE METADATA ONLY: no messages, no member lists, no rules, no invites.
+   // Single-field order on the automatic index (no composite index needed);
+   // filtering, search and paging happen in code over a bounded page.
+   const me=await db.collection('users').doc(uid).get();
+   if(!me.exists||me.data().deleted||me.data().banned||me.data().onboarded!==true)throw problem('Your profile is unavailable.',403);
+   const size=Math.min(30,Math.max(1,Number(input.limit)||20));
+   const q=String(input.q||'').trim().toLowerCase().slice(0,60);
+   const after=typeof input.after==='string'?input.after:'';
+   const snap=await db.collection('builderRooms').orderBy('updatedAt','desc').limit(120).get();
+   const mine=new Set();
+   try{const r=await db.collection('builderRooms').where('memberIds','array-contains',uid).limit(50).get();r.docs.forEach(d=>mine.add(d.id));}catch{}
+   const all=[];
+   for(const d of snap.docs){
+    const g=d.data()||{};
+    if(g.archived===true||g.deleting===true)continue;
+    if(g.kind&&g.kind!=='group')continue;
+    if(g.discoverable===false)continue;
+    if(!Array.isArray(g.memberIds)||!g.memberIds.length)continue;
+    if((g.bannedIds||[]).includes(uid))continue;
+    const title=clean(g.title,80);if(!title)continue;
+    const description=clean(g.description||'',240);
+    if(q&&!(title.toLowerCase().includes(q)||description.toLowerCase().includes(q)))continue;
+    all.push({cursor:d.id+':'+Number(g.updatedAt||0),card:{id:d.id,title,description,photo:safePhoto(g.photo),memberCount:g.memberIds.length,discoverable:true,joined:mine.has(d.id),badges:groupBadges(g),createdAt:g.createdAt||0,updatedAt:g.updatedAt||0}});
+   }
+   const start=after?all.findIndex(c=>c.cursor===after)+1:0;
+   const from=Math.max(0,start),page=all.slice(from,from+size);
+   return {groups:page.map(p=>p.card),nextAfter:from+size<all.length&&page.length?page[page.length-1].cursor:null,total:all.length};
+  }
+  if(op==='groupJoin'){
+   // Join a discoverable group straight from browsing. Same safety rails as
+   // accepting an invitation: blocks, bans, capacity, archived/dormant rooms.
+   const rr=ref(input.groupId);
+   const joined=await db.runTransaction(async tx=>{
+    await assertActor(tx,uid);
+    const d=await tx.get(rr),g=d.data();
+    if(!d.exists)throw problem('Group not found.',404);
+    if(g.archived||g.deleting)throw problem('This group is not available.',409);
+    if(g.kind&&g.kind!=='group')throw problem('This group is not available.',403);
+    if(g.discoverable===false)throw problem('This group is private. Ask a member for an invitation.',403);
+    if((g.memberIds||[]).includes(uid))return false;
+    if((g.bannedIds||[]).includes(uid))throw problem('You are banned from this group.',403);
+    await checkBlocks(tx,uid,g.memberIds||[]);
+    if((g.memberIds||[]).length>=32)throw problem('This group is full.');
+    const bs=await tx.get(db.collection('builderStates').doc(uid));
+    if(!bs.exists)tx.set(db.collection('builderStates').doc(uid),stateOf({},now()));
+    tx.update(rr,{memberIds:[...new Set([...(g.memberIds||[]),uid])],['readAt.'+uid]:now(),updatedAt:now()});
+    return true;
+   });
+   return {ok:true,joined};
   }
   if(op==='groupGet'){
    const g=await access(uid,input.groupId,{manage:true}),group=await metadata(uid,g);return {group,...(group.blocked?{messages:[],more:false}:await messages(uid,{groupId:g.id}))};
@@ -88,7 +140,7 @@ export function createGroupService({db,now,blocked,connectable,notify,plus=async
   if(op==='groupUpdate'){
    await access(uid,input.groupId,{manage:true});const rr=ref(input.groupId);
    return db.runTransaction(async tx=>{await assertActor(tx,uid);const d=await tx.get(rr),g=d.data();if(!d.exists||!g.memberIds.includes(uid)||!groupIsAdmin(g,uid))throw problem('Only a current admin can edit group details.',403);if(g.archived)throw problem('This group is archived.',409);const patch={updatedAt:now()};
-    if('title'in input)patch.title=requireText(input.title,80,3);if('description'in input)patch.description=clean(input.description,500);if('rules'in input)patch.rules=clean(input.rules,2000);if('photo'in input){if(input.photo!==''&&!safePhoto(input.photo))throw problem('Use a hosted HTTPS group photo.');patch.photo=input.photo;}if('announcementsOnly'in input){if(typeof input.announcementsOnly!=='boolean')throw problem('Choose the posting mode.');patch.announcementsOnly=input.announcementsOnly;}
+    if('title'in input)patch.title=requireText(input.title,80,3);if('description'in input)patch.description=clean(input.description,500);if('rules'in input)patch.rules=clean(input.rules,2000);if('photo'in input){if(input.photo!==''&&!safePhoto(input.photo))throw problem('Use a hosted HTTPS group photo.');patch.photo=input.photo;}if('announcementsOnly'in input){if(typeof input.announcementsOnly!=='boolean')throw problem('Choose the posting mode.');patch.announcementsOnly=input.announcementsOnly;}if('discoverable'in input){if(typeof input.discoverable!=='boolean')throw problem('Choose whether the group is listed publicly.');patch.discoverable=input.discoverable;}
     if(Object.values(patch).some(v=>typeof v==='string'&&containsCredential(v)))throw problem('Remove credentials before sharing.');tx.update(rr,patch);return {ok:true};});
   }
   if(op==='groupPrefs'){
