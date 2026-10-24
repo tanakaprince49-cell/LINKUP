@@ -10,3 +10,15 @@ test('credentials are rejected before any workbench provider call',async()=>{let
 test('official opportunities have useful next actions and truthful private preparation drafts',()=>{assert.ok(EXTERNAL_LEADS.length>=10);const modern=EXTERNAL_LEADS.filter(l=>l.steps);assert.ok(modern.length>=6);for(const l of modern){assert.match(l.sourceUrl,/^https:\/\//);assert.ok(l.eligibility&&l.cost&&l.steps.length>=3);const brief=leadBrief({project:'My actual app',goal:'Build a prototype'},l);assert.match(brief,/My actual app/);assert.match(brief,/No application, message or personal data has been sent/);assert.match(brief,/\[Add actual numbers/);}});
 test('public avatars use real selected photos before gallery fallbacks, never arbitrary placeholders',()=>{const safe=u=>typeof u==='string'&&u.startsWith('https://')?u:'';assert.equal(selectProfileImage('u',{profilePic:'https://example.com/current.jpg',photos:['https://example.com/other.jpg']},safe).url,'https://example.com/current.jpg');assert.equal(selectProfileImage('u',{photos:[{url:'https://example.com/gallery.jpg'}]},safe).url,'https://example.com/gallery.jpg');});
 test('daily picks UI shares one API, exact two-person route and no invented compatibility percentages',()=>{const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');assert.match(read('mobile/src/screens/DiscoveryDashboardScreen.tsx'),/useDailyPicks/);assert.match(read('mobile/src/screens/DailyFiveScreen.tsx'),/useDailyPicks/);assert.doesNotMatch(read('mobile/src/screens/DailyFiveScreen.tsx'),/builderCall\('recommendations'\)/);assert.match(read('mobile/src/screens/GroupChatScreen.tsx'),/Delete group forever/);assert.match(read('mobile/src/components/ScreenHeader.tsx'),/onPress=\{onTitlePress\}/);});
+
+test('builder directory never advertises an image endpoint for a member who has no usable photo',async()=>{
+ const {loadBuilderLeague}=await import('../api/_leagueSeo.js');const {projectProfile}=await import('../api/_publicSeo.js');
+ const withPhoto=projectProfile('a',{displayName:'A',onboarded:true,isVisible:true,profilePic:'https://cdn.example.com/a.jpg'});
+ const noPhoto=projectProfile('b',{displayName:'B',onboarded:true,isVisible:true});
+ assert.equal(withPhoto.image,'https://cdn.example.com/a.jpg');assert.equal(noPhoto.image,'');
+ const docs=[{id:'a',data:()=>({})},{id:'b',data:()=>({})}];
+ const db={collection:()=>({orderBy:()=>({limit:()=>({get:async()=>({docs})})}),doc:id=>({id,path:'users/'+id})}),getAll:async(...args)=>args.filter(ref=>ref&&ref.id).map(ref=>({id:ref.id,exists:true,data:()=>({displayName:ref.id.toUpperCase(),onboarded:true,isVisible:true,profilePic:ref.id==='a'?'https://cdn.example.com/a.jpg':''})}))};
+ const board=await loadBuilderLeague(db);
+ assert.equal(board.rows.find(r=>r.uid==='a').image,'https://cdn.example.com/a.jpg');
+ assert.equal(board.rows.find(r=>r.uid==='b').image,'');
+});
