@@ -2127,7 +2127,7 @@ export default function ProfileScreen({ navigation, route }: any) {
             )}
           </View>
 
-          {!isViewingOther && isEditing && showEdit('photos') && (
+          {!isViewingOther && (isEditing || profileDetailsReady) && showEdit('photos') && (
             <View style={{ marginTop: 18 }}>
               <Text style={[styles.sectionHeader, { color: textColor(isDark) }]}>Photos</Text>
               <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 10 }}>
@@ -2138,7 +2138,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                     <TouchableOpacity
                       key={idx}
                       activeOpacity={0.85}
-                      onPress={() => pickGalleryPhoto(idx)}
+                      onPress={() => (isEditing ? pickGalleryPhoto(idx) : startEditing('all'))}
                       style={[styles.photoSlot, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
                     >
                       {uri && shouldRenderProfileImages ? (
@@ -2165,7 +2165,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 })}
               </View>
               <Text style={{ marginTop: 8, fontSize: 10, color: '#666', fontWeight: '900', textAlign: 'center' }}>
-                {'Tap a slot to change it or X to delete it'}
+                {isEditing ? 'Tap a slot to change it or X to delete it' : 'Tap to edit your swipe photos'}
               </Text>
             </View>
           )}
@@ -3720,6 +3720,9 @@ const styles = StyleSheet.create({
     left: '38%',
   },
   bannerPrompt: {
+    position: 'absolute',
+    top: 14,
+    alignSelf: 'center',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 16,
@@ -3774,7 +3777,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.35)',
   },
   avatarOverlap: {
-    marginTop: -46,
+    // Lifts the avatar box so the 120pt circle sits fully inside the
+    // 220pt banner instead of hanging below it.
+    marginTop: -144,
     zIndex: 5,
   },
   sectionHeader: {

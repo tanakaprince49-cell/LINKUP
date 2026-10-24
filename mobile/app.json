@@ -3,7 +3,7 @@
     "name": "LINKUP",
     "slug": "linkup",
     "scheme": "linkup",
-    "version": "16.9.1",
+    "version": "16.9.2",
     "orientation": "default",
     "icon": "./assets/icon-padded.png",
     "userInterfaceStyle": "light",
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "com.tana.linkup",
-      "versionCode": 33,
+      "versionCode": 34,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon-padded.png",
