@@ -104,18 +104,39 @@ test('midnight does not replenish free messages; next month does, with separate 
   assert.equal((await usage.reserveMessage(db, 'a', { now: Date.parse('2026-11-01T00:00:00Z') })).remaining, 14);
 });
 
-test('PLUS allows 25 a day and migration preserves existing daily usage', async () => {
-  const db = new Database(); const options = { plus: true, now: october, legacyState: { asks: { day: '2026-10-16', count: 24 } } };
-  const quota = await usage.reserveMessage(db, 'member', options);
-  assert.equal(quota.limit, 25); assert.equal(quota.used, 25); assert.equal(quota.upgradeRequired, false);
-  await assert.rejects(usage.reserveMessage(db, 'member', options));
-  assert.equal((await usage.reserveMessage(db, 'member', { plus: true, now: october + DAY })).remaining, 24);
+test('PLUS is unlimited beyond old caps, preserves legacy use, and bypasses the shared rejection', async () => {
+  const previous = { ...process.env };
+  try {
+    process.env.LINKY_PLUS_DAILY = '1';
+    process.env.LINKY_GLOBAL_DAILY_MESSAGES = '2';
+    const db = new Database();
+    const options = { plus: true, now: october, legacyState: { asks: { day: '2026-10-16', count: 24 } } };
+    const quota = await usage.reserveMessage(db, 'member', options);
+    assert.equal(quota.unlimited, true); assert.equal(quota.limit, null);
+    assert.equal(quota.remaining, null); assert.equal(quota.used, 25);
+    assert.equal(quota.dailyLimit, null); assert.equal(quota.dailyRemaining, null);
+    assert.equal(quota.exhausted, false); assert.equal(quota.upgradeRequired, false);
+    // Forty concurrent sends go beyond the retired 25/day allowance and the
+    // shared ceiling of two. None may be rejected or invent a finite remainder.
+    const more = await Promise.all(Array.from({ length: 40 }, () => usage.reserveMessage(db, 'member', options)));
+    assert.ok(more.every((item) => item.unlimited && item.remaining === null && !item.exhausted));
+    const final = await usage.readMessageQuota(db, 'member', options);
+    assert.equal(final.used, 65); assert.equal(final.remaining, null);
+    assert.equal(db.rows.get('linkyUsage/_global').day.count, 41);
+    // The same shared counter still protects free-plan provider capacity.
+    await assert.rejects(usage.reserveMessage(db, 'free-member', { now: october }), (error) => error.code === 'capacity');
+    const tomorrow = await usage.reserveMessage(db, 'member', { plus: true, now: october + DAY });
+    assert.equal(tomorrow.used, 1); assert.equal(tomorrow.remaining, null);
+  } finally {
+    process.env = previous;
+  }
 });
 
 test('upgrade/downgrade does not erase exhausted free monthly use', async () => {
   const db = new Database();
   await spendFree(db, 'member', 15);
-  assert.equal((await usage.reserveMessage(db, 'member', { plus: true, now: dayAt(3) })).remaining, 24);
+  const plus = await usage.reserveMessage(db, 'member', { plus: true, now: dayAt(3) });
+  assert.equal(plus.unlimited, true); assert.equal(plus.remaining, null); assert.equal(plus.used, 1);
   await assert.rejects(usage.reserveMessage(db, 'member', { plus: false, now: dayAt(3) }));
 });
 
@@ -143,6 +164,26 @@ test('real ask wrapper counts greetings from every channel, stops at the daily f
   db.rows.set('linkyState/member', { pendingLoop: { at: Date.now(), introId: 'intro' } });
   await assert.rejects(api.ask('member', 'we met', { userDoc: member }), (e) => e.code === 'ask_limit');
   assert.equal(api.aiCalls(), 0);
+});
+
+test('real PLUS ask wrapper is unlimited, publishes honest aliases, and refunds failures', async () => {
+  const db = new Database(); const api = core(db);
+  const plusMember = { ...member, isPro: true, plan: 'plus' };
+  for (let i = 0; i < 30; i++) {
+    const out = await api.ask('member', 'hello', { userDoc: plusMember, source: ['app', 'telegram', 'whatsapp'][i % 3] });
+    assert.equal(out.asksLeft, null); assert.equal(out.messageQuota.unlimited, true);
+    assert.equal(out.messageQuota.used, i + 1); assert.equal(out.upgradeRequired, false);
+  }
+  assert.equal(db.rows.get('linkyUsage/member').day.count, 30);
+  const home = await api.home('member', { userDoc: plusMember });
+  assert.equal(home.plus, true); assert.equal(home.messageQuota.unlimited, true);
+  assert.equal(home.messageQuota.limit, null); assert.equal(home.messageQuota.remaining, null);
+  assert.equal(home.limits.asksPerDay, null); assert.equal(home.limits.asksUsedToday, 30);
+  assert.equal(home.limits.asksPeriod, 'day'); assert.equal(home.limits.asksPerMonth, null);
+  db.failStateWrites = true;
+  await assert.rejects(api.ask('member', 'hello', { userDoc: plusMember }), /state unavailable/);
+  assert.equal(db.rows.get('linkyUsage/member').day.count, 30);
+  assert.equal(db.rows.get('linkyUsage/_global').day.count, 30);
 });
 
 test('clear chat and forget cannot reset the allowance ledger', async () => {
@@ -174,11 +215,25 @@ test('home publishes monthly allowance and legacy aliases without reading user-e
   assert.equal(home.limits.asksPeriod, 'month');
 });
 
-test('client opens paywall from exhaustion state and guards further sends, not just a failed sixteenth request', () => {
+test('client opens the free paywall from exhaustion and renders PLUS as unlimited', () => {
   const source = read('mobile/src/screens/LinkyHomeScreen.tsx');
   assert.match(source, /quota\?\.upgradeRequired/); assert.match(source, /setPaywall\(FREE_LINKY_LIMIT_MESSAGE\)/);
+  assert.match(source, /Unlimited messages · PLUS/); assert.doesNotMatch(source, /messages left today · PLUS/);
   assert.ok(source.indexOf('if (atMessageLimit &&') < source.indexOf('const out = await linkyAsk(msg)'));
   assert.match(read('firestore.rules'), /match \/linkyUsage\/\{userId\}\s*\{\s*allow read, write: if false;/);
+});
+
+test('client compatibility fallback understands nullable unlimited PLUS aliases', () => {
+  const module = { exports: {} };
+  const code = ts.transpileModule(read('mobile/src/lib/linkyQuota.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  vm.runInNewContext(code, { module, exports: module.exports });
+  const home = { plus: true, limits: { asksPerDay: null, asksUsedToday: 42, asksPeriod: 'day', asksResetAt: '' } };
+  const quota = module.exports.quotaFromHome(home);
+  assert.equal(quota.unlimited, true); assert.equal(quota.limit, null);
+  assert.equal(quota.remaining, null); assert.equal(quota.exhausted, false);
+  assert.equal(quota.used, 42); assert.equal(quota.resetAt, '');
+  const updated = module.exports.homeWithQuota(home, { ...quota, used: 43 });
+  assert.equal(updated.limits.asksPerDay, null); assert.equal(updated.limits.asksUsedToday, 43);
 });
 
 test('authenticated app API returns structured 402 quota data without losing the upgrade signal', async () => {

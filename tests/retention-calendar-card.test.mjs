@@ -15,15 +15,18 @@ const baseState = (over = {}) => ({
   followups: [], retention: { day: '', sent: [] }, lastDeliveryAt: 0, ...over,
 });
 
-test('Linky ships 5 free messages a day and 25 for PLUS, inside the 15-a-month allowance', () => {
+test('Linky keeps 5 free messages a day inside 15 a month and makes PLUS explicitly unlimited', () => {
   assert.equal(BUDGET_DEFAULTS.freeDaily, 5);
-  assert.equal(BUDGET_DEFAULTS.plusDaily, 25);
-  assert.equal(BUDGET_DEFAULTS.plusPerDay, 25);
+  assert.equal(BUDGET_DEFAULTS.plusDaily, null);
+  assert.equal(BUDGET_DEFAULTS.plusPerDay, null);
+  assert.equal(BUDGET_DEFAULTS.plusUnlimited, true);
   assert.equal(BUDGET_DEFAULTS.freePerMonth, 15);
-  // Environment overrides still win, and nonsense falls back to the shipped value.
+  // Free environment overrides still win, and nonsense falls back to the default.
   assert.equal(budgetConfig({ LINKY_FREE_DAILY: '7' }).freeDaily, 7);
   assert.equal(budgetConfig({ LINKY_FREE_DAILY: '-2' }).freeDaily, 5);
-  assert.equal(budgetConfig({ LINKY_PLUS_DAILY: 'abc' }).plusDaily, 25);
+  // A legacy deployment variable cannot reintroduce a hidden PLUS cap.
+  assert.equal(budgetConfig({ LINKY_PLUS_DAILY: '1' }).plusDaily, null);
+  assert.equal(budgetConfig({ LINKY_PLUS_DAILY: '1' }).plusUnlimited, true);
   // 15 a month is exactly three days at the burst cap, never a contradiction.
   assert.equal(BUDGET_DEFAULTS.freePerMonth, BUDGET_DEFAULTS.freeDaily * 3);
 });

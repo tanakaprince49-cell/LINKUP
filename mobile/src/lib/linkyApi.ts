@@ -149,7 +149,7 @@ export type LinkyAskResult = LinkyAsk & {
   cards: LinkyCard[];
   cached: boolean;
   usedAi?: boolean;
-  asksLeft: number;
+  asksLeft: number | null;
   /** Free / instant: a name lookup, chit-chat, a drafted message. */
   free?: boolean;
   /** Quick replies to render as chips under Linky's bubble. */
@@ -207,10 +207,12 @@ export type LinkyBrief = {
 };
 
 export type LinkyMessageQuota = {
-  period: 'day' | 'month'; periodKey: string; limit: number; used: number;
-  remaining: number; resetAt: string; exhausted: boolean; upgradeRequired: boolean;
-  /** Per-day burst cap actually enforced (free 5, PLUS 25 by default). */
-  dailyLimit?: number; dailyUsed?: number; dailyRemaining?: number;
+  /** Null limits/remaining are the explicit PLUS unlimited contract. */
+  period: 'day' | 'month'; periodKey: string; limit: number | null; used: number;
+  remaining: number | null; resetAt: string; exhausted: boolean; upgradeRequired: boolean;
+  unlimited?: boolean;
+  /** Free keeps its daily burst cap; PLUS has no daily cap. */
+  dailyLimit?: number | null; dailyUsed?: number; dailyRemaining?: number | null;
 };
 
 export type LinkyHome = {
@@ -218,7 +220,7 @@ export type LinkyHome = {
   name: string;
   plus: boolean;
   messageQuota?: LinkyMessageQuota;
-  limits: { meetsPerDay: number | null; meetsUsedToday: number; asksPerDay: number; asksUsedToday: number; asksPeriod?: 'day' | 'month'; asksPerMonth?: number | null; asksUsedThisMonth?: number | null; asksResetAt?: string };
+  limits: { meetsPerDay: number | null; meetsUsedToday: number; asksPerDay: number | null; asksUsedToday: number; asksPeriod?: 'day' | 'month'; asksPerMonth?: number | null; asksUsedThisMonth?: number | null; asksResetAt?: string };
   cards: LinkyCard[];
   inbound: LinkyIntro[];
   sent: LinkyIntro[];

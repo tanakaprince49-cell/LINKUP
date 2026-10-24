@@ -6,15 +6,16 @@
 //
 // Overrides (Vercel env, no redeploy of code needed):
 //   LINKY_FREE_DAILY              free members, messages per UTC day (default 5)
-//   LINKY_PLUS_DAILY              PLUS members, messages per UTC day (default 25)
-//   LINKY_GLOBAL_DAILY_MESSAGES   shared ceiling across every member (0 = disabled)
+//   LINKY_GLOBAL_DAILY_MESSAGES   shared free-plan ceiling (0 = disabled)
+//   LINKY_PLUS_DAILY is retired: PLUS messages are unlimited and cannot be capped.
 //   LINKY_MODEL_RPD               the provider's requests/day for the wired model
 //   LINKY_CALLS_PER_MESSAGE       average model calls per delivered message
 export const BUDGET_DEFAULTS = Object.freeze({
   freePerMonth: 15,
-  plusPerDay: 25,
+  plusPerDay: null,
   freeDaily: 5,
-  plusDaily: 25,
+  plusDaily: null,
+  plusUnlimited: true,
   globalDailyMessages: 200,
   modelRequestsPerDay: 500,
   callsPerMessage: 2.1,
@@ -30,7 +31,8 @@ export function budgetConfig(env = {}) {
   return {
     ...BUDGET_DEFAULTS,
     freeDaily: num(env.LINKY_FREE_DAILY, BUDGET_DEFAULTS.freeDaily, 0, 500),
-    plusDaily: num(env.LINKY_PLUS_DAILY, BUDGET_DEFAULTS.plusDaily, 0, 500),
+    // Deliberately ignore legacy LINKY_PLUS_DAILY values: an environment
+    // override must not turn an advertised unlimited plan back into a cap.
     globalDailyMessages: num(env.LINKY_GLOBAL_DAILY_MESSAGES, BUDGET_DEFAULTS.globalDailyMessages, 0, 100_000),
     modelRequestsPerDay: num(env.LINKY_MODEL_RPD, BUDGET_DEFAULTS.modelRequestsPerDay, 1, 10_000_000),
     callsPerMessage: Number(env.LINKY_CALLS_PER_MESSAGE) > 0 ? Number(env.LINKY_CALLS_PER_MESSAGE) : BUDGET_DEFAULTS.callsPerMessage,

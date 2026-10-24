@@ -338,8 +338,8 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
     setPaywall(FREE_LINKY_LIMIT_MESSAGE);
   }, [isFocused, atMessageLimit, quota?.periodKey, user?.uid]);
   useEffect(() => {
-    if (quota && quota.remaining > 0 && paywall === FREE_LINKY_LIMIT_MESSAGE) setPaywall(null);
-  }, [quota?.remaining, paywall]);
+    if (quota && (quota.unlimited || (quota.remaining ?? 0) > 0) && paywall === FREE_LINKY_LIMIT_MESSAGE) setPaywall(null);
+  }, [quota?.remaining, quota?.unlimited, paywall]);
   const mounted = useRef(true);
   const hydratedRef = useRef(false);
   useEffect(()=>{setHome(null);setAnswer(null);setLeads([]);setDraft(null);setPointerText('');setPointerRoutes([]);setPendingAsk('');setInput('');setThinking(false);setToolsOpen(false);},[user?.uid]);
@@ -382,7 +382,8 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
   const fail = (err: unknown, fallbackTitle: string) => {
     if (err instanceof LinkyApiError && err.status === 402) {
       if (err.messageQuota) setHome((h) => h ? homeWithQuota(h, err.messageQuota!) : h);
-      if (err.messageQuota?.period === 'day' || home?.plus) notifyUser('Daily allowance reached', err.message);
+      if (home?.plus) notifyUser(fallbackTitle, err.message);
+      else if (err.messageQuota?.period === 'day') notifyUser('Daily allowance reached', err.message);
       else setPaywall(err.message);
       return;
     }
@@ -515,7 +516,11 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
         const merged = h.cards.map((c) => byId.get(c.id) || c);
         out.cards.forEach((c) => { if (!merged.some((m) => m.id === c.id)) merged.push(c); });
         const updated = { ...h, cards: merged, ...(out.kind === 'chat' ? {} : { lastAsk: out }) };
-        return out.messageQuota ? homeWithQuota(updated, out.messageQuota) : { ...updated, limits: { ...h.limits, asksUsedToday: Math.max(h.limits.asksUsedToday, h.limits.asksPerDay - out.asksLeft) } };
+        if (out.messageQuota) return homeWithQuota(updated, out.messageQuota);
+        const usedToday = h.limits.asksPerDay !== null && out.asksLeft !== null
+          ? Math.max(h.limits.asksUsedToday, h.limits.asksPerDay - out.asksLeft)
+          : h.limits.asksUsedToday + 1;
+        return { ...updated, limits: { ...h.limits, asksUsedToday: usedToday } };
       });
       // Refresh source-checked cards after chat so the last shortlist remains
       // usable without reviving a profile hidden or blocked since that search.
@@ -748,7 +753,7 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
             {home ? 'AI building partner · Big ideas welcome' : 'Getting ready…'}
           </Text>
           {home ? <Text accessibilityLabel="Linky message allowance" accessibilityLiveRegion="polite" style={[styles.allowanceText,{color:textColor(isDark,'secondary'),marginTop:3}]}>
-            {home.plus ? `${asksLeft} messages left today · PLUS` : `${asksLeft} of ${messageLimit} free messages left this month${dailyLeft===null?'':` · ${dailyLeft} today`}`}
+            {home.plus ? 'Unlimited messages · PLUS' : `${asksLeft} of ${messageLimit} free messages left this month${dailyLeft===null?'':` · ${dailyLeft} today`}`}
           </Text> : null}
           {atMessageLimit && resetCountdown ? <Text style={[styles.allowanceText,{color:textColor(isDark,'muted'),marginTop:2}]}>Resets in {resetCountdown}</Text> : null}
         </View>

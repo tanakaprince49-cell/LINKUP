@@ -282,7 +282,7 @@ export default function LinkyCardsSection() {
         ) : null}
       </Modal>
 
-      <PaywallModal visible={!!paywall} onClose={() => setPaywall(null)} feature="Linky asks & intros" description={paywall || 'PLUS gets 60 asks a day and unlimited Meets.'} />
+      <PaywallModal visible={!!paywall} onClose={() => setPaywall(null)} feature="Linky asks & intros" description={paywall || 'PLUS gets unlimited Linky messages and Meets.'} />
     </View>
   );
 }

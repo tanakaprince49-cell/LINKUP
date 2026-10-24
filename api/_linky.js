@@ -1063,7 +1063,7 @@ const VOICE_KINDS = {
   check: "Address the actual thought first with a useful, evidence-based observation. Then ask whether to search for relevant professionals. Do not list profiles, imply a completed search, or start searching without agreement.",
   squad: "The member requested a complementary team. Present the supplied group together, identify each person and their documented contribution, and state the remaining expertise gap. Do not offer team discovery unless requested.",
   loop: "Ask a brief professional follow-up about the introduction after 48 hours. Offer the four supplied response choices clearly. Never assume the members met or describe an unconfirmed outcome.",
-  limit: "Explain the actual monthly or daily message allowance and reset from the dossier. Do not claim more messages are free or pressure a purchase.",
+  limit: "Explain the actual free monthly/daily allowance and reset, or unlimited PLUS access, from the dossier. Do not claim more messages are free or pressure a purchase.",
 };
 
 // Kinds that must be written fresh every time: caching a greeting for fourteen days
@@ -1206,7 +1206,7 @@ function plainReply(kind, d = {}) {
       return `A squad - not three searches.\n${squads.map(one).join('\n')}${d.channel && d.channel !== 'app' ? '\n\nReply meet squad and I will ask all of them at once - each one still gets to say yes.' : '\n\nTap Meet squad and I will ask all of them at once - each one still gets to say yes.'}`;
     }
     case 'loop': return loopQuestionText((d.other_person && d.other_person.name) || 'them', d.what_the_intro_was_for, d.they_have_messaged);
-    case 'limit': return 'Your Linky message allowance has been used. Free accounts receive 15 messages per calendar month; PLUS includes 60 messages per day.';
+    case 'limit': return 'Free accounts receive 15 Linky messages per calendar month, with a daily burst limit. PLUS includes unlimited Linky messages.';
     case 'draft': return d.ready_message || 'Specify the recipient and collaboration purpose. I can prepare a draft for you to review and send from your own account.';
     default: return 'Describe the professional role, skill, location, or name you want to find. I can review available profiles and explain relevant recommendations.';
   }

@@ -310,7 +310,7 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
   }
   if (last?.kind === 'ambiguous' && /^\d{1,2}$/.test(cmd.trim())) return { text: 'I lost that one. Say cards and pick by name - or ask again.' };
   if (cmd === 'unlink') { await unlinkBot(channel, chatId); return { text: 'Unlinked. Your LINKUP account is untouched.' }; }
-  if (cmd === 'forget') { await forget(uid); return { text: 'Linky recommendations and notes deleted; linked chat disconnected. Your message allowance is not reset.' }; }
+  if (cmd === 'forget') { await forget(uid); return { text: 'Linky recommendations and notes deleted; linked chat disconnected. Your plan and usage records are not reset.' }; }
 
   const numbered = async () => {const state=await loadState(uid);return orderedCards(await loadCards(uid),state).filter(c=>(state.lastAsk?.cardIds||[]).includes(c.id)).slice(0,5);};
   // The list Linky last put in front of the member: the directory rows from a
@@ -336,9 +336,14 @@ export async function botReply(channel, chatId, textIn, { callback } = {}) {
     const a = await audit(uid, { userDoc: user });
     const line = (label, value) => (value ? `${label}: ${value}\n` : '');
     const top = (a.asks || []).slice(0, 3).map((x) => `  - ${x.need} - ${x.none ? 'nobody yet' : `${x.cards} cards`}`).join('\n');
+    const quota = a.signals.messageQuota;
+    const allowance = quota.unlimited
+      ? `Linky messages used today: ${quota.used} - unlimited on PLUS.`
+      : `Linky messages used ${quota.period === 'month' ? 'this month' : 'today'}: ${quota.used} of ${quota.limit}.`;
+    const allowanceNote = quota.unlimited ? 'Usage is counted for your audit, not to limit PLUS messages.' : 'All messages count toward your allowance.';
     return {
-      text: `Here is everything I have on you.\n\n${line('Role', a.facts.role)}${line('Company', a.facts.company)}${line('City', a.facts.city)}${line('Skills', (a.facts.skills || []).slice(0, 6).join('   '))}${line('Open to', a.signals.openTo.map(offerLabel).join('   '))}${line('Your notes', (a.told.notes || '').slice(0, 180))}Linky messages used ${a.signals.messageQuota.period === 'month' ? 'this month' : 'today'}: ${a.signals.messageQuota.used} of ${a.signals.messageQuota.limit} - ${a.signals.meetsUsedToday} Meets today.\nAll messages count toward your allowance.
-Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n${top ? `Last asks:\n${top}` : 'No asks yet.'}\n\nSay forget to remove Linky notes, cards, and linked-chat details. Your message allowance is not reset.`,
+      text: `Here is everything I have on you.\n\n${line('Role', a.facts.role)}${line('Company', a.facts.company)}${line('City', a.facts.city)}${line('Skills', (a.facts.skills || []).slice(0, 6).join('   '))}${line('Open to', a.signals.openTo.map(offerLabel).join('   '))}${line('Your notes', (a.told.notes || '').slice(0, 180))}${allowance} ${a.signals.meetsUsedToday} Meets today.\n${allowanceNote}
+Held back from me: ${hiddenCount(a.hidden)}   muted: ${a.signals.mutedCount}\n\n${top ? `Last asks:\n${top}` : 'No asks yet.'}\n\nSay forget to remove Linky notes, cards, and linked-chat details. Your plan and usage records are not reset.`,
     };
   }
   // "draft" is a real intent the app has; on the bot it drafted nothing and simply

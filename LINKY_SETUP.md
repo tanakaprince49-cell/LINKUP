@@ -46,10 +46,11 @@ The API runs with the Admin SDK. `introSuggestions`, `intros`, `linkyState`, `bo
 
 ## Message allowances
 
-- Free: **10 conversational messages per UTC calendar month**.
-- PLUS: **60 conversational messages per UTC day**.
-- One shared reservation/refund ledger across the app and linked channels. Conversational tone commands, explanations, comparison, preparation, greetings and name lookups sent through `ask` are metered. Settings changes and navigation/approval actions are not extra conversational turns.
-- Clearing history, forgetting Linky, or unlinking a channel does not reset the allowance. Exhaustion returns the existing structured paywall/upgrade signal.
+- Free: **15 conversational messages per UTC calendar month**, with a default **5-message daily burst cap**. The daily cap does not increase the monthly allowance.
+- PLUS: **unlimited conversational messages**—no member daily/monthly allowance and no shared-cap rejection. `LINKY_PLUS_DAILY` is retired and ignored.
+- One shared reservation/refund ledger across the app and linked channels. Conversational tone commands, explanations, comparison, preparation, greetings and name lookups sent through `ask` are metered for usage accounting; PLUS usage is counted but not capped. Settings changes and navigation/approval actions are not extra conversational turns.
+- `LINKY_GLOBAL_DAILY_MESSAGES` still rejects free asks when the shared deployment ceiling is reached. PLUS asks continue and remain in the same global usage count; failed processing is refunded from member and global counters.
+- Clearing history, forgetting Linky, or unlinking a channel does not reset usage. Free exhaustion returns the existing structured paywall/upgrade signal; PLUS quota payloads use `unlimited: true` with null `limit`/`remaining`.
 - Meet limits remain separate: free 2/day; PLUS effectively unlimited. Target inbound cap defaults to 5/week and is adjustable. Introductions expire after 7 days.
 
 ## Introduction and outreach consent

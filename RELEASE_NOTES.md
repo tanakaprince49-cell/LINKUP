@@ -1,5 +1,13 @@
 # LINKUP Release Notes
 
+## 16.8.0 (versionCode 31)
+
+- LINKUP PLUS now includes **unlimited Linky messages**. The server no longer enforces a member daily/monthly allowance or shared-cap rejection for PLUS; `LINKY_PLUS_DAILY` is retired and ignored.
+- PLUS quota responses explicitly use `unlimited: true` with null `limit`/`remaining`, while daily usage accounting and failed-processing refunds remain intact.
+- Free members keep **15 messages per UTC calendar month** with the default **5-message daily burst cap**, transactional exhaustion, upgrade paywall, and shared-capacity protection.
+- The Linky header, PLUS paywall, audit views, Telegram/WhatsApp wording, budget report, setup guide, and Play listing copy now describe the same unlimited entitlement.
+- Added regression coverage for usage beyond the retired cap, concurrent PLUS sends, shared-cap bypass, upgrade/downgrade, legacy usage migration, nullable client aliases, and PLUS failure refunds.
+
 ## 16.7.0 (versionCode 30)
 
 - Linky can now invite inactive members back with eight rotating, attention-grabbing headlines. Invitations start after three days without observed app/workspace activity and have their own three-day cooldown.
