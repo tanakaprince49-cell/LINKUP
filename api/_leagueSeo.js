@@ -2,7 +2,7 @@ import {APP,publicEligible,projectProfile,profileUrl,validId,documentHtml,escape
 import {leagueScore,rankActivity,LEAGUE_RULES} from '../shared/league.js';
 import {memberHasPlus} from './_memberTier.js';
 import {calendarWeeks} from '../shared/contributions.js';
-const FIELDS=['displayName','fullName','name','username','city','country','occupation','onboarded','isVisible','isStealthMode','isBot','deleted','banned','isVerified'];
+const FIELDS=['displayName','fullName','name','username','city','country','occupation','onboarded','isVisible','isStealthMode','isBot','deleted','banned','isVerified','profilePic','profilePicUrl','photoURL','avatarUrl','photos'];
 const path=period=>APP+'/builder-league'+(period==='week'?'':'/'+period);
 const brand=html=>html.replace('</head>',`<style>body{background:#F1F0EC;color:#0A0B0D}.button,.tag.win{background:#FBE618;color:#111}.arena{background:#FBE618;border:2px solid #111}.arena h1{font-weight:950}.board{width:100%;border-collapse:collapse}.board td,.board th{text-align:left;padding:14px 8px;border-bottom:1px solid #ddd}.score{font-weight:900;font-size:22px}.calendar{display:flex;gap:4px;max-width:430px}.week{flex:1;display:flex;flex-direction:column;gap:4px}.day{aspect-ratio:1;border-radius:3px;background:#E3E1D8}.day.on{background:#FBE618;box-shadow:0 0 7px #FBE618}.periods{display:flex;gap:10px;flex-wrap:wrap}</style></head>`);
 export async function loadActivityLeague(db,{period='week',at=Date.now(),city='',country='',viewerUid=''}={}){
