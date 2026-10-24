@@ -1,3 +1,5 @@
+import LinkyWorkbenchPanel from '../components/LinkyWorkbenchPanel';
+import * as Clipboard from 'expo-clipboard';
 import BuildHabitCard from '../components/BuildHabitCard';
 import LinkyRichText from '../components/LinkyRichText';
 import { linkyShortlist } from '../lib/linkyShortlist';
@@ -251,7 +253,7 @@ const InboundView = ({
   );
 };
 
-export default function LinkyHomeScreen({ navigation }: any) {
+export default function LinkyHomeScreen({ navigation,route }: any) {
   const { theme } = useTheme();
   const { user, profile } = useAuth();
   const isDark = theme === 'dark';
@@ -271,7 +273,9 @@ export default function LinkyHomeScreen({ navigation }: any) {
     const hide = Keyboard.addListener('keyboardDidHide', () => setAndroidKeyboardHeight(0));
     return () => { show.remove(); hide.remove(); };
   }, []);
-  const [home, setHome] = useState<LinkyHome | null>(null);
+  const [rawHome, setHome] = useState<(LinkyHome & {viewerUid?:string}) | null>(null);
+  const viewer=useRef(user?.uid);viewer.current=user?.uid;const home=rawHome?.viewerUid===user?.uid?rawHome:null;
+  const [toolsOpen,setToolsOpen]=useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -280,6 +284,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const [activityOpen, setActivityOpen] = useState(false);
   const [composerHeight, setComposerHeight] = useState(96);
   const inputRef = useRef<TextInput>(null);
+  useEffect(()=>{if(route?.params?.workPrompt){setInput(String(route.params.workPrompt).slice(0,600));navigation.setParams?.({workPrompt:undefined});inputRef.current?.focus();}},[route?.params?.workPrompt]);
   const [thinking, setThinking] = useState(false);
   const [pendingAsk, setPendingAsk] = useState('');
   // the chips and the lead list only ever arrive on an ask result, so the state
@@ -336,17 +341,18 @@ export default function LinkyHomeScreen({ navigation }: any) {
   }, [quota?.remaining, paywall]);
   const mounted = useRef(true);
   const hydratedRef = useRef(false);
+  useEffect(()=>{setHome(null);setAnswer(null);setLeads([]);setDraft(null);setPointerText('');setPointerRoutes([]);setPendingAsk('');setInput('');setThinking(false);setToolsOpen(false);},[user?.uid]);
 
   useEffect(() => () => { mounted.current = false; }, []);
 
   const load = useCallback(async (silent = false) => {
-    if (!user?.uid) return;
+    if (!user?.uid) return;const owner=user.uid;
     if (!silent) setLoading(true);
     try {
       const h = await linkyHome();
-      if (!mounted.current) return;
+      if (!mounted.current||viewer.current!==owner) return;
       hydratedRef.current = true;
-      setHome(h);
+      setHome({...h,viewerUid:owner});
       setError('');
       // a lastAsk restored from home carries no ask budget of its own; the home
       // payload's limits are the same numbers, so derive it rather than fake it
@@ -354,11 +360,11 @@ export default function LinkyHomeScreen({ navigation }: any) {
         ? { ...h.lastAsk, cards: [], cached: false, asksLeft: quotaFromHome(h).remaining }
         : null));
     } catch (err) {
-      if (!mounted.current) return;
+      if (!mounted.current||viewer.current!==owner) return;
       setHome(h => h ? {...h,cards:[]} : h);
       setError(err instanceof Error ? err.message : 'Linky is unavailable right now.');
     } finally {
-      if (mounted.current) { setLoading(false); setRefreshing(false); }
+      if (mounted.current&&viewer.current===owner) { setLoading(false); setRefreshing(false); }
     }
   }, [user?.uid]);
 
@@ -470,6 +476,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
   };
 
   const send = async (text?: string) => {
+    const owner=user?.uid;
     const msg = (text ?? input).trim();
     if (!msg || thinking || !home) return;
     if (atMessageLimit && (!quota?.resetAt || Date.parse(quota.resetAt) > Date.now())) {
@@ -484,6 +491,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
     // scrolled to y:0, dumping the user at the top of the page every send).
     try {
       const out = await linkyAsk(msg);
+      if(viewer.current!==owner)return;
       if (user?.uid) void recordReviewAction(user.uid);
       setAnswer(out);
       if (out.kind !== 'chat') {
@@ -512,12 +520,12 @@ export default function LinkyHomeScreen({ navigation }: any) {
       // usable without reviving a profile hidden or blocked since that search.
       if (out.kind === 'chat') await load(true);
     } catch (err) {
+      if(viewer.current!==owner)return;
       fail(err, 'Linky could not answer');
       // A server failure can refund a reserved message. Refresh authoritative use.
       if (!(err instanceof LinkyApiError && err.status === 402)) void load(true);
     } finally {
-      setThinking(false);
-      setPendingAsk('');
+      if(viewer.current===owner){setThinking(false);setPendingAsk('');}
     }
   };
 
@@ -736,7 +744,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
             <VerifiedBadge size={18} accessibilityLabel="Verified Linky AI" />
           </View>
           <Text style={[styles.chatSubtitle, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
-            {home ? 'AI connector · Big ideas welcome' : 'Getting ready…'}
+            {home ? 'AI building partner · Big ideas welcome' : 'Getting ready…'}
           </Text>
           {home ? <Text accessibilityLabel="Linky message allowance" accessibilityLiveRegion="polite" style={[styles.allowanceText,{color:textColor(isDark,'secondary'),marginTop:3}]}>
             {home.plus ? `${asksLeft} messages left today · PLUS` : `${asksLeft} of ${messageLimit} free messages left this month`}
@@ -759,12 +767,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
         <Text style={{fontWeight:'800',color:textColor(isDark)}}>Your next move · progress & groups</Text>
         <Text style={{fontWeight:'900',color:textColor(isDark)}}>↗</Text>
       </TouchableOpacity>
-      {home&&!home.thread?.length&&<View style={{paddingHorizontal:14,paddingBottom:8}}>
-        <Text style={{color:textColor(isDark),fontWeight:'800',marginBottom:8}}>What would help you move forward today?</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>
-          {[{label:'Find a collaborator',intent:'cofounder',section:'Plan'},{label:'Find investors',intent:'investors',section:'Plan'},{label:'Get launch feedback',intent:'build',section:'Help board'}].map(goal=><TouchableOpacity key={goal.label} accessibilityRole="button" onPress={()=>navigation.navigate('BuilderWorkspace',goal)} style={{padding:11,borderRadius:15,backgroundColor:isDark?'#263649':'#eef2f6'}}><Text style={{color:textColor(isDark),fontWeight:'700'}}>{goal.label}</Text></TouchableOpacity>)}
-        </ScrollView>
-      </View>}
+      {home&&!!home.thread?.length&&!input.trim()&&!thinking&&<TouchableOpacity accessibilityRole="button" onPress={()=>setToolsOpen(v=>!v)} style={{paddingHorizontal:18,paddingVertical:10}}><Text style={{color:textColor(isDark),fontWeight:'800',fontSize:12}}>Create something useful · pitch, customers, MVP {toolsOpen?'−':'+'}</Text></TouchableOpacity>}
+      {home&&(!home.thread?.length||toolsOpen)&&!input.trim()&&!thinking&&!pendingAsk&&<LinkyWorkbenchPanel isDark={isDark} onPrompt={prompt=>{setInput(prompt);setToolsOpen(false);inputRef.current?.focus();}} onSources={()=>navigation.navigate('BuilderWorkspace',{section:'Leads'})}/>}
       {/* Keyboard keeps the composer visible:
           - iOS: KeyboardAvoidingView 'height' shrinks the container so the
             absolute-bottom composer ends at the keyboard top. The offset is
@@ -806,7 +810,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
                   ) : (
                     <View key={`l${t.at}-${i}`} style={styles.msgRow}>
                       <BrandMark size={28} style={{borderRadius: 10}} />
-                      <LinkyRichText text={t.text} isDark={isDark} profiles={textProfiles} onProfile={openProfile} style={[styles.turnText, { flexShrink: 1, color: textColor(isDark), backgroundColor: isDark ? '#203744' : '#FFFFFF', borderWidth: 1, borderColor: border }]} />
+                      <View style={{flex:1,gap:5}}><LinkyRichText text={t.text} isDark={isDark} profiles={textProfiles} onProfile={openProfile} style={[styles.turnText, { color: textColor(isDark), backgroundColor: isDark ? '#18231D' : '#FFFFFF', borderWidth: 1, borderColor: border }]} /><TouchableOpacity accessibilityRole="button" accessibilityLabel="Copy Linky answer" onPress={()=>void Clipboard.setStringAsync(t.text)}><Text style={{color:textColor(isDark,'muted'),fontSize:11,padding:7}}>Copy answer ↗</Text></TouchableOpacity></View>
                     </View>
                   )))}
                   {thinking && pendingAsk ? (

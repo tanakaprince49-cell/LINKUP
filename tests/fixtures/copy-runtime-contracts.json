@@ -327,7 +327,7 @@
     ],
     [
       "navigate",
-      "RecommendedMatches"
+      "DailyFive"
     ],
     [
       "navigate",
@@ -2627,10 +2627,6 @@
     [
       "navigate",
       "ShipLog"
-    ],
-    [
-      "navigate",
-      "Profile"
     ],
     [
       "navigate",

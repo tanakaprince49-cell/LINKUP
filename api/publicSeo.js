@@ -5,7 +5,7 @@ import {selectProfileImage} from './_publicProfileImage.js';
 import { getDb } from './_firebaseAdmin.js';
 import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, safeUrl, validId, publicEligible, projectProfile, profileUrl, renderProfile, renderDirectory, documentHtml, xmlIndex, xmlUrls } from './_publicSeo.js';
 
-const PUBLIC_FIELDS = ['displayName','fullName','name','username','bio','occupation','company','city','country','skills','lookingFor','profilePicUrl','photoURL','profilePic','avatarUrl','socialLinks','projects','deleted','banned','isBot','onboarded','isVisible','isStealthMode'];
+const PUBLIC_FIELDS = ['displayName','fullName','name','username','bio','occupation','company','city','country','skills','lookingFor','profilePicUrl','photoURL','profilePic','avatarUrl','photos','socialLinks','projects','deleted','banned','isBot','onboarded','isVisible','isStealthMode'];
 async function currentProfiles(db, ids) {
   if (!ids.length) return [];
   // The source of truth is users, NOT the eventually consistent discovery

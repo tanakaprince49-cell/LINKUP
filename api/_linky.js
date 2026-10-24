@@ -1,3 +1,4 @@
+import {assistWork,workTask,explicitPeopleSearch} from './_linkyWorkbench.js';
 // Linky core: ask -> immediate cited answer, double opt-in intros, audit,
 // editable "what Linky knows", bot linking. Shared by api/linky.js
 // (app + Telegram + WhatsApp).
@@ -1598,6 +1599,12 @@ async function answerAsk(uid, message, { user, state, source, now, plus, quota }
   const utility = utilityCommand(msgTyped);
   const vague = !searchBrief(msgTyped).browse && /^(?:find (?:me )?|i need |i want )?(?:a |an )?(?:co ?founder|co-founder|partner|someone|somebody|people|a match)[.!? ]*$/i.test(msgTyped.trim());
   const quickSocial = socialReply(msgTyped,{name:profileFacts(user)?.name,tone:companionTone,streak:Number(state.chitStreak||0)});
+  const previousWork=threadOf(state).at(-1),task=workTask(msgTyped)||(!quickSocial&&!explicitPeopleSearch(msgTyped)&&previousWork?.workTask&&now-Number(previousWork.at)<60*60*1000?previousWork.workTask:'');
+  if(task&&!tone&&!utility&&!vague){
+    const id=`${now.toString(36)}${crypto.randomBytes(4).toString('hex')}`,work=await assistWork({task,message:msgTyped,thread:threadOf(state),profile:profileFacts(user)||{},at:now},{generate:aiText,ready:aiReady()});
+    const thread=await appendThread(uid,state,[{id,role:'user',text:msgTyped,at:now},{id,role:'linky',text:work.reply,kind:'chat',workTask:task,at:now+1}]);
+    return {id,need:msgTyped,reply:work.reply,kind:'chat',cards:[],cardIds:[],nearest:[],none:true,checked:0,expansion:'none',createdAt:now,cached:false,usedAi:work.usedAi,suggest:['Make this more specific','Challenge my weakest assumption','Turn this into a 7-day plan'],thread};
+  }
   if (tone || utility || vague) {
     const id = `${now.toString(36)}${crypto.randomBytes(3).toString('hex')}`;
     const cards = utility && utility.kind !== 'brief' ? orderedCards(await loadCards(uid),state).filter(c=>(state.lastAsk?.cardIds||[]).includes(c.id)) : [];

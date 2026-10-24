@@ -19,7 +19,7 @@ export function decodeProfileImage(value) {
 export function selectProfileImage(uid, profile, safeUrl) {
   // profilePic is the member's current selection; hosted/provider aliases are
   // fallbacks, not a reason to replace a newer selection with an old photo.
-  for (const value of [profile.profilePic, profile.profilePicUrl, profile.photoURL, profile.avatarUrl]) {
+  for (const value of [profile.profilePic, profile.profilePicUrl, profile.photoURL, profile.avatarUrl,...(Array.isArray(profile.photos)?profile.photos.map(p=>typeof p==='string'?p:p?.url):[])]) {
     const url = safeUrl(value);
     if (url) return {url};
     const inline = decodeProfileImage(value);

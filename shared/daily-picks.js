@@ -1,0 +1,4 @@
+// Stable per viewer/day. Walk pairs through the eligible pool rather than
+// repeatedly returning the same two highest-scoring accounts.
+export function pickDay(at=Date.now(),timeZone='UTC'){try{const p=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(at)).map(p=>[p.type,p.value]));return `${p.year}-${p.month}-${p.day}`;}catch{return new Date(at).toISOString().slice(0,10);}}
+export function dailyPicks(people,viewer,day){const pool=[...new Map(people.filter(p=>p.uid&&p.uid!==viewer).map(p=>[p.uid,p])).values()].sort((a,b)=>a.uid.localeCompare(b.uid));if(!pool.length)return [];let seed=0;for(const c of String(viewer))seed=(seed*31+c.charCodeAt(0))>>>0;const ordinal=Math.floor(Date.parse(day+'T00:00:00Z')/86400000),start=(seed+ordinal*2)%pool.length;return Array.from({length:Math.min(2,pool.length)},(_,i)=>pool[(start+i)%pool.length]);}

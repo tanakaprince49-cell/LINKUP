@@ -107,6 +107,10 @@ export function createGroupService({db,now,blocked,connectable,notify,plus=async
     else throw problem('Unknown message action.');
     const changed={...v,...patch};tx.update(mr,patch);const groupPatch={updatedAt:now(),...groupChanges(g,[mr.id])};if(g.lastMessage?.id===mr.id||(!g.lastMessage?.id&&g.lastMessage?.at===v.at&&g.lastMessage?.authorId===v.authorId))groupPatch.lastMessage={id:mr.id,...changed,text:changed.deleted?'Message deleted':changed.text};if(g.pinnedMessage?.id===mr.id)groupPatch.pinnedMessage=changed.deleted?null:{...g.pinnedMessage,text:clean(changed.text,160)};tx.update(rr,groupPatch);return {message:groupMessage({id:mr.id,...changed})};});
   }
+  if(op==='groupDelete'){
+   const rr=ref(input.groupId);await db.runTransaction(async tx=>{await assertActor(tx,uid);const d=await tx.get(rr);if(!d.exists)return;if(d.data().ownerId!==uid)throw problem('Only the group owner can permanently delete this group.',403);tx.set(rr,{kind:'group',ownerId:uid,memberIds:[],adminIds:[],archived:true,deleting:true,updatedAt:now()});});
+   for(let page=0;page<3;page++){if(await purgeGroup(db,rr))break;}return {deleted:true};
+  }
   if(op==='groupExport'){const g=await access(uid,input.groupId);return {exportScope:'Latest 50 messages plus retained legacy project notes. Use nextBefore for earlier history.',group:await metadata(uid,g),legacy:{goal:g.goal||'',milestone:g.milestone||'',tasks:g.tasks||[],logs:g.logs||[],links:g.links||[],messages:g.messages||[]},...(await messages(uid,{groupId:g.id}))};}
   throw problem('Unknown group operation.');
  }
@@ -142,3 +146,8 @@ export async function sweepDeletedGroupData(db,at=Date.now()){
  }
  await marker.set({after:page.size===10?after:'',afterUid:'',at});return {cleaned};
 }
+
+// Revoke access first, then physically erase bounded pages. The hourly sweep
+// resumes large deletions after timeouts; no deleted group can be rejoined.
+async function purgeGroup(db,rr){const deadline=Date.now()+9000;let remains=false;do{remains=false;for(const q of [rr.collection('messages').limit(400),db.collection('builderInvites').where('roomId','==',rr.id).limit(400),db.collection('notifications').where('targetUrl','==','/groups/'+rr.id).limit(400)]){const page=await q.get();if(page.size){const batch=db.batch();for(const d of page.docs)batch.delete(d.ref);await batch.commit();if(page.size===400||page.size>=400)remains=true;}}}while(remains&&Date.now()<deadline);if(!remains){await rr.delete();return true;}return false;}
+export async function sweepDeletingGroups(db){const page=await db.collection('builderRooms').where('deleting','==',true).limit(3).get();for(const d of page.docs)await purgeGroup(db,d.ref);return {groups:page.size};}

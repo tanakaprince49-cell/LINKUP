@@ -267,7 +267,7 @@
     "file": "mobile/src/screens/DailyFiveScreen.tsx",
     "line": 77,
     "before": "Daily 5",
-    "after": "Daily briefing"
+    "after": "Today\u2019s 2 picks"
   },
   {
     "file": "mobile/src/screens/DailyFiveScreen.tsx",
@@ -1459,7 +1459,7 @@
   {
     "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
     "before": "Retired profile-quality rankings",
-    "after": "Real progress. Real competition."
+    "after": "Good people. Useful connections."
   },
   {
     "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
@@ -1479,7 +1479,7 @@
   {
     "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
     "before": "Retired profile-quality rankings",
-    "after": "THE STANDINGS"
+    "after": "Activity standings"
   },
   {
     "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
@@ -1489,7 +1489,7 @@
   {
     "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
     "before": "Retired profile-quality rankings",
-    "after": "WIN ON CONTRIBUTION, NOT HYPE."
+    "after": "Recorded activity, transparent rules."
   },
   {
     "file": "mobile/src/screens/TrendingBuildersScreen.tsx",

@@ -19,7 +19,7 @@
     "test:identity": "node --test tests/member-badges.test.mjs",
     "test:profile": "node --test tests/profile-save.test.mjs",
     "test:firestore": "npx --yes firebase-tools@13 emulators:exec --config firebase.emulator.json --project demo-linkup --only firestore \"node --test --test-concurrency=1 tests/firestore-profile/*.test.cjs\"",
-    "test:builder": "node --test tests/builder-core.test.mjs tests/contributions.test.mjs tests/build-habit.test.mjs tests/activity-league.test.mjs tests/group-package.test.mjs",
+    "test:builder": "node --test tests/builder-core.test.mjs tests/contributions.test.mjs tests/build-habit.test.mjs tests/activity-league.test.mjs tests/group-package.test.mjs tests/daily-workbench.test.mjs",
     "test:builder-browser": "node tests/builder-browser.cjs",
     "test:contribution-browser": "node tests/contribution-browser.cjs",
     "test:habit-browser": "node tests/build-habit-browser.cjs",

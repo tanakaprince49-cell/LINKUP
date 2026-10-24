@@ -1,3 +1,4 @@
+import useDailyPicks from '../hooks/useDailyPicks';
 import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Linking, Platform } from 'react-native';
@@ -244,11 +245,8 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     };
   }, [isFocused, user?.uid, me?.uid, people]);
 
-  const recommended = useMemo(() => {
-    const list = people.map((p) => ({ p, s: (aiRank[p.uid]?.score ?? localRank[p.uid]?.score ?? 1) + ((p as any).turboConnect ? 8 : 0) }));
-    list.sort((a, b) => b.s - a.s);
-    return list.filter((x) => x.s >= 0).slice(0, 2).map((x) => x.p);
-  }, [people, aiRank, localRank]);
+  const daily=useDailyPicks(user?.uid,isFocused);
+  const recommended = useMemo(()=>daily.people.map((p:any)=>({...p,displayName:p.name,profilePic:p.image,isVerified:p.verified,dailyPick:true,onboarded:true,isVisible:true})),[daily.people]);
 
   /**
    * Display scores for the picks rail.
@@ -260,7 +258,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
    * to each other never repeat a percentage.
    */
   const pickScoreById = useMemo(() => {
-    const entries = recommended.map((p) => ({
+    const entries = recommended.map((p:any) => ({
       uid: p.uid,
       score: Math.round(aiRank[p.uid]?.score ?? localRank[p.uid]?.score ?? 1),
     }));
@@ -317,7 +315,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     const match = localMatch || aiMatch;
     // The picks rail shows de-duplicated scores so the two cards never read
     // the same percentage; every other rail keeps the raw score.
-    const score = (showScore ? pickScoreById[item.uid] : undefined) ?? match?.score ?? null;
+    const score = (item as any).dailyPick?null:(showScore ? pickScoreById[item.uid] : undefined) ?? match?.score ?? null;
     return (
       <TouchableOpacity
         onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: score, compatibilityReason: match?.reason || '' })}
@@ -641,8 +639,8 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             title="Today’s 2 picks"
             icon={<UserCheck size={17} color={HOME_INK} />}
             data={recommended}
-            showScore
-            onViewAll={() => navigation.navigate('RecommendedMatches')}
+            showScore={false}
+            onViewAll={() => navigation.navigate('DailyFive')}
           />
           {/* Free plan: rotating sponsored card under Today's picks. */}
           <View style={{ paddingHorizontal: 16, marginTop: 12 }}>

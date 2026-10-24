@@ -7,12 +7,14 @@ import ProCrownBadge from './ProCrownBadge';
 export default function ScreenHeader({
   title,
   subtitle,
+  onTitlePress,
   onBack,
   isDark,
   right,
 }: {
   title: string;
   subtitle?: string;
+  onTitlePress?:()=>void;
   onBack?: () => void;
   isDark: boolean;
   right?: React.ReactNode;
@@ -30,7 +32,7 @@ export default function ScreenHeader({
       ) : (
         <View style={{ width: 44 }} />
       )}
-      <View style={styles.mid}>
+      <TouchableOpacity disabled={!onTitlePress} accessibilityRole={onTitlePress?'button':undefined} accessibilityLabel={onTitlePress?'Open group information':undefined} onPress={onTitlePress} style={styles.mid}>
         <Text style={[styles.title, { color: textColor(isDark) }]} numberOfLines={1}>
           {title}
         </Text>
@@ -39,7 +41,7 @@ export default function ScreenHeader({
             {subtitle}
           </Text>
         ) : null}
-      </View>
+      </TouchableOpacity>
       <View style={styles.right}>
         <View style={styles.rightRow}>
           <ProCrownBadge />

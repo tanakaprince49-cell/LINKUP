@@ -1,4 +1,6 @@
-import {cleanupDeletedGroupData,sweepDeletedGroupData,createGroupService} from './_groups.js';
+import {leadBrief} from '../shared/lead-brief.js';
+import {dailyPicks,pickDay} from '../shared/daily-picks.js';
+import {cleanupDeletedGroupData,sweepDeletedGroupData,sweepDeletingGroups,createGroupService} from './_groups.js';
 import {createHabitActions} from './_builderHabit.js';
 import {habitSnapshot,habitState} from '../shared/build-habit.js';
 import {DAY,id,clean,requireText,problem,validId,safeLink,stateOf,freshState,contextOf,sanitizePrefs,weekKey,localTime,brief,relevantPeople,nextDelivery,relevantLeads,weeklySummary} from './_builderCore.js';
@@ -6,7 +8,7 @@ import {publicEligible} from './_publicSeo.js';
 import {readMessageQuota} from './_linkyUsage.js';
 import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,contributionInsight,containsCredential,normalizeUpdate} from '../shared/contributions.js';
 import {EXTERNAL_LEADS} from '../shared/builder-leads.js';
-const fields=['displayName','fullName','name','occupation','skills','industries','city','country','onboarded','deleted','isBot','isVisible','isStealthMode','startupStage','remoteOnly'];
+const fields=['displayName','fullName','name','occupation','skills','industries','city','country','onboarded','deleted','banned','isBot','isVisible','isStealthMode','startupStage','remoteOnly','isVerified','profilePicUrl','photoURL','avatarUrl'];
 const row=d=>({id:d.id,...d.data()});
 const ownId=value=>{if(!validId(value))throw problem('Invalid item identifier.');return value;};
 export function createBuilderService({db,now=Date.now,plus=async()=>false,push=async()=>({sent:0})}){
@@ -41,16 +43,17 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   // One bounded audit document per user; analytics must never refund a finished AI review.
   try{const r=db.collection('builderEvents').doc(uid);await db.runTransaction(async tx=>{const d=await tx.get(r);tx.set(r,{uid,events:[{type,at:now()},...(d.exists?d.data().events||[]:[])].slice(0,40)});});}catch(e){console.warn('[builder] audit unavailable');}
  }
- async function recommendations(uid,s){
+ async function recommendations(uid,s,daily=false,timeZone='UTC'){
   const candidates=await db.collection('publicProfiles').orderBy('__name__').limit(160).get();
   const ids=candidates.docs.map(d=>d.id).filter(k=>validId(k)&&k!==uid);if(!ids.length)return [];
   const [sources,states,outgoing,incoming]=await Promise.all([
    db.getAll(...ids.map(k=>db.collection('users').doc(k)),{fieldMask:fields}),
-   db.getAll(...ids.map(k=>ref(k)),{fieldMask:['availability']}),
+   daily?Promise.resolve([]):db.getAll(...ids.map(k=>ref(k)),{fieldMask:['availability']}),
    db.collection('blocks').where('blockedById','==',uid).get(),db.collection('blocks').where('blockedUserId','==',uid).get()]);
   const unavailable=new Set([...outgoing.docs.map(d=>d.data().blockedUserId),...incoming.docs.map(d=>d.data().blockedById)]);
   const availability=new Map(states.filter(d=>d.exists).map(d=>[d.id,d.data().availability]));
   const people=sources.filter(d=>d.exists&&!unavailable.has(d.id)&&publicEligible(d.data(),d.id)).map(d=>({uid:d.id,...d.data(),name:clean(d.data().displayName||d.data().fullName||d.data().name,100),availability:availability.get(d.id)}));
+  if(daily){const day=pickDay(now(),timeZone),chosen=await change(uid,current=>{let ids=current.dailyPicks?.day===day&&current.dailyPicks?.timeZone===timeZone?current.dailyPicks.uids.filter(id=>people.some(p=>p.uid===id)):[];if(ids.length<Math.min(2,people.length)){const previous=current.dailyPicks?.day!==day?current.dailyPicks?.uids||[]:[];let candidates=people.filter(p=>!ids.includes(p.uid)&&!previous.includes(p.uid));if(candidates.length<2-ids.length)candidates=people.filter(p=>!ids.includes(p.uid));ids=[...ids,...dailyPicks(candidates,uid,day).map(p=>p.uid)].slice(0,2);}current.dailyPicks={day,timeZone,uids:ids};return ids;}),photos=new Map(candidates.docs.map(d=>[d.id,d.data()]));return {day,eligible:people.length,people:chosen.map(id=>people.find(p=>p.uid===id)).filter(Boolean).map(p=>({uid:p.uid,name:p.name,occupation:p.occupation||'',city:p.city||'',country:p.country||'',skills:p.skills||[],verified:p.isVerified===true,image:(photos.get(p.uid)?.profilePic||p.profilePicUrl||p.photoURL||p.avatarUrl)?'https://www.linkupbuild.com/app/api/publicSeo?mode=image&uid='+encodeURIComponent(p.uid):'',why:p.occupation?'Profile lists '+clean(p.occupation,120)+'.':p.skills?.length?'Profile lists '+p.skills.slice(0,3).join(', ')+'.':'An eligible public LINKUP member; explore their profile to assess fit.'})),note:people.length<3?'The eligible pool is small, so a person may repeat. We never invent members.':'A new pair each local calendar day. Rotation is discovery, not a compatibility guarantee.'};}
   return relevantPeople(s,people,now());
  }
  async function listAsks(uid,input={}){
@@ -128,7 +131,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   const me=await db.collection('users').doc(uid).get();if(!me.exists||me.data().deleted||me.data().banned||me.data().onboarded!==true)throw problem('Finish your profile before opening the builder workspace.',403);
   // Bounded server-owned request counter, separate from the paid AI ledger.
   await db.runTransaction(async tx=>{const r=db.collection('builderRates').doc(uid),d=await tx.get(r),v=d.exists?d.data():{};const key=Math.floor(now()/60000),count=v.key===key?v.count:0;if(count>=60)throw problem('Please pause for a moment before trying again.',429);tx.set(r,{key,count:count+1});});
-  if(['groups','groupCreate','groupGet','groupMessages','groupSend','groupRead','groupInvite','groupRespond','groupAction','groupExport','groupUpdate','groupMessageAction','groupPrefs','groupBlock'].includes(op))return groups.handle(uid,op,input);
+  if(['groups','groupCreate','groupGet','groupMessages','groupSend','groupRead','groupInvite','groupRespond','groupAction','groupExport','groupUpdate','groupMessageAction','groupPrefs','groupBlock','groupDelete'].includes(op))return groups.handle(uid,op,input);
   if(op==='habit')return habits.read(uid);
   if(['habitPrefs','habitRest','habitToken'].includes(op))return habits.act(uid,op,input);
   if(op==='contributions')return contributionData(uid,input.targetUid?ownId(input.targetUid):uid);
@@ -148,6 +151,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
    return {people};
   }
   if(op==='weeklyReview')return {review:await reviewFor(uid,await state(uid))};
+  if(op==='dailyPicks')return recommendations(uid,await state(uid),true,clean(input.timeZone,80)||'UTC');
   if(op==='recommendations')return {people:await recommendations(uid,await state(uid)),scope:'Up to 160 discovery candidates; only evidence-backed relevant members are shown.'};
   if(op==='recommendationFeedback'){ownId(input.uid);if(!['relevant','not_relevant','contacted'].includes(input.status))throw problem('Choose a feedback option.');await change(uid,s=>{s.feedback={...s.feedback,[input.uid]:{status:input.status,at:now()}};s.feedback=Object.fromEntries(Object.entries(s.feedback).sort((a,b)=>b[1].at-a[1].at).slice(0,100));});return {ok:true};}
   if(op==='followup'){
@@ -166,6 +170,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   if(op==='leads'){
    const s=await state(uid);return {leads:relevantLeads(s,EXTERNAL_LEADS,now()),note:'External public sources, not LINKUP members. Source access does not establish current availability or acceptance of pitches.'};
   }
+  if(op==='leadBrief'){const s=await state(uid),lead=relevantLeads(s,EXTERNAL_LEADS,now()).find(l=>l.id===input.id);if(!lead)throw problem('This source is unavailable or needs a new review.',404);return {text:leadBrief(s.context,lead),sent:false};}
   if(op==='leadSave'){if(!EXTERNAL_LEADS.some(l=>l.id===input.id))throw problem('Lead not found.',404);await change(uid,s=>{s.savedLeads=input.saved===false?s.savedLeads.filter(k=>k!==input.id):[...new Set([input.id,...s.savedLeads])].slice(0,50);});return {ok:true};}
   // Old room URLs remain readable; project/task mutations are retired.
   if(op==='roomCreate'){const r=await groups.handle(uid,'groupCreate',input);return {roomId:r.groupId};}
@@ -195,7 +200,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   throw problem('Unsupported builder action.');
  }
  async function runReminderPage({after='',limit=40}={}){
-  await sweepDeletedGroupData(db,now());
+  await sweepDeletedGroupData(db,now());await sweepDeletingGroups(db,now());
   let query=db.collection('builderStates').orderBy('__name__').limit(Math.min(40,limit));if(after)query=query.startAfter(after);const docs=(await query.get()).docs;let delivered=0,lastProcessed=after;const started=Date.now();
   for(const d of docs){if(Date.now()-started>40000)return {delivered,nextCursor:lastProcessed};lastProcessed=d.id;const user=await db.collection('users').doc(d.id).get();if(!user.exists||user.data().deleted){await db.collection('builderContributions').doc(d.id).delete();await cleanupDeletedGroupData(db,d.id,now());continue;}if(user.data().banned||user.data().onboarded!==true)continue;
    const prior=stateOf(d.data(),now()),clock=localTime(now(),prior.prefs.timezone);

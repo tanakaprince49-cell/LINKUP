@@ -1,5 +1,7 @@
+import useDailyPicks from '../hooks/useDailyPicks';
+import {useIsFocused} from '@react-navigation/native';
 import { builderCall } from '../lib/builder';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Check } from 'lucide-react-native';
@@ -18,27 +20,16 @@ export default function DailyFiveScreen({ navigation }: any) {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const [cards, setCards] = useState<DailyFiveCard[]>([]);
   const [doneIds, setDoneIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const focused=useIsFocused(),daily=useDailyPicks(user?.uid,focused),loading=daily.loading;
 
-  useEffect(() => {
-    if (!user?.uid) return;
-    let mounted = true;
-    loadDailyFiveProgress(user.uid).then((progress) => {
-      if (mounted) setDoneIds(progress.doneIds);
-    });
-    void builderCall('recommendations').then(({people:matches}) => {
-      if(mounted)setCards(matches.map((p:any)=>({id:`person_${p.uid}`,kind:'person' as const,title:p.name,subtitle:p.why+(p.available?' Available this week.':''),userId:p.uid})));
-    }).catch(()=>{if(mounted)setCards([]);}).finally(()=>{if(mounted)setLoading(false);});
-    return()=>{mounted=false;};
-  }, [user?.uid, profile?.uid]);
-
+  useEffect(()=>{let active=true;setDoneIds([]);if(user?.uid&&daily.day)void loadDailyFiveProgress(user.uid).then(p=>{if(active)setDoneIds(p.doneIds);});return()=>{active=false;};},[user?.uid,daily.day]);
+  const cards=useMemo<DailyFiveCard[]>(()=>daily.people.map((p:any)=>({id:`person_${p.uid}`,kind:'person' as const,title:p.name,subtitle:p.why,userId:p.uid,pic:p.image})),[daily.people]);
   const markDone = async (id: string) => {
     if (!user?.uid || doneIds.includes(id)) return;
     const next = [...doneIds, id];
     setDoneIds(next);
-    const completed = next.length >= Math.min(5, cards.length || 5);
+    const completed = next.length >= Math.min(2, cards.length || 2);
     await saveDailyFiveProgress(user.uid, next, completed);
   };
 
@@ -60,15 +51,15 @@ export default function DailyFiveScreen({ navigation }: any) {
   return (
     <SafeAreaView style={[styles.root, appBackground(isDark)]}>
       <ScreenHeader
-        title="Daily briefing"
-        subtitle={cards.length === 0 ? 'Set your building context to find relevant people.' : remaining === 0 ? "You have reviewed these suggestions. Matching stays available all week." : `${remaining} left · about 90 seconds`}
+        title="Today’s 2 picks"
+        subtitle={daily.error||daily.note|| (cards.length === 0 ? 'Set your building context to find relevant people.' : remaining === 0 ? "You have reviewed these suggestions. Matching stays available all week." : `${remaining} left · about 90 seconds`)}
         onBack={() => navigation.goBack()}
         isDark={isDark}
       />
       {loading ? (
         <ActivityIndicator color={COLORS.primaryStrong} style={{ marginTop: 40 }} />
       ) : (
-        <View style={styles.list}>
+        <View style={styles.list}>{daily.error&&<TouchableOpacity accessibilityRole="button" onPress={()=>void daily.refresh()}><Text>Retry today’s picks</Text></TouchableOpacity>}
           {/* Free plan sees a rotating sponsored card above the loop.
               PLUS is ad-free (founder/admin accounts excepted, for QA). */}
           <SponsoredSlot
