@@ -371,6 +371,13 @@ const PreferenceSwitch = ({
   </View>
 );
 
+// Quota-sipping caches (module scope: shared across remounts for the session,
+// so hot reloads and repeat visits don't re-bill the same reads).
+const founderCountCache = new Map<string, { at: number; value: number }>();
+const FOUNDER_COUNT_TTL_MS = 5 * 60 * 1000;
+const bannerTopupServerAt = new Map<string, number>();
+const BANNER_TOPUP_TTL_MS = 10 * 60 * 1000;
+
 export default function ProfileScreen({ navigation, route }: any) {
   const {
     user,
@@ -560,8 +567,13 @@ export default function ProfileScreen({ navigation, route }: any) {
         };
         // Instant + free when the doc is already cached...
         void getDocFromCache(userRef).then((snap) => mergeBanner(bannerFrom(snap))).catch(() => {});
-        // ...authoritative copy from the server right after.
-        void getDoc(userRef).then((snap) => mergeBanner(bannerFrom(snap))).catch(() => {});
+        // ...authoritative copy from the server right after, at most once per
+        // profile every few minutes so repeat views sip quota instead of chugging it.
+        const lastServerTopup = bannerTopupServerAt.get(uid) || 0;
+        if (Date.now() - lastServerTopup >= BANNER_TOPUP_TTL_MS) {
+          bannerTopupServerAt.set(uid, Date.now());
+          void getDoc(userRef).then((snap) => mergeBanner(bannerFrom(snap))).catch(() => {});
+        }
       };
 
       // 1) Serve instantly from the local Firestore cache when we have the
@@ -734,10 +746,16 @@ export default function ProfileScreen({ navigation, route }: any) {
     const uid = myProfile.uid;
 
     const countWhere = async (collectionName: string, field: string) => {
+      const cacheKey = `${uid}:${collectionName}:${field}`;
+      const hit = founderCountCache.get(cacheKey);
+      if (hit && Date.now() - hit.at < FOUNDER_COUNT_TTL_MS) return hit.value;
       try {
         const snapshot = await getCountFromServer(query(collection(db, collectionName), where(field, '==', uid)));
-        return Number(snapshot.data()?.count || 0) || 0;
+        const value = Number(snapshot.data()?.count || 0) || 0;
+        founderCountCache.set(cacheKey, { at: Date.now(), value });
+        return value;
       } catch (error) {
+        if (hit) return hit.value;
         if (!isPermissionDenied(error)) {
           console.warn(`Founder dashboard: ${collectionName} count unavailable:`, error);
         }

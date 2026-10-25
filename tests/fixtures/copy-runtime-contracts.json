@@ -2467,6 +2467,9 @@
       "get"
     ],
     [
+      "get"
+    ],
+    [
       "doc",
       "users"
     ],
@@ -2474,6 +2477,9 @@
       "property",
       "action",
       "profile"
+    ],
+    [
+      "get"
     ],
     [
       "collection"

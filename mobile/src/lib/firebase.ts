@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, initializeAuth } from 'firebase/auth';
-import { initializeFirestore, persistentLocalCache, persistentSingleTabManager } from 'firebase/firestore';
+import { connectAuthEmulator, getAuth, initializeAuth } from 'firebase/auth';
+import { connectFirestoreEmulator, initializeFirestore, persistentLocalCache, persistentSingleTabManager } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -66,6 +66,26 @@ export const db = initializeFirestore(app, {
       }),
 });
 export const functions = getFunctions(app);
+
+// Local Firebase emulators (dev-only, $0 quota burn): create mobile/.env with
+//   EXPO_PUBLIC_FIREBASE_EMULATOR_HOST=192.168.x.x   (your PC's LAN IP)
+// and run `firebase emulators:start --only auth,firestore` from the repo root.
+// When the variable is unset (or in production builds) this block is a no-op
+// and the app talks to production exactly as before. Full free-testing guide:
+// EMULATOR_TESTING.md
+const EMULATOR_HOST =
+  process.env.NODE_ENV === 'production'
+    ? ''
+    : String(process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST || '').trim();
+if (EMULATOR_HOST) {
+  try {
+    connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
+    connectFirestoreEmulator(db, EMULATOR_HOST, 8085);
+    console.log(`[LINKUP] Using local Firebase emulators at ${EMULATOR_HOST} (auth :9099, firestore :8085) — $0 quota burn.`);
+  } catch (error) {
+    console.warn('[LINKUP] Firebase emulator requested but unavailable; using production.', error);
+  }
+}
 
 export enum OperationType {
   CREATE = 'create',
