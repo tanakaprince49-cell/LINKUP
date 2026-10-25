@@ -14,6 +14,10 @@ async function currentProfiles(db, ids) {
   return docs.filter(d => d.exists && publicEligible(d.data(), d.id)).map(d => projectProfile(d.id, d.data()));
 }
 const single = value => typeof value === 'string' ? value : '';
+// Sitemap XML is crawler bait hit over and over for identical bytes; cache it
+// for an hour at the edge and in browsers. Profile/directory/image bodies stay
+// no-store (privacy changes must bite on the very next request).
+const SEO_SITEMAP_CACHE = {'Cache-Control':'public, max-age=3600','Vercel-CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400','CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400'};
 export function createPublicSeoHandler(database = getDb, news = getNewsFeed) {
   return async (req, res) => {
     res.setHeader('X-Content-Type-Options','nosniff');
@@ -99,9 +103,9 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed) {
         if (pages > 50000) throw new Error('Sitemap index capacity exceeded');
         const urls=[`${APP}/sitemap-static.xml`,...Array.from({length:pages},(_,i) => `${APP}/sitemap-profiles-${i}.xml`),`${APP}/sitemap-momentum.xml`,...await contentSitemapIndex(db)];
         if(urls.length>50000)throw new Error('Sitemap index capacity exceeded');
-        return send(200,xmlIndex(urls),'application/xml; charset=utf-8');
+        return send(200,xmlIndex(urls),'application/xml; charset=utf-8',SEO_SITEMAP_CACHE);
       }
-      if (mode === 'static') return send(200,xmlUrls([`${APP}/landing`,`${APP}/builders`,`${APP}/campaigns`,`${APP}/startups`,`${APP}/news`,`${APP}/builder-league`,`${APP}/builder-league/month`,`${APP}/builder-league/all`,`${APP}/momentum`]),'application/xml; charset=utf-8');
+      if (mode === 'static') return send(200,xmlUrls([`${APP}/landing`,`${APP}/builders`,`${APP}/campaigns`,`${APP}/startups`,`${APP}/news`,`${APP}/builder-league`,`${APP}/builder-league/month`,`${APP}/builder-league/all`,`${APP}/momentum`]),'application/xml; charset=utf-8',SEO_SITEMAP_CACHE);
       if (mode === 'profiles') {
         const raw = single(req.query?.page);
         if (!/^(0|[1-9]\d{0,4})$/.test(raw)) return failure(400,'Invalid sitemap');
@@ -113,7 +117,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed) {
         // URLs. At very large scale replace this with stored cursor manifests.
         const snap = await db.collection('publicProfiles').orderBy('__name__').select().offset(page * SITEMAP_SIZE).limit(SITEMAP_SIZE).get();
         const profiles = await currentProfiles(db,snap.docs.map(d => d.id));
-        return send(200,xmlUrls(profiles.map(p => ({url:profileUrl(p.uid),image:p.image}))),'application/xml; charset=utf-8');
+        return send(200,xmlUrls(profiles.map(p => ({url:profileUrl(p.uid),image:p.image}))),'application/xml; charset=utf-8',SEO_SITEMAP_CACHE);
       }
       return failure(404,'Page not found');
     } catch (error) {

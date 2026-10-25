@@ -18,7 +18,7 @@ type Snapshot={days:string[];points:number;totalUpdates:number;today:string;publ
  * Tapping a recorded day shows which day it is and, for your own calendar, the
  * private update from that day.
  */
-export default function ContributionCalendar({userId,isDark=false,refreshKey='',onPublish,snapshot}:{userId:string;isDark?:boolean;refreshKey?:string;onPublish?:()=>void;snapshot?:Snapshot}){
+export default function ContributionCalendar({userId,isDark=false,refreshKey='',onPublish,snapshot,displayName}:{userId:string;isDark?:boolean;refreshKey?:string;onPublish?:()=>void;snapshot?:Snapshot;displayName?:string}){
  const focused=useIsFocused(),[data,setData]=useState<Snapshot|null>(snapshot||null),[error,setError]=useState(''),[reload,setReload]=useState(0);
  const [view,setView]=useState<'month'|'recent'|'weeks'>('month'),[picked,setPicked]=useState('');
  const todayKey=monthKeyOf(data?.today?Date.parse(data.today+'T12:00:00Z'):Date.now());
@@ -40,9 +40,11 @@ export default function ContributionCalendar({userId,isDark=false,refreshKey='',
  const pickedUpdate=privateUpdates.find((u:any)=>u.day===pickedEntry);
  const label=visible.length?`Recorded contribution days: ${visible.map(d=>d.day).join(', ')}. Dates use UTC.`:'No recorded contribution days yet.';
  const monthTabs=[addMonth(month,-1),month,addMonth(month,1)].filter((k,i,all)=>k&&all.indexOf(k)===i&&k<=todayKey);
+ const ownerName=String(displayName||'').trim();
+ const calendarTitle=ownerName?`${ownerName}${ownerName.toLowerCase().endsWith('s')?"'":"'s"} calendar, date by date`:'Your calendar, date by date';
 
  return <View style={[styles.card,{backgroundColor:isDark?'#171A21':'#FFFFFF',borderColor:isDark?'#383A42':'#DDDAD1'}]}>
-  <View style={styles.heading}><View style={{flex:1}}><Text style={[styles.eyebrow,{color:muted}]}>BUILDER MOMENTUM</Text><Text style={[styles.title,{color:ink}]}>Your calendar, date by date</Text></View><View style={[styles.total,{backgroundColor:isDark?'#292B31':'#FBE618'}]}><Text style={[styles.points,{color:ink}]}>{data?.points??'—'}</Text><Text style={{fontSize:10,color:muted,fontWeight:'700'}}>contribution pts</Text></View></View>
+  <View style={styles.heading}><View style={{flex:1}}><Text style={[styles.eyebrow,{color:muted}]}>BUILDER MOMENTUM</Text><Text style={[styles.title,{color:ink}]}>{calendarTitle}</Text></View><View style={[styles.total,{backgroundColor:isDark?'#292B31':'#FBE618'}]}><Text style={[styles.points,{color:ink}]}>{data?.points??'—'}</Text><Text style={{fontSize:10,color:muted,fontWeight:'700'}}>contribution pts</Text></View></View>
 
   {error?<View style={{gap:8}}><Text style={{color:muted,fontSize:13}}>{error}</Text><TouchableOpacity accessibilityRole="button" onPress={()=>setReload(v=>v+1)}><Text style={{color:ink,fontWeight:'800'}}>Retry calendar</Text></TouchableOpacity></View>:!data?<ActivityIndicator color={ink}/>:<>
    <View style={styles.tabs}>{([['month','Month'],['recent','Recent'],['weeks','Weeks']] as const).map(([value,title])=><TouchableOpacity key={value} accessibilityRole="button" accessibilityState={{selected:view===value}} accessibilityLabel={`${title} view`} onPress={()=>setView(value)} style={[styles.tab,{backgroundColor:view===value?'#FBE618':panelTint,borderColor:view===value?'#0A0B0D':line}]}><Text style={{color:ink,fontWeight:'900',fontSize:12}}>{title}</Text></TouchableOpacity>)}</View>

@@ -27,12 +27,17 @@ export function createGroupService({db,now,blocked,connectable,notify,plus=async
   if(input.after&&input.before)throw problem('Choose one message cursor.');
   const direction=input.after?'asc':'desc';q=collection.orderBy('at',direction).orderBy('__name__',direction);
   if(input.after||input.before){const cursorDoc=await collection.doc(cursor(input.after||input.before)).get();if(!cursorDoc.exists)throw problem('Refresh the conversation to reset its cursor.',409);q=q.startAfter(cursorDoc.data().at,cursorDoc.id);}
+  const settings={title:g.title,photo:safePhoto(g.photo),description:g.description||'',rules:g.rules||'',ownerId:g.ownerId,adminIds:g.adminIds||[],pinnedMessage:g.pinnedMessage||null,announcementsOnly:!!g.announcementsOnly,preferences:g.preferences?.[uid]||{}};
+  // Quota guard: chat screens poll every 10s with their last revision. When it
+  // matches, nothing changed — skip the 51-message query entirely (the access()
+  // check above is the only cost) and let the client keep its messages.
+  if(input.revision!==undefined&&!input.after&&!input.before&&Number.isSafeInteger(input.revision)&&Number(input.revision)===Number(g.revision||0))return{revision:g.revision||0,changes:[],refreshRequired:false,settings,messages:[],more:false,nextAfter:null,nextBefore:null,archived:!!g.archived};
   const s=await q.limit(51).get(),docs=s.docs.slice(0,50),items=docs.map(d=>groupMessage({id:d.id,...d.data()}));if(direction==='desc')items.reverse();
   if(input.revision!==undefined&&(!Number.isSafeInteger(input.revision)||input.revision<0))throw problem('Refresh the conversation to reset its revision.',409);
   const journal=g.recentChanges||[],refreshRequired=input.revision!==undefined&&journal.length>0&&input.revision<journal[0].version-1,changeIds=input.revision===undefined?[]:[...new Set(journal.filter(v=>v.version>input.revision).map(v=>v.id))];
   const changes=changeIds.length?(await db.getAll(...changeIds.map(k=>collection.doc(cursor(k))))).map(d=>d.exists?groupMessage({id:d.id,...d.data()}):{id:d.id,authorId:'',at:0,text:'Message deleted',deleted:true,reactions:{}}):[];
   const replyIds=[...new Set(items.map(m=>m.replyTo).filter(Boolean))];if(replyIds.length){const replies=await db.getAll(...replyIds.map(k=>collection.doc(cursor(k))));for(const m of items){const r=replies.find(d=>d.id===m.replyTo);if(r)m.reply={id:r.id,authorId:r.data()?.authorId||'',text:!r.exists||r.data().deleted?'Message deleted':clean(r.data().text,120)};}}
-  return {revision:g.revision||0,changes,refreshRequired,settings:{title:g.title,photo:safePhoto(g.photo),description:g.description||'',rules:g.rules||'',ownerId:g.ownerId,adminIds:g.adminIds||[],pinnedMessage:g.pinnedMessage||null,announcementsOnly:!!g.announcementsOnly,preferences:g.preferences?.[uid]||{}},messages:items,more:s.docs.length>50,nextAfter:items.at(-1)?.id||null,nextBefore:items[0]?.id||null,archived:!!g.archived};
+  return {revision:g.revision||0,changes,refreshRequired,settings,messages:items,more:s.docs.length>50,nextAfter:items.at(-1)?.id||null,nextBefore:items[0]?.id||null,archived:!!g.archived};
  }
  async function handle(uid,op,input){
   if(op==='groups'){

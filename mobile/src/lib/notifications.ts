@@ -446,13 +446,21 @@ export function subscribeToUnreadNotificationsCount(
   );
 }
 
+let lastMarkReadSweepAt = 0;
+const MARK_READ_SWEEP_TTL_MS = 60_000;
+
 export async function markUnreadNotificationsRead(userId: string) {
   if (!userId) return;
+  // Backlog sweep: throttled, because callers fire on every focus and each
+  // sweep is a full query + a write per unread doc.
+  const now = Date.now();
+  if (now - lastMarkReadSweepAt < MARK_READ_SWEEP_TTL_MS) return;
+  lastMarkReadSweepAt = now;
 
   const unreadQuery = query(
     collection(db, 'notifications'),
     where('userId', '==', userId),
-    limit(450)
+    limit(100)
   );
   const snap = await getDocs(unreadQuery);
   if (snap.empty) return;
@@ -460,7 +468,7 @@ export async function markUnreadNotificationsRead(userId: string) {
   const batch = writeBatch(db);
   snap.docs
     .filter((notificationDoc) => (notificationDoc.data() as any)?.isRead === false)
-    .slice(0, 450)
+    .slice(0, 100)
     .forEach((notificationDoc) => {
     batch.update(notificationDoc.ref, { isRead: true });
   });

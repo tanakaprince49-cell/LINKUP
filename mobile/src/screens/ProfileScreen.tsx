@@ -124,6 +124,9 @@ const clampScore = (value: number) => Math.max(0, Math.min(100, Math.round(value
  * ignore 100% of the people who write to you.
  */
 const sampleResponseRate = async (uid: string) => {
+  const cacheKey = `${uid}:responseRate`;
+  const hit = founderCountCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < FOUNDER_COUNT_TTL_MS) return hit.value;
   try {
     const snapshot = await getDocs(
       query(collection(db, 'matches'), where(new FieldPath('participants', uid), '==', true), limit(200))
@@ -136,8 +139,11 @@ const sampleResponseRate = async (uid: string) => {
       asked += 1;
       if (Number(data.unreadBy?.[uid] || 0) <= 0) answered += 1;
     });
-    return asked > 0 ? Math.round((answered / asked) * 100) : -1;
+    const value = asked > 0 ? Math.round((answered / asked) * 100) : -1;
+    founderCountCache.set(cacheKey, { at: Date.now(), value });
+    return value;
   } catch (error) {
+    if (hit) return hit.value;
     if (!isPermissionDenied(error)) {
       console.warn('Founder dashboard: response rate unavailable:', error);
     }
@@ -2838,7 +2844,7 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         {!isEditing && (
           <>
-            {profile?.uid && <View style={styles.section}><ContributionCalendar userId={profile.uid} key={profile.uid} isDark={isDark} refreshKey={String(profile.lastShippedAt||'')} onPublish={!isViewingOther?()=>navigation.navigate('ShipLog'):undefined}/></View>}
+            {profile?.uid && <View style={styles.section}><ContributionCalendar userId={profile.uid} key={profile.uid} isDark={isDark} refreshKey={String(profile.lastShippedAt||'')} onPublish={!isViewingOther?()=>navigation.navigate('ShipLog'):undefined} displayName={isViewingOther?String((profile as any)?.displayName||''):undefined}/></View>}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>About</Text>
               <View style={[styles.profileStoryCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>

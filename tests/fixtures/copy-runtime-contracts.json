@@ -72,6 +72,10 @@
       "Profile"
     ],
     [
+      "doc",
+      "notifications"
+    ],
+    [
       "collection",
       "notifications"
     ],
@@ -2432,6 +2436,9 @@
     [
       "get",
       "window"
+    ],
+    [
+      "get"
     ],
     [
       "collection",

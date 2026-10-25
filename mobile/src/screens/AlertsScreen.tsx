@@ -2,7 +2,7 @@ import MemberBadges from '../components/MemberBadges';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, query, where, onSnapshot, doc, updateDoc, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, limit, writeBatch } from 'firebase/firestore';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { db } from '../lib/firebase';
 import { AppImage } from '../components/AppImage';
@@ -283,8 +283,19 @@ export default function AlertsScreen({ navigation }: any) {
   useFocusEffect(
     useCallback(() => {
       if (!user?.uid) return;
-      markUnreadNotificationsRead(user.uid).catch(() => {});
-    }, [user?.uid])
+      // Mark the already-loaded page read: zero fresh reads (the listener
+      // below refreshes the list on our own writes for free).
+      const unreadLoaded = notifications.filter((n) => (n as any)?.isRead === false && (n as any)?.id);
+      if (unreadLoaded.length) {
+        const batch = writeBatch(db);
+        unreadLoaded.forEach((n) => batch.update(doc(db, 'notifications', (n as any).id), { isRead: true }));
+        batch.commit().catch(() => {});
+      }
+      // Possible backlog beyond the loaded page: throttled server sweep.
+      if (notifications.length >= MOBILE_NOTIFICATION_QUERY_LIMIT) {
+        markUnreadNotificationsRead(user.uid).catch(() => {});
+      }
+    }, [user?.uid, notifications])
   );
 
   useEffect(() => {
