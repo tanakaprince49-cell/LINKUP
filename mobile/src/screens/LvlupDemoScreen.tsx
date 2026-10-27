@@ -45,9 +45,10 @@ type LvlupPick = {
   score: number;
   matched?: string[];
   brief: string;
-  why: { c: string; d: string }[];
-  lane: string;
-  laneWhy: string;
+  // Optional: CDN may serve pre-16.10.3 cached shapes without these — never crash on them.
+  why?: { c: string; d: string }[];
+  lane?: string;
+  laneWhy?: string;
 };
 
 type LvlupSearchResponse = {
@@ -152,7 +153,9 @@ export default function LvlupDemoScreen() {
     void Linking.openURL(url);
   };
 
-  const renderPick = (pick: LvlupPick, compact = false) => (
+  const renderPick = (pick: LvlupPick, compact = false) => {
+    const why = Array.isArray(pick.why) ? pick.why : [];
+    return (
     <View key={pick.uid} style={[styles.pick, { backgroundColor: card, borderColor: line }]}>
       <View style={styles.pickTop}>
         {pick.image ? (
@@ -192,7 +195,7 @@ export default function LvlupDemoScreen() {
           </View>
         </View>
       </View>
-      {!compact ? (
+      {!compact && pick.lane ? (
         <View style={styles.laneRow}>
           <View style={styles.lanePill}>
             <Text style={styles.laneText}>{pick.lane}</Text>
@@ -201,10 +204,10 @@ export default function LvlupDemoScreen() {
         </View>
       ) : null}
       <Text style={[styles.brief, { color: sub }]}>{pick.brief}</Text>
-      {!compact && pick.why.length > 0 ? (
+      {!compact && why.length > 0 ? (
         <View style={styles.whyBlock}>
           <Text style={[styles.whyTitle, { color: ink }]}>Why Linky surfaced {pick.name.split(' ')[0]}</Text>
-          {pick.why.map(w => (
+          {why.map(w => (
             <View key={w.c} style={styles.whyRow}>
               <Text style={[styles.whyDot, { color: sub }]}>•</Text>
               <Text style={[styles.whyText, { color: sub }]}>
@@ -228,7 +231,8 @@ export default function LvlupDemoScreen() {
         <ArrowUpRight size={14} color={isDark ? BRAND : '#0A0B0D'} />
       </TouchableOpacity>
     </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.safe, appBackground(isDark)]} edges={['top', 'bottom']}>
@@ -396,7 +400,7 @@ export default function LvlupDemoScreen() {
                     </View>
                     <View style={styles.digestInfo}>
                       <Text style={[styles.digestName, { color: ink }]} numberOfLines={1}>
-                        {pick.name} · {pick.lane}
+                        {pick.name}{pick.lane ? ` · ${pick.lane}` : ''}
                         {pick.location ? ` · ${pick.location}` : ''}
                       </Text>
                       <Text style={[styles.digestBrief, { color: sub }]} numberOfLines={2}>
