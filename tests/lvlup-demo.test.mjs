@@ -267,3 +267,10 @@ test('lvlup reports why it fell back when Linky AI fails',async() => {
   const slow = async () => { throw new Error('The operation was aborted due to timeout'); };
   assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, slow)).body).aiNote, 'timeout');
 });
+
+test('lvlup reports which AI providers were attempted',async() => {
+  const both = async () => { throw new Error('gemini: 429 quota | zen: 429 quota'); };
+  assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, both)).body).aiTried, 'gemini+zen');
+  const zenOnly = async () => { throw new Error('zen: 429 quota exceeded'); };
+  assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, zenOnly)).body).aiTried, 'zen');
+});

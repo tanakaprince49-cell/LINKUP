@@ -405,7 +405,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
           .sort((a, b) => b.score - a.score || a.p.name.localeCompare(b.p.name));
         // AI-first: real Linky ranking. Any failure degrades to deterministic —
         // engine tells the client which one answered.
-        let picks = null, engine = 'linky-offline', aiNote = '', aiProvider = '';
+        let picks = null, engine = 'linky-offline', aiNote = '', aiProvider = '', aiTried = '';
         const aiFn = ai || (aiReady() ? aiText : null);
         const pickLimit = view === 'companies' ? Math.min(10, limit * 2) : limit;
         if (aiFn) {
@@ -420,6 +420,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
               : /429|quota|rate limit|too many requests|billing|payment|credit|exhausted/i.test(m) ? 'quota'
               : /not supported|is not a model|unavailable|does not exist|unknown model|invalid model|no such model/i.test(m) ? 'model'
               : 'provider';
+            aiTried = ['gemini', 'zen'].filter(x => m.toLowerCase().includes(x + ':')).join('+');
             picks = null;
           }
         } else { aiNote = aiReady() ? '' : 'no-key'; }
@@ -428,12 +429,12 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         }
         let body;
         if (digest) {
-          body = { digest: true, week: lvlupWeekLabel(), thesis: terms.join(', ') || 'generalist technical builders', picks: picks.slice(0, limit), totalEligible: profiles.length, engine, aiNote, aiProvider, generatedAt: new Date().toISOString() };
+          body = { digest: true, week: lvlupWeekLabel(), thesis: terms.join(', ') || 'generalist technical builders', picks: picks.slice(0, limit), totalEligible: profiles.length, engine, aiNote, aiProvider, aiTried, generatedAt: new Date().toISOString() };
         } else if (view === 'companies') {
           const companies = lvlupCompanies(picks, terms, limit);
-          body = { companies, totalCompanies: companies.length, totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, aiNote, aiProvider, generatedAt: new Date().toISOString() };
+          body = { companies, totalCompanies: companies.length, totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, aiNote, aiProvider, aiTried, generatedAt: new Date().toISOString() };
         } else {
-          body = { picks: picks.slice(0, limit), totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, aiNote, aiProvider, generatedAt: new Date().toISOString() };
+          body = { picks: picks.slice(0, limit), totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, aiNote, aiProvider, aiTried, generatedAt: new Date().toISOString() };
         }
         return send(200, JSON.stringify(body), 'application/json; charset=utf-8', LVLUP_CACHE);
       }
