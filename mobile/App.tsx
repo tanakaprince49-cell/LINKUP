@@ -24,6 +24,7 @@ import DiscoveryDashboardScreen from './src/screens/DiscoveryDashboardScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import EmailAuthScreen from './src/screens/EmailAuthScreen';
 import LandingScreen from './src/screens/LandingScreen';
+import LvlupDemoScreen from './src/screens/LvlupDemoScreen';
 
 const LinkyHomeScreen = lazyScreen(() => import('./src/screens/LinkyHomeScreen'));
 const IdeaDeckScreen = lazyScreen(() => import('./src/screens/IdeaDeckScreen'));
@@ -142,6 +143,7 @@ const linking: any = {
     path: WEB_BASE_PATH.slice(1),
     screens: {
       Landing: 'landing',
+      LvlupDemo: 'lvlup',
       EmailAuth: 'login',
       EmailVerification: 'verify-email',
       Onboarding: 'onboarding',
@@ -713,6 +715,7 @@ function AppContent() {
           <>
             <Stack.Screen name="Landing" component={LandingScreen} />
             <Stack.Screen name="EmailAuth" component={EmailAuthScreen} />
+          <Stack.Screen name="LvlupDemo" component={LvlupDemoScreen} />
             {isPublicSharedWebPath ? (
               <>
                 <Stack.Screen
@@ -765,6 +768,7 @@ function AppContent() {
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
             <Stack.Screen name="GroupChat" component={GroupChatScreen} />
             <Stack.Screen name="CityLeague" component={CityLeagueScreen} />
+          <Stack.Screen name="LvlupDemo" component={LvlupDemoScreen} />
           </>
         ) : null}
       </Stack.Navigator>
@@ -803,6 +807,7 @@ const SCREEN_REGISTRY: Array<[string, any]> = [
   ['AlertsScreen', AlertsScreen],
   ['NewsScreen', NewsScreen],
   ['RecommendedMatchesScreen', RecommendedMatchesScreen],
+  ['LvlupDemoScreen', LvlupDemoScreen],
 ];
 SCREEN_REGISTRY.forEach(([name, component]) => {
   if (typeof component !== 'function' && !(component && typeof component === 'object')) {

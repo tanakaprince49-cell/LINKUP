@@ -13,6 +13,39 @@ async function currentProfiles(db, ids) {
   const docs = await db.getAll(...ids.map(id => db.collection('users').doc(id)), {fieldMask: PUBLIC_FIELDS});
   return docs.filter(d => d.exists && publicEligible(d.data(), d.id)).map(d => projectProfile(d.id, d.data()));
 }
+// LvlUp Ventures deal-flow demo (public, login-free): deterministic Linky-style
+// matching over REAL public-eligible builder profiles. Bounded scan, cached
+// JSON, no private fields ever (same projectProfile allowlist as /builders).
+const LVLUP_SCAN = 60;
+const LVLUP_CACHE = {'Cache-Control':'public, max-age=60','Vercel-CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600','CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600'};
+function lvlupHaystack(p) {
+  return [p.name, p.bio, p.occupation, p.company, p.location, (p.skills || []).join(' '), (p.lookingFor || []).join(' '), (p.projects || []).map(x => `${x.title} ${x.description}`).join(' ')].join(' ').toLowerCase();
+}
+function lvlupScore(p, terms) {
+  const hay = lvlupHaystack(p);
+  const matched = terms.filter(t => t.length > 1 && hay.includes(t));
+  const signal = [p.bio && p.bio.length > 40, p.occupation, (p.skills || []).length >= 3, (p.projects || []).length > 0, p.image, p.company].filter(Boolean).length;
+  const score = terms.length
+    ? Math.max(5, Math.min(99, Math.round((matched.length / terms.length) * 82 + signal * 3)))
+    : Math.max(5, Math.min(99, 58 + signal * 6));
+  return { score, matched: matched.slice(0, 6) };
+}
+function lvlupBrief(p, matched) {
+  const firstProject = (p.projects || [])[0]?.title || '';
+  const building = firstProject || (p.bio ? p.bio.split('.')[0].slice(0, 90) : '');
+  const stack = (p.skills || []).slice(0, 4).join(', ');
+  const a = `${p.name}${p.occupation ? `, ${p.occupation}` : ''}${p.location ? ` in ${p.location}` : ''}${building ? ` — building ${building}` : ''}.`;
+  const bits = [];
+  if (matched.length) bits.push(`matches your thesis on ${matched.slice(0, 3).join(', ')}`);
+  if (stack) bits.push(`stack signals: ${stack}`);
+  if ((p.projects || []).length > 1) bits.push(`${p.projects.length} shipped projects on record`);
+  const b = bits.length ? `Linky flag: ${bits.join(' · ')}.` : 'Linky flag: strong generalist footprint in the builder index.';
+  return `${a} ${b}`;
+}
+function lvlupWeekLabel(now = new Date()) {
+  const monday = new Date(now.getTime() - ((now.getUTCDay() + 6) % 7) * 86400000);
+  return `Week of ${monday.toISOString().slice(0, 10)} (UTC)`;
+}
 const single = value => typeof value === 'string' ? value : '';
 // Sitemap XML is crawler bait hit over and over for identical bytes; cache it
 // for an hour at the edge and in browsers. Profile/directory/image bodies stay
@@ -118,6 +151,28 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed) {
         const snap = await db.collection('publicProfiles').orderBy('__name__').select().offset(page * SITEMAP_SIZE).limit(SITEMAP_SIZE).get();
         const profiles = await currentProfiles(db,snap.docs.map(d => d.id));
         return send(200,xmlUrls(profiles.map(p => ({url:profileUrl(p.uid),image:p.image}))),'application/xml; charset=utf-8',SEO_SITEMAP_CACHE);
+      }
+      if (mode === 'lvlup') {
+        const db = database();
+        const q = single(req.query?.q).toLowerCase().slice(0, 60);
+        const skills = single(req.query?.skills).toLowerCase().split(/[,+]/).map(x => x.trim()).filter(x => x.length > 1).slice(0, 8);
+        const limit = Math.min(12, Math.max(1, Number(req.query?.limit) || 6));
+        const digest = single(req.query?.digest) === '1';
+        const terms = [...new Set([...q.split(/[\s,+/]+/).filter(w => w.length > 1), ...skills])].slice(0, 10);
+        const snap = await db.collection('publicProfiles').orderBy('__name__').select().limit(LVLUP_SCAN).get();
+        const profiles = await currentProfiles(db, snap.docs.map(d => d.id));
+        const ranked = profiles.map(p => ({ p, ...lvlupScore(p, terms) }))
+          .sort((a, b) => b.score - a.score || a.p.name.localeCompare(b.p.name));
+        const picks = ranked.slice(0, limit).map(({ p, score, matched }) => ({
+          uid: p.uid, name: p.name, username: p.username, verified: p.verified,
+          headline: [p.occupation, p.company].filter(Boolean).join(' @ ') || p.bio.split('.')[0].slice(0, 120),
+          location: p.location, skills: (p.skills || []).slice(0, 6), image: p.image, url: profileUrl(p.uid),
+          score, matched, brief: lvlupBrief(p, matched),
+        }));
+        const body = digest
+          ? { digest: true, week: lvlupWeekLabel(), thesis: terms.join(', ') || 'generalist technical builders', picks, totalEligible: profiles.length, generatedAt: new Date().toISOString() }
+          : { picks, totalEligible: profiles.length, scanned: snap.docs.length, terms, generatedAt: new Date().toISOString() };
+        return send(200, JSON.stringify(body), 'application/json; charset=utf-8', LVLUP_CACHE);
       }
       return failure(404,'Page not found');
     } catch (error) {
