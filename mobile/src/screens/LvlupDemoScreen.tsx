@@ -48,6 +48,7 @@ type LvlupPick = {
   why?: { c: string; d: string }[];
   lane?: string;
   laneWhy?: string;
+  programs?: { name: string; check: string; why: string }[];
 };
 
 type LvlupSearchResponse = {
@@ -147,6 +148,7 @@ export default function LvlupDemoScreen() {
 
   const renderPick = (pick: LvlupPick, compact = false) => {
     const why = Array.isArray(pick.why) ? pick.why : [];
+    const programs = Array.isArray(pick.programs) ? pick.programs : [];
     return (
     <View key={pick.uid} style={[styles.pick, { backgroundColor: card, borderColor: line }]}>
       <View style={styles.pickTop}>
@@ -205,6 +207,21 @@ export default function LvlupDemoScreen() {
               <Text style={[styles.whyText, { color: sub }]}>
                 <Text style={styles.whyC}>{w.c}: </Text>
                 {w.d}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      {!compact && programs.length > 0 ? (
+        <View style={styles.whyBlock}>
+          <Text style={[styles.whyTitle, { color: ink }]}>Where {pick.name.split(' ')[0]} fits at LvlUp</Text>
+          {programs.map(pr => (
+            <View key={pr.name} style={styles.progRow}>
+              <View style={styles.progPill}>
+                <Text style={styles.progName}>{pr.name}</Text>
+              </View>
+              <Text style={[styles.progWhy, { color: sub }]} numberOfLines={2}>
+                {pr.check} · {pr.why}
               </Text>
             </View>
           ))}
@@ -548,6 +565,10 @@ const styles = StyleSheet.create({
   whyDot: { fontSize: 13, fontWeight: '900' },
   whyText: { fontSize: 13, lineHeight: 19, flex: 1, flexShrink: 1 },
   whyC: { fontWeight: '800' },
+  progRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  progPill: { backgroundColor: BRAND, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
+  progName: { color: INK, fontWeight: '800', fontSize: 12 },
+  progWhy: { fontSize: 12, lineHeight: 17, flex: 1, flexShrink: 1 },
   brief: { fontSize: 14, lineHeight: 21 },
   skills: { fontSize: 12 },
   profileLink: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },

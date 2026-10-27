@@ -160,3 +160,34 @@ test('lvlup filters AI-invented uids and rejects junk completions',async() => {
   assert.equal(body2.engine,'linky-offline');
   assert.equal(body2.picks[0].uid,'ada');
 });
+
+const LVLUP_CATALOG = ['First Check Fund','Seed Fund','Flagship Fund','CPG Fund','Labs CPG','Marketing Edge','LvlUp Labs','E-Commerce Builders','Small Business Fund','CPG Non-Dilutive','Tech Non-Dilutive','Real Economy Non-Dilutive','B2B SaaS Accel'];
+
+test('lvlup categorizes founders into real LvlUp funding programs',async() => {
+  const res = await request(database(), {mode:'lvlup', q:'fintech settlement'});
+  assert.equal(res.code,200);
+  const body = JSON.parse(res.body);
+  const ada = body.picks[0];
+  const names = ada.programs.map(p => p.name);
+  assert.ok(names.includes('LvlUp Labs'));
+  assert.ok(names.includes('Seed Fund')); // shipped product
+  assert.ok(names.includes('Tech Non-Dilutive')); // fintech + shipped
+  assert.ok(ada.programs.every(p => LVLUP_CATALOG.includes(p.name) && p.check && p.why));
+  assert.ok(ada.programs.length <= 3);
+  const bob = body.picks[1];
+  const bobNames = bob.programs.map(p => p.name);
+  assert.ok(bobNames.includes('First Check Fund')); // idea stage, 0 projects
+  assert.ok(bobNames.includes('Small Business Fund')); // pastry craft, brick-and-mortar
+});
+
+test('lvlup keeps only real program names from Linky AI',async() => {
+  const stub = aiOk([{uid:'ada', score:80, lane:'Seed track', laneWhy:'stub', why:[], programs:[{name:'Seed Fund', why:'stub reason'}, {name:'Fake Fund', why:'invented'}]}]);
+  const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, stub);
+  const ada = JSON.parse(res.body).picks[0];
+  assert.deepEqual(ada.programs.map(p => p.name), ['Seed Fund']);
+  assert.equal(ada.programs[0].check, '$100K–$250K');
+  const empty = aiOk([{uid:'ada', score:80, lane:'Seed track', laneWhy:'stub', why:[], programs:[]}]);
+  const res2 = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, empty);
+  const ada2 = JSON.parse(res2.body).picks[0];
+  assert.ok(ada2.programs.some(p => p.name === 'LvlUp Labs')); // deterministic backfill
+});
