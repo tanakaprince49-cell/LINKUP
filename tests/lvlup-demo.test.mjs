@@ -127,6 +127,7 @@ test('lvlup uses real Linky AI ranking when a provider answers',async() => {
   assert.equal(res.code,200);
   const body = JSON.parse(res.body);
   assert.equal(body.engine,'linky-ai');
+  assert.equal(body.aiProvider,'stub');
   const pick = body.picks[0];
   assert.equal(pick.uid,'bob');
   assert.equal(pick.score,95);
@@ -141,6 +142,7 @@ test('lvlup degrades to deterministic ranking when Linky AI fails',async() => {
   assert.equal(res.code,200);
   const body = JSON.parse(res.body);
   assert.equal(body.engine,'linky-offline');
+  assert.equal(body.aiProvider,'');
   assert.equal(body.picks[0].uid,'ada');
   assert.equal(body.picks[0].why[0].c,'Thesis fit');
 });

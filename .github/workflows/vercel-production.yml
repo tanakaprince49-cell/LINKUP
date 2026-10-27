@@ -46,6 +46,8 @@ jobs:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           ZEN_API_KEY: ${{ secrets.ZEN_API_KEY }}
           ZEN_MODEL: ${{ secrets.ZEN_MODEL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
         shell: bash
         run: |
           # the fallback brain and the search key live in Vercel, not the repo, so
@@ -63,6 +65,8 @@ jobs:
           sync SERPAPI_KEY "$SERPAPI_KEY"
           sync ZEN_API_KEY "$ZEN_API_KEY"
           sync ZEN_MODEL "$ZEN_MODEL"
+          sync GEMINI_API_KEY "$GEMINI_API_KEY"
+          sync GEMINI_MODEL "$GEMINI_MODEL"
 
       - name: Pull Vercel production environment
         run: npx vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
