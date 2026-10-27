@@ -395,7 +395,8 @@
       "maxDuration": 60
     },
     "api/publicSeo.js": {
-      "includeFiles": "api/_assets/**"
+      "includeFiles": "api/_assets/**",
+      "maxDuration": 60
     }
   }
 }

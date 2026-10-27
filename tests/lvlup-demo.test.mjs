@@ -242,3 +242,17 @@ test('lvlup explains each program fit with criterion + evidence',async() => {
   const res3 = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, nofit);
   assert.ok(JSON.parse(res3.body).picks[0].programs[0].fit.includes('seed-check')); // deterministic backfill
 });
+
+test('lvlup salvages AI completions wrapped in prose or cut off mid-stream',async() => {
+  const good = {picks:[{uid:'ada', score:77, lane:'Seed track', laneWhy:'s', why:[], programs:[]}]};
+  const wrapped = async () => ({text: 'Sure! Here are the matches:\n```json\n' + JSON.stringify(good) + '\n```\nGood luck!', provider:'stub'});
+  const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, wrapped);
+  assert.equal(JSON.parse(res.body).picks[0].score, 77);
+  const cut = JSON.stringify(good).slice(0, 60); // severed mid-string
+  const trunc = async () => ({text: cut, provider:'stub'});
+  const res2 = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, trunc);
+  const body2 = JSON.parse(res2.body);
+  assert.equal(body2.engine, 'linky-ai');
+  assert.equal(body2.picks[0].uid, 'ada');
+  assert.equal(body2.picks[0].score, 77);
+});
