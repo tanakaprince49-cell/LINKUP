@@ -21,14 +21,70 @@ const LVLUP_CACHE = {'Cache-Control':'public, max-age=60','Vercel-CDN-Cache-Cont
 function lvlupHaystack(p) {
   return [p.name, p.bio, p.occupation, p.company, p.location, (p.skills || []).join(' '), (p.lookingFor || []).join(' '), (p.projects || []).map(x => `${x.title} ${x.description}`).join(' ')].join(' ').toLowerCase();
 }
+// LvlUp-weighted founder signals, in their own screening language:
+// thesis fit first, then shipping velocity, founder focus (their "one tight
+// sentence" screen), technical depth, openness to intros, verified identity.
+function lvlupFounderSignals(p) {
+  const bio = p.bio || '';
+  const sentences = bio.split('.').filter(x => x.trim()).length;
+  return {
+    shipped: (p.projects || []).length > 0,
+    repeat: (p.projects || []).length > 1,
+    focus: !!bio && bio.length <= 140 && sentences <= 1,
+    stack: (p.skills || []).length >= 3,
+    open: (p.lookingFor || []).length > 0,
+    verified: !!p.verified,
+    founderTitle: /founder|co-founder|cofounder|ceo|cto/i.test(`${p.occupation} ${p.company}`),
+  };
+}
 function lvlupScore(p, terms) {
   const hay = lvlupHaystack(p);
   const matched = terms.filter(t => t.length > 1 && hay.includes(t));
-  const signal = [p.bio && p.bio.length > 40, p.occupation, (p.skills || []).length >= 3, (p.projects || []).length > 0, p.image, p.company].filter(Boolean).length;
+  const founder = Object.values(lvlupFounderSignals(p)).filter(Boolean).length;
   const score = terms.length
-    ? Math.max(5, Math.min(99, Math.round((matched.length / terms.length) * 82 + signal * 3)))
-    : Math.max(5, Math.min(99, 58 + signal * 6));
+    ? Math.max(5, Math.min(99, Math.round((matched.length / terms.length) * 68 + founder * 4)))
+    : Math.max(5, Math.min(99, 56 + founder * 5));
   return { score, matched: matched.slice(0, 6) };
+}
+function lvlupFieldHits(p, terms) {
+  const fields = {
+    skills: (p.skills || []).join(' ').toLowerCase(),
+    projects: (p.projects || []).map(x => `${x.title} ${x.description}`).join(' ').toLowerCase(),
+    bio: (p.bio || '').toLowerCase(),
+    role: `${p.occupation} ${p.company}`.toLowerCase(),
+    seeking: (p.lookingFor || []).join(' ').toLowerCase(),
+  };
+  const hits = {};
+  for (const t of terms) {
+    const inFields = Object.keys(fields).filter(f => t.length > 1 && fields[f].includes(t));
+    if (inFields.length) hits[t] = inFields;
+  }
+  return hits;
+}
+function lvlupWhy(p, terms) {
+  const why = [];
+  const hits = lvlupFieldHits(p, terms);
+  const hitTerms = Object.keys(hits);
+  if (terms.length && hitTerms.length) {
+    const fields = [...new Set(hitTerms.flatMap(t => hits[t]))];
+    why.push({ c: 'Thesis fit', d: `matches ${hitTerms.join(', ')} in ${fields.join(' + ')}` });
+  }
+  const sig = lvlupFounderSignals(p);
+  if (sig.shipped) {
+    const n = p.projects.length, latest = p.projects[0]?.title || '';
+    why.push({ c: 'Shipping velocity', d: n > 1 ? `${n} shipped projects on record — latest: ${latest}` : `shipped: ${latest}` });
+  }
+  if (sig.focus) why.push({ c: 'Founder focus', d: `one-sentence bio: "${p.bio.split('.')[0].slice(0, 90)}"` });
+  if (sig.stack) why.push({ c: 'Technical depth', d: `stack: ${p.skills.slice(0, 4).join(', ')}` });
+  if (sig.open) why.push({ c: 'Open to intros', d: `seeking: ${p.lookingFor.slice(0, 2).join(', ')}` });
+  if (sig.verified) why.push({ c: 'Verified identity', d: 'verified LINKUP member' });
+  return why.slice(0, 5);
+}
+function lvlupLane(p) {
+  const shipped = (p.projects || []).length;
+  return shipped === 0
+    ? { lane: 'First Check', laneWhy: "idea to first demo — LvlUp's first-check lane" }
+    : { lane: 'Seed track', laneWhy: `${shipped} shipped project${shipped > 1 ? 's' : ''} — seed-lane signals` };
 }
 function lvlupBrief(p, matched) {
   const firstProject = (p.projects || [])[0]?.title || '';
@@ -167,7 +223,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed) {
           uid: p.uid, name: p.name, username: p.username, verified: p.verified,
           headline: [p.occupation, p.company].filter(Boolean).join(' @ ') || p.bio.split('.')[0].slice(0, 120),
           location: p.location, skills: (p.skills || []).slice(0, 6), image: p.image, url: profileUrl(p.uid),
-          score, matched, brief: lvlupBrief(p, matched),
+          score, matched, brief: lvlupBrief(p, matched), why: lvlupWhy(p, terms), ...lvlupLane(p),
         }));
         const body = digest
           ? { digest: true, week: lvlupWeekLabel(), thesis: terms.join(', ') || 'generalist technical builders', picks, totalEligible: profiles.length, generatedAt: new Date().toISOString() }

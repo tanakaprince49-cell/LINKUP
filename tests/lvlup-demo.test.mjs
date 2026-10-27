@@ -93,3 +93,21 @@ test('lvlup deep link survives the signed-out web guard in both stacks',() => {
   assert.match(app, /LvlupDemo: 'lvlup',/);
   assert.equal(app.match(/<Stack\.Screen name="LvlupDemo" component=\{LvlupDemoScreen\} \/>/g)?.length, 2);
 });
+
+test('lvlup explains why each pick surfaced and assigns a LvlUp lane',async() => {
+  const res = await request(database(), {mode:'lvlup', q:'fintech settlement'});
+  assert.equal(res.code,200);
+  const body = JSON.parse(res.body);
+  const ada = body.picks[0];
+  assert.equal(ada.uid,'ada');
+  assert.equal(ada.why[0].c,'Thesis fit');
+  assert.ok(ada.why[0].d.includes('fintech'));
+  assert.match(ada.why[0].d, /skills|projects|bio|role|seeking/);
+  assert.ok(ada.why.some(w => w.c==='Shipping velocity' && w.d.includes('PayBridge')));
+  assert.ok(ada.why.some(w => w.c==='Founder focus'));
+  assert.equal(ada.lane,'Seed track');
+  assert.ok(ada.laneWhy.includes('seed-lane'));
+  const bob = body.picks[1];
+  assert.equal(bob.uid,'bob');
+  assert.equal(bob.lane,'First Check');
+});

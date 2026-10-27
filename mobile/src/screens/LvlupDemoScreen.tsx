@@ -30,7 +30,7 @@ const LVLUP_LOGO_URL = 'https://i.ibb.co/8n9cQx9j/download.webp';
 const INK = '#0A0B0D';
 const CONTACT_EMAIL = 'tanakaprince49@gmail.com';
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.tana.linkup';
-const THESIS_CHIPS = ['Fintech', 'AI & ML', 'SaaS', 'Climate', 'Mobile apps', 'Dev tools'];
+const THESIS_CHIPS = ['AI agents', 'SaaS', 'Fintech', 'Consumer', 'Climate', 'Dev tools'];
 
 type LvlupPick = {
   uid: string;
@@ -45,6 +45,9 @@ type LvlupPick = {
   score: number;
   matched?: string[];
   brief: string;
+  why: { c: string; d: string }[];
+  lane: string;
+  laneWhy: string;
 };
 
 type LvlupSearchResponse = {
@@ -189,16 +192,29 @@ export default function LvlupDemoScreen() {
           </View>
         </View>
       </View>
-      {!compact && pick.matched && pick.matched.length > 0 ? (
-        <View style={styles.matchedRow}>
-          {pick.matched.slice(0, 4).map(term => (
-            <View key={term} style={[styles.matchedChip, { borderColor: line }]}>
-              <Text style={[styles.matchedText, { color: sub }]}>✓ {term}</Text>
+      {!compact ? (
+        <View style={styles.laneRow}>
+          <View style={styles.lanePill}>
+            <Text style={styles.laneText}>{pick.lane}</Text>
+          </View>
+          <Text style={[styles.laneWhy, { color: muted }]}>{pick.laneWhy}</Text>
+        </View>
+      ) : null}
+      <Text style={[styles.brief, { color: sub }]}>{pick.brief}</Text>
+      {!compact && pick.why.length > 0 ? (
+        <View style={styles.whyBlock}>
+          <Text style={[styles.whyTitle, { color: ink }]}>Why Linky surfaced {pick.name.split(' ')[0]}</Text>
+          {pick.why.map(w => (
+            <View key={w.c} style={styles.whyRow}>
+              <Text style={[styles.whyDot, { color: sub }]}>•</Text>
+              <Text style={[styles.whyText, { color: sub }]}>
+                <Text style={styles.whyC}>{w.c}: </Text>
+                {w.d}
+              </Text>
             </View>
           ))}
         </View>
       ) : null}
-      <Text style={[styles.brief, { color: sub }]}>{pick.brief}</Text>
       {!compact && pick.skills && pick.skills.length > 0 ? (
         <Text style={[styles.skills, { color: muted }]} numberOfLines={1}>
           {pick.skills.join(' · ')}
@@ -221,14 +237,15 @@ export default function LvlupDemoScreen() {
           {/* HERO — the gold arena (Builder League rule): brand colour carries it, no black band. */}
           <View style={styles.hero}>
             <View style={styles.logoRow} accessibilityLabel="LINKUP and LvlUp Ventures">
-              <BrandMark size={48} />
+              <BrandMark size={44} />
               <Text style={styles.logoX}>×</Text>
               <AppImage uri={LVLUP_LOGO_URL} style={styles.lvlupBadge} contentFit="cover" />
+              <Text style={styles.logoText}>LINKUP × LVLUP VENTURES</Text>
             </View>
             <Text style={styles.heroTitle}>Deal flow, before the pitch deck.</Text>
             <Text style={styles.heroSub}>
-              Type an investment thesis. Linky searches every public builder profile on LINKUP and
-              returns ranked founders — with receipts. No login, no demo data, no theatre.
+              LvlUp screens 25,000+ applications a year. Linky pre-filters the builder index to
+              your thesis first — and every pick ships with its receipts. No login, no theatre.
             </Text>
             <View style={styles.heroStats}>
               {heroStats.map(stat => (
@@ -364,9 +381,9 @@ export default function LvlupDemoScreen() {
               <Text style={[styles.sectionTitle, { color: ink }]}>The LvlUp weekly digest</Text>
             </View>
             <Text style={[styles.sectionSub, { color: sub }]}>
-              Every Monday: the five builders who moved the most — new projects, new skills, new
-              momentum — matched to your thesis. Here&apos;s this week&apos;s edition, generated live
-              from the index.
+              Talent is global and early capital still is not. Every Monday: the five builders who
+              moved the most — new projects, new skills, new momentum — matched to your thesis.
+              Here&apos;s this week&apos;s edition, generated live from the index.
             </Text>
             {digest ? (
               <View style={[styles.digestCard, { backgroundColor: card, borderColor: line }]}>
@@ -379,7 +396,7 @@ export default function LvlupDemoScreen() {
                     </View>
                     <View style={styles.digestInfo}>
                       <Text style={[styles.digestName, { color: ink }]} numberOfLines={1}>
-                        {pick.name}
+                        {pick.name} · {pick.lane}
                         {pick.location ? ` · ${pick.location}` : ''}
                       </Text>
                       <Text style={[styles.digestBrief, { color: sub }]} numberOfLines={2}>
@@ -427,7 +444,7 @@ export default function LvlupDemoScreen() {
               {
                 n: '2',
                 title: 'Linky ranks the builders',
-                body: 'Every public profile scored against your thesis, with the receipts shown on every card.',
+                body: "Every public profile scored against your thesis and LvlUp's first-check filters — thesis fit, shipping velocity, founder focus.",
               },
               {
                 n: '3',
@@ -483,7 +500,8 @@ const styles = StyleSheet.create({
   hero: { backgroundColor: BRAND, borderRadius: 20, padding: 24, gap: 12 },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   logoX: { color: INK, fontWeight: '900', fontSize: 22 },
-  lvlupBadge: { width: 68, height: 60, borderRadius: 12 },
+  lvlupBadge: { width: 62, height: 55, borderRadius: 12 },
+  logoText: { flex: 1, flexShrink: 1, color: INK, fontWeight: '800', fontSize: 13, letterSpacing: 1.5 },
   heroTitle: { color: INK, fontSize: 34, fontWeight: '900', lineHeight: 40 },
   heroSub: { color: GOLD_SOFT, fontSize: 15, lineHeight: 22 },
   heroStats: { flexDirection: 'row', gap: 24, marginTop: 8 },
@@ -535,9 +553,16 @@ const styles = StyleSheet.create({
   scoreText: { color: INK, fontWeight: '900', fontSize: 14 },
   scoreTrack: { height: 4, width: '100%', borderRadius: 2, overflow: 'hidden' },
   scoreFill: { height: '100%', backgroundColor: BRAND, borderRadius: 2 },
-  matchedRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  matchedChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  matchedText: { fontSize: 12, fontWeight: '600' },
+  laneRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lanePill: { backgroundColor: INK, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
+  laneText: { color: BRAND, fontWeight: '900', fontSize: 12 },
+  laneWhy: { fontSize: 12, flex: 1, flexShrink: 1 },
+  whyBlock: { gap: 6, marginTop: 2 },
+  whyTitle: { fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
+  whyRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
+  whyDot: { fontSize: 13, fontWeight: '900' },
+  whyText: { fontSize: 13, lineHeight: 19, flex: 1, flexShrink: 1 },
+  whyC: { fontWeight: '800' },
   brief: { fontSize: 14, lineHeight: 21 },
   skills: { fontSize: 12 },
   profileLink: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },
