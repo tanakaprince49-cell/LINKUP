@@ -227,3 +227,18 @@ test('lvlup companies view works over real Linky AI picks',async() => {
   assert.equal(body.companies[0].name,'Crust & Co'); // AI order honored
   assert.ok(body.companies[0].programs.some(p => p.name === 'Small Business Fund'));
 });
+
+test('lvlup explains each program fit with criterion + evidence',async() => {
+  const res = await request(database(), {mode:'lvlup', q:'fintech settlement'});
+  assert.equal(res.code,200);
+  const ada = JSON.parse(res.body).picks[0];
+  assert.ok(ada.programs.every(p => p.fit && p.fit.length > 10));
+  assert.ok(ada.programs.find(p => p.name === 'Seed Fund').fit.includes('seed-check'));
+  assert.ok(ada.programs.find(p => p.name === 'Tech Non-Dilutive').fit.includes('cap table'));
+  const stub = aiOk([{uid:'ada', score:80, lane:'Seed track', laneWhy:'s', why:[], programs:[{name:'Seed Fund', why:'stub', fit:'AI fit explanation here'}]}]);
+  const res2 = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, stub);
+  assert.equal(JSON.parse(res2.body).picks[0].programs[0].fit, 'AI fit explanation here');
+  const nofit = aiOk([{uid:'ada', score:80, lane:'Seed track', laneWhy:'s', why:[], programs:[{name:'Seed Fund', why:'stub'}]}]);
+  const res3 = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, nofit);
+  assert.ok(JSON.parse(res3.body).picks[0].programs[0].fit.includes('seed-check')); // deterministic backfill
+});

@@ -48,7 +48,7 @@ type LvlupPick = {
   why?: { c: string; d: string }[];
   lane?: string;
   laneWhy?: string;
-  programs?: { name: string; check: string; why: string }[];
+  programs?: { name: string; check: string; why: string; fit?: string }[];
 };
 
 type LvlupSearchResponse = {
@@ -77,7 +77,7 @@ type LvlupCompany = {
   matched?: string[];
   brief: string;
   why: { c: string; d: string }[];
-  programs: { name: string; check: string; why: string }[];
+  programs: { name: string; check: string; why: string; fit?: string }[];
 };
 type LvlupCompaniesResponse = {
   companies: LvlupCompany[];
@@ -255,13 +255,18 @@ export default function LvlupDemoScreen() {
         <View style={styles.whyBlock}>
           <Text style={[styles.whyTitle, { color: ink }]}>Where {pick.name.split(' ')[0]} fits at LvlUp</Text>
           {programs.map(pr => (
-            <View key={pr.name} style={styles.progRow}>
-              <View style={styles.progPill}>
-                <Text style={styles.progName}>{pr.name}</Text>
+            <View key={pr.name} style={styles.progBlock}>
+              <View style={styles.progRow}>
+                <View style={styles.progPill}>
+                  <Text style={styles.progName}>{pr.name}</Text>
+                </View>
+                <Text style={[styles.progWhy, { color: sub }]} numberOfLines={2}>
+                  {pr.check} · {pr.why}
+                </Text>
               </View>
-              <Text style={[styles.progWhy, { color: sub }]} numberOfLines={2}>
-                {pr.check} · {pr.why}
-              </Text>
+              {pr.fit ? (
+                <Text style={[styles.progFit, { color: muted }]}>{pr.fit}</Text>
+              ) : null}
             </View>
           ))}
         </View>
@@ -354,13 +359,18 @@ export default function LvlupDemoScreen() {
         <View style={styles.whyBlock}>
           <Text style={[styles.whyTitle, { color: ink }]}>Where {co.name} fits at LvlUp</Text>
           {programs.map(pr => (
-            <View key={pr.name} style={styles.progRow}>
-              <View style={styles.progPill}>
-                <Text style={styles.progName}>{pr.name}</Text>
+            <View key={pr.name} style={styles.progBlock}>
+              <View style={styles.progRow}>
+                <View style={styles.progPill}>
+                  <Text style={styles.progName}>{pr.name}</Text>
+                </View>
+                <Text style={[styles.progWhy, { color: sub }]} numberOfLines={2}>
+                  {pr.check} · {pr.why}
+                </Text>
               </View>
-              <Text style={[styles.progWhy, { color: sub }]} numberOfLines={2}>
-                {pr.check} · {pr.why}
-              </Text>
+              {pr.fit ? (
+                <Text style={[styles.progFit, { color: muted }]}>{pr.fit}</Text>
+              ) : null}
             </View>
           ))}
         </View>
@@ -714,6 +724,8 @@ const styles = StyleSheet.create({
   progPill: { backgroundColor: BRAND, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
   progName: { color: INK, fontWeight: '800', fontSize: 12 },
   progWhy: { fontSize: 12, lineHeight: 17, flex: 1, flexShrink: 1 },
+  progBlock: { gap: 3 },
+  progFit: { fontSize: 12, lineHeight: 17 },
   viewToggle: { flexDirection: 'row', gap: 8 },
   viewTab: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   viewTabText: { fontSize: 14, fontWeight: '800' },
