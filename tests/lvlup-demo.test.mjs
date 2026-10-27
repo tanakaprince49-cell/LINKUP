@@ -17,7 +17,8 @@ function database(users = {ada, bob, cara}, ids = Object.keys(users)) {
 }
 async function request(db, query, method='GET') {
   const res = {headers:{},code:0,body:'',setHeader(k,v) {this.headers[k.toLowerCase()]=v;},status(c) {this.code=c;return this;},send(b) {this.body=b;return this;},end() {this.body='';return this;}};
-  await createPublicSeoHandler(() => db)({query,method},res);
+  const noAi = async () => { throw new Error('AI disabled in unit tests'); };
+  await createPublicSeoHandler(() => db, undefined, noAi)({query,method},res);
   return res;
 }
 
@@ -110,4 +111,52 @@ test('lvlup explains why each pick surfaced and assigns a LvlUp lane',async() =>
   const bob = body.picks[1];
   assert.equal(bob.uid,'bob');
   assert.equal(bob.lane,'First Check');
+});
+
+async function requestAi(db, query, aiFn) {
+  const res = {headers:{},code:0,body:'',setHeader(k,v) {this.headers[k.toLowerCase()]=v;},status(c) {this.code=c;return this;},send(b) {this.body=b;return this;},end() {this.body='';return this;}};
+  await createPublicSeoHandler(() => db, undefined, aiFn)({query,method:'GET'},res);
+  return res;
+}
+const aiOk = picks => async () => ({text: JSON.stringify({picks}), provider: 'stub'});
+
+test('lvlup uses real Linky AI ranking when a provider answers',async() => {
+  // AI overrules deterministic order (bob first) and hydrates full cards.
+  const stub = aiOk([{uid:'bob', score:95, lane:'First Check', laneWhy:'idea-stage baker, first-check lane', why:[{c:'Thesis fit', d:'matches sourdough at scale'}]}]);
+  const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, stub);
+  assert.equal(res.code,200);
+  const body = JSON.parse(res.body);
+  assert.equal(body.engine,'linky-ai');
+  const pick = body.picks[0];
+  assert.equal(pick.uid,'bob');
+  assert.equal(pick.score,95);
+  assert.equal(pick.name,'Bob Baker');
+  assert.ok(pick.url.includes('/p/bob'));
+  assert.equal(pick.why[0].c,'Thesis fit');
+});
+
+test('lvlup degrades to deterministic ranking when Linky AI fails',async() => {
+  const stub = async () => { throw new Error('model down'); };
+  const res = await requestAi(database(), {mode:'lvlup', q:'fintech settlement'}, stub);
+  assert.equal(res.code,200);
+  const body = JSON.parse(res.body);
+  assert.equal(body.engine,'linky-offline');
+  assert.equal(body.picks[0].uid,'ada');
+  assert.equal(body.picks[0].why[0].c,'Thesis fit');
+});
+
+test('lvlup filters AI-invented uids and rejects junk completions',async() => {
+  const mixed = aiOk([
+    {uid:'mallory', score:99, lane:'Seed track', laneWhy:'fake', why:[{c:'x', d:'y'}]},
+    {uid:'ada', score:60, lane:'Seed track', laneWhy:'stub lane', why:[]},
+  ]);
+  const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'6'}, mixed);
+  const body = JSON.parse(res.body);
+  assert.equal(body.engine,'linky-ai');
+  assert.deepEqual(body.picks.map(p => p.uid), ['ada']);
+  const junk = async () => ({text: 'sorry, no JSON here', provider: 'stub'});
+  const res2 = await requestAi(database(), {mode:'lvlup', q:'fintech'}, junk);
+  const body2 = JSON.parse(res2.body);
+  assert.equal(body2.engine,'linky-offline');
+  assert.equal(body2.picks[0].uid,'ada');
 });

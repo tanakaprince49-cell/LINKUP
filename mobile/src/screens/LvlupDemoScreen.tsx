@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -18,7 +18,6 @@ import {
   Search,
   TrendingUp,
 } from 'lucide-react-native';
-import { useTheme } from '../contexts/ThemeContext';
 import { appBackground, COLORS, hairline, textColor } from '../theme/theme';
 import { AppImage } from '../components/AppImage';
 import BrandMark from '../components/BrandMark';
@@ -56,6 +55,7 @@ type LvlupSearchResponse = {
   totalEligible: number;
   scanned: number;
   terms: string[];
+  engine?: string;
   generatedAt: string;
 };
 
@@ -65,6 +65,7 @@ type LvlupDigestResponse = {
   thesis: string;
   picks: LvlupPick[];
   totalEligible: number;
+  engine?: string;
   generatedAt: string;
 };
 
@@ -83,8 +84,8 @@ function initials(name: string) {
 }
 
 export default function LvlupDemoScreen() {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
+  // Demo page is always LINKUP white + gold, whatever the viewer's theme.
+  const isDark = false;
   const ink = textColor(isDark);
   const sub = isDark ? COLORS.darkTextSecondary : COLORS.lightTextSecondary;
   const muted = isDark ? COLORS.darkTextMuted : COLORS.lightTextMuted;
@@ -135,17 +136,8 @@ export default function LvlupDemoScreen() {
     };
   }, [search]);
 
-  const heroStats = useMemo(() => {
-    const total = results?.totalEligible ?? digest?.totalEligible ?? null;
-    return [
-      { value: total === null ? '—' : String(total), label: 'Builders indexed' },
-      { value: '60s', label: 'Thesis to shortlist' },
-      { value: '100%', label: 'Real profiles' },
-    ];
-  }, [results, digest]);
-
   const searchHits = results?.picks.filter(p => (p.matched?.length ?? 0) > 0) ?? [];
-  const emptyIndex = !!results && !searching && results.picks.length === 0;
+  const emptyIndex = !!results && !searching && results.picks.length === 0 && results.totalEligible === 0;
   const noMatch = !!results && !searching && results.terms.length > 0 && searchHits.length === 0;
 
   const openMail = (subject: string, body: string) => {
@@ -161,7 +153,7 @@ export default function LvlupDemoScreen() {
         {pick.image ? (
           <AppImage uri={pick.image} style={styles.avatar} />
         ) : (
-          <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: INK }]}>
+          <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: BRAND }]}>
             <Text style={styles.avatarInitials}>{initials(pick.name)}</Text>
           </View>
         )}
@@ -251,14 +243,6 @@ export default function LvlupDemoScreen() {
               LvlUp screens 25,000+ applications a year. Linky pre-filters the builder index to
               your thesis first — and every pick ships with its receipts. No login, no theatre.
             </Text>
-            <View style={styles.heroStats}>
-              {heroStats.map(stat => (
-                <View key={stat.label} style={styles.heroStat}>
-                  <Text style={styles.heroStatValue}>{stat.value}</Text>
-                  <Text style={styles.heroStatLabel}>{stat.label}</Text>
-                </View>
-              ))}
-            </View>
           </View>
 
           {/* THESIS SEARCH */}
@@ -340,6 +324,7 @@ export default function LvlupDemoScreen() {
                     : 'Top builders · '}
                   {results.totalEligible} indexed · updated{' '}
                   {new Date(results.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {results.engine === 'linky-ai' ? ' · Live Linky AI' : ''}
                 </Text>
               </View>
             ) : null}
@@ -508,10 +493,6 @@ const styles = StyleSheet.create({
   logoText: { flex: 1, flexShrink: 1, color: INK, fontWeight: '800', fontSize: 13, letterSpacing: 1.5 },
   heroTitle: { color: INK, fontSize: 34, fontWeight: '900', lineHeight: 40 },
   heroSub: { color: GOLD_SOFT, fontSize: 15, lineHeight: 22 },
-  heroStats: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  heroStat: { gap: 2 },
-  heroStatValue: { color: INK, fontSize: 20, fontWeight: '900' },
-  heroStatLabel: { color: GOLD_SOFT, fontSize: 12 },
   section: { gap: 12 },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionTitle: { fontSize: 20, fontWeight: '800' },
@@ -537,7 +518,7 @@ const styles = StyleSheet.create({
   pickTop: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   avatar: { width: 52, height: 52, borderRadius: 26 },
   avatarFallback: { alignItems: 'center', justifyContent: 'center' },
-  avatarInitials: { color: BRAND, fontWeight: '900', fontSize: 18 },
+  avatarInitials: { color: INK, fontWeight: '900', fontSize: 18 },
   pickHead: { flex: 1, gap: 2 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   pickName: { fontSize: 16, fontWeight: '800', flexShrink: 1 },
@@ -558,8 +539,8 @@ const styles = StyleSheet.create({
   scoreTrack: { height: 4, width: '100%', borderRadius: 2, overflow: 'hidden' },
   scoreFill: { height: '100%', backgroundColor: BRAND, borderRadius: 2 },
   laneRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  lanePill: { backgroundColor: INK, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
-  laneText: { color: BRAND, fontWeight: '900', fontSize: 12 },
+  lanePill: { backgroundColor: BRAND, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
+  laneText: { color: INK, fontWeight: '900', fontSize: 12 },
   laneWhy: { fontSize: 12, flex: 1, flexShrink: 1 },
   whyBlock: { gap: 6, marginTop: 2 },
   whyTitle: { fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
@@ -581,14 +562,14 @@ const styles = StyleSheet.create({
   digestThesis: { fontSize: 16, fontWeight: '800' },
   digestRow: { flexDirection: 'row', gap: 12, borderTopWidth: 1, paddingTop: 12, alignItems: 'flex-start' },
   digestScore: {
-    backgroundColor: INK,
+    backgroundColor: BRAND,
     borderRadius: 10,
     minWidth: 44,
     paddingVertical: 8,
     paddingHorizontal: 6,
     alignItems: 'center',
   },
-  digestScoreText: { color: BRAND, fontWeight: '900', fontSize: 15 },
+  digestScoreText: { color: INK, fontWeight: '900', fontSize: 15 },
   digestInfo: { flex: 1, gap: 3 },
   digestName: { fontSize: 14, fontWeight: '800' },
   digestBrief: { fontSize: 13, lineHeight: 18 },
@@ -606,14 +587,14 @@ const styles = StyleSheet.create({
   loader: { paddingVertical: 24 },
   step: { borderWidth: 1, borderRadius: 14, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   stepNum: {
-    backgroundColor: INK,
+    backgroundColor: BRAND,
     width: 30,
     height: 30,
     borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepNumText: { color: BRAND, fontWeight: '900', fontSize: 15 },
+  stepNumText: { color: INK, fontWeight: '900', fontSize: 15 },
   stepBody: { flex: 1, gap: 3 },
   stepTitle: { fontSize: 15, fontWeight: '800' },
   stepText: { fontSize: 13, lineHeight: 19 },
