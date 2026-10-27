@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {createPublicSeoHandler} from '../api/publicSeo.js';
 
 const ada = {displayName:'Ada Fintech',username:'ada',bio:'Building instant settlement rails for African merchants.',occupation:'Founder',company:'PayBridge',city:'Harare',country:'Zimbabwe',skills:['React Native','Node.js','Postgres'],lookingFor:['Angel investors','Fintech advisors'],projects:[{title:'PayBridge',description:'Instant settlement for merchants'},{title:'Kuda clone',description:'Side project'}],onboarded:true,isVisible:true,isStealthMode:false,email:'ada@secret.example',phone:'private-phone',billing:'private-billing'};
@@ -82,4 +83,13 @@ test('lvlup clamps limit and caches publicly on the CDN',async() => {
   assert.ok(res.headers['vercel-cdn-cache-control'].includes('s-maxage=300'));
   const fallback = await request(database(), {mode:'lvlup', limit:'abc'});
   assert.equal(JSON.parse(fallback.body).picks.length,2); // default 6, only 2 eligible
+});
+
+test('lvlup deep link survives the signed-out web guard in both stacks',() => {
+  // Regression: /app/lvlup used to be rewritten to /landing by the publicPaths
+  // guard, then re-parsed after the auth remount into Main/LinkyHome (/linky).
+  const app = fs.readFileSync(new URL('../mobile/App.tsx', import.meta.url), 'utf8');
+  assert.match(app, /publicPaths = new Set\(\[[^\]]*'\/lvlup'[^\]]*\]\)/);
+  assert.match(app, /LvlupDemo: 'lvlup',/);
+  assert.equal(app.match(/<Stack\.Screen name="LvlupDemo" component=\{LvlupDemoScreen\} \/>/g)?.length, 2);
 });

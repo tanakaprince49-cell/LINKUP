@@ -611,7 +611,7 @@ function AppContent() {
     const location = (globalThis as any)?.location;
     const history = (globalThis as any)?.history;
     const pathname = webRoutePath(String(location?.pathname || '')).replace(/\/+$/, '') || '/';
-    const publicPaths = new Set(['', '/', '/landing', '/login']);
+    const publicPaths = new Set(['', '/', '/landing', '/login', '/lvlup']);
     const isPublicSharedPath = pathname.startsWith('/profile/') || pathname.startsWith('/opportunity/');
 
     if (history?.replaceState && !publicPaths.has(pathname) && !isPublicSharedPath) {
