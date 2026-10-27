@@ -16,15 +16,17 @@ import {
   Mail,
   MapPin,
   Search,
-  Zap,
   TrendingUp,
 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { appBackground, COLORS, hairline, textColor } from '../theme/theme';
 import { AppImage } from '../components/AppImage';
+import BrandMark from '../components/BrandMark';
 import { linkupWebBaseUrl } from '../lib/profileLinks';
 
 const BRAND = '#FBE618';
+const GOLD_SOFT = 'rgba(10, 11, 13, 0.72)';
+const LVLUP_LOGO_URL = 'https://i.ibb.co/8n9cQx9j/download.webp';
 const INK = '#0A0B0D';
 const CONTACT_EMAIL = 'tanakaprince49@gmail.com';
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.tana.linkup';
@@ -138,6 +140,10 @@ export default function LvlupDemoScreen() {
     ];
   }, [results, digest]);
 
+  const searchHits = results?.picks.filter(p => (p.matched?.length ?? 0) > 0) ?? [];
+  const emptyIndex = !!results && !searching && results.picks.length === 0;
+  const noMatch = !!results && !searching && results.terms.length > 0 && searchHits.length === 0;
+
   const openMail = (subject: string, body: string) => {
     const url = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     void Linking.openURL(url);
@@ -176,7 +182,6 @@ export default function LvlupDemoScreen() {
         </View>
         <View style={styles.scoreWrap}>
           <View style={styles.scorePill}>
-            <Zap size={12} color={INK} />
             <Text style={styles.scoreText}>{pick.score}</Text>
           </View>
           <View style={[styles.scoreTrack, { backgroundColor: line }]}>
@@ -213,9 +218,13 @@ export default function LvlupDemoScreen() {
     <SafeAreaView style={[styles.safe, appBackground(isDark)]} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.page}>
-          {/* HERO — always ink for punch, both themes */}
+          {/* HERO — the gold arena (Builder League rule): brand colour carries it, no black band. */}
           <View style={styles.hero}>
-            <Text style={styles.eyebrow}>LINKUP × LVLUP VENTURES</Text>
+            <View style={styles.logoRow} accessibilityLabel="LINKUP and LvlUp Ventures">
+              <BrandMark size={48} />
+              <Text style={styles.logoX}>×</Text>
+              <AppImage uri={LVLUP_LOGO_URL} style={styles.lvlupBadge} contentFit="cover" />
+            </View>
             <Text style={styles.heroTitle}>Deal flow, before the pitch deck.</Text>
             <Text style={styles.heroSub}>
               Type an investment thesis. Linky searches every public builder profile on LINKUP and
@@ -261,10 +270,7 @@ export default function LvlupDemoScreen() {
                 {searching ? (
                   <ActivityIndicator size="small" color={INK} />
                 ) : (
-                  <>
-                    <Zap size={15} color={INK} />
-                    <Text style={styles.askText}>Ask Linky</Text>
-                  </>
+                  <Text style={styles.askText}>Ask Linky</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -316,7 +322,39 @@ export default function LvlupDemoScreen() {
                 </Text>
               </View>
             ) : null}
-            {results?.picks.map(pick => renderPick(pick))}
+            {emptyIndex ? (
+              <View style={[styles.notice, { backgroundColor: card, borderColor: line }]}>
+                <Text style={[styles.noticeTitle, { color: ink }]}>The builder index came back empty.</Text>
+                <Text style={[styles.noticeBody, { color: sub }]}>
+                  No public profiles were returned. Check your connection and try again.
+                </Text>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={() => void search(activeThesis)}
+                  accessibilityRole="button">
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : noMatch ? (
+              <View style={[styles.notice, { backgroundColor: card, borderColor: line }]}>
+                <Text style={[styles.noticeTitle, { color: ink }]}>No builders match this thesis yet.</Text>
+                <Text style={[styles.noticeBody, { color: sub }]}>
+                  Nothing in the index matches “{activeThesis.trim()}” right now. Try broader terms
+                  or one of the thesis chips above.
+                </Text>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={() => {
+                    setThesis('');
+                    void search('');
+                  }}
+                  accessibilityRole="button">
+                  <Text style={styles.retryText}>Browse top builders</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              results?.picks.map(pick => renderPick(pick))
+            )}
           </View>
 
           {/* WEEKLY DIGEST */}
@@ -425,7 +463,7 @@ export default function LvlupDemoScreen() {
               }
               accessibilityRole="button">
               <Text style={styles.ctaButtonText}>Book the thesis call</Text>
-              <ArrowUpRight size={16} color={INK} />
+              <ArrowUpRight size={16} color={BRAND} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => void Linking.openURL(PLAY_STORE_URL)} accessibilityRole="link">
               <Text style={styles.storeLink}>Get LINKUP on Google Play ↗</Text>
@@ -442,14 +480,16 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { flexGrow: 1, alignItems: 'center' },
   page: { width: '100%', maxWidth: 760, padding: 16, gap: 20 },
-  hero: { backgroundColor: INK, borderRadius: 20, padding: 24, gap: 12 },
-  eyebrow: { color: BRAND, fontWeight: '800', fontSize: 12, letterSpacing: 2 },
-  heroTitle: { color: '#FFFFFF', fontSize: 34, fontWeight: '900', lineHeight: 40 },
-  heroSub: { color: '#C7CBD4', fontSize: 15, lineHeight: 22 },
+  hero: { backgroundColor: BRAND, borderRadius: 20, padding: 24, gap: 12 },
+  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  logoX: { color: INK, fontWeight: '900', fontSize: 22 },
+  lvlupBadge: { width: 68, height: 60, borderRadius: 12 },
+  heroTitle: { color: INK, fontSize: 34, fontWeight: '900', lineHeight: 40 },
+  heroSub: { color: GOLD_SOFT, fontSize: 15, lineHeight: 22 },
   heroStats: { flexDirection: 'row', gap: 24, marginTop: 8 },
   heroStat: { gap: 2 },
-  heroStatValue: { color: BRAND, fontSize: 20, fontWeight: '900' },
-  heroStatLabel: { color: '#8B9199', fontSize: 12 },
+  heroStatValue: { color: INK, fontSize: 20, fontWeight: '900' },
+  heroStatLabel: { color: GOLD_SOFT, fontSize: 12 },
   section: { gap: 12 },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionTitle: { fontSize: 20, fontWeight: '800' },
@@ -548,11 +588,11 @@ const styles = StyleSheet.create({
   stepBody: { flex: 1, gap: 3 },
   stepTitle: { fontSize: 15, fontWeight: '800' },
   stepText: { fontSize: 13, lineHeight: 19 },
-  cta: { backgroundColor: INK, borderRadius: 20, padding: 24, gap: 12, alignItems: 'center' },
-  ctaTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900', textAlign: 'center', lineHeight: 28 },
-  ctaSub: { color: '#C7CBD4', fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  cta: { backgroundColor: BRAND, borderRadius: 20, padding: 24, gap: 12, alignItems: 'center' },
+  ctaTitle: { color: INK, fontSize: 22, fontWeight: '900', textAlign: 'center', lineHeight: 28 },
+  ctaSub: { color: GOLD_SOFT, fontSize: 14, lineHeight: 20, textAlign: 'center' },
   ctaButton: {
-    backgroundColor: BRAND,
+    backgroundColor: INK,
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 28,
@@ -561,7 +601,7 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 4,
   },
-  ctaButtonText: { color: INK, fontWeight: '900', fontSize: 16 },
-  storeLink: { color: BRAND, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' },
-  footnote: { color: '#8B9199', fontSize: 12, marginTop: 4 },
+  ctaButtonText: { color: BRAND, fontWeight: '900', fontSize: 16 },
+  storeLink: { color: INK, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' },
+  footnote: { color: GOLD_SOFT, fontSize: 12, marginTop: 4 },
 });
