@@ -173,18 +173,19 @@ test('lvlup categorizes founders into real LvlUp funding programs',async() => {
   assert.ok(names.includes('Seed Fund')); // shipped product
   assert.ok(names.includes('Tech Non-Dilutive')); // fintech + shipped
   assert.ok(ada.programs.every(p => LVLUP_CATALOG.includes(p.name) && p.check && p.why));
-  assert.ok(ada.programs.length <= 3);
+  assert.equal(ada.programs.length, 3); // Tech Non-Dilutive + Seed + Labs: every rule that fires
   const bob = body.picks[1];
   const bobNames = bob.programs.map(p => p.name);
   assert.ok(bobNames.includes('First Check Fund')); // idea stage, 0 projects
   assert.ok(bobNames.includes('Small Business Fund')); // pastry craft, brick-and-mortar
+  assert.equal(bob.programs.length, 3); // First Check + SMB + Labs
 });
 
 test('lvlup keeps only real program names from Linky AI',async() => {
-  const stub = aiOk([{uid:'ada', score:80, lane:'Seed track', laneWhy:'stub', why:[], programs:[{name:'Seed Fund', why:'stub reason'}, {name:'Fake Fund', why:'invented'}]}]);
+  const stub = aiOk([{uid:'ada', score:80, lane:'Seed track', laneWhy:'stub', why:[], programs:[{name:'Seed Fund', why:'stub reason'}, {name:'LvlUp Labs', why:'stub'}, {name:'Tech Non-Dilutive', why:'stub'}, {name:'B2B SaaS Accel', why:'stub'}, {name:'Marketing Edge', why:'stub'}, {name:'Fake Fund', why:'invented'}]}]);
   const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, stub);
   const ada = JSON.parse(res.body).picks[0];
-  assert.deepEqual(ada.programs.map(p => p.name), ['Seed Fund']);
+  assert.deepEqual(ada.programs.map(p => p.name), ['Seed Fund', 'LvlUp Labs', 'Tech Non-Dilutive', 'B2B SaaS Accel', 'Marketing Edge']); // no cap, fake dropped
   assert.equal(ada.programs[0].check, '$100K–$250K');
   const empty = aiOk([{uid:'ada', score:80, lane:'Seed track', laneWhy:'stub', why:[], programs:[]}]);
   const res2 = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, empty);
