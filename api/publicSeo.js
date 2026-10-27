@@ -142,11 +142,49 @@ function lvlupCard(p, score, matched, why, lane, programs) {
     headline: [p.occupation, p.company].filter(Boolean).join(' @ ') || p.bio.split('.')[0].slice(0, 120),
     location: p.location, skills: (p.skills || []).slice(0, 6), image: p.image, url: profileUrl(p.uid),
     score, matched, brief: lvlupBrief(p, matched), why, ...lane, programs,
+    venture: p.company || (p.projects || [])[0]?.title || '',
   };
 }
 const lvlupClean = x => String(x || '').replace(/[\r\n\t"\\]+/g, ' ').trim();
 function lvlupCandidateLine(p) {
   return `[${p.uid}] ${lvlupClean(p.name).slice(0, 60)} | ${lvlupClean(`${p.occupation} @ ${p.company}`).slice(0, 80)} | ${lvlupClean(p.location).slice(0, 60)} | skills: ${lvlupClean((p.skills || []).join(', ')).slice(0, 160)} | seeking: ${lvlupClean((p.lookingFor || []).join(', ')).slice(0, 120)} | bio: ${lvlupClean(p.bio).slice(0, 160)} | projects: ${lvlupClean((p.projects || []).map(x => `${x.title}: ${x.description}`).join(' // ')).slice(0, 300)}`;
+}
+// Companies view: group ranked founder picks by venture. Same real AI
+// results underneath — founders carry the AI why/programs, companies inherit.
+function lvlupCompanies(picks, terms, limit) {
+  const groups = new Map();
+  for (const c of picks) {
+    const name = (c.venture || '').trim();
+    if (!name) continue;
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(c);
+  }
+  const out = [];
+  for (const [name, members] of groups) {
+    members.sort((a, b) => b.score - a.score);
+    const matched = [...new Set(members.flatMap(m => m.matched || []))];
+    const programs = [];
+    for (const m of members) {
+      for (const pr of (m.programs || [])) {
+        if (!programs.some(x => x.name === pr.name)) programs.push(pr);
+        if (programs.length >= 6) break;
+      }
+      if (programs.length >= 6) break;
+    }
+    const skills = [...new Set(members.flatMap(m => m.skills || []))].slice(0, 5);
+    const why = [];
+    if (terms.length && matched.length) why.push({ c: 'Thesis fit', d: `${members.length} founder${members.length > 1 ? 's' : ''} match${members.length > 1 ? '' : 'es'} ${matched.join(', ')}` });
+    const roles = [...new Set(members.map(m => m.headline).filter(Boolean))].slice(0, 3);
+    if (roles.length) why.push({ c: 'Team', d: roles.join(' · ').slice(0, 160) });
+    out.push({
+      name, location: members.find(m => m.location)?.location || '',
+      founders: members.slice(0, 4).map(m => ({ uid: m.uid, name: m.name, role: m.headline, image: m.image, url: m.url, score: m.score })),
+      founderCount: members.length, score: members[0].score, matched,
+      brief: `${members.length} founder${members.length > 1 ? 's' : ''} on LINKUP${skills.length ? ` · ${skills.join(', ')}` : ''}`,
+      programs, why,
+    });
+  }
+  return out.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)).slice(0, limit);
 }
 // Real Linky AI ranking: the same aiText pipeline the app's Linky uses.
 // Throws on any failure (timeout, junk, no known uids) so the caller falls
@@ -305,6 +343,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         const skills = single(req.query?.skills).toLowerCase().split(/[,+]/).map(x => x.trim()).filter(x => x.length > 1).slice(0, 8);
         const limit = Math.min(12, Math.max(1, Number(req.query?.limit) || 6));
         const digest = single(req.query?.digest) === '1';
+        const view = single(req.query?.view) === 'companies' ? 'companies' : 'builders';
         const terms = [...new Set([...q.split(/[\s,+/]+/).filter(w => w.length > 1), ...skills])].slice(0, 10);
         const snap = await db.collection('publicProfiles').orderBy('__name__').select().limit(LVLUP_SCAN).get();
         const profiles = await currentProfiles(db, snap.docs.map(d => d.id));
@@ -314,18 +353,25 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         // engine tells the client which one answered.
         let picks = null, engine = 'linky-offline';
         const aiFn = ai || (aiReady() ? aiText : null);
+        const pickLimit = view === 'companies' ? Math.min(10, limit * 2) : limit;
         if (aiFn) {
           try {
-            picks = await lvlupAiPicks(aiFn, ranked.map(r => r.p), { terms, limit });
+            picks = await lvlupAiPicks(aiFn, ranked.map(r => r.p), { terms, limit: pickLimit });
             engine = 'linky-ai';
           } catch { picks = null; }
         }
         if (!picks) {
-          picks = ranked.slice(0, limit).map(({ p, score, matched }) => lvlupCard(p, score, matched, lvlupWhy(p, terms), lvlupLane(p), lvlupPrograms(p)));
+          picks = ranked.slice(0, pickLimit).map(({ p, score, matched }) => lvlupCard(p, score, matched, lvlupWhy(p, terms), lvlupLane(p), lvlupPrograms(p)));
         }
-        const body = digest
-          ? { digest: true, week: lvlupWeekLabel(), thesis: terms.join(', ') || 'generalist technical builders', picks, totalEligible: profiles.length, engine, generatedAt: new Date().toISOString() }
-          : { picks, totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, generatedAt: new Date().toISOString() };
+        let body;
+        if (digest) {
+          body = { digest: true, week: lvlupWeekLabel(), thesis: terms.join(', ') || 'generalist technical builders', picks: picks.slice(0, limit), totalEligible: profiles.length, engine, generatedAt: new Date().toISOString() };
+        } else if (view === 'companies') {
+          const companies = lvlupCompanies(picks, terms, limit);
+          body = { companies, totalCompanies: companies.length, totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, generatedAt: new Date().toISOString() };
+        } else {
+          body = { picks: picks.slice(0, limit), totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, generatedAt: new Date().toISOString() };
+        }
         return send(200, JSON.stringify(body), 'application/json; charset=utf-8', LVLUP_CACHE);
       }
       return failure(404,'Page not found');

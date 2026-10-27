@@ -60,6 +60,34 @@ type LvlupSearchResponse = {
   generatedAt: string;
 };
 
+type LvlupCompanyFounder = {
+  uid: string;
+  name: string;
+  role?: string;
+  image?: string;
+  url: string;
+  score: number;
+};
+type LvlupCompany = {
+  name: string;
+  location?: string;
+  founders: LvlupCompanyFounder[];
+  founderCount: number;
+  score: number;
+  matched?: string[];
+  brief: string;
+  why: { c: string; d: string }[];
+  programs: { name: string; check: string; why: string }[];
+};
+type LvlupCompaniesResponse = {
+  companies: LvlupCompany[];
+  totalCompanies: number;
+  totalEligible: number;
+  scanned: number;
+  terms: string[];
+  engine?: string;
+  generatedAt: string;
+};
 type LvlupDigestResponse = {
   digest: boolean;
   week: string;
@@ -96,23 +124,29 @@ export default function LvlupDemoScreen() {
   const [thesis, setThesis] = useState('');
   const [activeThesis, setActiveThesis] = useState('');
   const [results, setResults] = useState<LvlupSearchResponse | null>(null);
+  const [companies, setCompanies] = useState<LvlupCompaniesResponse | null>(null);
+  const [view, setView] = useState<'builders' | 'companies'>('builders');
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [digest, setDigest] = useState<LvlupDigestResponse | null>(null);
   const [digestError, setDigestError] = useState(false);
 
-  const search = useCallback(async (q: string) => {
+  const search = useCallback(async (q: string, v: 'builders' | 'companies' = 'builders') => {
     const query = q.trim();
     setActiveThesis(q);
     setSearching(true);
     setSearchError(false);
     try {
-      const res = await fetch(lvlupUrl(query ? { q: query.slice(0, 60), limit: '6' } : { limit: '6' }));
+      const params: Record<string, string> = query ? { q: query.slice(0, 60), limit: '6' } : { limit: '6' };
+      if (v === 'companies') params.view = 'companies';
+      const res = await fetch(lvlupUrl(params));
       if (!res.ok) throw new Error(`lvlup search ${res.status}`);
-      setResults((await res.json()) as LvlupSearchResponse);
+      if (v === 'companies') setCompanies((await res.json()) as LvlupCompaniesResponse);
+      else setResults((await res.json()) as LvlupSearchResponse);
     } catch {
       setSearchError(true);
-      setResults(null);
+      if (v === 'companies') setCompanies(null);
+      else setResults(null);
     } finally {
       setSearching(false);
     }
@@ -137,9 +171,14 @@ export default function LvlupDemoScreen() {
     };
   }, [search]);
 
-  const searchHits = results?.picks.filter(p => (p.matched?.length ?? 0) > 0) ?? [];
-  const emptyIndex = !!results && !searching && results.picks.length === 0 && results.totalEligible === 0;
-  const noMatch = !!results && !searching && results.terms.length > 0 && searchHits.length === 0;
+  const activeResp = view === 'builders' ? results : companies;
+  const activePicks = activeResp ? ('picks' in activeResp ? activeResp.picks : activeResp.companies) : null;
+  const activeTerms = activeResp?.terms ?? [];
+  const activeTotal = activeResp?.totalEligible ?? 0;
+  const noun = view === 'builders' ? 'builders' : 'companies';
+  const searchHits = (activePicks ?? []).filter(item => ((item as LvlupPick).matched?.length ?? 0) > 0);
+  const emptyIndex = activePicks !== null && !searching && activePicks.length === 0 && activeTotal === 0;
+  const noMatch = activePicks !== null && !searching && activeTerms.length > 0 && searchHits.length === 0;
 
   const openMail = (subject: string, body: string) => {
     const url = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -243,6 +282,93 @@ export default function LvlupDemoScreen() {
     );
   };
 
+  const renderCompany = (co: LvlupCompany) => {
+    const why = Array.isArray(co.why) ? co.why : [];
+    const programs = Array.isArray(co.programs) ? co.programs : [];
+    return (
+    <View key={co.name} style={[styles.pick, { backgroundColor: card, borderColor: line }]}>
+      <View style={styles.pickTop}>
+        <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: BRAND }]}>
+          <Text style={styles.avatarInitials}>{initials(co.name)}</Text>
+        </View>
+        <View style={styles.pickHead}>
+          <Text style={[styles.pickName, { color: ink }]} numberOfLines={1}>
+            {co.name}
+          </Text>
+          <Text style={[styles.pickHeadline, { color: sub }]} numberOfLines={1}>
+            {co.founderCount} founder{co.founderCount > 1 ? 's' : ''} on LINKUP
+            {co.location ? ` · ${co.location}` : ''}
+          </Text>
+        </View>
+        <View style={styles.scoreWrap}>
+          <View style={styles.scorePill}>
+            <Text style={styles.scoreText}>{co.score}</Text>
+          </View>
+          <View style={[styles.scoreTrack, { backgroundColor: line }]}>
+            <View style={[styles.scoreFill, { width: `${Math.max(4, Math.min(100, co.score))}%` }]} />
+          </View>
+        </View>
+      </View>
+      {co.founders.map(f => (
+        <TouchableOpacity
+          key={f.uid}
+          style={styles.founderRow}
+          onPress={() => void Linking.openURL(f.url)}
+          accessibilityRole="link">
+          {f.image ? (
+            <AppImage uri={f.image} style={styles.founderAvatar} />
+          ) : (
+            <View style={[styles.founderAvatar, styles.avatarFallback, { backgroundColor: BRAND }]}>
+              <Text style={styles.founderInitials}>{initials(f.name)}</Text>
+            </View>
+          )}
+          <View style={styles.founderInfo}>
+            <Text style={[styles.founderName, { color: ink }]} numberOfLines={1}>
+              {f.name}
+            </Text>
+            {f.role ? (
+              <Text style={[styles.founderRole, { color: muted }]} numberOfLines={1}>
+                {f.role}
+              </Text>
+            ) : null}
+          </View>
+          <ArrowUpRight size={14} color={isDark ? BRAND : '#0A0B0D'} />
+        </TouchableOpacity>
+      ))}
+      <Text style={[styles.brief, { color: sub }]}>{co.brief}</Text>
+      {why.length > 0 ? (
+        <View style={styles.whyBlock}>
+          <Text style={[styles.whyTitle, { color: ink }]}>Why Linky surfaced {co.name}</Text>
+          {why.map(w => (
+            <View key={w.c} style={styles.whyRow}>
+              <Text style={[styles.whyDot, { color: sub }]}>•</Text>
+              <Text style={[styles.whyText, { color: sub }]}>
+                <Text style={styles.whyC}>{w.c}: </Text>
+                {w.d}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      {programs.length > 0 ? (
+        <View style={styles.whyBlock}>
+          <Text style={[styles.whyTitle, { color: ink }]}>Where {co.name} fits at LvlUp</Text>
+          {programs.map(pr => (
+            <View key={pr.name} style={styles.progRow}>
+              <View style={styles.progPill}>
+                <Text style={styles.progName}>{pr.name}</Text>
+              </View>
+              <Text style={[styles.progWhy, { color: sub }]} numberOfLines={2}>
+                {pr.check} · {pr.why}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.safe, appBackground(isDark)]} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -272,6 +398,24 @@ export default function LvlupDemoScreen() {
               Describe the builder you want to meet. Linky matches skills, projects, bios and
               locations across the index — then explains every pick.
             </Text>
+            <View style={styles.viewToggle}>
+              {(['builders', 'companies'] as const).map(v => (
+                <TouchableOpacity
+                  key={v}
+                  style={[styles.viewTab, { borderColor: line }, view === v && { backgroundColor: INK, borderColor: INK }]}
+                  onPress={() => {
+                    if (v !== view) {
+                      setView(v);
+                      void search(thesis, v);
+                    }
+                  }}
+                  accessibilityRole="button">
+                  <Text style={[styles.viewTabText, { color: view === v ? BRAND : sub }]}>
+                    {v === 'builders' ? 'Builders' : 'Companies'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <View style={[styles.searchBox, { backgroundColor: card, borderColor: line }]}>
               <TextInput
                 style={[styles.input, { color: ink }]}
@@ -279,14 +423,14 @@ export default function LvlupDemoScreen() {
                 placeholderTextColor={muted}
                 value={thesis}
                 onChangeText={setThesis}
-                onSubmitEditing={() => void search(thesis)}
+                onSubmitEditing={() => void search(thesis, view)}
                 returnKeyType="search"
                 maxLength={60}
                 accessibilityLabel="Investment thesis"
               />
               <TouchableOpacity
                 style={styles.askButton}
-                onPress={() => void search(thesis)}
+                onPress={() => void search(thesis, view)}
                 disabled={searching}
                 accessibilityRole="button">
                 {searching ? (
@@ -308,7 +452,7 @@ export default function LvlupDemoScreen() {
                     ]}
                     onPress={() => {
                       setThesis(chip);
-                      void search(chip);
+                      void search(chip, view);
                     }}
                     accessibilityRole="button">
                     <Text style={[styles.chipText, { color: active ? INK : sub }]}>{chip}</Text>
@@ -325,42 +469,43 @@ export default function LvlupDemoScreen() {
                 </Text>
                 <TouchableOpacity
                   style={styles.retryButton}
-                  onPress={() => void search(activeThesis)}
+                  onPress={() => void search(activeThesis, view)}
                   accessibilityRole="button">
                   <Text style={styles.retryText}>Retry search</Text>
                 </TouchableOpacity>
               </View>
             ) : null}
 
-            {results && !searching ? (
+            {activeResp && !searching ? (
               <View style={styles.resultsMeta}>
                 <TrendingUp size={13} color={muted} />
                 <Text style={[styles.resultsMetaText, { color: muted }]}>
-                  {results.terms.length > 0
-                    ? `Ranked for “${results.terms.join(' · ')}” · `
-                    : 'Top builders · '}
-                  {results.totalEligible} indexed · updated{' '}
-                  {new Date(results.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {results.engine === 'linky-ai' ? ' · Live Linky AI' : ''}
+                  {activeTerms.length > 0
+                    ? `Ranked for “${activeTerms.join(' · ')}” · `
+                    : `Top ${noun} · `}
+                  {view === 'companies' ? `${(activeResp as LvlupCompaniesResponse).totalCompanies} companies · ` : ''}
+                  {activeTotal} builders indexed · updated{' '}
+                  {new Date(activeResp.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {activeResp.engine === 'linky-ai' ? ' · Live Linky AI' : ''}
                 </Text>
               </View>
             ) : null}
             {emptyIndex ? (
               <View style={[styles.notice, { backgroundColor: card, borderColor: line }]}>
-                <Text style={[styles.noticeTitle, { color: ink }]}>The builder index came back empty.</Text>
+                <Text style={[styles.noticeTitle, { color: ink }]}>{noun === 'builders' ? 'The builder index came back empty.' : 'No companies came back.'}</Text>
                 <Text style={[styles.noticeBody, { color: sub }]}>
-                  No public profiles were returned. Check your connection and try again.
+                  {noun === 'builders' ? 'No public profiles were returned. Check your connection and try again.' : 'None of the ranked founders list a venture. Check your connection and try again.'}
                 </Text>
                 <TouchableOpacity
                   style={styles.retryButton}
-                  onPress={() => void search(activeThesis)}
+                  onPress={() => void search(activeThesis, view)}
                   accessibilityRole="button">
                   <Text style={styles.retryText}>Retry</Text>
                 </TouchableOpacity>
               </View>
             ) : noMatch ? (
               <View style={[styles.notice, { backgroundColor: card, borderColor: line }]}>
-                <Text style={[styles.noticeTitle, { color: ink }]}>No builders match this thesis yet.</Text>
+                <Text style={[styles.noticeTitle, { color: ink }]}>No {noun} match this thesis yet.</Text>
                 <Text style={[styles.noticeBody, { color: sub }]}>
                   Nothing in the index matches “{activeThesis.trim()}” right now. Try broader terms
                   or one of the thesis chips above.
@@ -369,14 +514,14 @@ export default function LvlupDemoScreen() {
                   style={styles.retryButton}
                   onPress={() => {
                     setThesis('');
-                    void search('');
+                    void search('', view);
                   }}
                   accessibilityRole="button">
-                  <Text style={styles.retryText}>Browse top builders</Text>
+                  <Text style={styles.retryText}>Browse top {noun}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              results?.picks.map(pick => renderPick(pick))
+              (view === 'builders' ? results?.picks.map(pick => renderPick(pick)) : companies?.companies.map(co => renderCompany(co)))
             )}
           </View>
 
@@ -569,6 +714,15 @@ const styles = StyleSheet.create({
   progPill: { backgroundColor: BRAND, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
   progName: { color: INK, fontWeight: '800', fontSize: 12 },
   progWhy: { fontSize: 12, lineHeight: 17, flex: 1, flexShrink: 1 },
+  viewToggle: { flexDirection: 'row', gap: 8 },
+  viewTab: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
+  viewTabText: { fontSize: 14, fontWeight: '800' },
+  founderRow: { flexDirection: 'row', gap: 10, alignItems: 'center', paddingVertical: 6 },
+  founderAvatar: { width: 36, height: 36, borderRadius: 18 },
+  founderInitials: { color: INK, fontWeight: '900', fontSize: 14 },
+  founderInfo: { flex: 1, gap: 1 },
+  founderName: { fontSize: 14, fontWeight: '800' },
+  founderRole: { fontSize: 12 },
   brief: { fontSize: 14, lineHeight: 21 },
   skills: { fontSize: 12 },
   profileLink: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },

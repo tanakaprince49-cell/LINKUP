@@ -192,3 +192,38 @@ test('lvlup keeps only real program names from Linky AI',async() => {
   const ada2 = JSON.parse(res2.body).picks[0];
   assert.ok(ada2.programs.some(p => p.name === 'LvlUp Labs')); // deterministic backfill
 });
+
+const dave = {displayName:'Dave Solo',username:'dave',bio:'Solo dev shipping a habit app.',occupation:'Indie Hacker',company:'',skills:['React Native'],projects:[{title:'SoloApp',description:'Habit tracker'}],onboarded:true,isVisible:true,isStealthMode:false};
+
+test('lvlup companies view groups founders by venture with union programs',async() => {
+  const users = {ada, bob, cara, dave};
+  const db = database(users, Object.keys(users));
+  const res = await request(db, {mode:'lvlup', view:'companies', q:'fintech settlement', limit:'6'});
+  assert.equal(res.code,200);
+  const body = JSON.parse(res.body);
+  assert.equal(body.totalEligible,3); // cara still excluded
+  assert.equal(body.totalCompanies,3); // PayBridge, Crust & Co, SoloApp (project fallback)
+  const names = body.companies.map(c => c.name);
+  assert.ok(!names.includes('Stealth'));
+  assert.ok(names.includes('SoloApp'));
+  const top = body.companies[0];
+  assert.equal(top.name,'PayBridge'); // ada outranks on fintech
+  assert.equal(top.founders[0].uid,'ada');
+  assert.ok(top.founders[0].url.includes('/p/ada'));
+  assert.ok(top.programs.some(p => p.name === 'LvlUp Labs'));
+  assert.equal(top.why[0].c,'Thesis fit');
+  assert.ok(top.brief.includes('LINKUP') || top.brief.includes('React Native'));
+});
+
+test('lvlup companies view works over real Linky AI picks',async() => {
+  const stub = aiOk([
+    {uid:'bob', score:95, lane:'First Check', laneWhy:'stub', why:[], programs:[{name:'Small Business Fund', why:'stub'}]},
+    {uid:'ada', score:80, lane:'Seed track', laneWhy:'stub', why:[], programs:[{name:'Seed Fund', why:'stub'}]},
+  ]);
+  const res = await requestAi(database(), {mode:'lvlup', view:'companies', q:'food brands', limit:'6'}, stub);
+  assert.equal(res.code,200);
+  const body = JSON.parse(res.body);
+  assert.equal(body.engine,'linky-ai');
+  assert.equal(body.companies[0].name,'Crust & Co'); // AI order honored
+  assert.ok(body.companies[0].programs.some(p => p.name === 'Small Business Fund'));
+});
