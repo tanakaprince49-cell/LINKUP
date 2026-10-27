@@ -54,7 +54,9 @@ test('lvlup skills param and score determinism',async() => {
   const first = await request(database(), {mode:'lvlup', skills:'React Native, Node.js'});
   const second = await request(database(), {mode:'lvlup', skills:'React Native, Node.js'});
   assert.equal(first.code,200);
-  assert.equal(first.body, second.body); // byte-identical: deterministic, no AI jitter
+  const a = JSON.parse(first.body), b = JSON.parse(second.body);
+  delete a.generatedAt; delete b.generatedAt;
+  assert.deepEqual(a, b); // deterministic: identical modulo the timestamp, no AI jitter
   const body = JSON.parse(first.body);
   assert.equal(body.picks[0].uid,'ada');
   assert.ok(body.picks[0].matched.includes('react native') || body.picks[0].matched.includes('node.js'));
