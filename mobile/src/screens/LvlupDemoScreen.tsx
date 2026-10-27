@@ -496,7 +496,7 @@ export default function LvlupDemoScreen() {
                   {view === 'companies' ? `${(activeResp as LvlupCompaniesResponse).totalCompanies} companies · ` : ''}
                   {activeTotal} builders indexed · updated{' '}
                   {new Date(activeResp.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {activeResp.engine === 'linky-ai' ? ' · Live Linky AI' : ''}
+                  {activeResp.engine === 'linky-ai' ? ' · Live Linky AI' : ' · Instant ranking'}
                 </Text>
               </View>
             ) : null}

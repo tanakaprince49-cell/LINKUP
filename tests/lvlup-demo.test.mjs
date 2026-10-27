@@ -256,3 +256,12 @@ test('lvlup salvages AI completions wrapped in prose or cut off mid-stream',asyn
   assert.equal(body2.picks[0].uid, 'ada');
   assert.equal(body2.picks[0].score, 77);
 });
+
+test('lvlup reports why it fell back when Linky AI fails',async() => {
+  const quota = async () => { throw new Error('Zen HTTP 429: quota exceeded'); };
+  assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, quota)).body).aiNote, 'quota');
+  const keys = async () => { throw new Error('No AI provider configured (GEMINI_API_KEY or ZEN_API_KEY).'); };
+  assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, keys)).body).aiNote, 'no-key');
+  const slow = async () => { throw new Error('The operation was aborted due to timeout'); };
+  assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, slow)).body).aiNote, 'timeout');
+});

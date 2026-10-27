@@ -405,26 +405,35 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
           .sort((a, b) => b.score - a.score || a.p.name.localeCompare(b.p.name));
         // AI-first: real Linky ranking. Any failure degrades to deterministic —
         // engine tells the client which one answered.
-        let picks = null, engine = 'linky-offline';
+        let picks = null, engine = 'linky-offline', aiNote = '';
         const aiFn = ai || (aiReady() ? aiText : null);
         const pickLimit = view === 'companies' ? Math.min(10, limit * 2) : limit;
         if (aiFn) {
           try {
             picks = await lvlupAiPicks(aiFn, ranked.map(r => r.p), { terms, limit: pickLimit });
             engine = 'linky-ai';
-          } catch (err) { console.warn('[lvlup] AI ranking failed, deterministic fallback:', err?.message || err); picks = null; }
-        }
+          } catch (err) {
+            const m = String(err?.message || err);
+            console.warn('[lvlup] AI ranking failed, deterministic fallback:', m);
+            aiNote = /No AI provider configured/.test(m) ? 'no-key'
+              : /timeout|timed out|abort/i.test(m) ? 'timeout'
+              : /429|quota|rate limit|too many requests|billing|payment|credit|exhausted/i.test(m) ? 'quota'
+              : /not supported|is not a model|unavailable|does not exist|unknown model|invalid model|no such model/i.test(m) ? 'model'
+              : 'provider';
+            picks = null;
+          }
+        } else { aiNote = aiReady() ? '' : 'no-key'; }
         if (!picks) {
           picks = ranked.slice(0, pickLimit).map(({ p, score, matched }) => lvlupCard(p, score, matched, lvlupWhy(p, terms), lvlupLane(p), lvlupPrograms(p)));
         }
         let body;
         if (digest) {
-          body = { digest: true, week: lvlupWeekLabel(), thesis: terms.join(', ') || 'generalist technical builders', picks: picks.slice(0, limit), totalEligible: profiles.length, engine, generatedAt: new Date().toISOString() };
+          body = { digest: true, week: lvlupWeekLabel(), thesis: terms.join(', ') || 'generalist technical builders', picks: picks.slice(0, limit), totalEligible: profiles.length, engine, aiNote, generatedAt: new Date().toISOString() };
         } else if (view === 'companies') {
           const companies = lvlupCompanies(picks, terms, limit);
-          body = { companies, totalCompanies: companies.length, totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, generatedAt: new Date().toISOString() };
+          body = { companies, totalCompanies: companies.length, totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, aiNote, generatedAt: new Date().toISOString() };
         } else {
-          body = { picks: picks.slice(0, limit), totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, generatedAt: new Date().toISOString() };
+          body = { picks: picks.slice(0, limit), totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, aiNote, generatedAt: new Date().toISOString() };
         }
         return send(200, JSON.stringify(body), 'application/json; charset=utf-8', LVLUP_CACHE);
       }
