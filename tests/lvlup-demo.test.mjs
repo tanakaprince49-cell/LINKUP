@@ -75,13 +75,16 @@ test('lvlup digest returns a weekly VC-style brief',async() => {
   assert.equal(body.totalEligible,2);
 });
 
-test('lvlup clamps limit and caches publicly on the CDN',async() => {
+test('lvlup clamps limit; only AI wins cache publicly on the CDN',async() => {
   const res = await request(database(), {mode:'lvlup', limit:'99'});
   assert.equal(res.code,200);
   const body = JSON.parse(res.body);
   assert.ok(body.picks.length <= 12);
-  assert.ok(res.headers['cache-control'].includes('public'));
-  assert.ok(res.headers['vercel-cdn-cache-control'].includes('s-maxage=300'));
+  assert.equal(res.headers['cache-control'],'private, no-store');
+  const win = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, aiOk([{uid:'bob', score:95, lane:'First Check', laneWhy:'s', why:[]}]));
+  assert.equal(JSON.parse(win.body).engine,'linky-ai');
+  assert.ok(win.headers['cache-control'].includes('public'));
+  assert.ok(win.headers['vercel-cdn-cache-control'].includes('s-maxage=3600'));
   const fallback = await request(database(), {mode:'lvlup', limit:'abc'});
   assert.equal(JSON.parse(fallback.body).picks.length,2); // default 6, only 2 eligible
 });
@@ -289,4 +292,14 @@ test('lvlup keeps AI ranks with deterministic programs when program call fails',
   assert.equal(body.engine,'linky-ai');
   assert.equal(body.picks[0].uid,'bob');
   assert.ok(body.picks[0].programs.some(p => p.name === 'LvlUp Labs'));
+});
+
+test('lvlup caches AI wins long but never caches the offline fallback',async() => {
+  const ok = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, aiOk([{uid:'bob', score:95, lane:'First Check', laneWhy:'s', why:[]}]));
+  assert.equal(JSON.parse(ok.body).engine,'linky-ai');
+  assert.ok(String(ok.headers['vercel-cdn-cache-control']).includes('s-maxage=3600'));
+  const off = await request(database(), {mode:'lvlup', q:'fintech', limit:'1'});
+  assert.equal(JSON.parse(off.body).engine,'linky-offline');
+  assert.equal(off.headers['cache-control'],'private, no-store');
+  assert.equal(off.headers['vercel-cdn-cache-control'],'no-store');
 });

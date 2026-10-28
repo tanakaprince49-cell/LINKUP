@@ -18,7 +18,10 @@ async function currentProfiles(db, ids) {
 // matching over REAL public-eligible builder profiles. Bounded scan, cached
 // JSON, no private fields ever (same projectProfile allowlist as /builders).
 const LVLUP_SCAN = 60;
-const LVLUP_CACHE = {'Cache-Control':'public, max-age=60','Vercel-CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600','CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600'};
+// AI wins cache long (an hour at the edge): one good ranking survives a whole
+// demo even if the provider congests mid-presentation. Fallbacks NEVER cache —
+// the next request must retry live AI so recovery bites immediately.
+const LVLUP_CACHE = {'Cache-Control':'public, max-age=300','Vercel-CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400','CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400'};
 function lvlupHaystack(p) {
   return [p.name, p.bio, p.occupation, p.company, p.location, (p.skills || []).join(' '), (p.lookingFor || []).join(' '), (p.projects || []).map(x => `${x.title} ${x.description}`).join(' ')].join(' ').toLowerCase();
 }
@@ -456,7 +459,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         } else {
           body = { picks: picks.slice(0, limit), totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, aiNote, aiProvider, aiTried, generatedAt: new Date().toISOString() };
         }
-        return send(200, JSON.stringify(body), 'application/json; charset=utf-8', LVLUP_CACHE);
+        return send(200, JSON.stringify(body), 'application/json; charset=utf-8', engine === 'linky-ai' ? LVLUP_CACHE : null);
       }
       return failure(404,'Page not found');
     } catch (error) {
