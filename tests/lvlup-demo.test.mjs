@@ -184,7 +184,8 @@ test('lvlup categorizes founders into real LvlUp funding programs',async() => {
 });
 
 test('lvlup keeps only real program names from Linky AI',async() => {
-  const stub = aiOk([{uid:'ada', score:80, lane:'Seed track', laneWhy:'stub', why:[], programs:[{name:'Seed Fund', why:'stub reason'}, {name:'LvlUp Labs', why:'stub'}, {name:'Tech Non-Dilutive', why:'stub'}, {name:'B2B SaaS Accel', why:'stub'}, {name:'Marketing Edge', why:'stub'}, {name:'Fake Fund', why:'invented'}]}]);
+  const progs = [{name:'Seed Fund', why:'stub reason'}, {name:'LvlUp Labs', why:'stub'}, {name:'Tech Non-Dilutive', why:'stub'}, {name:'B2B SaaS Accel', why:'stub'}, {name:'Marketing Edge', why:'stub'}, {name:'Fake Fund', why:'invented'}];
+  const stub = async () => ({text: JSON.stringify({picks:[{uid:'ada', score:80, lane:'Seed track', laneWhy:'stub', why:[]}], assign:[{uid:'ada', programs:progs}]}), provider:'stub'});
   const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, stub);
   const ada = JSON.parse(res.body).picks[0];
   assert.deepEqual(ada.programs.map(p => p.name), ['Seed Fund', 'LvlUp Labs', 'Tech Non-Dilutive', 'B2B SaaS Accel', 'Marketing Edge']); // no cap, fake dropped
@@ -237,10 +238,10 @@ test('lvlup explains each program fit with criterion + evidence',async() => {
   assert.ok(ada.programs.every(p => p.fit && p.fit.length > 10));
   assert.ok(ada.programs.find(p => p.name === 'Seed Fund').fit.includes('seed-check'));
   assert.ok(ada.programs.find(p => p.name === 'Tech Non-Dilutive').fit.includes('cap table'));
-  const stub = aiOk([{uid:'ada', score:80, lane:'Seed track', laneWhy:'s', why:[], programs:[{name:'Seed Fund', why:'stub', fit:'AI fit explanation here'}]}]);
+  const stub = async () => ({text: JSON.stringify({picks:[{uid:'ada', score:80, lane:'Seed track', laneWhy:'s', why:[]}], assign:[{uid:'ada', programs:[{name:'Seed Fund', why:'stub', fit:'AI fit explanation here'}]}]}), provider:'stub'});
   const res2 = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, stub);
   assert.equal(JSON.parse(res2.body).picks[0].programs[0].fit, 'AI fit explanation here');
-  const nofit = aiOk([{uid:'ada', score:80, lane:'Seed track', laneWhy:'s', why:[], programs:[{name:'Seed Fund', why:'stub'}]}]);
+  const nofit = async () => ({text: JSON.stringify({picks:[{uid:'ada', score:80, lane:'Seed track', laneWhy:'s', why:[]}], assign:[{uid:'ada', programs:[{name:'Seed Fund', why:'stub'}]}]}), provider:'stub'});
   const res3 = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, nofit);
   assert.ok(JSON.parse(res3.body).picks[0].programs[0].fit.includes('seed-check')); // deterministic backfill
 });
@@ -275,4 +276,17 @@ test('lvlup reports which AI providers were attempted',async() => {
   assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, both)).body).aiTried, 'gemini+zen');
   const zenOnly = async () => { throw new Error('zen: 429 quota exceeded'); };
   assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, zenOnly)).body).aiTried, 'zen');
+});
+
+test('lvlup keeps AI ranks with deterministic programs when program call fails',async() => {
+  const rankText = JSON.stringify({picks:[{uid:'bob', score:95, lane:'First Check', laneWhy:'s', why:[]}]});
+  const stub = async (prompt) => {
+    if (String(prompt).includes('PROGRAMS (exact names')) throw new Error('programs down');
+    return {text: rankText, provider:'stub'};
+  };
+  const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, stub);
+  const body = JSON.parse(res.body);
+  assert.equal(body.engine,'linky-ai');
+  assert.equal(body.picks[0].uid,'bob');
+  assert.ok(body.picks[0].programs.some(p => p.name === 'LvlUp Labs'));
 });
