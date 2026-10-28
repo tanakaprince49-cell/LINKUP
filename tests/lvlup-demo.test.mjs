@@ -81,7 +81,7 @@ test('lvlup clamps limit; only AI wins cache publicly on the CDN',async() => {
   const body = JSON.parse(res.body);
   assert.ok(body.picks.length <= 12);
   assert.equal(res.headers['cache-control'],'private, no-store');
-  const win = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, aiOk([{uid:'bob', score:95, lane:'First Check', laneWhy:'s', why:[]}]));
+  const win = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, aiOk([{uid:'bob', score:95, lane:'First Check', laneWhy:'s', why:'stub line'}]));
   assert.equal(JSON.parse(win.body).engine,'linky-ai');
   assert.ok(win.headers['cache-control'].includes('public'));
   assert.ok(win.headers['vercel-cdn-cache-control'].includes('s-maxage=3600'));
@@ -125,18 +125,28 @@ const aiOk = picks => async () => ({text: JSON.stringify({picks}), provider: 'st
 
 test('lvlup uses real Linky AI ranking when a provider answers',async() => {
   // AI overrules deterministic order (bob first) and hydrates full cards.
-  const stub = aiOk([{uid:'bob', score:95, lane:'First Check', laneWhy:'idea-stage baker, first-check lane', why:[{c:'Thesis fit', d:'matches sourdough at scale'}]}]);
+  // Call shape mirrors main Linky ranking: temp 0, 500 output tokens.
+  let got = null, calls = 0;
+  const stub = async (prompt, options) => {
+    calls++; got = options;
+    return {text: JSON.stringify({picks:[{uid:'bob', score:95, lane:'First Check', why:'matches sourdough at scale'}]}), provider:'stub'};
+  };
   const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, stub);
   assert.equal(res.code,200);
   const body = JSON.parse(res.body);
   assert.equal(body.engine,'linky-ai');
   assert.equal(body.aiProvider,'stub');
+  assert.equal(calls,1);
+  assert.equal(got.temperature,0);
+  assert.equal(got.maxOutputTokens,500);
+  assert.equal(got.responseMimeType,'application/json');
   const pick = body.picks[0];
   assert.equal(pick.uid,'bob');
   assert.equal(pick.score,95);
   assert.equal(pick.name,'Bob Baker');
   assert.ok(pick.url.includes('/p/bob'));
-  assert.equal(pick.why[0].c,'Thesis fit');
+  assert.equal(pick.why[0].c,'Linky take');
+  assert.ok(pick.why[0].d.includes('sourdough'));
 });
 
 test('lvlup degrades to deterministic ranking when Linky AI fails',async() => {
@@ -153,7 +163,7 @@ test('lvlup degrades to deterministic ranking when Linky AI fails',async() => {
 test('lvlup filters AI-invented uids and rejects junk completions',async() => {
   const mixed = aiOk([
     {uid:'mallory', score:99, lane:'Seed track', laneWhy:'fake', why:[{c:'x', d:'y'}]},
-    {uid:'ada', score:60, lane:'Seed track', laneWhy:'stub lane', why:[]},
+    {uid:'ada', score:60, lane:'Seed track', laneWhy:'stub lane', why:'stub line'},
   ]);
   const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'6'}, mixed);
   const body = JSON.parse(res.body);
@@ -186,17 +196,17 @@ test('lvlup categorizes founders into real LvlUp funding programs',async() => {
   assert.equal(bob.programs.length, 3); // First Check + SMB + Labs
 });
 
-test('lvlup keeps only real program names from Linky AI',async() => {
-  const progs = [{name:'Seed Fund', why:'stub reason'}, {name:'LvlUp Labs', why:'stub'}, {name:'Tech Non-Dilutive', why:'stub'}, {name:'B2B SaaS Accel', why:'stub'}, {name:'Marketing Edge', why:'stub'}, {name:'Fake Fund', why:'invented'}];
-  const stub = async () => ({text: JSON.stringify({picks:[{uid:'ada', score:80, lane:'Seed track', laneWhy:'stub', why:[]}], assign:[{uid:'ada', programs:progs}]}), provider:'stub'});
+test('lvlup pairs AI ranks with deterministic real-catalog programs',async() => {
+  const stub = aiOk([{uid:'ada', score:80, lane:'Seed track', why:'settlement rails with live merchants'}]);
   const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, stub);
-  const ada = JSON.parse(res.body).picks[0];
-  assert.deepEqual(ada.programs.map(p => p.name), ['Seed Fund', 'LvlUp Labs', 'Tech Non-Dilutive', 'B2B SaaS Accel', 'Marketing Edge']); // no cap, fake dropped
-  assert.equal(ada.programs[0].check, '$100K–$250K');
-  const empty = aiOk([{uid:'ada', score:80, lane:'Seed track', laneWhy:'stub', why:[], programs:[]}]);
-  const res2 = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, empty);
-  const ada2 = JSON.parse(res2.body).picks[0];
-  assert.ok(ada2.programs.some(p => p.name === 'LvlUp Labs')); // deterministic backfill
+  const body = JSON.parse(res.body);
+  assert.equal(body.engine,'linky-ai');
+  const ada = body.picks[0];
+  assert.ok(ada.programs.length > 1);
+  assert.ok(ada.programs.every(p => LVLUP_CATALOG.includes(p.name)));
+  assert.ok(ada.programs.some(p => p.name === 'Seed Fund'));
+  assert.ok(ada.programs.some(p => p.name === 'LvlUp Labs'));
+  assert.equal(ada.programs.find(p => p.name === 'Seed Fund').check, '$100K–$250K');
 });
 
 const dave = {displayName:'Dave Solo',username:'dave',bio:'Solo dev shipping a habit app.',occupation:'Indie Hacker',company:'',skills:['React Native'],projects:[{title:'SoloApp',description:'Habit tracker'}],onboarded:true,isVisible:true,isStealthMode:false};
@@ -223,15 +233,16 @@ test('lvlup companies view groups founders by venture with union programs',async
 
 test('lvlup companies view works over real Linky AI picks',async() => {
   const stub = aiOk([
-    {uid:'bob', score:95, lane:'First Check', laneWhy:'stub', why:[], programs:[{name:'Small Business Fund', why:'stub'}]},
-    {uid:'ada', score:80, lane:'Seed track', laneWhy:'stub', why:[], programs:[{name:'Seed Fund', why:'stub'}]},
+    {uid:'bob', score:95, lane:'First Check', why:'bread brand with weekend lines'},
+    {uid:'ada', score:80, lane:'Seed track', why:'settlement rails live'},
   ]);
   const res = await requestAi(database(), {mode:'lvlup', view:'companies', q:'food brands', limit:'6'}, stub);
   assert.equal(res.code,200);
   const body = JSON.parse(res.body);
   assert.equal(body.engine,'linky-ai');
   assert.equal(body.companies[0].name,'Crust & Co'); // AI order honored
-  assert.ok(body.companies[0].programs.some(p => p.name === 'Small Business Fund'));
+  assert.ok(body.companies[0].programs.some(p => p.name === 'LvlUp Labs'));
+  assert.ok(body.companies[0].programs.every(p => LVLUP_CATALOG.includes(p.name)));
 });
 
 test('lvlup explains each program fit with criterion + evidence',async() => {
@@ -241,16 +252,15 @@ test('lvlup explains each program fit with criterion + evidence',async() => {
   assert.ok(ada.programs.every(p => p.fit && p.fit.length > 10));
   assert.ok(ada.programs.find(p => p.name === 'Seed Fund').fit.includes('seed-check'));
   assert.ok(ada.programs.find(p => p.name === 'Tech Non-Dilutive').fit.includes('cap table'));
-  const stub = async () => ({text: JSON.stringify({picks:[{uid:'ada', score:80, lane:'Seed track', laneWhy:'s', why:[]}], assign:[{uid:'ada', programs:[{name:'Seed Fund', why:'stub', fit:'AI fit explanation here'}]}]}), provider:'stub'});
+  const stub = aiOk([{uid:'ada', score:80, lane:'Seed track', why:'settlement rails live'}]);
   const res2 = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, stub);
-  assert.equal(JSON.parse(res2.body).picks[0].programs[0].fit, 'AI fit explanation here');
-  const nofit = async () => ({text: JSON.stringify({picks:[{uid:'ada', score:80, lane:'Seed track', laneWhy:'s', why:[]}], assign:[{uid:'ada', programs:[{name:'Seed Fund', why:'stub'}]}]}), provider:'stub'});
-  const res3 = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, nofit);
-  assert.ok(JSON.parse(res3.body).picks[0].programs[0].fit.includes('seed-check')); // deterministic backfill
+  const aiAda = JSON.parse(res2.body).picks[0];
+  assert.ok(aiAda.programs.every(p => p.fit && p.fit.length > 10));
+  assert.ok(aiAda.programs.find(p => p.name === 'Seed Fund').fit.includes('seed-check'));
 });
 
 test('lvlup salvages AI completions wrapped in prose or cut off mid-stream',async() => {
-  const good = {picks:[{uid:'ada', score:77, lane:'Seed track', laneWhy:'s', why:[], programs:[]}]};
+  const good = {picks:[{uid:'ada', score:77, lane:'Seed track', why:'live settlement rails'}]};
   const wrapped = async () => ({text: 'Sure! Here are the matches:\n```json\n' + JSON.stringify(good) + '\n```\nGood luck!', provider:'stub'});
   const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, wrapped);
   assert.equal(JSON.parse(res.body).picks[0].score, 77);
@@ -281,21 +291,23 @@ test('lvlup reports which AI providers were attempted',async() => {
   assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, zenOnly)).body).aiTried, 'zen');
 });
 
-test('lvlup keeps AI ranks with deterministic programs when program call fails',async() => {
-  const rankText = JSON.stringify({picks:[{uid:'bob', score:95, lane:'First Check', laneWhy:'s', why:[]}]});
+test('lvlup ranks with a single main-Linky call and deterministic programs',async() => {
+  let calls = 0;
   const stub = async (prompt) => {
-    if (String(prompt).includes('PROGRAMS (exact names')) throw new Error('programs down');
-    return {text: rankText, provider:'stub'};
+    calls++;
+    assert.ok(!String(prompt).includes('PROGRAMS (exact names'));
+    return {text: JSON.stringify({picks:[{uid:'bob', score:95, lane:'First Check', why:'bread brand with weekend lines'}]}), provider:'stub'};
   };
   const res = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, stub);
   const body = JSON.parse(res.body);
   assert.equal(body.engine,'linky-ai');
+  assert.equal(calls,1);
   assert.equal(body.picks[0].uid,'bob');
   assert.ok(body.picks[0].programs.some(p => p.name === 'LvlUp Labs'));
 });
 
 test('lvlup caches AI wins long but never caches the offline fallback',async() => {
-  const ok = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, aiOk([{uid:'bob', score:95, lane:'First Check', laneWhy:'s', why:[]}]));
+  const ok = await requestAi(database(), {mode:'lvlup', q:'fintech', limit:'1'}, aiOk([{uid:'bob', score:95, lane:'First Check', laneWhy:'s', why:'stub line'}]));
   assert.equal(JSON.parse(ok.body).engine,'linky-ai');
   assert.ok(String(ok.headers['vercel-cdn-cache-control']).includes('s-maxage=3600'));
   const off = await request(database(), {mode:'lvlup', q:'fintech', limit:'1'});
