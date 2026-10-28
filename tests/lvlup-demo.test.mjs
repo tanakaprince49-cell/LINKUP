@@ -266,6 +266,8 @@ test('lvlup reports why it fell back when Linky AI fails',async() => {
   assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, keys)).body).aiNote, 'no-key');
   const slow = async () => { throw new Error('The operation was aborted due to timeout'); };
   assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, slow)).body).aiNote, 'timeout');
+  const busy = async () => { throw new Error('gemini: This model is currently experiencing high demand.'); };
+  assert.equal(JSON.parse((await requestAi(database(), {mode:'lvlup', q:'fintech'}, busy)).body).aiNote, 'busy');
 });
 
 test('lvlup reports which AI providers were attempted',async() => {

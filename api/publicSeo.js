@@ -419,6 +419,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
               : /timeout|timed out|abort/i.test(m) ? 'timeout'
               : /429|quota|rate limit|too many requests|billing|payment|credit|exhausted/i.test(m) ? 'quota'
               : /not supported|is not a model|unavailable|does not exist|unknown model|invalid model|no such model/i.test(m) ? 'model'
+              : /high demand|overloaded|503|500|capacity/i.test(m) ? 'busy'
               : 'provider';
             aiTried = ['gemini', 'zen'].filter(x => m.toLowerCase().includes(x + ':')).join('+');
             picks = null;

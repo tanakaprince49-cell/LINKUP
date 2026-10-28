@@ -105,7 +105,19 @@ export function clippedJson(value, max = MAX_PROFILE_CHARS) {
   return JSON.stringify(value ?? {}).slice(0, max);
 }
 
+// Capacity flakes (503/overload) get ONE retry after 1.5s — new-model tiers
+// shed load in bursts and the second attempt usually lands. Quota/4xx fail
+// straight through to Zen / deterministic fallbacks.
 export async function callGemini(prompt, options, apiKey) {
+  try {
+    return await callGeminiOnce(prompt, options, apiKey);
+  } catch (err) {
+    if (!/503|500|overloaded|high demand|capacity/i.test(String(err?.message || err))) throw err;
+    await new Promise(r => setTimeout(r, 1500));
+    return callGeminiOnce(prompt, options, apiKey);
+  }
+}
+async function callGeminiOnce(prompt, options, apiKey) {
 
   const generationConfig = {
     temperature: options.temperature ?? 0.25,
