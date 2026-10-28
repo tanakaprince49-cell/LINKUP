@@ -161,7 +161,7 @@ function lvlupCard(p, score, matched, why, lane, programs) {
 }
 const lvlupClean = x => String(x || '').replace(/[\r\n\t"\\]+/g, ' ').trim();
 function lvlupCandidateLine(p) {
-  return `[${p.uid}] ${lvlupClean(p.name).slice(0, 60)} | ${lvlupClean(`${p.occupation} @ ${p.company}`).slice(0, 80)} | ${lvlupClean(p.location).slice(0, 60)} | skills: ${lvlupClean((p.skills || []).join(', ')).slice(0, 160)} | seeking: ${lvlupClean((p.lookingFor || []).join(', ')).slice(0, 120)} | bio: ${lvlupClean(p.bio).slice(0, 160)} | projects: ${lvlupClean((p.projects || []).map(x => `${x.title}: ${x.description}`).join(' // ')).slice(0, 300)}`;
+  return `[${p.uid}] ${lvlupClean(p.name).slice(0, 40)} | ${lvlupClean(`${p.occupation} @ ${p.company}`).slice(0, 60)} | ${lvlupClean(p.location).slice(0, 30)} | skills: ${lvlupClean((p.skills || []).join(', ')).slice(0, 100)} | seeking: ${lvlupClean((p.lookingFor || []).join(', ')).slice(0, 80)} | bio: ${lvlupClean(p.bio).slice(0, 80)} | projects: ${lvlupClean((p.projects || []).map(x => x.title).join(', ')).slice(0, 120)}`;
 }
 // Companies view: group ranked founder picks by venture. Same real AI
 // results underneath — founders carry the AI why/programs, companies inherit.
@@ -239,7 +239,11 @@ function lvlupExtractJson(text) {
 // back to deterministic ranking — the demo never breaks, it just degrades.
 async function lvlupAiPicks(aiFn, profiles, { terms, limit }) {
   const byUid = new Map(profiles.map(p => [p.uid, p]));
-  const cands = profiles.slice(0, 20);
+  // Deterministic shortlist first, AI re-ranks only the top 15 — the same
+  // local-rank-then-AI shape as main Linky. A fat prompt gets shed first.
+  const cands = profiles.map(p => ({ p, s: lvlupScore(p, terms).score }))
+    .sort((a, b) => b.s - a.s || String(a.p.name).localeCompare(String(b.p.name)))
+    .slice(0, 15).map(r => r.p);
   if (!cands.length) return { cards: [], provider: '' };
   const thesis = terms.length ? terms.join(', ') : 'generalist technical builders';
   const candidates = cands.map(lvlupCandidateLine).join('\n');

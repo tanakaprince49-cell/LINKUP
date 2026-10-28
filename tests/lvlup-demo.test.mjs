@@ -315,3 +315,13 @@ test('lvlup caches AI wins long but never caches the offline fallback',async() =
   assert.equal(off.headers['cache-control'],'private, no-store');
   assert.equal(off.headers['vercel-cdn-cache-control'],'no-store');
 });
+
+test('lvlup sends AI a 15-candidate shortlist like main Linky ranking',async() => {
+  const users = {};
+  for (let i = 0; i < 20; i++) users['u'+i] = {displayName:'User '+i, username:'u'+i, bio:'Builder '+i+' shipping AI tools', occupation:'Founder', company:'Co'+i, skills:['AI'], lookingFor:[], projects:[], onboarded:true, isVisible:true, isStealthMode:false};
+  let prompt = '';
+  const stub = async (p) => { prompt = String(p); return {text: JSON.stringify({picks:[{uid:'u0', score:90, lane:'First Check', why:'top of shortlist'}]}), provider:'stub'}; };
+  const res = await requestAi(database(users, Object.keys(users)), {mode:'lvlup', q:'AI', limit:'6'}, stub);
+  assert.equal(JSON.parse(res.body).engine,'linky-ai');
+  assert.equal((prompt.match(/\[u\d+\]/g) || []).length, 15);
+});
