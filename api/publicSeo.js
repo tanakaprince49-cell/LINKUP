@@ -297,6 +297,7 @@ const single = value => typeof value === 'string' ? value : '';
 // Sitemap XML is crawler bait hit over and over for identical bytes; cache it
 // for an hour at the edge and in browsers. Profile/directory/image bodies stay
 // no-store (privacy changes must bite on the very next request).
+const BUILDER_COUNT_CACHE = {'Cache-Control':'public, max-age=60','Vercel-CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600','CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600'};
 const SEO_SITEMAP_CACHE = {'Cache-Control':'public, max-age=3600','Vercel-CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400','CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400'};
 export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai = null) {
   return async (req, res) => {
@@ -374,6 +375,14 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
           return send(200, JSON.stringify({ profiles: members, nextCursor: next || null }), 'application/json; charset=utf-8');
         }
         return send(200,renderDirectory(profiles,cursor,next));
+      }
+      if (mode === 'builder-count') {
+        // Live marketing counter: cheap count aggregation over public profiles,
+        // refreshed at most every 5 minutes at the edge. No profile data leaves.
+        res.setHeader('X-Robots-Tag', 'noindex');
+        const db = database();
+        const count = (await db.collection('publicProfiles').count().get()).data().count;
+        return send(200, JSON.stringify({ count, updatedAt: new Date().toISOString() }), 'application/json; charset=utf-8', BUILDER_COUNT_CACHE);
       }
       if (mode === 'sitemap') {
         const db = database();

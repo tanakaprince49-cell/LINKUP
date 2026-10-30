@@ -180,3 +180,14 @@ test('the current chosen profile photo takes precedence over stale hosted/provid
  const p=projectProfile('alice',{...user,profilePic:png,profilePicUrl:'https://example.com/old.jpg',photoURL:'https://example.com/google-old.jpg'});
  assert.equal(p.image,`${APP}/api/publicSeo?mode=image&uid=alice`);
 });
+
+test('builder-count returns the live public-profile total for the marketing counter',async() => {
+  const users = {alice:user, bob:{...user,displayName:'Bob'}};
+  const res = await request(database(users,['alice','bob']),{mode:'builder-count'});
+  assert.equal(res.code,200);
+  const body = JSON.parse(res.body);
+  assert.equal(body.count,2);
+  assert.ok(Date.parse(body.updatedAt) > 0);
+  assert.equal(res.headers['x-robots-tag'],'noindex');
+  assert.ok(String(res.headers['vercel-cdn-cache-control']).includes('s-maxage=300'));
+});
