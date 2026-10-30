@@ -47,3 +47,15 @@ test('Coach is gone, public consent can be revoked, groups are private and recor
  assert.match(read('mobile/src/screens/GroupChatScreen.tsx'),/record\?\.viewerUid===user\?\.uid/);assert.match(read('mobile/src/screens/TrendingBuildersScreen.tsx'),/scopeKey===scope/);
  const rules=read('firestore.rules');assert.match(rules,/match \/messages\/\{messageId\} \{ allow read, write: if false; \}/);
 });
+test('standings show competing builders with photos, profiles and explicit verified status',async()=>{
+ const users={alice:profile('Alice',{isVerified:true,profilePic:'https://example.com/alice.jpg',occupation:'Founder'}),bob:profile('Bob')};
+ const league=await request(database(users,{alice:activity(),bob:activity()}),{mode:'league',period:'week'});
+ assert.equal(league.code,200);
+ for(const text of ['/app/p/alice','/app/p/bob','alt="Alice profile photo"','\u2713 Verified','Not verified','Founder','momentum/'])assert.ok(league.body.includes(text),text);
+});
+test('empty boards fall back to builder cards with photos, profiles and verified status',async()=>{
+ const users={carol:profile('Carol',{isVerified:true,profilePic:'https://example.com/carol.jpg',occupation:'Designer',bio:'Builds things',skills:['UI']})};
+ const league=await request(database(users,{carol:{}}),{mode:'league',period:'week'});
+ assert.equal(league.code,200);
+ for(const text of ['Meet the builders','/app/p/carol','alt="Carol profile photo"','\u2713 Verified','profile score'])assert.ok(league.body.includes(text),text);
+});
