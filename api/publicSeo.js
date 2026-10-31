@@ -299,7 +299,7 @@ const single = value => typeof value === 'string' ? value : '';
 // no-store (privacy changes must bite on the very next request).
 const BUILDER_COUNT_CACHE = {'Cache-Control':'public, max-age=60','Vercel-CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600','CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600'};
 const SEO_SITEMAP_CACHE = {'Cache-Control':'public, max-age=3600','Vercel-CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400','CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400'};
-export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai = null) {
+export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai = null, now = Date.now) {
   return async (req, res) => {
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
@@ -327,7 +327,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
     try {
       if (mode === 'robots') return send(200,`User-agent: *\nAllow: /\n\nSitemap: ${APP}/sitemap.xml\n`,'text/plain; charset=utf-8');
       if (['league-json','builders-league-json','momentum-card'].includes(mode)) res.setHeader('X-Robots-Tag','noindex');
-      if (await serveLeagueSeo(req,{database,send,failure})) return;
+      if (await serveLeagueSeo(req,{database,send,failure,now})) return;
       if (await serveContentSeo(req,{database,send,failure,news})) return;
       if (mode === 'image') {
         const uid = single(req.query?.uid);

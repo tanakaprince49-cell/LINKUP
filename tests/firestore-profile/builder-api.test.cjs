@@ -233,7 +233,7 @@ test('public momentum is explicit, persists through publishing, and opt-out is i
 });
 test('public SSR filters real source visibility, omits private text, and removes opted-out calendars',async()=>{
  const s=await seed(),{createPublicSeoHandler}=await import('../../api/publicSeo.js');await s.handle('alice','habitPrefs',{publicMomentum:true});await s.handle('alice','shipUpdate',{key:'public_render',text:'PRIVATE UPDATE TEXT that must never be indexed.'});
- const handler=createPublicSeoHandler(()=>db),request=async query=>{const r={headers:{},setHeader(k,v){this.headers[k]=v;},status(v){this.code=v;return this;},send(v){this.body=v;return this;}};await handler({method:'GET',query},r);return r;};
+ const handler=createPublicSeoHandler(()=>db,undefined,undefined,()=>NOW),request=async query=>{const r={headers:{},setHeader(k,v){this.headers[k]=v;},status(v){this.code=v;return this;},send(v){this.body=v;return this;}};await handler({method:'GET',query},r);return r;};
  const p=await request({mode:'momentum-profile',uid:'alice'});assert.equal(p.code,200);assert.match(p.body,/#FBE618/);assert.doesNotMatch(p.body,/PRIVATE UPDATE TEXT/);assert.equal(p.headers['Cache-Control'],'private, no-store');
  const board=await request({mode:'league-json',period:'week',uid:'alice'});assert.equal(JSON.parse(board.body).me.uid,'alice');assert.doesNotMatch(board.body,/PRIVATE UPDATE TEXT/);
  await s.handle('alice','habitPrefs',{publicMomentum:false});assert.equal((await request({mode:'momentum-profile',uid:'alice'})).code,404);assert.equal(JSON.parse((await request({mode:'league-json'})).body).rows.length,0);
