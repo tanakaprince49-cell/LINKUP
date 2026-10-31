@@ -93,4 +93,7 @@ test('push attempts honor an explicit opt-out but cover members who never chose'
  assert.equal(pushAllowed({push:true,pushSetOnce:true}),true);
  assert.equal(pushAllowed(freshState(at).prefs),true);
  assert.equal(pushAllowed({}),true);
+ assert.equal(pushAllowed({push:false},'build'),false);
+ assert.equal(pushAllowed({push:true},'build'),true);
+ assert.equal(pushAllowed({push:false},'league'),true);
 });

@@ -21,7 +21,7 @@ export function sanitizePrefs(input,previous={}){
  for(const k of ['quietStart','quietEnd','buildHour'])if(k in input){if(!Number.isInteger(input[k])||input[k]<0||input[k]>23)throw problem('Quiet hours must be hours from 0 to 23.');p[k]=input[k];}
  return p;
 }
-export function pushAllowed(prefs={}){return prefs.push===true||prefs.pushSetOnce!==true;}
+export function pushAllowed(prefs={},kind=''){if(prefs.push===true)return true;if(prefs.pushSetOnce===true)return false;return kind!=='build';}
 export function quiet(now,prefs){const h=localTime(now,prefs.timezone).hour,a=prefs.quietStart,b=prefs.quietEnd;return a===b?false:a<b?h>=a&&h<b:h>=a||h<b;}
 export function freshState(now=Date.now()){
  return {version:16,epoch:id(),context:{project:'',stage:'',goal:'',skills:'',needs:'',constraints:'',intent:'build',preferredLocation:'',preferredStage:'',remotePreference:'any',availabilityPreference:'any'},goals:[],followups:[],feedback:{},availability:{enabled:false,until:0,purpose:''},prefs:{...DEFAULT_PREFS},coachRuns:[],savedLeads:[],momentumDays:[],lastVisitAt:0,previousVisitAt:0,createdAt:now,updatedAt:now};
