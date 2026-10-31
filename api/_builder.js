@@ -4,7 +4,7 @@ import {readCampaignReward,claimCampaignReward} from './_campaignReward.js';
 import {cleanupDeletedGroupData,sweepDeletedGroupData,sweepDeletingGroups,createGroupService} from './_groups.js';
 import {createHabitActions} from './_builderHabit.js';
 import {habitSnapshot,habitState} from '../shared/build-habit.js';
-import {DAY,id,clean,requireText,problem,validId,safeLink,stateOf,freshState,contextOf,sanitizePrefs,weekKey,localTime,brief,relevantPeople,relevantLeads,weeklySummary} from './_builderCore.js';
+import {DAY,id,clean,requireText,problem,validId,safeLink,stateOf,freshState,contextOf,sanitizePrefs,pushAllowed,weekKey,localTime,brief,relevantPeople,relevantLeads,weeklySummary} from './_builderCore.js';
 import {planRetention,leagueSummary,retentionKey} from './_retention.js';
 import {nextLinkyHeadlineIndex} from '../shared/linky-reengagement.js';
 import {loadActivityLeague} from './_leagueSeo.js';
@@ -149,7 +149,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   if(op==='shipUpdate')return publishContribution(uid,input);
   if(['home','visit'].includes(op))return loadHome(uid,op);
   if(op==='context'){await change(uid,s=>{const context=contextOf(input);if(context.project!==s.context.project||context.goal!==s.context.goal||context.needs!==s.context.needs)s.feedback={};s.context=context;});await event(uid,'context_set');return {ok:true};}
-  if(op==='prefs'){await change(uid,s=>{const before=s.prefs.dailyBuild;s.prefs=sanitizePrefs(input,s.prefs);if(s.prefs.dailyBuild&&!before){s.prefs.buildOptInDay=contributionDay(now());s.buildReminderCount=0;}});return {ok:true,emailAvailable:false};}
+  if(op==='prefs'){await change(uid,s=>{const before=s.prefs.dailyBuild;s.prefs=sanitizePrefs(input,s.prefs);if('push'in input)s.prefs.pushSetOnce=true;if(s.prefs.dailyBuild&&!before){s.prefs.buildOptInDay=contributionDay(now());s.buildReminderCount=0;}});return {ok:true,emailAvailable:false};}
   if(op==='goal'){
    const text=requireText(input.text,300,4);await change(uid,s=>{const week=weekKey(now(),s.prefs.timezone);s.goals=[{id:id(),text,week,at:now(),doneAt:0},...s.goals.filter(g=>g.week!==week||g.doneAt)].slice(0,24);});await event(uid,'goal_set');return {ok:true};
   }
@@ -262,12 +262,12 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
     }else{
      // One document per member, per UTC day, per category: a replayed cron run
      // can never duplicate a message the member already received.
-     tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',fromPic:'',type:'builder',category:message.category,slot:message.slot,title:message.title,body:message.body,content:message.content,section:message.section,url:message.url,...(message.campaign?{campaign:message.campaign,headlineKey:message.headlineKey}:{}),serverPushManaged:true,pushRequested:prefs.push,...(review?{builderSummary:review.summary}:{}),isRead:prefs.inApp===false,timestamp:new Date(now())});
+     tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',fromPic:'',type:'builder',category:message.category,slot:message.slot,title:message.title,body:message.body,content:message.content,section:message.section,url:message.url,...(message.campaign?{campaign:message.campaign,headlineKey:message.headlineKey}:{}),serverPushManaged:true,pushRequested:pushAllowed(prefs),...(review?{builderSummary:review.summary}:{}),isRead:prefs.inApp===false,timestamp:new Date(now())});
     }
    });
    if(delivery){
     delivered++;
-    if(prefs.push){
+    if(pushAllowed(prefs)){
      const nr=delivery.kind==='build'?db.collection('builderContributions').doc(d.id):notifyRef;
      const patch=v=>delivery.kind==='build'?{buildPushStatus:{key:delivery.key,...v}}:v;
      try{

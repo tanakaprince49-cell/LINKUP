@@ -12,7 +12,7 @@ export function localTime(now,tz='UTC'){
  return {day:`${p.year}-${p.month}-${p.day}`,hour:Number(p.hour),weekday:p.weekday};
 }
 export function weekKey(now,tz='UTC'){const d=new Date(localTime(now,tz).day+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));return d.toISOString().slice(0,10);}
-export const DEFAULT_PREFS={reminders:false,digest:false,friday:false,inApp:true,push:false,email:false,timezone:'UTC',quietStart:20,quietEnd:8,useContextForAI:false,allowInvites:true,dailyBuild:false,buildHour:18,retention:true,welcomeBack:true};
+export const DEFAULT_PREFS={reminders:false,digest:false,friday:false,inApp:true,push:false,pushSetOnce:false,email:false,timezone:'UTC',quietStart:20,quietEnd:8,useContextForAI:false,allowInvites:true,dailyBuild:false,buildHour:18,retention:true,welcomeBack:true};
 export function sanitizePrefs(input,previous={}){
  const p={...DEFAULT_PREFS,...previous};
  for(const k of ['reminders','digest','friday','inApp','push','allowInvites','dailyBuild','retention','welcomeBack'])if(k in input){if(typeof input[k]!=='boolean')throw problem('Invalid preference.');p[k]=input[k];}
@@ -21,6 +21,7 @@ export function sanitizePrefs(input,previous={}){
  for(const k of ['quietStart','quietEnd','buildHour'])if(k in input){if(!Number.isInteger(input[k])||input[k]<0||input[k]>23)throw problem('Quiet hours must be hours from 0 to 23.');p[k]=input[k];}
  return p;
 }
+export function pushAllowed(prefs={}){return prefs.push===true||prefs.pushSetOnce!==true;}
 export function quiet(now,prefs){const h=localTime(now,prefs.timezone).hour,a=prefs.quietStart,b=prefs.quietEnd;return a===b?false:a<b?h>=a&&h<b:h>=a||h<b;}
 export function freshState(now=Date.now()){
  return {version:16,epoch:id(),context:{project:'',stage:'',goal:'',skills:'',needs:'',constraints:'',intent:'build',preferredLocation:'',preferredStage:'',remotePreference:'any',availabilityPreference:'any'},goals:[],followups:[],feedback:{},availability:{enabled:false,until:0,purpose:''},prefs:{...DEFAULT_PREFS},coachRuns:[],savedLeads:[],momentumDays:[],lastVisitAt:0,previousVisitAt:0,createdAt:now,updatedAt:now};

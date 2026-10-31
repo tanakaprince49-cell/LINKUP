@@ -74,6 +74,16 @@ jobs:
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "$(date -u +%H)" != "03" ]; then echo "Backfill runs daily at 03:00 UTC; skipping this hour."; exit 0; fi
           node backfill-public-profiles.mjs ${{ (github.event_name == 'schedule' || inputs.write) && '--write' || '' }}
 
+      # Builder states for members who never opened the workspace: without a
+      # state document the reminder cron cannot see them at all. Idempotent
+      # (creates only missing docs), capped per run, safe to run hourly.
+      - name: Backfill missing builderStates
+        if: always()
+        working-directory: functions
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/linkup-sa.json
+        run: node backfill-builder-states.mjs ${{ (github.event_name == 'schedule' || inputs.write) && '--write' || '' }}
+
       # Renewal reminders for web (Payonify) PLUS / Campaigns terms: 3 days,
       # 1 day, day-of, and "has ended". Idempotent per term, so hourly is safe.
       - name: Send PLUS / Campaigns renewal reminders

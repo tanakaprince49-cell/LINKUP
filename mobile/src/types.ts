@@ -209,7 +209,8 @@ export interface AppNotification {
     | 'intro_accepted'
     | 'intro_declined'
     | 'daily_brief'
-    | 'builder';
+    | 'builder'
+    | 'league';
   content: string;
   timestamp: Timestamp | FieldValue;
   isRead: boolean;

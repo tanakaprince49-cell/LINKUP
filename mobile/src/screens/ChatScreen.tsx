@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, getDocsFromCache, setDoc, arrayUnion, arrayRemove, increment, limitToLast } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { linkyCall } from '../lib/linkyApi';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { ChevronLeft, Send, Camera, Users, MoreVertical, BellOff, Pin, Archive, Star, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X, Flag } from 'lucide-react-native';
@@ -605,6 +606,7 @@ export default function ChatScreen({ route, navigation }: any) {
           isRead: false,
           timestamp: serverTimestamp(),
         });
+        linkyCall('pushNotify', { toUid: recipientId, type: 'message', text, matchId }).catch(() => {});
       }
 
       await setDoc(doc(db, 'presence', user.uid), { isOnline: true, lastActiveAt: serverTimestamp() }, { merge: true });

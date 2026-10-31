@@ -18,8 +18,7 @@ import {
   APP_URL, LIMITS, OFFERS, LOOP_CHOICES, answerLoop, approveLead, approveMeet, approveSquad, ask, audit, botUserFor, cancelMeet, cancelSquad,
   clearChat, consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
   meet, meetSquad, orderedCards, patchState, pickPerson, pointers, pullProfiles, reactionFor, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
-  setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret,
-} from './_linky.js';
+  setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret, pushNotify} from './_linky.js';
 import { badgeLine } from './_proof.js';
 
 
@@ -898,6 +897,7 @@ async function handleApp(req, res) {
     let out;
     switch (action) {
       case 'builder': out = await builderService().handle(uid,String(body.op || 'home'),body.input || {}); break;
+      case 'pushNotify': out = await pushNotify(uid, { toUid: String(body.toUid || ''), type: String(body.type || ''), text: String(body.text || ''), matchId: String(body.matchId || '') }); break;
       case 'home': out = await home(uid); break;
       case 'ask': out = await ask(uid, body.message, { source: 'app' }); break;
       case 'facts': out = await setFacts(uid, { notes: body.notes, skills: body.skills, lookingFor: body.lookingFor, hidden: body.hidden }); break;

@@ -4,6 +4,7 @@
 import { awardWeek, chooseChampion, claimDeadline, rewardState, runDeadline, REWARD, toMs, DAY_MS } from '../shared/campaign-reward.js';
 import { loadActivityLeague } from './_leagueSeo.js';
 import { clean, problem } from './_builderCore.js';
+import { notifyLeagueWinner } from './_leagueNotify.js';
 import { isGoldMember } from '../shared/member-badges.js';
 
 export const REWARD_COLLECTION = 'campaignRewards';
@@ -57,7 +58,7 @@ function creativeOf(input = {}) {
  * Grant last week's champion exactly one reward. Idempotent: the document id is
  * the week key, so a cron re-run can never mint a second campaign.
  */
-export async function awardWeeklyChampion(db, now = Date.now()) {
+export async function awardWeeklyChampion(db, now = Date.now(), deps = {}) {
   const { end, weekKey } = awardWeek(now);
   const ref = db.collection(REWARD_COLLECTION).doc(weekKey);
   const existing = await ref.get();
@@ -83,6 +84,18 @@ export async function awardWeeklyChampion(db, now = Date.now()) {
       : { ...base, status: 'no-winner' });
     granted = !!champion;
   });
+  if (granted && champion) {
+    const claimBy = new Date(base.claimBy).toISOString().slice(0, 10);
+    await notifyLeagueWinner(db, {
+      uid: champion.uid,
+      kind: 'week',
+      key: weekKey,
+      title: 'You won the Builder League!',
+      body: `Champion of the week with ${champion.points} points and ${champion.buildDays} build days. Claim your free 7-day campaign before ${claimBy}.`,
+      url: '/builder-league',
+      meta: { weekKey, points: champion.points, buildDays: champion.buildDays, helpful: champion.helpful || 0, claimBy: base.claimBy },
+    }, deps).catch(() => null);
+  }
   // A week with no recorded public activity has no champion. That is a real
   // answer, not a failure, and the marker stops the cron retrying it forever.
   return { weekKey, granted, participants: base.participants };

@@ -85,6 +85,7 @@ export async function setupNativeNotificationRuntimeAsync() {
 
 function notificationTitle(data: any) {
   if (data?.campaign === 'linky_reengagement' && data?.title) return `Linky · ${String(data.title).slice(0, 80)}`;
+  if (typeof data?.title === 'string' && data.title.trim()) return data.title.trim().slice(0, 80);
   return 'LINKUP';
 }
 
@@ -108,12 +109,14 @@ function notificationBody(data: any) {
   if (data?.type === 'intro_request') return content || 'Linky has an intro for you.';
   if (data?.type === 'intro_accepted') return content || 'Your intro was accepted.';
   if (data?.type === 'daily_brief') return content || 'Linky found someone worth your time.';
+  if (data?.type === 'league') return content || 'You won the Builder League!';
   return content || 'Open LINKUP for the latest update.';
 }
 
 function notificationTargetUrl(data: any) {
   if (data?.type === 'builder' && data.builderAction === 'ship') return '/ship';
   if (data?.type === 'builder') return '/builder?section='+encodeURIComponent(String(data.section || 'Today'));
+  if (data?.type === 'league') return '/alerts';
   if (data?.matchId) return `/chat/${data.matchId}`;
   if (data?.type === 'game_challenge') {
     const gameMap: Record<string, string> = {

@@ -11,6 +11,7 @@ import { awardWeek, chooseChampion } from '../shared/campaign-reward.js';
 import { loadActivityLeague } from './_leagueSeo.js';
 import { clean } from './_builderCore.js';
 import { REWARD_COLLECTION } from './_campaignReward.js';
+import { notifyLeagueWinner } from './_leagueNotify.js';
 
 export const CHAMPION_COLLECTION = 'leagueChampions';
 
@@ -30,7 +31,7 @@ const summary = (period, window, champion, participants, now) => ({
 });
 
 /** Grant the last completed month/year. Safe to run on every cron tick. */
-export async function awardSeasonChampion(db, period, now = Date.now()) {
+export async function awardSeasonChampion(db, period, now = Date.now(), deps = {}) {
   if (!SEASON_PERIODS.includes(period)) throw new Error('Unknown season period');
   const window = seasonWindow(period, now);
   const id = seasonDocId(period, window.key);
@@ -58,13 +59,24 @@ export async function awardSeasonChampion(db, period, now = Date.now()) {
       : { period, key: window.key, start: window.start, end: window.end, awardedAt: now, participants: Number(board.participants) || 0, status: 'no-winner' });
     granted = !!champion;
   });
+  if (granted && champion) {
+    await notifyLeagueWinner(db, {
+      uid: champion.uid,
+      kind: period,
+      key: window.key,
+      title: `Builder League ${period} champion!`,
+      body: `${champion.name || 'Champion'} takes ${window.key} with ${champion.points} points and ${champion.buildDays} build days. The title and champion card are yours.`,
+      url: '/builder-league',
+      meta: { period, seasonKey: window.key, points: champion.points, buildDays: champion.buildDays, helpful: champion.helpful || 0 },
+    }, deps).catch(() => null);
+  }
   return { period, key: window.key, granted };
 }
 
-export async function awardSeasonChampions(db, now = Date.now()) {
+export async function awardSeasonChampions(db, now = Date.now(), deps = {}) {
   const out = {};
   for (const period of SEASON_PERIODS) {
-    out[period] = await awardSeasonChampion(db, period, now).catch(() => null);
+    out[period] = await awardSeasonChampion(db, period, now, deps).catch(() => null);
   }
   return out;
 }

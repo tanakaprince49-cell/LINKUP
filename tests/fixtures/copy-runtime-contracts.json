@@ -51,6 +51,14 @@
     ],
     [
       "navigate",
+      "Campaigns"
+    ],
+    [
+      "navigate",
+      "Profile"
+    ],
+    [
+      "navigate",
       "Chat"
     ],
     [
@@ -181,6 +189,11 @@
     [
       "collection",
       "notifications"
+    ],
+    [
+      "property",
+      "type",
+      "message"
     ],
     [
       "property",

@@ -1,5 +1,6 @@
 import { addDoc, collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import { linkyCall } from './linkyApi';
 import { directMatchId, ensureDirectMatch } from './chat';
 import { storedProfileImageUri } from './profilePerformance';
 
@@ -292,6 +293,7 @@ export async function respondToConnectionRequest({
     isRead: false,
     timestamp: serverTimestamp(),
   });
+  if (approved) linkyCall('pushNotify', { toUid: senderId, type: 'match', matchId }).catch(() => {});
 
   return { approved, matchId: approved ? matchId : '' };
 }

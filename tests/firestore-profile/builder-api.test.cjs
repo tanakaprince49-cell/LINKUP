@@ -386,6 +386,7 @@ test('the weekly grant and the monthly title are decided from real opt-in activi
  assert.equal(reward.uid,'alice');assert.equal(reward.status,'available');assert.equal(reward.points,30);
  // A hidden profile is excluded even if it opted in.
  const again=await awardWeeklyChampion(db,week);assert.equal(again.skipped,true);
+ const win=(await db.collection('notifications').doc('league_win_week_'+award.weekKey).get()).data();assert.equal(win.userId,'alice');assert.equal(win.type,'league');assert.equal(win.isRead,false);
  // A week with nothing recorded gets no invented champion.
  const empty=await awardWeeklyChampion(db,award.end+8*86400000);assert.equal(empty.granted,false);
  assert.equal((await db.collection('campaignRewards').doc(awardWeek(award.end+8*86400000).weekKey).get()).data().status,'no-winner');

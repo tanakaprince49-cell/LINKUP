@@ -6,6 +6,7 @@ import { seasonWindow, seasonDocId, seasonLabel } from '../shared/league-season.
 import { awardSeasonChampion, awardSeasonChampions, readSeasonChampions, championFor, CHAMPION_COLLECTION } from '../api/_leagueChampions.js';
 import { momentumCardSvg, renderMomentumCard, renderCardSvg } from '../api/_momentumCard.js';
 import { awardWeek } from '../shared/campaign-reward.js';
+import { awardWeeklyChampion } from '../api/_campaignReward.js';
 
 const read = file => fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
 const at = Date.parse('2026-10-24T09:00:00Z');
@@ -20,6 +21,7 @@ function memoryDb({ users = {}, contributions = {}, docs = {} } = {}) {
       if (col === 'users') return { id, exists: !!users[id], data: () => users[id] };
       return { id, exists: store.has(col + '/' + id), data: () => store.get(col + '/' + id) };
     },
+    async set(value) { store.set(col + '/' + id, value); },
   });
   const activityQuery = () => {
     let after = '', cap = Infinity;
@@ -162,4 +164,47 @@ test('the hourly cron imports every league job it calls', () => {
     assert.match(source, new RegExp(`await ${name}\\(`), name);
   }
   assert.match(read('api/_leagueSeo.js'), /championFor/);
+});
+
+test('a granted season title notifies the winner exactly once', async () => {
+  const users = { alice: profile('Alice') };
+  const contributions = { alice: activity({ points: 90, totalUpdates: 9, days: ['2026-09-01', '2026-09-08', '2026-09-15'] }) };
+  const db = memoryDb({ users, contributions });
+  const pushes = [];
+  const push = async (uid, msg) => { pushes.push({ uid, msg }); return { sent: 1 }; };
+  const out = await awardSeasonChampion(db, 'month', at, { push });
+  assert.equal(out.granted, true);
+  const note = db.store.get('notifications/league_win_month_2026-09');
+  assert.equal(note.userId, 'alice');
+  assert.equal(note.type, 'league');
+  assert.equal(note.kind, 'month');
+  assert.equal(note.isRead, false);
+  assert.equal(note.serverPushManaged, true);
+  assert.equal(pushes.length, 1);
+  assert.equal(pushes[0].uid, 'alice');
+  const replay = await awardSeasonChampion(db, 'month', at, { push });
+  assert.equal(replay.skipped, true);
+  assert.equal(pushes.length, 1);
+});
+
+test('a granted weekly title notifies the winner and names the campaign prize', async () => {
+  const { end, weekKey } = awardWeek(at);
+  const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const users = { alice: profile('Alice') };
+  const contributions = { alice: activity({ points: 20, totalUpdates: 2, days: [day(end - 86400000), day(end - 2 * 86400000)] }) };
+  const db = memoryDb({ users, contributions });
+  const pushes = [];
+  const push = async (uid, msg) => { pushes.push({ uid, msg }); return { sent: 1 }; };
+  const out = await awardWeeklyChampion(db, at, { push });
+  assert.equal(out.granted, true);
+  assert.equal(out.weekKey, weekKey);
+  const note = db.store.get('notifications/league_win_week_' + weekKey);
+  assert.equal(note.userId, 'alice');
+  assert.equal(note.type, 'league');
+  assert.equal(note.kind, 'week');
+  assert.match(note.body, /campaign/);
+  assert.equal(pushes.length, 1);
+  const replay = await awardWeeklyChampion(db, at, { push });
+  assert.equal(replay.skipped, true);
+  assert.equal(pushes.length, 1);
 });

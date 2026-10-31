@@ -16,7 +16,7 @@ import { respondToConnectionRequest } from '../lib/connectionRequests';
 import { notifyUser } from '../lib/notify';
 import { challengeId as makeChallengeId } from '../lib/gameChallenges';
 import { MOBILE_LIST_IMAGE_LIMIT, MOBILE_NOTIFICATION_QUERY_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
-import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X, Megaphone, ThumbsDown } from 'lucide-react-native';
+import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X, Megaphone, ThumbsDown, Trophy } from 'lucide-react-native';
 import ScreenHeader from '../components/ScreenHeader';
 
 const formatTimeAgo = (timestamp: any) => {
@@ -104,6 +104,8 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         return badgeFor('#DC2626', X);
       case 'plus_expiring':
         return badgeFor('#B45309', Bell);
+      case 'league':
+        return badgeFor('#B45309', Trophy);
       case 'intro_request':
       case 'intro_accepted':
       case 'daily_brief':
@@ -165,6 +167,8 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         if (isRequest) return;
         if (notification.type === 'builder' && (notification as any).builderAction === 'ship') { navigation.navigate('ShipLog'); return; }
         if (notification.type === 'builder') { navigation.navigate('BuilderWorkspace', { section: (notification as any).section || 'Today' }); return; }
+        if (notification.type === 'league' && (notification as any).kind === 'week') { navigation.navigate('Campaigns', {}); return; }
+        if (notification.type === 'league') { navigation.navigate('Profile', {}); return; }
         if (notification.matchId) {
           navigation.navigate('Chat', {
             matchId: notification.matchId,

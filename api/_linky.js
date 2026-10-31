@@ -549,6 +549,46 @@ export async function notifyUser(uid, { type, content, from, requestId, matchId,
   return ref.id;
 }
 
+// ---------------------------------------------------------------- realtime social push
+// The client already writes the inbox document for a message or a new match;
+// this endpoint adds the OS-level push the client cannot send itself. Strict
+// by design: the caller must be a real counterparty (match member or approved
+// connection), and each pair is throttled so a burst of messages becomes one
+// push every few minutes instead of a buzz per bubble.
+const PUSH_THROTTLE_MS = 5 * 60 * 1000;
+export async function pushNotify(senderUid, { toUid = '', type = '', text = '', matchId = '' } = {}) {
+  if (!['message', 'match'].includes(type)) throw new Error('Unknown push type.');
+  if (!isValidId(toUid) || toUid === senderUid) throw new Error('Invalid recipient.');
+  const pair = [senderUid, toUid].sort().join('_');
+  if (type === 'message') {
+    const mid = isValidId(matchId) ? matchId : pair;
+    const snap = await db().collection('matches').doc(mid).get().catch(() => null);
+    const users = snap?.exists ? (snap.data().userIds || snap.data().users || []) : [];
+    if (!snap?.exists || !users.includes(senderUid) || !users.includes(toUid)) throw new Error('No shared conversation.');
+  } else {
+    const [a, b] = await Promise.all([
+      db().collection('connectionRequests').doc(`${senderUid}_${toUid}`).get().catch(() => null),
+      db().collection('connectionRequests').doc(`${toUid}_${senderUid}`).get().catch(() => null),
+    ]);
+    const approved = [a, b].some((d) => d?.exists && d.data().status === 'approved');
+    const match = await db().collection('matches').doc(pair).get().catch(() => null);
+    if (!approved && !match?.exists) throw new Error('No approved connection.');
+  }
+  const throttleRef = db().collection('pushReceipts').doc(`${pair}_${type}`);
+  const last = await throttleRef.get().catch(() => null);
+  if (last?.exists && Date.now() - Number(last.data().at || 0) < PUSH_THROTTLE_MS) return { pushed: false, throttled: true };
+  const sender = await db().collection('users').doc(senderUid).get().catch(() => null);
+  const name = String(sender?.exists ? (sender.data().displayName || sender.data().fullName || sender.data().name) : '').trim() || 'Someone';
+  const preview = String(text || '').trim().slice(0, 120);
+  await sendExpoPush(toUid, {
+    title: type === 'message' ? name : 'New match!',
+    body: type === 'message' ? (preview || `${name} sent you a message.`) : `${name} is ready to talk. Say hello!`,
+    data: { notificationId: '', type: type === 'message' ? 'message' : 'match', url: matchId ? `/chat/${matchId}` : '/alerts', matchId: matchId || '', fromId: senderUid },
+  });
+  await throttleRef.set({ at: Date.now(), by: senderUid }).catch(() => null);
+  return { pushed: true };
+}
+
 // ---------------------------------------------------------------- ask parsing (no AI)
 const OFFER_RX = /\b(pay|paid|paying|budget|\$|usd|salary|rate|hire|hiring|freelance|contract)\b/;
 

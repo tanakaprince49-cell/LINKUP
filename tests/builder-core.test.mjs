@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {DAY,brief,freshState,contextOf,sanitizePrefs,quiet,weekKey,relevantPeople,weeklySummary,relevantLeads} from '../api/_builderCore.js';
+import {DAY,brief,freshState,contextOf,sanitizePrefs,pushAllowed,quiet,weekKey,relevantPeople,weeklySummary,relevantLeads} from '../api/_builderCore.js';
 import {nextRetention} from '../shared/retention.js';
 const at=Date.parse('2026-10-23T12:00:00Z');
 test('builder context is explicit and defaults to private, optional AI use and opt-in reminders',()=>{
@@ -87,4 +87,10 @@ test('weekly review contains actual outcomes, replies and attributed opportuniti
 test('old and future-dated external sources are not presented as freshly reviewed',()=>{
  const s=freshState(at);const lead={id:'source',name:'Source',tags:[],checkedAt:new Date(at-91*DAY).toISOString()};
  assert.equal(relevantLeads(s,[lead],at).length,0);lead.checkedAt=new Date(at+DAY).toISOString();assert.equal(relevantLeads(s,[lead],at).length,0);
+});
+test('push attempts honor an explicit opt-out but cover members who never chose',()=>{
+ assert.equal(pushAllowed({push:false,pushSetOnce:true}),false);
+ assert.equal(pushAllowed({push:true,pushSetOnce:true}),true);
+ assert.equal(pushAllowed(freshState(at).prefs),true);
+ assert.equal(pushAllowed({}),true);
 });

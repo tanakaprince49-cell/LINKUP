@@ -149,6 +149,7 @@ test('the preference, settings control, push adapter and browser copy are wired 
   assert.match(service, /s\.comebackSequence=nextLinkyHeadlineIndex/);
   const runtime = read('api/_builderRuntime.js');
   assert.match(runtime, /campaign,category/);
-  assert.match(runtime, /priority:'high'/);
+  assert.match(runtime, /sendExpoPush/);
+  assert.match(read('api/_expoPush.js'), /priority:'high'/);
   assert.match(read('mobile/src/lib/notifications.ts'), /data\?\.campaign === 'linky_reengagement'/);
 });
