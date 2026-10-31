@@ -169,6 +169,7 @@ service cloud.firestore {
           validOptionalString(data, 'coverPhoto', 900000) &&
           validOptionalString(data, 'vibeMedia', 900000) &&
           validOptionalList(data, 'photos', 3) &&
+          validOptionalList(data, 'roles', 20) &&
           validOptionalList(data, 'skills', 50) &&
           validOptionalList(data, 'interests', 50) &&
           validOptionalList(data, 'industries', 40) &&
@@ -219,7 +220,7 @@ service cloud.firestore {
       function safeProfileCreateKeys() {
         return incoming().keys().hasOnly([
           'uid', 'displayName', 'username', 'profileLink',
-          'occupation', 'company', 'bio',
+          'occupation', 'roles', 'company', 'bio',
           'age', 'country', 'city',
           'skills', 'interests', 'goals', 'industries',
           'experience', 'personalityType', 'personalityAnswers', 'roleAnswers',
@@ -255,7 +256,7 @@ service cloud.firestore {
         return [
           'uid',
           'displayName', 'username', 'profileLink',
-          'occupation', 'company', 'bio',
+          'occupation', 'roles', 'company', 'bio',
           'age', 'country', 'city',
           'skills', 'interests', 'goals', 'industries',
           'experience', 'personalityType', 'personalityAnswers', 'roleAnswers',
