@@ -39,7 +39,7 @@ type PersonalityQuestion = {
 };
 
 const identityChoices: Choice[] = LINKUP_ROLE_OPTIONS;
-const OTHER_ROLE_ID = '__other';
+const OTHER_CHOICE_ID = '__other'; // marker for the free-text option; never persisted
 
 const goalsChoices: Choice[] = [
   { id: 'Cofounder', label: 'Cofounder' },
@@ -914,6 +914,7 @@ export default function OnboardingScreen({ navigation }: any) {
   const [rolePicks, setRolePicks] = useState<string[]>([]);
   const [customRole, setCustomRole] = useState('');
   const [lookingFor, setLookingFor] = useState<string[]>([]);
+  const [customLookingFor, setCustomLookingFor] = useState('');
   const [industries, setIndustries] = useState<string[]>([]);
   const [skills, setSkills] = useState<string[]>([]);
   const [experience, setExperience] = useState('');
@@ -936,13 +937,21 @@ export default function OnboardingScreen({ navigation }: any) {
   const finalRoles = useMemo(() => {
     const clean = customRole.trim().slice(0, 40);
     return [
-      ...rolePicks.filter((pick) => pick !== OTHER_ROLE_ID),
-      ...(rolePicks.includes(OTHER_ROLE_ID) && clean ? [clean] : []),
+      ...rolePicks.filter((pick) => pick !== OTHER_CHOICE_ID),
+      ...(rolePicks.includes(OTHER_CHOICE_ID) && clean ? [clean] : []),
     ];
   }, [rolePicks, customRole]);
+  const finalLookingFor = useMemo(() => {
+    const clean = customLookingFor.trim().slice(0, 40);
+    return [
+      ...lookingFor.filter((pick) => pick !== OTHER_CHOICE_ID),
+      ...(lookingFor.includes(OTHER_CHOICE_ID) && clean ? [clean] : []),
+    ];
+  }, [lookingFor, customLookingFor]);
 
   useEffect(() => {
     setLookingFor([]);
+    setCustomLookingFor('');
     setIndustries([]);
     setSkills([]);
     setCustomSkillsText('');
@@ -1512,27 +1521,27 @@ export default function OnboardingScreen({ navigation }: any) {
               value={rolePicks}
               onChange={(v) => {
                 const picks = v as string[];
-                if (!picks.includes(OTHER_ROLE_ID)) setCustomRole('');
+                if (!picks.includes(OTHER_CHOICE_ID)) setCustomRole('');
                 setRolePicks(picks);
                 const clean = customRole.trim().slice(0, 40);
                 const roles = [
-                  ...picks.filter((pick) => pick !== OTHER_ROLE_ID),
-                  ...(picks.includes(OTHER_ROLE_ID) && clean ? [clean] : []),
+                  ...picks.filter((pick) => pick !== OTHER_CHOICE_ID),
+                  ...(picks.includes(OTHER_CHOICE_ID) && clean ? [clean] : []),
                 ];
                 setRole(roles[0] || '');
               }}
-              choices={[...identityChoices, { id: OTHER_ROLE_ID, label: 'Other — type your own' }]}
+              choices={[...identityChoices, { id: OTHER_CHOICE_ID, label: 'Other — type your own' }]}
               multi
               isDark={isDark}
             />
-            {rolePicks.includes(OTHER_ROLE_ID) && (
+            {rolePicks.includes(OTHER_CHOICE_ID) && (
               <TextInput
                 value={customRole}
                 onChangeText={(text) => {
                   setCustomRole(text);
                   const clean = text.trim().slice(0, 40);
                   const roles = [
-                    ...rolePicks.filter((pick) => pick !== OTHER_ROLE_ID),
+                    ...rolePicks.filter((pick) => pick !== OTHER_CHOICE_ID),
                     ...(clean ? [clean] : []),
                   ];
                   setRole(roles[0] || '');
@@ -1562,22 +1571,45 @@ export default function OnboardingScreen({ navigation }: any) {
       {
         key: 'goals',
         title: 'Who are you looking for?',
-        subtitle: 'Pick at least one. You can add more later.',
+        subtitle: 'Pick at least one. None of these? Choose Other and type your own.',
         body: (
           <View>
             <ChoiceGrid
               value={lookingFor}
-              onChange={(v) => setLookingFor(v as string[])}
-              choices={lookingForChoices}
+              onChange={(v) => {
+                const picks = v as string[];
+                if (!picks.includes(OTHER_CHOICE_ID)) setCustomLookingFor('');
+                setLookingFor(picks);
+              }}
+              choices={[...lookingForChoices, { id: OTHER_CHOICE_ID, label: 'Other — type your own' }]}
               multi
               isDark={isDark}
             />
+            {lookingFor.includes(OTHER_CHOICE_ID) && (
+              <TextInput
+                value={customLookingFor}
+                onChangeText={setCustomLookingFor}
+                placeholder="Type your own (e.g. Gym buddy, Language partner)"
+                placeholderTextColor={textColor(isDark, 'muted')}
+                autoCapitalize="words"
+                maxLength={40}
+                returnKeyType="done"
+                style={[
+                  styles.textInput,
+                  {
+                    marginTop: 12,
+                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
+                    color: textColor(isDark),
+                  },
+                ]}
+              />
+            )}
             <Text style={{ marginTop: 10, fontSize: 12, fontWeight: '700', color: textColor(isDark, 'muted') }}>
-              Pick all that apply — scroll to see every option.
+              First pick leads your matches — everything else widens the net.
             </Text>
           </View>
         ),
-        canNext: lookingFor.length > 0,
+        canNext: finalLookingFor.length > 0,
       },
       {
         key: 'photos',
@@ -1656,7 +1688,7 @@ export default function OnboardingScreen({ navigation }: any) {
             },
           ]),
     ],
-    [displayName, lookingFor, lookingForChoices, profilePicUri, role, rolePicks, customRole, finalRoles, isDark, ageText, country, city, profileNoticeSeen, saving]
+    [displayName, lookingFor, lookingForChoices, customLookingFor, finalLookingFor, profilePicUri, role, rolePicks, customRole, finalRoles, isDark, ageText, country, city, profileNoticeSeen, saving]
   );
 
   const current = steps[step];
@@ -1685,7 +1717,7 @@ export default function OnboardingScreen({ navigation }: any) {
       const roleSignalValues = Object.values(roleAnswers).flatMap((answer) => (Array.isArray(answer) ? answer : answer ? [answer] : []));
       const personalitySignalValues = Object.values(personalityAnswers).filter(Boolean);
       const personalityType = [role, workStyle, roleSignalValues[0], personalitySignalValues[0]].filter(Boolean).join(' - ');
-      const networkingIntent = lookingFor[0] || (role ? `${role} Opportunities` : 'Serious Builder');
+      const networkingIntent = finalLookingFor[0] || (role ? `${role} Opportunities` : 'Serious Builder');
       const onboardingProfile: Record<string, unknown> = {
         uid: user.uid,
         displayName: finalName,
@@ -1697,8 +1729,8 @@ export default function OnboardingScreen({ navigation }: any) {
         city: city.trim(),
         occupation: role,
         roles: finalRoles,
-        goals: lookingFor.join(', '),
-        lookingFor,
+        goals: finalLookingFor.join(', '),
+        lookingFor: finalLookingFor,
         interests: industries,
         industries,
         skills: finalSkills,
