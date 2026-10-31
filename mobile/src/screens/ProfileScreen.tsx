@@ -1479,6 +1479,13 @@ export default function ProfileScreen({ navigation, route }: any) {
         username: cleanUsername(editData.username || nextDisplayName || ''),
         profileLink: profileLinkFor({ uid: ownerUid }).slice(0, 180),
         occupation: limitText(editData.occupation, 80),
+        roles: (() => {
+          const headline = limitText(editData.occupation, 80);
+          const prev = Array.isArray((profile as any)?.roles)
+            ? (profile as any).roles.filter((entry: unknown) => typeof entry === 'string' && entry)
+            : [];
+          return (headline ? [headline, ...prev.filter((entry: string) => entry !== headline)] : prev).slice(0, 5);
+        })(),
         company: limitText(editData.company, 120),
         bio: limitText(editData.bio, 2000),
         city: limitText(editData.city, 80),
@@ -2697,7 +2704,7 @@ export default function ProfileScreen({ navigation, route }: any) {
                 <Text style={styles.profileRoleBadgeText}>{roleInfoFor((profile as any)?.occupation).badge}</Text>
               </View>
               <Text style={styles.roleTextLine} numberOfLines={1}>
-                {[(profile as any)?.occupation, (profile as any)?.company ? `@ ${(profile as any)?.company}` : null].filter(Boolean).join(' ') || 'Builder'}
+                {[Array.isArray((profile as any)?.roles) && (profile as any).roles.length ? (profile as any).roles.slice(0, 3).join(' · ') : (profile as any)?.occupation, (profile as any)?.company ? `@ ${(profile as any)?.company}` : null].filter(Boolean).join(' ') || 'Builder'}
               </Text>
               <Text style={styles.locationText}>
                 {[profile?.city, profile?.country].filter(Boolean).join(', ') || 'Remote'}

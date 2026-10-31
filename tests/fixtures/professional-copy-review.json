@@ -943,9 +943,9 @@
   },
   {
     "file": "mobile/src/screens/OnboardingScreen.tsx",
-    "line": 1498,
-    "before": "Pick the lane people should match you on.",
-    "after": "Select the professional role most relevant to your collaboration goals."
+    "line": 1508,
+    "before": "Select the professional role most relevant to your collaboration goals.",
+    "after": "Pick all that apply — your first pick sets your main path. None of these? Choose Other and type your own."
   },
   {
     "file": "mobile/src/screens/OnboardingScreen.tsx",

@@ -39,6 +39,7 @@ type PersonalityQuestion = {
 };
 
 const identityChoices: Choice[] = LINKUP_ROLE_OPTIONS;
+const OTHER_ROLE_ID = '__other';
 
 const goalsChoices: Choice[] = [
   { id: 'Cofounder', label: 'Cofounder' },
@@ -910,6 +911,8 @@ export default function OnboardingScreen({ navigation }: any) {
   const [customSkillsText, setCustomSkillsText] = useState('');
 
   const [role, setRole] = useState('');
+  const [rolePicks, setRolePicks] = useState<string[]>([]);
+  const [customRole, setCustomRole] = useState('');
   const [lookingFor, setLookingFor] = useState<string[]>([]);
   const [industries, setIndustries] = useState<string[]>([]);
   const [skills, setSkills] = useState<string[]>([]);
@@ -930,6 +933,13 @@ export default function OnboardingScreen({ navigation }: any) {
     () => Array.from(new Set([...skills, ...typedSkills])).slice(0, 20),
     [skills, typedSkills]
   );
+  const finalRoles = useMemo(() => {
+    const clean = customRole.trim().slice(0, 40);
+    return [
+      ...rolePicks.filter((pick) => pick !== OTHER_ROLE_ID),
+      ...(rolePicks.includes(OTHER_ROLE_ID) && clean ? [clean] : []),
+    ];
+  }, [rolePicks, customRole]);
 
   useEffect(() => {
     setLookingFor([]);
@@ -1495,11 +1505,59 @@ export default function OnboardingScreen({ navigation }: any) {
       {
         key: 'identity',
         title: 'What best describes you?',
-        subtitle: "Select the professional role most relevant to your collaboration goals.",
+        subtitle: 'Pick all that apply — your first pick sets your main path. None of these? Choose Other and type your own.',
         body: (
-          <ChoiceGrid value={role} onChange={(v) => setRole(String(v))} choices={identityChoices} isDark={isDark} />
+          <View>
+            <ChoiceGrid
+              value={rolePicks}
+              onChange={(v) => {
+                const picks = v as string[];
+                if (!picks.includes(OTHER_ROLE_ID)) setCustomRole('');
+                setRolePicks(picks);
+                const clean = customRole.trim().slice(0, 40);
+                const roles = [
+                  ...picks.filter((pick) => pick !== OTHER_ROLE_ID),
+                  ...(picks.includes(OTHER_ROLE_ID) && clean ? [clean] : []),
+                ];
+                setRole(roles[0] || '');
+              }}
+              choices={[...identityChoices, { id: OTHER_ROLE_ID, label: 'Other — type your own' }]}
+              multi
+              isDark={isDark}
+            />
+            {rolePicks.includes(OTHER_ROLE_ID) && (
+              <TextInput
+                value={customRole}
+                onChangeText={(text) => {
+                  setCustomRole(text);
+                  const clean = text.trim().slice(0, 40);
+                  const roles = [
+                    ...rolePicks.filter((pick) => pick !== OTHER_ROLE_ID),
+                    ...(clean ? [clean] : []),
+                  ];
+                  setRole(roles[0] || '');
+                }}
+                placeholder="Type your own (e.g. Pilot, Chef, Athlete)"
+                placeholderTextColor={textColor(isDark, 'muted')}
+                autoCapitalize="words"
+                maxLength={40}
+                returnKeyType="done"
+                style={[
+                  styles.textInput,
+                  {
+                    marginTop: 12,
+                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
+                    color: textColor(isDark),
+                  },
+                ]}
+              />
+            )}
+            <Text style={{ marginTop: 10, fontSize: 12, fontWeight: '700', color: textColor(isDark, 'muted') }}>
+              First pick is your headline role — everything else sharpens your matches.
+            </Text>
+          </View>
         ),
-        canNext: !!role,
+        canNext: finalRoles.length > 0,
       },
       {
         key: 'goals',
@@ -1598,7 +1656,7 @@ export default function OnboardingScreen({ navigation }: any) {
             },
           ]),
     ],
-    [displayName, lookingFor, lookingForChoices, profilePicUri, role, isDark, ageText, country, city, profileNoticeSeen, saving]
+    [displayName, lookingFor, lookingForChoices, profilePicUri, role, rolePicks, customRole, finalRoles, isDark, ageText, country, city, profileNoticeSeen, saving]
   );
 
   const current = steps[step];
@@ -1638,6 +1696,7 @@ export default function OnboardingScreen({ navigation }: any) {
         country: country.trim(),
         city: city.trim(),
         occupation: role,
+        roles: finalRoles,
         goals: lookingFor.join(', '),
         lookingFor,
         interests: industries,
@@ -1649,7 +1708,7 @@ export default function OnboardingScreen({ navigation }: any) {
         startupStage,
         fundingStage,
         availability: availability || commitmentLevel,
-        education: role === 'Student' ? 'Student' : '',
+        education: role === 'Student' || finalRoles.includes('Student') ? 'Student' : '',
         personalityType,
         personalityAnswers,
         roleAnswers,
