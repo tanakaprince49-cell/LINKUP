@@ -1764,9 +1764,11 @@ export default function OnboardingScreen({ navigation }: any) {
       await setDoc(doc(db, 'users', user.uid), onboardingProfile, { merge: true });
       await markOnboardingComplete(onboardingProfile);
       void seedConciergeWelcome(user.uid, onboardingProfile);
-    } catch (e) {
+    } catch (e: any) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
-      notifyUser('Could not finish onboarding', 'Please deploy the latest Firestore rules, then try again.');
+      const code = String(e?.code || 'unknown-error');
+      const detail = String(e?.message || '').slice(0, 160);
+      notifyUser('Could not finish onboarding', `${code}${detail ? `: ${detail}` : ''}. Screenshot this and send it to support.`);
     } finally {
       setSaving(false);
     }

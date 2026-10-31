@@ -76,3 +76,11 @@ test('owners can persist their hosted avatar URL but cannot write oversized or n
  for(const value of ['http://example.com/a.jpg','javascript:alert(1)',42,'https://example.com/'+'a'.repeat(2048)])await assertFails(setDoc(ref,{profilePicUrl:value},{merge:true}));
  await assertFails(setDoc(doc(env.authenticatedContext('stranger').firestore(),'users/owner'),{profilePicUrl:'https://example.com/other.jpg'},{merge:true}));
 });
+test('the real onboarding save shape passes rules on create and on re-run update',async()=>{
+ await env.clearFirestore();
+ const ref=doc(env.authenticatedContext('owner').firestore(),'users/owner');
+ const payload={uid:'owner',displayName:'Tanaka Fixture',username:'tanakafixture',profileLink:'https://www.linkupbuild.com/app/p/owner',bio:'Building a professional network.',age:25,country:'Zimbabwe',city:'Harare',occupation:'Founder',roles:['Founder','Student'],goals:'Cofounder',lookingFor:['Cofounder'],interests:['Fintech'],industries:['Fintech'],skills:['React'],experience:'Experienced',workStyle:'Remote',commitmentLevel:'Part time',startupStage:'Building MVP',fundingStage:'Bootstrapped',availability:'Part time',education:'',personalityType:'Founder - Remote',personalityAnswers:{style:'Direct'},roleAnswers:{focus:'Ship'},networkingIntent:'Cofounder',circles:['Founders'],profilePic:'',photos:[],onboarded:true,isStealthMode:false,isVisible:true,turboConnect:false,hideOnlineStatus:false,settings:{publicDiscovery:true,stealthMode:false,turboConnect:false,hideOnlineStatus:false,darkMode:false}};
+ await assertSucceeds(setDoc(ref,payload));
+ await assertSucceeds(setDoc(ref,{...payload,bio:'Updated bio.',roles:['Founder','Investor','Student'],lookingFor:['Cofounder','Gym buddy']},{merge:true}));
+ assert.deepEqual((await getDoc(ref)).data().roles,['Founder','Investor','Student']);
+});
