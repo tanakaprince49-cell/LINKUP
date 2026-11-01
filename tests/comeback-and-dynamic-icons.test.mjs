@@ -128,12 +128,12 @@ test('Part A: comeback emails enforce milestones (Day 3/7/14/30), sunset at >45d
   assert.equal(d5Dup.sent, false);
   assert.equal(d5Dup.reason, 'duplicate');
 
-  // Day 7 milestone advances and sends once; >45d sunsets automatically
+  // Day 7 milestone advances (4 days later) and sends once; >45d sunsets automatically
   const d7 = await sendComebackEmail(
     db,
     'builder1',
     { daysSinceActive: 8, lastActiveAt: lastActive, headline: 'Quick LinkUp pulse check', prefs: { welcomeBack: true } },
-    { env, fetcher, now },
+    { env, fetcher, now: Date.parse('2026-11-05T10:00:00Z') },
   );
   assert.equal(d7.sent, true);
 
@@ -481,16 +481,20 @@ test('Part C: emails render full-width uncropped mood heroes, LINKUP cat profile
   assert.equal(selectExpressivePulse({ localHour: 21, slot: 'pulse2' }).mood, 'night_owl');
   assert.equal(selectExpressivePulse({ localHour: 10, localWeekday: 2 }).mood, 'default');
 
-  // 3. Randomized 2x/day schedule varies across users & days and fires 2 emails + 2 pushes + Linky avatar notifications
-  const hoursSeen = new Set();
+  // 3. Randomized 2x/day schedule varies across users & days (distinct random hours AND distinct random minutes, never :00)
+  const slotsSeen = new Set();
   for (let d = 1; d <= 10; d += 1) {
     const s = randomPulseScheduleForDay('memberA', `2026-11-${String(d).padStart(2, '0')}`);
-    assert.ok(s.pulse1Hour >= 8 && s.pulse1Hour <= 13);
+    assert.ok(s.pulse1Hour >= 8 && s.pulse1Hour <= 12);
     assert.ok(s.pulse2Hour >= 15 && s.pulse2Hour <= 20);
-    assert.ok(s.pulse2Hour - s.pulse1Hour >= 4);
-    hoursSeen.add(`${s.pulse1Hour}-${s.pulse2Hour}`);
+    assert.ok(s.pulse1Minute >= 4 && s.pulse1Minute <= 53);
+    assert.ok(s.pulse2Minute >= 4 && s.pulse2Minute <= 53);
+    assert.notEqual(s.pulse1Minute, s.pulse2Minute, 'pulse1 and pulse2 minutes must always differ');
+    const gapMinutes = (s.pulse2Hour * 60 + s.pulse2Minute) - (s.pulse1Hour * 60 + s.pulse1Minute);
+    assert.ok(gapMinutes >= 250, `expected >= 4h 10m gap between daily emails, got ${gapMinutes}m`);
+    slotsSeen.add(`${s.pulse1Hour}:${s.pulse1Minute}-${s.pulse2Hour}:${s.pulse2Minute}`);
   }
-  assert.ok(hoursSeen.size >= 4, 'schedule must vary across days with no fixed clock time');
+  assert.ok(slotsSeen.size >= 8, 'schedule must vary randomly across days with no fixed clock time');
 
   // Verify full 2x/day delivery on a member (morning pulse1 + evening pulse2)
   const store = new Map();
@@ -586,8 +590,39 @@ test('Part C: emails render full-width uncropped mood heroes, LINKUP cat profile
   assert.equal(sentEmails.length, 2);
   assert.equal(sentPushes.length, 2);
   assert.notEqual(sentEmails[0].subject, sentEmails[1].subject);
+  assert.ok(sentEmails[0].scheduled_at, 'pulse1 must carry Resend scheduled_at random minute jitter');
+  assert.ok(sentEmails[1].scheduled_at, 'pulse2 must carry Resend scheduled_at random minute jitter');
+  assert.ok(
+    Date.parse(sentEmails[1].scheduled_at) - Date.parse(sentEmails[0].scheduled_at) >= 4 * 3600_000,
+    'scheduled delivery times of the 2 daily emails must never collide or be <4h apart',
+  );
   assert.match(sentEmails[0].html, /hero-angry-red\.png/);
   assert.match(sentEmails[0].html, /linky-avatar\.png/);
   const inApp1 = store.get('notifications/pulse_tanaka_2026-11-01_pulse1');
   assert.equal(inApp1.fromPic, LINKY_AVATAR_URL);
+
+  // 4. Anti-collision guard: a second email to the SAME user OR a duplicate account with the SAME email address
+  //    within <4 hours is blocked with too_close_to_recent_email so 2 emails NEVER arrive at the same time!
+  const pulse2EffectiveMs = Date.parse(sentEmails[1].scheduled_at);
+  const immediateSecond = await sendHighSignalEmail(
+    pagedDb,
+    'tanaka',
+    { receiptKey: 'different_event_same_minute', throttleMs: 0, subject: 'Simultaneous email' },
+    { ...emailOpts, now: pulse2EffectiveMs + 60_000 },
+  );
+  assert.equal(immediateSecond.sent, false);
+  assert.equal(immediateSecond.reason, 'too_close_to_recent_email');
+
+  await pagedDb.collection('users').doc('tanakaAltAccount').set({
+    email: 'TANAKA@example.com',
+    displayName: 'Tanaka Alt',
+  });
+  const duplicateAddrCollision = await sendHighSignalEmail(
+    pagedDb,
+    'tanakaAltAccount',
+    { receiptKey: 'alt_account_same_email', throttleMs: 0, subject: 'Second account same inbox' },
+    { ...emailOpts, now: pulse2EffectiveMs + 5 * 60_000 },
+  );
+  assert.equal(duplicateAddrCollision.sent, false);
+  assert.equal(duplicateAddrCollision.reason, 'too_close_to_recent_email');
 });

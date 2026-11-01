@@ -8,6 +8,7 @@ import { getAuth } from 'firebase-admin/auth';
 const APP_BASE = 'https://www.linkupbuild.com/app';
 const API_BASE = 'https://linkup-muqu.vercel.app';
 const SOCIAL_THROTTLE_MS = 6 * 60 * 60 * 1000;
+export const MIN_USER_EMAIL_GAP_MS = 4 * 60 * 60 * 1000;
 const RESEND_FALLBACK_FROM = 'Linky at LINKUP <onboarding@resend.dev>';
 export const LINKY_AVATAR_URL = `${APP_BASE}/icons/linky-avatar.png`;
 export const DAILY_EMAIL_HARD_CAP = 95;
@@ -350,43 +351,108 @@ export function buildLinkyEmailBodies({
   return { unsubUrl, textBody, htmlBody, mood: moodSpec.id, heroUrl, avatarUrl };
 }
 
-async function postResendEmail({ fetcher, apiKey, from, allowOnboardingFallback, to, subject, textBody, htmlBody, unsubUrl }) {
+function recipientLockId(to) {
+  return crypto.createHash('sha256').update(`recipient:${String(to || '').trim().toLowerCase()}`).digest('hex').slice(0, 40);
+}
+
+async function checkRecipientSpacing(db, uid, to, effectiveSendAt, minGapMs = MIN_USER_EMAIL_GAP_MS) {
+  if (!db || !(minGapMs > 0)) return { allowed: true };
+  const userPrefRef = uid ? db.collection('emailPrefs').doc(uid) : null;
+  const addrLockRef = to ? db.collection('emailRecipientLocks').doc(recipientLockId(to)) : null;
+
+  const [uSnap, aSnap] = await Promise.all([
+    userPrefRef ? userPrefRef.get().catch(() => null) : Promise.resolve(null),
+    addrLockRef ? addrLockRef.get().catch(() => null) : Promise.resolve(null),
+  ]);
+  const lastUserAt = Number(uSnap?.exists ? uSnap.data()?.lastEmailAt || 0 : 0);
+  const lastAddrAt = Number(aSnap?.exists ? aSnap.data()?.lastEmailAt || 0 : 0);
+  const lastAt = Math.max(lastUserAt, lastAddrAt);
+  if (lastAt > 0 && effectiveSendAt - lastAt < minGapMs) {
+    return { allowed: false, reason: 'too_close_to_recent_email', lastEmailAt: lastAt };
+  }
+  return { allowed: true, userPrefRef, addrLockRef };
+}
+
+async function stampRecipientSpacing(db, uid, to, effectiveSendAt, subject = '') {
+  if (!db) return;
+  const cleanSubj = sanitizeEmailCopy(subject).slice(0, 120);
+  const writes = [];
+  if (uid) {
+    writes.push(
+      db.collection('emailPrefs').doc(uid).set(
+        { lastEmailAt: effectiveSendAt, lastEmailSubject: cleanSubj, updatedAt: Date.now() },
+        { merge: true },
+      ).catch(() => null),
+    );
+  }
+  if (to) {
+    writes.push(
+      db.collection('emailRecipientLocks').doc(recipientLockId(to)).set(
+        { lastEmailAt: effectiveSendAt, uid: uid || '', updatedAt: Date.now() },
+        { merge: true },
+      ).catch(() => null),
+    );
+  }
+  await Promise.all(writes);
+}
+
+async function postResendEmail({
+  fetcher,
+  apiKey,
+  from,
+  allowOnboardingFallback,
+  to,
+  subject,
+  textBody,
+  htmlBody,
+  unsubUrl,
+  scheduledAt = '',
+}) {
   const cleanSubject = sanitizeEmailCopy(subject).slice(0, 120);
-  const sendOnce = async (sender) => {
+  const sendOnce = async (sender, scheduleIso = '') => {
+    const payloadObj = {
+      from: sender,
+      to: [to],
+      subject: cleanSubject,
+      text: textBody,
+      html: htmlBody,
+      ...(scheduleIso ? { scheduled_at: scheduleIso } : {}),
+      headers: {
+        'List-Unsubscribe': `<${unsubUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
+    };
     const res = await fetcher('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        from: sender,
-        to: [to],
-        subject: cleanSubject,
-        text: textBody,
-        html: htmlBody,
-        headers: {
-          'List-Unsubscribe': `<${unsubUrl}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        },
-      }),
+      body: JSON.stringify(payloadObj),
       signal: AbortSignal.timeout(8000),
     });
     let payload = null;
     try {
       payload = typeof res.json === 'function' ? await res.json() : null;
     } catch {}
-    return { res, payload, sender };
+    return { res, payload, sender, scheduledAtUsed: scheduleIso || null };
   };
 
-  let attempt = await sendOnce(from);
+  let attempt = await sendOnce(from, scheduledAt);
+  // If provider rejects scheduled_at syntax/window for any reason, send immediately rather than dropping
+  if (!attempt.res.ok && scheduledAt && attempt.res.status >= 400 && attempt.res.status < 500 && attempt.res.status !== 403) {
+    attempt = await sendOnce(from, '');
+  }
   if (
     !attempt.res.ok &&
     attempt.res.status === 403 &&
     allowOnboardingFallback &&
     from !== RESEND_FALLBACK_FROM
   ) {
-    attempt = await sendOnce(RESEND_FALLBACK_FROM);
+    attempt = await sendOnce(RESEND_FALLBACK_FROM, scheduledAt);
+    if (!attempt.res.ok && scheduledAt) {
+      attempt = await sendOnce(RESEND_FALLBACK_FROM, '');
+    }
   }
 
   if (!attempt.res.ok) {
@@ -401,12 +467,15 @@ async function postResendEmail({ fetcher, apiKey, from, allowOnboardingFallback,
     sent: true,
     id: attempt.payload?.id || null,
     fromUsed: attempt.sender,
+    scheduledAt: attempt.scheduledAtUsed,
   };
 }
 
 export async function sendHighSignalEmail(db, uid, {
   receiptKey = '',
   throttleMs = SOCIAL_THROTTLE_MS,
+  minUserGapMs = MIN_USER_EMAIL_GAP_MS,
+  scheduledAt = '',
   subject = 'LINKUP update',
   headline = 'You have an update on LINKUP',
   body = '',
@@ -425,6 +494,10 @@ export async function sendHighSignalEmail(db, uid, {
   if (prefSnap?.exists && prefSnap.data()?.unsubscribed === true) return { sent: false, reason: 'unsubscribed' };
 
   const nowMs = typeof now === 'function' ? now() : Number(now) || Date.now();
+  const parsedSchedMs = scheduledAt ? Date.parse(String(scheduledAt)) : NaN;
+  const effectiveSendAt = Number.isFinite(parsedSchedMs) && parsedSchedMs > nowMs ? parsedSchedMs : nowMs;
+  const scheduleIso = effectiveSendAt > nowMs ? new Date(effectiveSendAt).toISOString() : '';
+
   const rKey = receiptKey || `social_${uid}`;
   const receiptRef = db.collection('emailReceipts').doc(rKey.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120));
   const prev = await receiptRef.get().catch(() => null);
@@ -435,6 +508,12 @@ export async function sendHighSignalEmail(db, uid, {
 
   const to = await resolveRecipientEmail(db, uid);
   if (!to) return { sent: false, reason: 'no_email' };
+
+  // Global per-user + per-email-address anti-collision lock: never send 2 emails at the same time
+  const spacing = await checkRecipientSpacing(db, uid, to, effectiveSendAt, minUserGapMs);
+  if (!spacing.allowed) {
+    return { sent: false, reason: spacing.reason, lastEmailAt: spacing.lastEmailAt };
+  }
 
   const quota = await reserveDailyEmailQuota(db, quotaBucket, quotaCap, nowMs);
   if (!quota.allowed) return { sent: false, reason: quota.reason || 'daily_quota_reached' };
@@ -464,16 +543,29 @@ export async function sendHighSignalEmail(db, uid, {
       textBody,
       htmlBody,
       unsubUrl,
+      scheduledAt: scheduleIso,
     });
     if (!out.sent) return out;
-    await receiptRef.set({
-      uid,
-      at: nowMs,
+    const stampedAt = out.scheduledAt ? effectiveSendAt : nowMs;
+    await Promise.all([
+      receiptRef.set({
+        uid,
+        at: stampedAt,
+        bucket: quotaBucket,
+        mood: resolvedMood,
+        scheduledAt: out.scheduledAt || null,
+        subject: sanitizeEmailCopy(subject).slice(0, 120),
+      }).catch(() => null),
+      stampRecipientSpacing(db, uid, to, stampedAt, subject),
+    ]);
+    return {
+      sent: true,
+      id: out.id,
+      fromUsed: out.fromUsed,
       bucket: quotaBucket,
       mood: resolvedMood,
-      subject: sanitizeEmailCopy(subject).slice(0, 120),
-    }).catch(() => null);
-    return { sent: true, id: out.id, fromUsed: out.fromUsed, bucket: quotaBucket, mood: resolvedMood };
+      scheduledAt: out.scheduledAt || null,
+    };
   } catch {
     return { sent: false, reason: 'network_error' };
   }
@@ -483,6 +575,7 @@ export async function sendRetentionPulseEmail(db, uid, {
   localDateKey = '',
   slot = 'pulse1',
   mood = 'default',
+  scheduledAt = '',
   subject = 'LINKUP · Quick builder check-in from Linky',
   headline = 'Plug in for two minutes today',
   body = 'Fresh builders and collaborators are active on LINKUP right now.',
@@ -499,6 +592,8 @@ export async function sendRetentionPulseEmail(db, uid, {
   return sendHighSignalEmail(db, uid, {
     receiptKey: `pulse_${uid}_${dayTag}_${slotTag}`,
     throttleMs: 0,
+    minUserGapMs: MIN_USER_EMAIL_GAP_MS,
+    scheduledAt,
     subject,
     headline,
     body,

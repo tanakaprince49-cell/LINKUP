@@ -1,12 +1,14 @@
 // Randomized 2x/day retention pulse engine (Email + Native Push + Web Push + In-App).
 // Every reachable LINKUP member gets two daily pulses at pseudo-random local
-// daytime/evening hours (>=4h apart, never a fixed clock time, outside quiet hours),
-// with Linky's emotion dynamically matched to their live builder state.
+// daytime/evening hours AND distinct random minutes (>=4h 11m apart, never on :00,
+// never two emails at the same time), with Linky's emotion dynamically matched
+// to their live builder state.
 import crypto from 'node:crypto';
 import { sendExpoPush } from './_expoPush.js';
 import {
   COMEBACK_SUNSET_DAYS,
   LINKY_AVATAR_URL,
+  MIN_USER_EMAIL_GAP_MS,
   sendRetentionPulseEmail,
 } from './_emailNotify.js';
 
@@ -29,6 +31,7 @@ function localClock(nowMs, timeZone = 'UTC') {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
+    minute: '2-digit',
     hourCycle: 'h23',
     weekday: 'short',
   }).formatToParts(d);
@@ -36,46 +39,93 @@ function localClock(nowMs, timeZone = 'UTC') {
   const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
   const localDateKey = `${map.year}-${map.month}-${map.day}`;
   const localHour = Number(map.hour || 0);
+  const localMinute = Number(map.minute || 0);
   const wkMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
   const localWeekday = wkMap[map.weekday] ?? d.getUTCDay();
-  return { localDateKey, localHour, localWeekday, timeZone: safeZone };
+  return { localDateKey, localHour, localMinute, localWeekday, timeZone: safeZone };
 }
 
 export function randomPulseScheduleForDay(uid, localDateKey) {
   const digest = crypto
     .createHash('sha256')
-    .update(`linkup-pulse-v1:${uid}:${localDateKey}`)
+    .update(`linkup-pulse-v2:${uid}:${localDateKey}`)
     .digest();
 
-  // Morning / midday slot: 08..13 local time (6 distinct hours)
-  const pulse1Hour = 8 + (digest[0] % 6);
-  // Afternoon / evening slot: at least 4h after pulse1, between 15..20 local time
-  const minPulse2 = Math.max(15, pulse1Hour + 4);
+  // Morning / midday slot: 08..12 local time (5 distinct hours) + random minute 04..53
+  const pulse1Hour = 8 + (digest[0] % 5);
+  const pulse1Minute = 4 + (digest[2] % 50);
+
+  // Afternoon / evening slot: at least 5 calendar hours after pulse1Hour (15..20 local time)
+  // so even 12:53 -> 17:04 is >= 4h 11m apart! Plus a guaranteed different minute (04..53).
+  const minPulse2 = Math.max(15, pulse1Hour + 5);
   const span2 = Math.max(1, 20 - minPulse2 + 1);
   const pulse2Hour = minPulse2 + (digest[1] % span2);
+  const rawMin2 = 4 + (digest[3] % 49);
+  const pulse2Minute = rawMin2 >= pulse1Minute ? rawMin2 + 1 : rawMin2;
 
   return {
     pulse1Hour,
+    pulse1Minute,
     pulse2Hour,
-    seedA: digest[2],
-    seedB: digest[3],
+    pulse2Minute,
+    seedA: digest[4],
+    seedB: digest[5],
   };
+}
+
+export function computeScheduledEmailIso(nowMs, localMinute, targetMinute, fallbackSeed = 0) {
+  // Schedule inside the current hour at the user's unique random minute (never :00)
+  let offsetMinutes = targetMinute - localMinute;
+  if (offsetMinutes < 2) {
+    offsetMinutes = 3 + (Math.abs(Number(fallbackSeed) || 0) % 26); // 3..28m future jitter
+  }
+  const clampedMinutes = Math.min(54, Math.max(2, offsetMinutes));
+  const scheduledMs = nowMs + clampedMinutes * 60_000;
+  return { scheduledMs, scheduledIso: new Date(scheduledMs).toISOString(), offsetMinutes: clampedMinutes };
 }
 
 export function duePulseSlot({
   uid,
   localDateKey,
   localHour,
+  localMinute = 0,
+  nowMs = Date.now(),
   sentPulse1 = false,
   sentPulse2 = false,
+  pulse1At = 0,
+  lastEmailAt = 0,
 }) {
   if (localHour < 8 || localHour > 21) return null;
+
+  // Global spacing guard: defer (do NOT burn slot) if any email/pulse went out <4h ago
+  const recentAnchor = Math.max(Number(pulse1At) || 0, Number(lastEmailAt) || 0);
+  if (recentAnchor > 0 && nowMs - recentAnchor < MIN_USER_EMAIL_GAP_MS) {
+    return null;
+  }
+
   const schedule = randomPulseScheduleForDay(uid, localDateKey);
   if (!sentPulse1 && localHour >= schedule.pulse1Hour && (localHour < schedule.pulse2Hour || localHour <= 16)) {
-    return { slot: 'pulse1', schedule, seedByte: schedule.seedA };
+    const jitter = computeScheduledEmailIso(nowMs, localMinute, schedule.pulse1Minute, schedule.seedA);
+    return {
+      slot: 'pulse1',
+      schedule,
+      seedByte: schedule.seedA,
+      targetMinute: schedule.pulse1Minute,
+      ...jitter,
+    };
   }
   if (!sentPulse2 && localHour >= schedule.pulse2Hour) {
-    return { slot: 'pulse2', schedule, seedByte: schedule.seedB };
+    const jitter = computeScheduledEmailIso(nowMs, localMinute, schedule.pulse2Minute, schedule.seedB);
+    if (recentAnchor > 0 && jitter.scheduledMs - recentAnchor < MIN_USER_EMAIL_GAP_MS) {
+      return null;
+    }
+    return {
+      slot: 'pulse2',
+      schedule,
+      seedByte: schedule.seedB,
+      targetMinute: schedule.pulse2Minute,
+      ...jitter,
+    };
   }
   return null;
 }
@@ -381,15 +431,17 @@ export async function runDailyRetentionPulsePage(
     const u = userDoc.data() || {};
     if (u.deleted || u.banned) continue;
 
-    const [stateSnap, contribSnap] = await Promise.all([
+    const [stateSnap, contribSnap, emailPrefSnap] = await Promise.all([
       db.collection('builderStates').doc(uid).get().catch(() => null),
       db.collection('builderContributions').doc(uid).get().catch(() => null),
+      db.collection('emailPrefs').doc(uid).get().catch(() => null),
     ]);
     const state = stateSnap?.exists ? stateSnap.data() || {} : {};
     const contrib = contribSnap?.exists ? contribSnap.data() || {} : {};
+    const emailPref = emailPrefSnap?.exists ? emailPrefSnap.data() || {} : {};
     const prefs = state.prefs || {};
     const tz = prefs.timezone || u.timezone || 'UTC';
-    const { localDateKey, localHour, localWeekday } = localClock(nowMs, tz);
+    const { localDateKey, localHour, localMinute, localWeekday } = localClock(nowMs, tz);
 
     const pulseDocRef = db.collection('retentionPulses').doc(`${uid}_${localDateKey}`);
     const pulseSnap = await pulseDocRef.get().catch(() => null);
@@ -399,8 +451,12 @@ export async function runDailyRetentionPulsePage(
       uid,
       localDateKey,
       localHour,
+      localMinute,
+      nowMs,
       sentPulse1: Boolean(pulseState.pulse1At),
       sentPulse2: Boolean(pulseState.pulse2At),
+      pulse1At: Number(pulseState.pulse1EffectiveAt || pulseState.pulse1At || 0),
+      lastEmailAt: Number(emailPref.lastEmailAt || 0),
     });
     if (!due) continue;
 
@@ -435,13 +491,17 @@ export async function runDailyRetentionPulsePage(
       seedByte: due.seedByte,
     });
 
-    // Claim slot first so concurrent sweeps never double-fire the same slot
+    // Claim slot with both cron fire time and jittered scheduled delivery timestamp
     await pulseDocRef.set(
       {
         uid,
         localDateKey,
-        schedule: { pulse1Hour: due.schedule.pulse1Hour, pulse2Hour: due.schedule.pulse2Hour },
+        schedule: {
+          pulse1: `${String(due.schedule.pulse1Hour).padStart(2, '0')}:${String(due.schedule.pulse1Minute).padStart(2, '0')}`,
+          pulse2: `${String(due.schedule.pulse2Hour).padStart(2, '0')}:${String(due.schedule.pulse2Minute).padStart(2, '0')}`,
+        },
         [`${due.slot}At`]: nowMs,
+        [`${due.slot}EffectiveAt`]: due.scheduledMs,
         [`${due.slot}Mood`]: copy.mood,
         updatedAt: nowMs,
       },
@@ -472,7 +532,7 @@ export async function runDailyRetentionPulsePage(
       }).catch(() => null);
     }
 
-    // 2. Native Push (Expo) + Browser Web Push (VAPID) unless user explicitly opted out (`prefs.push === false`)
+    // 2. Native Push (Expo) + Browser Web Push (VAPID)
     let pushAccepted = 0;
     if (prefs.push !== false) {
       try {
@@ -491,7 +551,7 @@ export async function runDailyRetentionPulsePage(
       }
     }
 
-    // 3. Expressive Full-Bleed Email (at least 2/day across pulse1 + pulse2 unless unsubscribed)
+    // 3. Expressive Full-Bleed Email scheduled at the user's unique random minute (never colliding!)
     let emailSent = false;
     if (prefs.emailDaily !== false) {
       const eRes = await sendRetentionPulseEmail(
@@ -501,6 +561,7 @@ export async function runDailyRetentionPulsePage(
           localDateKey,
           slot: due.slot,
           mood: copy.mood,
+          scheduledAt: due.scheduledIso,
           subject: copy.subject,
           headline: copy.headline,
           body: copy.body,
