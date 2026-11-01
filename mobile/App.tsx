@@ -82,6 +82,7 @@ import { subscribeToUnreadMessagesCount } from './src/lib/chat';
 import OpportunityRadar from './src/components/OpportunityRadar';
 import WebAnalytics from './src/components/WebAnalytics';
 import PWAInstallPrompt from './src/components/PWAInstallPrompt';
+import DynamicAppearanceController from './src/components/DynamicAppearanceController';
 import LinkupAlertProvider from './src/components/LinkupAlertProvider';
 import { blurActiveElementOnWeb } from './src/lib/webFocus';
 import { hasLinkupPro } from './src/lib/paywall';
@@ -791,6 +792,7 @@ function AppContent() {
           <PWAInstallPrompt />
         </>
       ) : null}
+      <DynamicAppearanceController currentRoute={activeReviewRoute} />
       <AndroidReviewPrompt userId={user?.uid} ready={!loading && isOnboarded && online} routeName={activeReviewRoute} />
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </NavigationContainer>

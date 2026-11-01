@@ -10,7 +10,7 @@ import {nextLinkyHeadlineIndex} from '../shared/linky-reengagement.js';
 import {loadActivityLeague} from './_leagueSeo.js';
 import {publicEligible} from './_publicSeo.js';
 import {readMessageQuota} from './_linkyUsage.js';
-import {sendHighSignalEmail,emailStatus} from './_emailNotify.js';
+import {sendHighSignalEmail,sendComebackEmail,emailStatus} from './_emailNotify.js';
 import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,contributionInsight,containsCredential,normalizeUpdate} from '../shared/contributions.js';
 import {EXTERNAL_LEADS} from '../shared/builder-leads.js';
 const fields=['displayName','fullName','name','occupation','skills','industries','city','country','onboarded','deleted','banned','isBot','isVisible','isStealthMode','startupStage','remoteOnly','isVerified','profilePicUrl','photoURL','avatarUrl'];
@@ -234,9 +234,9 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
    const prior=stateOf(d.data(),now()),clock=localTime(now(),prior.prefs.timezone);
    const needsReview=(prior.prefs.friday===true&&prior.lastFriday!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Fri'&&clock.hour>=9&&clock.hour<19)||(prior.prefs.digest===true&&prior.lastDigest!==weekKey(now(),prior.prefs.timezone)&&clock.weekday==='Sun'&&clock.hour>=17&&clock.hour<20);
    const review=needsReview?await reviewFor(d.id,prior).catch(()=>null):null;
-   let delivery=null,prefs=null,notifyRef=null;
+   let delivery=null,deliveryFacts=null,prefs=null,notifyRef=null;
    await db.runTransaction(async tx=>{
-    delivery=null;prefs=null;notifyRef=null;
+    delivery=null;deliveryFacts=null;prefs=null;notifyRef=null;
     const fresh=await tx.get(d.ref),s=stateOf(fresh.data(),now());
     // Someone changed the account while the review was being read: use the next
     // run's review instead of delivering a stale one.
@@ -249,7 +249,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
     notifyRef=nr;
     // Build nudges keep the existing pause rule and private habit inbox.
     if(message.kind==='build'&&(habitState(contrib).nudges||[]).some(v=>v.key===message.key))return;
-    prefs={...s.prefs};delivery=message;s.lastDeliveryAt=now();
+    prefs={...s.prefs};delivery=message;deliveryFacts=facts;s.lastDeliveryAt=now();
     const sent=(s.retention&&s.retention.day===facts.localDay&&Array.isArray(s.retention.sent)?s.retention.sent:[]);
     s.retention={day:facts.localDay,sent:[...sent,{category:message.category,at:now()}].slice(-8)};
     if(message.kind==='build'){s.buildReminderCount=(s.buildReminderCount||0)+1;if(message.pause)s.prefs.dailyBuild=false;}
@@ -274,7 +274,10 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
    if(delivery){
     delivered++;
     if(delivery.category==='digest'||delivery.category==='weekly'){
-     sendHighSignalEmail(db,d.id,{receiptKey:'weekly_'+d.id+'_'+weekKey(now(),prefs.timezone),throttleMs:5*DAY,subject:'LINKUP · '+delivery.title,headline:delivery.title,body:delivery.body,ctaLabel:'View your weekly numbers',ctaUrl:delivery.url||'/trending-builders'}).catch(()=>null);
+     sendHighSignalEmail(db,d.id,{receiptKey:'weekly_'+d.id+'_'+weekKey(now(),prefs.timezone),throttleMs:5*DAY,subject:'LINKUP · '+delivery.title,headline:delivery.title,body:delivery.body,ctaLabel:'View your weekly numbers',ctaUrl:delivery.url||'/trending-builders'},{now:now()}).catch(()=>null);
+    }
+    if(delivery.category==='comeback'){
+     sendComebackEmail(db,d.id,{daysSinceActive:deliveryFacts?.daysSinceActive,lastActiveAt:deliveryFacts?.lastActiveAt,headline:delivery.title,body:delivery.body,ctaLabel:'Plug back into LINKUP',ctaUrl:delivery.url||'/ship?comeback=email',prefs},{now:now()}).catch(()=>null);
     }
     if(pushAllowed(prefs,delivery.kind)){
      const nr=delivery.kind==='build'?db.collection('builderContributions').doc(d.id):notifyRef;

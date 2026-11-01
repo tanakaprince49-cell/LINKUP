@@ -1,6 +1,6 @@
 import {useIsFocused} from '@react-navigation/native';
 import React,{useCallback,useEffect,useRef,useState} from 'react';
-import {ActivityIndicator,Alert,Linking,Platform,RefreshControl,ScrollView,StyleSheet,Switch,Text,TextInput,TouchableOpacity,View} from 'react-native';
+import {ActivityIndicator,Alert,Image,Linking,Platform,RefreshControl,ScrollView,StyleSheet,Switch,Text,TextInput,TouchableOpacity,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { CheckCircle2, ChevronRight, Users, Target, ArrowUpRight } from 'lucide-react-native';
@@ -13,6 +13,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import VerifiedBadge from '../components/VerifiedBadge';
 import LinkyRichText from '../components/LinkyRichText';
 import {builderCall,builderSection,BUILDER_SECTIONS,BuilderSection} from '../lib/builder';
+import {ICON_VARIANTS,ICON_VARIANT_IMAGES,getLatestResolvedAppearance,setSavedIconMode} from '../lib/dynamicAppearance';
 import {registerForPushNotificationsAsync,registerForWebNotificationsAsync} from '../lib/notifications';
 import {notifyUser} from '../lib/notify';
 const day=(time:number)=>new Date(time).toLocaleDateString();
@@ -116,6 +117,32 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
     {card('Helpful reminders, on your terms',<>{text('Up to four short daily messages, each about a different true thing: a due follow-up, your own rank and points, the empty fields on your profile, today’s calendar, or a real gap since your last build day. Never more than four, never the same idea twice in a day, at least two and a half hours apart, and never inside your quiet hours. Emails remain disabled until a verified provider is configured.')}{text('Linky welcome-back invitations start after three days away, rotate eight headlines and arrive at most once every three days. They never invent new matches, messages or activity.')}{text('Build nudges stop after an update, protected rest or weekly target and pause after three unanswered reminders.')}<View style={[styles.row,{justifyContent:'space-between'}]}><Text style={{color:textColor(dark),flex:1}}>Daily progress messages</Text><Switch accessibilityLabel="Daily progress messages" value={prefs.retention!==false} onValueChange={v=>setPrefs({...prefs,retention:v})}/></View>{Object.entries({welcomeBack:'Linky welcome-back invitations',dailyBuild:'Cheeky daily build reminders',reminders:'Due follow-up reminders',digest:'Sunday progress summary',friday:'Friday sourced opportunity drop',inApp:'In-app reminders',push:'Native push / foreground browser alerts',allowInvites:'Accept invitations from approved connections'}).map(([key,label])=><View key={key} style={[styles.row,{justifyContent:'space-between'}]}><Text style={{color:textColor(dark),flex:1}}>{label}</Text><Switch accessibilityLabel={label} value={!!prefs[key]} onValueChange={v=>setPrefs({...prefs,[key]:v})}/></View>)}
       <Field label="Daily build reminder hour (0–23)" value={String(prefs.buildHour??18)} onChange={(v:string)=>setPrefs({...prefs,buildHour:Number(v)})} max={2}/><Field label="IANA timezone" value={prefs.timezone||'UTC'} onChange={(v:string)=>setPrefs({...prefs,timezone:v})} max={80}/>{button('Use my device timezone',()=>setPrefs({...prefs,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'}),true)}
       <Field label="Quiet hours start (0–23)" value={String(prefs.quietStart??20)} onChange={(v:string)=>setPrefs({...prefs,quietStart:Number(v)})} max={2}/><Field label="Quiet hours end (0–23)" value={String(prefs.quietEnd??8)} onChange={(v:string)=>setPrefs({...prefs,quietEnd:Number(v)})} max={2}/>{button('Save preferences',()=>void savePrefs())}{text(Platform.OS==='web'?'Background web push is not configured. Browser alerts require permission, in-app reminders enabled and an open LINKUP tab.':'Push needs a supported native build, permission and a registered device. Delivery is not guaranteed.')}</>)}
+    {card('Dynamic Linky icon & occasion variants',<>
+      {text('Duolingo-style dynamic appearance updates your launcher icon on mobile and tab favicon + badge on web when your streak is on the line, unread signals arrive, you step away for 3+ days, or you hit a celebration milestone — and reverts to normal immediately when you jump back in.')}
+      <View style={styles.row}>
+        {([
+          ['auto','Auto (Smart occasions)'],
+          ['classic','Classic locked'],
+        ] as const).map(([modeId,label])=>{
+          const selected=(prefs.iconMode||'auto')===modeId;
+          return <TouchableOpacity key={modeId} accessibilityRole="button" accessibilityState={{selected}} onPress={()=>{const next={...prefs,iconMode:modeId};setPrefs(next);void setSavedIconMode(modeId);void builderCall('prefs',next).catch(()=>{});}} style={[styles.chip,selected&&styles.chipSelected]}><Text style={{fontWeight:'700',color:'#0A0B0D'}}>{label}</Text></TouchableOpacity>;
+        })}
+      </View>
+      {text(`Active right now: ${getLatestResolvedAppearance().meta.label} (${getLatestResolvedAppearance().state}) — tap any bundled occasion icon below to pin it anytime, or choose Auto above.`)}
+      <View style={{gap:10}}>
+        {ICON_VARIANTS.map(v=>{
+          const pinned=(prefs.iconMode||'auto')===v.id;
+          return <TouchableOpacity key={v.id} accessibilityRole="button" accessibilityState={{selected:pinned}} onPress={()=>{const next={...prefs,iconMode:v.id};setPrefs(next);void setSavedIconMode(v.id);void builderCall('prefs',next).catch(()=>{});}} style={{flexDirection:'row',alignItems:'center',gap:12,padding:10,borderRadius:16,borderWidth:pinned?2:1,borderColor:pinned?'#B7A400':(dark?'#383A42':'#DDDAD1'),backgroundColor:pinned?(dark?'#2B2814':'#FFFBEB'):(dark?'#1F222B':'#F8F7F2')}}>
+            <Image source={ICON_VARIANT_IMAGES[v.id]} style={{width:52,height:52,borderRadius:13,backgroundColor:v.themeColor}}/>
+            <View style={{flex:1,gap:2}}>
+              <Text style={{fontWeight:'800',fontSize:14,color:textColor(dark)}}>{v.label}{pinned?' · Pinned':''}</Text>
+              <Text style={{fontSize:11,fontWeight:'700',color:'#B78103'}}>{v.occasion}</Text>
+              <Text style={{fontSize:12,lineHeight:17,color:textColor(dark,'secondary')}}>{v.subtitle}</Text>
+            </View>
+          </TouchableOpacity>;
+        })}
+      </View>
+    </>)}
     {card('Your private context belongs to you',<>{text('Context, relationship notes and saved coaching reviews are private. Shared room messages and feedback remain visible to the people you shared them with. Clearing this workspace does not refill AI credits. Progress, rest protection and community-credit ledgers remain separate; resetting context cannot mint rewards.')}{button('Copy my private workspace export',()=>void act('export',{},r=>void Clipboard.setStringAsync(JSON.stringify({workspace:r.state,progress:r.contributions,habit:r.habit},null,2))),true)}{button('Clear private context, goals and reviews',()=>confirmed('Clear private workspace','Clear private context, goals, notes and reviews? Shared room content and public feedback are not deleted by this action.',()=>void act('forget')),true)}</>)}
    </>}
    <View style={{height:24}}/>

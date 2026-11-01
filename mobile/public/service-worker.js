@@ -106,10 +106,19 @@ self.addEventListener('push', (event) => {
     data = { body: event.data ? event.data.text() : '' };
   }
   if (!data || typeof data !== 'object') data = {};
+  const category = String(data.category || '');
+  const pushIcon = category === 'comeback'
+    ? appUrl('icons/icon-sad-inactive.png')
+    : category === 'league'
+      ? appUrl('icons/icon-champion-crown.png')
+      : category === 'build' || category === 'streak'
+        ? appUrl('icons/icon-streak-fire.png')
+        : appUrl('icons/icon-192.png');
+  self.navigator?.setAppBadge?.(1)?.catch?.(() => {});
   event.waitUntil(
     self.registration.showNotification(data.title || 'LINKUP', {
       body: data.body || 'You have a new LINKUP update.',
-      icon: appUrl('icons/icon-192.png'),
+      icon: pushIcon,
       badge: appUrl('icons/icon-192.png'),
       data: { url: notificationUrl(data.url) },
     })
@@ -118,6 +127,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  self.navigator?.clearAppBadge?.()?.catch?.(() => {});
   const targetUrl = notificationUrl(event.notification.data?.url);
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clients) => {

@@ -37,6 +37,7 @@
     },
     "plugins": [
       "./plugins/withAdiRegistration",
+      "./plugins/withDynamicLauncherIcon",
       [
         "expo-splash-screen",
         {
