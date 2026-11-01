@@ -23,7 +23,7 @@ async function seed(options={}){
 async function roomWithBob(service){const {roomId}=await service.handle('alice','roomCreate',{title:'An actual project',kind:'project'});await service.handle('alice','roomInvite',{roomId,targetUid:'bob'});return roomId;}
 test('builder collections are server-only even for their apparent owner',async()=>{
  await seed();const client=env.authenticatedContext('alice').firestore();await assertFails(getDoc(doc(client,'builderRooms/secret/messages/secret')));await assertFails(setDoc(doc(client,'builderRooms/secret/messages/secret'),{authorId:'alice',text:'Forged'}));
- for(const collection of ['builderStates','builderRooms','builderInvites','builderAsks','builderEvents','builderRates','builderScheduler']){
+ for(const collection of ['builderStates','builderRooms','builderInvites','builderAsks','builderEvents','builderRates','builderScheduler','webPushDevices','systemConfig','systemJobs','emailPrefs','emailReceipts','clientErrors','lvlupAiCache']){
   await assertFails(setDoc(doc(client,collection,'alice'),{ownerId:'alice',memberIds:['alice'],status:'accepted'}));
   await assertFails(getDoc(doc(client,collection,'alice')));
  }
@@ -434,3 +434,5 @@ test('unlisted, archived and banned groups cannot be browsed or joined',async()=
  assert.equal((await s.handle('mallory','groupDiscover',{})).groups.length,0);
  await assert.rejects(s.handle('mallory','groupJoin',{groupId}),/not available/);
 });
+
+test('bootstrap initializes builderStates once with member timezone',async()=>{const s=await seed();const a=await s.handle('alice','bootstrap',{timezone:'Africa/Harare'});assert.equal(a.created,true);assert.equal(a.timezone,'Africa/Harare');const b=await s.handle('alice','bootstrap',{timezone:'Europe/London'});assert.equal(b.created,false);assert.equal((await db.collection('builderStates').doc('alice').get()).data().prefs.timezone,'Africa/Harare');});

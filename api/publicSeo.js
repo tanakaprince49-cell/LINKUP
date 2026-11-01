@@ -3,6 +3,7 @@ import {serveContentSeo,contentSitemapIndex} from './_contentSeo.js';
 import {getNewsFeed} from './_newsFeed.js';
 import {selectProfileImage} from './_publicProfileImage.js';
 import { getDb } from './_firebaseAdmin.js';
+import crypto from 'node:crypto';
 import { aiText, aiReady } from './_gemini.js';
 import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, safeUrl, validId, publicEligible, projectProfile, profileUrl, renderProfile, renderDirectory, documentHtml, xmlIndex, xmlUrls } from './_publicSeo.js';
 
@@ -18,6 +19,41 @@ async function currentProfiles(db, ids) {
 // matching over REAL public-eligible builder profiles. Bounded scan, cached
 // JSON, no private fields ever (same projectProfile allowlist as /builders).
 const LVLUP_SCAN = 60;
+const LVLUP_MEM_CACHE = new Map();
+const LVLUP_FRESH_MS = 6 * 60 * 60 * 1000;
+const LVLUP_STALE_MS = 72 * 60 * 60 * 1000;
+
+async function readLvlupAiCache(db, key) {
+  const mem = LVLUP_MEM_CACHE.get(key);
+  if (mem && Date.now() - mem.at < LVLUP_STALE_MS) return mem;
+  if (!db || typeof db.collection !== 'function') return null;
+  try {
+    const ref = db.collection('lvlupAiCache').doc(key);
+    if (typeof ref.get !== 'function') return null;
+    const snap = await ref.get();
+    if (!snap?.exists) return null;
+    const d = snap.data();
+    if (!Array.isArray(d?.cards) || !d.cards.length || !d.at) return null;
+    if (Date.now() - Number(d.at) >= LVLUP_STALE_MS) return null;
+    const entry = { cards: d.cards, provider: d.provider || 'ai', at: Number(d.at) };
+    LVLUP_MEM_CACHE.set(key, entry);
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+async function writeLvlupAiCache(db, key, cards, provider) {
+  if (!Array.isArray(cards) || !cards.length) return;
+  const entry = { cards, provider: provider || 'ai', at: Date.now() };
+  if (LVLUP_MEM_CACHE.size > 100) LVLUP_MEM_CACHE.clear();
+  LVLUP_MEM_CACHE.set(key, entry);
+  if (!db || typeof db.collection !== 'function') return;
+  try {
+    const ref = db.collection('lvlupAiCache').doc(key);
+    if (typeof ref.set === 'function') await ref.set(entry);
+  } catch {}
+}
 // AI wins cache long (an hour at the edge): one good ranking survives a whole
 // demo even if the provider congests mid-presentation. Fallbacks NEVER cache —
 // the next request must retry live AI so recovery bites immediately.
@@ -425,10 +461,18 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         let picks = null, engine = 'linky-offline', aiNote = '', aiProvider = '', aiTried = '';
         const aiFn = ai || (aiReady() ? aiText : null);
         const pickLimit = view === 'companies' ? Math.min(10, limit * 2) : limit;
-        if (aiFn) {
+        const useProdCache = !ai;
+        const cacheKey = useProdCache
+          ? crypto.createHash('sha1').update(`${terms.join('|')}:${pickLimit}:${ranked.slice(0, 15).map(r => r.p.uid).join(',')}`).digest('hex')
+          : '';
+        const cachedAi = useProdCache ? await readLvlupAiCache(db, cacheKey) : null;
+        if (cachedAi && Date.now() - cachedAi.at < LVLUP_FRESH_MS) {
+          picks = cachedAi.cards; engine = 'linky-ai'; aiProvider = cachedAi.provider;
+        } else if (aiFn) {
           try {
             const aiOut = await lvlupAiPicks(aiFn, ranked.map(r => r.p), { terms, limit: pickLimit });
             picks = aiOut.cards; engine = 'linky-ai'; aiProvider = aiOut.provider || 'ai';
+            if (useProdCache) void writeLvlupAiCache(db, cacheKey, picks, aiProvider);
           } catch (err) {
             const m = String(err?.message || err);
             console.warn('[lvlup] AI ranking failed, deterministic fallback:', m);
@@ -439,7 +483,11 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
               : /high demand|overloaded|503|500|capacity/i.test(m) ? 'busy'
               : 'provider';
             aiTried = ['gemini', 'zen'].filter(x => m.toLowerCase().includes(x + ':')).join('+');
-            picks = null;
+            if (cachedAi) {
+              picks = cachedAi.cards; engine = 'linky-ai'; aiProvider = cachedAi.provider; aiNote = '';
+            } else {
+              picks = null;
+            }
           }
         } else { aiNote = aiReady() ? '' : 'no-key'; }
         if (!picks) {

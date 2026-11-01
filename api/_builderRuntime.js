@@ -5,6 +5,9 @@ import {validId,problem} from './_builderCore.js';
 import {awardWeeklyChampion,reconcileCampaignRewards} from './_campaignReward.js';
 import {awardSeasonChampions} from './_leagueChampions.js';
 import {sendExpoPush} from './_expoPush.js';
+import {emailStatus,verifyEmailUnsubscribe,unsubscribeUserEmail} from './_emailNotify.js';
+import {getVapidKeys,saveWebPushSubscription} from './_webPush.js';
+import {ensureMissingBuilderStates} from './_builderStatesBackfill.js';
 async function nativePush(uid,{title,body,url,campaign='builder_retention',category=''}){
  return sendExpoPush(getDb(),uid,{title,body,url,campaign,category,type:'builder'});
 }
@@ -21,9 +24,7 @@ export async function builderCron(input={}){
  try{reward=await awardWeeklyChampion(db);}catch{reward=null;}
  try{rewardSweep=await reconcileCampaignRewards(db);}catch{rewardSweep=null;}
  try{seasons=await awardSeasonChampions(db);}catch{seasons=null;}
- return {...result,reward,rewardSweep,seasons};
+ return {...result,reward,rewardSweep,seasons,email:builderEmailStatus()};
 }
-// Email is intentionally fail-closed until a verified provider is configured.
-// A future adapter must enforce opt-in, suppression, signed unsubscribe URLs,
-// authenticated domain setup and idempotency before enabling preferences.
-export const builderEmailStatus=()=>({available:false,reason:'Provider setup required'});
+export const builderEmailStatus=()=>{const s=emailStatus();return s.available?s:{available:false,reason:'Provider setup required'};};
+export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,ensureMissingBuilderStates};

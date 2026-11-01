@@ -1,4 +1,4 @@
-import {builderService,builderCron} from './_builderRuntime.js';
+import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,ensureMissingBuilderStates} from './_builderRuntime.js';
 // Linky endpoint: app actions, housekeeping cron, Telegram + WhatsApp webhooks.
 // One function on purpose (Vercel Hobby caps a deployment at 12).
 //
@@ -18,7 +18,7 @@ import {
   APP_URL, LIMITS, OFFERS, LOOP_CHOICES, answerLoop, approveLead, approveMeet, approveSquad, ask, audit, botUserFor, cancelMeet, cancelSquad,
   clearChat, consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
   meet, meetSquad, orderedCards, patchState, pickPerson, pointers, pullProfiles, reactionFor, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
-  setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret, pushNotify} from './_linky.js';
+  setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret, pushNotify, reportClientError } from './_linky.js';
 import { badgeLine } from './_proof.js';
 
 
@@ -49,10 +49,11 @@ function serviceAccountProject() {
 //   account of this Firebase project> (what the GitHub Action sends).
 async function cronAuthorized(req) {
   const token = cronToken();
-  const given = String(req.headers['x-linky-cron'] || '');
+  const given = String(req.headers['x-linky-cron'] || req.query?.key || '');
   if (token && given && safeEqual(given, token)) return true;
   const header = String(req.headers.authorization || '');
   const bearer = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (token && bearer && safeEqual(bearer, token)) return true;
   if (!bearer || bearer.length > 4096) return false;
   try {
     const info = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(bearer)}`, { signal: AbortSignal.timeout(6000) }).then((r) => r.json());
@@ -946,6 +947,9 @@ async function handleApp(req, res) {
         out = { ok: chatId ? await unlinkBot(channel, chatId) : true };
         break;
       }
+      case 'webPushKey': out = { publicKey: (await getVapidKeys(getDb())).publicKey }; break;
+      case 'webPushSubscribe': out = await saveWebPushSubscription(getDb(), uid, body.subscription); break;
+      case 'clientError': out = await reportClientError(uid, body); break;
       case 'limits': out = { LIMITS, OFFERS }; break;
       default: sendError(res, 400, `Unknown Linky action "${action}".`); return;
     }
@@ -972,6 +976,55 @@ export default async function handler(req, res) {
   const channel = String(req.query?.channel || '');
   if (channel === 'telegram') { if (req.method !== 'POST') { res.status(405).end(); return; } await handleTelegram(req, res); return; }
   if (channel === 'whatsapp') { await handleWhatsApp(req, res); return; }
+
+  if (String(req.query?.action || '') === 'unsubscribeEmail') {
+    const uid = String(req.query?.uid || '').trim();
+    const sig = String(req.query?.sig || '').trim();
+    if (!verifyEmailUnsubscribe(uid, sig)) { sendError(res, 400, 'Invalid unsubscribe link.'); return; }
+    try {
+      await unsubscribeUserEmail(getDb(), uid);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(200).send('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribed · LINKUP</title></head><body style="font-family:system-ui,sans-serif;max-width:480px;margin:48px auto;padding:24px;color:#0A0B0D"><h2>Unsubscribed</h2><p>You will no longer receive notification emails from LINKUP.</p><p><a href="https://www.linkupbuild.com/app">Return to LINKUP</a></p></body></html>');
+    } catch {
+      sendError(res, 503, 'Could not update email preferences.');
+    }
+    return;
+  }
+
+  if (String(req.query?.action || '') === 'hourlySweep') {
+    if (req.method !== 'GET' && req.method !== 'POST') { sendError(res, 405, 'Use GET or POST.'); return; }
+    if (!(await cronAuthorized(req))) { sendError(res, 401, 'Bad cron token.'); return; }
+    try {
+      const states = await ensureMissingBuilderStates(getDb(), { cap: 50, write: true }).catch(() => ({ created: 0 }));
+      const housekeeping = await runCron().catch(() => null);
+      let remindersDelivered = 0;
+      let lastSweep = null;
+      for (let page = 0; page < 4; page += 1) {
+        const pageRes = await builderCron({});
+        lastSweep = pageRes;
+        remindersDelivered += Number(pageRes?.delivered || 0);
+        if (!pageRes?.nextCursor) break;
+      }
+      const theses = ['', 'AI agents', 'SaaS', 'Fintech', 'Consumer', 'Climate', 'Dev tools'];
+      const warmedThesis = theses[new Date().getUTCHours() % theses.length];
+      const warmUrl = `https://www.linkupbuild.com/app/api/publicSeo?mode=lvlup${warmedThesis ? '&q=' + encodeURIComponent(warmedThesis) : ''}`;
+      await fetch(warmUrl, { signal: AbortSignal.timeout(8000) }).catch(() => null);
+      setCors(res);
+      res.status(200).json({
+        ok: true,
+        statesCreated: states.created || 0,
+        housekeeping,
+        remindersDelivered,
+        reward: lastSweep?.reward || null,
+        seasons: lastSweep?.seasons || null,
+        email: emailStatus(),
+        warmedThesis: warmedThesis || 'default',
+      });
+    } catch (err) {
+      sendError(res, 500, 'Hourly sweep failed.', String(err?.message || err));
+    }
+    return;
+  }
 
   if(String(req.query?.action || '') === 'builderCron') {
     if(req.method !== 'POST') { sendError(res,405,'Use POST.'); return; }
@@ -1007,6 +1060,7 @@ export default async function handler(req, res) {
         ok: true,
         ai: aiStatus(),
         search: { serpapi: !!process.env.SERPAPI_KEY },
+        email: emailStatus(),
         telegram: { bot: !!process.env.TELEGRAM_BOT_TOKEN, webhookSecretDerived: !!secret },
         aiFaults: await lastAiFault(),
       };

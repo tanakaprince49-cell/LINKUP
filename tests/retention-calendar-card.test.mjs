@@ -69,18 +69,18 @@ test('every message is built from facts: no fact, no message', () => {
 
 test('the planner never sends the same category twice a day, more than four times, or inside the gap', () => {
   const facts = { localDay: '2026-10-24', localHour: 9, weekDays: 1, weekTarget: 3, lastUpdateDay: '2026-10-23', totalUpdates: 5, streakDays: 1, todayRecorded: false, leagueParticipants: 4, topBuilderName: 'Bob', topBuilderPoints: 30 };
-  const first = nextRetention({ state: baseState(), facts });
+  const first = nextRetention({ state: baseState(), facts, now: at });
   assert.equal(first.category, 'kickoff');
   const sent = { ...baseState(), retention: { day: '2026-10-24', sent: [{ category: 'kickoff', at: at }] } };
-  assert.equal(nextRetention({ state: sent, facts }), null, 'same idea again in the same day');
+  assert.equal(nextRetention({ state: sent, facts, now: at }), null, 'same idea again in the same day');
   const four = { ...baseState(), retention: { day: '2026-10-24', sent: ['followup', 'kickoff', 'league', 'discover'].map(category => ({ category, at })) } };
-  assert.equal(nextRetention({ state: four, facts: { ...facts, localHour: 18 } }), null, 'four a day is the ceiling');
+  assert.equal(nextRetention({ state: four, facts: { ...facts, localHour: 18 }, now: at }), null, 'four a day is the ceiling');
   const spaced = { ...baseState(), lastDeliveryAt: at - 60_000 };
-  assert.equal(nextRetention({ state: spaced, facts }), null, 'no burst inside the minimum gap');
+  assert.equal(nextRetention({ state: spaced, facts, now: at }), null, 'no burst inside the minimum gap');
   const quiet = { ...baseState({ prefs: { quietStart: 8, quietEnd: 12 } }) };
-  assert.equal(nextRetention({ state: quiet, facts }), null, 'quiet hours win over every slot');
+  assert.equal(nextRetention({ state: quiet, facts, now: at }), null, 'quiet hours win over every slot');
   const optedOut = baseState({ prefs: { retention: false } });
-  assert.equal(nextRetention({ state: optedOut, facts }), null);
+  assert.equal(nextRetention({ state: optedOut, facts, now: at }), null);
   // The switch is reachable from the app, and off means off.
   assert.equal(DEFAULT_PREFS.retention, true);
   assert.equal(sanitizePrefs({ retention: false }).retention, false);

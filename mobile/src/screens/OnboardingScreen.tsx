@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,8 @@ import { notifyUser } from '../lib/notify';
 import { publicProfileLink } from '../lib/profileLinks';
 import { LINKUP_ROLE_OPTIONS, roleInfoFor } from '../lib/roles';
 import { seedConciergeWelcome } from '../lib/activation';
+import { builderCall } from '../lib/builder';
+import { linkyCall } from '../lib/linkyApi';
 
 // One-time "finish your profile" notice at the end of onboarding. The flag is
 // set the moment the notice is answered either way, so it never nags twice.
@@ -949,7 +951,98 @@ export default function OnboardingScreen({ navigation }: any) {
     ];
   }, [lookingFor, customLookingFor]);
 
+  const skipRoleResetRef = useRef(false);
+  const draftHydratedRef = useRef(false);
+  const draftStorageKey = user?.uid ? `@linkup/onboardingDraft:${user.uid}` : '';
+
   useEffect(() => {
+    if (!draftStorageKey || isOnboarded) {
+      draftHydratedRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    AsyncStorage.getItem(draftStorageKey)
+      .then((raw) => {
+        if (cancelled || !raw) return;
+        const d = JSON.parse(raw);
+        if (!d || typeof d !== 'object') return;
+        if (typeof d.role === 'string' && d.role) skipRoleResetRef.current = true;
+        if (typeof d.step === 'number' && d.step >= 0) setStep(d.step);
+        if (typeof d.displayName === 'string') setDisplayName(d.displayName);
+        if (typeof d.bio === 'string') setBio(d.bio);
+        if (typeof d.ageText === 'string') setAgeText(d.ageText);
+        if (typeof d.country === 'string') setCountry(d.country);
+        if (typeof d.city === 'string') setCity(d.city);
+        if (typeof d.profilePicUri === 'string' && d.profilePicUri.length < 150000) setProfilePicUri(d.profilePicUri);
+        if (typeof d.customSkillsText === 'string') setCustomSkillsText(d.customSkillsText);
+        if (typeof d.role === 'string') setRole(d.role);
+        if (Array.isArray(d.rolePicks)) setRolePicks(d.rolePicks);
+        if (typeof d.customRole === 'string') setCustomRole(d.customRole);
+        if (Array.isArray(d.lookingFor)) setLookingFor(d.lookingFor);
+        if (typeof d.customLookingFor === 'string') setCustomLookingFor(d.customLookingFor);
+        if (Array.isArray(d.industries)) setIndustries(d.industries);
+        if (Array.isArray(d.skills)) setSkills(d.skills);
+        if (typeof d.experience === 'string') setExperience(d.experience);
+        if (typeof d.workStyle === 'string') setWorkStyle(d.workStyle);
+        if (typeof d.commitmentLevel === 'string') setCommitmentLevel(d.commitmentLevel);
+        if (typeof d.startupStage === 'string') setStartupStage(d.startupStage);
+        if (typeof d.fundingStage === 'string') setFundingStage(d.fundingStage);
+        if (typeof d.availability === 'string') setAvailability(d.availability);
+        if (d.personalityAnswers && typeof d.personalityAnswers === 'object') setPersonalityAnswers(d.personalityAnswers);
+        if (d.roleAnswers && typeof d.roleAnswers === 'object') setRoleAnswers(d.roleAnswers);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) draftHydratedRef.current = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [draftStorageKey, isOnboarded]);
+
+  useEffect(() => {
+    if (!draftStorageKey || !draftHydratedRef.current || isOnboarded) return;
+    const timer = setTimeout(() => {
+      const payload = {
+        step,
+        displayName,
+        bio,
+        ageText,
+        country,
+        city,
+        profilePicUri: profilePicUri.length < 150000 ? profilePicUri : '',
+        customSkillsText,
+        role,
+        rolePicks,
+        customRole,
+        lookingFor,
+        customLookingFor,
+        industries,
+        skills,
+        experience,
+        workStyle,
+        commitmentLevel,
+        startupStage,
+        fundingStage,
+        availability,
+        personalityAnswers,
+        roleAnswers,
+      };
+      AsyncStorage.setItem(draftStorageKey, JSON.stringify(payload)).catch(() => {});
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [
+    draftStorageKey, isOnboarded, step, displayName, bio, ageText, country, city,
+    profilePicUri, customSkillsText, role, rolePicks, customRole, lookingFor,
+    customLookingFor, industries, skills, experience, workStyle, commitmentLevel,
+    startupStage, fundingStage, availability, personalityAnswers, roleAnswers,
+  ]);
+
+  useEffect(() => {
+    if (skipRoleResetRef.current) {
+      skipRoleResetRef.current = false;
+      return;
+    }
     setLookingFor([]);
     setCustomLookingFor('');
     setIndustries([]);
@@ -1762,12 +1855,16 @@ export default function OnboardingScreen({ navigation }: any) {
         },
       } as any;
       await setDoc(doc(db, 'users', user.uid), onboardingProfile, { merge: true });
+      if (draftStorageKey) void AsyncStorage.removeItem(draftStorageKey).catch(() => {});
+      const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } })();
+      void builderCall('bootstrap', { timezone: tz }).catch(() => {});
       await markOnboardingComplete(onboardingProfile);
       void seedConciergeWelcome(user.uid, onboardingProfile);
     } catch (e: any) {
       handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
       const code = String(e?.code || 'unknown-error');
       const detail = String(e?.message || '').slice(0, 160);
+      void linkyCall('clientError', { screen: 'OnboardingScreen', code, message: detail, step }).catch(() => {});
       notifyUser('Could not finish onboarding', `${code}${detail ? `: ${detail}` : ''}. Screenshot this and send it to support.`);
     } finally {
       setSaving(false);

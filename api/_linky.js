@@ -25,6 +25,8 @@ import { getAdmin, getDb } from './_firebaseAdmin.js';
 import { aiReady, aiStatus, aiText, geminiText } from './_gemini.js';
 import { findLeads, outreachDraft, safeLinkedinProfile } from './_serpapi.js';
 import { proofPoints, proofFromSnippet, badgeLine } from './_proof.js';
+import { sendExpoPush as sendSharedPush } from './_expoPush.js';
+import { sendHighSignalEmail } from './_emailNotify.js';
 
 export const LIMITS = {
   // All member messages count, including greetings, drafts and follow-up replies.
@@ -315,17 +317,17 @@ export const patchState = (uid, patch) => db().collection('linkyState').doc(uid)
 // ---------------------------------------------------------------- delivery
 async function sendExpoPush(uid, { title, body, data }) {
   try {
-    const snap = await db().collection('userPrivate').doc(uid).get();
-    const tokens = uniq((snap.get('pushTokens') || []).filter((t) => /^Expo(nent)?PushToken\[/.test(String(t))));
-    if (!tokens.length) return;
-    await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(tokens.map((to) => ({ to, title, body: String(body).slice(0, 180), data, sound: 'default', priority: 'high' }))),
-      signal: AbortSignal.timeout(8000),
+    return await sendSharedPush(db(), uid, {
+      title,
+      body,
+      url: data?.url || '/alerts',
+      type: data?.type || 'linky',
+      campaign: data?.campaign || '',
+      extraData: data || null,
     });
   } catch (err) {
     console.warn('[linky] push failed', err?.message || err);
+    return { sent: 0 };
   }
 }
 
@@ -557,7 +559,7 @@ export async function notifyUser(uid, { type, content, from, requestId, matchId,
 // push every few minutes instead of a buzz per bubble.
 const PUSH_THROTTLE_MS = 5 * 60 * 1000;
 export async function pushNotify(senderUid, { toUid = '', type = '', text = '', matchId = '' } = {}) {
-  if (!['message', 'match'].includes(type)) throw new Error('Unknown push type.');
+  if (!['message', 'match', 'request'].includes(type)) throw new Error('Unknown push type.');
   if (!isValidId(toUid) || toUid === senderUid) throw new Error('Invalid recipient.');
   const pair = [senderUid, toUid].sort().join('_');
   if (type === 'message') {
@@ -565,6 +567,9 @@ export async function pushNotify(senderUid, { toUid = '', type = '', text = '', 
     const snap = await db().collection('matches').doc(mid).get().catch(() => null);
     const users = snap?.exists ? (snap.data().userIds || snap.data().users || []) : [];
     if (!snap?.exists || !users.includes(senderUid) || !users.includes(toUid)) throw new Error('No shared conversation.');
+  } else if (type === 'request') {
+    const reqDoc = await db().collection('connectionRequests').doc(`${senderUid}_${toUid}`).get().catch(() => null);
+    if (!reqDoc?.exists || reqDoc.data().status !== 'pending') throw new Error('No pending connection request.');
   } else {
     const [a, b] = await Promise.all([
       db().collection('connectionRequests').doc(`${senderUid}_${toUid}`).get().catch(() => null),
@@ -580,13 +585,57 @@ export async function pushNotify(senderUid, { toUid = '', type = '', text = '', 
   const sender = await db().collection('users').doc(senderUid).get().catch(() => null);
   const name = String(sender?.exists ? (sender.data().displayName || sender.data().fullName || sender.data().name) : '').trim() || 'Someone';
   const preview = String(text || '').trim().slice(0, 120);
-  await sendExpoPush(toUid, {
-    title: type === 'message' ? name : 'New match!',
-    body: type === 'message' ? (preview || `${name} sent you a message.`) : `${name} is ready to talk. Say hello!`,
-    data: { notificationId: '', type: type === 'message' ? 'message' : 'match', url: matchId ? `/chat/${matchId}` : '/alerts', matchId: matchId || '', fromId: senderUid },
+  const title = type === 'message' ? name : type === 'request' ? 'New connection request' : 'New match!';
+  const body = type === 'message'
+    ? (preview || `${name} sent you a message.`)
+    : type === 'request'
+      ? (preview ? `${name}: ${preview}` : `${name} wants to connect with you on LINKUP.`)
+      : `${name} is ready to talk. Say hello!`;
+  const targetUrl = type === 'message' && matchId ? `/chat/${matchId}` : '/alerts';
+  const pushType = type === 'request' ? 'connection_request' : type;
+  const pushRes = await sendExpoPush(toUid, {
+    title,
+    body,
+    data: { notificationId: '', type: pushType, url: targetUrl, matchId: matchId || '', fromId: senderUid },
   });
+  if ((type === 'match' || type === 'request') && !(Number(pushRes?.sent) > 0)) {
+    await sendHighSignalEmail(db(), toUid, {
+      receiptKey: `social_${toUid}`,
+      subject: `LINKUP · ${title}`,
+      headline: title,
+      body,
+      ctaLabel: type === 'request' ? 'Review connection request' : 'Open conversation',
+      ctaUrl: targetUrl,
+    }).catch(() => null);
+  }
   await throttleRef.set({ at: Date.now(), by: senderUid }).catch(() => null);
-  return { pushed: true };
+  return { pushed: true, sent: Number(pushRes?.sent) || 0 };
+}
+
+const SCRUB_SECRET_RX = /(?:github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]+|AIza[0-9A-Za-z_-]{20,}|Bearer\s+[A-Za-z0-9._-]+|sk-[A-Za-z0-9_-]{16,})/g;
+
+export async function reportClientError(uid, { screen = '', code = '', message = '', step = null } = {}) {
+  if (!isValidId(uid)) throw new Error('Invalid user.');
+  const hourBucket = Math.floor(Date.now() / 3600000);
+  const rateRef = db().collection('clientErrorRates').doc(`${uid}_${hourBucket}`);
+  const rateSnap = await rateRef.get().catch(() => null);
+  const count = Number(rateSnap?.exists ? rateSnap.data()?.count : 0) || 0;
+  if (count >= 5) return { logged: false, throttled: true };
+  await rateRef.set({ count: count + 1, updatedAt: Date.now() }, { merge: true }).catch(() => null);
+  const safeScreen = String(screen || 'unknown').replace(/[^A-Za-z0-9_./-]/g, '').slice(0, 80);
+  const safeCode = String(code || 'unknown').replace(SCRUB_SECRET_RX, '[redacted]').slice(0, 80);
+  const safeMsg = String(message || '').replace(SCRUB_SECRET_RX, '[redacted]').slice(0, 300);
+  const safeStep = Number.isFinite(Number(step)) ? Math.max(0, Math.min(50, Math.floor(Number(step)))) : null;
+  await db().collection('clientErrors').add({
+    uid,
+    screen: safeScreen,
+    code: safeCode,
+    message: safeMsg,
+    step: safeStep,
+    createdAt: new Date().toISOString(),
+    at: Date.now(),
+  });
+  return { logged: true };
 }
 
 // ---------------------------------------------------------------- ask parsing (no AI)

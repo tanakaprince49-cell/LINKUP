@@ -482,6 +482,8 @@ function AppContent() {
 
     if (targetUrl === '/ship' || targetUrl.startsWith('/ship?')) { navigationRef.navigate('ShipLog'); return; }
 
+    if (targetUrl === '/campaigns' || targetUrl.startsWith('/campaigns?')) { navigationRef.navigate('Main', { screen: 'Campaigns' }); return; }
+
     if (targetUrl.startsWith('/builder') || data?.type === 'builder') {
       const section = new URL(targetUrl || '/builder', 'https://www.linkupbuild.com').searchParams.get('section') || 'Today';
       navigationRef.navigate('BuilderWorkspace', {section});
@@ -542,13 +544,23 @@ function AppContent() {
         .catch((error) => {
           console.warn('Notifications setup unavailable:', error);
         });
+      if (isOnboarded) {
+        import('./src/lib/builder')
+          .then(({ builderCall }) => {
+            if (cancelled) return;
+            let tz = 'UTC';
+            try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch {}
+            return builderCall('bootstrap', { timezone: tz });
+          })
+          .catch(() => {});
+      }
     });
 
     return () => {
       cancelled = true;
       cancelStartupTask();
     };
-  }, [user?.uid]);
+  }, [user?.uid, isOnboarded]);
 
   React.useEffect(() => {
     if (Platform.OS === 'web') return;

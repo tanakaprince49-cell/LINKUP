@@ -28,10 +28,18 @@ console.log(`housekeeping: pendingIntros=${json?.pendingIntros} expiredIntros=${
 // Native push and in-app builder reminders run under the same authenticated
 // scheduler. Each call advances a persisted cursor; later users cannot starve.
 let delivered=0;
+let emailMode='disabled';
 for(let page=0;page<20;page++) {
  const response=await fetch(`${BASE}/api/linky?action=builderCron`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(70000)});
  if(!response.ok)throw new Error(`Builder reminder job failed (${response.status})`);
  const result=await response.json();delivered+=Number(result.delivered||0);
+ if(result?.email?.available)emailMode=result.email.provider||'enabled';
  if(!result.nextCursor)break;
 }
-console.log(`builder reminders delivered=${delivered}; email=disabled`);
+console.log(`builder reminders delivered=${delivered}; email=${emailMode}`);
+
+// Keep the LvlUp partnership demo AI cache warm across rotating theses.
+const theses=['','AI agents','SaaS','Fintech','Consumer','Climate','Dev tools'];
+const thesis=theses[new Date().getUTCHours()%theses.length];
+const warmRes=await fetch(`https://www.linkupbuild.com/app/api/publicSeo?mode=lvlup${thesis?'&q='+encodeURIComponent(thesis):''}`,{signal:AbortSignal.timeout(15000)}).catch(()=>null);
+console.log(`lvlup warm (${thesis||'default'}): HTTP ${warmRes?.status||'skipped'}`);

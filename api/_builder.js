@@ -10,6 +10,7 @@ import {nextLinkyHeadlineIndex} from '../shared/linky-reengagement.js';
 import {loadActivityLeague} from './_leagueSeo.js';
 import {publicEligible} from './_publicSeo.js';
 import {readMessageQuota} from './_linkyUsage.js';
+import {sendHighSignalEmail,emailStatus} from './_emailNotify.js';
 import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,contributionInsight,containsCredential,normalizeUpdate} from '../shared/contributions.js';
 import {EXTERNAL_LEADS} from '../shared/builder-leads.js';
 const fields=['displayName','fullName','name','occupation','skills','industries','city','country','onboarded','deleted','banned','isBot','isVisible','isStealthMode','startupStage','remoteOnly','isVerified','profilePicUrl','photoURL','avatarUrl'];
@@ -89,7 +90,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   const rooms=[];for(const d of r.docs){try{const room=await roomFor(uid,d.id);rooms.push({id:room.id,title:room.title,kind:room.kind,updatedAt:room.updatedAt,archived:room.archived,ownerId:room.ownerId,memberCount:room.memberIds.length});}catch{}}
   const invitations=[];for(const d of i.docs){const v=d.data();if(v.status!=='pending'||v.expiresAt<=now())continue;try{await connectable(uid,v.senderId);const room=await db.collection('builderRooms').doc(v.roomId).get();if(room.exists&&!room.data().archived&&room.data().memberIds.includes(v.senderId))invitations.push({id:d.id,roomId:v.roomId,title:room.data().title,kind:room.data().kind,senderId:v.senderId});}catch{}}
   const quota=await readMessageQuota(db,uid,{plus:await plus(uid,me.data()),now:now()});
-  return {state:s,brief:brief(s,now(),rooms,invitations),rooms,invitations,messageQuota:quota,emailAvailable:false};
+  return {state:s,brief:brief(s,now(),rooms,invitations),rooms,invitations,messageQuota:quota,emailAvailable:emailStatus().available};
  }
  function contributionHistory(c,person){
   const legacy=(Array.isArray(person.shipLogs)?person.shipLogs:[]).slice(0,20).map(u=>({id:clean(u.id,128),text:clean(u.text,180),link:safeLink(u.link),createdAt:clean(u.createdAt,32)})).filter(u=>u.id&&u.text);
@@ -149,7 +150,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   if(op==='shipUpdate')return publishContribution(uid,input);
   if(['home','visit'].includes(op))return loadHome(uid,op);
   if(op==='context'){await change(uid,s=>{const context=contextOf(input);if(context.project!==s.context.project||context.goal!==s.context.goal||context.needs!==s.context.needs)s.feedback={};s.context=context;});await event(uid,'context_set');return {ok:true};}
-  if(op==='prefs'){await change(uid,s=>{const before=s.prefs.dailyBuild;s.prefs=sanitizePrefs(input,s.prefs);if('push'in input)s.prefs.pushSetOnce=true;if(s.prefs.dailyBuild&&!before){s.prefs.buildOptInDay=contributionDay(now());s.buildReminderCount=0;}});return {ok:true,emailAvailable:false};}
+  if(op==='prefs'){await change(uid,s=>{const before=s.prefs.dailyBuild;s.prefs=sanitizePrefs(input,s.prefs);if('push'in input)s.prefs.pushSetOnce=true;if(s.prefs.dailyBuild&&!before){s.prefs.buildOptInDay=contributionDay(now());s.buildReminderCount=0;}});return {ok:true,emailAvailable:emailStatus().available};}
   if(op==='goal'){
    const text=requireText(input.text,300,4);await change(uid,s=>{const week=weekKey(now(),s.prefs.timezone);s.goals=[{id:id(),text,week,at:now(),doneAt:0},...s.goals.filter(g=>g.week!==week||g.doneAt)].slice(0,24);});await event(uid,'goal_set');return {ok:true};
   }
@@ -207,6 +208,11 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   if(op==='export'){const s=await state(uid);return {state:s,contributions:await contributionData(uid,uid),habit:await habits.read(uid),notice:'Shared room content is visible to accepted members. Private building context and notes are never part of the public profile.'};}
   if(op==='forget'){
    await change(uid,s=>{const prefs={...s.prefs,reminders:false,digest:false,friday:false,push:false,dailyBuild:false};Object.keys(s).forEach(k=>delete s[k]);Object.assign(s,freshState(now()),{prefs});});return {ok:true,notice:'Private context, notes and saved reviews cleared. Shared rooms and posted feedback remain shared; archive rooms or close requests separately.'};
+  }
+  if(op==='bootstrap'){
+   let tz='UTC';try{if(typeof input.timezone==='string'&&input.timezone.trim())tz=sanitizePrefs({timezone:input.timezone.trim()}).timezone;}catch{tz='UTC';}
+   let created=false;await db.runTransaction(async tx=>{const d=await tx.get(ref(uid));if(!d.exists){const fresh=freshState(now());fresh.prefs.timezone=tz;tx.set(ref(uid),fresh);created=true;}});
+   return {ok:true,created,timezone:tz};
   }
   throw problem('Unsupported builder action.');
  }
@@ -267,6 +273,9 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
    });
    if(delivery){
     delivered++;
+    if(delivery.category==='digest'||delivery.category==='weekly'){
+     sendHighSignalEmail(db,d.id,{receiptKey:'weekly_'+d.id+'_'+weekKey(now(),prefs.timezone),throttleMs:5*DAY,subject:'LINKUP · '+delivery.title,headline:delivery.title,body:delivery.body,ctaLabel:'View your weekly numbers',ctaUrl:delivery.url||'/trending-builders'}).catch(()=>null);
+    }
     if(pushAllowed(prefs,delivery.kind)){
      const nr=delivery.kind==='build'?db.collection('builderContributions').doc(d.id):notifyRef;
      const patch=v=>delivery.kind==='build'?{buildPushStatus:{key:delivery.key,...v}}:v;

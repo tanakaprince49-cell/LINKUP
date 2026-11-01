@@ -103,6 +103,8 @@ function lvlupUrl(params: Record<string, string>) {
   return `${linkupWebBaseUrl()}/api/publicSeo?${qs}`;
 }
 
+const lvlupClientCache = new Map<string, any>();
+
 function initials(name: string) {
   return name
     .split(' ')
@@ -133,16 +135,26 @@ export default function LvlupDemoScreen() {
 
   const search = useCallback(async (q: string, v: 'builders' | 'companies' = 'builders') => {
     const query = q.trim();
+    const cacheKey = `${v}:${query.toLowerCase()}`;
     setActiveThesis(q);
-    setSearching(true);
     setSearchError(false);
+    const hit = lvlupClientCache.get(cacheKey);
+    if (hit) {
+      if (v === 'companies') setCompanies(hit as LvlupCompaniesResponse);
+      else setResults(hit as LvlupSearchResponse);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
     try {
       const params: Record<string, string> = query ? { q: query.slice(0, 60), limit: '6' } : { limit: '6' };
       if (v === 'companies') params.view = 'companies';
       const res = await fetch(lvlupUrl(params));
       if (!res.ok) throw new Error(`lvlup search ${res.status}`);
-      if (v === 'companies') setCompanies((await res.json()) as LvlupCompaniesResponse);
-      else setResults((await res.json()) as LvlupSearchResponse);
+      const json = await res.json();
+      lvlupClientCache.set(cacheKey, json);
+      if (v === 'companies') setCompanies(json as LvlupCompaniesResponse);
+      else setResults(json as LvlupSearchResponse);
     } catch {
       setSearchError(true);
       if (v === 'companies') setCompanies(null);
@@ -154,20 +166,43 @@ export default function LvlupDemoScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      // Weekly-digest preview loads on mount with the default thesis.
-      try {
-        const res = await fetch(lvlupUrl({ digest: '1', limit: '5' }));
-        if (!res.ok) throw new Error(`lvlup digest ${res.status}`);
-        if (!cancelled) setDigest((await res.json()) as LvlupDigestResponse);
-      } catch {
-        if (!cancelled) setDigestError(true);
-      }
-      // Default search: top generalist builders, no thesis entered yet.
-      if (!cancelled) await search('');
-    })();
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    void Promise.all([
+      (async () => {
+        const cachedDigest = lvlupClientCache.get('digest:default');
+        if (cachedDigest) {
+          if (!cancelled) setDigest(cachedDigest as LvlupDigestResponse);
+          return;
+        }
+        try {
+          const res = await fetch(lvlupUrl({ digest: '1', limit: '5' }));
+          if (!res.ok) throw new Error(`lvlup digest ${res.status}`);
+          const json = await res.json();
+          lvlupClientCache.set('digest:default', json);
+          if (!cancelled) setDigest(json as LvlupDigestResponse);
+        } catch {
+          if (!cancelled) setDigestError(true);
+        }
+      })(),
+      search(''),
+    ]).then(() => {
+      if (cancelled) return;
+      // Stagger pre-warming of top thesis chips so partner demo clicks render instantly without bursting RPM.
+      THESIS_CHIPS.slice(0, 3).forEach((chip, idx) => {
+        const key = `builders:${chip.toLowerCase()}`;
+        if (lvlupClientCache.has(key)) return;
+        timers.push(setTimeout(() => {
+          if (cancelled || lvlupClientCache.has(key)) return;
+          fetch(lvlupUrl({ q: chip, limit: '6' }))
+            .then((r) => (r.ok ? r.json() : null))
+            .then((j) => { if (j) lvlupClientCache.set(key, j); })
+            .catch(() => {});
+        }, (idx + 1) * 1800));
+      });
+    });
     return () => {
       cancelled = true;
+      timers.forEach(clearTimeout);
     };
   }, [search]);
 

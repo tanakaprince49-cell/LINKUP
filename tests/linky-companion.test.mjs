@@ -31,7 +31,7 @@ function core(db,{ai=false,aiMode="search",externalSearch=null,prompts=null}={})
   './_linkyWorkbench.js':workbench,'node:crypto':crypto,'./_linkyQuality.js':quality,'./_linkyCompanion.js':companion,'./_publicSeo.js':{publicEligible},'./_linkyUsage.js':usage,
   './_firebaseAdmin.js':{getDb:()=>db,getAdmin:()=>({firestore:{FieldValue:{serverTimestamp:()=>Date.now(),delete:()=>null},Timestamp:{fromMillis:ms=>ms}}})},
   './_gemini.js':{aiReady:()=>ai,aiStatus:()=>({gemini:{},zen:{}}),aiText:async(prompt)=>{prompts?.push(prompt);return {text:JSON.stringify({mode:aiMode,picks:[{uid:'irrelevant',score:100}],reply:'I found ten perfect matches'})}},geminiText:async()=>'{"picks":[{"uid":"irrelevant","score":100}]}'},
-  './_serpapi.js':{safeLinkedinProfile,findLeads:externalSearch || (async()=>({leads:[],searches:0,note:'not-configured'}))},'./_proof.js':{proofPoints:()=>[],badgeLine:()=>''}
+  './_serpapi.js':{safeLinkedinProfile,findLeads:externalSearch || (async()=>({leads:[],searches:0,note:'not-configured'}))},'./_expoPush.js':{sendExpoPush:async()=>({sent:0})},'./_emailNotify.js':{sendHighSignalEmail:async()=>({sent:false})},'./_proof.js':{proofPoints:()=>[],badgeLine:()=>''}
  };
  const code=ts.transpileModule(read('api/_linky.js'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
  vm.runInNewContext(code,{module,exports:module.exports,require:name=>{assert.ok(name in mocks,name);return mocks[name];},console,process:{env:{}},Date,Set,Map,URL,Buffer,setTimeout,clearTimeout});

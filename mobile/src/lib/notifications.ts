@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { MOBILE_NOTIFICATION_QUERY_LIMIT } from './profilePerformance';
+import { linkyCall } from './linkyApi';
 
 let notificationHandlerReady = false;
 let lastInAppSoundAt = 0;
@@ -294,6 +295,45 @@ export async function registerForPushNotificationsAsync(userId: string) {
   return token;
 }
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = typeof window !== 'undefined' && typeof window.atob === 'function' ? window.atob(base64) : '';
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+async function syncWebPushSubscriptionAsync() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+    ]);
+    if (!reg || !(reg as ServiceWorkerRegistration).pushManager) return;
+    const swReg = reg as ServiceWorkerRegistration;
+    let sub = await swReg.pushManager.getSubscription();
+    if (!sub) {
+      const keyRes = await linkyCall('webPushKey').catch(() => null);
+      const publicKey = typeof keyRes?.publicKey === 'string' ? keyRes.publicKey.trim() : '';
+      if (!publicKey) return;
+      sub = await swReg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+    }
+    if (sub) {
+      await linkyCall('webPushSubscribe', { subscription: sub.toJSON() }).catch(() => undefined);
+    }
+  } catch (err) {
+    console.warn('Web Push subscription skipped:', err);
+  }
+}
+
 export async function registerForWebNotificationsAsync(userId: string) {
   if (!userId || Platform.OS !== 'web' || typeof window === 'undefined' || !('Notification' in window)) {
     return;
@@ -316,6 +356,10 @@ export async function registerForWebNotificationsAsync(userId: string) {
       },
       { merge: true }
     ).catch(() => undefined);
+
+    if (permission === 'granted') {
+      void syncWebPushSubscriptionAsync();
+    }
 
     return permission;
   } catch (error) {

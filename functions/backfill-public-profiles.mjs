@@ -39,6 +39,7 @@
 import { createHash } from 'node:crypto';
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { shouldRunDailyJob, markDailyJobRan } from './_dailyGate.mjs';
 
 if (!getApps().length) {
   initializeApp({ credential: applicationDefault(), projectId: 'linkup-e0906' });
@@ -47,6 +48,11 @@ const db = getFirestore();
 const WRITE = process.argv.includes('--write');
 const FORCE = process.argv.includes('--all');
 const NO_UPLOAD = process.argv.includes('--no-upload');
+const DAILY = process.argv.includes('--daily');
+
+if (!(await shouldRunDailyJob(db, 'backfill-public-profiles', { daily: DAILY }))) {
+  process.exit(0);
+}
 
 // Same constants as mobile/src/lib/imagekitUpload.ts (public key + signer).
 const IMAGEKIT_PUBLIC_KEY = process.env.IMAGEKIT_PUBLIC_KEY || 'public_nCVzK4bEGR6VH/FGJHDvjqB5urQ=';
@@ -56,9 +62,27 @@ const MAX_UPLOADS_PER_RUN = Number(process.env.MAX_AVATAR_UPLOADS || 40);
 
 const sha1 = (value) => createHash('sha1').update(value).digest('hex');
 
-/** Upload a base64 image exactly like the phone does; returns the hosted URL. */
+let cachedSaToken = '';
+let cachedSaExp = 0;
+async function saBearerHeader() {
+  if (cachedSaToken && Date.now() < cachedSaExp) return { Authorization: `Bearer ${cachedSaToken}` };
+  const cred = applicationDefault();
+  const { access_token: token } = await cred.getAccessToken();
+  if (!token) throw new Error('could not mint SA access token');
+  cachedSaToken = token;
+  cachedSaExp = Date.now() + 30 * 60 * 1000;
+  return { Authorization: `Bearer ${token}` };
+}
+
+const VALID_DATA_IMAGE_RX = /^data:image\/(?:jpe?g|png|webp|gif);base64,[A-Za-z0-9+/=\s]{32,}$/i;
+
+/** Upload a base64 image through the signed ImageKit lane; returns hosted URL. */
 async function hostImage(fileName, dataUri) {
-  const authRes = await fetch(IMAGEKIT_AUTH_ENDPOINT);
+  if (!VALID_DATA_IMAGE_RX.test(String(dataUri || '').trim())) {
+    throw new Error('unsupported or malformed data:image payload');
+  }
+  const headers = await saBearerHeader();
+  const authRes = await fetch(IMAGEKIT_AUTH_ENDPOINT, { headers, signal: AbortSignal.timeout(10000) });
   if (!authRes.ok) throw new Error(`signer responded ${authRes.status}`);
   const { token, expire, signature } = await authRes.json();
   if (!token || !expire || !signature) throw new Error('signer returned no signature');
@@ -291,3 +315,4 @@ for (const userDoc of users.docs) {
 }
 await flush();
 console.log(`\n${WRITE ? 'Done' : 'Would do'}: create ${created}, refresh ${refreshed}, hide ${hidden}, photos hosted ${uploaded}${uploadFailed ? ` (${uploadFailed} failed)` : ''}; ${current} already current.`);
+await markDailyJobRan(db, 'backfill-public-profiles', { daily: DAILY, write: WRITE });

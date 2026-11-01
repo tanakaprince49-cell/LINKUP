@@ -7,6 +7,7 @@ import {useTheme} from '../contexts/ThemeContext';
 import {COLORS,appBackground,textColor} from '../theme/theme';
 import {normalizeShipLogs} from '../lib/dailyLoop';
 import MomentumShareCard from '../components/MomentumShareCard';
+import {shareMomentumCard} from '../lib/momentumShare';
 import {builderCall,coachRequestKey} from '../lib/builder';
 import BuildHabitCard from '../components/BuildHabitCard';
 import ContributionCalendar from '../components/ContributionCalendar';
@@ -27,7 +28,7 @@ export default function ShipLogScreen({navigation}:any){
   if(!pending.current||pending.current.text!==line||pending.current.link!==url)pending.current={key:coachRequestKey(),text:line,link:url};
   setSaving(true);setError('');const g=generation.current;
   try{const r=await builderCall('shipUpdate',pending.current);if(g!==generation.current)return;
-   setReceipt(r);const snap={days:r.days,points:r.contributionPoints,totalUpdates:r.totalUpdates,today:r.today||r.day};setSummary(snap);
+   setReceipt(r);const snap={days:r.days,points:r.contributionPoints,totalUpdates:r.totalUpdates,today:r.today||r.day,publicMomentum:summary?.publicMomentum===true};setSummary(snap);
    setLogs(r.shipLogs);
    setText('');setLink('');pending.current=null;Keyboard.dismiss();list.current?.scrollToOffset({offset:0,animated:true});
   }catch(e:any){if(g===generation.current)setError(e.message||'Could not record your update. Retry safely: the same request cannot earn points twice.');}
@@ -42,7 +43,10 @@ export default function ShipLogScreen({navigation}:any){
     {receipt&&<View accessibilityRole="alert" style={[styles.insight,{backgroundColor:dark?'#292B31':'#FFF8B8',borderColor:dark?'#AA9900':'#D8CB69'}]}>
      <View style={styles.row}><Text style={[styles.insightTitle,{color:ink}]}>Linky</Text><VerifiedBadge size={16}/><Text style={[styles.reward,{color:ink}]}>+{receipt.pointsAwarded} contribution pts{receipt.replayed?' · already recorded':''}</Text></View>
      <Text style={[styles.insightText,{color:ink}]}>{receipt.insight}</Text>{[1,3,7,14,30,50,100,365].includes(receipt.habit?.totalUpdates)&&<Text style={{color:ink,fontWeight:'900'}}>Milestone unlocked · {receipt.habit.totalUpdates} recorded build {receipt.habit.totalUpdates===1?'day':'days'}</Text>}<Text style={{color:muted,fontSize:11}}>Instant topic-based coaching · no chat credit used · not a code audit</Text>
-     <TouchableOpacity accessibilityRole="button" onPress={()=>navigation.navigate('TrendingBuilders')}><Text style={{color:ink,fontWeight:'800',marginTop:6}}>Take it to the Builder League →</Text></TouchableOpacity>
+     <View style={{flexDirection:'row',flexWrap:'wrap',gap:10,alignItems:'center',marginTop:6}}>
+      <TouchableOpacity accessibilityRole="button" onPress={()=>{if(user?.uid)void shareMomentumCard(user.uid).catch((e:any)=>setError(e?.message||'Enable public Momentum below to share your card.'));}} style={{backgroundColor:'#0A0B0D',paddingHorizontal:14,paddingVertical:9,borderRadius:12}}><Text style={{color:'#FBE618',fontWeight:'800',fontSize:13}}>Share my streak card</Text></TouchableOpacity>
+      <TouchableOpacity accessibilityRole="button" onPress={()=>navigation.navigate('TrendingBuilders')}><Text style={{color:ink,fontWeight:'800'}}>Take it to the Builder League →</Text></TouchableOpacity>
+     </View>
     </View>}
     <View style={[styles.composer,panel]}>
      <Text style={[styles.label,{color:ink}]}>What moved forward?</Text>

@@ -15,6 +15,7 @@ import { COLORS, appBackground, hairline, liquidGlass, textColor } from '../them
 import { respondToConnectionRequest } from '../lib/connectionRequests';
 import { notifyUser } from '../lib/notify';
 import { challengeId as makeChallengeId } from '../lib/gameChallenges';
+import { shareLeagueCard } from '../lib/momentumShare';
 import { MOBILE_LIST_IMAGE_LIMIT, MOBILE_NOTIFICATION_QUERY_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X, Megaphone, ThumbsDown, Trophy } from 'lucide-react-native';
 import ScreenHeader from '../components/ScreenHeader';
@@ -236,6 +237,22 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         {notification.note ? (
           <View style={[styles.noteBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(251,230,24,0.16)' }]}>
             <Text style={[styles.noteText, { color: textColor(isDark) }]}>“{notification.note}”</Text>
+          </View>
+        ) : null}
+        {notification.type === 'league' ? (
+          <View style={{ flexDirection: 'row', marginTop: 8 }}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              activeOpacity={0.88}
+              onPress={(event: any) => {
+                event?.stopPropagation?.();
+                const k = (notification as any).kind;
+                void shareLeagueCard(k === 'month' || k === 'year' ? k : 'week').catch(() => {});
+              }}
+              style={{ backgroundColor: '#FBE618', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10 }}
+            >
+              <Text style={{ color: '#0A0B0D', fontSize: 12, fontWeight: '800' }}>Share win card</Text>
+            </TouchableOpacity>
           </View>
         ) : null}
         {isRequest ? (

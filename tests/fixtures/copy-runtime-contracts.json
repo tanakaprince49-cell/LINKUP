@@ -2411,6 +2411,12 @@
       "getItem"
     ],
     [
+      "getItem"
+    ],
+    [
+      "setItem"
+    ],
+    [
       "replace",
       "Main"
     ],
@@ -2425,6 +2431,9 @@
     [
       "doc",
       "users"
+    ],
+    [
+      "removeItem"
     ],
     [
       "setItem",

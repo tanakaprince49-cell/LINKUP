@@ -209,6 +209,7 @@ export async function requestConnection({
     isRead: false,
     timestamp: serverTimestamp(),
   });
+  linkyCall('pushNotify', { toUid: recipientId, type: 'request', text: safeMessage }).catch(() => {});
 
   // Confirm the send in the SENDER's notifications — sending a request
   // should never feel like shouting into the void.

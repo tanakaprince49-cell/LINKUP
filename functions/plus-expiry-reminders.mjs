@@ -23,6 +23,7 @@
  */
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { shouldRunDailyJob, markDailyJobRan } from './_dailyGate.mjs';
 
 if (!getApps().length) {
   initializeApp({ credential: applicationDefault(), projectId: 'linkup-e0906' });
@@ -30,6 +31,11 @@ if (!getApps().length) {
 const db = getFirestore();
 
 const WRITE = process.argv.includes('--write');
+const DAILY = process.argv.includes('--daily');
+
+if (!(await shouldRunDailyJob(db, 'plus-expiry-reminders', { daily: DAILY }))) {
+  process.exit(0);
+}
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Which tiers to remind about and how they read in copy. */
@@ -145,3 +151,4 @@ for (const docSnap of snap.docs) {
 console.log(
   `\n${WRITE ? 'Sent' : 'Would send'} ${sent} reminder(s). Scanned ${scanned} tier entr${scanned === 1 ? 'y' : 'ies'}, skipped ${skipped} inactive.`
 );
+await markDailyJobRan(db, 'plus-expiry-reminders', { daily: DAILY, write: WRITE });

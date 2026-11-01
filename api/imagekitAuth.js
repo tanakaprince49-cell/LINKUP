@@ -1,14 +1,7 @@
 // ImageKit upload signer — Vercel serverless function.
-// The app calls this before uploading a profile photo; it returns the
-// short-lived (40 min) signature params ImageKit requires for client-side
-// uploads. Keeps the PRIVATE key server-side; the client only ever sees the
-// public key + one-shot signatures.
-//
-// Env required (Vercel project settings):
-//   IMAGEKIT_PRIVATE_KEY=private_xxx
-//
-// Auth: a Firebase ID token is verified before signing (see handler below).
-
+// Accepts either a signed-in Firebase user ID token (client uploads) OR a
+// Google Service Account OAuth token belonging to this Firebase project
+// (server-side publicProfiles photo hosting sweep).
 import crypto from 'node:crypto';
 import { verifyRequestUser } from './_firebaseAdmin.js';
 
@@ -18,6 +11,29 @@ const setCors = (res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 };
 
+function serviceAccountProject() {
+  try {
+    const raw = String(process.env.FIREBASE_SERVICE_ACCOUNT || '').trim();
+    if (raw) return String(JSON.parse(raw).project_id || '');
+  } catch {}
+  return String(process.env.FIREBASE_PROJECT_ID || 'linkup-e0906');
+}
+
+async function serviceAccountAuthorized(req) {
+  const header = String(req.headers?.authorization || '');
+  const bearer = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!bearer || bearer.length > 4096) return false;
+  try {
+    const info = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(bearer)}`, {
+      signal: AbortSignal.timeout(6000),
+    }).then((r) => r.json());
+    const email = String(info?.email || '');
+    return String(info?.email_verified) === 'true' && email.endsWith(`@${serviceAccountProject()}.iam.gserviceaccount.com`);
+  } catch {
+    return false;
+  }
+}
+
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -25,10 +41,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Signing an upload mints storage/quota on the ImageKit account, so this
-  // must not be callable by anyone who is not signed in.
   const user = await verifyRequestUser(req);
-  if (!user?.uid) {
+  const saOk = !user?.uid ? await serviceAccountAuthorized(req) : false;
+  if (!user?.uid && !saOk) {
     return res.status(401).json({ error: 'Sign in to upload media.' });
   }
 
@@ -38,7 +53,7 @@ export default async function handler(req, res) {
   }
 
   const token = crypto.randomUUID();
-  const expire = Math.floor(Date.now() / 1000) + 40 * 60; // ImageKit max: 1 hour
+  const expire = Math.floor(Date.now() / 1000) + 40 * 60;
   const signature = crypto.createHmac('sha1', privateKey).update(token + expire).digest('hex');
 
   return res.status(200).json({ token, expire, signature });
