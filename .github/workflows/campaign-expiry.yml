@@ -26,6 +26,11 @@ on:
         description: 'Apply changes. Leave unchecked for a dry run.'
         type: boolean
         default: false
+      test_email:
+        description: 'Optional email address to send a live Resend test email from Linky.'
+        type: string
+        required: false
+        default: ''
 
 concurrency:
   group: campaign-expiry-sweep
@@ -100,6 +105,7 @@ jobs:
         working-directory: functions
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/linkup-sa.json
+          LINKY_TEST_EMAIL: ${{ inputs.test_email || '' }}
         run: node linky-cron.mjs
 
       - name: Remove the service account key

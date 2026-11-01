@@ -9,6 +9,7 @@ import { getAuth } from 'firebase-admin/auth';
 const APP_BASE = 'https://www.linkupbuild.com/app';
 const API_BASE = 'https://linkup-muqu.vercel.app';
 const SOCIAL_THROTTLE_MS = 6 * 60 * 60 * 1000;
+const RESEND_FALLBACK_FROM = 'Linky at LINKUP <onboarding@resend.dev>';
 export const DAILY_EMAIL_HARD_CAP = 90;
 export const DAILY_COMEBACK_EMAIL_CAP = 50;
 export const COMEBACK_SUNSET_DAYS = 45;
@@ -47,7 +48,7 @@ export function emailStatus(env = process.env) {
   return {
     available: true,
     provider: 'resend',
-    from: String(env?.EMAIL_FROM || 'LINKUP <notifications@linkupbuild.com>').trim(),
+    from: String(env?.EMAIL_FROM || 'Linky at LINKUP <notifications@linkupbuild.com>').trim(),
   };
 }
 
@@ -121,6 +122,76 @@ export async function unsubscribeUserEmail(db, uid) {
   return { unsubscribed: true };
 }
 
+function buildLinkyEmailBodies({ uid, headline, body, ctaLabel, fullUrl, badgeLabel }) {
+  const unsubUrl = unsubscribeEmailUrl(uid || 'member');
+  const textBody = `${headline}\n\n${body}\n\n${ctaLabel}: ${fullUrl}\n\n— Linky, your LINKUP companion\n\n---\nUnsubscribe from LINKUP notification emails: ${unsubUrl}`;
+  const htmlBody = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0A0B0D;background:#FFFFFF;border:1px solid #E7E5DC;border-radius:18px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+    <img src="${APP_BASE}/icons/icon-default.png" alt="Linky" width="36" height="36" style="border-radius:9px;display:block"/>
+    <div style="font-weight:900;font-size:15px;letter-spacing:0.6px">LINK<span style="background:#FBE618;padding:2px 6px;border-radius:5px">UP</span> <span style="font-weight:600;color:#575B60;font-size:13px">· from Linky</span></div>
+  </div>
+  <h2 style="font-size:20px;line-height:1.35;margin:0 0 12px">${esc(headline)}</h2>
+  <p style="font-size:15px;line-height:1.6;color:#383B40;margin:0 0 20px">${esc(body)}</p>
+  <a href="${esc(fullUrl)}" style="display:inline-block;background:#FBE618;color:#0A0B0D;font-weight:800;font-size:14px;text-decoration:none;padding:12px 20px;border-radius:12px">${esc(ctaLabel)} →</a>
+  <hr style="border:none;border-top:1px solid #ECEAE2;margin:24px 0 14px"/>
+  <p style="font-size:12px;color:#767A82;margin:0">${esc(badgeLabel)} · <a href="${esc(unsubUrl)}" style="color:#575B60">Unsubscribe in one click</a></p>
+</div>`;
+  return { unsubUrl, textBody, htmlBody };
+}
+
+async function postResendEmail({ fetcher, apiKey, from, allowOnboardingFallback, to, subject, textBody, htmlBody, unsubUrl }) {
+  const sendOnce = async (sender) => {
+    const res = await fetcher('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: sender,
+        to: [to],
+        subject: String(subject).slice(0, 120),
+        text: textBody,
+        html: htmlBody,
+        headers: {
+          'List-Unsubscribe': `<${unsubUrl}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    let payload = null;
+    try {
+      payload = typeof res.json === 'function' ? await res.json() : null;
+    } catch {}
+    return { res, payload, sender };
+  };
+
+  let attempt = await sendOnce(from);
+  if (
+    !attempt.res.ok &&
+    attempt.res.status === 403 &&
+    allowOnboardingFallback &&
+    from !== RESEND_FALLBACK_FROM
+  ) {
+    attempt = await sendOnce(RESEND_FALLBACK_FROM);
+  }
+
+  if (!attempt.res.ok) {
+    return {
+      sent: false,
+      reason: `http_${attempt.res.status}`,
+      detail: String(attempt.payload?.message || attempt.payload?.name || '').slice(0, 240),
+      fromTried: attempt.sender,
+    };
+  }
+  return {
+    sent: true,
+    id: attempt.payload?.id || null,
+    fromUsed: attempt.sender,
+  };
+}
+
 export async function sendHighSignalEmail(db, uid, {
   receiptKey = '',
   throttleMs = SOCIAL_THROTTLE_MS,
@@ -155,40 +226,30 @@ export async function sendHighSignalEmail(db, uid, {
   if (!quota.allowed) return { sent: false, reason: quota.reason || 'daily_quota_reached' };
 
   const fullUrl = ctaUrl.startsWith('http') ? ctaUrl : `${APP_BASE}${ctaUrl.startsWith('/') ? ctaUrl : '/' + ctaUrl}`;
-  const unsubUrl = unsubscribeEmailUrl(uid);
-  const textBody = `${headline}\n\n${body}\n\n${ctaLabel}: ${fullUrl}\n\n---\nUnsubscribe from LINKUP notification emails: ${unsubUrl}`;
-  const htmlBody = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0A0B0D;background:#FFFFFF;border:1px solid #E7E5DC;border-radius:18px">
-  <div style="font-weight:900;font-size:15px;letter-spacing:0.6px;margin-bottom:16px">LINK<span style="background:#FBE618;padding:2px 6px;border-radius:5px">UP</span></div>
-  <h2 style="font-size:20px;line-height:1.35;margin:0 0 12px">${esc(headline)}</h2>
-  <p style="font-size:15px;line-height:1.6;color:#383B40;margin:0 0 20px">${esc(body)}</p>
-  <a href="${esc(fullUrl)}" style="display:inline-block;background:#FBE618;color:#0A0B0D;font-weight:800;font-size:14px;text-decoration:none;padding:12px 20px;border-radius:12px">${esc(ctaLabel)} →</a>
-  <hr style="border:none;border-top:1px solid #ECEAE2;margin:24px 0 14px"/>
-  <p style="font-size:12px;color:#767A82;margin:0">${esc(badgeLabel)} · <a href="${esc(unsubUrl)}" style="color:#575B60">Unsubscribe in one click</a></p>
-</div>`;
+  const { unsubUrl, textBody, htmlBody } = buildLinkyEmailBodies({
+    uid,
+    headline,
+    body,
+    ctaLabel,
+    fullUrl,
+    badgeLabel,
+  });
 
   try {
-    const res = await fetcher('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${String(env.RESEND_API_KEY).trim()}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: status.from,
-        to: [to],
-        subject: String(subject).slice(0, 120),
-        text: textBody,
-        html: htmlBody,
-        headers: {
-          'List-Unsubscribe': `<${unsubUrl}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        },
-      }),
-      signal: AbortSignal.timeout(8000),
+    const out = await postResendEmail({
+      fetcher,
+      apiKey: String(env.RESEND_API_KEY).trim(),
+      from: status.from,
+      allowOnboardingFallback: !String(env?.EMAIL_FROM || '').trim(),
+      to,
+      subject,
+      textBody,
+      htmlBody,
+      unsubUrl,
     });
-    if (!res.ok) return { sent: false, reason: `http_${res.status}` };
+    if (!out.sent) return out;
     await receiptRef.set({ uid, at: nowMs, bucket: quotaBucket, subject: String(subject).slice(0, 120) }).catch(() => null);
-    return { sent: true, bucket: quotaBucket };
+    return { sent: true, id: out.id, fromUsed: out.fromUsed, bucket: quotaBucket };
   } catch {
     return { sent: false, reason: 'network_error' };
   }
@@ -230,4 +291,45 @@ export async function sendComebackEmail(db, uid, {
     quotaBucket: 'comeback',
     quotaCap: DAILY_COMEBACK_EMAIL_CAP,
   }, options);
+}
+
+export async function sendLinkyDirectEmail(db, {
+  to = '',
+  uid = 'linky-test',
+  subject = 'LINKUP · Linky is plugged in and live!',
+  headline = 'Hey builder — Linky’s email line is live ⚡',
+  body = 'Resend delivery, free-tier comeback check-ins, and all 10 dynamic Linky occasion icons are plugged in and ready on LINKUP.',
+  ctaLabel = 'Open LINKUP',
+  ctaUrl = '/builder?section=Settings',
+} = {}, { fetcher = fetch, env = process.env } = {}) {
+  const status = emailStatus(env);
+  const cleanTo = String(to || '').trim();
+  if (!status.available) return { sent: false, reason: status.reason || 'disabled' };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanTo)) return { sent: false, reason: 'invalid_email' };
+
+  const fullUrl = ctaUrl.startsWith('http') ? ctaUrl : `${APP_BASE}${ctaUrl.startsWith('/') ? ctaUrl : '/' + ctaUrl}`;
+  const { unsubUrl, textBody, htmlBody } = buildLinkyEmailBodies({
+    uid,
+    headline,
+    body,
+    ctaLabel,
+    fullUrl,
+    badgeLabel: 'Live verification from Linky on LINKUP',
+  });
+
+  try {
+    return await postResendEmail({
+      fetcher,
+      apiKey: String(env.RESEND_API_KEY).trim(),
+      from: status.from,
+      allowOnboardingFallback: true,
+      to: cleanTo,
+      subject,
+      textBody,
+      htmlBody,
+      unsubUrl,
+    });
+  } catch (err) {
+    return { sent: false, reason: 'network_error', detail: String(err?.message || '') };
+  }
 }

@@ -1,4 +1,4 @@
-import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,ensureMissingBuilderStates} from './_builderRuntime.js';
+import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates} from './_builderRuntime.js';
 // Linky endpoint: app actions, housekeeping cron, Telegram + WhatsApp webhooks.
 // One function on purpose (Vercel Hobby caps a deployment at 12).
 //
@@ -1023,6 +1023,23 @@ export default async function handler(req, res) {
     } catch (err) {
       sendError(res, 500, 'Hourly sweep failed.', String(err?.message || err));
     }
+    return;
+  }
+
+  if (String(req.query?.action || '') === 'testEmail') {
+    if (req.method !== 'POST') { sendError(res, 405, 'Use POST.'); return; }
+    if (!(await cronAuthorized(req))) { sendError(res, 401, 'Bad cron token.'); return; }
+    const body = readJsonBody(req) || {};
+    const out = await sendLinkyDirectEmail(getDb(), {
+      to: body.to,
+      subject: body.subject || 'LINKUP · Linky is plugged in and live! ⚡',
+      headline: body.headline || 'Hey Tanaka — Linky’s email line is officially plugged in! ⚡',
+      body: body.body || 'Your free-tier Resend integration is live on LINKUP! Comeback milestone check-ins, Builder League win notifications, missed match alerts, and all 10 Duolingo-style dynamic Linky occasion icons are active.',
+      ctaLabel: body.ctaLabel || 'Open your LINKUP Workspace',
+      ctaUrl: body.ctaUrl || '/builder?section=Settings',
+    });
+    setCors(res);
+    res.status(out.sent ? 200 : 502).json(out);
     return;
   }
 

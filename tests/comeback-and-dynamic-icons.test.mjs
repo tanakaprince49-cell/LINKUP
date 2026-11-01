@@ -10,6 +10,7 @@ import {
   comebackEmailMilestone,
   sendComebackEmail,
   sendHighSignalEmail,
+  sendLinkyDirectEmail,
   unsubscribeUserEmail,
 } from '../api/_emailNotify.js';
 import { sanitizePrefs } from '../api/_builderCore.js';
@@ -174,6 +175,36 @@ test('Part A: comeback emails enforce milestones (Day 3/7/14/30), sunset at >45d
   );
   assert.equal(unsubCheck.sent, false);
   assert.equal(unsubCheck.reason, 'unsubscribed');
+
+  // Direct Linky email falls back cleanly to onboarding@resend.dev if custom domain returns 403
+  const attempts = [];
+  const fallbackRes = await sendLinkyDirectEmail(
+    db,
+    { to: 'tanakaprince49@gmail.com', headline: 'Linky live check' },
+    {
+      env: { RESEND_API_KEY: 're_live_mock' },
+      fetcher: async (_url, init) => {
+        const body = JSON.parse(init.body);
+        attempts.push(body.from);
+        if (body.from.includes('linkupbuild.com')) {
+          return {
+            ok: false,
+            status: 403,
+            json: async () => ({ message: 'The linkupbuild.com domain is not verified.' }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ id: 're_msg_999' }),
+        };
+      },
+    },
+  );
+  assert.equal(fallbackRes.sent, true);
+  assert.equal(fallbackRes.id, 're_msg_999');
+  assert.equal(attempts.length, 2);
+  assert.match(attempts[1], /onboarding@resend\.dev/);
 });
 
 test('Part B: all 10 bundled occasion icon assets, web favicons, and Expo native launcher aliases exist without version churn', () => {

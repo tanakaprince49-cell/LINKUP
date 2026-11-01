@@ -43,3 +43,16 @@ const theses=['','AI agents','SaaS','Fintech','Consumer','Climate','Dev tools'];
 const thesis=theses[new Date().getUTCHours()%theses.length];
 const warmRes=await fetch(`https://www.linkupbuild.com/app/api/publicSeo?mode=lvlup${thesis?'&q='+encodeURIComponent(thesis):''}`,{signal:AbortSignal.timeout(15000)}).catch(()=>null);
 console.log(`lvlup warm (${thesis||'default'}): HTTP ${warmRes?.status||'skipped'}`);
+
+const testEmail=String(process.env.LINKY_TEST_EMAIL||'').trim();
+if(testEmail){
+ const emailRes=await fetch(`${BASE}/api/linky?action=testEmail`,{
+  method:'POST',
+  headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+  body:JSON.stringify({to:testEmail}),
+  signal:AbortSignal.timeout(20000),
+ });
+ const emailPayload=await emailRes.text();
+ console.log(`linky testEmail (${testEmail}): HTTP ${emailRes.status} ${emailPayload}`);
+ if(!emailRes.ok)process.exit(1);
+}

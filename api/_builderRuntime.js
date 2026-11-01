@@ -5,7 +5,7 @@ import {validId,problem} from './_builderCore.js';
 import {awardWeeklyChampion,reconcileCampaignRewards} from './_campaignReward.js';
 import {awardSeasonChampions} from './_leagueChampions.js';
 import {sendExpoPush} from './_expoPush.js';
-import {emailStatus,verifyEmailUnsubscribe,unsubscribeUserEmail} from './_emailNotify.js';
+import {emailStatus,verifyEmailUnsubscribe,unsubscribeUserEmail,sendLinkyDirectEmail} from './_emailNotify.js';
 import {getVapidKeys,saveWebPushSubscription} from './_webPush.js';
 import {ensureMissingBuilderStates} from './_builderStatesBackfill.js';
 async function nativePush(uid,{title,body,url,campaign='builder_retention',category=''}){
@@ -27,4 +27,4 @@ export async function builderCron(input={}){
  return {...result,reward,rewardSweep,seasons,email:builderEmailStatus()};
 }
 export const builderEmailStatus=()=>{const s=emailStatus();return s.available?s:{available:false,reason:'Provider setup required'};};
-export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,ensureMissingBuilderStates};
+export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates};
