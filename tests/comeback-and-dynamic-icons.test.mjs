@@ -253,10 +253,10 @@ test('Part B: all 11 bundled occasion icon assets, web favicons, and Expo native
   assert.equal(sanitizePrefs({ iconMode: 'classic' }).iconMode, 'classic');
   assert.throws(() => sanitizePrefs({ iconMode: 'nonexistent_variant' }));
 
-  // Check app.json registers plugin and preserves version 16.10.4 / versionCode 45
+  // Check app.json registers plugin and carries Version 17.0.0 / versionCode 46
   const appJson = JSON.parse(fs.readFileSync(path.join(root, 'mobile', 'app.json'), 'utf8')).expo;
-  assert.equal(appJson.version, '16.10.4');
-  assert.equal(appJson.android.versionCode, 45);
+  assert.equal(appJson.version, '17.0.0');
+  assert.equal(appJson.android.versionCode, 46);
   assert.ok(appJson.plugins.includes('./plugins/withDynamicLauncherIcon'));
 
   // Verify serverless function count stays strictly <= 12 on Vercel Hobby
