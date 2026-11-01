@@ -1,8 +1,7 @@
-// Free-tier high-signal email fallback (Resend: 100/day, 3,000 free/month, no card).
+// Free-tier email engine (Resend: 100/day, 3,000 free/month, zero card).
 // Fail-closed unless RESEND_API_KEY is configured. Enforces signed one-click
-// unsubscribe links, per-recipient throttling, daily free-tier quota shields,
-// and strict high-signal scope (Builder League wins, missed matches/requests,
-// weekly digest, and milestone comeback check-ins with automatic sunsetting).
+// unsubscribe links, daily free-tier quota shields, LINKUP cat avatar sender
+// header, and full-width uncropped expressive Linky mood illustrations.
 import crypto from 'node:crypto';
 import { getAuth } from 'firebase-admin/auth';
 
@@ -10,9 +9,148 @@ const APP_BASE = 'https://www.linkupbuild.com/app';
 const API_BASE = 'https://linkup-muqu.vercel.app';
 const SOCIAL_THROTTLE_MS = 6 * 60 * 60 * 1000;
 const RESEND_FALLBACK_FROM = 'Linky at LINKUP <onboarding@resend.dev>';
-export const DAILY_EMAIL_HARD_CAP = 90;
+export const LINKY_AVATAR_URL = `${APP_BASE}/icons/linky-avatar.png`;
+export const DAILY_EMAIL_HARD_CAP = 95;
+export const DAILY_PULSE_EMAIL_CAP = 85;
 export const DAILY_COMEBACK_EMAIL_CAP = 50;
 export const COMEBACK_SUNSET_DAYS = 45;
+
+export const EMAIL_MOODS = Object.freeze({
+  default: {
+    id: 'default',
+    heroFile: 'hero-default.png',
+    iconFile: 'icon-default.png',
+    pillText: 'Plugged in & ready',
+    pillBg: '#FFF8B8',
+    pillColor: '#0A0B0D',
+    alt: 'Linky happily plugging an ethernet cable into the LINKUP wall socket',
+  },
+  angry_1d: {
+    id: 'angry_1d',
+    heroFile: 'hero-angry-red.png',
+    iconFile: 'icon-angry-red.png',
+    pillText: 'Linky noticed you missed a day',
+    pillBg: '#FFE2E0',
+    pillColor: '#9E1412',
+    alt: 'Linky looking grumpy in fiery red holding an unplugged cable',
+  },
+  sad_inactive: {
+    id: 'sad_inactive',
+    heroFile: 'hero-sad-inactive.png',
+    iconFile: 'icon-sad-inactive.png',
+    pillText: 'Linky misses seeing your builds',
+    pillBg: '#E4ECF7',
+    pillColor: '#233654',
+    alt: 'Linky looking sad in the rain beside an unplugged wall socket',
+  },
+  ghost_abandoned: {
+    id: 'ghost_abandoned',
+    heroFile: 'hero-ghost-abandoned.png',
+    iconFile: 'icon-ghost-abandoned.png',
+    pillText: 'Cobwebs are gathering on your desk',
+    pillBg: '#EAEAF0',
+    pillColor: '#1F2029',
+    alt: 'Linky waiting in a dusty workspace with cobwebs on the wall socket',
+  },
+  unread_urgent: {
+    id: 'unread_urgent',
+    heroFile: 'hero-unread-urgent.png',
+    iconFile: 'icon-unread-urgent.png',
+    pillText: 'Someone is waiting on you',
+    pillBg: '#FFF6B3',
+    pillColor: '#0A0B0D',
+    alt: 'Linky alert with incoming signal waves from the LINKUP socket',
+  },
+  streak_fire: {
+    id: 'streak_fire',
+    heroFile: 'hero-streak-fire.png',
+    iconFile: 'icon-streak-fire.png',
+    pillText: 'Your build streak is on the line',
+    pillBg: '#FFE7D6',
+    pillColor: '#9A2E00',
+    alt: 'Linky rushing with a blazing orange ethernet plug to keep your streak alive',
+  },
+  champion_crown: {
+    id: 'champion_crown',
+    heroFile: 'hero-champion-crown.png',
+    iconFile: 'icon-champion-crown.png',
+    pillText: 'Builder League standout',
+    pillBg: '#FFF4B8',
+    pillColor: '#6B4E00',
+    alt: 'Linky wearing a gold crown plugged into LINKUP',
+  },
+  on_fire_shipped: {
+    id: 'on_fire_shipped',
+    heroFile: 'hero-shipped.png',
+    iconFile: 'icon-shipped.png',
+    pillText: 'Momentum locked in',
+    pillBg: '#DCFCE7',
+    pillColor: '#14532D',
+    alt: 'Linky wearing cool sunglasses after shipping today’s build',
+  },
+  milestone_party: {
+    id: 'milestone_party',
+    heroFile: 'hero-milestone-party.png',
+    iconFile: 'icon-milestone-party.png',
+    pillText: 'Milestone unlocked',
+    pillBg: '#FEF08A',
+    pillColor: '#0A0B0D',
+    alt: 'Linky celebrating with confetti and a party hat',
+  },
+  night_owl: {
+    id: 'night_owl',
+    heroFile: 'hero-night-owl.png',
+    iconFile: 'icon-night-owl.png',
+    pillText: 'Late-night builder session',
+    pillBg: '#E6E9F5',
+    pillColor: '#0A0B0D',
+    alt: 'Linky coding late at night with glowing yellow eyes',
+  },
+  weekend_chill: {
+    id: 'weekend_chill',
+    heroFile: 'hero-weekend-chill.png',
+    iconFile: 'icon-weekend-chill.png',
+    pillText: 'Easy weekend check-in',
+    pillBg: '#FFEDD5',
+    pillColor: '#7C2D12',
+    alt: 'Linky relaxing with a warm mug on a calm weekend',
+  },
+});
+
+const FORBIDDEN_EMAIL_PATTERNS = [
+  /all\s+\d+\s+duolingo(?:-style)?/gi,
+  /duolingo(?:-style)?/gi,
+];
+
+export function sanitizeEmailCopy(raw) {
+  let clean = String(raw ?? '');
+  for (const rx of FORBIDDEN_EMAIL_PATTERNS) {
+    clean = clean.replace(rx, 'expressive');
+  }
+  return clean.replace(/\s{2,}/g, ' ').trim();
+}
+
+export function resolveEmailMood({ mood = '', receiptKey = '', subject = '', headline = '', badgeLabel = '', daysSinceActive = null } = {}) {
+  if (mood && EMAIL_MOODS[mood]) return EMAIL_MOODS[mood];
+  const days = Number(daysSinceActive);
+  if (Number.isFinite(days) && daysSinceActive !== null && daysSinceActive !== '') {
+    if (days >= 7) return EMAIL_MOODS.ghost_abandoned;
+    if (days >= 3) return EMAIL_MOODS.sad_inactive;
+    if (days >= 1) return EMAIL_MOODS.angry_1d;
+  }
+  const hay = `${receiptKey} ${subject} ${headline} ${badgeLabel}`.toLowerCase();
+  if (/league|champion|crown|podium|won/.test(hay)) return EMAIL_MOODS.champion_crown;
+  if (/milestone|day 7|day 14|day 30|day 50|day 100|celebrat/.test(hay)) return EMAIL_MOODS.milestone_party;
+  if (/streak|on the line|before midnight|tonight/.test(hay)) return EMAIL_MOODS.streak_fire;
+  if (/match|intro|message|unread|waiting|request|reply/.test(hay)) return EMAIL_MOODS.unread_urgent;
+  if (/cobweb|day14|day30/.test(hay)) return EMAIL_MOODS.ghost_abandoned;
+  if (/comeback|seat is warm|miss|away|day3|day7/.test(hay)) return EMAIL_MOODS.sad_inactive;
+  if (/yesterday|skipped|1 day/.test(hay)) return EMAIL_MOODS.angry_1d;
+  if (/shipped|weekly|numbers|locked in|momentum/.test(hay)) return EMAIL_MOODS.on_fire_shipped;
+  if (/weekend|sunday|saturday|coffee|rest/.test(hay)) return EMAIL_MOODS.weekend_chill;
+  if (/night|late|owl/.test(hay)) return EMAIL_MOODS.night_owl;
+  return EMAIL_MOODS.default;
+}
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -122,24 +260,98 @@ export async function unsubscribeUserEmail(db, uid) {
   return { unsubscribed: true };
 }
 
-function buildLinkyEmailBodies({ uid, headline, body, ctaLabel, fullUrl, badgeLabel }) {
+export function buildLinkyEmailBodies({
+  uid,
+  headline,
+  body,
+  ctaLabel,
+  fullUrl,
+  badgeLabel,
+  mood,
+  receiptKey = '',
+  subject = '',
+  daysSinceActive = null,
+}) {
+  const cleanHeadline = sanitizeEmailCopy(headline);
+  const cleanBody = sanitizeEmailCopy(body);
+  const cleanCta = sanitizeEmailCopy(ctaLabel || 'Open LINKUP');
+  const cleanBadge = sanitizeEmailCopy(badgeLabel || 'From Linky on LINKUP');
+  const moodSpec = resolveEmailMood({
+    mood,
+    receiptKey,
+    subject,
+    headline: cleanHeadline,
+    badgeLabel: cleanBadge,
+    daysSinceActive,
+  });
   const unsubUrl = unsubscribeEmailUrl(uid || 'member');
-  const textBody = `${headline}\n\n${body}\n\n${ctaLabel}: ${fullUrl}\n\n— Linky, your LINKUP companion\n\n---\nUnsubscribe from LINKUP notification emails: ${unsubUrl}`;
-  const htmlBody = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0A0B0D;background:#FFFFFF;border:1px solid #E7E5DC;border-radius:18px">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
-    <img src="${APP_BASE}/icons/icon-default.png" alt="Linky" width="36" height="36" style="border-radius:9px;display:block"/>
-    <div style="font-weight:900;font-size:15px;letter-spacing:0.6px">LINK<span style="background:#FBE618;padding:2px 6px;border-radius:5px">UP</span> <span style="font-weight:600;color:#575B60;font-size:13px">· from Linky</span></div>
-  </div>
-  <h2 style="font-size:20px;line-height:1.35;margin:0 0 12px">${esc(headline)}</h2>
-  <p style="font-size:15px;line-height:1.6;color:#383B40;margin:0 0 20px">${esc(body)}</p>
-  <a href="${esc(fullUrl)}" style="display:inline-block;background:#FBE618;color:#0A0B0D;font-weight:800;font-size:14px;text-decoration:none;padding:12px 20px;border-radius:12px">${esc(ctaLabel)} →</a>
-  <hr style="border:none;border-top:1px solid #ECEAE2;margin:24px 0 14px"/>
-  <p style="font-size:12px;color:#767A82;margin:0">${esc(badgeLabel)} · <a href="${esc(unsubUrl)}" style="color:#575B60">Unsubscribe in one click</a></p>
-</div>`;
-  return { unsubUrl, textBody, htmlBody };
+  const avatarUrl = `${LINKY_AVATAR_URL}?v=2`;
+  const heroUrl = `${APP_BASE}/icons/${moodSpec.heroFile}?v=2`;
+
+  const textBody = `${cleanHeadline}\n[${moodSpec.pillText}]\n\n${cleanBody}\n\n${cleanCta}: ${fullUrl}\n\n— Linky, your LINKUP builder companion\n\n---\nUnsubscribe from LINKUP emails: ${unsubUrl}`;
+
+  const htmlBody = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+</head>
+<body style="margin:0;padding:16px 10px;background:#F6F5EF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0A0B0D;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;margin:0 auto;background:#FFFFFF;border:1px solid #E5E2D6;border-radius:22px;overflow:hidden;">
+    <tr>
+      <td style="padding:18px 20px 14px 20px;border-bottom:1px solid #F0EEE6;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td width="52" valign="middle" style="padding-right:12px;">
+              <img src="${esc(avatarUrl)}" alt="LINKUP" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:50%;border:2px solid #0A0B0D;background:#FBE618;"/>
+            </td>
+            <td valign="middle">
+              <div style="font-weight:900;font-size:16px;line-height:1.2;color:#0A0B0D;">
+                Linky <span style="display:inline-block;background:#FBE618;color:#0A0B0D;font-weight:900;font-size:11px;letter-spacing:0.6px;padding:2px 7px;border-radius:6px;margin-left:4px;vertical-align:middle;">LINKUP</span>
+              </div>
+              <div style="font-size:12px;color:#5E636B;margin-top:3px;">Builder network &amp; daily momentum</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:18px 20px 0 20px;">
+        <div style="margin-bottom:12px;">
+          <span style="display:inline-block;background:${esc(moodSpec.pillBg)};color:${esc(moodSpec.pillColor)};font-weight:800;font-size:12px;padding:5px 11px;border-radius:999px;">
+            ${esc(moodSpec.pillText)}
+          </span>
+        </div>
+        <img src="${esc(heroUrl)}" alt="${esc(moodSpec.alt)}" width="480" style="display:block;width:100%;max-width:480px;height:auto;border-radius:18px;border:1px solid #ECE9DD;margin:0 auto;"/>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:20px 22px 24px 22px;">
+        <h2 style="font-size:21px;line-height:1.32;font-weight:900;color:#0A0B0D;margin:0 0 12px 0;">${esc(cleanHeadline)}</h2>
+        <p style="font-size:15px;line-height:1.62;color:#353940;margin:0 0 22px 0;">${esc(cleanBody)}</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td align="center" bgcolor="#FBE618" style="border-radius:14px;">
+              <a href="${esc(fullUrl)}" style="display:inline-block;background:#FBE618;color:#0A0B0D;font-weight:900;font-size:15px;text-decoration:none;padding:13px 22px;border-radius:14px;border:2px solid #0A0B0D;">
+                ${esc(cleanCta)} &rarr;
+              </a>
+            </td>
+          </tr>
+        </table>
+        <hr style="border:none;border-top:1px solid #ECEAE2;margin:24px 0 14px 0;"/>
+        <p style="font-size:12px;line-height:1.5;color:#767A82;margin:0;">
+          ${esc(cleanBadge)} &middot; <a href="${esc(unsubUrl)}" style="color:#575B60;text-decoration:underline;">Unsubscribe in one click</a>
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  return { unsubUrl, textBody, htmlBody, mood: moodSpec.id, heroUrl, avatarUrl };
 }
 
 async function postResendEmail({ fetcher, apiKey, from, allowOnboardingFallback, to, subject, textBody, htmlBody, unsubUrl }) {
+  const cleanSubject = sanitizeEmailCopy(subject).slice(0, 120);
   const sendOnce = async (sender) => {
     const res = await fetcher('https://api.resend.com/emails', {
       method: 'POST',
@@ -150,7 +362,7 @@ async function postResendEmail({ fetcher, apiKey, from, allowOnboardingFallback,
       body: JSON.stringify({
         from: sender,
         to: [to],
-        subject: String(subject).slice(0, 120),
+        subject: cleanSubject,
         text: textBody,
         html: htmlBody,
         headers: {
@@ -200,7 +412,9 @@ export async function sendHighSignalEmail(db, uid, {
   body = '',
   ctaLabel = 'Open LINKUP',
   ctaUrl = '/alerts',
-  badgeLabel = 'High-signal LINKUP alert',
+  badgeLabel = 'LINKUP builder alert',
+  mood = '',
+  daysSinceActive = null,
   quotaBucket = 'transactional',
   quotaCap = DAILY_EMAIL_HARD_CAP,
 } = {}, { fetcher = fetch, env = process.env, now = Date.now() } = {}) {
@@ -226,13 +440,17 @@ export async function sendHighSignalEmail(db, uid, {
   if (!quota.allowed) return { sent: false, reason: quota.reason || 'daily_quota_reached' };
 
   const fullUrl = ctaUrl.startsWith('http') ? ctaUrl : `${APP_BASE}${ctaUrl.startsWith('/') ? ctaUrl : '/' + ctaUrl}`;
-  const { unsubUrl, textBody, htmlBody } = buildLinkyEmailBodies({
+  const { unsubUrl, textBody, htmlBody, mood: resolvedMood } = buildLinkyEmailBodies({
     uid,
     headline,
     body,
     ctaLabel,
     fullUrl,
     badgeLabel,
+    mood,
+    receiptKey: rKey,
+    subject,
+    daysSinceActive,
   });
 
   try {
@@ -248,11 +466,50 @@ export async function sendHighSignalEmail(db, uid, {
       unsubUrl,
     });
     if (!out.sent) return out;
-    await receiptRef.set({ uid, at: nowMs, bucket: quotaBucket, subject: String(subject).slice(0, 120) }).catch(() => null);
-    return { sent: true, id: out.id, fromUsed: out.fromUsed, bucket: quotaBucket };
+    await receiptRef.set({
+      uid,
+      at: nowMs,
+      bucket: quotaBucket,
+      mood: resolvedMood,
+      subject: sanitizeEmailCopy(subject).slice(0, 120),
+    }).catch(() => null);
+    return { sent: true, id: out.id, fromUsed: out.fromUsed, bucket: quotaBucket, mood: resolvedMood };
   } catch {
     return { sent: false, reason: 'network_error' };
   }
+}
+
+export async function sendRetentionPulseEmail(db, uid, {
+  localDateKey = '',
+  slot = 'pulse1',
+  mood = 'default',
+  subject = 'LINKUP · Quick builder check-in from Linky',
+  headline = 'Plug in for two minutes today',
+  body = 'Fresh builders and collaborators are active on LINKUP right now.',
+  ctaLabel = 'Open LINKUP',
+  ctaUrl = '/ship?pulse=email',
+  daysSinceActive = 0,
+} = {}, options = {}) {
+  const days = Number(daysSinceActive);
+  if (Number.isFinite(days) && days > COMEBACK_SUNSET_DAYS) {
+    return { sent: false, reason: 'sunset_inactive' };
+  }
+  const dayTag = String(localDateKey || new Date().toISOString().slice(0, 10)).replace(/[^0-9-]/g, '');
+  const slotTag = String(slot || 'pulse1').replace(/[^A-Za-z0-9_-]/g, '');
+  return sendHighSignalEmail(db, uid, {
+    receiptKey: `pulse_${uid}_${dayTag}_${slotTag}`,
+    throttleMs: 0,
+    subject,
+    headline,
+    body,
+    ctaLabel,
+    ctaUrl,
+    mood,
+    daysSinceActive,
+    badgeLabel: 'Daily check-in from Linky on LINKUP',
+    quotaBucket: 'daily_pulse',
+    quotaCap: DAILY_PULSE_EMAIL_CAP,
+  }, options);
 }
 
 export async function sendComebackEmail(db, uid, {
@@ -262,6 +519,7 @@ export async function sendComebackEmail(db, uid, {
   body = 'Builders in your lane posted new progress while you were away. Jump back in when you have two minutes.',
   ctaLabel = 'Plug back into LINKUP',
   ctaUrl = '/ship?comeback=email',
+  mood = '',
   prefs = {},
 } = {}, options = {}) {
   if (prefs && prefs.welcomeBack === false) return { sent: false, reason: 'welcome_back_opted_out' };
@@ -287,6 +545,8 @@ export async function sendComebackEmail(db, uid, {
     body: `${body}${finalFooter}`,
     ctaLabel,
     ctaUrl,
+    mood,
+    daysSinceActive,
     badgeLabel: 'Linky welcome-back invitation',
     quotaBucket: 'comeback',
     quotaCap: DAILY_COMEBACK_EMAIL_CAP,
@@ -296,11 +556,12 @@ export async function sendComebackEmail(db, uid, {
 export async function sendLinkyDirectEmail(db, {
   to = '',
   uid = 'linky-test',
-  subject = 'LINKUP · Linky is plugged in and live!',
-  headline = 'Hey builder — Linky’s email line is live ⚡',
-  body = 'Resend delivery, free-tier comeback check-ins, and all 10 dynamic Linky occasion icons are plugged in and ready on LINKUP.',
+  mood = 'default',
+  subject = 'LINKUP · Linky is plugged in and waiting for you ⚡',
+  headline = 'Hey builder — Linky is plugged in with a fresh look!',
+  body = 'Builders in your lane are posting progress, opening warm intros, and climbing the Builder League right now. Plug in for two minutes and put today’s move on the board.',
   ctaLabel = 'Open LINKUP',
-  ctaUrl = '/builder?section=Settings',
+  ctaUrl = '/ship',
 } = {}, { fetcher = fetch, env = process.env } = {}) {
   const status = emailStatus(env);
   const cleanTo = String(to || '').trim();
@@ -308,17 +569,19 @@ export async function sendLinkyDirectEmail(db, {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanTo)) return { sent: false, reason: 'invalid_email' };
 
   const fullUrl = ctaUrl.startsWith('http') ? ctaUrl : `${APP_BASE}${ctaUrl.startsWith('/') ? ctaUrl : '/' + ctaUrl}`;
-  const { unsubUrl, textBody, htmlBody } = buildLinkyEmailBodies({
+  const { unsubUrl, textBody, htmlBody, mood: resolvedMood } = buildLinkyEmailBodies({
     uid,
     headline,
     body,
     ctaLabel,
     fullUrl,
-    badgeLabel: 'Live verification from Linky on LINKUP',
+    mood,
+    subject,
+    badgeLabel: 'From Linky on LINKUP',
   });
 
   try {
-    return await postResendEmail({
+    const out = await postResendEmail({
       fetcher,
       apiKey: String(env.RESEND_API_KEY).trim(),
       from: status.from,
@@ -329,6 +592,7 @@ export async function sendLinkyDirectEmail(db, {
       htmlBody,
       unsubUrl,
     });
+    return out.sent ? { ...out, mood: resolvedMood } : out;
   } catch (err) {
     return { sent: false, reason: 'network_error', detail: String(err?.message || '') };
   }

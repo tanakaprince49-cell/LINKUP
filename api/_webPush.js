@@ -143,7 +143,7 @@ export async function saveWebPushSubscription(db, uid, rawSub) {
   return { saved: true, count: next.length };
 }
 
-export async function sendWebPush(db, uid, { title, body, url = '', campaign = '', category = '', type = 'builder' } = {}, { fetcher = fetch } = {}) {
+export async function sendWebPush(db, uid, { title, body, url = '', campaign = '', category = '', type = 'builder', icon = '', mood = '' } = {}, { fetcher = fetch } = {}) {
   if (!db || typeof db.collection !== 'function' || !uid) return { sent: 0, subscriptions: 0 };
   const ref = db.collection('webPushDevices').doc(uid);
   const snap = await ref.get().catch(() => null);
@@ -160,10 +160,27 @@ export async function sendWebPush(db, uid, { title, body, url = '', campaign = '
     return { sent: 0, subscriptions: subs.length };
   }
 
+  const MOOD_ICONS = {
+    default: '/app/icons/linky-avatar.png',
+    angry_1d: '/app/icons/icon-angry-red.png',
+    sad_inactive: '/app/icons/icon-sad-inactive.png',
+    ghost_abandoned: '/app/icons/icon-ghost-abandoned.png',
+    unread_urgent: '/app/icons/icon-unread-urgent.png',
+    streak_fire: '/app/icons/icon-streak-fire.png',
+    champion_crown: '/app/icons/icon-champion-crown.png',
+    on_fire_shipped: '/app/icons/icon-shipped.png',
+    milestone_party: '/app/icons/icon-milestone-party.png',
+    night_owl: '/app/icons/icon-night-owl.png',
+    weekend_chill: '/app/icons/icon-weekend-chill.png',
+  };
+  const resolvedIcon = icon || MOOD_ICONS[mood] || '/app/icons/linky-avatar.png';
+
   const jsonPayload = JSON.stringify({
     title: String(title || 'LINKUP').slice(0, 100),
     body: String(body || '').slice(0, 180),
     url: url || '/alerts',
+    icon: resolvedIcon,
+    badge: '/app/icons/linky-avatar.png',
     type,
     campaign,
     category,

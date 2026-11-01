@@ -127,7 +127,7 @@ for (const docSnap of snap.docs) {
         userId: uid,
         fromId: '',
         fromName: 'LINKUP',
-        fromPic: '',
+        fromPic: 'https://www.linkupbuild.com/app/icons/linky-avatar.png',
         type: 'plus_expiring',
         content,
         isRead: false,

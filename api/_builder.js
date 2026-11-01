@@ -41,7 +41,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
  }
  async function notify(uid,key,section,content,enabledPush=false,targetUrl=''){
   const n=db.collection('notifications').doc('builder_'+uid+'_'+key);
-  const created=await db.runTransaction(async tx=>{const d=await tx.get(n);if(d.exists)return false;tx.set(n,{userId:uid,fromId:uid,fromName:'Linky',fromPic:'',type:'builder',content,section,...(targetUrl?{targetUrl,url:targetUrl}:{}),serverPushManaged:true,pushRequested:enabledPush,isRead:false,timestamp:new Date(now())});return true;});
+  const created=await db.runTransaction(async tx=>{const d=await tx.get(n);if(d.exists)return false;tx.set(n,{userId:uid,fromId:uid,fromName:'Linky',fromPic:'https://www.linkupbuild.com/app/icons/linky-avatar.png',type:'builder',content,section,...(targetUrl?{targetUrl,url:targetUrl}:{}),serverPushManaged:true,pushRequested:enabledPush,isRead:false,timestamp:new Date(now())});return true;});
   if(created&&enabledPush)await push(uid,{title:'LINKUP · Your next move',body:content,url:targetUrl||'/builder?section='+encodeURIComponent(section)});
  }
  async function event(uid,type){
@@ -268,7 +268,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
     }else{
      // One document per member, per UTC day, per category: a replayed cron run
      // can never duplicate a message the member already received.
-     tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',fromPic:'',type:'builder',category:message.category,slot:message.slot,title:message.title,body:message.body,content:message.content,section:message.section,url:message.url,...(message.campaign?{campaign:message.campaign,headlineKey:message.headlineKey}:{}),serverPushManaged:true,pushRequested:pushAllowed(prefs,message.kind),...(review?{builderSummary:review.summary}:{}),isRead:prefs.inApp===false,timestamp:new Date(now())});
+     tx.set(nr,{userId:d.id,fromId:d.id,fromName:'Linky',fromPic:'https://www.linkupbuild.com/app/icons/linky-avatar.png',type:'builder',category:message.category,slot:message.slot,title:message.title,body:message.body,content:message.content,section:message.section,url:message.url,...(message.campaign?{campaign:message.campaign,headlineKey:message.headlineKey}:{}),serverPushManaged:true,pushRequested:pushAllowed(prefs,message.kind),...(review?{builderSummary:review.summary}:{}),isRead:prefs.inApp===false,timestamp:new Date(now())});
     }
    });
    if(delivery){

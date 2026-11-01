@@ -28,15 +28,19 @@ console.log(`housekeeping: pendingIntros=${json?.pendingIntros} expiredIntros=${
 // Native push and in-app builder reminders run under the same authenticated
 // scheduler. Each call advances a persisted cursor; later users cannot starve.
 let delivered=0;
+let pulsed=0;
+let pulseEmails=0;
 let emailMode='disabled';
 for(let page=0;page<20;page++) {
  const response=await fetch(`${BASE}/api/linky?action=builderCron`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(70000)});
  if(!response.ok)throw new Error(`Builder reminder job failed (${response.status})`);
  const result=await response.json();delivered+=Number(result.delivered||0);
+ pulsed+=Number(result?.pulse?.pulsed||0);
+ pulseEmails+=Number(result?.pulse?.emailsSent||0);
  if(result?.email?.available)emailMode=result.email.provider||'enabled';
  if(!result.nextCursor)break;
 }
-console.log(`builder reminders delivered=${delivered}; email=${emailMode}`);
+console.log(`builder reminders delivered=${delivered}; dailyPulses=${pulsed} (emails=${pulseEmails}); email=${emailMode}`);
 
 // Keep the LvlUp partnership demo AI cache warm across rotating theses.
 const theses=['','AI agents','SaaS','Fintech','Consumer','Climate','Dev tools'];
@@ -46,13 +50,35 @@ console.log(`lvlup warm (${thesis||'default'}): HTTP ${warmRes?.status||'skipped
 
 const testEmail=String(process.env.LINKY_TEST_EMAIL||'').trim();
 if(testEmail){
- const emailRes=await fetch(`${BASE}/api/linky?action=testEmail`,{
-  method:'POST',
-  headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-  body:JSON.stringify({to:testEmail}),
-  signal:AbortSignal.timeout(20000),
- });
- const emailPayload=await emailRes.text();
- console.log(`linky testEmail (${testEmail}): HTTP ${emailRes.status} ${emailPayload}`);
- if(!emailRes.ok)process.exit(1);
+ const samples=[
+  {
+   to:testEmail,
+   mood:'default',
+   subject:'LINKUP · What’s the one thing you’re shipping today? ⚡',
+   headline:'Hey Tanaka — Linky is plugged in and ready for today’s move!',
+   body:'Fresh founders, engineers, and designers are active on LINKUP right now. Search collaborators right from the homescreen or drop a 60-second Ship Log update to climb the Builder League.',
+   ctaLabel:'Start today’s move on LINKUP',
+   ctaUrl:'/ship',
+  },
+  {
+   to:testEmail,
+   mood:'angry_1d',
+   subject:'LINKUP · Linky turned red waiting on your build update!',
+   headline:'Hey Tanaka — you skipped yesterday and Linky noticed!',
+   body:'One missed day turns into a quiet week if you let it slide. Plug back into LINKUP for two minutes and put one honest build note on the board to turn Linky bright yellow again.',
+   ctaLabel:'Calm Linky down & log progress',
+   ctaUrl:'/ship?comeback=1d',
+  },
+ ];
+ for(const sample of samples){
+  const emailRes=await fetch(`${BASE}/api/linky?action=testEmail`,{
+   method:'POST',
+   headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+   body:JSON.stringify(sample),
+   signal:AbortSignal.timeout(20000),
+  });
+  const emailPayload=await emailRes.text();
+  console.log(`linky testEmail (${sample.mood} -> ${testEmail}): HTTP ${emailRes.status} ${emailPayload}`);
+  if(!emailRes.ok)process.exit(1);
+ }
 }

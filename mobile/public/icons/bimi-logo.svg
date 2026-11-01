@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<svg version="1.2" baseProfile="tiny-ps" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <title>LINKUP</title>
+  <rect width="512" height="512" fill="#FBE618"/>
+  <rect x="76" y="176" width="112" height="112" rx="16" fill="#0A0B0D"/>
+  <rect x="92" y="192" width="80" height="80" rx="8" fill="#FBE618"/>
+  <path d="M110 210 H154 V244 H142 V256 H122 V244 H110 Z" fill="#0A0B0D"/>
+  <path d="M292 146 L312 192 L268 188 Z" fill="#0A0B0D"/>
+  <path d="M352 152 L366 204 L322 188 Z" fill="#0A0B0D"/>
+  <circle cx="310" cy="226" r="56" fill="#0A0B0D"/>
+  <circle cx="290" cy="218" r="7" fill="#FBE618"/>
+  <circle cx="326" cy="224" r="7" fill="#FBE618"/>
+  <path d="M286 274 C278 320 282 368 270 392 L396 392 C404 344 378 294 342 274 Z" fill="#0A0B0D"/>
+  <path d="M214 238 L286 266 L278 292 L206 260 Z" fill="#0A0B0D"/>
+  <path d="M392 384 C432 378 442 328 424 286 C410 254 426 232 448 238" fill="none" stroke="#0A0B0D" stroke-width="24" stroke-linecap="round"/>
+</svg>

@@ -53,7 +53,7 @@ export const LIMITS = {
 export const OFFERS = ['paid', 'equity', 'advisory', 'coffee'];
 export const CRON_UID = 'linky-cron';
 export const APP_URL = 'https://www.linkupbuild.com/app';
-const LINKY_FROM = { fromId: 'linky-ai', fromName: 'Linky', fromPic: '' };
+const LINKY_FROM = { fromId: 'linky-ai', fromName: 'Linky', fromPic: 'https://www.linkupbuild.com/app/icons/linky-avatar.png' };
 const DAY_MS = 86400000;
 
 const db = () => getDb();
@@ -598,9 +598,10 @@ export async function pushNotify(senderUid, { toUid = '', type = '', text = '', 
     body,
     data: { notificationId: '', type: pushType, url: targetUrl, matchId: matchId || '', fromId: senderUid },
   });
-  if ((type === 'match' || type === 'request') && !(Number(pushRes?.sent) > 0)) {
+  if (type === 'match' || type === 'request') {
     await sendHighSignalEmail(db(), toUid, {
       receiptKey: `social_${toUid}`,
+      mood: 'unread_urgent',
       subject: `LINKUP · ${title}`,
       headline: title,
       body,

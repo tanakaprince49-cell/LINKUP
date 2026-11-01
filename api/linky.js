@@ -1032,11 +1032,12 @@ export default async function handler(req, res) {
     const body = readJsonBody(req) || {};
     const out = await sendLinkyDirectEmail(getDb(), {
       to: body.to,
-      subject: body.subject || 'LINKUP · Linky is plugged in and live! ⚡',
-      headline: body.headline || 'Hey Tanaka — Linky’s email line is officially plugged in! ⚡',
-      body: body.body || 'Your free-tier Resend integration is live on LINKUP! Comeback milestone check-ins, Builder League win notifications, missed match alerts, and all 10 Duolingo-style dynamic Linky occasion icons are active.',
-      ctaLabel: body.ctaLabel || 'Open your LINKUP Workspace',
-      ctaUrl: body.ctaUrl || '/builder?section=Settings',
+      mood: body.mood || 'default',
+      subject: body.subject || 'LINKUP · What’s the one thing you’re shipping today? ⚡',
+      headline: body.headline || 'Hey Tanaka — Linky is plugged in and ready for today’s build!',
+      body: body.body || 'Fresh founders, engineers, and collaborators are online on LINKUP right now. Plug in for two minutes, search directly from the homescreen, or post one quick Ship Log update.',
+      ctaLabel: body.ctaLabel || 'Open LINKUP',
+      ctaUrl: body.ctaUrl || '/ship',
     });
     setCors(res);
     res.status(out.sent ? 200 : 502).json(out);
