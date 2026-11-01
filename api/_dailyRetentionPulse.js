@@ -1,18 +1,17 @@
-// Randomized 2x/day retention pulse engine (Email + Native Push + Web Push + In-App).
-// Every reachable LINKUP member gets two daily pulses at pseudo-random local
-// daytime/evening hours AND distinct random minutes (>=4h 11m apart, never on :00,
-// never two emails at the same time), with Linky's emotion dynamically matched
-// to their live builder state.
+// Randomized daily retention pulse engine (1 Email/day + randomized Native/Web Push + In-App).
+// Every reachable LINKUP member gets at most ONE expressive email per day at a
+// pseudo-random local hour & minute, plus spaced mobile/browser push check-ins
+// (>=4h apart, never on :00, never two emails in the same day).
 import crypto from 'node:crypto';
 import { sendExpoPush } from './_expoPush.js';
 import {
   COMEBACK_SUNSET_DAYS,
   LINKY_AVATAR_URL,
-  MIN_USER_EMAIL_GAP_MS,
   sendRetentionPulseEmail,
 } from './_emailNotify.js';
 
 const DAY_MS = 86_400_000;
+const MIN_PULSE_GAP_MS = 4 * 60 * 60 * 1000;
 
 function localClock(nowMs, timeZone = 'UTC') {
   const safeZone = (() => {
@@ -62,12 +61,15 @@ export function randomPulseScheduleForDay(uid, localDateKey) {
   const pulse2Hour = minPulse2 + (digest[1] % span2);
   const rawMin2 = 4 + (digest[3] % 49);
   const pulse2Minute = rawMin2 >= pulse1Minute ? rawMin2 + 1 : rawMin2;
+  // Pick ONE random slot per day for the member's single daily email
+  const emailSlot = digest[6] % 2 === 0 ? 'pulse1' : 'pulse2';
 
   return {
     pulse1Hour,
     pulse1Minute,
     pulse2Hour,
     pulse2Minute,
+    emailSlot,
     seedA: digest[4],
     seedB: digest[5],
   };
@@ -93,13 +95,12 @@ export function duePulseSlot({
   sentPulse1 = false,
   sentPulse2 = false,
   pulse1At = 0,
-  lastEmailAt = 0,
 }) {
   if (localHour < 8 || localHour > 21) return null;
 
-  // Global spacing guard: defer (do NOT burn slot) if any email/pulse went out <4h ago
-  const recentAnchor = Math.max(Number(pulse1At) || 0, Number(lastEmailAt) || 0);
-  if (recentAnchor > 0 && nowMs - recentAnchor < MIN_USER_EMAIL_GAP_MS) {
+  // Minimum 4h spacing between daily pulses
+  const recentPulseAt = Number(pulse1At) || 0;
+  if (recentPulseAt > 0 && nowMs - recentPulseAt < MIN_PULSE_GAP_MS) {
     return null;
   }
 
@@ -116,7 +117,7 @@ export function duePulseSlot({
   }
   if (!sentPulse2 && localHour >= schedule.pulse2Hour) {
     const jitter = computeScheduledEmailIso(nowMs, localMinute, schedule.pulse2Minute, schedule.seedB);
-    if (recentAnchor > 0 && jitter.scheduledMs - recentAnchor < MIN_USER_EMAIL_GAP_MS) {
+    if (recentPulseAt > 0 && jitter.scheduledMs - recentPulseAt < MIN_PULSE_GAP_MS) {
       return null;
     }
     return {
@@ -456,7 +457,6 @@ export async function runDailyRetentionPulsePage(
       sentPulse1: Boolean(pulseState.pulse1At),
       sentPulse2: Boolean(pulseState.pulse2At),
       pulse1At: Number(pulseState.pulse1EffectiveAt || pulseState.pulse1At || 0),
-      lastEmailAt: Number(emailPref.lastEmailAt || 0),
     });
     if (!due) continue;
 
@@ -551,9 +551,16 @@ export async function runDailyRetentionPulsePage(
       }
     }
 
-    // 3. Expressive Full-Bleed Email scheduled at the user's unique random minute (never colliding!)
+    // 3. Expressive Full-Bleed Email: STRICTLY 1 EMAIL PER DAY at a random local minute!
     let emailSent = false;
-    if (prefs.emailDaily !== false) {
+    const alreadyEmailedToday =
+      Boolean(pulseState.emailSentToday) ||
+      String(emailPref.lastEmailDay || '') === localDateKey;
+    const shouldSendDailyEmailNow =
+      !alreadyEmailedToday &&
+      (due.slot === due.schedule.emailSlot || due.slot === 'pulse2');
+
+    if (prefs.emailDaily !== false && shouldSendDailyEmailNow) {
       const eRes = await sendRetentionPulseEmail(
         db,
         uid,
@@ -572,6 +579,12 @@ export async function runDailyRetentionPulsePage(
         { ...emailOpts, now: nowMs },
       ).catch(() => ({ sent: false }));
       emailSent = Boolean(eRes?.sent);
+      if (emailSent) {
+        await pulseDocRef.set(
+          { emailSentToday: true, emailSentSlot: due.slot, updatedAt: nowMs },
+          { merge: true },
+        ).catch(() => null);
+      }
     }
 
     pulsed += 1;

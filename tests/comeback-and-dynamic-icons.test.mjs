@@ -559,14 +559,13 @@ test('Part C: emails render full-width uncropped mood heroes, LINKUP cat profile
     return { sent: 1 };
   };
 
-  // Sweep at pulse1Hour -> delivers Pulse #1 (angry_1d since ~1.1d away!)
+  // Sweep at pulse1Hour -> delivers Pulse #1 push (and email ONLY if emailSlot === 'pulse1')
   const res1 = await runDailyRetentionPulsePage(pagedDb, {
     now: Date.parse(`2026-11-01T${String(sched.pulse1Hour).padStart(2, '0')}:10:00Z`),
     push: pushMock,
     emailOpts,
   });
   assert.equal(res1.pulsed, 1);
-  assert.equal(res1.emailsSent, 1);
   assert.equal(res1.pushesSent, 1);
 
   // Re-sweep same hour -> idempotent (0 duplicates)
@@ -577,41 +576,36 @@ test('Part C: emails render full-width uncropped mood heroes, LINKUP cat profile
   });
   assert.equal(dup1.pulsed, 0);
 
-  // Sweep at pulse2Hour -> delivers Pulse #2 (2nd email + 2nd push of the day!)
+  // Sweep at pulse2Hour -> delivers Pulse #2 push (and email ONLY if not already sent on pulse1!)
   const res2 = await runDailyRetentionPulsePage(pagedDb, {
     now: Date.parse(`2026-11-01T${String(sched.pulse2Hour).padStart(2, '0')}:15:00Z`),
     push: pushMock,
     emailOpts,
   });
   assert.equal(res2.pulsed, 1);
-  assert.equal(res2.emailsSent, 1);
   assert.equal(res2.pushesSent, 1);
 
-  assert.equal(sentEmails.length, 2);
+  // Strictly 1 email per day per user, paired with 2 spaced native/web pushes!
+  assert.equal(res1.emailsSent + res2.emailsSent, 1);
+  assert.equal(sentEmails.length, 1);
   assert.equal(sentPushes.length, 2);
-  assert.notEqual(sentEmails[0].subject, sentEmails[1].subject);
-  assert.ok(sentEmails[0].scheduled_at, 'pulse1 must carry Resend scheduled_at random minute jitter');
-  assert.ok(sentEmails[1].scheduled_at, 'pulse2 must carry Resend scheduled_at random minute jitter');
-  assert.ok(
-    Date.parse(sentEmails[1].scheduled_at) - Date.parse(sentEmails[0].scheduled_at) >= 4 * 3600_000,
-    'scheduled delivery times of the 2 daily emails must never collide or be <4h apart',
-  );
+  assert.ok(sentEmails[0].scheduled_at, 'daily email must carry Resend scheduled_at random minute jitter');
   assert.match(sentEmails[0].html, /hero-angry-red\.png/);
   assert.match(sentEmails[0].html, /linky-avatar\.png/);
   const inApp1 = store.get('notifications/pulse_tanaka_2026-11-01_pulse1');
   assert.equal(inApp1.fromPic, LINKY_AVATAR_URL);
 
-  // 4. Anti-collision guard: a second email to the SAME user OR a duplicate account with the SAME email address
-  //    within <4 hours is blocked with too_close_to_recent_email so 2 emails NEVER arrive at the same time!
-  const pulse2EffectiveMs = Date.parse(sentEmails[1].scheduled_at);
-  const immediateSecond = await sendHighSignalEmail(
+  // 4. Hard 1-email-per-day cap: a second email to the SAME user OR a duplicate account with the SAME email address
+  //    on the same day is blocked with daily_user_email_limit!
+  const dailyEmailEffectiveMs = Date.parse(sentEmails[0].scheduled_at);
+  const secondSameDay = await sendHighSignalEmail(
     pagedDb,
     'tanaka',
-    { receiptKey: 'different_event_same_minute', throttleMs: 0, subject: 'Simultaneous email' },
-    { ...emailOpts, now: pulse2EffectiveMs + 60_000 },
+    { receiptKey: 'different_event_same_day', throttleMs: 0, subject: 'Second email same day' },
+    { ...emailOpts, now: dailyEmailEffectiveMs + 60_000 },
   );
-  assert.equal(immediateSecond.sent, false);
-  assert.equal(immediateSecond.reason, 'too_close_to_recent_email');
+  assert.equal(secondSameDay.sent, false);
+  assert.equal(secondSameDay.reason, 'daily_user_email_limit');
 
   await pagedDb.collection('users').doc('tanakaAltAccount').set({
     email: 'TANAKA@example.com',
@@ -621,8 +615,8 @@ test('Part C: emails render full-width uncropped mood heroes, LINKUP cat profile
     pagedDb,
     'tanakaAltAccount',
     { receiptKey: 'alt_account_same_email', throttleMs: 0, subject: 'Second account same inbox' },
-    { ...emailOpts, now: pulse2EffectiveMs + 5 * 60_000 },
+    { ...emailOpts, now: dailyEmailEffectiveMs + 5 * 60_000 },
   );
   assert.equal(duplicateAddrCollision.sent, false);
-  assert.equal(duplicateAddrCollision.reason, 'too_close_to_recent_email');
+  assert.equal(duplicateAddrCollision.reason, 'daily_user_email_limit');
 });

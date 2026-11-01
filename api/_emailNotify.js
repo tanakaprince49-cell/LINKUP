@@ -7,8 +7,9 @@ import { getAuth } from 'firebase-admin/auth';
 
 const APP_BASE = 'https://www.linkupbuild.com/app';
 const API_BASE = 'https://linkup-muqu.vercel.app';
-const SOCIAL_THROTTLE_MS = 6 * 60 * 60 * 1000;
-export const MIN_USER_EMAIL_GAP_MS = 4 * 60 * 60 * 1000;
+const SOCIAL_THROTTLE_MS = 20 * 60 * 60 * 1000;
+export const MIN_USER_EMAIL_GAP_MS = 20 * 60 * 60 * 1000;
+export const MAX_USER_EMAILS_PER_DAY = 1;
 const RESEND_FALLBACK_FROM = 'Linky at LINKUP <onboarding@resend.dev>';
 export const LINKY_AVATAR_URL = `${APP_BASE}/icons/linky-avatar.png`;
 export const DAILY_EMAIL_HARD_CAP = 95;
@@ -356,7 +357,7 @@ function recipientLockId(to) {
 }
 
 async function checkRecipientSpacing(db, uid, to, effectiveSendAt, minGapMs = MIN_USER_EMAIL_GAP_MS) {
-  if (!db || !(minGapMs > 0)) return { allowed: true };
+  if (!db) return { allowed: true };
   const userPrefRef = uid ? db.collection('emailPrefs').doc(uid) : null;
   const addrLockRef = to ? db.collection('emailRecipientLocks').doc(recipientLockId(to)) : null;
 
@@ -364,11 +365,21 @@ async function checkRecipientSpacing(db, uid, to, effectiveSendAt, minGapMs = MI
     userPrefRef ? userPrefRef.get().catch(() => null) : Promise.resolve(null),
     addrLockRef ? addrLockRef.get().catch(() => null) : Promise.resolve(null),
   ]);
-  const lastUserAt = Number(uSnap?.exists ? uSnap.data()?.lastEmailAt || 0 : 0);
-  const lastAddrAt = Number(aSnap?.exists ? aSnap.data()?.lastEmailAt || 0 : 0);
-  const lastAt = Math.max(lastUserAt, lastAddrAt);
-  if (lastAt > 0 && effectiveSendAt - lastAt < minGapMs) {
-    return { allowed: false, reason: 'too_close_to_recent_email', lastEmailAt: lastAt };
+  const uData = uSnap?.exists ? uSnap.data() || {} : {};
+  const aData = aSnap?.exists ? aSnap.data() || {} : {};
+
+  // Hard 1-email-per-day cap per user AND per email address
+  const sendDay = new Date(effectiveSendAt).toISOString().slice(0, 10);
+  if (minGapMs > 0 && (uData.lastEmailDay === sendDay || aData.lastEmailDay === sendDay)) {
+    const lastAt = Math.max(Number(uData.lastEmailAt || 0), Number(aData.lastEmailAt || 0));
+    return { allowed: false, reason: 'daily_user_email_limit', lastEmailAt: lastAt };
+  }
+
+  if (minGapMs > 0) {
+    const lastAt = Math.max(Number(uData.lastEmailAt || 0), Number(aData.lastEmailAt || 0));
+    if (lastAt > 0 && effectiveSendAt - lastAt < minGapMs) {
+      return { allowed: false, reason: 'too_close_to_recent_email', lastEmailAt: lastAt };
+    }
   }
   return { allowed: true, userPrefRef, addrLockRef };
 }
@@ -376,11 +387,12 @@ async function checkRecipientSpacing(db, uid, to, effectiveSendAt, minGapMs = MI
 async function stampRecipientSpacing(db, uid, to, effectiveSendAt, subject = '') {
   if (!db) return;
   const cleanSubj = sanitizeEmailCopy(subject).slice(0, 120);
+  const sendDay = new Date(effectiveSendAt).toISOString().slice(0, 10);
   const writes = [];
   if (uid) {
     writes.push(
       db.collection('emailPrefs').doc(uid).set(
-        { lastEmailAt: effectiveSendAt, lastEmailSubject: cleanSubj, updatedAt: Date.now() },
+        { lastEmailAt: effectiveSendAt, lastEmailDay: sendDay, lastEmailSubject: cleanSubj, updatedAt: Date.now() },
         { merge: true },
       ).catch(() => null),
     );
@@ -388,7 +400,7 @@ async function stampRecipientSpacing(db, uid, to, effectiveSendAt, subject = '')
   if (to) {
     writes.push(
       db.collection('emailRecipientLocks').doc(recipientLockId(to)).set(
-        { lastEmailAt: effectiveSendAt, uid: uid || '', updatedAt: Date.now() },
+        { lastEmailAt: effectiveSendAt, lastEmailDay: sendDay, uid: uid || '', updatedAt: Date.now() },
         { merge: true },
       ).catch(() => null),
     );
