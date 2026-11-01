@@ -2,6 +2,7 @@ export interface IconVariantMeta {
   readonly id: string;
   readonly label: string;
   readonly occasion: string;
+  readonly triggerRule: string;
   readonly subtitle: string;
   readonly category: 'normal' | 'urgent' | 'inactive' | 'celebration' | 'occasion';
   readonly androidAlias: string;

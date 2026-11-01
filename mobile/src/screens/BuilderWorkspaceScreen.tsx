@@ -60,10 +60,11 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
  const confirmed=(title:string,message:string,onConfirm:()=>void)=>{if(Platform.OS==='web'){if((globalThis as any).confirm?.(message))onConfirm();}else Alert.alert(title,message,[{text:'Cancel',style:'cancel'},{text:'Continue',style:'destructive',onPress:onConfirm}]);};
  const dateDue=()=>{const n=Number(days);return Number.isFinite(n)&&n>=0&&n<=90?Date.now()+n*86400000:0;};
  const savePrefs=()=>run('preferences',async()=>{if(prefs.push&&!home.state.prefs.push){if(Platform.OS==='web')await registerForWebNotificationsAsync(user!.uid);else await registerForPushNotificationsAsync(user!.uid);}await builderCall('prefs',prefs);notifyUser('Preferences saved',Platform.OS==='web'?'Browser alerts work while LINKUP is open. Background web push is not configured.':'Push delivery needs notification permission and a registered token on a supported native build.');});
- if(!home)return <SafeAreaView style={[styles.root,appBackground(dark)]}><ScreenHeader title="Your builder workspace" onBack={()=>navigation.goBack()} isDark={dark}/><View style={{padding:24,gap:16}}>{error?text(error):<ActivityIndicator color={COLORS.primaryStrong}/>} {error?button('Try again',()=>void refresh(true)):null}</View></SafeAreaView>;
+ const isTabWorkspace=route?.name==='Workspace';
+ if(!home)return <SafeAreaView edges={isTabWorkspace?[]:undefined} style={[styles.root,appBackground(dark)]}>{!isTabWorkspace?<ScreenHeader title="Your builder workspace" onBack={()=>navigation.goBack()} isDark={dark}/>:null}<View style={{padding:24,gap:16}}>{error?text(error):<ActivityIndicator color={COLORS.primaryStrong}/>} {error?button('Try again',()=>void refresh(true)):null}</View></SafeAreaView>;
  const b=home.brief,s=home.state;
- return <SafeAreaView style={[styles.root,appBackground(dark)]}>
-  <ScreenHeader title="Build with Linky" subtitle="A useful next step. Then another." onBack={()=>navigation.goBack()} isDark={dark} right={<VerifiedBadge size={20}/>}/>
+ return <SafeAreaView edges={isTabWorkspace?[]:undefined} style={[styles.root,appBackground(dark)]}>
+  {!isTabWorkspace?<ScreenHeader title="Build with Linky" subtitle="A useful next step. Then another." onBack={()=>navigation.goBack()} isDark={dark} right={<VerifiedBadge size={20}/>}/>:null}
   <View style={{paddingHorizontal:18,paddingBottom:8}}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>{BUILDER_SECTIONS.map(tab=><TouchableOpacity key={tab} accessibilityRole="button" accessibilityState={{selected:section===tab}} onPress={()=>choose(tab)} style={[styles.tab,section===tab&&styles.activeTab]}><Text style={{color:section===tab?'#0A0B0D':'#575B60',fontWeight:'800'}}>{tab}</Text></TouchableOpacity>)}</ScrollView></View>
   <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async()=>{setRefreshing(true);await refresh();await panel(section);setRefreshing(false);}}/>}>
    {error?<View accessibilityRole="alert" style={styles.error}><Text style={{color:'#9f1239'}}>{error}</Text></View>:null}{busy?<ActivityIndicator color={COLORS.primaryStrong}/>:null}
@@ -137,7 +138,7 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
             <View style={{flex:1,gap:2}}>
               <Text style={{fontWeight:'800',fontSize:14,color:textColor(dark)}}>{v.label}{pinned?' · Pinned':''}</Text>
               <Text style={{fontSize:11,fontWeight:'700',color:'#B78103'}}>{v.occasion}</Text>
-              <Text style={{fontSize:12,lineHeight:17,color:textColor(dark,'secondary')}}>{v.subtitle}</Text>
+              <Text style={{fontSize:12,lineHeight:17,color:textColor(dark,'secondary')}}>{v.triggerRule||v.subtitle}</Text>
             </View>
           </TouchableOpacity>;
         })}

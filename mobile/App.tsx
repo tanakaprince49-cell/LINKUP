@@ -152,13 +152,14 @@ const linking: any = {
         screens: {
           Dashboard: '',
           LinkyHome: 'linky',
-          Search: 'search',
+          Workspace: 'workspace',
           Inbox: 'inbox',
           Feed: 'startup-feed',
           News: 'news-feed',
           Campaigns: 'campaign-dashboard',
         },
       },
+      Search: 'search',
       Campaigns: 'campaign-manager',
       CampaignDetail: 'campaign-manager/:campaignId',
       Profile: 'profile/:userId',
@@ -300,7 +301,7 @@ function TabNavigator({ navigation }: any) {
     Dashboard: 'Discover',
     LinkyHome: 'Linky',
     Feed: 'Startups',
-    Search: 'Search',
+    Workspace: 'Workspace',
     Inbox: 'Messages',
     News: 'News',
   };
@@ -339,7 +340,7 @@ function TabNavigator({ navigation }: any) {
             LinkyHome: { active: 'Handshake', inactive: 'Handshake' },
             Feed: { active: 'Sprout', inactive: 'Sprout' },
             Campaigns: { active: 'Megaphone', inactive: 'Megaphone' },
-            Search: { active: 'Search', inactive: 'Search' },
+            Workspace: { active: 'Briefcase', inactive: 'Briefcase' },
             Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },
             News: { active: 'Newspaper', inactive: 'Newspaper' },
           };
@@ -411,7 +412,7 @@ function TabNavigator({ navigation }: any) {
             Dashboard: 'Network',
             LinkyHome: 'Linky',
             Feed: 'Startups',
-            Search: 'Search',
+            Workspace: 'Workspace',
             Inbox: 'Messages',
             News: 'News',
           };
@@ -422,7 +423,7 @@ function TabNavigator({ navigation }: any) {
       <Tab.Screen name="Dashboard" component={DiscoveryDashboardScreen} />
       <Tab.Screen name="LinkyHome" component={LinkyHomeScreen} options={{ headerShown: false, tabBarStyle: { display: 'none' } }} />
       <Tab.Screen name="Feed" component={FeedScreen} />
-      <Tab.Screen name="Search" component={SearchScreen} />
+      <Tab.Screen name="Workspace" component={BuilderWorkspaceScreen} />
       <Tab.Screen name="Inbox" component={MessagesScreen} options={{ headerShown: false }} />
       <Tab.Screen name="News" component={NewsScreen} />
       <Tab.Screen name="Campaigns" component={CampaignsScreen} />
@@ -757,6 +758,7 @@ function AppContent() {
               options={{ animation: Platform.OS === 'android' ? 'fade' : Platform.OS === 'web' ? 'none' : 'fade_from_bottom' }}
             />
             <Stack.Screen name="Alerts" component={AlertsScreen} />
+            <Stack.Screen name="Search" component={SearchScreen} />
             <Stack.Screen name="Messages" component={MessagesScreen} />
             <Stack.Screen name="ArchivedChats" component={MessagesScreen} initialParams={{ archivedOnly: true }} />
             <Stack.Screen name="Chat" component={ChatScreen} />

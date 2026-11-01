@@ -1,7 +1,7 @@
 import useDailyPicks from '../hooks/useDailyPicks';
 import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Linking, Platform } from 'react-native';
+import { AppState, View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -103,6 +103,7 @@ const writeCachedDashboardPeople = async (uid: string, people: UserProfile[]) =>
 };
 
 function DiscoveryDashboardScreen({ navigation }: any) {
+  const [homeSearchQuery, setHomeSearchQuery] = useState('');
   const { user, profile: me } = useAuth();
   // Hub ad strip: one sponsored slot for free members; PLUS members never see it.
   const [hubSponsor, setHubSponsor] = useState<Campaign | null>(null);
@@ -521,10 +522,58 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 </Text>
               </View>
 
-              <TouchableOpacity accessibilityRole="button" onPress={() => navigation.navigate('BuilderWorkspace', { section: 'Today' })}
-                style={{padding:14,borderRadius:14,backgroundColor:HOME_GOLD_TINT,marginTop:12}}>
-                <Text style={{fontWeight:'800',color:HOME_GOLD_DEEP}}>Your next move · Build with Linky ↗</Text>
-              </TouchableOpacity>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 14,
+                  backgroundColor: HOME_GOLD_TINT,
+                  borderWidth: 1,
+                  borderColor: HOME_LINE,
+                  marginTop: 12,
+                }}
+              >
+                <Search size={17} color={HOME_GOLD_DEEP} />
+                <TextInput
+                  value={homeSearchQuery}
+                  onChangeText={setHomeSearchQuery}
+                  onSubmitEditing={() => {
+                    const q = homeSearchQuery.trim();
+                    navigation.navigate('Search', { initialQuery: q });
+                  }}
+                  returnKeyType="search"
+                  placeholder="Search anyone on LINKUP by name, skill, or role..."
+                  placeholderTextColor={textColor(isDark, 'muted')}
+                  style={{
+                    flex: 1,
+                    fontSize: 14,
+                    fontWeight: '600',
+                    color: textColor(isDark),
+                    paddingVertical: 6,
+                  }}
+                />
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Search anyone on LINKUP"
+                  onPress={() => {
+                    const q = homeSearchQuery.trim();
+                    navigation.navigate('Search', { initialQuery: q });
+                  }}
+                  style={{
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                    borderRadius: 10,
+                    backgroundColor: HOME_GOLD,
+                    borderWidth: 1,
+                    borderColor: HOME_LINE,
+                  }}
+                >
+                  <Text style={{ fontWeight: '800', fontSize: 13, color: '#000' }}>Search</Text>
+                </TouchableOpacity>
+              </View>
               <View style={styles.heroActions}>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('DailyFive')}

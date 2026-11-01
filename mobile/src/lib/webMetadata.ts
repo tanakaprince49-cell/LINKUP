@@ -11,7 +11,7 @@ const titles: Record<string, string> = {
   RecommendedMatches: 'Recommended professionals', IdeaDeck: 'Startup ideas',
   LinkySettings: 'Introduction preferences', Campaigns: 'Product campaigns',
   CreateCampaign: 'Create a campaign', CreatePost: 'Publish a startup',
-  BuilderWorkspace: 'Private builder workspace',
+  BuilderWorkspace: 'Private builder workspace', Workspace: 'Private builder workspace',
   DailyFive: 'Daily briefing', ShipLog: 'Progress log', CityLeague: 'Local rankings',
   GamificationHub: 'Professional development', TrendingBuilders: 'Community rankings',
   Viewers: 'Profile insights', FounderFlip: 'Founder Flip', PitchPerfect: 'Pitch Perfect', NetworkQuiz: 'Business knowledge quiz', LvlupDemo: 'LvlUp Ventures deal flow demo',

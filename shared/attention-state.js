@@ -1,6 +1,6 @@
 // Duolingo-style dynamic visual appearance & multi-occasion icon resolver.
-// Shared across Web (favicon, tab title, PWA badge) and Mobile (Android
-// activity-alias launcher icons, iOS CFBundleAlternateIcons, OS app badge).
+// Every bundled favicon / mobile launcher icon maps to a concrete, deterministic
+// product reason across both Web and Mobile, and reverts immediately on user action.
 
 export const MILESTONE_STREAK_DAYS = Object.freeze([1, 3, 7, 14, 30, 50, 100, 365]);
 
@@ -8,7 +8,8 @@ export const ICON_VARIANTS = Object.freeze([
   {
     id: 'default',
     label: 'Plugged In',
-    occasion: 'Default',
+    occasion: 'Active · Caught up & building',
+    triggerRule: 'Shown during normal active sessions when unread alerts are cleared.',
     subtitle: 'Classic LINKUP black cat plugging in on signature yellow.',
     category: 'normal',
     androidAlias: 'LauncherDefault',
@@ -19,35 +20,24 @@ export const ICON_VARIANTS = Object.freeze([
     tabPrefix: '',
   },
   {
-    id: 'streak_fire',
-    label: 'Streak on the Line',
-    occasion: 'Urgent · Evening streak risk',
-    subtitle: 'Flaming ethernet plug when an active streak needs today’s build before midnight.',
-    category: 'urgent',
-    androidAlias: 'LauncherStreakFire',
-    iosIconName: 'StreakFire',
-    assetFile: 'icon-streak-fire.png',
-    webIconFile: 'icon-streak-fire.png',
-    themeColor: '#FF4D00',
-    tabPrefix: '🔥 Streak at risk',
-  },
-  {
-    id: 'unread_urgent',
-    label: 'Incoming Signal',
-    occasion: 'Urgent · Unread messages or requests',
-    subtitle: 'Buzzing red alert socket when a builder message or match is waiting.',
-    category: 'urgent',
-    androidAlias: 'LauncherUnreadUrgent',
-    iosIconName: 'UnreadUrgent',
-    assetFile: 'icon-unread-urgent.png',
-    webIconFile: 'icon-unread-urgent.png',
-    themeColor: '#FBE618',
-    tabPrefix: '⚡ New signal',
+    id: 'angry_1d',
+    label: 'Red Angry',
+    occasion: 'Inactive · Not opened for 1 day',
+    triggerRule: 'Automatically turns red angry when LINKUP has not been opened for 1–2 days.',
+    subtitle: 'Furious crimson-red Linky glaring with an unplugged sparking cord after 24 hours away.',
+    category: 'inactive',
+    androidAlias: 'LauncherAngry1d',
+    iosIconName: 'Angry1d',
+    assetFile: 'icon-angry-red.png',
+    webIconFile: 'icon-angry-red.png',
+    themeColor: '#CA221F',
+    tabPrefix: '😠 1 day away',
   },
   {
     id: 'sad_inactive',
     label: 'Missing You',
-    occasion: 'Inactive · 3–6 days away',
+    occasion: 'Inactive · Not opened for 3–6 days',
+    triggerRule: 'Automatically shown when LINKUP has not been opened for 3 to 6 days.',
     subtitle: 'Rainy unplugged Linky cat waiting to hear what you are building.',
     category: 'inactive',
     androidAlias: 'LauncherSadInactive',
@@ -60,7 +50,8 @@ export const ICON_VARIANTS = Object.freeze([
   {
     id: 'ghost_abandoned',
     label: 'Cobweb Mode',
-    occasion: 'Inactive · 7+ days away',
+    occasion: 'Inactive · Not opened for 7+ days',
+    triggerRule: 'Automatically shown when LINKUP has not been opened for a full week or longer.',
     subtitle: 'Dusty cobwebs over the ethernet socket when your workspace goes quiet.',
     category: 'inactive',
     androidAlias: 'LauncherGhostAbandoned',
@@ -71,9 +62,38 @@ export const ICON_VARIANTS = Object.freeze([
     tabPrefix: '🕸️ Unplugged',
   },
   {
+    id: 'unread_urgent',
+    label: 'Incoming Signal',
+    occasion: 'Urgent · Unread messages or notifications',
+    triggerRule: 'Shown across web & mobile whenever unread messages, matches, or alerts are waiting.',
+    subtitle: 'Buzzing red alert socket when a builder message or match is waiting.',
+    category: 'urgent',
+    androidAlias: 'LauncherUnreadUrgent',
+    iosIconName: 'UnreadUrgent',
+    assetFile: 'icon-unread-urgent.png',
+    webIconFile: 'icon-unread-urgent.png',
+    themeColor: '#FBE618',
+    tabPrefix: '⚡ New signal',
+  },
+  {
+    id: 'streak_fire',
+    label: 'Streak on the Line',
+    occasion: 'Urgent · Evening streak at risk (after 6 PM)',
+    triggerRule: 'Shown after 6:00 PM when an active 2+ day streak still needs today’s build update.',
+    subtitle: 'Flaming ethernet plug when an active streak needs today’s build before midnight.',
+    category: 'urgent',
+    androidAlias: 'LauncherStreakFire',
+    iosIconName: 'StreakFire',
+    assetFile: 'icon-streak-fire.png',
+    webIconFile: 'icon-streak-fire.png',
+    themeColor: '#FF4D00',
+    tabPrefix: '🔥 Streak at risk',
+  },
+  {
     id: 'champion_crown',
     label: 'League Champion',
     occasion: 'Occasion · Builder League winner & PLUS',
+    triggerRule: 'Shown when you hold a Builder League win, reward campaign, or PLUS crown.',
     subtitle: 'Royal gold crown Linky for Builder League podium winners and champions.',
     category: 'celebration',
     androidAlias: 'LauncherChampionCrown',
@@ -87,6 +107,7 @@ export const ICON_VARIANTS = Object.freeze([
     id: 'on_fire_shipped',
     label: 'Shipped Today',
     occasion: 'Occasion · Daily build logged',
+    triggerRule: 'Shown throughout the rest of the day right after you log your daily build step.',
     subtitle: 'Cool sunglasses + green check once today’s build square is lit.',
     category: 'celebration',
     androidAlias: 'LauncherOnFireShipped',
@@ -99,7 +120,8 @@ export const ICON_VARIANTS = Object.freeze([
   {
     id: 'milestone_party',
     label: 'Milestone Party',
-    occasion: 'Occasion · Streak milestone & launch days',
+    occasion: 'Occasion · Streak milestone & New Year',
+    triggerRule: 'Shown on Day 1, 3, 7, 14, 30, 50, 100, or 365 build streaks and New Year’s.',
     subtitle: 'Confetti party hat on Day 1, 3, 7, 14, 30, 50, 100, 365 & New Year.',
     category: 'celebration',
     androidAlias: 'LauncherMilestoneParty',
@@ -113,6 +135,7 @@ export const ICON_VARIANTS = Object.freeze([
     id: 'night_owl',
     label: 'Night Owl',
     occasion: 'Occasion · Late-night builder (10 PM – 4 AM)',
+    triggerRule: 'Shown automatically during late-night building sessions between 10 PM and 4 AM.',
     subtitle: 'Stealth obsidian dark icon with glowing neon yellow Linky under the moon.',
     category: 'occasion',
     androidAlias: 'LauncherNightOwl',
@@ -126,6 +149,7 @@ export const ICON_VARIANTS = Object.freeze([
     id: 'weekend_chill',
     label: 'Weekend Recharge',
     occasion: 'Occasion · Protected rest day',
+    triggerRule: 'Shown on your protected weekly rest day or Sunday streak-safe recharge.',
     subtitle: 'Warm sunset Linky with a coffee mug for protected Sunday rest days.',
     category: 'occasion',
     androidAlias: 'LauncherWeekendChill',
@@ -160,13 +184,14 @@ export function isNewYearCelebration(nowMs = Date.now()) {
 
 /**
  * Pure deterministic resolver for LINKUP's dynamic visual appearance.
- * Guarantees immediate revert from 'urgent' / 'inactive' upon user action:
- * - Focusing/opening the app (`isForeground === true` or `userActedRecently === true`)
- *   immediately clears `inactive` states (`sad_inactive`, `ghost_abandoned`) and
- *   suppresses background tab nagging titles so SEO route titles stay clean.
- * - Reading messages/notifications (`unreadMessages + unreadNotifications === 0` or
- *   `unreadAcknowledged === true`) immediately exits `unread_urgent`.
- * - Recording today's build (`todayRecorded === true`) immediately exits `streak_fire`.
+ * Every variant maps to a specific reason across Web & Mobile:
+ * - Not opened for 7+ days -> `ghost_abandoned` (Cobweb Mode)
+ * - Not opened for 3–6 days -> `sad_inactive` (Missing You)
+ * - Not opened for 1–2 days -> `angry_1d` (Red Angry)
+ *   (All 3 inactivity states revert immediately the instant the user opens/focuses LINKUP!)
+ * - Unread messages or notifications -> `unread_urgent` (reverts immediately on opening Messages/Alerts or reading)
+ * - Active 2+ day streak unlogged after 6 PM -> `streak_fire` (transforms immediately on logging today's build)
+ * - Milestone streak / League Champion / Shipped Today / Protected Rest / Night Owl -> matching occasion icon!
  */
 export function resolveAttentionAppearance({
   mode = 'auto',
@@ -232,7 +257,7 @@ export function resolveAttentionAppearance({
     ? 0
     : Math.max(0, Math.floor(Number(daysSinceActive) || 0));
 
-  // 1. INACTIVE STATES (3+ days sad cat, 7+ days cobweb cat) — reverts immediately on open/focus!
+  // 1. INACTIVE STATES (7d+ cobweb, 3–6d sad, 1–2d red angry) — reverts immediately on open/focus!
   if (inactiveDays >= 7) {
     return {
       state: 'inactive',
@@ -253,12 +278,23 @@ export function resolveAttentionAppearance({
       reason: 'inactive_3d',
     };
   }
+  if (inactiveDays >= 1) {
+    return {
+      state: 'inactive',
+      variant: 'angry_1d',
+      meta: ICON_VARIANT_MAP.angry_1d,
+      badgeCount: Math.max(1, effectiveUnread),
+      backgroundTitle: '😠 1 day away — Linky is waiting · LINKUP',
+      reason: 'inactive_1d',
+    };
+  }
 
-  // 2. URGENT STATES — reverts immediately when user reads alerts/messages, focuses/acts, or logs build!
+  // 2. URGENT STATES — shown live across web & mobile for their exact reason,
+  // and revert immediately when the user reads messages/alerts or logs today's build!
   const streak = Math.max(0, Math.floor(Number(streakCount) || 0));
   const hour = ((Math.floor(Number(localHour) || 0) % 24) + 24) % 24;
 
-  if (effectiveUnread > 0 && !userActedRecently) {
+  if (effectiveUnread > 0) {
     const countLabel = effectiveUnread > 99 ? '99+' : String(effectiveUnread);
     return {
       state: 'urgent',
@@ -272,13 +308,13 @@ export function resolveAttentionAppearance({
     };
   }
 
-  const streakAtRisk = streak >= 2 && !todayRecorded && !protectedRestToday && hour >= 18 && !userActedRecently;
+  const streakAtRisk = streak >= 2 && !todayRecorded && !protectedRestToday && hour >= 18;
   if (streakAtRisk) {
     return {
       state: 'urgent',
       variant: 'streak_fire',
       meta: ICON_VARIANT_MAP.streak_fire,
-      badgeCount: Math.max(1, effectiveUnread),
+      badgeCount: 1,
       backgroundTitle: !isForeground
         ? `🔥 Keep your ${streak}-day build streak alive · LINKUP`
         : null,
@@ -286,14 +322,14 @@ export function resolveAttentionAppearance({
     };
   }
 
-  // 3. CELEBRATION & OCCASION VARIANTS (when healthy & caught up!)
+  // 3. CELEBRATION & OCCASION VARIANTS (each shown for its real product occasion!)
   const milestoneToday = todayRecorded && MILESTONE_STREAK_DAYS.includes(streak);
   if (milestoneToday || isNewYearCelebration(nowMs)) {
     return {
       state: 'celebration',
       variant: 'milestone_party',
       meta: ICON_VARIANT_MAP.milestone_party,
-      badgeCount: effectiveUnread,
+      badgeCount: 0,
       backgroundTitle: null,
       reason: milestoneToday ? 'streak_milestone' : 'new_year',
     };
@@ -304,7 +340,7 @@ export function resolveAttentionAppearance({
       state: 'celebration',
       variant: 'champion_crown',
       meta: ICON_VARIANT_MAP.champion_crown,
-      badgeCount: effectiveUnread,
+      badgeCount: 0,
       backgroundTitle: null,
       reason: 'champion_shipped',
     };
@@ -315,7 +351,7 @@ export function resolveAttentionAppearance({
       state: 'celebration',
       variant: 'on_fire_shipped',
       meta: ICON_VARIANT_MAP.on_fire_shipped,
-      badgeCount: effectiveUnread,
+      badgeCount: 0,
       backgroundTitle: null,
       reason: 'shipped_today',
     };
@@ -326,7 +362,7 @@ export function resolveAttentionAppearance({
       state: 'celebration',
       variant: 'champion_crown',
       meta: ICON_VARIANT_MAP.champion_crown,
-      badgeCount: effectiveUnread,
+      badgeCount: 0,
       backgroundTitle: null,
       reason: 'league_champion',
     };
@@ -337,7 +373,7 @@ export function resolveAttentionAppearance({
       state: 'normal',
       variant: 'weekend_chill',
       meta: ICON_VARIANT_MAP.weekend_chill,
-      badgeCount: effectiveUnread,
+      badgeCount: 0,
       backgroundTitle: null,
       reason: 'protected_rest',
     };
@@ -348,7 +384,7 @@ export function resolveAttentionAppearance({
       state: 'normal',
       variant: 'night_owl',
       meta: ICON_VARIANT_MAP.night_owl,
-      badgeCount: effectiveUnread,
+      badgeCount: 0,
       backgroundTitle: null,
       reason: 'night_owl_window',
     };
@@ -359,7 +395,7 @@ export function resolveAttentionAppearance({
     state: 'normal',
     variant: 'default',
     meta: ICON_VARIANT_MAP.default,
-    badgeCount: effectiveUnread,
+    badgeCount: 0,
     backgroundTitle: null,
     reason: 'normal_active',
   };

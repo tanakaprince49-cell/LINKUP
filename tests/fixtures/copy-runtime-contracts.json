@@ -328,7 +328,11 @@
     ],
     [
       "navigate",
-      "BuilderWorkspace"
+      "Search"
+    ],
+    [
+      "navigate",
+      "Search"
     ],
     [
       "navigate",
@@ -702,10 +706,6 @@
     [
       "navigate",
       "LinkyAudit"
-    ],
-    [
-      "navigate",
-      "BuilderWorkspace"
     ],
     [
       "navigate",

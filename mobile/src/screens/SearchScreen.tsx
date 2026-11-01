@@ -1,4 +1,5 @@
 import MemberBadges from '../components/MemberBadges';
+import ScreenHeader from '../components/ScreenHeader';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
@@ -170,7 +171,14 @@ export default function SearchScreen({ navigation, route }: any) {
   const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
   const [serverHits, setServerHits] = useState<UserProfile[]>([]);
   const [serverSearching, setServerSearching] = useState(false);
-  const [queryText, setQueryText] = useState('');
+  const [queryText, setQueryText] = useState(() =>
+    typeof route?.params?.initialQuery === 'string' ? route.params.initialQuery : '',
+  );
+  useEffect(() => {
+    if (typeof route?.params?.initialQuery === 'string') {
+      setQueryText(route.params.initialQuery);
+    }
+  }, [route?.params?.initialQuery]);
   const [aiQuery, setAiQuery] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiRankLoading, setAiRankLoading] = useState(false);
@@ -739,6 +747,11 @@ export default function SearchScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
+      <ScreenHeader
+        title="Search"
+        onBack={navigation?.canGoBack?.() ? () => navigation.goBack() : undefined}
+        isDark={isDark}
+      />
       <ScrollView
         contentContainerStyle={styles.searchContent}
         showsVerticalScrollIndicator

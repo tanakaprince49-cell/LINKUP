@@ -11,9 +11,11 @@ import {
   applyResolvedAppearance,
   getActionSnapshot,
   getCurrentIconModeSync,
+  loadPersistedLastOpenedAt,
   loadSavedIconMode,
   recordUserActionForAppearance,
   resolveAttentionAppearance,
+  savePersistedLastOpenedAt,
   subscribeDynamicAppearance,
 } from '../lib/dynamicAppearance';
 
@@ -41,11 +43,24 @@ export default function DynamicAppearanceController({ currentRoute }: { currentR
   const [tick, setTick] = useState(0);
   const lastForegroundAtRef = useRef<number>(Date.now());
 
-  // Hydrate persisted icon mode & subscribe to instant Settings/user-action updates
+  // Hydrate persisted icon mode + persisted lastOpenedAt (for session-restored background tabs!)
   useEffect(() => {
     let alive = true;
     loadSavedIconMode().then((saved) => {
       if (alive) setIconMode(saved);
+    });
+    loadPersistedLastOpenedAt().then((ts) => {
+      if (!alive) return;
+      const visibleNow = Platform.OS === 'web' && typeof document !== 'undefined'
+        ? document.visibilityState !== 'hidden'
+        : AppState.currentState === 'active';
+      if (visibleNow) {
+        lastForegroundAtRef.current = Date.now();
+        savePersistedLastOpenedAt(lastForegroundAtRef.current);
+      } else {
+        lastForegroundAtRef.current = ts;
+        setTick((t) => t + 1);
+      }
     });
     const unsub = subscribeDynamicAppearance(() => {
       setIconMode(getCurrentIconModeSync());

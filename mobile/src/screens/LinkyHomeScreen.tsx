@@ -770,11 +770,6 @@ export default function LinkyHomeScreen({ navigation,route }: any) {
           {home && (home.inbound.length > 0 || home.pending?.meet || home.pending?.lead || home.loop) ? <View style={styles.activityDot} /> : null}
         </TouchableOpacity>
       </View>
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open your builder workspace" onPress={() => navigation.navigate('BuilderWorkspace', { section: 'Today' })}
-        style={{marginHorizontal:14,marginBottom:6,paddingHorizontal:14,paddingVertical:11,borderRadius:16,backgroundColor:isDark?'#25483b':'#e6f0be',flexDirection:'row',justifyContent:'space-between'}}>
-        <Text style={{fontWeight:'800',color:textColor(isDark)}}>Your next move · progress & groups</Text>
-        <Text style={{fontWeight:'900',color:textColor(isDark)}}>↗</Text>
-      </TouchableOpacity>
       {home&&!!home.thread?.length&&!input.trim()&&!thinking&&<TouchableOpacity accessibilityRole="button" onPress={()=>setToolsOpen(v=>!v)} style={{paddingHorizontal:18,paddingVertical:10}}><Text style={{color:textColor(isDark),fontWeight:'800',fontSize:12}}>Create something useful · pitch, customers, MVP {toolsOpen?'−':'+'}</Text></TouchableOpacity>}
       {home&&(!home.thread?.length||toolsOpen)&&!input.trim()&&!thinking&&!pendingAsk&&<LinkyWorkbenchPanel isDark={isDark} onPrompt={prompt=>{setInput(prompt);setToolsOpen(false);inputRef.current?.focus();}} onSources={()=>navigation.navigate('BuilderWorkspace',{section:'Leads'})}/>}
       {/* Keyboard keeps the composer visible:

@@ -107,13 +107,15 @@ self.addEventListener('push', (event) => {
   }
   if (!data || typeof data !== 'object') data = {};
   const category = String(data.category || '');
-  const pushIcon = category === 'comeback'
-    ? appUrl('icons/icon-sad-inactive.png')
-    : category === 'league'
-      ? appUrl('icons/icon-champion-crown.png')
-      : category === 'build' || category === 'streak'
-        ? appUrl('icons/icon-streak-fire.png')
-        : appUrl('icons/icon-192.png');
+  const pushIcon = category === 'inactive_1d' || category === 'nudge'
+    ? appUrl('icons/icon-angry-red.png')
+    : category === 'comeback'
+      ? appUrl('icons/icon-sad-inactive.png')
+      : category === 'league'
+        ? appUrl('icons/icon-champion-crown.png')
+        : category === 'build' || category === 'streak'
+          ? appUrl('icons/icon-streak-fire.png')
+          : appUrl('icons/icon-unread-urgent.png');
   self.navigator?.setAppBadge?.(1)?.catch?.(() => {});
   event.waitUntil(
     self.registration.showNotification(data.title || 'LINKUP', {

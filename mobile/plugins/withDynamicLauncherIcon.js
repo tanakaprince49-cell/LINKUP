@@ -9,10 +9,11 @@ const path = require('path');
 
 const VARIANTS = [
   { id: 'default', alias: 'LauncherDefault', iosName: null, asset: 'icon-padded.png', enabled: true },
-  { id: 'streak_fire', alias: 'LauncherStreakFire', iosName: 'StreakFire', asset: 'icon-streak-fire.png', enabled: false },
-  { id: 'unread_urgent', alias: 'LauncherUnreadUrgent', iosName: 'UnreadUrgent', asset: 'icon-unread-urgent.png', enabled: false },
+  { id: 'angry_1d', alias: 'LauncherAngry1d', iosName: 'Angry1d', asset: 'icon-angry-red.png', enabled: false },
   { id: 'sad_inactive', alias: 'LauncherSadInactive', iosName: 'SadInactive', asset: 'icon-sad-inactive.png', enabled: false },
   { id: 'ghost_abandoned', alias: 'LauncherGhostAbandoned', iosName: 'GhostAbandoned', asset: 'icon-ghost-abandoned.png', enabled: false },
+  { id: 'unread_urgent', alias: 'LauncherUnreadUrgent', iosName: 'UnreadUrgent', asset: 'icon-unread-urgent.png', enabled: false },
+  { id: 'streak_fire', alias: 'LauncherStreakFire', iosName: 'StreakFire', asset: 'icon-streak-fire.png', enabled: false },
   { id: 'champion_crown', alias: 'LauncherChampionCrown', iosName: 'ChampionCrown', asset: 'icon-champion-crown.png', enabled: false },
   { id: 'on_fire_shipped', alias: 'LauncherOnFireShipped', iosName: 'OnFireShipped', asset: 'icon-shipped.png', enabled: false },
   { id: 'milestone_party', alias: 'LauncherMilestoneParty', iosName: 'MilestoneParty', asset: 'icon-milestone-party.png', enabled: false },
@@ -66,6 +67,25 @@ function withAndroidDynamicIcons(config) {
     }));
 
     app['activity-alias'] = [...existing, ...aliases];
+
+    // Internal BroadcastReceiver for 1-day (angry_1d), 3-day (sad_inactive), and 7-day (ghost_abandoned)
+    // automatic home-screen launcher decay when the user has not opened LINKUP.
+    const receiverClass = `${pkg}.dynamicicon.LinkupIconDecayReceiver`;
+    const receivers = (app.receiver || []).filter((r) => r.$?.['android:name'] !== receiverClass);
+    receivers.push({
+      $: {
+        'android:name': receiverClass,
+        'android:enabled': 'true',
+        'android:exported': 'false',
+      },
+      'intent-filter': [
+        {
+          action: [{ $: { 'android:name': 'android.intent.action.BOOT_COMPLETED' } }],
+        },
+      ],
+    });
+    app.receiver = receivers;
+
     return mod;
   });
 
@@ -76,7 +96,7 @@ function withAndroidDynamicIcons(config) {
       const platformRoot = mod.modRequest.platformProjectRoot;
       const pkg = (mod.android?.package || 'com.tana.linkup').replace(/\./g, '/');
 
-      // 1. Copy bundled PNGs into mipmap-xxhdpi & raw keep rules so R8 shrinkResources preserves all 10 icons
+      // 1. Copy bundled PNGs into mipmap-xxhdpi & raw keep rules so R8 shrinkResources preserves all 11 icons
       const mipmapDir = path.join(platformRoot, 'app', 'src', 'main', 'res', 'mipmap-xxhdpi');
       const rawDir = path.join(platformRoot, 'app', 'src', 'main', 'res', 'raw');
       fs.mkdirSync(mipmapDir, { recursive: true });
@@ -95,7 +115,7 @@ function withAndroidDynamicIcons(config) {
         `<?xml version="1.0" encoding="utf-8"?>\n<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="${keepTargets}" />\n`,
       );
 
-      // 2. Write Kotlin native module + lifecycle switcher (stages swap until background so foreground UI is never killed)
+      // 2. Write Kotlin native module + lifecycle switcher + 1d/3d/7d automatic decay receiver
       const javaDir = path.join(platformRoot, 'app', 'src', 'main', 'java', pkg, 'dynamicicon');
       fs.mkdirSync(javaDir, { recursive: true });
       const pkgDot = mod.android?.package || 'com.tana.linkup';
@@ -106,11 +126,15 @@ function withAndroidDynamicIcons(config) {
         `package ${pkgDot}.dynamicicon
 
 import android.app.Activity
+import android.app.AlarmManager
 import android.app.Application
+import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.SystemClock
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -120,12 +144,88 @@ class LinkupDynamicIconModule(private val reactContext: ReactApplicationContext)
   ReactContextBaseJavaModule(reactContext), Application.ActivityLifecycleCallbacks {
 
   companion object {
-    private const val PREFS = "linkup_dynamic_icon"
-    private const val KEY_DESIRED = "desired_variant"
-    private const val KEY_APPLIED = "applied_variant"
+    const val PREFS = "linkup_dynamic_icon"
+    const val KEY_DESIRED = "desired_variant"
+    const val KEY_APPLIED = "applied_variant"
+    const val KEY_MODE = "icon_mode"
+    const val KEY_LAST_SEEN = "last_seen_epoch_ms"
+    private const val DAY_MS = 86_400_000L
+
     val ALIASES = mapOf(
       ${aliasMapEntries}
     )
+
+    fun applyVariantSwap(ctx: Context, target: String) {
+      try {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val applied = prefs.getString(KEY_APPLIED, "default") ?: "default"
+        val safeTarget = if (ALIASES.containsKey(target)) target else "default"
+        if (safeTarget == applied) return
+        val desiredClass = ALIASES[safeTarget] ?: return
+        val pm = ctx.packageManager
+        pm.setComponentEnabledSetting(
+          ComponentName(ctx.packageName, desiredClass),
+          PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+          PackageManager.DONT_KILL_APP
+        )
+        for ((key, cls) in ALIASES) {
+          if (key != safeTarget) {
+            pm.setComponentEnabledSetting(
+              ComponentName(ctx.packageName, cls),
+              PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+              PackageManager.DONT_KILL_APP
+            )
+          }
+        }
+        prefs.edit().putString(KEY_APPLIED, safeTarget).apply()
+      } catch (_: Throwable) {}
+    }
+
+    fun scheduleInactivityDecayAlarms(ctx: Context) {
+      try {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val mode = prefs.getString(KEY_MODE, "auto") ?: "auto"
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val milestones = listOf(1 to "angry_1d", 3 to "sad_inactive", 7 to "ghost_abandoned")
+        for ((days, variant) in milestones) {
+          val intent = Intent(ctx, LinkupIconDecayReceiver::class.java).apply {
+            putExtra("variant", variant)
+            putExtra("days", days)
+          }
+          val pi = PendingIntent.getBroadcast(
+            ctx,
+            7100 + days,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+          )
+          if (mode != "auto") {
+            am.cancel(pi)
+          } else {
+            am.set(
+              AlarmManager.ELAPSED_REALTIME,
+              SystemClock.elapsedRealtime() + days * DAY_MS,
+              pi
+            )
+          }
+        }
+      } catch (_: Throwable) {}
+    }
+
+    fun cancelInactivityDecayAlarms(ctx: Context) {
+      try {
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        for (days in listOf(1, 3, 7)) {
+          val intent = Intent(ctx, LinkupIconDecayReceiver::class.java)
+          val pi = PendingIntent.getBroadcast(
+            ctx,
+            7100 + days,
+            intent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+          )
+          if (pi != null) am.cancel(pi)
+        }
+      } catch (_: Throwable) {}
+    }
   }
 
   private var startedActivities = 0
@@ -143,58 +243,91 @@ class LinkupDynamicIconModule(private val reactContext: ReactApplicationContext)
   }
 
   @ReactMethod
+  fun setIconMode(mode: String?, promise: Promise) {
+    val safeMode = if (mode.isNullOrBlank()) "auto" else mode
+    val prefs = reactContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    prefs.edit().putString(KEY_MODE, safeMode).apply()
+    if (safeMode != "auto") cancelInactivityDecayAlarms(reactContext.applicationContext)
+    promise.resolve(safeMode)
+  }
+
+  @ReactMethod
   fun setAlternateIcon(variantId: String?, promise: Promise) {
     val target = if (variantId != null && ALIASES.containsKey(variantId)) variantId else "default"
     val prefs = reactContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     prefs.edit().putString(KEY_DESIRED, target).apply()
     if (startedActivities <= 0) {
-      applyPendingSwap(reactContext.applicationContext)
+      applyVariantSwap(reactContext.applicationContext, target)
     }
     promise.resolve(target)
   }
 
-  private fun applyPendingSwap(ctx: Context) {
-    try {
-      val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-      val desired = prefs.getString(KEY_DESIRED, "default") ?: "default"
-      val applied = prefs.getString(KEY_APPLIED, "default") ?: "default"
-      if (desired == applied) return
-      val desiredClass = ALIASES[desired] ?: ALIASES["default"] ?: return
-      val pm = ctx.packageManager
-      pm.setComponentEnabledSetting(
-        ComponentName(ctx.packageName, desiredClass),
-        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-        PackageManager.DONT_KILL_APP
-      )
-      for ((key, cls) in ALIASES) {
-        if (key != desired) {
-          val defaultDisabledState = if (key == "default")
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-          else
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-          pm.setComponentEnabledSetting(
-            ComponentName(ctx.packageName, cls),
-            defaultDisabledState,
-            PackageManager.DONT_KILL_APP
-          )
-        }
-      }
-      prefs.edit().putString(KEY_APPLIED, desired).apply()
-    } catch (_: Throwable) {}
-  }
-
   override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
-  override fun onActivityStarted(activity: Activity) { startedActivities++ }
+  override fun onActivityStarted(activity: Activity) {
+    startedActivities++
+    cancelInactivityDecayAlarms(activity.applicationContext)
+    activity.applicationContext
+      .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .edit()
+      .putLong(KEY_LAST_SEEN, System.currentTimeMillis())
+      .apply()
+  }
   override fun onActivityResumed(activity: Activity) {}
   override fun onActivityPaused(activity: Activity) {}
   override fun onActivityStopped(activity: Activity) {
     startedActivities = (startedActivities - 1).coerceAtLeast(0)
     if (startedActivities == 0) {
-      applyPendingSwap(activity.applicationContext)
+      val ctx = activity.applicationContext
+      val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      prefs.edit().putLong(KEY_LAST_SEEN, System.currentTimeMillis()).apply()
+      val desired = prefs.getString(KEY_DESIRED, "default") ?: "default"
+      applyVariantSwap(ctx, desired)
+      scheduleInactivityDecayAlarms(ctx)
     }
   }
   override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
   override fun onActivityDestroyed(activity: Activity) {}
+}
+`,
+      );
+
+      fs.writeFileSync(
+        path.join(javaDir, 'LinkupIconDecayReceiver.kt'),
+        `package ${pkgDot}.dynamicicon
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+
+class LinkupIconDecayReceiver : BroadcastReceiver() {
+  override fun onReceive(context: Context, intent: Intent?) {
+    val prefs = context.getSharedPreferences(LinkupDynamicIconModule.PREFS, Context.MODE_PRIVATE)
+    val mode = prefs.getString(LinkupDynamicIconModule.KEY_MODE, "auto") ?: "auto"
+    if (mode != "auto") return
+
+    if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
+      val lastSeen = prefs.getLong(LinkupDynamicIconModule.KEY_LAST_SEEN, 0L)
+      if (lastSeen > 0L) {
+        val daysAway = ((System.currentTimeMillis() - lastSeen) / 86_400_000L).toInt()
+        val bootVariant = when {
+          daysAway >= 7 -> "ghost_abandoned"
+          daysAway >= 3 -> "sad_inactive"
+          daysAway >= 1 -> "angry_1d"
+          else -> null
+        }
+        if (bootVariant != null) {
+          prefs.edit().putString(LinkupDynamicIconModule.KEY_DESIRED, bootVariant).apply()
+          LinkupDynamicIconModule.applyVariantSwap(context, bootVariant)
+        }
+      }
+      LinkupDynamicIconModule.scheduleInactivityDecayAlarms(context)
+      return
+    }
+
+    val variant = intent?.getStringExtra("variant") ?: return
+    prefs.edit().putString(LinkupDynamicIconModule.KEY_DESIRED, variant).apply()
+    LinkupDynamicIconModule.applyVariantSwap(context, variant)
+  }
 }
 `,
       );

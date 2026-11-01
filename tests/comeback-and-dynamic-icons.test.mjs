@@ -207,14 +207,15 @@ test('Part A: comeback emails enforce milestones (Day 3/7/14/30), sunset at >45d
   assert.match(attempts[1], /onboarding@resend\.dev/);
 });
 
-test('Part B: all 10 bundled occasion icon assets, web favicons, and Expo native launcher aliases exist without version churn', () => {
-  assert.equal(ICON_VARIANTS.length, 10);
+test('Part B: all 11 bundled occasion icon assets, web favicons, and Expo native launcher aliases exist without version churn', () => {
+  assert.equal(ICON_VARIANTS.length, 11);
   const expectedIds = [
     'default',
-    'streak_fire',
-    'unread_urgent',
+    'angry_1d',
     'sad_inactive',
     'ghost_abandoned',
+    'unread_urgent',
+    'streak_fire',
     'champion_crown',
     'on_fire_shipped',
     'milestone_party',
@@ -225,6 +226,7 @@ test('Part B: all 10 bundled occasion icon assets, web favicons, and Expo native
 
   for (const variant of ICON_VARIANTS) {
     assert.equal(isValidIconMode(variant.id), true);
+    assert.ok(variant.triggerRule && variant.triggerRule.length > 15, `missing triggerRule on ${variant.id}`);
     assert.equal(sanitizePrefs({ iconMode: variant.id }).iconMode, variant.id);
 
     const mobileAsset = path.join(root, 'mobile', 'assets', variant.assetFile);
@@ -255,10 +257,21 @@ test('Part B: all 10 bundled occasion icon assets, web favicons, and Expo native
   assert.ok(apiEntrypoints.length <= 12, `too many Vercel functions: ${apiEntrypoints.length}`);
 });
 
-test('Part B: Duolingo-style appearance transitions across inactive, urgent, celebration occasions and reverts immediately on user action', () => {
+test('Part B: Duolingo-style appearance transitions across 1d angry, 3d sad, 7d cobweb, urgent, celebration occasions and reverts immediately on user action', () => {
   const normalHour = Date.parse('2026-11-03T14:00:00Z');
 
-  // 1. Inactive 3d -> sad_inactive; Inactive 7d -> ghost_abandoned
+  // 1a. Not opened for 1–2 days -> angry_1d (Red Angry!)
+  const angry1d = resolveAttentionAppearance({
+    isAuthenticated: true,
+    isForeground: false,
+    daysSinceActive: 1,
+    nowMs: normalHour,
+  });
+  assert.equal(angry1d.state, 'inactive');
+  assert.equal(angry1d.variant, 'angry_1d');
+  assert.match(angry1d.backgroundTitle, /1 day away/);
+
+  // 1b. Inactive 3d -> sad_inactive; Inactive 7d -> ghost_abandoned
   const sad = resolveAttentionAppearance({
     isAuthenticated: true,
     isForeground: false,
@@ -404,4 +417,17 @@ test('Part B: Duolingo-style appearance transitions across inactive, urgent, cel
     }).variant,
     'champion_crown',
   );
+
+  // 7. Navigation layout: Workspace on bottom nav bar, Search on Homescreen, Your next move banners removed
+  const appSrc = fs.readFileSync(path.join(root, 'mobile', 'App.tsx'), 'utf8');
+  assert.match(appSrc, /<Tab\.Screen name="Workspace" component=\{BuilderWorkspaceScreen\}/);
+  assert.doesNotMatch(appSrc, /<Tab\.Screen name="Search"/);
+  assert.match(appSrc, /<Stack\.Screen name="Search" component=\{SearchScreen\}/);
+
+  const homeSrc = fs.readFileSync(path.join(root, 'mobile', 'src', 'screens', 'DiscoveryDashboardScreen.tsx'), 'utf8');
+  assert.doesNotMatch(homeSrc, /Your next move · Build with Linky/);
+  assert.match(homeSrc, /Search anyone on LINKUP/);
+
+  const linkySrc = fs.readFileSync(path.join(root, 'mobile', 'src', 'screens', 'LinkyHomeScreen.tsx'), 'utf8');
+  assert.doesNotMatch(linkySrc, /Your next move · progress & groups/);
 });
