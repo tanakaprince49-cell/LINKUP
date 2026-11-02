@@ -9,6 +9,7 @@ import {emailStatus,verifyEmailUnsubscribe,unsubscribeUserEmail,sendLinkyDirectE
 import {getVapidKeys,saveWebPushSubscription} from './_webPush.js';
 import {ensureMissingBuilderStates} from './_builderStatesBackfill.js';
 import {runDailyRetentionPulsePage} from './_dailyRetentionPulse.js';
+import {verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer} from './_ventureEngine.js';
 async function nativePush(uid,{title,body,url,mood='',campaign='builder_retention',category=''}){
  return sendExpoPush(getDb(),uid,{title,body,url,mood,campaign,category,type:'builder'});
 }
@@ -39,4 +40,4 @@ export async function builderCron(input={}){
  return {...result,nextCursor:combinedCursor,pulse,reward,rewardSweep,seasons,email:builderEmailStatus()};
 }
 export const builderEmailStatus=()=>{const s=emailStatus();return s.available?s:{available:false,reason:'Provider setup required'};};
-export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runDailyRetentionPulsePage};
+export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runDailyRetentionPulsePage,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer};

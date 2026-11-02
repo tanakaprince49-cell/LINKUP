@@ -6,6 +6,7 @@ import { getDb } from './_firebaseAdmin.js';
 import crypto from 'node:crypto';
 import { aiText, aiReady } from './_gemini.js';
 import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, safeUrl, validId, publicEligible, projectProfile, profileUrl, renderProfile, renderDirectory, documentHtml, xmlIndex, xmlUrls } from './_publicSeo.js';
+import { serveLvlupBreakouts } from './_ventureEngine.js';
 
 const PUBLIC_FIELDS = ['displayName','fullName','name','username','bio','occupation','company','city','country','skills','lookingFor','profilePicUrl','photoURL','profilePic','avatarUrl','photos','socialLinks','projects','deleted','banned','isBot','onboarded','isVisible','isStealthMode'];
 async function currentProfiles(db, ids) {
@@ -503,6 +504,13 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
           body = { picks: picks.slice(0, limit), totalEligible: profiles.length, scanned: snap.docs.length, terms, engine, aiNote, aiProvider, aiTried, generatedAt: new Date().toISOString() };
         }
         return send(200, JSON.stringify(body), 'application/json; charset=utf-8', engine === 'linky-ai' ? LVLUP_CACHE : null);
+      }
+      if (mode === 'lvlupBreakouts') {
+        const db = database();
+        const limit = Math.min(12, Math.max(1, Number(req.query?.limit) || 6));
+        const launchpadSlug = single(req.query?.launchpad).toLowerCase().slice(0, 60);
+        const body = await serveLvlupBreakouts({ db, limit, launchpadSlug });
+        return send(200, JSON.stringify(body), 'application/json; charset=utf-8', { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' });
       }
       return failure(404,'Page not found');
     } catch (error) {

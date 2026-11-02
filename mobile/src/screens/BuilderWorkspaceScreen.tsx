@@ -9,6 +9,7 @@ import {useTheme} from '../contexts/ThemeContext';
 import {COLORS,appBackground,textColor} from '../theme/theme';
 import {GroupsPanel} from './GroupChatScreen';
 import BuildHabitCard from '../components/BuildHabitCard';
+import VentureEnginePanel from '../components/VentureEnginePanel';
 import ScreenHeader from '../components/ScreenHeader';
 import VerifiedBadge from '../components/VerifiedBadge';
 import LinkyRichText from '../components/LinkyRichText';
@@ -71,6 +72,7 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
    {section==='Today'&&<>
     <BuildHabitCard navigation={navigation} isDark={dark} compact refreshKey={String(home.state.updatedAt)}/>
     <View style={styles.hero}><View style={styles.row}><Text style={styles.eyebrow}>YOUR NEXT MOVE</Text></View><Text style={styles.heroTitle}>{b.next.label}</Text>{text(s.context.project?`Working on ${s.context.project}`:'You do not need an active network to make progress today.')}{button('Take the next step',()=>choose(builderSection(b.next.section)))}</View>
+    <VentureEnginePanel navigation={navigation} isDark={dark} mode="full" onRefreshWorkspace={()=>void refresh()}/>
     {!s.context.project&&card('Start with what matters to you',<>{text('Choose a goal, add a little context, then get a useful first action. You can skip networking and start with your own project.')}{button('Set up my building context',()=>choose('Plan'))}</>)}
     {b.returningAfterBreak&&card('Welcome back — no catching up required',<>{text('Still building the same thing? Keep your plan, adjust it or start fresh. Your old activity is not a debt.')}{button('Continue my current goal',()=>choose('Plan'),true)}{button('Adjust my plan',()=>choose('Plan'))}{button('Refresh my availability',()=>choose('People'),true)}{button('Reset private context',()=>confirmed('Reset','Clear private goals, follow-ups and reviews? Shared rooms and feedback remain shared.',()=>void act('forget')),true)}</>)}
     {card('Your real progress',<>{text(`${b.completed} goals completed this week · ${b.due} follow-ups due · ${b.roomUpdates} rooms updated · ${b.invitations} invitations`)}{text(`${b.momentumDays} contribution days in the last seven days. This is activity, not proof of expertise or investment quality.`)}{button('Make this week count',()=>choose('Plan'),true)}</>)}
@@ -87,6 +89,7 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
     {card('Build together',<>{text('Create a private group chat and invite approved connections. They choose whether to join.')}{button('Open my groups',()=>choose('Groups'),true)}</>)}
    </>}
    {section==='People'&&<>
+    <VentureEnginePanel navigation={navigation} isDark={dark} mode="spliceOnly" onRefreshWorkspace={()=>void refresh()}/>
     {card('Available for a useful conversation?',<><Field label="What are you available to discuss?" value={availability} onChange={setAvailability} max={180}/>{text(s.availability.enabled&&s.availability.until>Date.now()?`Your availability expires ${day(s.availability.until)}.`:'Not currently marked available.')}{button('Available for the next 7 days',()=>void act('availability',{enabled:true,purpose:availability}))}{button('Pause availability',()=>void act('availability',{enabled:false}),true)}</>)}
     {card('Daily 5 — relevance before quantity',<>{text('Suggestions are drawn from up to 160 discovery candidates and require an overlap with your saved needs or skills. We will not fill five slots with weak matches. Availability is self-reported and expires.')}{button('Refresh recommendations',()=>void panel('People'),true)}{!people.length&&text('No evidence-backed matches in the current candidate pool. Refine your needs or explore external sources.')}</>)}
     {people.map(p=>card(p.name,<View key={p.uid}>{text(p.why)}{text(p.available?`Available: ${p.availability}`:'Availability not confirmed')}{button('View actual profile',()=>navigation.navigate('Profile',{userId:p.uid}))}{choices(['relevant','not_relevant','contacted'],'',status=>void act('recommendationFeedback',{uid:p.uid,status},()=>setPeople(people.filter(x=>x.uid!==p.uid))))}</View>))}

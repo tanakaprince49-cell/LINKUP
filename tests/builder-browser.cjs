@@ -14,6 +14,7 @@ const rooms=[],asks=[];let quota=15;
 const brief=()=>({next:{label:s.context.project?'Choose one outcome for this week':'Tell Linky what you are building',section:'Plan'},completed:s.goals.filter(g=>g.doneAt).length,due:0,roomUpdates:0,invitations:0,momentumDays:0});
 window.builderCall=async(op,input={})=>{window.calls.push({op,input});
  if(op==='habit')return habitSnapshot({},now,s.prefs);
+ if(op==='ventureStatus')return null;
  if(op==='visit'||op==='home')return {state:structuredClone(s),brief:brief(),rooms:structuredClone(rooms),invitations:[],messageQuota:{remaining:quota,period:'month'}};
  if(op==='weeklyReview')return {review:{summary:'No completed outcomes yet.',completed:[],opportunities:[],meaningful:false,scope:'Offline browser adapter — no production data'}};
  if(op==='context'){s.context={...s.context,...input};return {ok:true};}

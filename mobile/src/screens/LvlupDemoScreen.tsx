@@ -103,6 +103,49 @@ function lvlupUrl(params: Record<string, string>) {
   return `${linkupWebBaseUrl()}/api/publicSeo?${qs}`;
 }
 
+function lvlupBreakoutsUrl(params: Record<string, string> = {}) {
+  const qs = new URLSearchParams({ mode: 'lvlupBreakouts', ...params }).toString();
+  return `${linkupWebBaseUrl()}/api/publicSeo?${qs}`;
+}
+
+function fastTrackDealUrl() {
+  return `${linkupWebBaseUrl()}/api/linky?action=fastTrackDeal`;
+}
+
+type BreakoutSquad = {
+  id: string;
+  kind: 'squad' | 'builder';
+  slug?: string;
+  name: string;
+  headline: string;
+  launchpadUrl: string;
+  reservedDomain?: string;
+  velocityScore: number;
+  recentShipDays14d: number;
+  totalShipDays: number;
+  verifiedCommits: number;
+  githubVerified: boolean;
+  recommendedCheck: string;
+  instrument: string;
+  flashBanner: string;
+  founders: { uid: string; name: string; image?: string; role?: string; url: string }[];
+};
+
+type FeaturedLaunchpad = {
+  slug: string;
+  name: string;
+  thesis: string;
+  reservedDomain: string;
+  launchpadUrl: string;
+  sharedFolder: string;
+  starterFiles: string[];
+  milestones: { id: string; title: string; done: boolean }[];
+  combinedShipDays: number;
+  combinedVerifiedCommits: number;
+  offerCount: number;
+  founders: { uid: string; name: string; image?: string; url: string; lane: string }[];
+};
+
 const lvlupClientCache = new Map<string, any>();
 
 function initials(name: string) {
@@ -114,7 +157,7 @@ function initials(name: string) {
     .join('');
 }
 
-export default function LvlupDemoScreen() {
+export default function LvlupDemoScreen({ route }: any = {}) {
   // Demo page is always LINKUP white + gold, whatever the viewer's theme.
   const isDark = false;
   const ink = textColor(isDark);
@@ -132,6 +175,17 @@ export default function LvlupDemoScreen() {
   const [searchError, setSearchError] = useState(false);
   const [digest, setDigest] = useState<LvlupDigestResponse | null>(null);
   const [digestError, setDigestError] = useState(false);
+  const [breakouts, setBreakouts] = useState<BreakoutSquad[]>([]);
+  const [featuredLaunchpad, setFeaturedLaunchpad] = useState<FeaturedLaunchpad | null>(null);
+  const [dealTarget, setDealTarget] = useState<{ id: string; name: string } | null>(null);
+  const [partnerName, setPartnerName] = useState('');
+  const [firmName, setFirmName] = useState('LvlUp Ventures');
+  const [partnerEmail, setPartnerEmail] = useState('');
+  const [checkUsd, setCheckUsd] = useState<number>(50000);
+  const [dealNote, setDealNote] = useState('');
+  const [dealSubmitting, setDealSubmitting] = useState(false);
+  const [dealError, setDealError] = useState('');
+  const [dealReceipt, setDealReceipt] = useState<any>(null);
 
   const search = useCallback(async (q: string, v: 'builders' | 'companies' = 'builders') => {
     const query = q.trim();
@@ -167,7 +221,24 @@ export default function LvlupDemoScreen() {
   useEffect(() => {
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
+    let launchpadParam = String(route?.params?.launchpad || '').trim();
+    if (!launchpadParam && typeof window !== 'undefined' && window.location?.search) {
+      launchpadParam = new URLSearchParams(window.location.search).get('launchpad') || '';
+    }
     void Promise.all([
+      (async () => {
+        try {
+          const params: Record<string, string> = { limit: '4' };
+          if (launchpadParam) params.launchpad = launchpadParam;
+          const res = await fetch(lvlupBreakoutsUrl(params));
+          if (!res.ok) return;
+          const json = await res.json();
+          if (!cancelled) {
+            setBreakouts(Array.isArray(json.breakouts) ? json.breakouts : []);
+            if (json.featuredLaunchpad) setFeaturedLaunchpad(json.featuredLaunchpad);
+          }
+        } catch {}
+      })(),
       (async () => {
         const cachedDigest = lvlupClientCache.get('digest:default');
         if (cachedDigest) {
@@ -218,6 +289,40 @@ export default function LvlupDemoScreen() {
   const openMail = (subject: string, body: string) => {
     const url = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     void Linking.openURL(url);
+  };
+
+  const openDealModal = (targetId: string, name: string) => {
+    setDealTarget({ id: targetId, name });
+    setDealReceipt(null);
+    setDealError('');
+  };
+
+  const submitFastTrackDeal = async () => {
+    if (!dealTarget || dealSubmitting) return;
+    setDealSubmitting(true);
+    setDealError('');
+    try {
+      const res = await fetch(fastTrackDealUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetId: dealTarget.id,
+          partnerName: partnerName.trim(),
+          firmName: firmName.trim() || 'LvlUp Ventures',
+          partnerEmail: partnerEmail.trim(),
+          checkUsd,
+          valuationCapUsd: 5000000,
+          note: dealNote.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || 'Could not dispatch offer.');
+      setDealReceipt(json);
+    } catch (e: any) {
+      setDealError(e?.message || 'Could not dispatch offer.');
+    } finally {
+      setDealSubmitting(false);
+    }
   };
 
   const renderPick = (pick: LvlupPick, compact = false) => {
@@ -311,13 +416,23 @@ export default function LvlupDemoScreen() {
           {pick.skills.join(' · ')}
         </Text>
       ) : null}
-      <TouchableOpacity
-        style={styles.profileLink}
-        onPress={() => void Linking.openURL(pick.url)}
-        accessibilityRole="link">
-        <Text style={styles.profileLinkText}>View public profile</Text>
-        <ArrowUpRight size={14} color={isDark ? BRAND : '#0A0B0D'} />
-      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+        <TouchableOpacity
+          style={styles.profileLink}
+          onPress={() => void Linking.openURL(pick.url)}
+          accessibilityRole="link">
+          <Text style={styles.profileLinkText}>View public profile</Text>
+          <ArrowUpRight size={14} color={isDark ? BRAND : '#0A0B0D'} />
+        </TouchableOpacity>
+        {!compact ? (
+          <TouchableOpacity
+            style={styles.instantCheckBtn}
+            onPress={() => openDealModal(`builder:${pick.uid}`, pick.name)}
+            accessibilityRole="button">
+            <Text style={styles.instantCheckBtnText}>Send $50,000 Check Offer →</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
     </View>
     );
   };
@@ -432,6 +547,183 @@ export default function LvlupDemoScreen() {
               your thesis first — and every pick ships with its receipts. No login, no theatre.
             </Text>
           </View>
+
+          {/* HOSTED DAY-1 VENTURE LAUNCHPAD (when ?launchpad=<slug> is opened) */}
+          {featuredLaunchpad ? (
+            <View style={[styles.breakoutPanel, { backgroundColor: '#FFFBEB', borderColor: '#D4A000' }]}>
+              <Text style={styles.breakoutEyebrow}>
+                PROVISIONED DAY-1 VENTURE LAUNCHPAD · {featuredLaunchpad.reservedDomain.toUpperCase()}
+              </Text>
+              <Text style={[styles.breakoutTitle, { color: ink }]}>{featuredLaunchpad.name}</Text>
+              <Text style={[styles.sectionSub, { color: sub }]}>{featuredLaunchpad.thesis}</Text>
+              <View style={{ gap: 6 }}>
+                {featuredLaunchpad.founders.map(f => (
+                  <TouchableOpacity
+                    key={f.uid}
+                    onPress={() => void Linking.openURL(f.url)}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontWeight: '900', fontSize: 13, color: ink }}>• {f.name}</Text>
+                    <Text style={{ fontSize: 13, color: sub }}>— {f.lane}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#9A6B00' }}>
+                Combined Verified Shipping: {featuredLaunchpad.combinedShipDays} build days · {featuredLaunchpad.combinedVerifiedCommits} GitHub commits · {featuredLaunchpad.offerCount} VC offer(s)
+              </Text>
+              <TouchableOpacity
+                style={styles.flashDealCta}
+                onPress={() => openDealModal(`squad:${featuredLaunchpad.slug}`, featuredLaunchpad.name)}
+                accessibilityRole="button">
+                <Text style={styles.flashDealCtaText}>
+                  Send $50,000 Check Offer to {featuredLaunchpad.name} Right Now →
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {/* AUTOMATED BREAKOUT VELOCITY ALERTS & SMART-CONTRACT VENTURE BRIDGE */}
+          {breakouts.length > 0 ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHead}>
+                <TrendingUp size={18} color={INK} />
+                <Text style={[styles.sectionTitle, { color: ink }]}>
+                  Automated Breakout Velocity Alerts
+                </Text>
+              </View>
+              <Text style={[styles.sectionSub, { color: sub }]}>
+                Live squads and GitHub-verified engineers climbing the Builder League automatically from real code commits. Dispatch a cryptographically timestamped $50,000 SAFE offer in one click.
+              </Text>
+              {breakouts.slice(0, 3).map(b => (
+                <View key={b.id} style={[styles.breakoutCard, { backgroundColor: '#FFFBEB', borderColor: '#D4A000' }]}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                    <View style={styles.flashBadge}>
+                      <Text style={styles.flashBadgeText}>
+                        TOP LEADERBOARD VELOCITY · {b.velocityScore} SCORE{b.githubVerified ? ' · GITHUB VERIFIED' : ''}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: '#9A6B00' }}>
+                      {b.totalShipDays} build days{b.verifiedCommits ? ` · ${b.verifiedCommits} commits` : ''}
+                    </Text>
+                  </View>
+                  <Text style={[styles.breakoutTitle, { color: ink }]}>{b.name}</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#78350F', lineHeight: 19 }}>
+                    {b.flashBanner}
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                    {b.founders.map(f => (
+                      <TouchableOpacity key={f.uid} onPress={() => void Linking.openURL(f.url)}>
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: ink, textDecorationLine: 'underline' }}>
+                          {f.name} ({f.role})
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.flashDealCta}
+                    onPress={() => openDealModal(b.id, b.name)}
+                    accessibilityRole="button">
+                    <Text style={styles.flashDealCtaText}>
+                      Click Here to Send {b.recommendedCheck} Check Right Now →
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {/* INLINE SMART-CONTRACT / DIGITAL SAFE OFFER BRIDGE DRAWER */}
+          {dealTarget ? (
+            <View style={[styles.breakoutPanel, { backgroundColor: card, borderColor: INK }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.breakoutEyebrow}>SMART-CONTRACT SAFE VENTURE BRIDGE</Text>
+                <TouchableOpacity onPress={() => setDealTarget(null)} accessibilityRole="button">
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: sub }}>Close ✕</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.breakoutTitle, { color: ink }]}>
+                Dispatch Fast-Track Investment Offer to {dealTarget.name}
+              </Text>
+              <Text style={{ fontSize: 13, lineHeight: 19, color: sub }}>
+                Generates a SHA-256 verifiable Post-Money SAFE term-sheet dispatch, notifies the founders immediately inside LINKUP, and records LINKUP&apos;s 2.5% automated Venture Bridge scout allocation memo (subject to formal closing).
+              </Text>
+
+              {dealReceipt ? (
+                <View style={{ gap: 8, padding: 14, borderRadius: 14, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#D4A000' }}>
+                  <Text style={{ fontWeight: '900', fontSize: 15, color: ink }}>
+                    Offer Dispatched — ${Number(dealReceipt.checkUsd).toLocaleString('en-US')} SAFE Review Live
+                  </Text>
+                  <Text style={{ fontSize: 12, fontFamily: 'monospace', color: '#374151' }}>
+                    Contract Receipt Hash: {dealReceipt.contractHash}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#78350F', fontWeight: '700' }}>
+                    LINKUP Venture Bridge Allocation Recorded: 2.50% (${Number(dealReceipt.platformFeeMemoUsd).toLocaleString('en-US')} memo on ${Number(dealReceipt.checkUsd).toLocaleString('en-US')} check)
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ gap: 10 }}>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {[50000, 100000, 250000].map(amt => (
+                      <TouchableOpacity
+                        key={amt}
+                        onPress={() => setCheckUsd(amt)}
+                        style={[
+                          styles.chip,
+                          { borderColor: checkUsd === amt ? INK : line, backgroundColor: checkUsd === amt ? BRAND : 'transparent' },
+                        ]}>
+                        <Text style={[styles.chipText, { color: INK, fontWeight: '800' }]}>
+                          ${amt.toLocaleString('en-US')} SAFE
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <TextInput
+                    style={[styles.bridgeInput, { borderColor: line, color: ink }]}
+                    placeholder="Partner full name (e.g. Brandon Maier)"
+                    placeholderTextColor={muted}
+                    value={partnerName}
+                    onChangeText={setPartnerName}
+                  />
+                  <TextInput
+                    style={[styles.bridgeInput, { borderColor: line, color: ink }]}
+                    placeholder="Venture firm"
+                    placeholderTextColor={muted}
+                    value={firmName}
+                    onChangeText={setFirmName}
+                  />
+                  <TextInput
+                    style={[styles.bridgeInput, { borderColor: line, color: ink }]}
+                    placeholder="Partner work email (e.g. partner@lvlup.vc)"
+                    placeholderTextColor={muted}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    value={partnerEmail}
+                    onChangeText={setPartnerEmail}
+                  />
+                  <TextInput
+                    style={[styles.bridgeInput, { borderColor: line, color: ink }]}
+                    placeholder="Optional partner note or diligence link"
+                    placeholderTextColor={muted}
+                    value={dealNote}
+                    onChangeText={setDealNote}
+                  />
+                  {dealError ? (
+                    <Text style={{ color: '#B91C1C', fontSize: 13, fontWeight: '700' }}>{dealError}</Text>
+                  ) : null}
+                  <TouchableOpacity
+                    style={styles.flashDealCta}
+                    disabled={dealSubmitting}
+                    onPress={() => void submitFastTrackDeal()}
+                    accessibilityRole="button">
+                    <Text style={styles.flashDealCtaText}>
+                      {dealSubmitting
+                        ? 'Dispatching SAFE Offer…'
+                        : `Dispatch $${checkUsd.toLocaleString('en-US')} Check Offer Now →`}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          ) : null}
 
           {/* THESIS SEARCH */}
           <View style={styles.section}>
@@ -836,4 +1128,70 @@ const styles = StyleSheet.create({
   ctaButtonText: { color: BRAND, fontWeight: '900', fontSize: 16 },
   storeLink: { color: INK, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' },
   footnote: { color: GOLD_SOFT, fontSize: 12, marginTop: 4 },
+  breakoutPanel: {
+    borderWidth: 2,
+    borderRadius: 20,
+    padding: 20,
+    gap: 10,
+  },
+  breakoutCard: {
+    borderWidth: 2,
+    borderRadius: 18,
+    padding: 16,
+    gap: 8,
+  },
+  breakoutEyebrow: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+    color: '#9A6B00',
+  },
+  breakoutTitle: {
+    fontSize: 19,
+    fontWeight: '900',
+  },
+  flashBadge: {
+    backgroundColor: BRAND,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  flashBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    color: INK,
+  },
+  flashDealCta: {
+    backgroundColor: INK,
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  flashDealCtaText: {
+    color: BRAND,
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  instantCheckBtn: {
+    backgroundColor: BRAND,
+    borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  instantCheckBtnText: {
+    color: INK,
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  bridgeInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    backgroundColor: '#FFFFFF',
+  },
 });

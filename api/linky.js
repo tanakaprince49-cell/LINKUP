@@ -1,4 +1,4 @@
-import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates} from './_builderRuntime.js';
+import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer} from './_builderRuntime.js';
 // Linky endpoint: app actions, housekeeping cron, Telegram + WhatsApp webhooks.
 // One function on purpose (Vercel Hobby caps a deployment at 12).
 //
@@ -934,7 +934,16 @@ async function handleApp(req, res) {
       case 'cancelSquad': out = await cancelSquad(uid, { squadId: String(body.squadId || '') }); break;
       case 'respond': {
         const decision = ['accept', 'decline', 'later'].includes(body.decision) ? body.decision : 'later';
-        out = await respond(uid, String(body.introId || ''), decision); break;
+        out = await respond(uid, String(body.introId || ''), decision);
+        if (decision === 'accept' && out?.status === 'accepted' && typeof autoProvisionOnIntroAccept === 'function') {
+          const launchpad = await autoProvisionOnIntroAccept({
+            db: getDb(),
+            introId: String(body.introId || ''),
+            accepterUid: uid,
+          });
+          if (launchpad) out = { ...out, launchpad };
+        }
+        break;
       }
       case 'prefs': out = await setPrefs(uid, {openTo:body.openTo,inboundCap:body.inboundCap,companionTone:body.companionTone}); break;
       case 'audit': out = await audit(uid); break;
@@ -976,6 +985,60 @@ export default async function handler(req, res) {
   const channel = String(req.query?.channel || '');
   if (channel === 'telegram') { if (req.method !== 'POST') { res.status(405).end(); return; } await handleTelegram(req, res); return; }
   if (channel === 'whatsapp') { await handleWhatsApp(req, res); return; }
+
+  if (String(req.query?.action || '') === 'githubWebhook') {
+    if (req.method !== 'POST') { sendError(res, 405, 'Use POST.'); return; }
+    const uid = String(req.query?.uid || '').trim();
+    const sig = String(req.query?.sig || '').trim();
+    const ghSig = String(req.headers['x-hub-signature-256'] || '').trim();
+    const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
+    if (!verifyWebhookAuth({ uid, sig, rawBody, githubSignature256: ghSig })) {
+      sendError(res, 401, 'Invalid GitHub webhook signature.');
+      return;
+    }
+    const ghEvent = String(req.headers['x-github-event'] || 'push').toLowerCase();
+    if (ghEvent === 'ping') {
+      setCors(res);
+      res.status(200).json({ ok: true, event: 'ping', status: 'passive_verification_ready' });
+      return;
+    }
+    try {
+      const payload = readJsonBody(req) || {};
+      const commits = Array.isArray(payload.commits) ? payload.commits : [];
+      const head = payload.head_commit || commits.at(-1) || {};
+      const repoName = String(payload.repository?.full_name || payload.repository?.name || 'github-repo').slice(0, 100);
+      const commitSha = String(head.id || payload.after || '').slice(0, 40);
+      const commitTimestamp = String(head.timestamp || new Date().toISOString());
+      const out = await recordVerifiedCommitToLeague({
+        db: getDb(),
+        uid,
+        repoName,
+        commitSha,
+        commitTimestamp,
+        commitCount: Math.max(1, commits.length || 1),
+      });
+      setCors(res);
+      res.status(200).json(out);
+    } catch (err) {
+      sendError(res, err?.status || 400, String(err?.message || 'GitHub webhook processing failed.'));
+    }
+    return;
+  }
+
+  if (String(req.query?.action || '') === 'fastTrackDeal') {
+    if (req.method !== 'POST') { sendError(res, 405, 'Use POST.'); return; }
+    try {
+      const body = readJsonBody(req) || {};
+      const ipRaw = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'anon').split(',')[0].trim();
+      const ipHash = crypto.createHash('sha256').update(`vc-ip:${ipRaw}`).digest('hex').slice(0, 32);
+      const out = await dispatchVcInvestmentOffer({ db: getDb(), input: body, ipHash });
+      setCors(res);
+      res.status(200).json(out);
+    } catch (err) {
+      sendError(res, err?.status || 400, String(err?.message || 'Could not dispatch VC offer.'));
+    }
+    return;
+  }
 
   if (String(req.query?.action || '') === 'unsubscribeEmail') {
     const uid = String(req.query?.uid || '').trim();
