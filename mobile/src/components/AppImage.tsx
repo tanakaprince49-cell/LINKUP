@@ -36,11 +36,21 @@ type Props = {
   transitionMs?: number;
   /** Opt in for recycled list rows only — see note above. */
   recycle?: boolean;
+  accessibilityLabel?: string;
+  alt?: string;
 };
 
 const TILE = { backgroundColor: '#E5E7EB' } as const;
 
-export const AppImage = ({ uri, style, contentFit = 'cover', transitionMs = 0, recycle = false }: Props) => {
+export const AppImage = ({
+  uri,
+  style,
+  contentFit = 'cover',
+  transitionMs = 0,
+  recycle = false,
+  accessibilityLabel,
+  alt,
+}: Props) => {
   const [source, setSource] = React.useState(uri);
   const [dead, setDead] = React.useState(false);
 
@@ -61,6 +71,8 @@ export const AppImage = ({ uri, style, contentFit = 'cover', transitionMs = 0, r
       cachePolicy="memory-disk"
       transition={0}
       recyclingKey={recycle ? uri : undefined}
+      accessibilityLabel={accessibilityLabel || alt}
+      alt={alt || accessibilityLabel}
       // Local, so the stand-in shows even when the network cannot reach
       // either the CDN or the old remote avatar service.
       placeholder={LOCAL_PLACEHOLDER_URI}

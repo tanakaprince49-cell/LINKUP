@@ -213,9 +213,11 @@ test('service worker precaches only its scope and deletes only its own old cache
 
 test('service worker leaves homepage, other apps, APIs, auth and foreign origins untouched', async () => {
   const sw = worker();
-  for (const pathname of ['/', '/assets/landing.js', '/application', '/app-other/', '/app/api/linky', '/app/__/auth/handler', '/app/p/alice', '/app/builders', '/app/campaigns', '/app/campaigns/product', '/app/startups', '/app/startups/startup', '/app/news', '/app/sitemap-campaigns-0.xml', '/app/sitemap-startups-0.xml', '/app/sitemap.xml', '/app/sitemap-profiles-0.xml', '/app/robots.txt']) {
+  for (const pathname of ['/', '/assets/landing.js', '/application', '/app-other/', '/app/api/linky', '/app/__/auth/handler', '/app/p/alice', '/app/builders', '/app/blogs', '/app/blogs/founder-essay--b123', '/app/blogs/rss.xml', '/app/campaigns', '/app/campaigns/product', '/app/startups', '/app/startups/startup', '/app/news', '/app/sitemap-blogs-0.xml', '/app/sitemap-google-news.xml', '/app/sitemap-campaigns-0.xml', '/app/sitemap-startups-0.xml', '/app/sitemap.xml', '/app/sitemap-profiles-0.xml', '/app/robots.txt']) {
     assert.equal((await sw.fire('fetch', { request: request(pathname) })).intercepted, false, pathname);
   }
+  assert.equal((await sw.fire('fetch', { request: request('/app/news-feed') })).intercepted, true);
+  assert.equal((await sw.fire('fetch', { request: request('/app/blogs-feed') })).intercepted, true);
   assert.equal((await sw.fire('fetch', { request: request('/app/api/linky', 'cors', 'POST') })).intercepted, false);
   assert.equal((await sw.fire('fetch', { request: { url: 'https://foreign.example/app/', method: 'GET', mode: 'navigate' } })).intercepted, false);
   assert.equal((await sw.fire('fetch', { request: request('/app/_expo/static/js/web/test.js', 'cors') })).intercepted, true);

@@ -158,6 +158,26 @@
       "destination": "/api/publicSeo?mode=news"
     },
     {
+      "source": "/app/blogs/rss.xml",
+      "destination": "/api/publicSeo?mode=blogs-rss"
+    },
+    {
+      "source": "/app/blogs",
+      "destination": "/api/publicSeo?mode=blogs"
+    },
+    {
+      "source": "/app/blogs/:id",
+      "destination": "/api/publicSeo?mode=blog&id=:id"
+    },
+    {
+      "source": "/app/sitemap-blogs-:page.xml",
+      "destination": "/api/publicSeo?mode=blog-sitemap&page=:page"
+    },
+    {
+      "source": "/app/sitemap-google-news.xml",
+      "destination": "/api/publicSeo?mode=google-news-sitemap"
+    },
+    {
       "source": "/app/sitemap-campaigns-:page.xml",
       "destination": "/api/publicSeo?mode=campaign-sitemap&page=:page"
     },
@@ -184,6 +204,26 @@
     {
       "source": "/news",
       "destination": "/api/publicSeo?mode=news"
+    },
+    {
+      "source": "/blogs/rss.xml",
+      "destination": "/api/publicSeo?mode=blogs-rss"
+    },
+    {
+      "source": "/blogs",
+      "destination": "/api/publicSeo?mode=blogs"
+    },
+    {
+      "source": "/blogs/:id",
+      "destination": "/api/publicSeo?mode=blog&id=:id"
+    },
+    {
+      "source": "/sitemap-blogs-:page.xml",
+      "destination": "/api/publicSeo?mode=blog-sitemap&page=:page"
+    },
+    {
+      "source": "/sitemap-google-news.xml",
+      "destination": "/api/publicSeo?mode=google-news-sitemap"
     },
     {
       "source": "/sitemap-campaigns-:page.xml",

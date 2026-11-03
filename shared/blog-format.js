@@ -38,6 +38,39 @@ export function estimateReadTimeMinutes(body = '') {
   return Math.max(1, Math.min(60, Math.ceil(words / 200)));
 }
 
+export function slugifyBlogTitle(title = '') {
+  return String(title || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 72)
+    .replace(/-+$/g, '');
+}
+
+export function canonicalBlogSlug(title = '', blogId = '') {
+  const cleanId = String(blogId || '').trim();
+  const slug = slugifyBlogTitle(title);
+  if (!cleanId) return slug;
+  return slug ? `${slug}--${cleanId}` : cleanId;
+}
+
+export function extractBlogIdFromSlug(slugOrId = '') {
+  const raw = String(slugOrId || '').trim();
+  if (!raw || raw.length > 220) return '';
+  const idx = raw.lastIndexOf('--');
+  const candidate = idx >= 0 ? raw.slice(idx + 2) : raw;
+  return /^[A-Za-z0-9_-]{1,128}$/.test(candidate) ? candidate : '';
+}
+
+export function defaultCoverAlt(title = '', authorName = '', categories = []) {
+  const t = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Community Blog';
+  const a = String(authorName || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  const c = Array.isArray(categories) && categories[0] ? String(categories[0]).trim() : 'Startup';
+  return a ? `${t} — ${c} blog by ${a} on LINKUP` : `${t} — ${c} blog on LINKUP`;
+}
+
 /**
  * Extracts { label, url } if `selected` is already formatted as `[label](url)`.
  */

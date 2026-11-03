@@ -2,6 +2,14 @@ export const DEFAULT_BLOG_CATEGORIES: string[];
 
 export function sanitizeBlogUrl(raw?: string): string;
 export function estimateReadTimeMinutes(body?: string): number;
+export function slugifyBlogTitle(title?: string): string;
+export function canonicalBlogSlug(title?: string, blogId?: string): string;
+export function extractBlogIdFromSlug(slugOrId?: string): string;
+export function defaultCoverAlt(
+  title?: string,
+  authorName?: string,
+  categories?: string[]
+): string;
 
 export function extractMarkdownLink(
   selected?: string

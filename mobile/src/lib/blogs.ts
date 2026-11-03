@@ -8,28 +8,45 @@ import { uploadImageToImageKit } from './imagekitUpload';
 import {
   DEFAULT_BLOG_CATEGORIES,
   applyToolbarFormat,
+  canonicalBlogSlug,
   computeCoverCropRect,
+  defaultCoverAlt,
   estimateReadTimeMinutes,
+  extractBlogIdFromSlug,
   extractMarkdownLink,
   parseBlogBlocks,
   plainExcerptFromBlog,
   sanitizeBlogUrl,
+  slugifyBlogTitle,
 } from '../../../shared/blog-format.js';
 
 export {
   DEFAULT_BLOG_CATEGORIES,
   applyToolbarFormat,
+  canonicalBlogSlug,
   computeCoverCropRect,
+  defaultCoverAlt,
   estimateReadTimeMinutes,
+  extractBlogIdFromSlug,
   extractMarkdownLink,
   parseBlogBlocks,
   plainExcerptFromBlog,
   sanitizeBlogUrl,
+  slugifyBlogTitle,
 };
 
 export type BlogLink = {
   label: string;
   url: string;
+};
+
+export type AuthorBlogStats = {
+  views: number;
+  uniqueViews: number;
+  cardClicks: number;
+  linkClicks: number;
+  totalClicks: number;
+  linkBreakdown: Array<{ url: string; label: string; clicks: number }>;
 };
 
 export type CommunityBlog = {
@@ -38,6 +55,9 @@ export type CommunityBlog = {
   body: string;
   excerpt: string;
   coverImage: string;
+  coverAlt?: string;
+  seoSlug?: string;
+  seoUrl?: string;
   readTimeMinutes: number;
   categories: string[];
   links: BlogLink[];
@@ -50,6 +70,8 @@ export type CommunityBlog = {
   authorBadgeLabel: string;
   createdAt: number;
   publishedAt: string;
+  updatedAt?: string;
+  authorStats?: AuthorBlogStats;
 };
 
 export type BlogsFeedResponse = {
@@ -74,9 +96,21 @@ function blogsApiUrl(query = '') {
   return `${linkupWebBaseUrl()}${path}`;
 }
 
+async function optionalAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 export async function fetchCommunityBlogs(category = ''): Promise<BlogsFeedResponse> {
   const qs = category && category !== 'All' ? new URLSearchParams({ category }).toString() : '';
-  const res = await fetch(blogsApiUrl(qs), { headers: { Accept: 'application/json' } });
+  const authHeaders = await optionalAuthHeaders();
+  const res = await fetch(blogsApiUrl(qs), {
+    headers: { Accept: 'application/json', ...authHeaders },
+  });
   const json = await res.json().catch(() => null);
   if (!res.ok || !json) {
     throw new Error(json?.error || 'Could not load blogs right now.');
@@ -90,10 +124,50 @@ export async function fetchCommunityBlogs(category = ''): Promise<BlogsFeedRespo
   };
 }
 
+export async function fetchCommunityBlogById(blogId: string): Promise<CommunityBlog | null> {
+  if (!blogId) return null;
+  const qs = new URLSearchParams({ id: blogId }).toString();
+  const authHeaders = await optionalAuthHeaders();
+  const res = await fetch(blogsApiUrl(qs), {
+    headers: { Accept: 'application/json', ...authHeaders },
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.blog) return null;
+  return json.blog as CommunityBlog;
+}
+
+export async function trackCommunityBlogEvent(
+  blogId: string,
+  event: 'view' | 'card_click' | 'link_click',
+  extra?: { url?: string; label?: string }
+): Promise<void> {
+  if (!blogId) return;
+  try {
+    const authHeaders = await optionalAuthHeaders();
+    await fetch(blogsApiUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({
+        action: 'track',
+        blogId,
+        event,
+        ...(extra?.url ? { url: extra.url } : {}),
+        ...(extra?.label ? { label: extra.label } : {}),
+      }),
+    });
+  } catch {
+    // Non-blocking telemetry
+  }
+}
+
 export async function publishCommunityBlog(input: {
   title: string;
   body: string;
   coverImage?: string;
+  coverAlt?: string;
   readTimeMinutes: number;
   categories: string[];
   links?: BlogLink[];
@@ -142,10 +216,6 @@ function measureImageDimensions(uri: string): Promise<{ width: number; height: n
   });
 }
 
-/**
- * Picks a raw image without OS auto-cropping so the user can interactively pan,
- * zoom, or fit the image themselves inside BlogCoverCropModal on web & mobile.
- */
 export async function pickRawBlogCoverImage(): Promise<RawCoverAsset | null> {
   if (Platform.OS !== 'web') {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -233,7 +303,6 @@ async function renderWebCanvasCover(
   const natH = img.naturalHeight || img.height || 720;
 
   if (options.mode === 'fit') {
-    // Clean dark backdrop + subtle ambient blurred fill + crisp 100% uncropped image centered
     ctx.fillStyle = '#111318';
     ctx.fillRect(0, 0, outW, outH);
     try {
@@ -244,9 +313,7 @@ async function renderWebCanvasCover(
       const bgH = natH * bgScale;
       ctx.drawImage(img, (outW - bgW) / 2, (outH - bgH) / 2, bgW, bgH);
       ctx.restore();
-    } catch {
-      // Older Safari without ctx.filter keeps clean #111318 studio frame
-    }
+    } catch {}
     const fitScale = Math.min(outW / natW, outH / natH);
     const drawW = Math.round(natW * fitScale);
     const drawH = Math.round(natH * fitScale);
@@ -279,9 +346,6 @@ async function renderWebCanvasCover(
   return canvas.toDataURL('image/jpeg', 0.86);
 }
 
-/**
- * Crops (or fits) the user's chosen cover image to exact 16:9 (1280x720) and uploads to ImageKit.
- */
 export async function cropAndUploadBlogCover(
   uid: string,
   rawAsset: RawCoverAsset,
@@ -319,7 +383,6 @@ export async function cropAndUploadBlogCover(
     if (!uploaded) {
       throw new Error('Cover upload could not complete. Try again or paste an HTTPS image URL.');
     }
-    // Use ImageKit 16:9 padded transform so zero pixels are cut off on native Fit mode
     const ikBase = 'https://ik.imagekit.io/vjkzaxrro/';
     if (uploaded.startsWith(ikBase) && !uploaded.includes('/tr:')) {
       return `${ikBase}tr:w-1280,h-720,cm-pad_resize,bg-111318,q-86,f-auto/${uploaded.slice(ikBase.length)}`;

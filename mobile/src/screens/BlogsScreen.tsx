@@ -16,15 +16,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import * as Clipboard from 'expo-clipboard';
 import {
   ArrowLeft,
+  BarChart3,
   Bold,
   BookOpen,
   Clock,
   Code,
+  Copy,
   Crop,
   ExternalLink,
   Eye,
+  Globe,
   Highlighter,
   ImagePlus,
   Italic,
@@ -32,11 +36,13 @@ import {
   List,
   ListOrdered,
   Minus,
+  MousePointerClick,
   PenSquare,
   Plus,
   Quote,
   RefreshCw,
   Search,
+  Share2,
   Strikethrough,
   Trash2,
   Underline,
@@ -59,15 +65,20 @@ import {
   DEFAULT_BLOG_CATEGORIES,
   RawCoverAsset,
   applyToolbarFormat,
+  canonicalBlogSlug,
   cropAndUploadBlogCover,
+  defaultCoverAlt,
   deleteCommunityBlog,
   estimateReadTimeMinutes,
+  extractBlogIdFromSlug,
   extractMarkdownLink,
+  fetchCommunityBlogById,
   fetchCommunityBlogs,
   parseBlogBlocks,
   pickRawBlogCoverImage,
   publishCommunityBlog,
   sanitizeBlogUrl,
+  trackCommunityBlogEvent,
 } from '../lib/blogs';
 import type {
   BlogSelection,
@@ -146,10 +157,12 @@ function RichSegments({
   segments,
   isDark,
   baseStyle,
+  onLinkPress,
 }: {
   segments: InlineSegment[];
   isDark: boolean;
   baseStyle?: any;
+  onLinkPress?: (url: string, label: string) => void;
 }) {
   return (
     <Text style={baseStyle}>
@@ -186,7 +199,10 @@ function RichSegments({
           return (
             <Text
               key={idx}
-              onPress={() => void Linking.openURL(seg.url).catch(() => {})}
+              onPress={() => {
+                onLinkPress?.(seg.url, seg.text);
+                void Linking.openURL(seg.url).catch(() => {});
+              }}
               accessibilityRole="link"
               style={[
                 ...fontStyle,
@@ -211,7 +227,15 @@ function RichSegments({
   );
 }
 
-function BlogRichBody({ body, isDark }: { body: string; isDark: boolean }) {
+function BlogRichBody({
+  body,
+  isDark,
+  onLinkPress,
+}: {
+  body: string;
+  isDark: boolean;
+  onLinkPress?: (url: string, label: string) => void;
+}) {
   const blocks = useMemo(() => parseBlogBlocks(body), [body]);
   const ink = textColor(isDark);
   const secondary = textColor(isDark, 'secondary');
@@ -254,6 +278,7 @@ function BlogRichBody({ body, isDark }: { body: string; isDark: boolean }) {
               segments={block.segments}
               isDark={isDark}
               baseStyle={[styles.readerH1, { color: ink }]}
+              onLinkPress={onLinkPress}
             />
           );
         }
@@ -264,6 +289,7 @@ function BlogRichBody({ body, isDark }: { body: string; isDark: boolean }) {
               segments={block.segments}
               isDark={isDark}
               baseStyle={[styles.readerH2, { color: ink }]}
+              onLinkPress={onLinkPress}
             />
           );
         }
@@ -274,6 +300,7 @@ function BlogRichBody({ body, isDark }: { body: string; isDark: boolean }) {
               segments={block.segments}
               isDark={isDark}
               baseStyle={[styles.readerH3, { color: ink }]}
+              onLinkPress={onLinkPress}
             />
           );
         }
@@ -293,6 +320,7 @@ function BlogRichBody({ body, isDark }: { body: string; isDark: boolean }) {
                 segments={block.segments}
                 isDark={isDark}
                 baseStyle={[styles.readerQuoteText, { color: ink }]}
+                onLinkPress={onLinkPress}
               />
             </View>
           );
@@ -308,6 +336,7 @@ function BlogRichBody({ body, isDark }: { body: string; isDark: boolean }) {
                       segments={itemSegs}
                       isDark={isDark}
                       baseStyle={[styles.readerParagraph, { color: secondary }]}
+                      onLinkPress={onLinkPress}
                     />
                   </View>
                 </View>
@@ -328,6 +357,7 @@ function BlogRichBody({ body, isDark }: { body: string; isDark: boolean }) {
                       segments={itemSegs}
                       isDark={isDark}
                       baseStyle={[styles.readerParagraph, { color: secondary }]}
+                      onLinkPress={onLinkPress}
                     />
                   </View>
                 </View>
@@ -341,6 +371,7 @@ function BlogRichBody({ body, isDark }: { body: string; isDark: boolean }) {
             segments={block.segments}
             isDark={isDark}
             baseStyle={[styles.readerParagraph, { color: secondary }]}
+            onLinkPress={onLinkPress}
           />
         );
       })}
@@ -469,9 +500,10 @@ export default function BlogsScreen() {
   const [composeTab, setComposeTab] = useState<'edit' | 'preview'>('edit');
   const [activeBlog, setActiveBlog] = useState<CommunityBlog | null>(null);
 
-  // Composer state + Cover Cropper state
+  // Composer state + Cover Cropper + Cover Image SEO state
   const [title, setTitle] = useState('');
   const [coverImage, setCoverImage] = useState('');
+  const [coverAlt, setCoverAlt] = useState('');
   const [showCoverUrlBox, setShowCoverUrlBox] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [cropModalOpen, setCropModalOpen] = useState(false);
@@ -631,7 +663,69 @@ export default function BlogsScreen() {
 
   useEffect(() => {
     void loadBlogs();
-  }, [loadBlogs]);
+  }, [loadBlogs, user?.uid]);
+
+  const openBlogReader = useCallback(
+    (blog: CommunityBlog, fromCard = false) => {
+      setActiveBlog(blog);
+      setScreenMode('reader');
+      if (fromCard) {
+        void trackCommunityBlogEvent(blog.id, 'card_click');
+      }
+      void trackCommunityBlogEvent(blog.id, 'view');
+      const isAuthorOrAdmin = Boolean(
+        user?.uid &&
+          (user.uid === blog.authorId ||
+            user.uid === GOLD_MEMBER_UID ||
+            (profile as any)?.isAdmin)
+      );
+      if (isAuthorOrAdmin) {
+        void fetchCommunityBlogById(blog.id).then((fresh) => {
+          if (!fresh) return;
+          setActiveBlog((curr) => (curr?.id === fresh.id ? fresh : curr));
+          setBlogs((prev) => prev.map((b) => (b.id === fresh.id ? fresh : b)));
+        });
+      }
+    },
+    [user?.uid, profile]
+  );
+
+  // Support ?blog=<id|slug> deep-links from Google-indexed SSR pages
+  const handledDeepLinkRef = useRef(false);
+  useEffect(() => {
+    if (handledDeepLinkRef.current || Platform.OS !== 'web') return;
+    const loc = (globalThis as any).window?.location;
+    if (!loc?.search) return;
+    const param = new URLSearchParams(loc.search).get('blog') || '';
+    const targetId = extractBlogIdFromSlug(param);
+    if (!targetId) return;
+    const found = blogs.find((b) => b.id === targetId);
+    if (found) {
+      handledDeepLinkRef.current = true;
+      openBlogReader(found, false);
+      return;
+    }
+    if (!loading) {
+      handledDeepLinkRef.current = true;
+      void fetchCommunityBlogById(targetId).then((fetched) => {
+        if (fetched) openBlogReader(fetched, false);
+      });
+    }
+  }, [blogs, loading, openBlogReader]);
+
+  const copyCanonicalBlogUrl = useCallback(async (blog: CommunityBlog) => {
+    const url =
+      blog.seoUrl ||
+      `https://www.linkupbuild.com/app/blogs/${encodeURIComponent(
+        canonicalBlogSlug(blog.title, blog.id)
+      )}`;
+    try {
+      await Clipboard.setStringAsync(url);
+      notifyUser('SEO link copied', 'Google-indexed blog link copied to clipboard.');
+    } catch {
+      notifyUser('Blog link', url);
+    }
+  }, []);
 
   const allFilterCategories = useMemo(() => {
     const merged = ['All', ...defaultCategories];
@@ -687,6 +781,7 @@ export default function BlogsScreen() {
   const resetComposer = () => {
     setTitle('');
     setCoverImage('');
+    setCoverAlt('');
     setShowCoverUrlBox(false);
     setPendingCoverAsset(null);
     setLastRawCoverAsset(null);
@@ -878,6 +973,7 @@ export default function BlogsScreen() {
         title: title.trim(),
         body: body.trim(),
         coverImage: coverImage.trim(),
+        coverAlt: coverAlt.trim(),
         readTimeMinutes: mins,
         categories: chosenCategories,
         links,
@@ -886,7 +982,10 @@ export default function BlogsScreen() {
       resetComposer();
       setActiveBlog(created);
       setScreenMode('reader');
-      notifyUser('Blog published', 'Your blog is now live for everyone on LINKUP.');
+      notifyUser(
+        'Blog published & indexed',
+        'Your blog is live on LINKUP and ready for Google Search, Google News & Google Images.'
+      );
     } catch (e: any) {
       setComposeError(e?.message || 'Could not publish blog.');
     } finally {
@@ -934,6 +1033,23 @@ export default function BlogsScreen() {
           user.uid === GOLD_MEMBER_UID ||
           (profile as any)?.isAdmin)
     );
+    const canonicalSeoUrl =
+      activeBlog.seoUrl ||
+      `https://www.linkupbuild.com/app/blogs/${encodeURIComponent(
+        canonicalBlogSlug(activeBlog.title, activeBlog.id)
+      )}`;
+    const stats = activeBlog.authorStats || {
+      views: 0,
+      uniqueViews: 0,
+      cardClicks: 0,
+      linkClicks: 0,
+      totalClicks: 0,
+      linkBreakdown: [],
+    };
+    const handleReaderLinkPress = (url: string, label: string) => {
+      void trackCommunityBlogEvent(activeBlog.id, 'link_click', { url, label });
+    };
+
     return (
       <SafeAreaView
         edges={['top']}
@@ -957,19 +1073,31 @@ export default function BlogsScreen() {
             <Text style={{ fontWeight: '800', fontSize: 14, color: ink }}>All Blogs</Text>
           </TouchableOpacity>
 
-          {canDelete ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
-              onPress={() => confirmDelete(activeBlog)}
-              disabled={deletingId === activeBlog.id}
-              style={styles.deleteBtn}
+              onPress={() => void copyCanonicalBlogUrl(activeBlog)}
+              style={styles.secondarySmallBtn}
               accessibilityRole="button"
+              accessibilityLabel="Copy Google SEO blog link"
             >
-              <Trash2 size={15} color="#DC2626" />
-              <Text style={styles.deleteBtnText}>
-                {deletingId === activeBlog.id ? 'Deleting…' : 'Delete Blog'}
-              </Text>
+              <Share2 size={14} color="#0A0B0D" />
+              <Text style={styles.secondarySmallBtnText}>Share Link</Text>
             </TouchableOpacity>
-          ) : null}
+
+            {canDelete ? (
+              <TouchableOpacity
+                onPress={() => confirmDelete(activeBlog)}
+                disabled={deletingId === activeBlog.id}
+                style={styles.deleteBtn}
+                accessibilityRole="button"
+              >
+                <Trash2 size={15} color="#DC2626" />
+                <Text style={styles.deleteBtnText}>
+                  {deletingId === activeBlog.id ? 'Deleting…' : 'Delete Blog'}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.articleContainer}>
@@ -979,6 +1107,10 @@ export default function BlogsScreen() {
                 uri={ikCard(activeBlog.coverImage)}
                 style={styles.coverImageFill}
                 contentFit="cover"
+                accessibilityLabel={
+                  activeBlog.coverAlt ||
+                  defaultCoverAlt(activeBlog.title, activeBlog.authorName, activeBlog.categories)
+                }
               />
             </View>
           ) : null}
@@ -1024,7 +1156,137 @@ export default function BlogsScreen() {
             />
           </View>
 
-          <BlogRichBody body={activeBlog.body} isDark={isDark} />
+          {/* Author-Only Views, Clicks & Google SEO Dashboard */}
+          {canDelete ? (
+            <View
+              style={[
+                styles.authorAnalyticsPanel,
+                {
+                  backgroundColor: isDark ? '#151923' : '#FAF8EE',
+                  borderColor: isDark ? '#3B4252' : '#E6DD9C',
+                },
+              ]}
+            >
+              <View style={styles.authorAnalyticsHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                  <BarChart3 size={16} color={isDark ? '#FBE618' : '#854D0E'} />
+                  <Text style={{ fontWeight: '900', fontSize: 14, color: ink }}>
+                    Author Analytics (Visible only to you)
+                  </Text>
+                </View>
+                <View style={styles.googleIndexedPill}>
+                  <Globe size={12} color="#166534" />
+                  <Text style={styles.googleIndexedPillText}>Google Search & News Indexed</Text>
+                </View>
+              </View>
+
+              <View style={styles.statsGrid}>
+                <View
+                  style={[
+                    styles.statTile,
+                    { backgroundColor: isDark ? '#1E2330' : '#FFFFFF', borderColor: isDark ? '#2F3646' : '#E5E2D6' },
+                  ]}
+                >
+                  <Text style={[styles.statTileValue, { color: ink }]}>{stats.views}</Text>
+                  <Text style={[styles.statTileLabel, { color: sub }]}>Blog Views</Text>
+                </View>
+                <View
+                  style={[
+                    styles.statTile,
+                    { backgroundColor: isDark ? '#1E2330' : '#FFFFFF', borderColor: isDark ? '#2F3646' : '#E5E2D6' },
+                  ]}
+                >
+                  <Text style={[styles.statTileValue, { color: ink }]}>{stats.uniqueViews}</Text>
+                  <Text style={[styles.statTileLabel, { color: sub }]}>Unique Readers</Text>
+                </View>
+                <View
+                  style={[
+                    styles.statTile,
+                    { backgroundColor: isDark ? '#1E2330' : '#FFFFFF', borderColor: isDark ? '#2F3646' : '#E5E2D6' },
+                  ]}
+                >
+                  <Text style={[styles.statTileValue, { color: ink }]}>{stats.totalClicks}</Text>
+                  <Text style={[styles.statTileLabel, { color: sub }]}>Total Clicks</Text>
+                </View>
+                <View
+                  style={[
+                    styles.statTile,
+                    { backgroundColor: isDark ? '#1E2330' : '#FFFFFF', borderColor: isDark ? '#2F3646' : '#E5E2D6' },
+                  ]}
+                >
+                  <Text style={[styles.statTileValue, { color: ink }]}>{stats.linkClicks}</Text>
+                  <Text style={[styles.statTileLabel, { color: sub }]}>Link Clicks</Text>
+                </View>
+              </View>
+
+              {stats.linkBreakdown.length > 0 ? (
+                <View style={{ gap: 6 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: sub }}>
+                    Clicked Links Inside Your Blog
+                  </Text>
+                  {stats.linkBreakdown.slice(0, 6).map((item, i) => (
+                    <View
+                      key={`${item.url}-${i}`}
+                      style={[
+                        styles.linkStatRow,
+                        { backgroundColor: isDark ? '#1E2330' : '#FFFFFF' },
+                      ]}
+                    >
+                      <Link2 size={13} color={isDark ? '#FBE618' : '#0A58CA'} />
+                      <Text
+                        style={{ flex: 1, fontSize: 12, fontWeight: '700', color: ink }}
+                        numberOfLines={1}
+                      >
+                        {item.label || item.url}
+                      </Text>
+                      <Text style={{ fontSize: 12, fontWeight: '900', color: isDark ? '#FBE618' : '#854D0E' }}>
+                        {item.clicks} {item.clicks === 1 ? 'click' : 'clicks'}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              <View
+                style={[
+                  styles.seoUrlRow,
+                  {
+                    backgroundColor: isDark ? '#1E2330' : '#FFFFFF',
+                    borderColor: isDark ? '#2F3646' : '#E5E2D6',
+                  },
+                ]}
+              >
+                <Globe size={14} color={muted} />
+                <Text style={{ flex: 1, fontSize: 12, color: sub }} numberOfLines={1}>
+                  {canonicalSeoUrl}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => void copyCanonicalBlogUrl(activeBlog)}
+                  style={styles.copySeoBtn}
+                  accessibilityRole="button"
+                >
+                  <Copy size={12} color="#0A0B0D" />
+                  <Text style={{ fontSize: 11, fontWeight: '900', color: '#0A0B0D' }}>
+                    Copy SEO URL
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => void Linking.openURL(canonicalSeoUrl).catch(() => {})}
+                  style={styles.openSeoIconBtn}
+                  accessibilityRole="link"
+                  accessibilityLabel="Open public Google-indexed blog page"
+                >
+                  <ExternalLink size={13} color={ink} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
+          <BlogRichBody
+            body={activeBlog.body}
+            isDark={isDark}
+            onLinkPress={handleReaderLinkPress}
+          />
 
           {activeBlog.links.length > 0 ? (
             <View
@@ -1042,7 +1304,10 @@ export default function BlogsScreen() {
               {activeBlog.links.map((lnk, idx) => (
                 <TouchableOpacity
                   key={`${lnk.url}-${idx}`}
-                  onPress={() => void Linking.openURL(lnk.url).catch(() => {})}
+                  onPress={() => {
+                    handleReaderLinkPress(lnk.url, lnk.label);
+                    void Linking.openURL(lnk.url).catch(() => {});
+                  }}
                   style={styles.attachedLinkRow}
                   accessibilityRole="link"
                 >
@@ -1262,6 +1527,28 @@ export default function BlogsScreen() {
                       { backgroundColor: inputBg, color: ink, borderColor: borderCol },
                     ]}
                   />
+                ) : null}
+
+                {coverImage ? (
+                  <View style={{ gap: 5, marginTop: 4 }}>
+                    <Text style={[styles.fieldLabel, { color: ink, fontSize: 13 }]}>
+                      Cover Picture SEO Description / Alt Text (Google Images & Google News)
+                    </Text>
+                    <TextInput
+                      value={coverAlt}
+                      onChangeText={setCoverAlt}
+                      maxLength={180}
+                      placeholder={defaultCoverAlt(title || 'Your blog', viewerName, chosenCategories)}
+                      placeholderTextColor={muted}
+                      style={[
+                        styles.textInput,
+                        { backgroundColor: inputBg, color: ink, borderColor: borderCol, fontSize: 13 },
+                      ]}
+                    />
+                    <Text style={{ fontSize: 11, color: muted }}>
+                      Helps your blog cover photo rank in Google Images & Google News Top Stories (auto-generated if left blank).
+                    </Text>
+                  </View>
                 ) : null}
               </View>
 
@@ -1914,13 +2201,11 @@ export default function BlogsScreen() {
           user.uid === GOLD_MEMBER_UID ||
           (profile as any)?.isAdmin)
     );
+    const ownerStats = isOwner ? blog.authorStats : undefined;
     return (
       <TouchableOpacity
         activeOpacity={0.88}
-        onPress={() => {
-          setActiveBlog(blog);
-          setScreenMode('reader');
-        }}
+        onPress={() => openBlogReader(blog, true)}
         style={[styles.card, liquidGlass(isDark)]}
         accessibilityRole="button"
       >
@@ -1930,6 +2215,9 @@ export default function BlogsScreen() {
               uri={ikCard(blog.coverImage)}
               style={styles.coverImageFill}
               contentFit="cover"
+              accessibilityLabel={
+                blog.coverAlt || defaultCoverAlt(blog.title, blog.authorName, blog.categories)
+              }
             />
           </View>
         ) : null}
@@ -1960,6 +2248,47 @@ export default function BlogsScreen() {
             <Text style={[styles.cardExcerpt, { color: sub }]} numberOfLines={3}>
               {blog.excerpt}
             </Text>
+          ) : null}
+
+          {/* Author-Only Views & Clicks Pill Bar on Feed Card */}
+          {isOwner && ownerStats ? (
+            <View
+              style={[
+                styles.cardAuthorStatsBar,
+                {
+                  backgroundColor: isDark ? 'rgba(251, 230, 24, 0.10)' : '#FAF7E6',
+                  borderColor: isDark ? 'rgba(251, 230, 24, 0.28)' : '#EAE09B',
+                },
+              ]}
+            >
+              <View style={styles.cardStatMetric}>
+                <Eye size={13} color={isDark ? '#FBE618' : '#854D0E'} />
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '800',
+                    color: isDark ? '#FEF9C3' : '#171918',
+                  }}
+                >
+                  {ownerStats.views} {ownerStats.views === 1 ? 'view' : 'views'}
+                </Text>
+              </View>
+              <View style={styles.cardStatMetric}>
+                <MousePointerClick size={13} color={isDark ? '#FBE618' : '#854D0E'} />
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '800',
+                    color: isDark ? '#FEF9C3' : '#171918',
+                  }}
+                >
+                  {ownerStats.totalClicks} {ownerStats.totalClicks === 1 ? 'click' : 'clicks'}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: muted, marginLeft: 'auto' }}>
+                Only you see this
+              </Text>
+            </View>
           ) : null}
 
           <View style={[styles.cardFooter, { borderTopColor: isDark ? '#2A2E37' : '#ECEAE2' }]}>
@@ -2633,5 +2962,101 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFE4E6',
     borderRadius: 12,
     padding: 12,
+  },
+  authorAnalyticsPanel: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 12,
+  },
+  authorAnalyticsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  googleIndexedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  googleIndexedPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#166534',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statTile: {
+    flex: 1,
+    minWidth: 110,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 2,
+  },
+  statTileValue: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  statTileLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  linkStatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 9,
+  },
+  seoUrlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  copySeoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FBE618',
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  openSeoIconBtn: {
+    padding: 4,
+  },
+  cardAuthorStatsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 2,
+  },
+  cardStatMetric: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
 });

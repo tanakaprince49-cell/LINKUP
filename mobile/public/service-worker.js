@@ -39,7 +39,7 @@ self.addEventListener('fetch', (event) => {
   if (!inScope(url)) return;
   const relativePath = url.pathname.slice(SCOPE_PATH.length);
   // Never cache personalized API responses or Firebase authentication helpers.
-  if (/^(?:p(?:\/|$)|builders(?:\/|$)|campaigns(?:\/|$)|startups(?:\/|$)|news(?:\/|$)|sitemap(?:[.-]|$)|robots\.txt$)/.test(relativePath)) return;
+  if (/^(?:p(?:\/|$)|builders(?:\/|$)|blogs(?:\/|$)|campaigns(?:\/|$)|startups(?:\/|$)|news(?:\/|$)|sitemap(?:[.-]|$)|robots\.txt$)/.test(relativePath)) return;
   if (relativePath === 'api' || relativePath.startsWith('api/') || relativePath.startsWith('__/')) return;
 
   if (request.mode === 'navigate') {

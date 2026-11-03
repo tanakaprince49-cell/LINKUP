@@ -133,7 +133,7 @@ const linking: any = {
   getPathFromState: (state: any, options: any) =>
     scopedNavigationPath(getPathFromState(state, options), WEB_BASE_PATH),
   getStateFromPath: (path: string, options: any) => {
-    const normalizedPath = path.replace(/^(\/app)?\/blogs(?=$|[/?#])/, '$1/news-feed');
+    const normalizedPath = path.replace(/^(\/app)?\/blogs-feed(?=$|[/?#])/, '$1/news-feed');
     // React Navigation 7 strips a root config.path to an empty string, which
     // misses its special '/' dashboard matcher. Handle only the mount's home;
     // regular deep links retain the library's full prefixed path handling.
