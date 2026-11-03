@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Linking,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -20,18 +21,25 @@ import {
   Bold,
   BookOpen,
   Clock,
+  Code,
+  Crop,
   ExternalLink,
   Eye,
+  Highlighter,
   ImagePlus,
   Italic,
   Link2,
   List,
+  ListOrdered,
+  Minus,
   PenSquare,
   Plus,
   Quote,
   RefreshCw,
   Search,
+  Strikethrough,
   Trash2,
+  Underline,
   X,
 } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
@@ -39,24 +47,33 @@ import { useAuth } from '../contexts/AuthContext';
 import { COLORS, liquidGlass, textColor } from '../theme/theme';
 import { AppImage } from '../components/AppImage';
 import VerifiedBadge from '../components/VerifiedBadge';
+import BlogCoverCropModal from '../components/BlogCoverCropModal';
 import { SponsoredCard, useSponsoredSlots } from '../components/SponsoredCard';
 import { Campaign, interleaveSponsored, isSponsoredHiddenForViewer } from '../lib/campaigns';
 import PaywallModal from '../components/PaywallModal';
 import { notifyUser } from '../lib/notify';
+import { ikAvatar, ikCard } from '../lib/ikImage';
 import {
   BlogLink,
   CommunityBlog,
   DEFAULT_BLOG_CATEGORIES,
+  RawCoverAsset,
   applyToolbarFormat,
+  cropAndUploadBlogCover,
   deleteCommunityBlog,
   estimateReadTimeMinutes,
+  extractMarkdownLink,
   fetchCommunityBlogs,
   parseBlogBlocks,
-  pickAndUploadBlogCover,
+  pickRawBlogCoverImage,
   publishCommunityBlog,
   sanitizeBlogUrl,
 } from '../lib/blogs';
-import type { BlogSelection, InlineSegment } from '../../../shared/blog-format';
+import type {
+  BlogSelection,
+  InlineSegment,
+  ToolbarFormatAction,
+} from '../../../shared/blog-format';
 
 const GOLD_MEMBER_UID = 'FvxIfciyHMfQZbLwziZpseMNKxC3';
 const BLOGS_FIRST_AD_AFTER = 1;
@@ -90,6 +107,41 @@ function formatDateLabel(dateStr: string, createdAt: number) {
   });
 }
 
+/**
+ * Toolbar / highlight-bar button that prevents browser mousedown focus steal so
+ * highlighted words inside the Body <TextInput> stay selected when clicked.
+ */
+function FormatToolButton({
+  onPress,
+  style,
+  accessibilityLabel,
+  children,
+}: {
+  onPress: () => void;
+  style?: any;
+  accessibilityLabel: string;
+  children: React.ReactNode;
+}) {
+  const webPreventFocus: any =
+    Platform.OS === 'web'
+      ? {
+          onMouseDown: (e: any) => e?.preventDefault?.(),
+        }
+      : {};
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={({ pressed }) => [style, pressed && { opacity: 0.78 }]}
+      {...webPreventFocus}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
 function RichSegments({
   segments,
   isDark,
@@ -102,10 +154,34 @@ function RichSegments({
   return (
     <Text style={baseStyle}>
       {segments.map((seg, idx) => {
+        const decoration =
+          seg.underline && seg.strike
+            ? ('underline line-through' as const)
+            : seg.underline
+              ? ('underline' as const)
+              : seg.strike
+                ? ('line-through' as const)
+                : undefined;
+
         const fontStyle = [
           seg.bold ? { fontWeight: '800' as const } : null,
           seg.italic ? { fontStyle: 'italic' as const } : null,
+          decoration ? { textDecorationLine: decoration } : null,
+          seg.highlight
+            ? {
+                backgroundColor: isDark ? 'rgba(251, 230, 24, 0.28)' : '#FEF08A',
+                color: isDark ? '#FEF9C3' : '#0A0B0D',
+              }
+            : null,
+          seg.code
+            ? {
+                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                backgroundColor: isDark ? '#262B36' : '#ECEAE2',
+                fontSize: 14,
+              }
+            : null,
         ];
+
         if (seg.type === 'link') {
           return (
             <Text
@@ -116,7 +192,7 @@ function RichSegments({
                 ...fontStyle,
                 {
                   color: isDark ? '#FBE618' : '#0A58CA',
-                  textDecorationLine: 'underline',
+                  textDecorationLine: seg.strike ? 'underline line-through' : 'underline',
                   fontWeight: seg.bold ? '900' : '700',
                 },
               ]}
@@ -143,6 +219,44 @@ function BlogRichBody({ body, isDark }: { body: string; isDark: boolean }) {
   return (
     <View style={{ gap: 16 }}>
       {blocks.map((block, index) => {
+        if (block.type === 'divider') {
+          return (
+            <View
+              key={index}
+              style={{
+                height: 1,
+                backgroundColor: isDark ? '#2E333E' : '#DEDBD2',
+                marginVertical: 6,
+              }}
+            />
+          );
+        }
+        if (block.type === 'codeblock') {
+          return (
+            <View
+              key={index}
+              style={[
+                styles.readerCodeBlock,
+                {
+                  backgroundColor: isDark ? '#11141B' : '#181B22',
+                  borderColor: isDark ? '#2C313D' : '#2C313D',
+                },
+              ]}
+            >
+              <Text style={styles.readerCodeBlockText}>{block.code}</Text>
+            </View>
+          );
+        }
+        if (block.type === 'h1') {
+          return (
+            <RichSegments
+              key={index}
+              segments={block.segments}
+              isDark={isDark}
+              baseStyle={[styles.readerH1, { color: ink }]}
+            />
+          );
+        }
         if (block.type === 'h2') {
           return (
             <RichSegments
@@ -150,6 +264,16 @@ function BlogRichBody({ body, isDark }: { body: string; isDark: boolean }) {
               segments={block.segments}
               isDark={isDark}
               baseStyle={[styles.readerH2, { color: ink }]}
+            />
+          );
+        }
+        if (block.type === 'h3') {
+          return (
+            <RichSegments
+              key={index}
+              segments={block.segments}
+              isDark={isDark}
+              baseStyle={[styles.readerH3, { color: ink }]}
             />
           );
         }
@@ -179,6 +303,26 @@ function BlogRichBody({ body, isDark }: { body: string; isDark: boolean }) {
               {block.items.map((itemSegs, itemIdx) => (
                 <View key={itemIdx} style={styles.readerListItem}>
                   <Text style={[styles.readerBullet, { color: '#D4A000' }]}>•</Text>
+                  <View style={{ flex: 1 }}>
+                    <RichSegments
+                      segments={itemSegs}
+                      isDark={isDark}
+                      baseStyle={[styles.readerParagraph, { color: secondary }]}
+                    />
+                  </View>
+                </View>
+              ))}
+            </View>
+          );
+        }
+        if (block.type === 'ordered') {
+          return (
+            <View key={index} style={{ gap: 8, paddingLeft: 4 }}>
+              {block.items.map((itemSegs, itemIdx) => (
+                <View key={itemIdx} style={styles.readerListItem}>
+                  <Text style={[styles.readerOrderedNum, { color: '#D4A000' }]}>
+                    {itemIdx + 1}.
+                  </Text>
                   <View style={{ flex: 1 }}>
                     <RichSegments
                       segments={itemSegs}
@@ -240,7 +384,8 @@ function AuthorRow({
     >
       {authorAvatar ? (
         <AppImage
-          uri={authorAvatar}
+          uri={ikAvatar(authorAvatar)}
+          contentFit="cover"
           style={{ width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }}
         />
       ) : (
@@ -257,7 +402,10 @@ function AuthorRow({
       )}
       <View style={{ flex: 1, gap: 3 }}>
         <View style={styles.authorNameLine}>
-          <Text style={[styles.authorName, { color: ink, fontSize: large ? 16 : 14 }]} numberOfLines={1}>
+          <Text
+            style={[styles.authorName, { color: ink, fontSize: large ? 16 : 14 }]}
+            numberOfLines={1}
+          >
             {authorName}
           </Text>
           {authorVerified ? (
@@ -321,11 +469,15 @@ export default function BlogsScreen() {
   const [composeTab, setComposeTab] = useState<'edit' | 'preview'>('edit');
   const [activeBlog, setActiveBlog] = useState<CommunityBlog | null>(null);
 
-  // Composer state
+  // Composer state + Cover Cropper state
   const [title, setTitle] = useState('');
   const [coverImage, setCoverImage] = useState('');
   const [showCoverUrlBox, setShowCoverUrlBox] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [pendingCoverAsset, setPendingCoverAsset] = useState<RawCoverAsset | null>(null);
+  const [lastRawCoverAsset, setLastRawCoverAsset] = useState<RawCoverAsset | null>(null);
+
   const [readTimeInput, setReadTimeInput] = useState('3');
   const [readTimeTouched, setReadTimeTouched] = useState(false);
   const [chosenCategories, setChosenCategories] = useState<string[]>(['Startups']);
@@ -334,7 +486,14 @@ export default function BlogsScreen() {
   const [body, setBody] = useState('');
   const [selection, setSelection] = useState<BlogSelection>({ start: 0, end: 0 });
 
-  // Inline "Link in words" popover state
+  const bodyRef = useRef('');
+  bodyRef.current = body;
+  const bodyInputRef = useRef<TextInput | null>(null);
+  const linkUrlInputRef = useRef<TextInput | null>(null);
+  const lastActiveSelectionRef = useRef<BlogSelection>({ start: 0, end: 0 });
+  const lockedLinkRangeRef = useRef<BlogSelection>({ start: 0, end: 0 });
+
+  // Inline "Insert Link" popover state
   const [showInlineLinkBox, setShowInlineLinkBox] = useState(false);
   const [inlineLinkWords, setInlineLinkWords] = useState('');
   const [inlineLinkUrl, setInlineLinkUrl] = useState('');
@@ -373,6 +532,86 @@ export default function BlogsScreen() {
     email: user?.email,
     isAdmin: (profile as any)?.isAdmin,
   });
+
+  const updateEditorSelection = useCallback((nextSel: BlogSelection) => {
+    const clean = {
+      start: Math.max(0, Number(nextSel?.start) || 0),
+      end: Math.max(0, Number(nextSel?.end) || 0),
+    };
+    lastActiveSelectionRef.current = clean;
+    setSelection((prev) =>
+      prev.start === clean.start && prev.end === clean.end ? prev : clean
+    );
+  }, []);
+
+  /**
+   * Read live DOM selectionStart/selectionEnd on Web when available so double-clicks
+   * and mouse-drag highlights are captured with zero lag before toolbar actions run.
+   */
+  const readCurrentSelection = useCallback((): BlogSelection => {
+    if (Platform.OS === 'web') {
+      const el: any = bodyInputRef.current;
+      const doc: any = (globalThis as any).document;
+      if (
+        el &&
+        typeof el.selectionStart === 'number' &&
+        typeof el.selectionEnd === 'number' &&
+        (!doc || doc.activeElement === el)
+      ) {
+        const domSel = { start: el.selectionStart, end: el.selectionEnd };
+        lastActiveSelectionRef.current = domSel;
+        return domSel;
+      }
+    }
+    return lastActiveSelectionRef.current;
+  }, []);
+
+  const restoreEditorSelection = useCallback(
+    (nextSel: BlogSelection) => {
+      updateEditorSelection(nextSel);
+      setTimeout(() => {
+        const el: any = bodyInputRef.current;
+        if (!el) return;
+        try {
+          el.focus?.();
+          if (Platform.OS === 'web' && typeof el.setSelectionRange === 'function') {
+            el.setSelectionRange(nextSel.start, nextSel.end);
+          } else if (typeof el.setNativeProps === 'function') {
+            el.setNativeProps({ selection: nextSel });
+          }
+        } catch {
+          // Ignore platform focus race
+        }
+      }, 25);
+    },
+    [updateEditorSelection]
+  );
+
+  // Sync mouse-drag / double-click / touch-handle word selection on Web <textarea>
+  useEffect(() => {
+    if (Platform.OS !== 'web' || screenMode !== 'compose' || composeTab !== 'edit') return;
+    const el: any = bodyInputRef.current;
+    const doc: any = (globalThis as any).document;
+    if (!el || typeof el.addEventListener !== 'function') return;
+
+    const syncFromDom = () => {
+      if (doc && doc.activeElement !== el) return;
+      if (typeof el.selectionStart === 'number' && typeof el.selectionEnd === 'number') {
+        updateEditorSelection({ start: el.selectionStart, end: el.selectionEnd });
+      }
+    };
+
+    el.addEventListener('select', syncFromDom);
+    el.addEventListener('mouseup', syncFromDom);
+    el.addEventListener('keyup', syncFromDom);
+    el.addEventListener('touchend', syncFromDom);
+    return () => {
+      el.removeEventListener('select', syncFromDom);
+      el.removeEventListener('mouseup', syncFromDom);
+      el.removeEventListener('keyup', syncFromDom);
+      el.removeEventListener('touchend', syncFromDom);
+    };
+  }, [screenMode, composeTab, updateEditorSelection]);
 
   const loadBlogs = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -449,12 +688,16 @@ export default function BlogsScreen() {
     setTitle('');
     setCoverImage('');
     setShowCoverUrlBox(false);
+    setPendingCoverAsset(null);
+    setLastRawCoverAsset(null);
+    setCropModalOpen(false);
     setReadTimeInput('3');
     setReadTimeTouched(false);
     setChosenCategories(['Startups']);
     setNewCategoryInput('');
     setBody('');
-    setSelection({ start: 0, end: 0 });
+    updateEditorSelection({ start: 0, end: 0 });
+    lockedLinkRangeRef.current = { start: 0, end: 0 };
     setShowInlineLinkBox(false);
     setInlineLinkWords('');
     setInlineLinkUrl('');
@@ -482,17 +725,30 @@ export default function BlogsScreen() {
     }
   };
 
-  const triggerToolbar = (action: 'bold' | 'italic' | 'h2' | 'quote' | 'list') => {
-    const res = applyToolbarFormat(body, selection, action);
+  const triggerToolbar = (action: Exclude<ToolbarFormatAction, 'link'>) => {
+    const activeSel = readCurrentSelection();
+    const res = applyToolbarFormat(bodyRef.current, activeSel, action);
     onChangeBody(res.text);
-    setSelection(res.selection);
+    restoreEditorSelection(res.selection);
   };
 
   const openLinkInWordsBox = () => {
-    const picked = body.slice(selection.start, selection.end).trim();
-    setInlineLinkWords(picked);
-    setInlineLinkUrl('');
+    const activeSel = readCurrentSelection();
+    lockedLinkRangeRef.current = activeSel;
+    const rawSlice = bodyRef.current.slice(activeSel.start, activeSel.end);
+    const existingLink = extractMarkdownLink(rawSlice);
+    if (existingLink) {
+      setInlineLinkWords(existingLink.label);
+      setInlineLinkUrl(existingLink.url);
+    } else {
+      setInlineLinkWords(rawSlice.trim());
+      setInlineLinkUrl('');
+    }
+    setComposeError('');
     setShowInlineLinkBox(true);
+    setTimeout(() => {
+      linkUrlInputRef.current?.focus?.();
+    }, 45);
   };
 
   const insertLinkInWords = () => {
@@ -501,16 +757,18 @@ export default function BlogsScreen() {
       setComposeError('Enter a valid URL (for example https://linkupbuild.com).');
       return;
     }
-    const res = applyToolbarFormat(body, selection, 'link', {
-      label: inlineLinkWords.trim() || 'link',
+    const targetRange = lockedLinkRangeRef.current;
+    const fallbackSelected = bodyRef.current.slice(targetRange.start, targetRange.end).trim();
+    const res = applyToolbarFormat(bodyRef.current, targetRange, 'link', {
+      label: inlineLinkWords.trim() || fallbackSelected || 'link',
       url: safe,
     });
     onChangeBody(res.text);
-    setSelection(res.selection);
     setShowInlineLinkBox(false);
     setInlineLinkWords('');
     setInlineLinkUrl('');
     setComposeError('');
+    restoreEditorSelection(res.selection);
   };
 
   const addStandaloneLink = () => {
@@ -550,18 +808,49 @@ export default function BlogsScreen() {
     setNewCategoryInput('');
   };
 
-  const handleUploadCover = async () => {
+  // Step 1: Pick image -> open user-controlled interactive Crop Modal
+  const handlePickCoverForCrop = async () => {
     if (!user?.uid || uploadingCover) return;
+    setComposeError('');
+    try {
+      const picked = await pickRawBlogCoverImage();
+      if (picked) {
+        setPendingCoverAsset(picked);
+        setCropModalOpen(true);
+      }
+    } catch (e: any) {
+      setComposeError(e?.message || 'Could not select cover image.');
+    }
+  };
+
+  // Re-open Crop Modal for the already selected image so user can re-adjust anytime
+  const handleReCropExistingCover = () => {
+    if (!lastRawCoverAsset || uploadingCover) return;
+    setPendingCoverAsset(lastRawCoverAsset);
+    setCropModalOpen(true);
+  };
+
+  // Step 2: Apply user's pan/zoom/fit crop -> upload 1280x720 16:9 image to ImageKit
+  const handleConfirmCoverCrop = async (cropParams: {
+    mode: 'fill' | 'fit';
+    stageW: number;
+    stageH: number;
+    zoom: number;
+    panX: number;
+    panY: number;
+  }) => {
+    if (!user?.uid || !pendingCoverAsset || uploadingCover) return;
     setUploadingCover(true);
     setComposeError('');
     try {
-      const uploaded = await pickAndUploadBlogCover(user.uid);
-      if (uploaded) {
-        setCoverImage(uploaded);
-        setShowCoverUrlBox(false);
-      }
+      const uploaded = await cropAndUploadBlogCover(user.uid, pendingCoverAsset, cropParams);
+      setCoverImage(uploaded);
+      setLastRawCoverAsset(pendingCoverAsset);
+      setPendingCoverAsset(null);
+      setCropModalOpen(false);
+      setShowCoverUrlBox(false);
     } catch (e: any) {
-      setComposeError(e?.message || 'Could not upload cover image.');
+      setComposeError(e?.message || 'Could not upload cropped cover image.');
     } finally {
       setUploadingCover(false);
     }
@@ -636,18 +925,26 @@ export default function BlogsScreen() {
   };
 
   // ============================================================================
-  // READER VIEW — Full Article with Author Profile Pic + Verified Author Ticks
+  // READER VIEW — Full Article with 16:9 Cover + Profile Pic + Verified Author
   // ============================================================================
   if (screenMode === 'reader' && activeBlog) {
     const canDelete = Boolean(
-      user?.uid && (user.uid === activeBlog.authorId || user.uid === GOLD_MEMBER_UID || (profile as any)?.isAdmin)
+      user?.uid &&
+        (user.uid === activeBlog.authorId ||
+          user.uid === GOLD_MEMBER_UID ||
+          (profile as any)?.isAdmin)
     );
     return (
       <SafeAreaView
         edges={['top']}
         style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}
       >
-        <View style={[styles.topActionHeader, { borderBottomColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+        <View
+          style={[
+            styles.topActionHeader,
+            { borderBottomColor: isDark ? COLORS.darkBorder : COLORS.lightBorder },
+          ]}
+        >
           <TouchableOpacity
             onPress={() => {
               setActiveBlog(null);
@@ -677,7 +974,13 @@ export default function BlogsScreen() {
 
         <ScrollView contentContainerStyle={styles.articleContainer}>
           {activeBlog.coverImage ? (
-            <AppImage uri={activeBlog.coverImage} style={styles.readerCover} contentFit="cover" />
+            <View style={styles.coverFrame16x9}>
+              <AppImage
+                uri={ikCard(activeBlog.coverImage)}
+                style={styles.coverImageFill}
+                contentFit="cover"
+              />
+            </View>
           ) : null}
 
           <View style={styles.metaRow}>
@@ -767,7 +1070,7 @@ export default function BlogsScreen() {
   }
 
   // ============================================================================
-  // COMPOSER VIEW — Write + Rich Formatting Toolbar + Preview Before Publishing
+  // COMPOSER VIEW — User Cover Cropper + Highlight Word -> Insert Link & Formats
   // ============================================================================
   if (screenMode === 'compose') {
     const previewReadMins = Math.max(
@@ -777,6 +1080,39 @@ export default function BlogsScreen() {
     const cardBg = isDark ? '#171A21' : '#FFFFFF';
     const borderCol = isDark ? '#323640' : '#DDDAD1';
     const inputBg = isDark ? '#222630' : '#F4F3EE';
+
+    const rawHighlighted =
+      selection.end > selection.start ? body.slice(selection.start, selection.end) : '';
+    const trimmedHighlighted = rawHighlighted.trim();
+    const hasWordHighlighted = trimmedHighlighted.length > 0;
+    const highlightedPreview =
+      trimmedHighlighted.length > 36
+        ? `${trimmedHighlighted.slice(0, 35)}…`
+        : trimmedHighlighted;
+
+    const webBodyKeyboardShortcuts: any =
+      Platform.OS === 'web'
+        ? {
+            onKeyDown: (e: any) => {
+              const mod = e?.metaKey || e?.ctrlKey;
+              if (!mod) return;
+              const k = String(e.key || '').toLowerCase();
+              if (k === 'k') {
+                e.preventDefault?.();
+                openLinkInWordsBox();
+              } else if (k === 'b') {
+                e.preventDefault?.();
+                triggerToolbar('bold');
+              } else if (k === 'i') {
+                e.preventDefault?.();
+                triggerToolbar('italic');
+              } else if (k === 'u') {
+                e.preventDefault?.();
+                triggerToolbar('underline');
+              }
+            },
+          }
+        : {};
 
     return (
       <SafeAreaView
@@ -831,7 +1167,7 @@ export default function BlogsScreen() {
 
         <ScrollView
           contentContainerStyle={styles.articleContainer}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
         >
           {composeError ? (
             <View style={styles.errorBanner}>
@@ -843,35 +1179,61 @@ export default function BlogsScreen() {
 
           {composeTab === 'edit' ? (
             <View style={{ gap: 16 }}>
-              {/* 1. Cover Page */}
+              {/* 1. Cover Page with User Interactive 16:9 Cropper */}
               <View style={[styles.editorCard, { backgroundColor: cardBg, borderColor: borderCol }]}>
-                <Text style={[styles.fieldLabel, { color: ink }]}>Cover Page (Optional)</Text>
+                <Text style={[styles.fieldLabel, { color: ink }]}>Cover Page (Optional · 16:9)</Text>
+                <Text style={{ fontSize: 12, color: muted }}>
+                  Upload any photo and crop, drag, zoom, or fit the full picture yourself so it displays cleanly across phones and desktops.
+                </Text>
+
                 {coverImage && sanitizeBlogUrl(coverImage) ? (
-                  <View style={{ gap: 8 }}>
-                    <AppImage
-                      uri={sanitizeBlogUrl(coverImage)}
-                      style={styles.readerCover}
-                      contentFit="cover"
-                    />
-                    <TouchableOpacity
-                      onPress={() => setCoverImage('')}
-                      style={styles.secondarySmallBtn}
-                    >
-                      <Text style={styles.secondarySmallBtnText}>Remove Cover Page</Text>
-                    </TouchableOpacity>
+                  <View style={{ gap: 10 }}>
+                    <View style={styles.coverFrame16x9}>
+                      <AppImage
+                        uri={ikCard(sanitizeBlogUrl(coverImage))}
+                        style={styles.coverImageFill}
+                        contentFit="cover"
+                      />
+                    </View>
+                    <View style={styles.rowWrap}>
+                      {lastRawCoverAsset ? (
+                        <TouchableOpacity
+                          onPress={handleReCropExistingCover}
+                          disabled={uploadingCover}
+                          style={styles.goldActionBtn}
+                          accessibilityRole="button"
+                        >
+                          <Crop size={15} color="#0A0B0D" />
+                          <Text style={styles.goldActionBtnText}>Adjust / Re-Crop Cover</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      <TouchableOpacity
+                        onPress={() => {
+                          setCoverImage('');
+                          setLastRawCoverAsset(null);
+                        }}
+                        style={styles.secondarySmallBtn}
+                      >
+                        <Text style={styles.secondarySmallBtnText}>Remove Cover Page</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ) : null}
 
                 <View style={styles.rowWrap}>
                   <TouchableOpacity
-                    onPress={() => void handleUploadCover()}
+                    onPress={() => void handlePickCoverForCrop()}
                     disabled={uploadingCover}
                     style={styles.goldActionBtn}
                     accessibilityRole="button"
                   >
                     <ImagePlus size={16} color="#0A0B0D" />
                     <Text style={styles.goldActionBtnText}>
-                      {uploadingCover ? 'Uploading Cover…' : 'Upload Cover Image'}
+                      {uploadingCover
+                        ? 'Uploading Cropped Cover…'
+                        : coverImage
+                          ? 'Choose & Crop Another Photo'
+                          : 'Upload & Crop Cover Image'}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -888,11 +1250,17 @@ export default function BlogsScreen() {
                 {showCoverUrlBox ? (
                   <TextInput
                     value={coverImage}
-                    onChangeText={setCoverImage}
+                    onChangeText={(v) => {
+                      setCoverImage(v);
+                      setLastRawCoverAsset(null);
+                    }}
                     placeholder="https://images.example.com/cover.jpg"
                     placeholderTextColor={muted}
                     autoCapitalize="none"
-                    style={[styles.textInput, { backgroundColor: inputBg, color: ink, borderColor: borderCol }]}
+                    style={[
+                      styles.textInput,
+                      { backgroundColor: inputBg, color: ink, borderColor: borderCol },
+                    ]}
                   />
                 ) : null}
               </View>
@@ -908,7 +1276,13 @@ export default function BlogsScreen() {
                   placeholderTextColor={muted}
                   style={[
                     styles.textInput,
-                    { backgroundColor: inputBg, color: ink, borderColor: borderCol, fontSize: 17, fontWeight: '700' },
+                    {
+                      backgroundColor: inputBg,
+                      color: ink,
+                      borderColor: borderCol,
+                      fontSize: 17,
+                      fontWeight: '700',
+                    },
                   ]}
                 />
 
@@ -924,7 +1298,10 @@ export default function BlogsScreen() {
                       keyboardType="number-pad"
                       placeholder="5"
                       placeholderTextColor={muted}
-                      style={[styles.textInput, { backgroundColor: inputBg, color: ink, borderColor: borderCol }]}
+                      style={[
+                        styles.textInput,
+                        { backgroundColor: inputBg, color: ink, borderColor: borderCol },
+                      ]}
                     />
                   </View>
                   <TouchableOpacity
@@ -932,7 +1309,10 @@ export default function BlogsScreen() {
                       setReadTimeTouched(false);
                       setReadTimeInput(String(estimateReadTimeMinutes(body)));
                     }}
-                    style={[styles.secondarySmallBtn, { alignSelf: 'flex-end', height: 46, justifyContent: 'center' }]}
+                    style={[
+                      styles.secondarySmallBtn,
+                      { alignSelf: 'flex-end', height: 46, justifyContent: 'center' },
+                    ]}
                   >
                     <Text style={styles.secondarySmallBtnText}>Auto-Calculate Read Time</Text>
                   </TouchableOpacity>
@@ -953,10 +1333,7 @@ export default function BlogsScreen() {
                       <TouchableOpacity
                         key={cat}
                         onPress={() => toggleCategory(cat)}
-                        style={[
-                          styles.catSelectChip,
-                          active && styles.catSelectChipActive,
-                        ]}
+                        style={[styles.catSelectChip, active && styles.catSelectChipActive]}
                         accessibilityRole="button"
                       >
                         <Text
@@ -983,7 +1360,13 @@ export default function BlogsScreen() {
                     onSubmitEditing={addCustomCategory}
                     style={[
                       styles.textInput,
-                      { flex: 1, minWidth: 190, backgroundColor: inputBg, color: ink, borderColor: borderCol },
+                      {
+                        flex: 1,
+                        minWidth: 190,
+                        backgroundColor: inputBg,
+                        color: ink,
+                        borderColor: borderCol,
+                      },
                     ]}
                   />
                   <TouchableOpacity
@@ -997,131 +1380,327 @@ export default function BlogsScreen() {
                 </View>
               </View>
 
-              {/* 4. Body of the Blog + Formatting Toolbar */}
+              {/* 4. Body of the Blog + Selection Menu + Rich Formatting Toolbar */}
               <View style={[styles.editorCard, { backgroundColor: cardBg, borderColor: borderCol }]}>
                 <Text style={[styles.fieldLabel, { color: ink }]}>Body of the Blog</Text>
                 <Text style={{ fontSize: 12, color: muted }}>
-                  Select text in your article and tap any formatting tool below (Bold, Italic, H2, Quote, List, or Link in words).
+                  Highlight any word or sentence below to insert a clickable link directly on that word or apply rich text formatting.
                 </Text>
 
-                {/* Rich Formatting Toolbar */}
+                {/* Persistent Rich Formatting Toolbar */}
                 <View style={[styles.toolbar, { backgroundColor: inputBg, borderColor: borderCol }]}>
-                  <TouchableOpacity
+                  <FormatToolButton
+                    onPress={openLinkInWordsBox}
+                    style={[styles.toolBtn, styles.toolBtnHighlight]}
+                    accessibilityLabel="Insert Link"
+                  >
+                    <Link2 size={15} color="#0A0B0D" />
+                    <Text style={[styles.toolBtnLabel, { color: '#0A0B0D', fontWeight: '900' }]}>
+                      Insert Link
+                    </Text>
+                  </FormatToolButton>
+
+                  <FormatToolButton
                     onPress={() => triggerToolbar('bold')}
                     style={styles.toolBtn}
-                    accessibilityRole="button"
                     accessibilityLabel="Bold"
                   >
                     <Bold size={15} color={ink} />
                     <Text style={[styles.toolBtnLabel, { color: ink, fontWeight: '900' }]}>B</Text>
-                  </TouchableOpacity>
+                  </FormatToolButton>
 
-                  <TouchableOpacity
+                  <FormatToolButton
                     onPress={() => triggerToolbar('italic')}
                     style={styles.toolBtn}
-                    accessibilityRole="button"
                     accessibilityLabel="Italic"
                   >
                     <Italic size={15} color={ink} />
-                    <Text style={[styles.toolBtnLabel, { color: ink, fontStyle: 'italic' }]}>I</Text>
-                  </TouchableOpacity>
+                    <Text style={[styles.toolBtnLabel, { color: ink, fontStyle: 'italic' }]}>
+                      I
+                    </Text>
+                  </FormatToolButton>
 
-                  <TouchableOpacity
+                  <FormatToolButton
+                    onPress={() => triggerToolbar('underline')}
+                    style={styles.toolBtn}
+                    accessibilityLabel="Underline"
+                  >
+                    <Underline size={15} color={ink} />
+                    <Text
+                      style={[
+                        styles.toolBtnLabel,
+                        { color: ink, textDecorationLine: 'underline' },
+                      ]}
+                    >
+                      U
+                    </Text>
+                  </FormatToolButton>
+
+                  <FormatToolButton
+                    onPress={() => triggerToolbar('strike')}
+                    style={styles.toolBtn}
+                    accessibilityLabel="Strikethrough"
+                  >
+                    <Strikethrough size={15} color={ink} />
+                  </FormatToolButton>
+
+                  <FormatToolButton
+                    onPress={() => triggerToolbar('highlight')}
+                    style={styles.toolBtn}
+                    accessibilityLabel="Highlight text"
+                  >
+                    <Highlighter size={15} color={ink} />
+                    <Text style={[styles.toolBtnLabel, { color: ink }]}>Highlight</Text>
+                  </FormatToolButton>
+
+                  <FormatToolButton
+                    onPress={() => triggerToolbar('h1')}
+                    style={styles.toolBtn}
+                    accessibilityLabel="Heading 1"
+                  >
+                    <Text style={[styles.toolBtnLabel, { color: ink, fontWeight: '900' }]}>H1</Text>
+                  </FormatToolButton>
+
+                  <FormatToolButton
                     onPress={() => triggerToolbar('h2')}
                     style={styles.toolBtn}
-                    accessibilityRole="button"
                     accessibilityLabel="Heading 2"
                   >
                     <Text style={[styles.toolBtnLabel, { color: ink, fontWeight: '900' }]}>H2</Text>
-                  </TouchableOpacity>
+                  </FormatToolButton>
 
-                  <TouchableOpacity
+                  <FormatToolButton
+                    onPress={() => triggerToolbar('h3')}
+                    style={styles.toolBtn}
+                    accessibilityLabel="Heading 3"
+                  >
+                    <Text style={[styles.toolBtnLabel, { color: ink, fontWeight: '900' }]}>H3</Text>
+                  </FormatToolButton>
+
+                  <FormatToolButton
                     onPress={() => triggerToolbar('quote')}
                     style={styles.toolBtn}
-                    accessibilityRole="button"
                     accessibilityLabel="Blockquote"
                   >
                     <Quote size={15} color={ink} />
                     <Text style={[styles.toolBtnLabel, { color: ink }]}>Quote</Text>
-                  </TouchableOpacity>
+                  </FormatToolButton>
 
-                  <TouchableOpacity
+                  <FormatToolButton
                     onPress={() => triggerToolbar('list')}
                     style={styles.toolBtn}
-                    accessibilityRole="button"
                     accessibilityLabel="Bulleted list"
                   >
                     <List size={15} color={ink} />
-                    <Text style={[styles.toolBtnLabel, { color: ink }]}>List</Text>
-                  </TouchableOpacity>
+                    <Text style={[styles.toolBtnLabel, { color: ink }]}>Bullets</Text>
+                  </FormatToolButton>
 
-                  <TouchableOpacity
-                    onPress={openLinkInWordsBox}
-                    style={[styles.toolBtn, styles.toolBtnHighlight]}
-                    accessibilityRole="button"
-                    accessibilityLabel="Link in words"
+                  <FormatToolButton
+                    onPress={() => triggerToolbar('ordered')}
+                    style={styles.toolBtn}
+                    accessibilityLabel="Numbered list"
                   >
-                    <Link2 size={15} color="#0A0B0D" />
-                    <Text style={[styles.toolBtnLabel, { color: '#0A0B0D', fontWeight: '800' }]}>
-                      Link in words
-                    </Text>
-                  </TouchableOpacity>
+                    <ListOrdered size={15} color={ink} />
+                    <Text style={[styles.toolBtnLabel, { color: ink }]}>1. List</Text>
+                  </FormatToolButton>
+
+                  <FormatToolButton
+                    onPress={() => triggerToolbar('code')}
+                    style={styles.toolBtn}
+                    accessibilityLabel="Inline code"
+                  >
+                    <Code size={15} color={ink} />
+                    <Text style={[styles.toolBtnLabel, { color: ink }]}>Code</Text>
+                  </FormatToolButton>
+
+                  <FormatToolButton
+                    onPress={() => triggerToolbar('codeblock')}
+                    style={styles.toolBtn}
+                    accessibilityLabel="Code block"
+                  >
+                    <Text style={[styles.toolBtnLabel, { color: ink }]}>{'{ } Block'}</Text>
+                  </FormatToolButton>
+
+                  <FormatToolButton
+                    onPress={() => triggerToolbar('divider')}
+                    style={styles.toolBtn}
+                    accessibilityLabel="Divider line"
+                  >
+                    <Minus size={15} color={ink} />
+                    <Text style={[styles.toolBtnLabel, { color: ink }]}>Divider</Text>
+                  </FormatToolButton>
                 </View>
 
-                {showInlineLinkBox ? (
-                  <View style={[styles.inlineLinkCard, { backgroundColor: inputBg, borderColor: borderCol }]}>
-                    <View style={[styles.rowWrap, { justifyContent: 'space-between' }]}>
-                      <Text style={{ fontWeight: '800', fontSize: 13, color: ink }}>
-                        Put a Link Inside Words
+                {/* Contextual Selection Bar — appears automatically when any word is highlighted */}
+                {hasWordHighlighted && !showInlineLinkBox ? (
+                  <View style={styles.selectionFloatingBar}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+                      <Text style={styles.selectionBarBadge} numberOfLines={1}>
+                        Selected: “{highlightedPreview}”
                       </Text>
+                    </View>
+                    <View style={styles.selectionBarActions}>
+                      <FormatToolButton
+                        onPress={openLinkInWordsBox}
+                        style={styles.selectionLinkCta}
+                        accessibilityLabel="Insert link on highlighted word"
+                      >
+                        <Link2 size={14} color="#0A0B0D" />
+                        <Text style={styles.selectionLinkCtaText}>Insert Link</Text>
+                      </FormatToolButton>
+
+                      <FormatToolButton
+                        onPress={() => triggerToolbar('bold')}
+                        style={styles.selectionQuickBtn}
+                        accessibilityLabel="Bold highlighted word"
+                      >
+                        <Text style={styles.selectionQuickBtnText}>B</Text>
+                      </FormatToolButton>
+
+                      <FormatToolButton
+                        onPress={() => triggerToolbar('italic')}
+                        style={styles.selectionQuickBtn}
+                        accessibilityLabel="Italicize highlighted word"
+                      >
+                        <Text style={[styles.selectionQuickBtnText, { fontStyle: 'italic' }]}>
+                          I
+                        </Text>
+                      </FormatToolButton>
+
+                      <FormatToolButton
+                        onPress={() => triggerToolbar('underline')}
+                        style={styles.selectionQuickBtn}
+                        accessibilityLabel="Underline highlighted word"
+                      >
+                        <Text
+                          style={[
+                            styles.selectionQuickBtnText,
+                            { textDecorationLine: 'underline' },
+                          ]}
+                        >
+                          U
+                        </Text>
+                      </FormatToolButton>
+
+                      <FormatToolButton
+                        onPress={() => triggerToolbar('highlight')}
+                        style={styles.selectionQuickBtn}
+                        accessibilityLabel="Highlight selected word"
+                      >
+                        <Highlighter size={13} color="#F9FAFB" />
+                      </FormatToolButton>
+
+                      <FormatToolButton
+                        onPress={() => triggerToolbar('h2')}
+                        style={styles.selectionQuickBtn}
+                        accessibilityLabel="Turn into H2 heading"
+                      >
+                        <Text style={styles.selectionQuickBtnText}>H2</Text>
+                      </FormatToolButton>
+
+                      <FormatToolButton
+                        onPress={() => triggerToolbar('quote')}
+                        style={styles.selectionQuickBtn}
+                        accessibilityLabel="Quote selected text"
+                      >
+                        <Quote size={13} color="#F9FAFB" />
+                      </FormatToolButton>
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* Insert Link Popover — locks onto the exact highlighted word range */}
+                {showInlineLinkBox ? (
+                  <View
+                    style={[
+                      styles.inlineLinkCard,
+                      {
+                        backgroundColor: isDark ? '#1E2330' : '#FFFDF2',
+                        borderColor: '#FBE618',
+                      },
+                    ]}
+                  >
+                    <View style={[styles.rowWrap, { justifyContent: 'space-between' }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Link2 size={15} color={ink} />
+                        <Text style={{ fontWeight: '900', fontSize: 13, color: ink }}>
+                          {lockedLinkRangeRef.current.end > lockedLinkRangeRef.current.start
+                            ? 'Turn Highlighted Text Into a Link'
+                            : 'Insert Clickable Link in Text'}
+                        </Text>
+                      </View>
                       <TouchableOpacity onPress={() => setShowInlineLinkBox(false)}>
                         <X size={16} color={muted} />
                       </TouchableOpacity>
                     </View>
+
                     <TextInput
                       value={inlineLinkWords}
                       onChangeText={setInlineLinkWords}
-                      placeholder="Words to make clickable (e.g. try our live demo)"
+                      placeholder="Clickable words (e.g. our live launch)"
                       placeholderTextColor={muted}
-                      style={[styles.textInput, { backgroundColor: cardBg, color: ink, borderColor: borderCol }]}
+                      style={[
+                        styles.textInput,
+                        { backgroundColor: cardBg, color: ink, borderColor: borderCol },
+                      ]}
                     />
                     <TextInput
+                      ref={linkUrlInputRef}
                       value={inlineLinkUrl}
                       onChangeText={setInlineLinkUrl}
-                      placeholder="https://yourlink.com"
+                      onSubmitEditing={insertLinkInWords}
+                      placeholder="Paste or type URL (e.g. https://linkupbuild.com)"
                       placeholderTextColor={muted}
                       autoCapitalize="none"
-                      style={[styles.textInput, { backgroundColor: cardBg, color: ink, borderColor: borderCol }]}
+                      autoCorrect={false}
+                      keyboardType="url"
+                      returnKeyType="done"
+                      style={[
+                        styles.textInput,
+                        { backgroundColor: cardBg, color: ink, borderColor: borderCol },
+                      ]}
                     />
-                    <TouchableOpacity onPress={insertLinkInWords} style={styles.goldActionBtn}>
-                      <Text style={styles.goldActionBtnText}>Insert Link in Words</Text>
-                    </TouchableOpacity>
+                    <View style={styles.rowWrap}>
+                      <TouchableOpacity onPress={insertLinkInWords} style={styles.goldActionBtn}>
+                        <Link2 size={15} color="#0A0B0D" />
+                        <Text style={styles.goldActionBtnText}>Insert Link</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setShowInlineLinkBox(false)}
+                        style={styles.secondarySmallBtn}
+                      >
+                        <Text style={styles.secondarySmallBtnText}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ) : null}
 
                 <TextInput
+                  ref={bodyInputRef}
                   value={body}
                   onChangeText={onChangeBody}
-                  onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+                  onSelectionChange={(e) => updateEditorSelection(e.nativeEvent.selection)}
                   multiline
-                  placeholder="Write your blog here… Use H2 for sub-headings, **bold**, *italic*, > quotes, - bullet lists, and [links in words](https://…)."
+                  placeholder="Write your blog here… Highlight any word and click Insert Link (or Ctrl+K) to turn that word into a clickable link."
                   placeholderTextColor={muted}
                   style={[
                     styles.bodyInput,
                     { backgroundColor: inputBg, color: ink, borderColor: borderCol },
                   ]}
+                  {...webBodyKeyboardShortcuts}
                 />
               </View>
 
               {/* 5. Standalone Resource Links */}
               <View style={[styles.editorCard, { backgroundColor: cardBg, borderColor: borderCol }]}>
-                <Text style={[styles.fieldLabel, { color: ink }]}>
-                  Attached Links (Optional)
-                </Text>
+                <Text style={[styles.fieldLabel, { color: ink }]}>Attached Links (Optional)</Text>
                 {links.map((lnk, idx) => (
                   <View key={`${lnk.url}-${idx}`} style={styles.attachedLinkRow}>
                     <Link2 size={14} color={ink} />
-                    <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: ink }} numberOfLines={1}>
+                    <Text
+                      style={{ flex: 1, fontSize: 13, fontWeight: '700', color: ink }}
+                      numberOfLines={1}
+                    >
                       {lnk.label} — {lnk.url}
                     </Text>
                     <TouchableOpacity
@@ -1139,7 +1718,13 @@ export default function BlogsScreen() {
                     placeholderTextColor={muted}
                     style={[
                       styles.textInput,
-                      { flex: 1, minWidth: 140, backgroundColor: inputBg, color: ink, borderColor: borderCol },
+                      {
+                        flex: 1,
+                        minWidth: 140,
+                        backgroundColor: inputBg,
+                        color: ink,
+                        borderColor: borderCol,
+                      },
                     ]}
                   />
                   <TextInput
@@ -1150,7 +1735,13 @@ export default function BlogsScreen() {
                     autoCapitalize="none"
                     style={[
                       styles.textInput,
-                      { flex: 1, minWidth: 160, backgroundColor: inputBg, color: ink, borderColor: borderCol },
+                      {
+                        flex: 1,
+                        minWidth: 160,
+                        backgroundColor: inputBg,
+                        color: ink,
+                        borderColor: borderCol,
+                      },
                     ]}
                   />
                   <TouchableOpacity onPress={addStandaloneLink} style={styles.secondarySmallBtn}>
@@ -1192,11 +1783,13 @@ export default function BlogsScreen() {
               </View>
 
               {coverImage && sanitizeBlogUrl(coverImage) ? (
-                <AppImage
-                  uri={sanitizeBlogUrl(coverImage)}
-                  style={styles.readerCover}
-                  contentFit="cover"
-                />
+                <View style={styles.coverFrame16x9}>
+                  <AppImage
+                    uri={ikCard(sanitizeBlogUrl(coverImage))}
+                    style={styles.coverImageFill}
+                    contentFit="cover"
+                  />
+                </View>
               ) : null}
 
               <View style={styles.metaRow}>
@@ -1218,10 +1811,7 @@ export default function BlogsScreen() {
               </Text>
 
               <View
-                style={[
-                  styles.authorCardBox,
-                  { backgroundColor: cardBg, borderColor: borderCol },
-                ]}
+                style={[styles.authorCardBox, { backgroundColor: cardBg, borderColor: borderCol }]}
               >
                 <AuthorRow
                   authorId={user?.uid || ''}
@@ -1245,10 +1835,7 @@ export default function BlogsScreen() {
 
               {links.length > 0 ? (
                 <View
-                  style={[
-                    styles.linksSection,
-                    { backgroundColor: cardBg, borderColor: borderCol },
-                  ]}
+                  style={[styles.linksSection, { backgroundColor: cardBg, borderColor: borderCol }]}
                 >
                   <Text style={{ fontWeight: '900', fontSize: 14, color: ink }}>
                     Referenced Links
@@ -1300,6 +1887,19 @@ export default function BlogsScreen() {
             </View>
           )}
         </ScrollView>
+
+        <BlogCoverCropModal
+          visible={cropModalOpen}
+          asset={pendingCoverAsset}
+          saving={uploadingCover}
+          isDark={isDark}
+          onCancel={() => {
+            if (uploadingCover) return;
+            setCropModalOpen(false);
+            setPendingCoverAsset(null);
+          }}
+          onConfirm={(params) => void handleConfirmCoverCrop(params)}
+        />
       </SafeAreaView>
     );
   }
@@ -1309,7 +1909,10 @@ export default function BlogsScreen() {
   // ============================================================================
   const renderBlogCard = (blog: CommunityBlog) => {
     const isOwner = Boolean(
-      user?.uid && (user.uid === blog.authorId || user.uid === GOLD_MEMBER_UID || (profile as any)?.isAdmin)
+      user?.uid &&
+        (user.uid === blog.authorId ||
+          user.uid === GOLD_MEMBER_UID ||
+          (profile as any)?.isAdmin)
     );
     return (
       <TouchableOpacity
@@ -1322,7 +1925,13 @@ export default function BlogsScreen() {
         accessibilityRole="button"
       >
         {blog.coverImage ? (
-          <AppImage uri={blog.coverImage} style={styles.cardCover} contentFit="cover" />
+          <View style={styles.cardCoverFrame16x9}>
+            <AppImage
+              uri={ikCard(blog.coverImage)}
+              style={styles.coverImageFill}
+              contentFit="cover"
+            />
+          </View>
         ) : null}
 
         <View style={styles.cardBody}>
@@ -1385,9 +1994,7 @@ export default function BlogsScreen() {
 
   const renderFeedItem = ({ item }: { item: FeedItem }) => {
     if (item.kind === 'ad') {
-      return item.ad ? (
-        <SponsoredCard campaign={item.ad} viewerUid={user?.uid} />
-      ) : null;
+      return item.ad ? <SponsoredCard campaign={item.ad} viewerUid={user?.uid} /> : null;
     }
     return renderBlogCard(item.row);
   };
@@ -1587,10 +2194,22 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
   },
-  cardCover: {
+  cardCoverFrame16x9: {
     width: '100%',
-    height: 195,
-    backgroundColor: '#E5E7EB',
+    aspectRatio: 16 / 9,
+    backgroundColor: '#111318',
+    overflow: 'hidden',
+  },
+  coverFrame16x9: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 18,
+    backgroundColor: '#111318',
+    overflow: 'hidden',
+  },
+  coverImageFill: {
+    width: '100%',
+    height: '100%',
   },
   cardBody: {
     padding: 16,
@@ -1725,12 +2344,6 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  readerCover: {
-    width: '100%',
-    height: 240,
-    borderRadius: 18,
-    backgroundColor: '#E5E7EB',
-  },
   readerTitle: {
     fontSize: 28,
     lineHeight: 35,
@@ -1741,11 +2354,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
   },
+  readerH1: {
+    fontSize: 24,
+    lineHeight: 31,
+    fontWeight: '900',
+    marginTop: 10,
+  },
   readerH2: {
     fontSize: 21,
     lineHeight: 28,
     fontWeight: '900',
     marginTop: 8,
+  },
+  readerH3: {
+    fontSize: 18,
+    lineHeight: 25,
+    fontWeight: '800',
+    marginTop: 6,
   },
   readerParagraph: {
     fontSize: 16,
@@ -1762,6 +2387,17 @@ const styles = StyleSheet.create({
     lineHeight: 25,
     fontStyle: 'italic',
   },
+  readerCodeBlock: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+  },
+  readerCodeBlockText: {
+    color: '#F3F4F6',
+    fontSize: 13,
+    lineHeight: 20,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
   readerListItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1771,6 +2407,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 26,
     fontWeight: '900',
+  },
+  readerOrderedNum: {
+    fontSize: 15,
+    lineHeight: 26,
+    fontWeight: '900',
+    minWidth: 20,
   },
   linksSection: {
     borderWidth: 1,
@@ -1825,7 +2467,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 14,
     padding: 14,
-    minHeight: 230,
+    minHeight: 240,
     fontSize: 15,
     lineHeight: 23,
     textAlignVertical: 'top',
@@ -1896,11 +2538,58 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  inlineLinkCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
+  selectionFloatingBar: {
+    backgroundColor: '#11141C',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#FBE618',
+  },
+  selectionBarBadge: {
+    color: '#E5E7EB',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  selectionBarActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+  },
+  selectionLinkCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FBE618',
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 9,
+  },
+  selectionLinkCtaText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#0A0B0D',
+  },
+  selectionQuickBtn: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#252A38',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectionQuickBtnText: {
+    color: '#F9FAFB',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  inlineLinkCard: {
+    borderWidth: 1.5,
+    borderRadius: 14,
+    padding: 13,
+    gap: 9,
   },
   secondaryLargeBtn: {
     flexDirection: 'row',

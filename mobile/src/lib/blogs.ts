@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
-import { Platform } from 'react-native';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { Image as RNImage, Platform } from 'react-native';
 import { auth } from './firebase';
 import { linkupWebBaseUrl } from './profileLinks';
 import { webAppPath } from './webPaths';
@@ -7,7 +8,9 @@ import { uploadImageToImageKit } from './imagekitUpload';
 import {
   DEFAULT_BLOG_CATEGORIES,
   applyToolbarFormat,
+  computeCoverCropRect,
   estimateReadTimeMinutes,
+  extractMarkdownLink,
   parseBlogBlocks,
   plainExcerptFromBlog,
   sanitizeBlogUrl,
@@ -16,7 +19,9 @@ import {
 export {
   DEFAULT_BLOG_CATEGORIES,
   applyToolbarFormat,
+  computeCoverCropRect,
   estimateReadTimeMinutes,
+  extractMarkdownLink,
   parseBlogBlocks,
   plainExcerptFromBlog,
   sanitizeBlogUrl,
@@ -53,6 +58,14 @@ export type BlogsFeedResponse = {
   customCategories: string[];
 };
 
+export type RawCoverAsset = {
+  uri: string;
+  dataUri: string;
+  width: number;
+  height: number;
+  mimeType: string;
+};
+
 function blogsApiUrl(query = '') {
   const path = `/api/news${query ? `?${query}` : ''}`;
   if (Platform.OS === 'web') {
@@ -70,7 +83,9 @@ export async function fetchCommunityBlogs(category = ''): Promise<BlogsFeedRespo
   }
   return {
     blogs: Array.isArray(json.blogs) ? json.blogs : [],
-    defaultCategories: Array.isArray(json.defaultCategories) ? json.defaultCategories : DEFAULT_BLOG_CATEGORIES,
+    defaultCategories: Array.isArray(json.defaultCategories)
+      ? json.defaultCategories
+      : DEFAULT_BLOG_CATEGORIES,
     customCategories: Array.isArray(json.customCategories) ? json.customCategories : [],
   };
 }
@@ -117,28 +132,231 @@ export async function deleteCommunityBlog(blogId: string): Promise<void> {
   }
 }
 
-export async function pickAndUploadBlogCover(uid: string): Promise<string | null> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) {
-    throw new Error('Allow photo access to select a blog cover image.');
+function measureImageDimensions(uri: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    RNImage.getSize(
+      uri,
+      (width, height) => resolve({ width: width || 1280, height: height || 720 }),
+      () => resolve({ width: 1280, height: 720 })
+    );
+  });
+}
+
+/**
+ * Picks a raw image without OS auto-cropping so the user can interactively pan,
+ * zoom, or fit the image themselves inside BlogCoverCropModal on web & mobile.
+ */
+export async function pickRawBlogCoverImage(): Promise<RawCoverAsset | null> {
+  if (Platform.OS !== 'web') {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      throw new Error('Allow photo access to select a blog cover image.');
+    }
   }
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
-    allowsEditing: true,
-    aspect: [16, 9],
-    quality: 0.72,
+    allowsEditing: false,
+    quality: 0.9,
     base64: true,
   });
   if (result.canceled) return null;
   const asset = result.assets?.[0];
-  if (!asset?.base64) {
+  if (!asset) return null;
+
+  const mimeType = asset.mimeType || 'image/jpeg';
+  const dataUri = asset.base64
+    ? `data:${mimeType};base64,${asset.base64}`
+    : asset.uri?.startsWith('data:')
+      ? asset.uri
+      : '';
+  const sourceUri = dataUri || asset.uri;
+  if (!sourceUri) {
     throw new Error('Could not read this image. Please pick another photo.');
   }
-  if (asset.base64.length > 6_000_000) {
-    throw new Error('Choose a cover image smaller than 4.5 MB.');
+  if (asset.base64 && asset.base64.length > 10_000_000) {
+    throw new Error('Choose a cover image smaller than 7 MB.');
   }
-  const dataUri = `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`;
-  const hostedUrl = await uploadImageToImageKit(uid, dataUri, {
+
+  let width = Number(asset.width) || 0;
+  let height = Number(asset.height) || 0;
+  if (!width || !height) {
+    const measured = await measureImageDimensions(sourceUri);
+    width = measured.width;
+    height = measured.height;
+  }
+
+  return {
+    uri: asset.uri || sourceUri,
+    dataUri: dataUri || sourceUri,
+    width,
+    height,
+    mimeType,
+  };
+}
+
+async function renderWebCanvasCover(
+  sourceUri: string,
+  options: {
+    mode: 'fill' | 'fit';
+    stageW: number;
+    stageH: number;
+    zoom: number;
+    panX: number;
+    panY: number;
+  }
+): Promise<string> {
+  const doc = (globalThis as any).document;
+  const WinImage = (globalThis as any).Image;
+  if (!doc || !WinImage) {
+    throw new Error('Browser canvas unavailable.');
+  }
+
+  const img: any = await new Promise((resolve, reject) => {
+    const el = new WinImage();
+    el.crossOrigin = 'anonymous';
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error('Could not decode selected cover image.'));
+    el.src = sourceUri;
+  });
+
+  const outW = 1280;
+  const outH = 720;
+  const canvas = doc.createElement('canvas');
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not initialize image cropper.');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  const natW = img.naturalWidth || img.width || 1280;
+  const natH = img.naturalHeight || img.height || 720;
+
+  if (options.mode === 'fit') {
+    // Clean dark backdrop + subtle ambient blurred fill + crisp 100% uncropped image centered
+    ctx.fillStyle = '#111318';
+    ctx.fillRect(0, 0, outW, outH);
+    try {
+      ctx.save();
+      ctx.filter = 'blur(28px) brightness(0.42)';
+      const bgScale = Math.max(outW / natW, outH / natH) * 1.08;
+      const bgW = natW * bgScale;
+      const bgH = natH * bgScale;
+      ctx.drawImage(img, (outW - bgW) / 2, (outH - bgH) / 2, bgW, bgH);
+      ctx.restore();
+    } catch {
+      // Older Safari without ctx.filter keeps clean #111318 studio frame
+    }
+    const fitScale = Math.min(outW / natW, outH / natH);
+    const drawW = Math.round(natW * fitScale);
+    const drawH = Math.round(natH * fitScale);
+    const dx = Math.round((outW - drawW) / 2);
+    const dy = Math.round((outH - drawH) / 2);
+    ctx.drawImage(img, 0, 0, natW, natH, dx, dy, drawW, drawH);
+  } else {
+    const rect = computeCoverCropRect({
+      imgW: natW,
+      imgH: natH,
+      stageW: options.stageW,
+      stageH: options.stageH,
+      zoom: options.zoom,
+      panX: options.panX,
+      panY: options.panY,
+    });
+    ctx.drawImage(
+      img,
+      rect.originX,
+      rect.originY,
+      rect.width,
+      rect.height,
+      0,
+      0,
+      outW,
+      outH
+    );
+  }
+
+  return canvas.toDataURL('image/jpeg', 0.86);
+}
+
+/**
+ * Crops (or fits) the user's chosen cover image to exact 16:9 (1280x720) and uploads to ImageKit.
+ */
+export async function cropAndUploadBlogCover(
+  uid: string,
+  rawAsset: RawCoverAsset,
+  options: {
+    mode: 'fill' | 'fit';
+    stageW: number;
+    stageH: number;
+    zoom: number;
+    panX: number;
+    panY: number;
+  }
+): Promise<string> {
+  let finalDataUri = '';
+
+  if (Platform.OS === 'web') {
+    finalDataUri = await renderWebCanvasCover(rawAsset.dataUri || rawAsset.uri, options);
+  } else if (options.mode === 'fit') {
+    const resized = await manipulateAsync(
+      rawAsset.uri,
+      [{ resize: { width: Math.min(1280, rawAsset.width || 1280) } }],
+      { compress: 0.85, format: SaveFormat.JPEG, base64: true }
+    );
+    if (!resized.base64) {
+      throw new Error('Could not prepare cover image.');
+    }
+    const uploaded = await uploadImageToImageKit(
+      uid,
+      `data:image/jpeg;base64,${resized.base64}`,
+      {
+        folder: '/linkup-blogs',
+        fileName: `blog-cover-${Date.now()}.jpg`,
+        useUniqueFileName: true,
+      }
+    );
+    if (!uploaded) {
+      throw new Error('Cover upload could not complete. Try again or paste an HTTPS image URL.');
+    }
+    // Use ImageKit 16:9 padded transform so zero pixels are cut off on native Fit mode
+    const ikBase = 'https://ik.imagekit.io/vjkzaxrro/';
+    if (uploaded.startsWith(ikBase) && !uploaded.includes('/tr:')) {
+      return `${ikBase}tr:w-1280,h-720,cm-pad_resize,bg-111318,q-86,f-auto/${uploaded.slice(ikBase.length)}`;
+    }
+    return uploaded;
+  } else {
+    const rect = computeCoverCropRect({
+      imgW: rawAsset.width,
+      imgH: rawAsset.height,
+      stageW: options.stageW,
+      stageH: options.stageH,
+      zoom: options.zoom,
+      panX: options.panX,
+      panY: options.panY,
+    });
+    const cropped = await manipulateAsync(
+      rawAsset.uri,
+      [
+        {
+          crop: {
+            originX: rect.originX,
+            originY: rect.originY,
+            width: rect.width,
+            height: rect.height,
+          },
+        },
+        { resize: { width: 1280, height: 720 } },
+      ],
+      { compress: 0.85, format: SaveFormat.JPEG, base64: true }
+    );
+    if (!cropped.base64) {
+      throw new Error('Could not crop this image. Please try another photo.');
+    }
+    finalDataUri = `data:image/jpeg;base64,${cropped.base64}`;
+  }
+
+  const hostedUrl = await uploadImageToImageKit(uid, finalDataUri, {
     folder: '/linkup-blogs',
     fileName: `blog-cover-${Date.now()}.jpg`,
     useUniqueFileName: true,
@@ -147,4 +365,17 @@ export async function pickAndUploadBlogCover(uid: string): Promise<string | null
     throw new Error('Cover upload could not complete. Try again or paste an HTTPS image URL.');
   }
   return hostedUrl;
+}
+
+export async function pickAndUploadBlogCover(uid: string): Promise<string | null> {
+  const raw = await pickRawBlogCoverImage();
+  if (!raw) return null;
+  return cropAndUploadBlogCover(uid, raw, {
+    mode: 'fill',
+    stageW: 320,
+    stageH: 180,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+  });
 }
