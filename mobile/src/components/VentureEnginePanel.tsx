@@ -323,21 +323,63 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
             </TouchableOpacity>
           </View>
 
+          {status.autoWatchActive || status.githubRepo || status.githubHandle ? (
+            <View
+              style={[
+                styles.autoWatchBanner,
+                {
+                  backgroundColor: isDark ? '#12261E' : '#ECFDF5',
+                  borderColor: isDark ? '#1E5B41' : '#86EFAC',
+                },
+              ]}
+            >
+              <View style={[styles.row, { justifyContent: 'space-between' }]}>
+                <View style={[styles.row, { gap: 6 }]}>
+                  <View style={styles.pillVerified}>
+                    <Text style={styles.pillVerifiedText}>AUTO-RECORDING ON</Text>
+                  </View>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: isDark ? '#A7F3D0' : '#065F46' }}>
+                    {status.githubRepo || `@${String(status.githubHandle).replace(/^@/, '')}`}
+                  </Text>
+                </View>
+                {status.lastAutoCheckedAt ? (
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: isDark ? '#6EE7B7' : '#047857' }}>
+                    Checked {formatCommitTime(new Date(Number(status.lastAutoCheckedAt)).toISOString())}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={{ fontSize: 12, lineHeight: 18, color: isDark ? '#D1FAE5' : '#065F46' }}>
+                Linky watches your GitHub automatically in the background. Whenever you commit & push code, Linky records the commit here and credits Builder League without you needing to open LINKUP.
+              </Text>
+            </View>
+          ) : null}
+
           {showWebhookBox ? (
             <View style={[styles.subPanel, { backgroundColor: softBg }]}>
               <Text style={{ fontWeight: '800', fontSize: 13, color: ink }}>
-                Zero-Login Builder League Webhook (GitHub & Cursor)
+                Instant Real-Time Push & Local Git Hook (Optional · Cloud Auto-Watch Already Active)
               </Text>
               <Text style={{ fontSize: 12, lineHeight: 18, color: sub }}>
-                Add this Payload URL in GitHub → Settings → Webhooks (Push events) or drop the 1-line hook into .git/hooks/post-push. Every daily commit automatically logs +10 Builder League points. Stop shipping code and your streak breaks naturally.
+                Linky already sweeps your public GitHub commits automatically in the background. For sub-second instant recording (or private/offline local commits before git push), add the GitHub Webhook or paste the 1-line local post-commit installer in your project terminal.
               </Text>
               <View style={styles.row}>
+                {status.autoInstallHookCmd ? (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={() => void copyText('1-line local auto-commit installer', status.autoInstallHookCmd)}
+                    style={styles.goldBtn}
+                  >
+                    <Text style={styles.goldBtnText}>Copy 1-Line Auto-Commit Installer</Text>
+                  </TouchableOpacity>
+                ) : null}
                 <TouchableOpacity
                   accessibilityRole="button"
                   onPress={() => void copyText('GitHub Webhook URL', status.webhookUrl)}
-                  style={styles.goldBtn}
+                  style={status.autoInstallHookCmd ? styles.secBtn : styles.goldBtn}
                 >
-                  <Text style={styles.goldBtnText}>Copy GitHub Webhook URL</Text>
+                  <Text style={status.autoInstallHookCmd ? styles.secBtnText : styles.goldBtnText}>
+                    Copy GitHub Webhook URL
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   accessibilityRole="button"
@@ -403,6 +445,7 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
                   const timeLabel = formatCommitTime(commit?.timestamp || '');
                   const commitUrl = typeof commit?.url === 'string' && commit.url.startsWith('https://') ? commit.url : '';
                   const isWebhook = commit?.source === 'passive_webhook';
+                  const isAutoWatcher = commit?.source === 'auto_watcher';
 
                   return (
                     <View
@@ -438,16 +481,30 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
                           <View
                             style={[
                               styles.commitSourceBadge,
-                              isWebhook ? styles.commitSourceWebhook : styles.commitSourceScan,
+                              isWebhook
+                                ? styles.commitSourceWebhook
+                                : isAutoWatcher
+                                  ? styles.commitSourceAuto
+                                  : styles.commitSourceScan,
                             ]}
                           >
                             <Text
                               style={[
                                 styles.commitSourceBadgeText,
-                                { color: isWebhook ? '#075985' : '#374151' },
+                                {
+                                  color: isWebhook
+                                    ? '#075985'
+                                    : isAutoWatcher
+                                      ? '#065F46'
+                                      : '#374151',
+                                },
                               ]}
                             >
-                              {isWebhook ? 'Passive Webhook' : 'Codebase Scan'}
+                              {isWebhook
+                                ? 'Passive Webhook'
+                                : isAutoWatcher
+                                  ? 'Auto-Recorded'
+                                  : 'Codebase Scan'}
                             </Text>
                           </View>
 
@@ -811,6 +868,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#92400E',
   },
+  autoWatchBanner: {
+    borderRadius: 14,
+    padding: 12,
+    gap: 5,
+    borderWidth: 1,
+  },
   commitSourceBadge: {
     borderRadius: 999,
     paddingHorizontal: 8,
@@ -824,6 +887,10 @@ const styles = StyleSheet.create({
   commitSourceWebhook: {
     backgroundColor: '#E0F2FE',
     borderColor: '#7DD3FC',
+  },
+  commitSourceAuto: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#86EFAC',
   },
   commitSourceBadgeText: {
     fontSize: 10,

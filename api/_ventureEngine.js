@@ -72,8 +72,9 @@ export function webhookCredentials(uid) {
   const sig = crypto.createHmac('sha256', engineSecret()).update(`gh-hook:${uid}`).digest('hex').slice(0, 32);
   const secret = crypto.createHmac('sha256', engineSecret()).update(`gh-secret:${uid}`).digest('hex').slice(0, 40);
   const webhookUrl = `${API_ORIGIN}?action=githubWebhook&uid=${encodeURIComponent(uid)}&sig=${sig}`;
-  const cursorHook = `curl -fsSL -X POST "${webhookUrl}" -H "Content-Type: application/json" -d "{\\"repository\\":{\\"full_name\\":\\"$(basename $(git rev-parse --show-toplevel))\\"},\\"head_commit\\":{\\"id\\":\\"$(git rev-parse HEAD)\\",\\"message\\":\\"$(git log -1 --pretty=%s | tr '\\"' \\"'\\" | cut -c1-120)\\",\\"timestamp\\":\\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\\"}}" >/dev/null 2>&1 &`;
-  return { sig, secret, webhookUrl, cursorHook };
+  const cursorHook = `curl -fsSL -X POST "${webhookUrl}" -H "Content-Type: application/json" -d "{\\"repository\\":{\\"full_name\\":\\"$(git config --get remote.origin.url 2>/dev/null | sed -E 's#.*github.com[:/]([^/]+/[^/.]+)(\\.git)?$#\\1#' | grep '/' || basename $(git rev-parse --show-toplevel))\\"},\\"head_commit\\":{\\"id\\":\\"$(git rev-parse HEAD)\\",\\"message\\":\\"$(git log -1 --pretty=%s | tr '\\"\\\\' '  ' | cut -c1-120)\\",\\"author\\":{\\"name\\":\\"$(git log -1 --pretty=%an | tr '\\"\\\\' '  ' | cut -c1-50)\\"},\\"timestamp\\":\\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\\"}}" >/dev/null 2>&1 &`;
+  const autoInstallHookCmd = `mkdir -p .git/hooks && printf '#!/bin/sh\\n%s\\n' '${cursorHook.replace(/'/g, "'\\''")}' > .git/hooks/post-commit && chmod +x .git/hooks/post-commit`;
+  return { sig, secret, webhookUrl, cursorHook, autoInstallHookCmd };
 }
 
 export function verifyWebhookAuth({ uid, sig = '', rawBody = '', githubSignature256 = '' }) {
@@ -192,7 +193,12 @@ export function normalizeInspectedCommit(
     /^[a-fA-F0-9]{7,40}$/.test(hexSha || shortSha)
       ? `https://github.com/${repo}/commit/${hexSha || shortSha}`
       : '';
-  const source = raw.source === 'passive_webhook' ? 'passive_webhook' : defaultSource;
+  const validSources = new Set(['passive_webhook', 'auto_watcher', 'github_scan']);
+  const source = validSources.has(raw.source)
+    ? raw.source
+    : validSources.has(defaultSource)
+      ? defaultSource
+      : 'github_scan';
   const in14dWindow = timestamp ? Date.parse(timestamp) >= nowMs - 14 * DAY : false;
 
   return {
@@ -209,6 +215,11 @@ export function normalizeInspectedCommit(
   };
 }
 
+function pickHigherPriorityCommitSource(a = '', b = '') {
+  const rank = { passive_webhook: 3, auto_watcher: 2, github_scan: 1 };
+  return (rank[a] || 0) >= (rank[b] || 0) ? a || 'github_scan' : b || 'github_scan';
+}
+
 export function mergeInspectedCommits(primary = [], secondary = [], max = 20) {
   const byKey = new Map();
   for (const item of [...(Array.isArray(primary) ? primary : []), ...(Array.isArray(secondary) ? secondary : [])]) {
@@ -222,6 +233,7 @@ export function mergeInspectedCommits(primary = [], secondary = [], max = 20) {
       const prev = byKey.get(key);
       byKey.set(key, {
         ...prev,
+        source: pickHigherPriorityCommitSource(prev.source, item.source),
         message:
           prev.message && prev.message !== 'Verified Git commit'
             ? prev.message
@@ -552,10 +564,16 @@ export async function recordVerifiedCommitToLeague({
 
     if (eligibleDay && c.lastDay !== eligibleDay && !(c.days || []).includes(eligibleDay)) {
       const safeRepo = clean(repoName, 80) || 'connected repository';
-      const text = clean(
-        `Passive GitHub verification: pushed ${Math.max(1, Number(commitCount) || 1)} verified commit${Number(commitCount) === 1 ? '' : 's'} to ${safeRepo} (${shaShort || 'HEAD'}).`,
-        180
-      );
+      const headlineMsg = clean(String(commitMessage || '').split(/\r?\n/)[0], 80);
+      const text = headlineMsg
+        ? clean(
+            `${source === 'auto_watcher' ? 'Linky auto-recorded GitHub commit' : 'Passive GitHub verification'}: "${headlineMsg}" on ${safeRepo} (${shaShort || 'HEAD'}).`,
+            180
+          )
+        : clean(
+            `Passive GitHub verification: pushed ${Math.max(1, Number(commitCount) || 1)} verified commit${Number(commitCount) === 1 ? '' : 's'} to ${safeRepo} (${shaShort || 'HEAD'}).`,
+            180
+          );
       const entry = {
         id: id(),
         key: `gh_${eligibleDay}_${shaShort || 'push'}`,
@@ -613,7 +631,6 @@ export async function recordVerifiedCommitToLeague({
       tx.set(cr, nextContrib, { merge: true });
     }
 
-    const updatedShas = shaShort ? [shaShort, ...seenShas.filter((x) => x !== shaShort)].slice(0, 40) : seenShas;
     const safeRepoName = clean(repoName, 100);
     const creditedShort = String(commitSha || shaShort || '').replace(/[^a-fA-F0-9]/g, '').slice(0, 7);
     const rawPushCommits = Array.isArray(commitsList) && commitsList.length > 0
@@ -649,7 +666,19 @@ export async function recordVerifiedCommitToLeague({
     const normalizedIncoming = rawPushCommits
       .map((item) => normalizeInspectedCommit(item, safeRepoName, source, now))
       .filter(Boolean);
+    const incomingShas = normalizedIncoming
+      .map((item) => clean(item.sha || item.shortSha || '', 12))
+      .filter(Boolean);
+    const updatedShas = [...new Set([shaShort, ...incomingShas, ...seenShas].filter(Boolean))].slice(0, 60);
     const updatedInspected = mergeInspectedCommits(normalizedIncoming, v.inspectedCommits || [], 20);
+    const updatedCommits14d = updatedInspected.filter(
+      (item) => item.timestamp && Date.parse(item.timestamp) >= now - 14 * DAY
+    ).length;
+
+    const updatedCommitHours = updatedInspected
+      .map((item) => (item.timestamp ? new Date(item.timestamp).getUTCHours() : NaN))
+      .filter((h) => Number.isFinite(h));
+    const updatedWindow = classifyCommitWindow(updatedCommitHours);
 
     tx.set(
       vr,
@@ -662,6 +691,23 @@ export async function recordVerifiedCommitToLeague({
         lastCommitSha: shaShort,
         recentCommitShas: updatedShas,
         inspectedCommits: updatedInspected,
+        ...(v.codeDiagnosis
+          ? {
+              codeDiagnosis: {
+                ...v.codeDiagnosis,
+                inspectedCommits: updatedInspected,
+                commitsLast14d: Math.max(Number(v.codeDiagnosis.commitsLast14d) || 0, updatedCommits14d),
+                latestCommitAt: updatedInspected[0]?.timestamp || v.codeDiagnosis.latestCommitAt || '',
+                latestCommitSha: shaShort || v.codeDiagnosis.latestCommitSha || '',
+                codingStyle: {
+                  ...(v.codeDiagnosis.codingStyle || {}),
+                  peakWindowUtc: updatedWindow.label,
+                  peakHourUtc: updatedWindow.peakHourUtc,
+                },
+              },
+            }
+          : {}),
+        ...(source === 'auto_watcher' ? { lastAutoSyncedAt: now } : {}),
         totalVerifiedPushes: (Number(v.totalVerifiedPushes) || 0) + (alreadyRecordedSha ? 0 : 1),
         updatedAt: now,
       },
@@ -679,6 +725,445 @@ export async function recordVerifiedCommitToLeague({
       inspectedCommits: updatedInspected,
       day: eligibleDay || pushDay,
     };
+  });
+}
+
+// Lightweight ETag-aware GitHub commit watcher across default branch + all-branch PushEvents
+export async function fetchIncrementalGithubCommits({
+  githubRepo = '',
+  githubHandle = '',
+  cached = {},
+  githubToken = '',
+  fetchFn = globalThis.fetch,
+} = {}) {
+  const parsedRepo = parseGithubRepoInput(githubRepo);
+  const handle = parseGithubHandle(githubHandle) || parsedRepo?.owner || '';
+  if (!parsedRepo && !handle) {
+    return { notModified: true, commits: [], repoEtag: '', eventsEtag: '' };
+  }
+
+  const token = String(githubToken || process.env.GITHUB_TOKEN || '').trim();
+  const makeHeaders = (etag = '') => ({
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'LINKUP-VentureEngine/1.0',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(etag ? { 'If-None-Match': etag } : {}),
+  });
+
+  const safeGet = async (url, etag = '') => {
+    try {
+      const res = await fetchFn(url, {
+        headers: makeHeaders(etag),
+        signal: AbortSignal.timeout(6500),
+      });
+      const nextEtag = typeof res?.headers?.get === 'function' ? res.headers.get('etag') || '' : '';
+      if (res?.status === 304) return { ok: true, notModified: true, etag: etag || nextEtag, data: null };
+      if (!res?.ok) return { ok: false, notModified: false, etag: '', data: null };
+      return { ok: true, notModified: false, etag: nextEtag, data: await res.json() };
+    } catch {
+      return { ok: false, notModified: false, etag: '', data: null };
+    }
+  };
+
+  const byShort = new Map();
+  const addCommit = (c) => {
+    if (!c?.sha) return;
+    const short = String(c.sha).replace(/[^a-fA-F0-9]/g, '').slice(0, 7);
+    if (!short) return;
+    const prev = byShort.get(short);
+    if (!prev || (prev.message === 'GitHub push event' && c.message && c.message !== 'GitHub push event')) {
+      byShort.set(short, c);
+    }
+  };
+
+  let repoEtag = String(cached.repoEtag || '');
+  let eventsEtag = String(cached.eventsEtag || '');
+  let repoNotModified = true;
+  let eventsNotModified = true;
+
+  if (parsedRepo) {
+    const base = `https://api.github.com/repos/${encodeURIComponent(parsedRepo.owner)}/${encodeURIComponent(parsedRepo.repo)}`;
+    const [commitsRes, repoEventsRes] = await Promise.all([
+      safeGet(`${base}/commits?per_page=10`, repoEtag),
+      safeGet(`${base}/events?per_page=15`, eventsEtag),
+    ]);
+
+    if (commitsRes.ok) {
+      repoNotModified = !!commitsRes.notModified;
+      if (commitsRes.etag) repoEtag = commitsRes.etag;
+      if (Array.isArray(commitsRes.data)) {
+        for (const c of commitsRes.data) {
+          addCommit({
+            sha: String(c?.sha || '').slice(0, 40),
+            timestamp: c?.commit?.author?.date || c?.commit?.committer?.date || '',
+            repo: parsedRepo.fullName,
+            author: clean(String(c?.author?.login || c?.commit?.author?.name || ''), 60),
+            url: safeLink(c?.html_url || ''),
+            message: clean(String(c?.commit?.message || '').split('\n')[0], 160),
+          });
+        }
+      }
+    }
+
+    if (repoEventsRes.ok) {
+      eventsNotModified = !!repoEventsRes.notModified;
+      if (repoEventsRes.etag) eventsEtag = repoEventsRes.etag;
+      if (Array.isArray(repoEventsRes.data)) {
+        let headLookups = 0;
+        for (const ev of repoEventsRes.data) {
+          if (ev?.type !== 'PushEvent' || !ev?.created_at) continue;
+          const evRepo = String(ev?.repo?.name || parsedRepo.fullName);
+          const evActor = clean(String(ev?.actor?.login || parsedRepo.owner), 60);
+          const evCommits = Array.isArray(ev?.payload?.commits) ? ev.payload.commits : [];
+          if (evCommits.length > 0) {
+            for (const cItem of evCommits.slice(-5).reverse()) {
+              addCommit({
+                sha: String(cItem?.sha || ev?.payload?.head || '').slice(0, 40),
+                timestamp: ev.created_at,
+                repo: evRepo,
+                author: clean(String(cItem?.author?.name || evActor), 60),
+                message: clean(String(cItem?.message || 'GitHub push event').split('\n')[0], 160),
+              });
+            }
+          } else if (ev?.payload?.head && headLookups < 2) {
+            const headSha = String(ev.payload.head).slice(0, 40);
+            const headShort = headSha.slice(0, 7);
+            if (!byShort.has(headShort) && headShort !== String(cached.lastSeenHead || '').slice(0, 7)) {
+              headLookups += 1;
+              const detail = await safeGet(`${base}/commits/${encodeURIComponent(headSha)}`);
+              if (detail.ok && detail.data?.sha) {
+                addCommit({
+                  sha: String(detail.data.sha).slice(0, 40),
+                  timestamp: detail.data?.commit?.author?.date || ev.created_at,
+                  repo: evRepo,
+                  author: clean(String(detail.data?.author?.login || detail.data?.commit?.author?.name || evActor), 60),
+                  url: safeLink(detail.data?.html_url || ''),
+                  message: clean(String(detail.data?.commit?.message || 'GitHub push event').split('\n')[0], 160),
+                });
+              } else {
+                addCommit({
+                  sha: headSha,
+                  timestamp: ev.created_at,
+                  repo: evRepo,
+                  author: evActor,
+                  message: 'GitHub push event',
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  } else if (handle) {
+    const eventsRes = await safeGet(
+      `https://api.github.com/users/${encodeURIComponent(handle)}/events/public?per_page=20`,
+      eventsEtag
+    );
+    if (eventsRes.ok) {
+      eventsNotModified = !!eventsRes.notModified;
+      if (eventsRes.etag) eventsEtag = eventsRes.etag;
+      if (Array.isArray(eventsRes.data)) {
+        let headLookups = 0;
+        for (const ev of eventsRes.data) {
+          if (ev?.type !== 'PushEvent' || !ev?.created_at) continue;
+          const evRepo = String(ev?.repo?.name || '');
+          const evActor = clean(String(ev?.actor?.login || handle), 60);
+          const evCommits = Array.isArray(ev?.payload?.commits) ? ev.payload.commits : [];
+          if (evCommits.length > 0) {
+            for (const cItem of evCommits.slice(-5).reverse()) {
+              addCommit({
+                sha: String(cItem?.sha || ev?.payload?.head || '').slice(0, 40),
+                timestamp: ev.created_at,
+                repo: evRepo,
+                author: clean(String(cItem?.author?.name || evActor), 60),
+                message: clean(String(cItem?.message || 'GitHub push event').split('\n')[0], 160),
+              });
+            }
+          } else if (ev?.payload?.head && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(evRepo) && headLookups < 2) {
+            const headSha = String(ev.payload.head).slice(0, 40);
+            const headShort = headSha.slice(0, 7);
+            if (!byShort.has(headShort) && headShort !== String(cached.lastSeenHead || '').slice(0, 7)) {
+              headLookups += 1;
+              const detail = await safeGet(`https://api.github.com/repos/${evRepo}/commits/${encodeURIComponent(headSha)}`);
+              if (detail.ok && detail.data?.sha) {
+                addCommit({
+                  sha: String(detail.data.sha).slice(0, 40),
+                  timestamp: detail.data?.commit?.author?.date || ev.created_at,
+                  repo: evRepo,
+                  author: clean(String(detail.data?.author?.login || detail.data?.commit?.author?.name || evActor), 60),
+                  url: safeLink(detail.data?.html_url || ''),
+                  message: clean(String(detail.data?.commit?.message || 'GitHub push event').split('\n')[0], 160),
+                });
+              } else {
+                addCommit({
+                  sha: headSha,
+                  timestamp: ev.created_at,
+                  repo: evRepo,
+                  author: evActor,
+                  message: 'GitHub push event',
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const commits = [...byShort.values()].sort(
+    (a, b) => (Date.parse(b.timestamp || '') || 0) - (Date.parse(a.timestamp || '') || 0)
+  );
+  return {
+    notModified: repoNotModified && eventsNotModified && commits.length === 0,
+    commits,
+    repoEtag,
+    eventsEtag,
+  };
+}
+
+function extractProfileGithubTarget(userData = {}) {
+  const rawLink = clean(
+    userData?.socialLinks?.github || userData?.github || '',
+    200
+  );
+  if (!rawLink) return null;
+  const repo = parseGithubRepoInput(rawLink);
+  if (repo) return { githubRepo: repo.fullName, githubHandle: repo.owner };
+  const handle = parseGithubHandle(rawLink);
+  if (handle) return { githubRepo: '', githubHandle: handle };
+  return null;
+}
+
+// Autonomous background watcher: detects & records GitHub commits without the founder opening LINKUP
+export async function sweepConnectedGithubCommits({
+  db,
+  fetchFn = globalThis.fetch,
+  githubToken = '',
+  maxProfiles = 35,
+  discoverFromProfiles = false,
+  write = true,
+  now = Date.now(),
+} = {}) {
+  const watcherRef = db.collection('builderScheduler').doc('githubAutoWatcher');
+  const [watcherSnap, ventureSnap] = await Promise.all([
+    watcherRef.get().catch(() => ({ exists: false, data: () => ({}) })),
+    db.collection('ventureProfiles').orderBy('__name__').limit(200).get().catch(() => ({ docs: [] })),
+  ]);
+
+  const watcherData = watcherSnap?.exists ? watcherSnap.data() || {} : {};
+  const cache = watcherData.cache && typeof watcherData.cache === 'object'
+    ? { ...watcherData.cache }
+    : {};
+
+  let discoveredProfiles = 0;
+  const existingUids = new Set(ventureSnap.docs.map((d) => d.id));
+
+  if (discoverFromProfiles && write) {
+    const usersSnap = await db
+      .collection('users')
+      .where('onboarded', '==', true)
+      .limit(80)
+      .get()
+      .catch(() => ({ docs: [] }));
+    const ops = createVentureWorkspaceOps({ db, now: () => now, fetchFn });
+    for (const uDoc of usersSnap.docs) {
+      if (discoveredProfiles >= 5) break;
+      const uid = uDoc.id;
+      if (!validId(uid) || existingUids.has(uid)) continue;
+      const u = uDoc.data() || {};
+      if (u.deleted || u.banned) continue;
+      const target = extractProfileGithubTarget(u);
+      if (!target) continue;
+      try {
+        await ops.connectAndAnalyze(uid, target);
+        existingUids.add(uid);
+        discoveredProfiles += 1;
+      } catch {
+        // Non-fatal per user
+      }
+    }
+  }
+
+  const connectedDocs = ventureSnap.docs
+    .map((d) => ({ uid: d.id, ...(d.data() || {}) }))
+    .filter((v) => validId(v.uid) && v.autoWatchEnabled !== false && (v.githubRepo || v.githubHandle))
+    .sort((a, b) => {
+      const aChecked = Number(cache[a.uid]?.checkedAt || a.lastAutoSyncedAt || 0);
+      const bChecked = Number(cache[b.uid]?.checkedAt || b.lastAutoSyncedAt || 0);
+      return aChecked - bChecked;
+    })
+    .slice(0, Math.max(1, Math.min(80, Number(maxProfiles) || 35)));
+
+  let checked = 0;
+  let notModified = 0;
+  let usersWithNewCommits = 0;
+  let commitsRecorded = 0;
+  let leagueDaysCredited = 0;
+  const recordedDetails = [];
+
+  for (const v of connectedDocs) {
+    checked += 1;
+    const prevCache = cache[v.uid] || {};
+    const knownShorts = new Set([
+      ...(Array.isArray(v.recentCommitShas) ? v.recentCommitShas : [])
+        .map((s) => String(s || '').replace(/[^a-fA-F0-9]/g, '').slice(0, 7))
+        .filter(Boolean),
+      ...(Array.isArray(v.inspectedCommits) ? v.inspectedCommits : [])
+        .map((c) => String(c?.shortSha || c?.sha || '').replace(/[^a-fA-F0-9]/g, '').slice(0, 7))
+        .filter(Boolean),
+    ]);
+
+    // First-time baseline scan if no commits were ever indexed for this connected profile
+    if (knownShorts.size === 0 && write) {
+      try {
+        const ops = createVentureWorkspaceOps({ db, now: () => now, fetchFn });
+        const initRes = await ops.connectAndAnalyze(v.uid, {
+          githubRepo: v.githubRepo || '',
+          githubHandle: v.githubHandle || '',
+        });
+        const topShort = initRes?.inspectedCommits?.[0]?.shortSha || '';
+        cache[v.uid] = { ...prevCache, lastSeenHead: topShort, checkedAt: now };
+        if ((initRes?.inspectedCommits || []).length > 0) {
+          usersWithNewCommits += 1;
+          commitsRecorded += initRes.inspectedCommits.length;
+          if (initRes?.autoLeagueSync?.dayCredited) leagueDaysCredited += 1;
+        }
+      } catch {
+        cache[v.uid] = { ...prevCache, checkedAt: now };
+      }
+      continue;
+    }
+
+    const inc = await fetchIncrementalGithubCommits({
+      githubRepo: v.githubRepo || '',
+      githubHandle: v.githubHandle || '',
+      cached: prevCache,
+      githubToken,
+      fetchFn,
+    });
+
+    if (inc.notModified) {
+      notModified += 1;
+      cache[v.uid] = { ...prevCache, checkedAt: now };
+      continue;
+    }
+
+    const unseen = inc.commits.filter((c) => {
+      const short = String(c?.sha || '').replace(/[^a-fA-F0-9]/g, '').slice(0, 7);
+      return short && !knownShorts.has(short);
+    });
+
+    const latestHead = String(inc.commits[0]?.sha || prevCache.lastSeenHead || '').slice(0, 7);
+    cache[v.uid] = {
+      repoEtag: inc.repoEtag || prevCache.repoEtag || '',
+      eventsEtag: inc.eventsEtag || prevCache.eventsEtag || '',
+      lastSeenHead: latestHead,
+      checkedAt: now,
+    };
+
+    if (unseen.length === 0) continue;
+
+    usersWithNewCommits += 1;
+    commitsRecorded += unseen.length;
+    const newest = unseen[0];
+    recordedDetails.push({
+      uid: v.uid,
+      repo: newest.repo || v.githubRepo || v.githubHandle,
+      shortSha: String(newest.sha || '').slice(0, 7),
+      message: newest.message || '',
+      count: unseen.length,
+    });
+
+    if (write) {
+      try {
+        const res = await recordVerifiedCommitToLeague({
+          db,
+          uid: v.uid,
+          repoName: newest.repo || v.githubRepo || v.githubHandle || 'github',
+          commitSha: newest.sha,
+          commitMessage: newest.message || '',
+          commitAuthor: newest.author || '',
+          commitUrl: newest.url || '',
+          commitsList: unseen,
+          commitTimestamp: newest.timestamp || new Date(now).toISOString(),
+          commitCount: unseen.length,
+          source: 'auto_watcher',
+          now,
+        });
+        if (res?.dayCredited) leagueDaysCredited += 1;
+      } catch {
+        // Isolate individual profile errors (e.g. deleted user) so other builders continue
+      }
+    }
+  }
+
+  // Prune stale cache entries if >250 keys
+  const cacheKeys = Object.keys(cache);
+  if (cacheKeys.length > 250) {
+    cacheKeys
+      .sort((a, b) => (cache[a]?.checkedAt || 0) - (cache[b]?.checkedAt || 0))
+      .slice(0, cacheKeys.length - 250)
+      .forEach((k) => delete cache[k]);
+  }
+
+  if (write) {
+    await watcherRef
+      .set(
+        {
+          lastRunAt: now,
+          lastCheckedCount: checked,
+          lastCommitsRecorded: commitsRecorded,
+          lastLeagueDaysCredited: leagueDaysCredited,
+          discoveredProfiles,
+          cache,
+        },
+        { merge: true }
+      )
+      .catch(() => null);
+  }
+
+  return {
+    ok: true,
+    checked,
+    notModified,
+    discoveredProfiles,
+    usersWithNewCommits,
+    commitsRecorded,
+    leagueDaysCredited,
+    recordedDetails,
+    at: now,
+  };
+}
+
+let lastProcessAutoSweepAt = 0;
+export async function maybeAutoSweepGithubCommits({
+  db,
+  fetchFn = globalThis.fetch,
+  githubToken = '',
+  minIntervalMs = 3 * 60 * 1000,
+  now = Date.now(),
+} = {}) {
+  if (now - lastProcessAutoSweepAt < minIntervalMs) {
+    return { ok: true, skipped: 'in_memory_cooldown' };
+  }
+  lastProcessAutoSweepAt = now;
+  const watcherSnap = await db
+    .collection('builderScheduler')
+    .doc('githubAutoWatcher')
+    .get()
+    .catch(() => null);
+  const lastRunAt = watcherSnap?.exists ? Number(watcherSnap.data()?.lastRunAt || 0) : 0;
+  if (lastRunAt && now - lastRunAt < minIntervalMs) {
+    return { ok: true, skipped: 'firestore_cooldown', lastRunAt };
+  }
+  return sweepConnectedGithubCommits({
+    db,
+    fetchFn,
+    githubToken,
+    maxProfiles: 15,
+    discoverFromProfiles: false,
+    write: true,
+    now,
   });
 }
 
@@ -1335,28 +1820,54 @@ export async function dispatchVcInvestmentOffer({ db, input = {}, ipHash = 'anon
 
 // Workspace service methods mounted onto api/_builder.js
 export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = globalThis.fetch }) {
-  async function status(uid) {
-    const [vDoc, cDoc, sDoc, lpSnap, offersSnap] = await Promise.all([
+  async function status(uid, opts = {}) {
+    let [vDoc, cDoc, sDoc, watcherDoc, lpSnap, offersSnap] = await Promise.all([
       db.collection('ventureProfiles').doc(uid).get(),
       db.collection('builderContributions').doc(uid).get(),
       db.collection('builderStates').doc(uid).get(),
+      db.collection('builderScheduler').doc('githubAutoWatcher').get().catch(() => ({ exists: false, data: () => ({}) })),
       db.collection('ventureLaunchpads').where('founderIds', 'array-contains', uid).limit(10).get().catch(() => ({ docs: [] })),
       db.collection('vcDealOffers').where('founderIds', 'array-contains', uid).limit(10).get().catch(() => ({ docs: [] })),
     ]);
+
+    if (!vDoc.exists && !opts.skipAutoBootstrap) {
+      const uDoc = await db.collection('users').doc(uid).get().catch(() => null);
+      const profileTarget = uDoc?.exists ? extractProfileGithubTarget(uDoc.data() || {}) : null;
+      if (profileTarget) {
+        try {
+          return await connectAndAnalyze(uid, profileTarget);
+        } catch {
+          // Fall through gracefully if GitHub is unreachable
+        }
+      }
+    }
+
     const v = vDoc.exists ? vDoc.data() : {};
     const c = cDoc.exists ? cDoc.data() : {};
     const s = stateOf(sDoc.data(), now());
     const creds = webhookCredentials(uid);
+    const watcherData = watcherDoc?.exists ? watcherDoc.data() || {} : {};
+    const userWatcher = watcherData.cache?.[uid] || {};
     const inspectedCommits = mergeInspectedCommits(
       v.inspectedCommits || [],
       v.codeDiagnosis?.inspectedCommits || [],
       20
     );
 
+    const autoWatchActive = v.autoWatchEnabled !== false && !!(v.githubRepo || v.githubHandle);
+    const lastAutoCheckedAt = Math.max(
+      Number(userWatcher.checkedAt || 0),
+      Number(watcherData.lastRunAt || 0),
+      Number(v.lastAutoSyncedAt || 0),
+      Number(v.updatedAt || 0)
+    );
+
     return {
       githubHandle: v.githubHandle || '',
       githubRepo: v.githubRepo || '',
       githubVerified: !!v.githubVerified,
+      autoWatchActive,
+      lastAutoCheckedAt,
       lastPushAt: v.lastPushAt || 0,
       lastCommitSha: v.lastCommitSha || '',
       verifiedCommitCount: Number(c.verifiedCommitCount) || 0,
@@ -1365,6 +1876,7 @@ export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = global
       webhookUrl: creds.webhookUrl,
       webhookSecret: creds.secret,
       cursorHook: creds.cursorHook,
+      autoInstallHookCmd: creds.autoInstallHookCmd,
       inspectedCommits,
       codeDiagnosis: v.codeDiagnosis
         ? { ...v.codeDiagnosis, inspectedCommits }
@@ -1448,6 +1960,7 @@ export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = global
         githubHandle: ghData.handle || githubHandle,
         githubRepo: ghData.repoFullName || githubRepo,
         githubVerified: ghData.commits.length > 0 || !!ghData.repoReachable,
+        autoWatchEnabled: true,
         inspectedCommits: mergedInspected,
         codeDiagnosis: { ...codeDiagnosis, inspectedCommits: mergedInspected },
         timezone: tz,
@@ -1476,7 +1989,7 @@ export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = global
       });
     }
 
-    const freshStatus = await status(uid);
+    const freshStatus = await status(uid, { skipAutoBootstrap: true });
     return {
       ok: true,
       githubVerified: ghData.commits.length > 0 || !!ghData.repoReachable,

@@ -1,4 +1,4 @@
-import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer} from './_builderRuntime.js';
+import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer,sweepConnectedGithubCommits} from './_builderRuntime.js';
 // Linky endpoint: app actions, housekeeping cron, Telegram + WhatsApp webhooks.
 // One function on purpose (Vercel Hobby caps a deployment at 12).
 //
@@ -1115,6 +1115,28 @@ export default async function handler(req, res) {
     return;
   }
 
+  if (String(req.query?.action || '') === 'githubAutoSync') {
+    if (req.method !== 'GET' && req.method !== 'POST') { sendError(res, 405, 'Use GET or POST.'); return; }
+    if (!(await cronAuthorized(req))) { sendError(res, 401, 'Bad cron token.'); return; }
+    try {
+      const body = req.method === 'POST' ? readJsonBody(req) || {} : {};
+      const out = typeof sweepConnectedGithubCommits === 'function'
+        ? await sweepConnectedGithubCommits({
+            db: getDb(),
+            githubToken: String(body.githubToken || process.env.GITHUB_TOKEN || ''),
+            maxProfiles: Number(body.maxProfiles) || 40,
+            discoverFromProfiles: body.discoverFromProfiles !== false,
+            write: body.write !== false,
+          })
+        : { ok: false };
+      setCors(res);
+      res.status(200).json(out);
+    } catch (err) {
+      sendError(res, 500, 'GitHub auto-sync failed.', String(err?.message || err));
+    }
+    return;
+  }
+
   if(String(req.query?.action || '') === 'builderCron') {
     if(req.method !== 'POST') { sendError(res,405,'Use POST.'); return; }
     if(!(await cronAuthorized(req))) { sendError(res,401,'Bad cron token.'); return; }
@@ -1126,9 +1148,14 @@ export default async function handler(req, res) {
   if (wantsCron) {
     if (!(await cronAuthorized(req))) { sendError(res, 401, 'Bad cron token.'); return; }
     try {
-      const out = await runCron();
+      const [out, githubAutoSync] = await Promise.all([
+        runCron(),
+        typeof sweepConnectedGithubCommits === 'function'
+          ? sweepConnectedGithubCommits({ db: getDb(), maxProfiles: 35, discoverFromProfiles: true }).catch(() => null)
+          : Promise.resolve(null),
+      ]);
       setCors(res);
-      res.status(200).json(out);
+      res.status(200).json({ ...out, githubAutoSync });
     } catch (err) {
       sendError(res, 500, 'Cron failed.', String(err?.message || err));
     }

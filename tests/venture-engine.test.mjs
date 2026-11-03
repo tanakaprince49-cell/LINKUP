@@ -12,6 +12,7 @@ import {
   autoProvisionOnIntroAccept,
   serveLvlupBreakouts,
   dispatchVcInvestmentOffer,
+  sweepConnectedGithubCommits,
   createVentureWorkspaceOps,
 } from '../api/_ventureEngine.js';
 import { createPublicSeoHandler } from '../api/publicSeo.js';
@@ -451,5 +452,149 @@ test('Linky Codebase Manager & Passive GitHub League records and returns the exa
   );
   assert.match(panelUi, /Commits Linky Looked At/);
   assert.match(panelUi, /Passive Webhook/);
+  assert.match(panelUi, /Auto-Recorded/);
+  assert.match(panelUi, /AUTO-RECORDING ON/);
   assert.match(panelUi, /Codebase Scan/);
+});
+
+test('Autonomous GitHub Commit Watcher records commits automatically while the builder is offline and honors ETag 304 caching', async () => {
+  const day1 = Date.parse('2026-11-02T14:00:00Z');
+  const day2 = Date.parse('2026-11-03T16:00:00Z');
+
+  const db = createMockDb({
+    users: {
+      offline_founder: {
+        displayName: 'Offline Founder',
+        onboarded: true,
+        isVisible: true,
+        socialLinks: { github: 'https://github.com/offline-dev/stealth-saas' },
+      },
+    },
+    builderStates: {
+      offline_founder: { prefs: { timezone: 'Africa/Harare' }, momentumDays: [] },
+    },
+  });
+
+  let remoteHeadSha = 'aaaa1111bbbb2222cccc3333dddd4444eeee5555';
+  let remoteHeadMsg = 'chore: initial repo setup';
+  let remoteHeadTs = '2026-11-02T13:30:00Z';
+  let currentEtag = '"etag-v1"';
+  let branchPushEvents = [];
+
+  const mockFetch = async (url, init = {}) => {
+    const u = String(url);
+    const ifNoneMatch = init?.headers?.['If-None-Match'] || '';
+    if (u.endsWith('/languages')) {
+      return { ok: true, status: 200, json: async () => ({ TypeScript: 45000 }) };
+    }
+    if (u.endsWith('/contents')) {
+      return { ok: true, status: 200, json: async () => [{ name: 'package.json' }] };
+    }
+    if (u.endsWith('/contents/package.json')) {
+      const b64 = Buffer.from(JSON.stringify({ dependencies: { next: '15.0.0' } })).toString('base64');
+      return { ok: true, status: 200, json: async () => ({ content: b64, encoding: 'base64' }) };
+    }
+    if (u.includes('/commits?per_page=')) {
+      if (ifNoneMatch && ifNoneMatch === currentEtag) {
+        return { ok: true, status: 304, headers: new Map([['etag', currentEtag]]), json: async () => null };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Map([['etag', currentEtag]]),
+        json: async () => [
+          {
+            sha: remoteHeadSha,
+            html_url: `https://github.com/offline-dev/stealth-saas/commit/${remoteHeadSha}`,
+            author: { login: 'offline-dev' },
+            commit: {
+              message: remoteHeadMsg,
+              author: { name: 'Offline Founder', date: remoteHeadTs },
+            },
+          },
+        ],
+      };
+    }
+    if (u.includes('/events?per_page=')) {
+      if (ifNoneMatch && ifNoneMatch === currentEtag) {
+        return { ok: true, status: 304, headers: new Map([['etag', currentEtag]]), json: async () => null };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Map([['etag', currentEtag]]),
+        json: async () => branchPushEvents,
+      };
+    }
+    return { ok: false, status: 404, json: async () => null };
+  };
+
+  // Day 1: Auto-discovers the founder's GitHub from their LINKUP profile without them even clicking Connect
+  const initialSweep = await sweepConnectedGithubCommits({
+    db,
+    fetchFn: mockFetch,
+    discoverFromProfiles: true,
+    write: true,
+    now: day1,
+  });
+  assert.equal(initialSweep.discoveredProfiles, 1);
+
+  // Day 2: Founder is completely offline (not on LINKUP) and pushes 2 commits (1 on main, 1 on feat/billing)
+  remoteHeadSha = 'ffff9999eeee8888dddd7777cccc6666bbbb5555';
+  remoteHeadMsg = 'feat(api): ship autonomous background sync';
+  remoteHeadTs = '2026-11-03T15:50:00Z';
+  currentEtag = '"etag-v2"';
+  branchPushEvents = [
+    {
+      type: 'PushEvent',
+      created_at: '2026-11-03T15:54:00Z',
+      repo: { name: 'offline-dev/stealth-saas' },
+      actor: { login: 'offline-dev' },
+      payload: {
+        commits: [
+          {
+            sha: '77776666555544443333222211110000abcdef12',
+            author: { name: 'Offline Founder' },
+            message: 'feat(billing): add Payonify subscription webhook on feature branch',
+          },
+        ],
+      },
+    },
+  ];
+
+  const autoSweep = await sweepConnectedGithubCommits({
+    db,
+    fetchFn: mockFetch,
+    githubToken: 'ghs_test_token',
+    discoverFromProfiles: false,
+    write: true,
+    now: day2,
+  });
+
+  assert.equal(autoSweep.ok, true);
+  assert.equal(autoSweep.usersWithNewCommits, 1);
+  assert.equal(autoSweep.commitsRecorded, 2);
+  assert.equal(autoSweep.leagueDaysCredited, 1);
+
+  // Verify both commits are recorded automatically in Builder League + Commits Linky Looked At
+  const ops = createVentureWorkspaceOps({ db, now: () => day2 + 5000, fetchFn: mockFetch });
+  const status = await ops.status('offline_founder');
+  assert.equal(status.autoWatchActive, true);
+  assert.equal(status.leaguePoints, 20); // Day 1 (+10) + Day 2 (+10)
+  assert.equal(status.inspectedCommits.length, 3);
+  assert.equal(status.inspectedCommits[0].shortSha, '7777666');
+  assert.equal(status.inspectedCommits[0].source, 'auto_watcher');
+  assert.match(status.inspectedCommits[0].message, /Payonify subscription webhook/);
+  assert.equal(status.inspectedCommits[1].shortSha, 'ffff999');
+  assert.equal(status.inspectedCommits[1].source, 'auto_watcher');
+
+  // Next 10-minute background tick hits ETag 304 Not Modified -> 0 duplicate commits!
+  const idleSweep = await sweepConnectedGithubCommits({
+    db,
+    fetchFn: mockFetch,
+    write: true,
+    now: day2 + 600000,
+  });
+  assert.equal(idleSweep.notModified, 1);
+  assert.equal(idleSweep.commitsRecorded, 0);
 });

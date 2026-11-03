@@ -23,7 +23,7 @@ if (!res.ok) {
 }
 let json = null;
 try { json = JSON.parse(text); } catch {}
-console.log(`housekeeping: pendingIntros=${json?.pendingIntros} expiredIntros=${json?.expiredIntros} telegram=${JSON.stringify(json?.telegram || {})}`);
+console.log(`housekeeping: pendingIntros=${json?.pendingIntros} expiredIntros=${json?.expiredIntros} githubCommitsRecorded=${json?.githubAutoSync?.commitsRecorded ?? 0} telegram=${JSON.stringify(json?.telegram || {})}`);
 
 // Native push and in-app builder reminders run under the same authenticated
 // scheduler. Each call advances a persisted cursor; later users cannot starve.

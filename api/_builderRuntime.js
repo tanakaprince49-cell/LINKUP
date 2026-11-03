@@ -9,7 +9,7 @@ import {emailStatus,verifyEmailUnsubscribe,unsubscribeUserEmail,sendLinkyDirectE
 import {getVapidKeys,saveWebPushSubscription} from './_webPush.js';
 import {ensureMissingBuilderStates} from './_builderStatesBackfill.js';
 import {runDailyRetentionPulsePage} from './_dailyRetentionPulse.js';
-import {verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer} from './_ventureEngine.js';
+import {verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer,sweepConnectedGithubCommits,maybeAutoSweepGithubCommits} from './_ventureEngine.js';
 async function nativePush(uid,{title,body,url,mood='',campaign='builder_retention',category=''}){
  return sendExpoPush(getDb(),uid,{title,body,url,mood,campaign,category,type:'builder'});
 }
@@ -32,12 +32,15 @@ export async function builderCron(input={}){
 
  // Builder League prizes. Reminders must still be delivered if a league job
  // fails, so each block is isolated: a throw here can never 500 the cron.
- let reward=null,rewardSweep=null,seasons=null;
+ let reward=null,rewardSweep=null,seasons=null,githubAutoSync=null;
  try{reward=await awardWeeklyChampion(db);}catch{reward=null;}
  try{rewardSweep=await reconcileCampaignRewards(db);}catch{rewardSweep=null;}
  try{seasons=await awardSeasonChampions(db);}catch{seasons=null;}
+ if(!after){
+  try{githubAutoSync=await sweepConnectedGithubCommits({db,maxProfiles:25,discoverFromProfiles:true});}catch{githubAutoSync=null;}
+ }
  const combinedCursor=result.nextCursor||pulse.nextCursor||'';
- return {...result,nextCursor:combinedCursor,pulse,reward,rewardSweep,seasons,email:builderEmailStatus()};
+ return {...result,nextCursor:combinedCursor,pulse,reward,rewardSweep,seasons,githubAutoSync,email:builderEmailStatus()};
 }
 export const builderEmailStatus=()=>{const s=emailStatus();return s.available?s:{available:false,reason:'Provider setup required'};};
-export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runDailyRetentionPulsePage,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer};
+export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runDailyRetentionPulsePage,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer,sweepConnectedGithubCommits,maybeAutoSweepGithubCommits};
