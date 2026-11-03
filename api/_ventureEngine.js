@@ -3,6 +3,7 @@ import { DAY, id, clean, problem, validId, safeLink, stateOf, localTime } from '
 import { CONTRIBUTION_POINTS, CONTRIBUTION_HISTORY_DAYS, contributionDay, contributionInsight } from '../shared/contributions.js';
 import { habitSnapshot, habitState } from '../shared/build-habit.js';
 import { publicEligible, projectProfile, profileUrl } from './_publicSeo.js';
+import { sendExpoPush } from './_expoPush.js';
 
 const APP_ORIGIN = 'https://www.linkupbuild.com';
 const API_ORIGIN = 'https://www.linkupbuild.com/api/linky';
@@ -521,7 +522,7 @@ export async function fetchGithubSkeleton({ githubRepo = '', githubHandle = '', 
   };
 }
 
-// Automatically credits Builder League + Ship Log + Streak when real code is pushed
+// Automatically credits Builder League + Ship Log + Streak + sends Notification when real code is pushed
 export async function recordVerifiedCommitToLeague({
   db,
   uid,
@@ -534,6 +535,9 @@ export async function recordVerifiedCommitToLeague({
   commitTimestamp = '',
   commitCount = 1,
   source = 'passive_webhook',
+  notify = true,
+  notifyOnlyFresh = false,
+  pushFn = sendExpoPush,
   now = Date.now(),
 }) {
   if (!validId(uid)) throw problem('Invalid builder uid.', 400);
@@ -548,7 +552,7 @@ export async function recordVerifiedCommitToLeague({
   const ur = db.collection('users').doc(uid);
   const vr = db.collection('ventureProfiles').doc(uid);
 
-  return db.runTransaction(async (tx) => {
+  const txOut = await db.runTransaction(async (tx) => {
     const [cd, sd, ud, vd] = await Promise.all([tx.get(cr), tx.get(sr), tx.get(ur), tx.get(vr)]);
     if (!ud.exists || ud.data()?.deleted || ud.data()?.banned) {
       throw problem('Builder profile is unavailable.', 403);
@@ -556,7 +560,15 @@ export async function recordVerifiedCommitToLeague({
     const c = cd.exists ? cd.data() : { days: [], updates: [], points: 0, totalUpdates: 0 };
     const v = vd.exists ? vd.data() : {};
     const seenShas = Array.isArray(v.recentCommitShas) ? v.recentCommitShas : [];
-    const alreadyRecordedSha = shaShort && seenShas.includes(shaShort);
+    const seenShorts = new Set(
+      seenShas
+        .map((s) => String(s || '').replace(/[^a-fA-F0-9]/g, '').slice(0, 7))
+        .filter(Boolean)
+    );
+    const shaHex7 = String(shaShort || '').replace(/[^a-fA-F0-9]/g, '').slice(0, 7);
+    const alreadyRecordedSha = Boolean(
+      shaShort && (seenShas.includes(shaShort) || (shaHex7.length === 7 && seenShorts.has(shaHex7)))
+    );
 
     let leaguePointsAdded = 0;
     let dayCredited = false;
@@ -715,17 +727,130 @@ export async function recordVerifiedCommitToLeague({
     );
 
     const snap = habitSnapshot(nextContrib, now, sd.data()?.prefs);
+    const currentStreak = snap.rhythm?.actualDays || 0;
+    const newlyRecordedCommits = normalizedIncoming.filter((item) =>
+      item.shortSha && item.shortSha !== 'HEAD' ? !seenShorts.has(item.shortSha) : !alreadyRecordedSha
+    );
+    const recordedSomethingNew = !alreadyRecordedSha || newlyRecordedCommits.length > 0;
+
     return {
-      ok: true,
-      dayCredited,
-      leaguePointsAdded,
-      totalPoints: Number(nextContrib.points) || 0,
-      currentStreak: snap.rhythm?.actualDays || 0,
-      verifiedCommitCount: Number(nextContrib.verifiedCommitCount) || 0,
-      inspectedCommits: updatedInspected,
-      day: eligibleDay || pushDay,
+      result: {
+        ok: true,
+        dayCredited,
+        leaguePointsAdded,
+        totalPoints: Number(nextContrib.points) || 0,
+        currentStreak,
+        verifiedCommitCount: Number(nextContrib.verifiedCommitCount) || 0,
+        inspectedCommits: updatedInspected,
+        day: eligibleDay || pushDay,
+      },
+      recordedSomethingNew,
+      newlyRecordedCommits,
+      normalizedIncoming,
+      safeRepoName,
     };
   });
+
+  let notificationSent = false;
+  let notificationId = '';
+  let pushResult = { sent: 0, tokens: 0 };
+
+  const shouldNotify =
+    notify !== false &&
+    txOut.recordedSomethingNew &&
+    !(notifyOnlyFresh && !eligibleDay);
+
+  if (shouldNotify) {
+    const topCommit = txOut.newlyRecordedCommits[0] || txOut.normalizedIncoming[0] || null;
+    const recordedCount =
+      txOut.newlyRecordedCommits.length > 0
+        ? txOut.newlyRecordedCommits.length
+        : Math.max(1, Number(commitCount) || 1);
+    const shortDisplay = clean(topCommit?.shortSha || String(shaShort || 'HEAD').slice(0, 7), 16);
+    const safeRepo = txOut.safeRepoName || 'GitHub';
+    const commitHeadline = clean(
+      String(topCommit?.message || commitMessage || '').split(/\r?\n/)[0],
+      110
+    );
+    const autoPrefix = source === 'auto_watcher' ? 'automatically ' : '';
+    const title = txOut.result.dayCredited
+      ? recordedCount === 1
+        ? `Linky recorded your commit · +${txOut.result.leaguePointsAdded} League pts`
+        : `Linky recorded ${recordedCount} commits · +${txOut.result.leaguePointsAdded} League pts`
+      : recordedCount === 1
+        ? `Linky recorded your commit (${shortDisplay})`
+        : `Linky recorded ${recordedCount} new commits`;
+    const body = txOut.result.dayCredited
+      ? `Linky ${autoPrefix}recorded ${recordedCount === 1 ? `commit ${shortDisplay}` : `${recordedCount} commits`} on ${safeRepo} (+${txOut.result.leaguePointsAdded} Builder League pts · ${txOut.result.currentStreak}d streak). Tap to view Commits Linky Looked At.`
+      : `Linky ${autoPrefix}recorded ${recordedCount === 1 ? `commit ${shortDisplay}` : `${recordedCount} commits`} on ${safeRepo} (${txOut.result.verifiedCommitCount} verified total). Tap to view Commits Linky Looked At.`;
+    const note =
+      commitHeadline && commitHeadline !== 'Verified Git commit'
+        ? `${shortDisplay} · ${commitHeadline}`
+        : `${shortDisplay} on ${safeRepo}`;
+
+    const rawDocKey = `${uid}_${shortDisplay}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 96);
+    notificationId = `commit_${rawDocKey}`;
+    const notifRef = db.collection('notifications').doc(notificationId);
+    const existingNotif = await notifRef.get().catch(() => null);
+
+    if (!existingNotif?.exists) {
+      await notifRef
+        .set({
+          userId: uid,
+          fromId: 'linky',
+          fromName: 'Linky',
+          fromPic: LINKY_AVATAR,
+          type: 'builder',
+          category: 'github_commit_recorded',
+          campaign: 'shipped',
+          mood: 'on_fire_shipped',
+          title: clean(title, 100),
+          body: clean(body, 220),
+          content: clean(body, 220),
+          note: clean(note, 140),
+          section: 'Today',
+          url: '/builder?section=Today',
+          shortSha: shortDisplay,
+          repo: safeRepo,
+          source,
+          leaguePointsAdded: txOut.result.leaguePointsAdded,
+          isRead: false,
+          timestamp: new Date(now),
+        })
+        .catch(() => null);
+
+      notificationSent = true;
+      if (typeof pushFn === 'function') {
+        pushResult = await pushFn(db, uid, {
+          title: clean(title, 100),
+          body: clean(
+            commitHeadline && commitHeadline !== 'Verified Git commit'
+              ? `${shortDisplay} · ${commitHeadline} (${safeRepo})`
+              : body,
+            180
+          ),
+          url: '/builder?section=Today',
+          mood: 'on_fire_shipped',
+          campaign: 'shipped',
+          category: 'shipped',
+          type: 'builder',
+          extraData: {
+            shortSha: shortDisplay,
+            repo: safeRepo,
+            source,
+            leaguePointsAdded: txOut.result.leaguePointsAdded,
+          },
+        }).catch(() => ({ sent: 0, tokens: 0 }));
+      }
+    }
+  }
+
+  return {
+    ...txOut.result,
+    notificationSent,
+    notificationId,
+    pushSent: Number(pushResult?.sent) || 0,
+  };
 }
 
 // Lightweight ETag-aware GitHub commit watcher across default branch + all-branch PushEvents
@@ -938,6 +1063,7 @@ function extractProfileGithubTarget(userData = {}) {
 export async function sweepConnectedGithubCommits({
   db,
   fetchFn = globalThis.fetch,
+  pushFn = sendExpoPush,
   githubToken = '',
   maxProfiles = 35,
   discoverFromProfiles = false,
@@ -965,7 +1091,7 @@ export async function sweepConnectedGithubCommits({
       .limit(80)
       .get()
       .catch(() => ({ docs: [] }));
-    const ops = createVentureWorkspaceOps({ db, now: () => now, fetchFn });
+    const ops = createVentureWorkspaceOps({ db, now: () => now, fetchFn, pushFn });
     for (const uDoc of usersSnap.docs) {
       if (discoveredProfiles >= 5) break;
       const uid = uDoc.id;
@@ -975,7 +1101,7 @@ export async function sweepConnectedGithubCommits({
       const target = extractProfileGithubTarget(u);
       if (!target) continue;
       try {
-        await ops.connectAndAnalyze(uid, target);
+        await ops.connectAndAnalyze(uid, { ...target, notifyOnlyFresh: true });
         existingUids.add(uid);
         discoveredProfiles += 1;
       } catch {
@@ -999,6 +1125,7 @@ export async function sweepConnectedGithubCommits({
   let usersWithNewCommits = 0;
   let commitsRecorded = 0;
   let leagueDaysCredited = 0;
+  let notificationsSent = 0;
   const recordedDetails = [];
 
   for (const v of connectedDocs) {
@@ -1016,10 +1143,11 @@ export async function sweepConnectedGithubCommits({
     // First-time baseline scan if no commits were ever indexed for this connected profile
     if (knownShorts.size === 0 && write) {
       try {
-        const ops = createVentureWorkspaceOps({ db, now: () => now, fetchFn });
+        const ops = createVentureWorkspaceOps({ db, now: () => now, fetchFn, pushFn });
         const initRes = await ops.connectAndAnalyze(v.uid, {
           githubRepo: v.githubRepo || '',
           githubHandle: v.githubHandle || '',
+          notifyOnlyFresh: true,
         });
         const topShort = initRes?.inspectedCommits?.[0]?.shortSha || '';
         cache[v.uid] = { ...prevCache, lastSeenHead: topShort, checkedAt: now };
@@ -1027,6 +1155,7 @@ export async function sweepConnectedGithubCommits({
           usersWithNewCommits += 1;
           commitsRecorded += initRes.inspectedCommits.length;
           if (initRes?.autoLeagueSync?.dayCredited) leagueDaysCredited += 1;
+          if (initRes?.autoLeagueSync?.notificationSent) notificationsSent += 1;
         }
       } catch {
         cache[v.uid] = { ...prevCache, checkedAt: now };
@@ -1088,9 +1217,11 @@ export async function sweepConnectedGithubCommits({
           commitTimestamp: newest.timestamp || new Date(now).toISOString(),
           commitCount: unseen.length,
           source: 'auto_watcher',
+          pushFn,
           now,
         });
         if (res?.dayCredited) leagueDaysCredited += 1;
+        if (res?.notificationSent) notificationsSent += 1;
       } catch {
         // Isolate individual profile errors (e.g. deleted user) so other builders continue
       }
@@ -1114,6 +1245,7 @@ export async function sweepConnectedGithubCommits({
           lastCheckedCount: checked,
           lastCommitsRecorded: commitsRecorded,
           lastLeagueDaysCredited: leagueDaysCredited,
+          lastNotificationsSent: notificationsSent,
           discoveredProfiles,
           cache,
         },
@@ -1130,6 +1262,7 @@ export async function sweepConnectedGithubCommits({
     usersWithNewCommits,
     commitsRecorded,
     leagueDaysCredited,
+    notificationsSent,
     recordedDetails,
     at: now,
   };
@@ -1819,7 +1952,7 @@ export async function dispatchVcInvestmentOffer({ db, input = {}, ipHash = 'anon
 }
 
 // Workspace service methods mounted onto api/_builder.js
-export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = globalThis.fetch }) {
+export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = globalThis.fetch, pushFn = sendExpoPush }) {
   async function status(uid, opts = {}) {
     let [vDoc, cDoc, sDoc, watcherDoc, lpSnap, offersSnap] = await Promise.all([
       db.collection('ventureProfiles').doc(uid).get(),
@@ -1985,6 +2118,9 @@ export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = global
         commitTimestamp: latest.timestamp,
         commitCount: ghData.commits.length,
         source: 'github_scan',
+        notify: input.notify !== false,
+        notifyOnlyFresh: input.notifyOnlyFresh !== false,
+        pushFn,
         now: now(),
       });
     }

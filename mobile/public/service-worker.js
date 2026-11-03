@@ -113,9 +113,11 @@ self.addEventListener('push', (event) => {
       ? appUrl('icons/icon-sad-inactive.png')
       : category === 'league'
         ? appUrl('icons/icon-champion-crown.png')
-        : category === 'build' || category === 'streak'
-          ? appUrl('icons/icon-streak-fire.png')
-          : appUrl('icons/icon-unread-urgent.png');
+        : category === 'shipped' || category === 'github_commit_recorded'
+          ? appUrl('icons/icon-shipped.png')
+          : category === 'build' || category === 'streak'
+            ? appUrl('icons/icon-streak-fire.png')
+            : appUrl('icons/icon-unread-urgent.png');
   self.navigator?.setAppBadge?.(1)?.catch?.(() => {});
   event.waitUntil(
     self.registration.showNotification(data.title || 'LINKUP', {

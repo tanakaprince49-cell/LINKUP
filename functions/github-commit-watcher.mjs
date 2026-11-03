@@ -31,7 +31,7 @@ console.log(
   `[Linky GitHub Watcher] mode=${WRITE ? 'write' : 'dry-run'} checked=${res.checked} ` +
     `notModified=${res.notModified} discovered=${res.discoveredProfiles} ` +
     `usersWithNewCommits=${res.usersWithNewCommits} commitsRecorded=${res.commitsRecorded} ` +
-    `leagueDaysCredited=${res.leagueDaysCredited}`
+    `leagueDaysCredited=${res.leagueDaysCredited} notificationsSent=${res.notificationsSent ?? 0}`
 );
 for (const item of res.recordedDetails || []) {
   console.log(`  + ${item.uid} · ${item.repo} · ${item.shortSha} (${item.count}) — ${item.message}`);

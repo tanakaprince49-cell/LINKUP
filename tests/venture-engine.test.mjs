@@ -562,9 +562,16 @@ test('Autonomous GitHub Commit Watcher records commits automatically while the b
     },
   ];
 
+  const pushedCalls = [];
+  const mockPush = async (_db, uid, payload) => {
+    pushedCalls.push({ uid, ...payload });
+    return { sent: 1, tokens: 1 };
+  };
+
   const autoSweep = await sweepConnectedGithubCommits({
     db,
     fetchFn: mockFetch,
+    pushFn: mockPush,
     githubToken: 'ghs_test_token',
     discoverFromProfiles: false,
     write: true,
@@ -575,6 +582,24 @@ test('Autonomous GitHub Commit Watcher records commits automatically while the b
   assert.equal(autoSweep.usersWithNewCommits, 1);
   assert.equal(autoSweep.commitsRecorded, 2);
   assert.equal(autoSweep.leagueDaysCredited, 1);
+  assert.equal(autoSweep.notificationsSent, 1);
+
+  // Verify Linky sent BOTH an in-app notification AND a native/web push notification!
+  assert.equal(pushedCalls.length, 1);
+  assert.equal(pushedCalls[0].uid, 'offline_founder');
+  assert.equal(pushedCalls[0].url, '/builder?section=Today');
+  assert.equal(pushedCalls[0].category, 'shipped');
+  assert.match(pushedCalls[0].title, /Linky recorded 2 commits · \+10 League pts/);
+  assert.match(pushedCalls[0].body, /7777666 · feat\(billing\): add Payonify subscription webhook/);
+
+  const inAppNotif = await db.collection('notifications').doc('commit_offline_founder_7777666').get();
+  assert.equal(inAppNotif.exists, true);
+  assert.equal(inAppNotif.data().userId, 'offline_founder');
+  assert.equal(inAppNotif.data().fromName, 'Linky');
+  assert.equal(inAppNotif.data().type, 'builder');
+  assert.equal(inAppNotif.data().category, 'github_commit_recorded');
+  assert.equal(inAppNotif.data().isRead, false);
+  assert.match(inAppNotif.data().note, /7777666 · feat\(billing\)/);
 
   // Verify both commits are recorded automatically in Builder League + Commits Linky Looked At
   const ops = createVentureWorkspaceOps({ db, now: () => day2 + 5000, fetchFn: mockFetch });
@@ -588,13 +613,16 @@ test('Autonomous GitHub Commit Watcher records commits automatically while the b
   assert.equal(status.inspectedCommits[1].shortSha, 'ffff999');
   assert.equal(status.inspectedCommits[1].source, 'auto_watcher');
 
-  // Next 10-minute background tick hits ETag 304 Not Modified -> 0 duplicate commits!
+  // Next 10-minute background tick hits ETag 304 Not Modified -> 0 duplicate commits & 0 duplicate notifications!
   const idleSweep = await sweepConnectedGithubCommits({
     db,
     fetchFn: mockFetch,
+    pushFn: mockPush,
     write: true,
     now: day2 + 600000,
   });
   assert.equal(idleSweep.notModified, 1);
   assert.equal(idleSweep.commitsRecorded, 0);
+  assert.equal(idleSweep.notificationsSent, 0);
+  assert.equal(pushedCalls.length, 1);
 });

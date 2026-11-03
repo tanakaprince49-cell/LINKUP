@@ -349,7 +349,7 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
                 ) : null}
               </View>
               <Text style={{ fontSize: 12, lineHeight: 18, color: isDark ? '#D1FAE5' : '#065F46' }}>
-                Linky watches your GitHub automatically in the background. Whenever you commit & push code, Linky records the commit here and credits Builder League without you needing to open LINKUP.
+                Linky watches your GitHub automatically in the background. Whenever you commit & push code, Linky records the commit here, credits Builder League, and sends you a notification without you needing to open LINKUP.
               </Text>
             </View>
           ) : null}
