@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import {
   webhookCredentials,
   verifyWebhookAuth,
@@ -358,4 +359,97 @@ test('Programmatic Workplace Provisioning spins up shared Builder Room, Launchpa
   assert.equal(wsStatus.launchpads.length, 1);
   assert.equal(wsStatus.vcOffers.length, 1);
   assert.equal(wsStatus.vcOffers[0].contractHash, offer.contractHash);
+});
+
+test('Linky Codebase Manager & Passive GitHub League records and returns the exact commits Linky looked at', async () => {
+  const now = Date.parse('2026-11-03T15:00:00Z');
+  const db = createMockDb({
+    users: {
+      tanaka: { displayName: 'Tanaka Founder', onboarded: true, isVisible: true },
+    },
+    builderStates: {
+      tanaka: { prefs: { timezone: 'Africa/Harare' }, momentumDays: [] },
+    },
+  });
+
+  const mockFetch = async (url) => {
+    const u = String(url);
+    if (u.endsWith('/languages')) {
+      return { ok: true, status: 200, json: async () => ({ TypeScript: 92000, JavaScript: 18000 }) };
+    }
+    if (u.endsWith('/contents')) {
+      return { ok: true, status: 200, json: async () => [{ name: 'package.json' }, { name: 'tests' }] };
+    }
+    if (u.endsWith('/contents/package.json')) {
+      const b64 = Buffer.from(JSON.stringify({ dependencies: { react: '19.0.0', expo: '57.0.0' } })).toString('base64');
+      return { ok: true, status: 200, json: async () => ({ content: b64, encoding: 'base64' }) };
+    }
+    if (u.includes('/commits?per_page=15')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => [
+          {
+            sha: 'de59952a1b2c3d4e5f6000111222333444555666',
+            html_url: 'https://github.com/tanakaprince49-cell/LINKUP/commit/de59952a1b2c3d4e5f6000111222333444555666',
+            author: { login: 'tanakaprince49-cell' },
+            commit: {
+              message: 'feat(blogs): author-only views & clicks analytics\n\nDetailed body',
+              author: { name: 'Tanaka Prince', date: '2026-11-03T14:30:00Z' },
+            },
+          },
+          {
+            sha: '78d97cc99887766554433221100ffeeddccbbaa1',
+            html_url: 'https://github.com/tanakaprince49-cell/LINKUP/commit/78d97cc99887766554433221100ffeeddccbbaa1',
+            author: { login: 'tanakaprince49-cell' },
+            commit: {
+              message: 'feat(blogs): interactive 16:9 cover cropper',
+              author: { name: 'Tanaka Prince', date: '2026-11-02T19:10:00Z' },
+            },
+          },
+        ],
+      };
+    }
+    return { ok: false, status: 404, json: async () => null };
+  };
+
+  const ops = createVentureWorkspaceOps({ db, now: () => now, fetchFn: mockFetch });
+  const connected = await ops.connectAndAnalyze('tanaka', {
+    githubRepo: 'tanakaprince49-cell/LINKUP',
+  });
+
+  assert.equal(connected.ok, true);
+  assert.equal(connected.inspectedCommits.length, 2);
+  assert.equal(connected.inspectedCommits[0].shortSha, 'de59952');
+  assert.equal(connected.inspectedCommits[0].message, 'feat(blogs): author-only views & clicks analytics');
+  assert.equal(connected.inspectedCommits[0].author, 'tanakaprince49-cell');
+  assert.match(connected.inspectedCommits[0].url, /github\.com\/tanakaprince49-cell\/LINKUP\/commit\/de59952/);
+  assert.equal(connected.inspectedCommits[0].leagueCredited, true);
+
+  // Passive GitHub / Cursor Webhook push adds its commit into the same inspectedCommits feed
+  await recordVerifiedCommitToLeague({
+    db,
+    uid: 'tanaka',
+    repoName: 'tanakaprince49-cell/LINKUP',
+    commitSha: '99887766554433221100abcdef1234567890abcd',
+    commitMessage: 'chore(engine): ship passive webhook commit preview',
+    commitAuthor: 'tanakaprince49-cell',
+    commitTimestamp: '2026-11-03T14:55:00Z',
+    source: 'passive_webhook',
+    now: now + 10000,
+  });
+
+  const latestStatus = await ops.status('tanaka');
+  assert.equal(latestStatus.inspectedCommits.length, 3);
+  assert.equal(latestStatus.inspectedCommits[0].shortSha, '9988776');
+  assert.equal(latestStatus.inspectedCommits[0].source, 'passive_webhook');
+  assert.equal(latestStatus.inspectedCommits[0].message, 'chore(engine): ship passive webhook commit preview');
+
+  const panelUi = fs.readFileSync(
+    new URL('../mobile/src/components/VentureEnginePanel.tsx', import.meta.url),
+    'utf8'
+  );
+  assert.match(panelUi, /Commits Linky Looked At/);
+  assert.match(panelUi, /Passive Webhook/);
+  assert.match(panelUi, /Codebase Scan/);
 });

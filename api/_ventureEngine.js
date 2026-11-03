@@ -72,7 +72,7 @@ export function webhookCredentials(uid) {
   const sig = crypto.createHmac('sha256', engineSecret()).update(`gh-hook:${uid}`).digest('hex').slice(0, 32);
   const secret = crypto.createHmac('sha256', engineSecret()).update(`gh-secret:${uid}`).digest('hex').slice(0, 40);
   const webhookUrl = `${API_ORIGIN}?action=githubWebhook&uid=${encodeURIComponent(uid)}&sig=${sig}`;
-  const cursorHook = `curl -fsSL -X POST "${webhookUrl}" -H "Content-Type: application/json" -d "{\\"repository\\":{\\"full_name\\":\\"$(basename $(git rev-parse --show-toplevel))\\"},\\"head_commit\\":{\\"id\\":\\"$(git rev-parse HEAD)\\",\\"timestamp\\":\\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\\"}}" >/dev/null 2>&1 &`;
+  const cursorHook = `curl -fsSL -X POST "${webhookUrl}" -H "Content-Type: application/json" -d "{\\"repository\\":{\\"full_name\\":\\"$(basename $(git rev-parse --show-toplevel))\\"},\\"head_commit\\":{\\"id\\":\\"$(git rev-parse HEAD)\\",\\"message\\":\\"$(git log -1 --pretty=%s | tr '\\"' \\"'\\" | cut -c1-120)\\",\\"timestamp\\":\\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\\"}}" >/dev/null 2>&1 &`;
   return { sig, secret, webhookUrl, cursorHook };
 }
 
@@ -158,6 +158,83 @@ function classifyCommitWindow(commitHoursUtc = []) {
     night: 'Night-Owl Systems Engineer (23:00–05:00 UTC)',
   };
   return { label: labels[topBucket], peakHourUtc: topHour };
+}
+
+export function normalizeInspectedCommit(
+  raw = {},
+  fallbackRepo = '',
+  defaultSource = 'github_scan',
+  nowMs = Date.now()
+) {
+  if (!raw || typeof raw !== 'object') return null;
+  const rawSha = String(raw.sha || raw.id || '').trim();
+  const hexSha = rawSha.replace(/[^a-fA-F0-9]/g, '').slice(0, 40);
+  const shortSha = (hexSha || String(raw.shortSha || rawSha)).slice(0, 7);
+  const timestamp =
+    raw.timestamp && Number.isFinite(Date.parse(raw.timestamp))
+      ? new Date(Date.parse(raw.timestamp)).toISOString()
+      : '';
+  if (!shortSha && !timestamp) return null;
+
+  const repo = clean(raw.repo || fallbackRepo || '', 100);
+  const firstLine = String(raw.message || '').split(/\r?\n/)[0].trim();
+  const message = clean(firstLine || 'Verified Git commit', 160);
+  const author = clean(
+    (typeof raw.author === 'object'
+      ? raw.author?.username || raw.author?.name
+      : raw.author) || '',
+    60
+  );
+  const directUrl = safeLink(raw.url || raw.html_url || '');
+  const derivedUrl =
+    !directUrl &&
+    /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) &&
+    /^[a-fA-F0-9]{7,40}$/.test(hexSha || shortSha)
+      ? `https://github.com/${repo}/commit/${hexSha || shortSha}`
+      : '';
+  const source = raw.source === 'passive_webhook' ? 'passive_webhook' : defaultSource;
+  const in14dWindow = timestamp ? Date.parse(timestamp) >= nowMs - 14 * DAY : false;
+
+  return {
+    sha: hexSha || shortSha,
+    shortSha: shortSha || 'HEAD',
+    message,
+    repo,
+    author,
+    timestamp,
+    url: directUrl || derivedUrl,
+    source,
+    in14dWindow,
+    ...(raw.leagueCredited ? { leagueCredited: true } : {}),
+  };
+}
+
+export function mergeInspectedCommits(primary = [], secondary = [], max = 20) {
+  const byKey = new Map();
+  for (const item of [...(Array.isArray(primary) ? primary : []), ...(Array.isArray(secondary) ? secondary : [])]) {
+    if (!item || typeof item !== 'object') continue;
+    const key = item.shortSha && item.shortSha !== 'HEAD'
+      ? `${item.repo || ''}:${item.shortSha}`
+      : `${item.repo || ''}:${item.timestamp || ''}:${item.message || ''}`;
+    if (!byKey.has(key)) {
+      byKey.set(key, item);
+    } else {
+      const prev = byKey.get(key);
+      byKey.set(key, {
+        ...prev,
+        message:
+          prev.message && prev.message !== 'Verified Git commit'
+            ? prev.message
+            : item.message || prev.message,
+        url: prev.url || item.url || '',
+        author: prev.author || item.author || '',
+        ...(prev.leagueCredited || item.leagueCredited ? { leagueCredited: true } : {}),
+      });
+    }
+  }
+  return [...byKey.values()]
+    .sort((a, b) => (Date.parse(b.timestamp || '') || 0) - (Date.parse(a.timestamp || '') || 0))
+    .slice(0, max);
 }
 
 // Safely reads ONLY project manifest metadata & structural skeleton (never private business logic)
@@ -259,9 +336,13 @@ export function analyzeCodebaseSignals({
     : 'initial project scaffold';
   const primaryGapRole = missingRoles[0] || 'Growth, Revenue & GTM Co-Founder';
   const targetLabel = repoFullName || 'your project manifest';
+  const inspectedCommits = validCommits
+    .map((c) => normalizeInspectedCommit(c, repoFullName, 'github_scan', now))
+    .filter(Boolean)
+    .slice(0, 15);
 
   const linkyManagerMemo =
-    `Linky inspected ${targetLabel} (${detectedStack.slice(0, 4).join(', ') || 'manifest structure'}) without reading private business logic. ` +
+    `Linky inspected ${targetLabel} (${detectedStack.slice(0, 4).join(', ') || 'manifest structure'}${inspectedCommits.length ? ` · ${inspectedCommits.length} commit${inspectedCommits.length === 1 ? '' : 's'} reviewed` : ''}) without reading private business logic. ` +
     `Your codebase already covers ${coveredSummary}${hasTestsOrCi ? ' with test/CI discipline' : ''}, ` +
     `leaving a clear gap in ${prioritizedMissing.slice(0, 2).map((k) => LANE_CATALOG[k].label).join(' + ')}. ` +
     `Next move: splice you with a verified ${primaryGapRole} to ship and monetize faster.`;
@@ -278,6 +359,7 @@ export function analyzeCodebaseSignals({
     activeCommitDays: activeCommitDays.slice(-60),
     latestCommitAt: validCommits[0]?.timestamp || '',
     latestCommitSha: String(validCommits[0]?.sha || '').slice(0, 12),
+    inspectedCommits,
     codingStyle: {
       cadence,
       peakWindowUtc: windowInfo.label,
@@ -371,9 +453,12 @@ export async function fetchGithubSkeleton({ githubRepo = '', githubHandle = '', 
         const ts = item?.commit?.author?.date || item?.commit?.committer?.date;
         if (ts) {
           commits.push({
-            sha: String(item?.sha || '').slice(0, 12),
+            sha: String(item?.sha || '').slice(0, 40),
             timestamp: ts,
-            message: clean(String(item?.commit?.message || '').split('\n')[0], 140),
+            repo: targetRepo.fullName,
+            author: clean(String(item?.author?.login || item?.commit?.author?.name || ''), 60),
+            url: safeLink(item?.html_url || ''),
+            message: clean(String(item?.commit?.message || '').split('\n')[0], 160),
           });
         }
       }
@@ -385,13 +470,29 @@ export async function fetchGithubSkeleton({ githubRepo = '', githubHandle = '', 
     if (eventsRes.ok && Array.isArray(eventsRes.data)) {
       for (const ev of eventsRes.data) {
         if (ev?.type === 'PushEvent' && ev?.created_at) {
-          const sha = ev?.payload?.head || ev?.payload?.commits?.[0]?.sha || ev?.id;
-          commits.push({
-            sha: String(sha || '').slice(0, 12),
-            timestamp: ev.created_at,
-            repo: ev?.repo?.name || '',
-            message: clean(String(ev?.payload?.commits?.[0]?.message || 'GitHub push event').split('\n')[0], 140),
-          });
+          const evRepo = String(ev?.repo?.name || '');
+          const evActor = clean(String(ev?.actor?.login || handle || ''), 60);
+          const evCommits = Array.isArray(ev?.payload?.commits) ? ev.payload.commits : [];
+          if (evCommits.length > 0) {
+            for (const cItem of evCommits.slice(-5).reverse()) {
+              commits.push({
+                sha: String(cItem?.sha || ev?.payload?.head || ev?.id || '').slice(0, 40),
+                timestamp: ev.created_at,
+                repo: evRepo,
+                author: clean(String(cItem?.author?.name || evActor), 60),
+                message: clean(String(cItem?.message || 'GitHub push event').split('\n')[0], 160),
+              });
+            }
+          } else {
+            const sha = ev?.payload?.head || ev?.id;
+            commits.push({
+              sha: String(sha || '').slice(0, 40),
+              timestamp: ev.created_at,
+              repo: evRepo,
+              author: evActor,
+              message: 'GitHub push event',
+            });
+          }
         }
       }
     }
@@ -414,8 +515,13 @@ export async function recordVerifiedCommitToLeague({
   uid,
   repoName = 'github-repo',
   commitSha = '',
+  commitMessage = '',
+  commitAuthor = '',
+  commitUrl = '',
+  commitsList = [],
   commitTimestamp = '',
   commitCount = 1,
+  source = 'passive_webhook',
   now = Date.now(),
 }) {
   if (!validId(uid)) throw problem('Invalid builder uid.', 400);
@@ -508,6 +614,43 @@ export async function recordVerifiedCommitToLeague({
     }
 
     const updatedShas = shaShort ? [shaShort, ...seenShas.filter((x) => x !== shaShort)].slice(0, 40) : seenShas;
+    const safeRepoName = clean(repoName, 100);
+    const creditedShort = String(commitSha || shaShort || '').replace(/[^a-fA-F0-9]/g, '').slice(0, 7);
+    const rawPushCommits = Array.isArray(commitsList) && commitsList.length > 0
+      ? commitsList.map((item, idx, arr) => {
+          const itemSha = String(item?.id || item?.sha || (idx === arr.length - 1 ? commitSha || shaShort : ''));
+          const itemShort = itemSha.replace(/[^a-fA-F0-9]/g, '').slice(0, 7);
+          const isCreditedTarget = creditedShort
+            ? itemShort === creditedShort
+            : idx === (source === 'github_scan' ? 0 : arr.length - 1);
+          return {
+            sha: itemSha,
+            message: item?.message || (isCreditedTarget ? commitMessage : ''),
+            author: item?.author?.username || item?.author?.name || item?.author || commitAuthor,
+            url: item?.url || item?.html_url || (isCreditedTarget ? commitUrl : ''),
+            timestamp: item?.timestamp || new Date(tsMs).toISOString(),
+            repo: item?.repo || safeRepoName,
+            source,
+            leagueCredited: dayCredited && isCreditedTarget,
+          };
+        })
+      : [
+          {
+            sha: commitSha || shaShort,
+            message: commitMessage,
+            author: commitAuthor,
+            url: commitUrl,
+            timestamp: new Date(tsMs).toISOString(),
+            repo: safeRepoName,
+            source,
+            leagueCredited: dayCredited,
+          },
+        ];
+    const normalizedIncoming = rawPushCommits
+      .map((item) => normalizeInspectedCommit(item, safeRepoName, source, now))
+      .filter(Boolean);
+    const updatedInspected = mergeInspectedCommits(normalizedIncoming, v.inspectedCommits || [], 20);
+
     tx.set(
       vr,
       {
@@ -515,9 +658,10 @@ export async function recordVerifiedCommitToLeague({
         uid,
         githubVerified: true,
         lastPushAt: now,
-        lastPushRepo: clean(repoName, 100),
+        lastPushRepo: safeRepoName,
         lastCommitSha: shaShort,
         recentCommitShas: updatedShas,
+        inspectedCommits: updatedInspected,
         totalVerifiedPushes: (Number(v.totalVerifiedPushes) || 0) + (alreadyRecordedSha ? 0 : 1),
         updatedAt: now,
       },
@@ -532,6 +676,7 @@ export async function recordVerifiedCommitToLeague({
       totalPoints: Number(nextContrib.points) || 0,
       currentStreak: snap.rhythm?.actualDays || 0,
       verifiedCommitCount: Number(nextContrib.verifiedCommitCount) || 0,
+      inspectedCommits: updatedInspected,
       day: eligibleDay || pushDay,
     };
   });
@@ -1202,6 +1347,11 @@ export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = global
     const c = cDoc.exists ? cDoc.data() : {};
     const s = stateOf(sDoc.data(), now());
     const creds = webhookCredentials(uid);
+    const inspectedCommits = mergeInspectedCommits(
+      v.inspectedCommits || [],
+      v.codeDiagnosis?.inspectedCommits || [],
+      20
+    );
 
     return {
       githubHandle: v.githubHandle || '',
@@ -1215,7 +1365,10 @@ export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = global
       webhookUrl: creds.webhookUrl,
       webhookSecret: creds.secret,
       cursorHook: creds.cursorHook,
-      codeDiagnosis: v.codeDiagnosis || null,
+      inspectedCommits,
+      codeDiagnosis: v.codeDiagnosis
+        ? { ...v.codeDiagnosis, inspectedCommits }
+        : null,
       timezone: s.prefs?.timezone || 'UTC',
       launchpads: lpSnap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
@@ -1277,8 +1430,17 @@ export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = global
       now: now(),
     });
 
-    const stateDoc = await db.collection('builderStates').doc(uid).get();
+    const [stateDoc, prevVentureDoc] = await Promise.all([
+      db.collection('builderStates').doc(uid).get(),
+      db.collection('ventureProfiles').doc(uid).get(),
+    ]);
     const tz = stateOf(stateDoc.data(), now()).prefs?.timezone || 'UTC';
+    const prevInspected = prevVentureDoc.exists ? prevVentureDoc.data()?.inspectedCommits || [] : [];
+    const mergedInspected = mergeInspectedCommits(
+      codeDiagnosis.inspectedCommits || [],
+      prevInspected,
+      20
+    );
 
     await db.collection('ventureProfiles').doc(uid).set(
       {
@@ -1286,7 +1448,8 @@ export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = global
         githubHandle: ghData.handle || githubHandle,
         githubRepo: ghData.repoFullName || githubRepo,
         githubVerified: ghData.commits.length > 0 || !!ghData.repoReachable,
-        codeDiagnosis,
+        inspectedCommits: mergedInspected,
+        codeDiagnosis: { ...codeDiagnosis, inspectedCommits: mergedInspected },
         timezone: tz,
         updatedAt: now(),
       },
@@ -1302,18 +1465,23 @@ export function createVentureWorkspaceOps({ db, now = Date.now, fetchFn = global
         uid,
         repoName: ghData.repoFullName || ghData.handle || 'github',
         commitSha: latest.sha,
+        commitMessage: latest.message || '',
+        commitAuthor: latest.author || '',
+        commitUrl: latest.url || '',
+        commitsList: ghData.commits,
         commitTimestamp: latest.timestamp,
         commitCount: ghData.commits.length,
+        source: 'github_scan',
         now: now(),
       });
     }
 
+    const freshStatus = await status(uid);
     return {
       ok: true,
-      codeDiagnosis,
       githubVerified: ghData.commits.length > 0 || !!ghData.repoReachable,
       autoLeagueSync,
-      ...(await status(uid)),
+      ...freshStatus,
     };
   }
 

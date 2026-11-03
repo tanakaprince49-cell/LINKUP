@@ -1008,14 +1008,22 @@ export default async function handler(req, res) {
       const head = payload.head_commit || commits.at(-1) || {};
       const repoName = String(payload.repository?.full_name || payload.repository?.name || 'github-repo').slice(0, 100);
       const commitSha = String(head.id || payload.after || '').slice(0, 40);
+      const commitMessage = String(head.message || '').slice(0, 180);
+      const commitAuthor = String(head.author?.username || head.author?.name || payload.pusher?.name || '').slice(0, 60);
+      const commitUrl = String(head.url || '').slice(0, 300);
       const commitTimestamp = String(head.timestamp || new Date().toISOString());
       const out = await recordVerifiedCommitToLeague({
         db: getDb(),
         uid,
         repoName,
         commitSha,
+        commitMessage,
+        commitAuthor,
+        commitUrl,
+        commitsList: commits.slice(-15),
         commitTimestamp,
         commitCount: Math.max(1, commits.length || 1),
+        source: 'passive_webhook',
       });
       setCors(res);
       res.status(200).json(out);

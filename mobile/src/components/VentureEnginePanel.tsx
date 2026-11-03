@@ -20,6 +20,24 @@ type Props = {
   onRefreshWorkspace?: () => void;
 };
 
+function formatCommitTime(iso = ''): string {
+  if (!iso) return '';
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return '';
+  const diffMins = Math.floor((Date.now() - ms) / 60000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 14) return `${diffDays}d ago`;
+  return new Date(ms).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 export default function VentureEnginePanel({ navigation, isDark, mode = 'full', onRefreshWorkspace }: Props) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -30,8 +48,10 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
   const [manifestInput, setManifestInput] = useState('');
   const [showManifestBox, setShowManifestBox] = useState(false);
   const [showWebhookBox, setShowWebhookBox] = useState(false);
+  const [showAllCommits, setShowAllCommits] = useState(false);
   const [spliced, setSpliced] = useState<any[]>([]);
   const [ventureName, setVentureName] = useState('');
+  const autoBackfilledRef = React.useRef(false);
 
   const ink = textColor(isDark);
   const sub = textColor(isDark, 'secondary');
@@ -55,6 +75,25 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Backfill inspected commits automatically once for repos connected before commit history display shipped
+  useEffect(() => {
+    if (autoBackfilledRef.current || mode !== 'full' || !status) return;
+    const hasConnectedTarget = Boolean(status.githubRepo || status.githubHandle);
+    const existingList = Array.isArray(status.inspectedCommits)
+      ? status.inspectedCommits
+      : Array.isArray(status.codeDiagnosis?.inspectedCommits)
+        ? status.codeDiagnosis.inspectedCommits
+        : [];
+    if (hasConnectedTarget && existingList.length === 0) {
+      autoBackfilledRef.current = true;
+      void builderCall('ventureSyncGithub', {})
+        .then((res) => {
+          if (res) setStatus(res);
+        })
+        .catch(() => {});
+    }
+  }, [status, mode]);
 
   const runOp = async (label: string, fn: () => Promise<void>) => {
     if (busy) return;
@@ -135,6 +174,17 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
   if (!status) return null;
 
   const diag = status.codeDiagnosis;
+  const inspectedCommits: any[] =
+    Array.isArray(status.inspectedCommits) && status.inspectedCommits.length > 0
+      ? status.inspectedCommits
+      : Array.isArray(diag?.inspectedCommits)
+        ? diag.inspectedCommits
+        : [];
+  const visibleCommits = showAllCommits ? inspectedCommits : inspectedCommits.slice(0, 5);
+  const recent14dCount =
+    typeof diag?.commitsLast14d === 'number' && diag.commitsLast14d > 0
+      ? diag.commitsLast14d
+      : inspectedCommits.filter((c) => c?.in14dWindow).length;
   const offers: any[] = Array.isArray(status.vcOffers) ? status.vcOffers : [];
   const launchpads: any[] = Array.isArray(status.launchpads) ? status.launchpads : [];
 
@@ -308,7 +358,7 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
           ) : null}
 
           {diag ? (
-            <View style={[styles.subPanel, { backgroundColor: softBg }]}>
+            <View style={[styles.subPanel, { backgroundColor: softBg, borderColor: cardBorder }]}>
               <Text style={{ fontWeight: '900', fontSize: 13, color: ink }}>
                 Linky Quiet Manager Diagnosis · {diag.codingStyle?.cadence || 'Builder'}
               </Text>
@@ -322,11 +372,159 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
                   ))}
                 </View>
               ) : null}
-              <Text style={{ fontSize: 12, fontWeight: '800', color: '#9A6B00' }}>
+              <Text style={{ fontSize: 12, fontWeight: '800', color: isDark ? '#FBE618' : '#9A6B00' }}>
                 Missing Co-Founder Puzzle Pieces: {(diag.missingRoles || []).join(' · ')}
               </Text>
               <Text style={{ fontSize: 12, color: sub }}>
                 Shipping Rhythm: {diag.codingStyle?.peakWindowUtc || 'Flexible Async'}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Commits Linky Looked At (from GitHub Codebase Scan + Passive GitHub/Cursor Webhook) */}
+          {inspectedCommits.length > 0 ? (
+            <View style={[styles.subPanel, { backgroundColor: softBg, borderColor: cardBorder }]}>
+              <View style={[styles.row, { justifyContent: 'space-between' }]}>
+                <Text style={{ fontWeight: '900', fontSize: 13, color: ink }}>
+                  Commits Linky Looked At ({inspectedCommits.length})
+                </Text>
+                {recent14dCount > 0 ? (
+                  <View style={styles.commitWindowPill}>
+                    <Text style={styles.commitWindowPillText}>
+                      {recent14dCount} in last 14 days
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={{ gap: 8, marginTop: 2 }}>
+                {visibleCommits.map((commit: any, idx: number) => {
+                  const shortSha = String(commit?.shortSha || commit?.sha || 'HEAD').slice(0, 7);
+                  const timeLabel = formatCommitTime(commit?.timestamp || '');
+                  const commitUrl = typeof commit?.url === 'string' && commit.url.startsWith('https://') ? commit.url : '';
+                  const isWebhook = commit?.source === 'passive_webhook';
+
+                  return (
+                    <View
+                      key={`${commit?.sha || shortSha}-${idx}`}
+                      style={[
+                        styles.commitRow,
+                        {
+                          backgroundColor: isDark ? '#161922' : '#FFFFFF',
+                          borderColor: isDark ? '#2E3340' : '#E3E0D6',
+                        },
+                      ]}
+                    >
+                      <View style={[styles.row, { justifyContent: 'space-between' }]}>
+                        <View style={[styles.row, { gap: 6 }]}>
+                          {commitUrl ? (
+                            <TouchableOpacity
+                              accessibilityRole="link"
+                              onPress={() => void Linking.openURL(commitUrl).catch(() => {})}
+                              style={styles.shaPill}
+                            >
+                              <Text style={styles.shaPillText}>{shortSha} ↗</Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <TouchableOpacity
+                              accessibilityRole="button"
+                              onPress={() => void copyText('Commit SHA', String(commit?.sha || shortSha))}
+                              style={styles.shaPill}
+                            >
+                              <Text style={styles.shaPillText}>{shortSha}</Text>
+                            </TouchableOpacity>
+                          )}
+
+                          <View
+                            style={[
+                              styles.commitSourceBadge,
+                              isWebhook ? styles.commitSourceWebhook : styles.commitSourceScan,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.commitSourceBadgeText,
+                                { color: isWebhook ? '#075985' : '#374151' },
+                              ]}
+                            >
+                              {isWebhook ? 'Passive Webhook' : 'Codebase Scan'}
+                            </Text>
+                          </View>
+
+                          {commit?.leagueCredited ? (
+                            <View style={styles.pillVerified}>
+                              <Text style={styles.pillVerifiedText}>+10 LEAGUE</Text>
+                            </View>
+                          ) : null}
+                        </View>
+
+                        {timeLabel ? (
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: sub }}>
+                            {timeLabel}
+                          </Text>
+                        ) : null}
+                      </View>
+
+                      <Text
+                        style={{ fontSize: 13, fontWeight: '800', lineHeight: 18, color: ink }}
+                        numberOfLines={2}
+                      >
+                        {commit?.message || 'Verified Git commit'}
+                      </Text>
+
+                      <View style={[styles.row, { justifyContent: 'space-between' }]}>
+                        <Text style={{ fontSize: 11, color: sub }} numberOfLines={1}>
+                          {[
+                            commit?.repo || status.githubRepo || '',
+                            commit?.author ? `by @${String(commit.author).replace(/^@/, '')}` : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </Text>
+
+                        {commitUrl ? (
+                          <TouchableOpacity
+                            accessibilityRole="link"
+                            onPress={() => void Linking.openURL(commitUrl).catch(() => {})}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                fontWeight: '800',
+                                color: isDark ? '#FBE618' : '#0A58CA',
+                              }}
+                            >
+                              Open commit ↗
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {inspectedCommits.length > 5 ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={() => setShowAllCommits((v) => !v)}
+                  style={[styles.secBtn, { alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 12 }]}
+                >
+                  <Text style={[styles.secBtnText, { fontSize: 12 }]}>
+                    {showAllCommits
+                      ? 'Show fewer commits'
+                      : `Show all ${inspectedCommits.length} commits Linky looked at`}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : diag ? (
+            <View style={[styles.subPanel, { backgroundColor: softBg, borderColor: cardBorder }]}>
+              <Text style={{ fontWeight: '800', fontSize: 12, color: ink }}>
+                Commits Linky Looked At (0)
+              </Text>
+              <Text style={{ fontSize: 12, lineHeight: 18, color: sub }}>
+                Enter your public GitHub repository (owner/repo) or @username above and tap Scan Codebase — or push with the Passive GitHub / Cursor Webhook — so Linky can list every commit he inspected here.
               </Text>
             </View>
           ) : null}
@@ -581,5 +779,54 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     backgroundColor: '#FFE4E6',
+  },
+  commitRow: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 11,
+    gap: 5,
+  },
+  shaPill: {
+    backgroundColor: '#FBE618',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  shaPillText: {
+    fontSize: 11,
+    fontWeight: '900',
+    fontFamily: 'monospace',
+    color: '#0A0B0D',
+  },
+  commitWindowPill: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  commitWindowPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  commitSourceBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+  },
+  commitSourceScan: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#D1D5DB',
+  },
+  commitSourceWebhook: {
+    backgroundColor: '#E0F2FE',
+    borderColor: '#7DD3FC',
+  },
+  commitSourceBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
   },
 });
