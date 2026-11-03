@@ -69,7 +69,7 @@ export const CAMPAIGN_PLACEMENT_OPTIONS: { id: string; label: string; desc: stri
   { id: 'hub', label: 'Hub strip', desc: 'Banner on the discovery home screen', available: true },
   { id: 'linky', label: 'Linky picks', desc: 'Linky may recommend you — always disclosed as sponsored', available: true },
   { id: 'discover', label: 'Discover boost', desc: 'Sponsored card shows every 4th swipe in the people deck', available: true },
-  { id: 'news', label: 'News feed', desc: 'Sponsored card inside the AI news feed', available: true },
+  { id: 'news', label: 'Blogs feed', desc: 'Sponsored card inside the community Blogs feed', available: true },
   { id: 'feed', label: 'Startups feed', desc: 'Sponsored card inside the Startups feed', available: true },
   { id: 'picks', label: "Today's picks", desc: 'Sponsored card above the recommended-people list', available: true },
   { id: 'projects', label: 'Project matches', desc: 'Sponsored card at the top of project & opportunity lists', available: true },

@@ -13,6 +13,7 @@ import {readMessageQuota} from './_linkyUsage.js';
 import {sendHighSignalEmail,sendComebackEmail,emailStatus} from './_emailNotify.js';
 import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,contributionInsight,containsCredential,normalizeUpdate} from '../shared/contributions.js';
 import {createVentureWorkspaceOps} from './_ventureEngine.js';
+import {createBlogsService} from './_blogs.js';
 import {EXTERNAL_LEADS} from '../shared/builder-leads.js';
 const fields=['displayName','fullName','name','occupation','skills','industries','city','country','onboarded','deleted','banned','isBot','isVisible','isStealthMode','startupStage','remoteOnly','isVerified','profilePicUrl','photoURL','avatarUrl'];
 const row=d=>({id:d.id,...d.data()});
@@ -21,6 +22,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
  const habits=createHabitActions({db,now});
  const groups=createGroupService({db,now,blocked,connectable,notify,plus});
  const venture=createVentureWorkspaceOps({db,now,fetchFn});
+ const blogs=createBlogsService({db,now,plus});
  const ref=uid=>db.collection('builderStates').doc(uid);
  async function state(uid){const d=await ref(uid).get();return stateOf(d.exists?d.data():{},now());}
  async function change(uid,edit){return db.runTransaction(async tx=>{const d=await tx.get(ref(uid));const s=stateOf(d.exists?d.data():{},now());const result=edit(s);s.updatedAt=now();tx.set(ref(uid),s);return result===undefined?s:result;});}
@@ -151,6 +153,9 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   if(op==='ventureSyncGithub')return venture.syncGithub(uid);
   if(op==='ventureSplice')return venture.splice(uid,input);
   if(op==='ventureProvision')return venture.autoSpliceAndProvision(uid,input);
+  if(op==='blogsList')return blogs.list(input);
+  if(op==='blogPublish')return blogs.publish(uid,input);
+  if(op==='blogDelete')return blogs.remove(uid,input);
   if(op==='habit')return habits.read(uid);
   if(['habitPrefs','habitRest','habitToken'].includes(op))return habits.act(uid,op,input);
   if(op==='contributions')return contributionData(uid,input.targetUid?ownId(input.targetUid):uid);

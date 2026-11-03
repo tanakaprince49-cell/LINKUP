@@ -52,6 +52,7 @@ const LinkyProfileScreen = lazyScreen(() => import('./src/screens/LinkyProfileSc
 const LinkySettingsScreen = lazyScreen(() => import('./src/screens/LinkySettingsScreen'));
 const LinkyAuditScreen = lazyScreen(() => import('./src/screens/LinkyAuditScreen'));
 const NewsScreen = lazyScreen(() => import('./src/screens/NewsScreen'));
+const BlogsScreen = lazyScreen(() => import('./src/screens/BlogsScreen'));
 const CampaignsScreen = lazyScreen(() => import('./src/screens/CampaignsScreen'));
 const CreateCampaignScreen = lazyScreen(() => import('./src/screens/CreateCampaignScreen'));
 const CampaignDetailScreen = lazyScreen(() => import('./src/screens/CampaignDetailScreen'));
@@ -65,7 +66,7 @@ const PRELOADED_SCREENS = [
   FeedScreen,
   SearchScreen,
   MessagesScreen,
-  NewsScreen,
+  BlogsScreen,
   ProfileScreen,
   ChatScreen,
   AlertsScreen,
@@ -132,13 +133,14 @@ const linking: any = {
   getPathFromState: (state: any, options: any) =>
     scopedNavigationPath(getPathFromState(state, options), WEB_BASE_PATH),
   getStateFromPath: (path: string, options: any) => {
+    const normalizedPath = path.replace(/^(\/app)?\/blogs(?=$|[/?#])/, '$1/news-feed');
     // React Navigation 7 strips a root config.path to an empty string, which
     // misses its special '/' dashboard matcher. Handle only the mount's home;
     // regular deep links retain the library's full prefixed path handling.
-    if (WEB_BASE_PATH && /^\/app\/?(?=$|[?#])/.test(path)) {
-      return getStateFromPath(path.replace(/^\/app\/?/, '/'), { ...options, path: '' });
+    if (WEB_BASE_PATH && /^\/app\/?(?=$|[?#])/.test(normalizedPath)) {
+      return getStateFromPath(normalizedPath.replace(/^\/app\/?/, '/'), { ...options, path: '' });
     }
-    return getStateFromPath(path, options);
+    return getStateFromPath(normalizedPath, options);
   },
   config: {
     path: WEB_BASE_PATH.slice(1),
@@ -303,7 +305,7 @@ function TabNavigator({ navigation }: any) {
     Feed: 'Startups',
     Workspace: 'Workspace',
     Inbox: 'Messages',
-    News: 'News',
+    News: 'Blogs',
   };
 
   React.useEffect(() => {
@@ -342,7 +344,7 @@ function TabNavigator({ navigation }: any) {
             Campaigns: { active: 'Megaphone', inactive: 'Megaphone' },
             Workspace: { active: 'Briefcase', inactive: 'Briefcase' },
             Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },
-            News: { active: 'Newspaper', inactive: 'Newspaper' },
+            News: { active: 'BookOpen', inactive: 'BookOpen' },
           };
           const iconName = (focused ? iconMap[route.name]?.active : iconMap[route.name]?.inactive) || 'Circle';
 
@@ -414,7 +416,7 @@ function TabNavigator({ navigation }: any) {
             Feed: 'Startups',
             Workspace: 'Workspace',
             Inbox: 'Messages',
-            News: 'News',
+            News: 'Blogs',
           };
           return <AppHeader navigation={props.navigation} title={titles[props.route.name] || 'LINKUP'} />;
         },
@@ -425,7 +427,7 @@ function TabNavigator({ navigation }: any) {
       <Tab.Screen name="Feed" component={FeedScreen} />
       <Tab.Screen name="Workspace" component={BuilderWorkspaceScreen} />
       <Tab.Screen name="Inbox" component={MessagesScreen} options={{ headerShown: false }} />
-      <Tab.Screen name="News" component={NewsScreen} />
+      <Tab.Screen name="News" component={BlogsScreen} />
       <Tab.Screen name="Campaigns" component={CampaignsScreen} />
     </Tab.Navigator>
   );
@@ -822,6 +824,7 @@ const SCREEN_REGISTRY: Array<[string, any]> = [
   ['MessagesScreen', MessagesScreen],
   ['AlertsScreen', AlertsScreen],
   ['NewsScreen', NewsScreen],
+  ['BlogsScreen', BlogsScreen],
   ['RecommendedMatchesScreen', RecommendedMatchesScreen],
   ['LvlupDemoScreen', LvlupDemoScreen],
 ];

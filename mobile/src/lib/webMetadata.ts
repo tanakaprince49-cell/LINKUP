@@ -5,7 +5,7 @@ const titles: Record<string, string> = {
   EmailAuth: 'Sign in', Onboarding: 'Professional profile setup',
   Dashboard: 'Discover professionals', LinkyHome: 'Linky AI networking assistant',
   Feed: 'Startup directory', Search: 'Professional search', Inbox: 'Messages',
-  Chat: 'Conversation', News: 'Startup news', Profile: 'Professional profile',
+  Chat: 'Conversation', News: 'Community blogs', Profile: 'Professional profile',
   Alerts: 'Notifications', MyConnections: 'Professional connections',
   ActiveOpportunities: 'Collaboration opportunities', ActiveOpportunity: 'Project opportunity',
   RecommendedMatches: 'Recommended professionals', IdeaDeck: 'Startup ideas',
