@@ -810,10 +810,13 @@ export async function recordVerifiedCommitToLeague({
           note: clean(note, 140),
           section: 'Today',
           url: '/builder?section=Today',
+          targetUrl: '/builder?section=Today',
           shortSha: shortDisplay,
           repo: safeRepo,
           source,
           leaguePointsAdded: txOut.result.leaguePointsAdded,
+          pushRequested: true,
+          serverPushManaged: false,
           isRead: false,
           timestamp: new Date(now),
         })
@@ -841,6 +844,30 @@ export async function recordVerifiedCommitToLeague({
             leaguePointsAdded: txOut.result.leaguePointsAdded,
           },
         }).catch(() => ({ sent: 0, tokens: 0 }));
+        if (Number(pushResult?.nativeSent) > 0) {
+          await notifRef.set({ serverPushManaged: true }, { merge: true }).catch(() => null);
+        }
+      }
+
+      if (txOut.result.dayCredited && process.env.RESEND_API_KEY) {
+        try {
+          const emailMod = await import('./_emailNotify.js').catch(() => null);
+          if (typeof emailMod?.sendHighSignalEmail === 'function') {
+            await emailMod.sendHighSignalEmail(db, uid, {
+              receiptKey: notificationId,
+              throttleMs: 0,
+              mood: 'on_fire_shipped',
+              subject: clean(title, 100),
+              headline: clean(title, 100),
+              body,
+              ctaLabel: 'View Commits Linky Looked At',
+              ctaUrl: '/builder?section=Today',
+              badgeLabel: 'Linky GitHub Auto-Recorder',
+            });
+          }
+        } catch {
+          // Never block commit recording on email delivery
+        }
       }
     }
   }

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -9,7 +10,12 @@ import {
   View,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import { useAuth } from '../contexts/AuthContext';
 import { builderCall } from '../lib/builder';
+import {
+  registerForPushNotificationsAsync,
+  registerForWebNotificationsAsync,
+} from '../lib/notifications';
 import { notifyUser } from '../lib/notify';
 import { textColor } from '../theme/theme';
 
@@ -39,6 +45,7 @@ function formatCommitTime(iso = ''): string {
 }
 
 export default function VentureEnginePanel({ navigation, isDark, mode = 'full', onRefreshWorkspace }: Props) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -49,9 +56,36 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
   const [showManifestBox, setShowManifestBox] = useState(false);
   const [showWebhookBox, setShowWebhookBox] = useState(false);
   const [showAllCommits, setShowAllCommits] = useState(false);
+  const [pushReady, setPushReady] = useState<boolean>(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
+      return window.Notification.permission === 'granted';
+    }
+    return false;
+  });
   const [spliced, setSpliced] = useState<any[]>([]);
   const [ventureName, setVentureName] = useState('');
   const autoBackfilledRef = React.useRef(false);
+
+  const enableCommitAlerts = async () => {
+    if (!user?.uid) return;
+    try {
+      if (Platform.OS === 'web') {
+        const perm = await registerForWebNotificationsAsync(user.uid);
+        if (perm === 'granted' || (typeof window !== 'undefined' && 'Notification' in window && window.Notification.permission === 'granted')) {
+          setPushReady(true);
+          notifyUser('Commit Push Alerts Enabled', 'Linky will send a push notification every time a commit is recorded.');
+        } else {
+          notifyUser('In-App Alerts Active', 'Allow browser notifications in site settings to also get desktop/mobile push alerts.');
+        }
+      } else {
+        await registerForPushNotificationsAsync(user.uid);
+        setPushReady(true);
+        notifyUser('Commit Push Alerts Enabled', 'Linky will notify your phone whenever a commit is recorded.');
+      }
+    } catch {
+      notifyUser('In-App Alerts Active', 'Linky will always deliver commit alerts to your LINKUP Alerts inbox.');
+    }
+  };
 
   const ink = textColor(isDark);
   const sub = textColor(isDark, 'secondary');
@@ -351,6 +385,28 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
               <Text style={{ fontSize: 12, lineHeight: 18, color: isDark ? '#D1FAE5' : '#065F46' }}>
                 Linky watches your GitHub automatically in the background. Whenever you commit & push code, Linky records the commit here, credits Builder League, and sends you a notification without you needing to open LINKUP.
               </Text>
+              {!pushReady ? (
+                <View style={[styles.row, { marginTop: 2 }]}>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={() => void enableCommitAlerts()}
+                    style={{
+                      backgroundColor: '#FBE618',
+                      paddingHorizontal: 11,
+                      paddingVertical: 6,
+                      borderRadius: 10,
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '900', color: '#0A0B0D' }}>
+                      Enable Push Alerts When Commits Record
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text style={{ fontSize: 11, fontWeight: '800', color: isDark ? '#6EE7B7' : '#047857' }}>
+                  Instant Commit Notifications Active (In-App Inbox + Push)
+                </Text>
+              )}
             </View>
           ) : null}
 

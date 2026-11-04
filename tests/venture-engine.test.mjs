@@ -598,6 +598,7 @@ test('Autonomous GitHub Commit Watcher records commits automatically while the b
   assert.equal(inAppNotif.data().fromName, 'Linky');
   assert.equal(inAppNotif.data().type, 'builder');
   assert.equal(inAppNotif.data().category, 'github_commit_recorded');
+  assert.equal(inAppNotif.data().pushRequested, true);
   assert.equal(inAppNotif.data().isRead, false);
   assert.match(inAppNotif.data().note, /7777666 · feat\(billing\)/);
 
