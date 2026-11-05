@@ -7,6 +7,7 @@ import { sendExpoPush } from './_expoPush.js';
 import {
   COMEBACK_SUNSET_DAYS,
   LINKY_AVATAR_URL,
+  buildPersonalBuilderBrief,
   sendRetentionPulseEmail,
 } from './_emailNotify.js';
 
@@ -131,6 +132,15 @@ export function duePulseSlot({
   return null;
 }
 
+function clipPhrase(str = '', max = 52) {
+  const s = String(str || '').replace(/\s+/g, ' ').trim();
+  if (!s) return '';
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max - 1);
+  const sp = cut.lastIndexOf(' ');
+  return `${(sp > 16 ? cut.slice(0, sp) : cut).replace(/[.,;:\s]+$/, '')}…`;
+}
+
 export function selectExpressivePulse({
   firstName = '',
   slot = 'pulse1',
@@ -142,26 +152,73 @@ export function selectExpressivePulse({
   unreadCount = 0,
   isLeagueTop3 = false,
   seedByte = 0,
+  personal = null,
+  projectLabel: rawProject = '',
+  goalLabel: rawGoal = '',
+  lookingForLabel: rawLooking = '',
+  openStep: rawStep = '',
+  roleLabel: rawRole = '',
 } = {}) {
-  const namePrefix = firstName ? `${firstName}, ` : '';
-  const nameHey = firstName ? `Hey ${firstName} — ` : 'Hey builder — ';
+  const p = personal && typeof personal === 'object' ? personal : {};
+  const resolvedName = String(firstName || p.firstName || '').trim();
+  const project = String(rawProject || p.projectLabel || '').trim();
+  const goal = String(rawGoal || p.goalLabel || '').trim();
+  const lookingFor = String(rawLooking || p.lookingForLabel || '').trim();
+  const openStep = String(rawStep || p.openStep || '').trim();
+  const role = String(rawRole || p.roleLabel || '').trim();
+
+  const shortProject = clipPhrase(project, 34);
+  const shortGoal = clipPhrase(goal || openStep, 52);
+  const shortLooking = clipPhrase(lookingFor, 44);
+
+  const namePrefix = resolvedName ? `${resolvedName}, ` : '';
+  const nameHey = resolvedName ? `Hey ${resolvedName} — ` : 'Hey builder — ';
+  const subjName = resolvedName ? `${resolvedName}, ` : '';
   const isEveningSlot = slot === 'pulse2';
   const pick = (arr) => arr[Math.abs(Number(seedByte) || 0) % arr.length];
+
+  const focusTail = (() => {
+    if (project && goal && lookingFor) {
+      return `You’re building ${project} toward "${goal}" and looking for ${lookingFor} — don’t carry the whole build solo when compatible co-founders and collaborators are active on LINKUP right now.`;
+    }
+    if (goal && lookingFor) {
+      return `Your goal on LINKUP is "${goal}" and you’re looking for ${lookingFor}. Log one concrete move or review vetted ${shortLooking} matches today.`;
+    }
+    if (project && goal) {
+      return `Every visible update on ${project} moves "${goal}" closer and puts your proof in front of serious co-founders.`;
+    }
+    if (goal) {
+      return `Keep "${goal}" moving today — even one 60-second update compounds your momentum and attracts the right co-founder.`;
+    }
+    if (project && lookingFor) {
+      return `You’re building ${project} and looking for ${lookingFor} — vetted builders in that exact lane are active on LINKUP today.`;
+    }
+    if (lookingFor) {
+      return `Builders matching what you’re looking for (${lookingFor}) are active on LINKUP right now — don’t build alone when your missing half could already be online.`;
+    }
+    if (role) {
+      return `Founders and teams looking for a sharp ${role} check active builders first on LINKUP.`;
+    }
+    return '';
+  })();
 
   // 1. Real unread messages / pending intros come first
   if (unreadCount > 0) {
     const noun = unreadCount === 1 ? '1 builder signal' : `${unreadCount} builder signals`;
+    const unreadTail = lookingFor
+      ? ` Could be the ${shortLooking} match${project ? ` for ${shortProject}` : ''} you’ve been looking for.`
+      : (goal ? ` Could help accelerate "${shortGoal}".` : '');
     return {
       mood: 'unread_urgent',
       subject: isEveningSlot
-        ? `LINKUP · ${noun} still waiting for your reply`
-        : `LINKUP · Someone reached out — ${noun} waiting`,
+        ? `LINKUP · ${subjName}${noun} still waiting${shortLooking ? ` (${shortLooking})` : ' for your reply'}`
+        : `LINKUP · ${subjName}someone reached out — ${noun} waiting`,
       headline: isEveningSlot
         ? `${nameHey}don’t leave a warm builder intro hanging tonight`
         : `${nameHey}${noun} landed in your LINKUP inbox`,
-      body: isEveningSlot
-        ? 'Fast replies turn warm intros into real collaborations. Take 60 seconds to check who reached out before calling it a day.'
-        : 'Another builder on LINKUP is waiting to hear back from you. Open your alerts now while momentum is warm.',
+      body: (isEveningSlot
+        ? 'Fast replies turn warm intros into real co-founder partnerships. Take 60 seconds to check who reached out before calling it a day.'
+        : 'Another builder on LINKUP is waiting to hear back from you. Open your alerts now while momentum is warm.') + unreadTail,
       ctaLabel: 'Check your waiting messages',
       ctaUrl: '/alerts',
       pushTitle: `LINKUP · ${noun} waiting`,
@@ -171,13 +228,19 @@ export function selectExpressivePulse({
 
   // 2. Milestone celebration when shipped today on a milestone day
   if (shippedToday && [7, 14, 30, 50, 100].includes(Number(streakDays))) {
+    const milestoneGoal = goal
+      ? ` pushing toward "${shortGoal}"`
+      : (project ? ` shipping ${shortProject}` : '');
+    const milestoneMatch = lookingFor
+      ? ` Use that verified ${streakDays}-day proof to pull in ${lookingFor} right now.`
+      : ' Share what you shipped or scout a co-founder who matches your pace.';
     return {
       mood: 'milestone_party',
-      subject: `LINKUP · Day ${streakDays} build milestone unlocked!`,
-      headline: `${nameHey}Linky is throwing confetti for Day ${streakDays}!`,
-      body: `Showing up ${streakDays} days in a row puts you among the most consistent builders on LINKUP. Share what you shipped or scout a collaborator who matches your pace.`,
-      ctaLabel: 'Celebrate on LINKUP',
-      ctaUrl: '/trending-builders',
+      subject: `LINKUP · ${subjName}Day ${streakDays} milestone unlocked${shortProject ? ` on ${shortProject}` : ''}!`,
+      headline: `${nameHey}Linky is throwing confetti for Day ${streakDays}${milestoneGoal}!`,
+      body: `Showing up ${streakDays} days in a row puts you among the most consistent builders on LINKUP.${milestoneMatch}`,
+      ctaLabel: lookingFor ? `Find ${ clipPhrase(lookingFor, 26) } matches` : 'Celebrate on LINKUP',
+      ctaUrl: lookingFor ? '/linky' : '/trending-builders',
       pushTitle: `Day ${streakDays} milestone on LINKUP!`,
       pushBody: `${namePrefix}Linky is celebrating your ${streakDays}-day streak — see who noticed.`,
     };
@@ -185,24 +248,30 @@ export function selectExpressivePulse({
 
   // 3. Shipped today -> proud cool-sunglasses Linky
   if (shippedToday) {
+    const shipSubject = shortGoal
+      ? `LINKUP · ${subjName}today’s step toward "${ clipPhrase(shortGoal, 36) }" is locked in`
+      : (shortProject ? `LINKUP · ${subjName}today’s ${shortProject} build is locked in` : 'LINKUP · Today’s build is locked in — see who else shipped');
+    const shipBody = lookingFor
+      ? `Linky has the sunglasses on because your build${project ? ` on ${project}` : ''} is logged${goal ? ` toward "${goal}"` : ''}. Now turn today’s proof into distribution — ask Linky for vetted ${lookingFor} matches while your streak badge is glowing.`
+      : (focusTail || 'Linky has the sunglasses on because your daily build is already logged. Take two minutes to check fresh builds in your lane and spark one high-signal connection.');
     return isEveningSlot
       ? {
           mood: 'on_fire_shipped',
-          subject: 'LINKUP · Today’s build is locked in — see who else shipped',
-          headline: `${nameHey}your proof is on the board today`,
-          body: 'Linky has the sunglasses on because your daily build is already logged. Take two minutes tonight to check fresh builds in your lane and spark one high-signal connection.',
-          ctaLabel: 'See today’s top builders',
-          ctaUrl: '/trending-builders',
+          subject: shipSubject,
+          headline: `${nameHey}your proof${shortProject ? ` on ${shortProject}` : ''} is on the board today`,
+          body: shipBody,
+          ctaLabel: lookingFor ? `Scout ${clipPhrase(lookingFor, 26)} matches` : 'See today’s top builders',
+          ctaUrl: lookingFor ? '/linky' : '/trending-builders',
           pushTitle: 'LINKUP · Today’s build is locked in',
           pushBody: `${namePrefix}check what other builders shipped alongside you today.`,
         }
       : {
           mood: 'on_fire_shipped',
-          subject: 'LINKUP · Early ship logged — ride that momentum',
-          headline: `${nameHey}shipping early sets the pace for the whole network`,
-          body: 'Your update is live on LINKUP. Builders browsing the feed right now can see your proof — drop into Search or Workspace to turn today’s win into a warm intro.',
-          ctaLabel: 'Browse builders in your lane',
-          ctaUrl: '/feed',
+          subject: shortProject ? `LINKUP · ${subjName}early ${shortProject} ship logged — ride that momentum` : 'LINKUP · Early ship logged — ride that momentum',
+          headline: `${nameHey}shipping early${shortGoal ? ` toward "${shortGoal}"` : ''} sets the pace`,
+          body: shipBody,
+          ctaLabel: lookingFor ? `Find ${clipPhrase(lookingFor, 26)} on LINKUP` : 'Browse builders in your lane',
+          ctaUrl: lookingFor ? '/linky' : '/feed',
           pushTitle: 'LINKUP · Momentum locked in',
           pushBody: `${namePrefix}your ship is live — see who is building in your lane right now.`,
         };
@@ -213,10 +282,10 @@ export function selectExpressivePulse({
     return {
       mood: 'champion_crown',
       subject: isEveningSlot
-        ? 'LINKUP · Defend your Builder League crown tonight'
-        : 'LINKUP · You’re on the Builder League podium',
+        ? `LINKUP · ${subjName}defend your Builder League crown${shortProject ? ` with ${shortProject}` : ''} tonight`
+        : `LINKUP · ${subjName}you’re on the Builder League podium`,
       headline: `${nameHey}builders are chasing your League spot`,
-      body: 'You’re sitting near the very top of the Builder League standings. Post one quick proof update today so nobody slips past your spot before the week closes.',
+      body: `You’re sitting near the very top of the Builder League standings.${goal ? ` Log one concrete step on "${goal}" today so nobody slips past you.` : ' Post one quick proof update today so nobody slips past your spot before the week closes.'}${lookingFor ? ` Podium builders get 3x faster replies from ${lookingFor} candidates.` : ''}`,
       ctaLabel: 'Defend your League rank',
       ctaUrl: '/trending-builders',
       pushTitle: 'LINKUP · Defend your League podium',
@@ -228,9 +297,11 @@ export function selectExpressivePulse({
   if (streakDays >= 2 && isEveningSlot) {
     return {
       mood: 'streak_fire',
-      subject: `LINKUP · Keep your ${streakDays}-day build streak alive tonight`,
-      headline: `${nameHey}your ${streakDays}-day streak is still open today`,
-      body: `Linky is holding the plug by the socket so your ${streakDays}-day streak doesn’t reset at midnight. Even two sentences on what moved forward today locks in Day ${streakDays + 1}.`,
+      subject: shortGoal
+        ? `LINKUP · ${subjName}keep your ${streakDays}-day streak alive on "${clipPhrase(shortGoal, 34)}"`
+        : `LINKUP · Keep your ${streakDays}-day build streak alive tonight`,
+      headline: `${nameHey}your ${streakDays}-day streak${shortProject ? ` on ${shortProject}` : ''} is still open today`,
+      body: `Linky is holding the plug by the socket so your ${streakDays}-day streak doesn’t reset at midnight.${goal ? ` Two honest lines on how you moved "${goal}" forward today locks in Day ${streakDays + 1}.` : ` Even two sentences on what moved forward today locks in Day ${streakDays + 1}.`}${lookingFor ? ` Serious ${lookingFor} matches look at live streaks first.` : ''}`,
       ctaLabel: `Lock in Day ${streakDays + 1}`,
       ctaUrl: '/ship',
       pushTitle: `Save your ${streakDays}-day LINKUP streak`,
@@ -240,23 +311,37 @@ export function selectExpressivePulse({
 
   // 6. Away for 1–2 days -> Fiery Angry Red Linky!
   if (daysSinceActive >= 1 && daysSinceActive < 3) {
+    const angryDetail = focusTail
+      || (isEveningSlot
+        ? 'One missed day turns into a dead week if you let it slide. Plug back into LINKUP for two minutes tonight and put one honest build note on the board.'
+        : 'You haven’t opened LINKUP in over a day while builders in your lane kept shipping. Jump back in right now — even a tiny ship turns Linky bright yellow again.');
     return isEveningSlot
       ? {
           mood: 'angry_1d',
-          subject: 'LINKUP · Linky turned red waiting on your update!',
-          headline: `${nameHey}you skipped yesterday and Linky noticed!`,
-          body: 'One missed day turns into a dead week if you let it slide. Plug back into LINKUP for two minutes tonight and put one honest build note on the board.',
-          ctaLabel: 'Calm Linky down & log progress',
+          subject: shortGoal
+            ? `LINKUP · ${subjName}Linky turned red — "${clipPhrase(shortGoal, 38)}" needs today’s move!`
+            : (shortLooking
+                ? `LINKUP · ${subjName}Linky turned red while ${clipPhrase(shortLooking, 34)} matches shipped!`
+                : 'LINKUP · Linky turned red waiting on your update!'),
+          headline: shortProject
+            ? `${nameHey}you skipped yesterday while ${shortProject} is waiting on you!`
+            : `${nameHey}you skipped yesterday and Linky noticed!`,
+          body: angryDetail,
+          ctaLabel: shortGoal ? 'Log progress & calm Linky down' : 'Calm Linky down & log progress',
           ctaUrl: '/ship?comeback=1d',
           pushTitle: 'Linky noticed you missed yesterday!',
           pushBody: `${namePrefix}plug back into LINKUP for 2 minutes and put a win on the board.`,
         }
       : {
           mood: 'angry_1d',
-          subject: 'LINKUP · Don’t let 1 missed day turn into 2',
-          headline: `${nameHey}Linky is standing by the wall socket looking grumpy`,
-          body: 'You haven’t opened LINKUP in over a day while builders in your lane kept shipping. Jump back in right now — even a tiny ship turns Linky bright yellow again.',
-          ctaLabel: 'Plug back into LINKUP',
+          subject: shortProject
+            ? `LINKUP · ${subjName}don’t let ${shortProject} stall for a 2nd day`
+            : 'LINKUP · Don’t let 1 missed day turn into 2',
+          headline: shortGoal
+            ? `${nameHey}Linky is grumpy — "${shortGoal}" didn’t move yesterday`
+            : `${nameHey}Linky is standing by the wall socket looking grumpy`,
+          body: angryDetail,
+          ctaLabel: lookingFor ? `Plug in & see ${clipPhrase(lookingFor, 24)} matches` : 'Plug back into LINKUP',
           ctaUrl: '/ship?comeback=1d',
           pushTitle: 'Don’t let 1 missed day become 2',
           pushBody: `${namePrefix}Linky turned fiery red — open LINKUP to plug back in.`,
@@ -265,24 +350,40 @@ export function selectExpressivePulse({
 
   // 7. Away for 3–6 days -> Sad Rainy Linky!
   if (daysSinceActive >= 3 && daysSinceActive < 7) {
+    const daysFloor = Math.floor(daysSinceActive);
+    const sadBody = (goal || lookingFor || project)
+      ? `${project ? `It’s been ${daysFloor} days since you updated ${project}. ` : `It’s been ${daysFloor} days since you plugged in. `}${goal ? `Your goal ("${goal}") is still within reach, ` : ''}${lookingFor ? `and vetted builders matching ${lookingFor} were active while you were away.` : 'and fresh founders & engineers joined your lane while you were away.'} Take two minutes to jump back in so you aren’t building in isolation.`
+      : (isEveningSlot
+          ? 'Linky has been sitting beside an unplugged socket while new founders, engineers, and designers joined your lane. Come say hi and share one sentence on what you’re working on.'
+          : 'No pressure to write an essay — just open LINKUP for two minutes, check fresh profiles on the homescreen search, or log one small thing you built this week.');
     return isEveningSlot
       ? {
           mood: 'sad_inactive',
-          subject: `LINKUP · Linky misses seeing what you’re building`,
-          headline: `${nameHey}it’s been ${Math.floor(daysSinceActive)} days since you plugged in`,
-          body: 'Linky has been sitting beside an unplugged socket while new founders, engineers, and designers joined your lane. Come say hi and share one sentence on what you’re working on.',
-          ctaLabel: 'Plug Linky back in',
-          ctaUrl: '/ship?comeback=sad',
+          subject: shortProject
+            ? `LINKUP · ${subjName}Linky misses seeing updates on ${shortProject}`
+            : (shortLooking
+                ? `LINKUP · ${subjName}${clipPhrase(shortLooking, 38)} builders were active while you were away`
+                : `LINKUP · Linky misses seeing what you’re building`),
+          headline: shortGoal
+            ? `${nameHey}${daysFloor} days quiet — how is "${shortGoal}" going?`
+            : `${nameHey}it’s been ${daysFloor} days since you plugged in`,
+          body: sadBody,
+          ctaLabel: lookingFor ? `Review ${clipPhrase(lookingFor, 26)} matches` : 'Plug Linky back in',
+          ctaUrl: lookingFor ? '/linky?comeback=sad' : '/ship?comeback=sad',
           pushTitle: 'Linky misses you on LINKUP',
-          pushBody: `${namePrefix}it’s been ${Math.floor(daysSinceActive)} days — drop one quick update tonight.`,
+          pushBody: `${namePrefix}it’s been ${daysFloor} days — drop one quick update tonight.`,
         }
       : {
           mood: 'sad_inactive',
-          subject: 'LINKUP · Your builder seat is getting cold',
-          headline: `${nameHey}builders in your lane kept moving while you were away`,
-          body: 'No pressure to write an essay — just open LINKUP for two minutes, check fresh profiles on the homescreen search, or log one small thing you built this week.',
-          ctaLabel: 'Return to LINKUP',
-          ctaUrl: '/feed',
+          subject: shortGoal
+            ? `LINKUP · ${subjName}still pushing toward "${clipPhrase(shortGoal, 40)}"?`
+            : 'LINKUP · Your builder seat is getting cold',
+          headline: lookingFor
+            ? `${nameHey}${shortLooking} builders kept moving while you were away`
+            : `${nameHey}builders in your lane kept moving while you were away`,
+          body: sadBody,
+          ctaLabel: lookingFor ? `See ${clipPhrase(lookingFor, 26)} profiles` : 'Return to LINKUP',
+          ctaUrl: lookingFor ? '/linky?comeback=sad' : '/feed',
           pushTitle: 'Your LINKUP seat is waiting',
           pushBody: `${namePrefix}see who joined your lane while you were away.`,
         };
@@ -290,22 +391,35 @@ export function selectExpressivePulse({
 
   // 8. Away for 7+ days -> Dusty Cobwebs Linky!
   if (daysSinceActive >= 7) {
+    const ghostBody = (goal || lookingFor || project)
+      ? `${project ? `Cobwebs are gathering on your ${project} workspace. ` : ''}${goal ? `Whether you’re still chasing "${goal}" or pivoted to a sharper target, ` : 'Whether you pivoted or shipped quietly, '}${lookingFor ? `builders matching what you’re looking for (${lookingFor}) are actively teaming up on LINKUP right now.` : 'one fresh update puts you right back in front of vetted co-founders on LINKUP.'}`
+      : (isEveningSlot
+          ? 'A lot has changed since you last stopped by — fresh builders, active Builder League standings, and direct search right on the homescreen. Tap back in whenever you have two spare minutes.'
+          : 'Whether you pivoted, shipped quietly, or took a breather, one fresh update puts you right back in front of collaborators on LINKUP.');
     return isEveningSlot
       ? {
           mood: 'ghost_abandoned',
-          subject: 'LINKUP · Cobwebs are forming on your builder workspace',
-          headline: `${nameHey}shake the dust off your LINKUP profile tonight`,
-          body: 'A lot has changed since you last stopped by — fresh builders, active Builder League standings, and direct search right on the homescreen. Tap back in whenever you have two spare minutes.',
-          ctaLabel: 'Brush off the cobwebs',
-          ctaUrl: '/feed',
+          subject: shortProject
+            ? `LINKUP · ${subjName}cobwebs are forming on ${shortProject}`
+            : 'LINKUP · Cobwebs are forming on your builder workspace',
+          headline: shortLooking
+            ? `${nameHey}don’t hunt for ${shortLooking} alone — shake off the dust`
+            : `${nameHey}shake the dust off your LINKUP profile tonight`,
+          body: ghostBody,
+          ctaLabel: lookingFor ? `Find ${clipPhrase(lookingFor, 26)} on LINKUP` : 'Brush off the cobwebs',
+          ctaUrl: lookingFor ? '/linky?comeback=7d' : '/feed',
           pushTitle: 'Cobwebs on your LINKUP workspace',
           pushBody: `${namePrefix}fresh builders joined your lane — tap to jump back in.`,
         }
       : {
           mood: 'ghost_abandoned',
-          subject: 'LINKUP · Still building? Linky kept your spot warm',
-          headline: `${nameHey}your workspace is still right where you left it`,
-          body: 'Whether you pivoted, shipped quietly, or took a breather, one fresh update puts you right back in front of collaborators on LINKUP.',
+          subject: shortGoal
+            ? `LINKUP · ${subjName}still aiming for "${clipPhrase(shortGoal, 40)}"?`
+            : 'LINKUP · Still building? Linky kept your spot warm',
+          headline: shortProject
+            ? `${nameHey}your ${shortProject} workspace is right where you left it`
+            : `${nameHey}your workspace is still right where you left it`,
+          body: ghostBody,
           ctaLabel: 'Open LINKUP',
           ctaUrl: '/ship?comeback=7d',
           pushTitle: 'Linky kept your spot on LINKUP',
@@ -317,11 +431,15 @@ export function selectExpressivePulse({
   if ((localWeekday === 0 || localWeekday === 6) && !isEveningSlot) {
     return {
       mood: 'weekend_chill',
-      subject: 'LINKUP · Easy weekend builder check-in',
-      headline: `${nameHey}grab a coffee and see what builders are tinkering on`,
-      body: 'Weekends are when the best side-projects and founder conversations spark. Browse fresh builders from Search or jot down one calm weekend note in your Workspace.',
-      ctaLabel: 'Explore weekend builders',
-      ctaUrl: '/feed',
+      subject: shortProject
+        ? `LINKUP · ${subjName}calm weekend check-in on ${shortProject}`
+        : (shortLooking ? `LINKUP · ${subjName}weekend ${clipPhrase(shortLooking, 36)} scout` : 'LINKUP · Easy weekend builder check-in'),
+      headline: shortGoal
+        ? `${nameHey}grab a coffee and pick one calm weekend win toward "${shortGoal}"`
+        : `${nameHey}grab a coffee and see what builders are tinkering on`,
+      body: focusTail || 'Weekends are when the best side-projects and co-founder conversations spark. Browse fresh builders from Search or jot down one calm weekend note in your Workspace.',
+      ctaLabel: lookingFor ? `Scout ${clipPhrase(lookingFor, 26)} matches` : 'Explore weekend builders',
+      ctaUrl: lookingFor ? '/linky' : '/feed',
       pushTitle: 'LINKUP · Weekend coffee check-in',
       pushBody: `${namePrefix}see what builders are tinkering on this weekend.`,
     };
@@ -331,9 +449,13 @@ export function selectExpressivePulse({
   if (localHour >= 20) {
     return {
       mood: 'night_owl',
-      subject: 'LINKUP · Late-night builder check-in from Linky',
-      headline: `${nameHey}quiet hours are where real builders pull ahead`,
-      body: 'Before you close your tabs for the night, log what moved forward today or bookmark one sharp collaborator from LINKUP Search.',
+      subject: shortGoal
+        ? `LINKUP · ${subjName}late-night check-in on "${clipPhrase(shortGoal, 40)}"`
+        : 'LINKUP · Late-night builder check-in from Linky',
+      headline: shortProject
+        ? `${nameHey}before you close ${shortProject} for the night, log today’s win`
+        : `${nameHey}quiet hours are where real builders pull ahead`,
+      body: focusTail || 'Before you close your tabs for the night, log what moved forward today or bookmark one sharp collaborator from LINKUP Search.',
       ctaLabel: 'Log tonight’s progress',
       ctaUrl: '/ship',
       pushTitle: 'LINKUP · Night-owl builder check-in',
@@ -341,12 +463,77 @@ export function selectExpressivePulse({
     };
   }
 
-  // 11. Default energized yellow plugged-in Linky (varied across days & slots!)
+  // 11. Default energized yellow plugged-in Linky — tailored to their exact goals & what they are looking for!
+  if (goal || lookingFor || project) {
+    const personalizedMorning = [
+      {
+        subject: shortGoal
+          ? `LINKUP · ${subjName}today’s 1 move toward "${clipPhrase(shortGoal, 42)}"`
+          : `LINKUP · ${subjName}what moves ${shortProject || 'your build'} forward today?`,
+        headline: shortGoal
+          ? `${nameHey}what’s the #1 step moving${shortProject ? ` ${shortProject}` : ''} closer to "${shortGoal}" today?`
+          : `${nameHey}let’s push ${shortProject || 'your startup'} forward${shortLooking ? ` & find ${shortLooking}` : ''}`,
+        body: focusTail,
+        ctaLabel: openStep ? `Tackle: ${clipPhrase(openStep, 28)}` : (shortProject ? `Advance ${shortProject}` : 'Start today’s move on LINKUP'),
+        ctaUrl: '/builder',
+        pushTitle: shortGoal ? `Today’s move: ${clipPhrase(shortGoal, 36)}` : 'LINKUP · What’s today’s move?',
+        pushBody: `${namePrefix}${shortGoal ? `log 1 concrete step toward "${clipPhrase(shortGoal, 42)}".` : 'plug in for 2 minutes and set today’s builder momentum.'}`,
+      },
+      {
+        subject: shortLooking
+          ? `LINKUP · ${subjName}vetted ${clipPhrase(shortLooking, 38)} builders are active today`
+          : `LINKUP · ${subjName}put ${shortProject || 'your goal'} in front of active co-founders`,
+        headline: shortLooking
+          ? `${nameHey}don’t build${shortProject ? ` ${shortProject}` : ''} alone — scout ${shortLooking} today`
+          : `${nameHey}builders who match "${shortGoal || shortProject}" are active right now`,
+        body: focusTail,
+        ctaLabel: shortLooking ? `Find ${clipPhrase(shortLooking, 26)} matches` : 'Open LINKUP',
+        ctaUrl: shortLooking ? '/linky' : '/feed',
+        pushTitle: shortLooking ? `${clipPhrase(shortLooking, 34)} active on LINKUP` : 'Fresh builders active on LINKUP',
+        pushBody: `${namePrefix}${shortLooking ? `review compatible ${clipPhrase(shortLooking, 34)} profiles today.` : 'see who is shipping in your lane today.'}`,
+      },
+    ];
+
+    const personalizedEvening = [
+      {
+        subject: shortGoal
+          ? `LINKUP · ${subjName}60s check-in on "${clipPhrase(shortGoal, 42)}"`
+          : `LINKUP · ${subjName}put today’s ${shortProject || 'build'} progress on the board`,
+        headline: shortGoal
+          ? `${nameHey}did "${shortGoal}" move an inch forward today?`
+          : `${nameHey}don’t let today’s work${shortProject ? ` on ${shortProject}` : ''} stay invisible`,
+        body: focusTail,
+        ctaLabel: shortProject ? `Log today’s ${clipPhrase(shortProject, 22)} progress` : 'Post a 60-second Ship Log',
+        ctaUrl: '/ship',
+        pushTitle: shortProject ? `Log today’s ${shortProject} win` : 'Put today’s build on LINKUP',
+        pushBody: `${namePrefix}60 seconds in Ship Log turns today’s work into visible co-founder proof.`,
+      },
+      {
+        subject: shortLooking
+          ? `LINKUP · ${subjName}who can cover ${clipPhrase(shortLooking, 36)} with you this week?`
+          : `LINKUP · ${subjName}who could unblock "${clipPhrase(shortGoal || shortProject, 38)}" faster?`,
+        headline: shortLooking
+          ? `${nameHey}let Linky pull ${shortLooking} matches${shortProject ? ` for ${shortProject}` : ''}`
+          : `${nameHey}who could help you hit "${shortGoal || shortProject}" twice as fast?`,
+        body: focusTail,
+        ctaLabel: shortLooking ? `Ask Linky for ${clipPhrase(shortLooking, 22)}` : 'Find a co-founder on LINKUP',
+        ctaUrl: '/linky',
+        pushTitle: 'LINKUP · Tailored co-founder pulse',
+        pushBody: `${namePrefix}${shortLooking ? `let Linky surface ${clipPhrase(shortLooking, 32)} matches.` : 'check new builder matches or log today’s step.'}`,
+      },
+    ];
+
+    return {
+      mood: 'default',
+      ...pick(isEveningSlot ? personalizedEvening : personalizedMorning),
+    };
+  }
+
   const morningOptions = [
     {
       subject: 'LINKUP · What’s the one thing you’re shipping today?',
       headline: `${nameHey}Linky is plugged in — what’s today’s main move?`,
-      body: 'Pick one concrete deliverable today, search for a collaborator right from the homescreen, or check who climbed the Builder League overnight.',
+      body: focusTail || 'Pick one concrete deliverable today, search for a collaborator right from the homescreen, or check who climbed the Builder League overnight.',
       ctaLabel: 'Start today’s move on LINKUP',
       ctaUrl: '/builder',
       pushTitle: 'LINKUP · What’s today’s move?',
@@ -355,7 +542,7 @@ export function selectExpressivePulse({
     {
       subject: 'LINKUP · Fresh founders & builders are active right now',
       headline: `${nameHey}new proof just hit the LINKUP feed`,
-      body: 'Builders who show up daily get spotted first for paid projects, co-founder roles, and warm intros. Jump in and make one visible move.',
+      body: focusTail || 'Builders who show up daily get spotted first for paid projects, co-founder roles, and warm intros. Jump in and make one visible move.',
       ctaLabel: 'Open LINKUP',
       ctaUrl: '/feed',
       pushTitle: 'Fresh builders active on LINKUP',
@@ -367,7 +554,7 @@ export function selectExpressivePulse({
     {
       subject: 'LINKUP · Put today’s progress on the board in 60 seconds',
       headline: `${nameHey}don’t let today’s work stay invisible`,
-      body: 'Even a two-line Ship Log update compounds your proof on LINKUP and keeps your Builder League momentum climbing.',
+      body: focusTail || 'Even a two-line Ship Log update compounds your proof on LINKUP and keeps your Builder League momentum climbing.',
       ctaLabel: 'Post a 60-second Ship Log',
       ctaUrl: '/ship',
       pushTitle: 'Put today’s build on LINKUP',
@@ -376,7 +563,7 @@ export function selectExpressivePulse({
     {
       subject: 'LINKUP · Quick afternoon pulse from Linky ⚡',
       headline: `${nameHey}who could unblock your build faster this week?`,
-      body: 'Use the homescreen search or ask Linky for a cited builder match — the right engineer, designer, or founder might already be online.',
+      body: focusTail || 'Use the homescreen search or ask Linky for a cited builder match — the right engineer, designer, or founder might already be online.',
       ctaLabel: 'Find a collaborator on LINKUP',
       ctaUrl: '/linky',
       pushTitle: 'LINKUP · Afternoon builder pulse',
@@ -432,14 +619,16 @@ export async function runDailyRetentionPulsePage(
     const u = userDoc.data() || {};
     if (u.deleted || u.banned) continue;
 
-    const [stateSnap, contribSnap, emailPrefSnap] = await Promise.all([
+    const [stateSnap, contribSnap, emailPrefSnap, ventureSnap] = await Promise.all([
       db.collection('builderStates').doc(uid).get().catch(() => null),
       db.collection('builderContributions').doc(uid).get().catch(() => null),
       db.collection('emailPrefs').doc(uid).get().catch(() => null),
+      db.collection('ventureProfiles').doc(uid).get().catch(() => null),
     ]);
     const state = stateSnap?.exists ? stateSnap.data() || {} : {};
     const contrib = contribSnap?.exists ? contribSnap.data() || {} : {};
     const emailPref = emailPrefSnap?.exists ? emailPrefSnap.data() || {} : {};
+    const venture = ventureSnap?.exists ? ventureSnap.data() || {} : {};
     const prefs = state.prefs || {};
     const tz = prefs.timezone || u.timezone || 'UTC';
     const { localDateKey, localHour, localMinute, localWeekday } = localClock(nowMs, tz);
@@ -477,9 +666,10 @@ export async function runDailyRetentionPulsePage(
     const isLeagueTop3 = Number(u.leagueRank || 0) >= 1 && Number(u.leagueRank || 0) <= 3;
     const rawName = String(u.displayName || u.fullName || u.name || '').trim();
     const firstName = rawName ? rawName.split(/\s+/)[0].slice(0, 24) : '';
+    const personal = buildPersonalBuilderBrief({ user: u, state, venture });
 
     const copy = selectExpressivePulse({
-      firstName,
+      firstName: personal.firstName || firstName,
       slot: due.slot,
       localHour,
       localWeekday,
@@ -489,6 +679,7 @@ export async function runDailyRetentionPulsePage(
       unreadCount,
       isLeagueTop3,
       seedByte: due.seedByte,
+      personal,
     });
 
     // Claim slot with both cron fire time and jittered scheduled delivery timestamp
@@ -575,6 +766,7 @@ export async function runDailyRetentionPulsePage(
           ctaLabel: copy.ctaLabel,
           ctaUrl: copy.ctaUrl,
           daysSinceActive,
+          personal,
         },
         { ...emailOpts, now: nowMs },
       ).catch(() => ({ sent: false }));

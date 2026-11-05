@@ -10,6 +10,7 @@ import {
   EMAIL_MOODS,
   LINKY_AVATAR_URL,
   buildLinkyEmailBodies,
+  buildPersonalBuilderBrief,
   comebackEmailMilestone,
   sanitizeEmailCopy,
   sendComebackEmail,
@@ -620,3 +621,101 @@ test('Part C: emails render full-width uncropped mood heroes, LINKUP cat profile
   assert.equal(duplicateAddrCollision.sent, false);
   assert.equal(duplicateAddrCollision.reason, 'daily_user_email_limit');
 });
+
+test('Part D: emails are hyper-personalized to each recipient’s specific project, goals, and what they are looking for', async () => {
+  const brief = buildPersonalBuilderBrief({
+    user: {
+      displayName: 'Tariro Moyo',
+      occupation: 'AI Systems Engineer',
+      skills: ['TypeScript', 'PyTorch', 'Postgres'],
+      city: 'Harare',
+      lookingFor: ['Growth & GTM Co-Founder', 'B2B Fintech Sales'],
+    },
+    state: {
+      context: {
+        project: 'PayPulse Africa',
+        goal: 'Onboard first 30 paying merchants before demo day',
+      },
+      plan: [
+        { id: 'p1', title: 'Done item', done: true },
+        { id: 'p2', title: 'Ship automated WhatsApp invoice reminders', done: false },
+      ],
+    },
+    venture: {
+      githubRepo: 'tariro/paypulse',
+      codeDiagnosis: { missingRoles: ['Growth, Revenue & GTM Co-Founder'] },
+    },
+  });
+
+  assert.equal(brief.firstName, 'Tariro');
+  assert.equal(brief.projectLabel, 'PayPulse Africa');
+  assert.equal(brief.goalLabel, 'Onboard first 30 paying merchants before demo day');
+  assert.equal(brief.openStep, 'Ship automated WhatsApp invoice reminders');
+  assert.match(brief.lookingForLabel, /Growth & GTM Co-Founder/);
+  assert.equal(brief.hasPersonalSignals, true);
+
+  // Expressive daily pulse weaves project, goal, and lookingFor into subject, headline, body & CTA
+  const morningPulse = selectExpressivePulse({
+    firstName: brief.firstName,
+    slot: 'pulse1',
+    localHour: 9,
+    localWeekday: 3,
+    seedByte: 0,
+    personal: brief,
+  });
+  assert.match(morningPulse.subject, /Tariro/);
+  assert.match(morningPulse.headline, /PayPulse Africa|Onboard first 30 paying merchants/);
+  assert.match(morningPulse.body, /PayPulse Africa/);
+  assert.match(morningPulse.body, /Onboard first 30 paying merchants/);
+  assert.match(morningPulse.body, /Growth & GTM Co-Founder/);
+
+  // Comeback email automatically pulls user + builderState + ventureProfile and renders tailored focus card
+  const db = memoryDb();
+  await db.collection('users').doc('tariro').set({
+    email: 'tariro@example.com',
+    displayName: 'Tariro Moyo',
+    city: 'Harare',
+    lookingFor: ['Growth & GTM Co-Founder', 'Seed Design Partner'],
+  });
+  await db.collection('builderStates').doc('tariro').set({
+    context: {
+      project: 'PayPulse Africa',
+      goal: 'Onboard first 30 paying merchants before demo day',
+    },
+    plan: [{ id: '1', title: 'Launch self-serve onboarding', done: false }],
+  });
+
+  const captured = [];
+  const res = await sendComebackEmail(
+    db,
+    'tariro',
+    {
+      daysSinceActive: 4,
+      lastActiveAt: Date.parse('2026-10-28T10:00:00Z'),
+      prefs: { welcomeBack: true },
+    },
+    {
+      env: { RESEND_API_KEY: 're_live_mock', EMAIL_FROM: 'LINKUP <notifications@linkupbuild.com>' },
+      now: Date.parse('2026-11-01T10:00:00Z'),
+      fetcher: async (_url, init) => {
+        captured.push(JSON.parse(init.body));
+        return { ok: true, status: 200, json: async () => ({ id: 're_pers_1' }) };
+      },
+    },
+  );
+  assert.equal(res.sent, true);
+  assert.equal(captured.length, 1);
+  assert.match(captured[0].subject, /Tariro/);
+  assert.match(captured[0].subject, /PayPulse Africa|Onboard first 30/);
+  assert.match(captured[0].html, /Tailored to Tariro&rsquo;s Goals &amp; Search/);
+  assert.match(captured[0].html, /PayPulse Africa/);
+  assert.match(captured[0].html, /Onboard first 30 paying merchants before demo day/);
+  assert.match(captured[0].html, /Launch self-serve onboarding/);
+  assert.match(captured[0].html, /Growth &amp; GTM Co-Founder/);
+  assert.doesNotMatch(captured[0].html, /display:flex/);
+  assert.doesNotMatch(captured[0].html, /duolingo/i);
+  assert.match(captured[0].text, /Building: PayPulse Africa/);
+  assert.match(captured[0].text, /Your Goal: Onboard first 30 paying merchants before demo day/);
+  assert.match(captured[0].text, /Looking For: Growth & GTM Co-Founder & Seed Design Partner/);
+});
+

@@ -132,6 +132,181 @@ export function sanitizeEmailCopy(raw) {
   return clean.replace(/\s{2,}/g, ' ').trim();
 }
 
+function cleanSnippet(value = '', maxLen = 84) {
+  const cleaned = sanitizeEmailCopy(String(value || ''))
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/^[-•*:\s]+/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  if (cleaned.length <= maxLen) return cleaned;
+  const sliced = cleaned.slice(0, maxLen - 1);
+  const lastSpace = sliced.lastIndexOf(' ');
+  return `${(lastSpace > 24 ? sliced.slice(0, lastSpace) : sliced).replace(/[.,;:\s]+$/, '')}…`;
+}
+
+function joinHumanList(items = [], maxItems = 3) {
+  const list = (Array.isArray(items) ? items : [items])
+    .map((item) => {
+      if (!item) return '';
+      if (typeof item === 'string') return cleanSnippet(item, 44);
+      if (typeof item === 'object') return cleanSnippet(item.title || item.label || item.name || item.role || '', 44);
+      return '';
+    })
+    .filter(Boolean);
+  const unique = [...new Set(list)].slice(0, maxItems);
+  if (unique.length === 0) return '';
+  if (unique.length === 1) return unique[0];
+  if (unique.length === 2) return `${unique[0]} & ${unique[1]}`;
+  return `${unique.slice(0, -1).join(', ')} & ${unique[unique.length - 1]}`;
+}
+
+function extractGoalFromBio(bio = '') {
+  const raw = String(bio || '').replace(/[\r\n]+/g, '. ').trim();
+  if (!raw) return '';
+  const sentences = raw.split(/(?<=[.!?])\s+/);
+  for (const s of sentences) {
+    if (/\b(goal|building|launching|working on|aiming|shipping|scaling|creating|solving)\b/i.test(s)) {
+      return cleanSnippet(s.replace(/[.!?]+$/, ''), 76);
+    }
+  }
+  return '';
+}
+
+export function buildPersonalBuilderBrief({ user = {}, state = {}, venture = {} } = {}) {
+  const u = user && typeof user === 'object' ? user : {};
+  const s = state && typeof state === 'object' ? state : {};
+  const v = venture && typeof venture === 'object' ? venture : {};
+  const ctx = s.context && typeof s.context === 'object' ? s.context : {};
+
+  const rawName = String(u.displayName || u.fullName || u.name || '').trim();
+  const firstName = rawName
+    ? rawName.split(/\s+/)[0].replace(/[^A-Za-z0-9'-]/g, '').slice(0, 24)
+    : '';
+
+  const firstProject = Array.isArray(u.projects) && u.projects[0] && typeof u.projects[0] === 'object'
+    ? u.projects[0]
+    : null;
+  const repoShort = v.githubRepo
+    ? String(v.githubRepo).trim().split('/').filter(Boolean).pop() || String(v.githubRepo).trim()
+    : '';
+
+  const projectLabel = cleanSnippet(
+    ctx.project
+      || firstProject?.title
+      || firstProject?.name
+      || u.startupName
+      || u.company
+      || repoShort,
+    56,
+  );
+
+  const openPlanTitle = Array.isArray(s.plan)
+    ? cleanSnippet(s.plan.find((p) => p && !p.done && String(p.title || '').trim())?.title || '', 72)
+    : '';
+  const openFollowupTitle = Array.isArray(s.followups)
+    ? cleanSnippet(s.followups.find((f) => f && f.status !== 'done' && String(f.title || '').trim())?.title || '', 72)
+    : '';
+  const userGoalField = Array.isArray(u.goals) ? joinHumanList(u.goals, 2) : (u.goal || u.goals || '');
+
+  const goalLabel = cleanSnippet(
+    ctx.goal
+      || userGoalField
+      || firstProject?.goal
+      || openPlanTitle
+      || openFollowupTitle
+      || firstProject?.description
+      || extractGoalFromBio(u.bio),
+    80,
+  );
+
+  const openStep = openPlanTitle && openPlanTitle.toLowerCase() !== goalLabel.toLowerCase()
+    ? openPlanTitle
+    : (openFollowupTitle && openFollowupTitle.toLowerCase() !== goalLabel.toLowerCase() ? openFollowupTitle : '');
+
+  const lookingFromProfile = Array.isArray(u.lookingFor)
+    ? joinHumanList(u.lookingFor, 3)
+    : cleanSnippet(u.lookingFor || '', 72);
+  const seekingFallback = Array.isArray(u.collaborationInterests)
+    ? joinHumanList(u.collaborationInterests, 3)
+    : cleanSnippet(u.collaborationInterests || u.seeking || '', 72);
+  const missingVentureRoles = Array.isArray(v?.codeDiagnosis?.missingRoles)
+    ? joinHumanList(v.codeDiagnosis.missingRoles, 2)
+    : '';
+  const intentFallback = ctx.intent === 'cofounder'
+    ? 'a Startup Co-Founder'
+    : ctx.intent === 'hire'
+      ? 'Founding Team Collaborators'
+      : '';
+
+  const lookingForLabel = cleanSnippet(
+    lookingFromProfile
+      || cleanSnippet(ctx.needs || '', 72)
+      || seekingFallback
+      || missingVentureRoles
+      || intentFallback,
+    76,
+  );
+
+  const roleLabel = cleanSnippet(u.occupation || u.headline || u.role || '', 48);
+  const skillsLabel = Array.isArray(u.skills) ? joinHumanList(u.skills, 3) : cleanSnippet(u.skills || '', 48);
+  const cityLabel = cleanSnippet(u.city || u.location || '', 36);
+
+  const hasPersonalSignals = Boolean(
+    projectLabel || goalLabel || lookingForLabel || openStep || roleLabel || skillsLabel,
+  );
+
+  return {
+    firstName,
+    projectLabel,
+    goalLabel,
+    lookingForLabel,
+    openStep,
+    roleLabel,
+    skillsLabel,
+    cityLabel,
+    hasPersonalSignals,
+  };
+}
+
+export async function loadPersonalBuilderBrief(db, uid, { email = '' } = {}) {
+  if (!db) return buildPersonalBuilderBrief();
+  let resolvedUid = uid && uid !== 'linky-test' ? String(uid) : '';
+  let userDoc = null;
+
+  if (resolvedUid) {
+    const uSnap = await db.collection('users').doc(resolvedUid).get().catch(() => null);
+    if (uSnap?.exists) userDoc = uSnap.data() || {};
+  }
+  if (!userDoc && email && typeof db.collection === 'function') {
+    try {
+      const usersCol = db.collection('users');
+      if (typeof usersCol.where === 'function') {
+        const qSnap = await usersCol.where('email', '==', String(email).trim()).limit(1).get();
+        const matchDoc = qSnap?.docs?.[0];
+        if (matchDoc?.exists) {
+          resolvedUid = matchDoc.id;
+          userDoc = matchDoc.data() || {};
+        }
+      }
+    } catch {}
+  }
+  if (!resolvedUid && !userDoc) return buildPersonalBuilderBrief();
+
+  const [stateSnap, ventureSnap] = resolvedUid
+    ? await Promise.all([
+        db.collection('builderStates').doc(resolvedUid).get().catch(() => null),
+        db.collection('ventureProfiles').doc(resolvedUid).get().catch(() => null),
+      ])
+    : [null, null];
+
+  return buildPersonalBuilderBrief({
+    user: userDoc || {},
+    state: stateSnap?.exists ? stateSnap.data() || {} : {},
+    venture: ventureSnap?.exists ? ventureSnap.data() || {} : {},
+  });
+}
+
 export function resolveEmailMood({ mood = '', receiptKey = '', subject = '', headline = '', badgeLabel = '', daysSinceActive = null } = {}) {
   if (mood && EMAIL_MOODS[mood]) return EMAIL_MOODS[mood];
   const days = Number(daysSinceActive);
@@ -273,6 +448,7 @@ export function buildLinkyEmailBodies({
   receiptKey = '',
   subject = '',
   daysSinceActive = null,
+  personal = null,
 }) {
   const cleanHeadline = sanitizeEmailCopy(headline);
   const cleanBody = sanitizeEmailCopy(body);
@@ -290,7 +466,49 @@ export function buildLinkyEmailBodies({
   const avatarUrl = `${LINKY_AVATAR_URL}?v=2`;
   const heroUrl = `${APP_BASE}/icons/${moodSpec.heroFile}?v=2`;
 
-  const textBody = `${cleanHeadline}\n[${moodSpec.pillText}]\n\n${cleanBody}\n\n${cleanCta}: ${fullUrl}\n\n— Linky, your LINKUP builder companion\n\n---\nUnsubscribe from LINKUP emails: ${unsubUrl}`;
+  const p = personal && typeof personal === 'object' ? personal : null;
+  const personalRows = [];
+  if (p) {
+    if (p.projectLabel) {
+      personalRows.push(['Building', p.projectLabel]);
+    } else if (p.roleLabel) {
+      personalRows.push([
+        'Your Lane',
+        p.skillsLabel ? `${p.roleLabel} (${p.skillsLabel})` : p.roleLabel,
+      ]);
+    }
+    if (p.goalLabel) personalRows.push(['Your Goal', p.goalLabel]);
+    if (p.openStep) personalRows.push(['Next Step', p.openStep]);
+    if (p.lookingForLabel) personalRows.push(['Looking For', p.lookingForLabel]);
+  }
+
+  const headerSubline = p?.firstName
+    ? `Tailored check-in for ${sanitizeEmailCopy(p.firstName)}${p.cityLabel ? ` · ${sanitizeEmailCopy(p.cityLabel)}` : ''}`
+    : (personalRows.length > 0 ? 'Tailored to your goals & co-founder search' : 'Builder network & daily momentum');
+
+  const personalTextBlock = personalRows.length > 0
+    ? `\n\n--- Tailored to ${p?.firstName ? `${sanitizeEmailCopy(p.firstName)}'s` : 'Your'} Focus ---\n${personalRows.map(([k, v]) => `• ${k}: ${sanitizeEmailCopy(v)}`).join('\n')}`
+    : '';
+
+  const personalHtmlBlock = personalRows.length > 0
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FCFBF3;border:1px solid #E7E1BF;border-radius:14px;margin:0 0 20px 0;">
+          <tr>
+            <td style="padding:13px 15px;">
+              <div style="font-size:11px;font-weight:900;letter-spacing:0.7px;text-transform:uppercase;color:#6E5B00;margin:0 0 8px 0;">
+                Tailored to ${p?.firstName ? `${esc(sanitizeEmailCopy(p.firstName))}&rsquo;s` : 'Your'} Goals &amp; Search
+              </div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                ${personalRows.map(([label, val], idx) => `<tr>
+                  <td valign="top" width="96" style="font-size:12px;font-weight:800;color:#575B60;padding:${idx === 0 ? '0' : '6px'} 8px 0 0;white-space:nowrap;">${esc(label)}:</td>
+                  <td valign="top" style="font-size:13px;line-height:1.45;font-weight:700;color:#0A0B0D;padding:${idx === 0 ? '0' : '6px'} 0 0 0;">${esc(sanitizeEmailCopy(val))}</td>
+                </tr>`).join('')}
+              </table>
+            </td>
+          </tr>
+        </table>`
+    : '';
+
+  const textBody = `${cleanHeadline}\n[${moodSpec.pillText}]\n\n${cleanBody}${personalTextBlock}\n\n${cleanCta}: ${fullUrl}\n\n— Linky, your LINKUP builder companion\n\n---\nUnsubscribe from LINKUP emails: ${unsubUrl}`;
 
   const htmlBody = `<!doctype html>
 <html>
@@ -311,7 +529,7 @@ export function buildLinkyEmailBodies({
               <div style="font-weight:900;font-size:16px;line-height:1.2;color:#0A0B0D;">
                 Linky <span style="display:inline-block;background:#FBE618;color:#0A0B0D;font-weight:900;font-size:11px;letter-spacing:0.6px;padding:2px 7px;border-radius:6px;margin-left:4px;vertical-align:middle;">LINKUP</span>
               </div>
-              <div style="font-size:12px;color:#5E636B;margin-top:3px;">Builder network &amp; daily momentum</div>
+              <div style="font-size:12px;color:#5E636B;margin-top:3px;">${esc(headerSubline)}</div>
             </td>
           </tr>
         </table>
@@ -330,7 +548,8 @@ export function buildLinkyEmailBodies({
     <tr>
       <td style="padding:20px 22px 24px 22px;">
         <h2 style="font-size:21px;line-height:1.32;font-weight:900;color:#0A0B0D;margin:0 0 12px 0;">${esc(cleanHeadline)}</h2>
-        <p style="font-size:15px;line-height:1.62;color:#353940;margin:0 0 22px 0;">${esc(cleanBody)}</p>
+        <p style="font-size:15px;line-height:1.62;color:#353940;margin:0 0 20px 0;">${esc(cleanBody)}</p>
+        ${personalHtmlBlock}
         <table role="presentation" cellpadding="0" cellspacing="0" border="0">
           <tr>
             <td align="center" bgcolor="#FBE618" style="border-radius:14px;">
@@ -498,6 +717,7 @@ export async function sendHighSignalEmail(db, uid, {
   daysSinceActive = null,
   quotaBucket = 'transactional',
   quotaCap = DAILY_EMAIL_HARD_CAP,
+  personal = null,
 } = {}, { fetcher = fetch, env = process.env, now = Date.now() } = {}) {
   const status = emailStatus(env);
   if (!status.available || !db || !uid) return { sent: false, reason: status.reason || 'disabled' };
@@ -530,11 +750,23 @@ export async function sendHighSignalEmail(db, uid, {
   const quota = await reserveDailyEmailQuota(db, quotaBucket, quotaCap, nowMs);
   if (!quota.allowed) return { sent: false, reason: quota.reason || 'daily_quota_reached' };
 
+  const resolvedPersonal = personal && typeof personal === 'object'
+    ? personal
+    : await loadPersonalBuilderBrief(db, uid, { email: to });
+
+  let finalBody = body;
+  if (!finalBody && resolvedPersonal?.hasPersonalSignals) {
+    const parts = [];
+    if (resolvedPersonal.goalLabel) parts.push(`Your goal on LINKUP is "${resolvedPersonal.goalLabel}".`);
+    if (resolvedPersonal.lookingForLabel) parts.push(`Builders matching what you're looking for (${resolvedPersonal.lookingForLabel}) are active right now.`);
+    finalBody = parts.join(' ');
+  }
+
   const fullUrl = ctaUrl.startsWith('http') ? ctaUrl : `${APP_BASE}${ctaUrl.startsWith('/') ? ctaUrl : '/' + ctaUrl}`;
   const { unsubUrl, textBody, htmlBody, mood: resolvedMood } = buildLinkyEmailBodies({
     uid,
     headline,
-    body,
+    body: finalBody,
     ctaLabel,
     fullUrl,
     badgeLabel,
@@ -542,6 +774,7 @@ export async function sendHighSignalEmail(db, uid, {
     receiptKey: rKey,
     subject,
     daysSinceActive,
+    personal: resolvedPersonal,
   });
 
   try {
@@ -594,6 +827,7 @@ export async function sendRetentionPulseEmail(db, uid, {
   ctaLabel = 'Open LINKUP',
   ctaUrl = '/ship?pulse=email',
   daysSinceActive = 0,
+  personal = null,
 } = {}, options = {}) {
   const days = Number(daysSinceActive);
   if (Number.isFinite(days) && days > COMEBACK_SUNSET_DAYS) {
@@ -613,26 +847,77 @@ export async function sendRetentionPulseEmail(db, uid, {
     ctaUrl,
     mood,
     daysSinceActive,
+    personal,
     badgeLabel: 'Daily check-in from Linky on LINKUP',
     quotaBucket: 'daily_pulse',
     quotaCap: DAILY_PULSE_EMAIL_CAP,
   }, options);
 }
 
-export async function sendComebackEmail(db, uid, {
-  daysSinceActive = 0,
-  lastActiveAt = 0,
-  headline = 'Your LinkUp seat is warm',
-  body = 'Builders in your lane posted new progress while you were away. Jump back in when you have two minutes.',
-  ctaLabel = 'Plug back into LINKUP',
-  ctaUrl = '/ship?comeback=email',
-  mood = '',
-  prefs = {},
-} = {}, options = {}) {
+const DEFAULT_COMEBACK_HEADLINE = 'Your LinkUp seat is warm';
+const DEFAULT_COMEBACK_BODY = 'Builders in your lane posted new progress while you were away. Jump back in when you have two minutes.';
+
+export async function sendComebackEmail(db, uid, rawInput = {}, options = {}) {
+  const {
+    daysSinceActive = 0,
+    lastActiveAt = 0,
+    headline = DEFAULT_COMEBACK_HEADLINE,
+    body = DEFAULT_COMEBACK_BODY,
+    ctaLabel = 'Plug back into LINKUP',
+    ctaUrl = '/ship?comeback=email',
+    mood = '',
+    prefs = {},
+    personal = null,
+  } = rawInput || {};
   if (prefs && prefs.welcomeBack === false) return { sent: false, reason: 'welcome_back_opted_out' };
   const milestone = comebackEmailMilestone(daysSinceActive);
   if (!milestone) return { sent: false, reason: 'not_due' };
   if (milestone === 'sunset') return { sent: false, reason: 'sunset_inactive' };
+
+  const resolvedPersonal = personal && typeof personal === 'object'
+    ? personal
+    : await loadPersonalBuilderBrief(db, uid);
+
+  const callerPassedHeadline = rawInput && Object.prototype.hasOwnProperty.call(rawInput, 'headline');
+  const callerPassedBody = rawInput && Object.prototype.hasOwnProperty.call(rawInput, 'body');
+
+  let finalHeadline = headline;
+  let finalBody = body;
+  let finalCta = ctaLabel;
+  let finalUrl = ctaUrl;
+
+  if (resolvedPersonal?.hasPersonalSignals) {
+    const greet = resolvedPersonal.firstName ? `${resolvedPersonal.firstName}, ` : '';
+    if (!callerPassedHeadline) {
+      if (resolvedPersonal.projectLabel && resolvedPersonal.goalLabel) {
+        finalHeadline = `${greet}${resolvedPersonal.projectLabel} & "${cleanSnippet(resolvedPersonal.goalLabel, 44)}" are waiting on you`;
+      } else if (resolvedPersonal.goalLabel) {
+        finalHeadline = `${greet}ready to move "${cleanSnippet(resolvedPersonal.goalLabel, 50)}" forward?`;
+      } else if (resolvedPersonal.lookingForLabel) {
+        finalHeadline = `${greet}vetted ${cleanSnippet(resolvedPersonal.lookingForLabel, 46)} matches are active`;
+      }
+    }
+    if (!callerPassedBody || body === DEFAULT_COMEBACK_BODY) {
+      const sentences = [];
+      if (resolvedPersonal.projectLabel && resolvedPersonal.goalLabel) {
+        sentences.push(`You set out to push ${resolvedPersonal.projectLabel} toward "${resolvedPersonal.goalLabel}" — don't let a quiet stretch stall that momentum.`);
+      } else if (resolvedPersonal.goalLabel) {
+        sentences.push(`Your personalized goal on LINKUP ("${resolvedPersonal.goalLabel}") is still waiting for your next move.`);
+      } else if (resolvedPersonal.projectLabel) {
+        sentences.push(`${resolvedPersonal.projectLabel} builds fastest when you don't carry every week in isolation.`);
+      }
+      if (resolvedPersonal.lookingForLabel) {
+        sentences.push(`Builders matching what you're looking for (${resolvedPersonal.lookingForLabel}) shipped updates while you were away — jump in for two minutes to review matches or log one step.`);
+        if (ctaLabel === 'Plug back into LINKUP') {
+          finalCta = `See ${cleanSnippet(resolvedPersonal.lookingForLabel, 30)} matches`;
+          finalUrl = '/linky?comeback=email';
+        }
+      } else {
+        sentences.push('Drop a quick 60-second update so Linky and compatible co-founders know what you need next.');
+      }
+      if (sentences.length > 0) finalBody = sentences.join(' ');
+    }
+  }
 
   const cycleTag = Number(lastActiveAt) > 0
     ? new Date(Number(lastActiveAt)).toISOString().slice(0, 10)
@@ -647,43 +932,91 @@ export async function sendComebackEmail(db, uid, {
   return sendHighSignalEmail(db, uid, {
     receiptKey,
     throttleMs: 0,
-    subject: `${subjectPrefix}${headline}`.slice(0, 120),
-    headline,
-    body: `${body}${finalFooter}`,
-    ctaLabel,
-    ctaUrl,
+    subject: `${subjectPrefix}${finalHeadline}`.slice(0, 120),
+    headline: finalHeadline,
+    body: `${finalBody}${finalFooter}`,
+    ctaLabel: finalCta,
+    ctaUrl: finalUrl,
     mood,
     daysSinceActive,
+    personal: resolvedPersonal,
     badgeLabel: 'Linky welcome-back invitation',
     quotaBucket: 'comeback',
     quotaCap: DAILY_COMEBACK_EMAIL_CAP,
   }, options);
 }
 
-export async function sendLinkyDirectEmail(db, {
-  to = '',
-  uid = 'linky-test',
-  mood = 'default',
-  subject = 'LINKUP · Linky is plugged in and waiting for you ⚡',
-  headline = 'Hey builder — Linky is plugged in with a fresh look!',
-  body = 'Builders in your lane are posting progress, opening warm intros, and climbing the Builder League right now. Plug in for two minutes and put today’s move on the board.',
-  ctaLabel = 'Open LINKUP',
-  ctaUrl = '/ship',
-} = {}, { fetcher = fetch, env = process.env } = {}) {
+const DEFAULT_DIRECT_SUBJECT = 'LINKUP · Linky is plugged in and waiting for you ⚡';
+const DEFAULT_DIRECT_HEADLINE = 'Hey builder — Linky is plugged in with a fresh look!';
+const DEFAULT_DIRECT_BODY = 'Builders in your lane are posting progress, opening warm intros, and climbing the Builder League right now. Plug in for two minutes and put today’s move on the board.';
+
+export async function sendLinkyDirectEmail(db, rawInput = {}, { fetcher = fetch, env = process.env } = {}) {
+  const {
+    to = '',
+    uid = 'linky-test',
+    mood = 'default',
+    subject = DEFAULT_DIRECT_SUBJECT,
+    headline = DEFAULT_DIRECT_HEADLINE,
+    body = DEFAULT_DIRECT_BODY,
+    ctaLabel = 'Open LINKUP',
+    ctaUrl = '/ship',
+    personal = null,
+  } = rawInput || {};
   const status = emailStatus(env);
   const cleanTo = String(to || '').trim();
   if (!status.available) return { sent: false, reason: status.reason || 'disabled' };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanTo)) return { sent: false, reason: 'invalid_email' };
 
+  const resolvedPersonal = personal && typeof personal === 'object'
+    ? personal
+    : await loadPersonalBuilderBrief(db, uid, { email: cleanTo });
+
+  const callerPassedHeadline = rawInput && Object.prototype.hasOwnProperty.call(rawInput, 'headline');
+  const callerPassedSubject = rawInput && Object.prototype.hasOwnProperty.call(rawInput, 'subject');
+  const callerPassedBody = rawInput && Object.prototype.hasOwnProperty.call(rawInput, 'body');
+
+  let finalSubject = subject;
+  let finalHeadline = headline;
+  let finalBody = body;
+
+  if (resolvedPersonal?.hasPersonalSignals) {
+    const greet = resolvedPersonal.firstName ? `Hey ${resolvedPersonal.firstName}` : 'Hey builder';
+    if (!callerPassedHeadline && headline === DEFAULT_DIRECT_HEADLINE) {
+      if (resolvedPersonal.goalLabel) {
+        finalHeadline = `${greet} — let’s move "${cleanSnippet(resolvedPersonal.goalLabel, 50)}" forward today`;
+      } else if (resolvedPersonal.lookingForLabel) {
+        finalHeadline = `${greet} — vetted ${cleanSnippet(resolvedPersonal.lookingForLabel, 44)} matches are active`;
+      }
+    }
+    if (!callerPassedSubject && subject === DEFAULT_DIRECT_SUBJECT) {
+      finalSubject = `LINKUP · ${finalHeadline}`.slice(0, 118);
+    }
+    if (!callerPassedBody && body === DEFAULT_DIRECT_BODY) {
+      const parts = [];
+      if (resolvedPersonal.projectLabel && resolvedPersonal.goalLabel) {
+        parts.push(`You’re building ${resolvedPersonal.projectLabel} with the goal "${resolvedPersonal.goalLabel}".`);
+      } else if (resolvedPersonal.goalLabel) {
+        parts.push(`Your current goal on LINKUP is "${resolvedPersonal.goalLabel}".`);
+      }
+      if (resolvedPersonal.lookingForLabel) {
+        parts.push(`You’re also looking for ${resolvedPersonal.lookingForLabel} — don’t build alone when compatible co-founders and collaborators are active right now.`);
+      } else {
+        parts.push('Log one concrete move today so Linky can keep sharpening your co-founder & builder matches.');
+      }
+      finalBody = parts.join(' ');
+    }
+  }
+
   const fullUrl = ctaUrl.startsWith('http') ? ctaUrl : `${APP_BASE}${ctaUrl.startsWith('/') ? ctaUrl : '/' + ctaUrl}`;
   const { unsubUrl, textBody, htmlBody, mood: resolvedMood } = buildLinkyEmailBodies({
     uid,
-    headline,
-    body,
+    headline: finalHeadline,
+    body: finalBody,
     ctaLabel,
     fullUrl,
     mood,
-    subject,
+    subject: finalSubject,
+    personal: resolvedPersonal,
     badgeLabel: 'From Linky on LINKUP',
   });
 
@@ -694,7 +1027,7 @@ export async function sendLinkyDirectEmail(db, {
       from: status.from,
       allowOnboardingFallback: true,
       to: cleanTo,
-      subject,
+      subject: finalSubject,
       textBody,
       htmlBody,
       unsubUrl,
