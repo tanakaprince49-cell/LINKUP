@@ -329,7 +329,7 @@ function TabNavigator({ navigation }: any) {
 
   return (
     <Tab.Navigator
-      initialRouteName="LinkyHome"
+      initialRouteName="Dashboard"
       detachInactiveScreens={Platform.OS !== 'web'}
       screenOptions={({ route }) => ({
         lazy: true,
