@@ -1,15 +1,15 @@
-// Real ShipLog + ContributionCalendar UI, isolated auth/API/icons only.
+// Real ShipLog UI, isolated auth/API/icons only.
 // No production calls, AI provider use or writes to real accounts.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),http=require('node:http'),assert=require('node:assert/strict');
 const tools=process.env.BUILDER_BROWSER_TOOLS||path.resolve('node_modules');
 const {build}=require(path.join(tools,'esbuild')),{chromium}=require(path.join(tools,'playwright'));
 const mobile=path.resolve(__dirname,'../mobile'),scratch=fs.mkdtempSync(path.join(os.tmpdir(),'linkup-contribution-'));
-const source=`import React from 'react';import {createRoot} from 'react-dom/client';import Screen from '${mobile}/src/screens/ShipLogScreen.tsx';import Calendar from '${mobile}/src/components/ContributionCalendar.tsx';import {contributionInsight} from '${path.resolve(__dirname,'../shared/contributions.js')}';
+const source=`import React from 'react';import {createRoot} from 'react-dom/client';import Screen from '${mobile}/src/screens/ShipLogScreen.tsx';import {contributionInsight} from '${path.resolve(__dirname,'../shared/contributions.js')}';
 import {habitSnapshot} from '${path.resolve(__dirname,'../shared/build-habit.js')}';
 window.calls=[];const day=new Date().toISOString().slice(0,10),state={days:[],points:0,totalUpdates:0,today:day,updates:[],shipLogs:[]};
 window.builderCall=async(op,input={})=>{window.calls.push({op,input});if(op==='habit')return habitSnapshot(state,Date.now());if(op==='contributions'){if(input.targetUid==='blocked')throw Error('This contribution calendar is not available.');return structuredClone(state);}
 if(op==='shipUpdate'){if(state.updates.length)return {...state.updates[0],days:state.days,contributionPoints:10,totalUpdates:1,shipLogs:state.shipLogs,replayed:true};const entry={...input,id:'recorded-update',day,createdAt:new Date().toISOString(),pointsAwarded:10,insight:contributionInsight(input.text)};Object.assign(state,{days:[day],points:10,totalUpdates:1,updates:[entry],shipLogs:[entry]});return {...entry,days:[day],contributionPoints:10,totalUpdates:1,shipLogs:[entry],replayed:false};}throw Error('Unexpected test action: '+op);};
-const root=createRoot(document.getElementById('root'));root.render(<Screen navigation={{goBack(){},navigate(name,params){window.navigationResult={name,params};}}}/>);window.showBlockedCalendar=()=>root.render(<Calendar userId="blocked"/>);`;
+const root=createRoot(document.getElementById('root'));root.render(<Screen navigation={{goBack(){},navigate(name,params){window.navigationResult={name,params};}}}/>);`;
 (async()=>{let browser,server;try{
  await build({stdin:{contents:source,resolveDir:mobile,loader:'tsx'},bundle:true,platform:'browser',format:'iife',outfile:path.join(scratch,'app.js'),jsx:'automatic',nodePaths:[path.join(mobile,'node_modules')],define:{'process.env.NODE_ENV':'"production"',__DEV__:'false'},resolveExtensions:['.web.tsx','.tsx','.web.ts','.ts','.web.jsx','.jsx','.web.js','.js','.json'],alias:{'react-native':'react-native-web'},plugins:[{name:'offline-adapters',setup(b){
   b.onResolve({filter:/^lucide-react-native$|AuthContext$|ThemeContext$|\/lib\/builder$|\/lib\/dailyLoop$|^@react-navigation\/native$|^expo-clipboard$|^react-native-safe-area-context$|\/components\/ScreenHeader$/},a=>({path:a.path,namespace:'offline'}));
@@ -21,33 +21,14 @@ const root=createRoot(document.getElementById('root'));root.render(<Screen navig
   const context=await browser.newContext({viewport:{width,height:1350},reducedMotion:'reduce'}),page=await context.newPage(),errors=[],external=[];
   page.on('pageerror',e=>{errors.push(e.message);console.error('UI runtime error: '+e.message);});await context.route('**/*',r=>{if(new URL(r.request().url()).hostname==='127.0.0.1')return r.continue();external.push(r.request().url());return r.abort();});
   await page.goto('http://127.0.0.1:'+server.address().port);const publish=page.getByRole('button',{name:'Publish update · earn 10 contribution points',exact:true});await publish.waitFor();await page.waitForFunction(()=>!document.querySelector('[role="progressbar"]'));
-  assert.equal(await page.getByText('0',{exact:true}).count(),1);
-  await page.getByLabel('Build update',{exact:true}).fill('Tightened Firestore rules and added tests for blocked reads');await page.getByLabel('Optional update link',{exact:true}).fill('https://example.com/changelog');await publish.click();
+    await page.getByLabel('Build update',{exact:true}).fill('Tightened Firestore rules and added tests for blocked reads');await page.getByLabel('Optional update link',{exact:true}).fill('https://example.com/changelog');await publish.click();
   await page.getByText('+10 contribution pts',{exact:true}).waitFor();assert.ok((await page.getByText('10',{exact:true}).count())>=1,'points total is shown');assert.equal(await page.getByText('Linky',{exact:true}).count(),1);
   assert.equal(await page.getByRole('button',{name:'Today’s square is lit',exact:true}).isDisabled(),true);assert.equal(await page.getByLabel('Build update',{exact:true}).isEditable(),false);
-  const day=await page.evaluate(()=>new Date().toISOString().slice(0,10)),cell=page.getByTestId('contribution-'+day);await cell.waitFor();assert.equal(await cell.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(251, 230, 24)');assert.notEqual(await cell.evaluate(el=>getComputedStyle(el).boxShadow),'none');
   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.op==='shipUpdate').length),1);
-  // The calendar shows real dates: a named month, every day of it, and a way
-  // back through the months the member actually recorded something in.
-  const monthLabel=await page.getByRole('img',{name:/recorded days? of/}).first().getAttribute('aria-label');
-  assert.match(monthLabel,/^[A-Z][a-z]+ \d{4}: 1 recorded day of (28|29|30|31)\./);
-  assert.equal(await page.getByText('1 of 31 days recorded in',{exact:false}).count()>=0,true);
-  assert.equal(await page.getByRole('button',{name:'Next month'}).isDisabled(),true,'the future is not browsable');
-  await page.getByRole('button',{name:'Previous month'}).click();
-  const earlier=await page.getByRole('img',{name:/recorded days? of/}).first().getAttribute('aria-label');
-  assert.notEqual(earlier,monthLabel,'previous month is a real, different month');
-  assert.match(earlier,/0 recorded days of (28|29|30|31)\./);
-  await page.getByRole('button',{name:'Jump to today'}).click();
-  assert.equal(await page.getByRole('img',{name:/recorded days? of/}).first().getAttribute('aria-label'),monthLabel);
-  await page.getByRole('button',{name:'Weeks view'}).click();
-  await page.getByText('Week of',{exact:false}).first().waitFor();
-  await page.getByRole('button',{name:'Recent view'}).click();
-  await page.getByRole('button',{name:'Month view'}).click();
   await page.getByRole('button',{name:'Today’s square is lit',exact:true}).isDisabled();
   const league=page.getByRole('button',{name:'Take it to the Builder League →',exact:true});await league.click();const nav=await page.evaluate(()=>window.navigationResult);assert.equal(nav.name,'TrendingBuilders');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Horizontal overflow');assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
   if(process.env.BUILDER_SCREENSHOT_DIR){fs.mkdirSync(process.env.BUILDER_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.BUILDER_SCREENSHOT_DIR,'contribution-'+width+'.png'),fullPage:true});}
-  await page.evaluate(()=>window.showBlockedCalendar());await page.getByText('This contribution calendar is not available.',{exact:true}).waitFor();assert.equal(await page.getByText('Tightened Firestore rules and added tests for blocked reads',{exact:true}).count(),0);
-  console.log('PASS '+width+'px: publish → two-sentence Linky insight → +10 points → glowing square → real month grid with browsable dates, weeks view; duplicate prevention, competitive league route, reduced motion, private calendar error, no external requests');await context.close();
+  console.log('PASS '+width+'px: publish → two-sentence Linky insight → +10 points → duplicate prevention, competitive league route, reduced motion, no external requests');await context.close();
  }
 }finally{await browser?.close();if(server)await new Promise(r=>server.close(r));fs.rmSync(scratch,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1;});

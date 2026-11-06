@@ -28,11 +28,11 @@ test('calendar handles leap day and year rollover without duplicating or inventi
   const cells=calendarWeeks([],Date.parse(date)).flat();assert.equal(new Set(cells.map(c=>c.day)).size,84);assert.equal(cells.filter(c=>c.active).length,0);assert.equal(cells.filter(c=>c.today).length,1);
  }
 });
-test('profile and progress log use the actual calendar and authoritative publishing adapter, not client badges',()=>{
+test('profile and progress log use the authoritative publishing adapter, not client badges',()=>{
  const root=new URL('../',import.meta.url),read=p=>fs.readFileSync(new URL(p,root),'utf8');
- const profile=read('mobile/src/screens/ProfileScreen.tsx'),ship=read('mobile/src/screens/ShipLogScreen.tsx'),calendar=read('mobile/src/components/ContributionCalendar.tsx');
- assert.match(profile,/<ContributionCalendar userId=\{profile.uid\}/);assert.match(ship,/builderCall\('shipUpdate',pending.current\)/);assert.match(ship,/no chat credit used/);
- assert.doesNotMatch(ship,/isVerified:|verificationProgram:|top 5%/);assert.doesNotMatch(calendar,/Animated|isReduceMotionEnabled/);assert.match(calendar,/#FBE618/);assert.match(calendar,/shadowRadius:7/);
+ const profile=read('mobile/src/screens/ProfileScreen.tsx'),ship=read('mobile/src/screens/ShipLogScreen.tsx');
+ assert.doesNotMatch(profile,/ContributionCalendar/);assert.doesNotMatch(ship,/ContributionCalendar/);assert.match(ship,/builderCall\('shipUpdate',pending.current\)/);assert.match(ship,/no chat credit used/);
+ assert.doesNotMatch(ship,/isVerified:|verificationProgram:|top 5%/);
  const loop=read('mobile/src/lib/dailyLoop.ts').split('export async function persistShipAndRep')[1].split('export async function syncDecayingRep')[0];assert.doesNotMatch(loop,/patch\.isVerified|SHIPPED|verifiedBy|setDoc\(/);
 });
 test('no decorative sparkle glyph or sparkle-icon import remains anywhere in application source',()=>{

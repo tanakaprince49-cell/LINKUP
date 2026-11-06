@@ -509,70 +509,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>
                   Grow your professional network.
                 </Text>
-                <Text style={[styles.heroSub, { color: textColor(isDark, 'muted'), marginTop: 0 }]}>
-                  {people.length === 0
-                    ? `${people.length} discoverable builders loaded. Invite people you already trust, or talk to LINKUP concierge in Alerts.`
-                    : "Discover recommended cofounders, startup collaborators, and active project opportunities in one place."}
-                </Text>
               </View>
-
-              <TouchableOpacity
-                accessibilityRole="link"
-                accessibilityLabel="Search builders on the web"
-                onPress={() => void Linking.openURL('https://www.linkupbuild.com/search/')}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 10,
-                  paddingHorizontal: 12,
-                  paddingVertical: 10,
-                  borderRadius: 14,
-                  backgroundColor: HOME_GOLD_TINT,
-                  borderWidth: 1,
-                  borderColor: HOME_LINE,
-                  marginTop: 12,
-                }}
-              >
-                <Search size={17} color={HOME_GOLD_DEEP} />
-                <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: textColor(isDark) }}>
-                  Search builders by name, skill, or city on the web ↗
-                </Text>
-              </TouchableOpacity>
-              <View style={styles.heroActions}>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate('DailyFive')}
-                  style={[styles.heroBtn, { backgroundColor: HOME_GOLD,
-    borderWidth: 1,
-    borderColor: HOME_LINE }]}
-                >
-                  <Flame size={14} color="#000" />
-                  <Text style={[styles.heroBtnText, { color: '#000' }]}>Daily briefing</Text>
-                </TouchableOpacity>
-                <View style={[styles.heroStatus, { backgroundColor: HOME_GOLD_TINT }]}>
-                  <Star size={12} color={HOME_INK} />
-                  <Text style={styles.heroStatusText}>{aiLoading ? 'UPDATING...' : 'READY'}</Text>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                onPress={() => navigation.navigate('IdeaDeck')}
-                activeOpacity={0.88}
-                style={[styles.ideaDeckBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
-              >
-                <Lightbulb size={15} color={HOME_INK} />
-                <Text style={[styles.ideaDeckBtnText, { color: textColor(isDark) }]}>Explore startup ideas and collaboration opportunities</Text>
-                <ChevronRight size={15} color={textColor(isDark, 'muted')} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => Platform.OS === 'web' ? navigation.navigate('Campaigns') : void Linking.openURL('https://www.linkupbuild.com/campaigns/')}
-                activeOpacity={0.88}
-                style={[styles.ideaDeckBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
-              >
-                <Megaphone size={15} color={HOME_INK} />
-                <Text style={[styles.ideaDeckBtnText, { color: textColor(isDark) }]}>Campaigns — promote your product to the LINKUP community</Text>
-                <ChevronRight size={15} color={textColor(isDark, 'muted')} />
-              </TouchableOpacity>
 
               {hubSponsor && (
                 <TouchableOpacity
@@ -648,17 +585,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 
           <LinkyCardsSection />
 
-          <Section
-            title="Today’s 2 picks"
-            icon={<UserCheck size={17} color={HOME_INK} />}
-            data={recommended}
-            showScore={false}
-            onViewAll={() => navigation.navigate('DailyFive')}
-          />
-          {/* Free plan: rotating sponsored card under Today's picks. */}
-          <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
-            <SponsoredSlot placement="picks" viewerUid={user?.uid} enabled={!adsHiddenForViewer} />
-          </View>
           <View style={{ marginTop: 12 }}>
             <TouchableOpacity style={styles.sectionHeader} onPress={() => navigation.navigate('ActiveOpportunities')} activeOpacity={0.8}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

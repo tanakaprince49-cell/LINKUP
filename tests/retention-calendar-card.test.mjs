@@ -163,17 +163,3 @@ test('the league top-three card exists, crowns only number one and is a real PNG
   assert.match(screen, /photoOf\(/);
 });
 
-test('the calendar screen shows dates, a month picker and each week', () => {
-  const source = read('mobile/src/components/ContributionCalendar.tsx');
-  for (const text of ['Month', 'Recent', 'Weeks', 'Previous month', 'Next month', 'MONTHS WITH RECORDED DAYS', 'Week of', 'Jump to today']) {
-    assert.ok(source.includes(text), text);
-  }
-  assert.match(source, /WEEKDAY_INITIALS/);
-  // The month grid keeps the long-standing `contribution-<date>` test id so
-  // existing suites and analytics keep working.
-  assert.match(source, /testID=\{`contribution-\$\{cell\.day\}`\}/);
-  // Server returns the real history bounds, not just a rolling window.
-  const builder = read('api/_builder.js');
-  assert.match(builder, /firstDay/);
-  assert.match(builder, /historyDays/);
-});

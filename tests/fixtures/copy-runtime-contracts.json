@@ -266,23 +266,6 @@
       "users"
     ]
   ],
-  "mobile/src/screens/DailyFiveScreen.tsx": [
-    [
-      "navigate"
-    ],
-    [
-      "navigate",
-      "IdeaDeck"
-    ],
-    [
-      "navigate",
-      "ShipLog"
-    ],
-    [
-      "navigate",
-      "BuilderWorkspace"
-    ]
-  ],
   "mobile/src/screens/DiscoveryDashboardScreen.tsx": [
     [
       "getItem"
@@ -312,23 +295,7 @@
     ],
     [
       "navigate",
-      "DailyFive"
-    ],
-    [
-      "navigate",
-      "IdeaDeck"
-    ],
-    [
-      "navigate",
-      "Campaigns"
-    ],
-    [
-      "navigate",
       "ActiveOpportunity"
-    ],
-    [
-      "navigate",
-      "DailyFive"
     ],
     [
       "navigate",
@@ -533,10 +500,6 @@
     ],
     [
       "navigate"
-    ],
-    [
-      "navigate",
-      "DailyFive"
     ],
     [
       "navigate",
@@ -2558,10 +2521,6 @@
     [
       "navigate",
       "Alerts"
-    ],
-    [
-      "navigate",
-      "ShipLog"
     ],
     [
       "navigate",

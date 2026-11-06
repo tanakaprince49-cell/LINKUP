@@ -10,7 +10,6 @@ import MomentumShareCard from '../components/MomentumShareCard';
 import {shareMomentumCard} from '../lib/momentumShare';
 import {builderCall,coachRequestKey} from '../lib/builder';
 import BuildHabitCard from '../components/BuildHabitCard';
-import ContributionCalendar from '../components/ContributionCalendar';
 import ScreenHeader from '../components/ScreenHeader';
 import VerifiedBadge from '../components/VerifiedBadge';
 
@@ -50,7 +49,7 @@ export default function ShipLogScreen({navigation}:any){
     </View>}
     <View style={[styles.composer,panel]}>
      <Text style={[styles.label,{color:ink}]}>What moved forward?</Text>
-     <Text style={{fontSize:13,lineHeight:20,color:muted}}>A result, a customer insight or a build milestone. Do not include credentials or private customer data. New update text and Linky feedback stay private; the calendar follows your profile’s visibility.</Text>
+     <Text style={{fontSize:13,lineHeight:20,color:muted}}>A result, a customer insight or a build milestone. Do not include credentials or private customer data. New update text and Linky feedback stay private and follow your profile’s visibility.</Text>
      <TextInput accessibilityLabel="Build update" value={text} onChangeText={setText} editable={!saving&&!doneToday} placeholder={doneToday?'Your update is recorded for today.':'Tightened Firestore rules and added tests for blocked reads'} placeholderTextColor={muted} maxLength={180} multiline style={[styles.input,{color:ink,borderColor:panel.borderColor}]}/>
      <TextInput accessibilityLabel="Optional update link" value={link} onChangeText={setLink} editable={!saving&&!doneToday} placeholder="Optional HTTPS link" placeholderTextColor={muted} maxLength={2048} autoCapitalize="none" autoCorrect={false} keyboardType="url" style={[styles.link,{color:ink,borderColor:panel.borderColor}]}/>
      {error?<View accessibilityRole="alert"><Text style={{color:dark?'#FDA4AF':'#A51E35',lineHeight:20}}>{error}</Text><TouchableOpacity accessibilityRole="button" onPress={()=>void load()}><Text style={{color:ink,fontWeight:'800',marginTop:8}}>Refresh progress</Text></TouchableOpacity></View>:null}
@@ -59,11 +58,10 @@ export default function ShipLogScreen({navigation}:any){
     </View>
     <BuildHabitCard navigation={navigation} isDark={dark} refreshKey={`${summary?.today||''}:${summary?.points||0}`}/>
     <MomentumShareCard isDark={dark} refreshKey={`${summary?.today||''}:${summary?.points||0}`}/>
-    {user?.uid&&<ContributionCalendar userId={user.uid} isDark={dark} snapshot={summary||undefined}/>}
     <Text style={[styles.historyTitle,{color:ink}]}>Your build history</Text>
    </View>}
    renderItem={({item})=><View style={[styles.log,panel]}><Text style={{fontSize:15,lineHeight:23,color:ink,fontWeight:'600'}}>{item.text}</Text><Text style={{fontSize:11,color:muted,marginTop:8}}>{item.createdAt.slice(0,10)} · {item.pointsAwarded?`${item.pointsAwarded} contribution pts`:'Earlier self-reported update'}</Text>{item.insight&&<Text style={{fontSize:13,color:muted,lineHeight:21,marginTop:10}}>Linky: {item.insight}</Text>}{typeof item.link==='string'&&item.link.startsWith('https://')&&<TouchableOpacity accessibilityRole="link" onPress={()=>void Linking.openURL(item.link)}><Text style={{color:ink,fontWeight:'700',marginTop:8,textDecorationLine:'underline'}}>Open update link ↗</Text></TouchableOpacity>}</View>}
-   ListEmptyComponent={!loading?<Text style={{color:muted,textAlign:'center',padding:20}}>Your first useful update starts the calendar. There is no streak to catch up on.</Text>:null}/>
+   ListEmptyComponent={!loading?<Text style={{color:muted,textAlign:'center',padding:20}}>Your first useful update starts your build history. There is no streak to catch up on.</Text>:null}/>
  </SafeAreaView>;
 }
 const styles=StyleSheet.create({root:{flex:1},content:{padding:18,gap:12,width:'100%',maxWidth:760,alignSelf:'center',paddingBottom:40},composer:{padding:18,borderWidth:1,borderRadius:24,gap:12},label:{fontSize:20,fontWeight:'800'},input:{borderWidth:1,borderRadius:14,padding:13,minHeight:95,fontSize:15,lineHeight:23,textAlignVertical:'top'},link:{borderWidth:1,borderRadius:14,padding:13,minHeight:48,fontSize:14},button:{backgroundColor:'#FBE618',minHeight:52,padding:15,borderRadius:15,alignItems:'center',justifyContent:'center'},buttonText:{fontSize:14,fontWeight:'800',color:'#0A0B0D'},insight:{borderWidth:1,borderRadius:24,padding:20,gap:12},row:{flexDirection:'row',alignItems:'center',gap:5,flexWrap:'wrap'},insightTitle:{fontSize:18,fontWeight:'900'},reward:{fontSize:11,fontWeight:'800',marginLeft:7},insightText:{fontSize:16,lineHeight:25,fontWeight:'600'},historyTitle:{fontSize:18,fontWeight:'800',marginTop:10,marginBottom:2},log:{padding:18,borderWidth:1,borderRadius:20}});

@@ -43,7 +43,6 @@ const FounderFlipScreen = lazyScreen(() => import('./src/screens/FounderFlipScre
 const PitchPerfectScreen = lazyScreen(() => import('./src/screens/PitchPerfectScreen'));
 const NetworkQuizScreen = lazyScreen(() => import('./src/screens/NetworkQuizScreen'));
 const BuilderWorkspaceScreen = lazyScreen(() => import('./src/screens/BuilderWorkspaceScreen'));
-const DailyFiveScreen = lazyScreen(() => import('./src/screens/DailyFiveScreen'));
 const ShipLogScreen = lazyScreen(() => import('./src/screens/ShipLogScreen'));
 const GroupChatScreen = lazyScreen(() => import('./src/screens/GroupChatScreen'));
 const CityLeagueScreen = lazyScreen(() => import('./src/screens/CityLeagueScreen'));
@@ -180,7 +179,6 @@ const linking: any = {
       PitchPerfect: 'PitchPerfect',
       NetworkQuiz: 'NetworkQuiz',
       BuilderWorkspace: 'builder',
-      DailyFive: 'daily-five',
       ShipLog: 'ship',
       CityLeague: 'league',
       GroupChat: 'groups/:groupId',
@@ -793,7 +791,6 @@ function AppContent() {
             <Stack.Screen name="LinkySettings" component={LinkySettingsScreen} />
             <Stack.Screen name="LinkyAudit" component={LinkyAuditScreen} />
             <Stack.Screen name="BuilderWorkspace" component={BuilderWorkspaceScreen} />
-            <Stack.Screen name="DailyFive" component={DailyFiveScreen} />
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
             <Stack.Screen name="GroupChat" component={GroupChatScreen} />
             <Stack.Screen name="CityLeague" component={CityLeagueScreen} />

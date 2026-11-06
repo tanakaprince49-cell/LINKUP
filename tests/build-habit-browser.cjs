@@ -1,4 +1,4 @@
-// Real ShipLog + ContributionCalendar UI, isolated auth/API/icons only.
+// Real ShipLog UI, isolated auth/API/icons only.
 // No production calls, AI provider use or writes to real accounts.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),http=require('node:http'),assert=require('node:assert/strict');
 const tools=process.env.BUILDER_BROWSER_TOOLS||path.resolve('node_modules');
