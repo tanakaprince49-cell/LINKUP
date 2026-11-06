@@ -28,3 +28,16 @@ export function seasonLabel(period, key) {
   }
   return String(key);
 }
+
+/** Deterministic champion: points, then build days, then helpful credit, then uid. */
+export function chooseChampion(rows = []) {
+  const viable = rows.filter(row => row && typeof row.uid === 'string' && Number(row.points) > 0);
+  if (!viable.length) return null;
+  const [top] = [...viable].sort((a, b) =>
+    Number(b.points) - Number(a.points) ||
+    Number(b.buildDays || 0) - Number(a.buildDays || 0) ||
+    Number(b.helpful || 0) - Number(a.helpful || 0) ||
+    String(a.uid).localeCompare(String(b.uid))
+  );
+  return { uid: top.uid, points: Number(top.points) || 0, buildDays: Number(top.buildDays) || 0, helpful: Number(top.helpful) || 0 };
+}

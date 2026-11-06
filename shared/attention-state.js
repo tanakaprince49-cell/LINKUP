@@ -93,7 +93,7 @@ export const ICON_VARIANTS = Object.freeze([
     id: 'champion_crown',
     label: 'League Champion',
     occasion: 'Occasion · Builder League winner & PLUS',
-    triggerRule: 'Shown when you hold a Builder League win, reward campaign, or PLUS crown.',
+    triggerRule: 'Shown when you hold a Builder League season title, or PLUS crown.',
     subtitle: 'Royal gold crown Linky for Builder League podium winners and champions.',
     category: 'celebration',
     androidAlias: 'LauncherChampionCrown',

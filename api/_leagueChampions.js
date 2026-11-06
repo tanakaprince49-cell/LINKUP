@@ -1,16 +1,13 @@
 // Monthly and yearly Builder League champions.
 //
-// The weekly prize is a campaign (campaignRewards). A month or a year cannot
-// buy "one more week", so the season winners get the permanent thing instead:
-// their name and totals recorded in leagueChampions, a champion card, and a
-// place on the league page. Awarding is idempotent by document id, uses only
-// publicly opted-in recorded activity, and never invents a winner for a season
-// where nobody recorded anything.
-import { seasonDocId, seasonWindow, SEASON_PERIODS } from '../shared/league-season.js';
-import { awardWeek, chooseChampion } from '../shared/campaign-reward.js';
+// The season winners get the permanent thing: their name and totals recorded
+// in leagueChampions, a champion card, and a place on the league page.
+// Awarding is idempotent by document id, uses only publicly opted-in recorded
+// activity, and never invents a winner for a season where nobody recorded
+// anything.
+import { chooseChampion, seasonDocId, seasonWindow, SEASON_PERIODS } from '../shared/league-season.js';
 import { loadActivityLeague } from './_leagueSeo.js';
 import { clean } from './_builderCore.js';
-import { REWARD_COLLECTION } from './_campaignReward.js';
 import { notifyLeagueWinner } from './_leagueNotify.js';
 
 export const CHAMPION_COLLECTION = 'leagueChampions';
@@ -111,24 +108,18 @@ export async function readSeasonChampions(db, now = Date.now()) {
 
 /**
  * The strongest title this member currently holds, used for the champion
- * ribbon on their card. Year beats month beats week; the week title comes from
- * the reward document that already drives the campaign prize.
+ * ribbon on their card. Year beats month.
  */
 export async function championFor(db, uid, now = Date.now()) {
   if (!uid) return null;
-  const week = awardWeek(now);
   const month = seasonWindow('month', now), year = seasonWindow('year', now);
   const refs = [
-    db.collection(REWARD_COLLECTION).doc(week.weekKey),
     db.collection(CHAMPION_COLLECTION).doc(seasonDocId('month', month.key)),
     db.collection(CHAMPION_COLLECTION).doc(seasonDocId('year', year.key)),
   ];
   const snaps = await db.getAll(...refs).catch(() => []);
-  const [weekDoc, monthDoc, yearDoc] = snaps;
+  const [monthDoc, yearDoc] = snaps;
   if (yearDoc?.exists && yearDoc.data().uid === uid) return { kind: 'year', start: year.start, end: year.end };
   if (monthDoc?.exists && monthDoc.data().uid === uid) return { kind: 'month', start: month.start, end: month.end };
-  if (weekDoc?.exists && weekDoc.data().uid === uid && weekDoc.data().status !== 'no-winner') {
-    return { kind: 'week', start: week.start, end: week.end };
-  }
   return null;
 }

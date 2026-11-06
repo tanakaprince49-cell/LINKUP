@@ -1086,7 +1086,6 @@ export default async function handler(req, res) {
         statesCreated: states.created || 0,
         housekeeping,
         remindersDelivered,
-        reward: lastSweep?.reward || null,
         seasons: lastSweep?.seasons || null,
         email: emailStatus(),
         warmedThesis: warmedThesis || 'default',

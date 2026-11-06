@@ -1,6 +1,6 @@
 import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Platform, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { ChevronLeft, MessageSquare, Search, Target, User, Zap } from 'lucide-react-native';
@@ -388,10 +388,10 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           ListEmptyComponent={
             <View style={[styles.emptyCard, liquidGlass(isDark)]}>
               <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No recommendations yet</Text>
-              <Text style={styles.emptySub}>Complete your profile or use search filters while LINKUP learns your matching signals.</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.emptyBtn}>
+              <Text style={styles.emptySub}>Complete your profile while LINKUP learns your matching signals. You can also browse everyone on the web.</Text>
+              <TouchableOpacity onPress={() => void Linking.openURL('https://www.linkupbuild.com/search/')} style={styles.emptyBtn}>
                 <Search size={16} color="#000" />
-                <Text style={styles.emptyBtnText}>Open search</Text>
+                <Text style={styles.emptyBtnText}>Search on the web ↗</Text>
               </TouchableOpacity>
             </View>
           }

@@ -65,7 +65,7 @@ export const CAMPAIGN_INDUSTRY_OPTIONS = [
  * — the chip renders disabled so the roadmap is visible without overselling. */
 export const CAMPAIGN_PLACEMENT_OPTIONS: { id: string; label: string; desc: string; available: boolean }[] = [
   { id: 'ideas', label: 'Idea Deck', desc: 'Sponsored card inside the idea swipe flow', available: true },
-  { id: 'search', label: 'Search boost', desc: 'Sponsored slot pinned to the top of search', available: true },
+  { id: 'search', label: 'Search boost', desc: 'Paused while search lives on the web — not available to buy right now', available: false },
   { id: 'hub', label: 'Hub strip', desc: 'Banner on the discovery home screen', available: true },
   { id: 'linky', label: 'Linky picks', desc: 'Linky may recommend you — always disclosed as sponsored', available: true },
   { id: 'discover', label: 'Discover boost', desc: 'Sponsored card shows every 4th swipe in the people deck', available: true },
@@ -501,16 +501,8 @@ export const setCampaignStatus = async (
       const snap = await getDoc(doc(db, 'campaigns', campaignId));
       const data = snap.data() || {};
       const ownerId = String(data.ownerId || '');
-      // Builder League reward: seven days from approval, not the paid window.
-      // Admin-only write (Firestore rules), with the hourly sweep as backstop.
-      if (data.rewardWeek) {
-        const started = Date.now();
-        expiryPatch = {
-          expiresAt: new Date(started + 7 * 24 * 60 * 60 * 1000),
-          expiresAtSource: 'league-reward',
-          rewardStartedAt: started,
-        };
-      } else if (ownerId) {
+      // Paid campaigns run for the owner's paid window from approval.
+      if (ownerId) {
         expiryPatch = {
           expiresAt: new Date(await computeCampaignExpiryMs(ownerId)),
           expiresAtSource: 'client',

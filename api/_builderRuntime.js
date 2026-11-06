@@ -2,7 +2,6 @@ import {getDb} from './_firebaseAdmin.js';
 import {isPlusUser} from './_linky.js';
 import {createBuilderService} from './_builder.js';
 import {validId,problem} from './_builderCore.js';
-import {awardWeeklyChampion,reconcileCampaignRewards} from './_campaignReward.js';
 import {awardSeasonChampions} from './_leagueChampions.js';
 import {sendExpoPush} from './_expoPush.js';
 import {emailStatus,verifyEmailUnsubscribe,unsubscribeUserEmail,sendLinkyDirectEmail} from './_emailNotify.js';
@@ -30,17 +29,15 @@ export async function builderCron(input={}){
   await pr.set({after:pulse.nextCursor||'',at:Date.now()});
  }catch{pulse={scanned:0,pulsed:0,emailsSent:0,pushesSent:0,nextCursor:''};}
 
- // Builder League prizes. Reminders must still be delivered if a league job
- // fails, so each block is isolated: a throw here can never 500 the cron.
- let reward=null,rewardSweep=null,seasons=null,githubAutoSync=null;
- try{reward=await awardWeeklyChampion(db);}catch{reward=null;}
- try{rewardSweep=await reconcileCampaignRewards(db);}catch{rewardSweep=null;}
+ // Builder League season prizes. Reminders must still be delivered if a league
+ // job fails, so the block is isolated: a throw here can never 500 the cron.
+ let seasons=null,githubAutoSync=null;
  try{seasons=await awardSeasonChampions(db);}catch{seasons=null;}
  if(!after){
   try{githubAutoSync=await sweepConnectedGithubCommits({db,maxProfiles:25,discoverFromProfiles:true});}catch{githubAutoSync=null;}
  }
  const combinedCursor=result.nextCursor||pulse.nextCursor||'';
- return {...result,nextCursor:combinedCursor,pulse,reward,rewardSweep,seasons,githubAutoSync,email:builderEmailStatus()};
+ return {...result,nextCursor:combinedCursor,pulse,seasons,githubAutoSync,email:builderEmailStatus()};
 }
 export const builderEmailStatus=()=>{const s=emailStatus();return s.available?s:{available:false,reason:'Provider setup required'};};
 export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runDailyRetentionPulsePage,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer,sweepConnectedGithubCommits,maybeAutoSweepGithubCommits};

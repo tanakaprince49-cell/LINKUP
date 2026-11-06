@@ -1987,14 +1987,7 @@ export default function ProfileScreen({ navigation, route }: any) {
   const searchSkill = (skill: string) => {
     const cleanSkill = String(skill || '').trim();
     if (!cleanSkill) return;
-    navigation.navigate('Main', {
-      screen: 'Search',
-      params: {
-        skill: cleanSkill,
-        query: cleanSkill,
-        searchToken: Date.now(),
-      },
-    });
+    void Linking.openURL('https://www.linkupbuild.com/search/?q=' + encodeURIComponent(cleanSkill));
   };
   const setEditField = (field: string, value: unknown) => {
     setEditData((current: any) => ({ ...(current || {}), [field]: value }));

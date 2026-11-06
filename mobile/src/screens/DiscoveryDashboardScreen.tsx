@@ -1,7 +1,7 @@
 import useDailyPicks from '../hooks/useDailyPicks';
 import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Linking, Platform } from 'react-native';
+import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -103,7 +103,6 @@ const writeCachedDashboardPeople = async (uid: string, people: UserProfile[]) =>
 };
 
 function DiscoveryDashboardScreen({ navigation }: any) {
-  const [homeSearchQuery, setHomeSearchQuery] = useState('');
   const { user, profile: me } = useAuth();
   // Hub ad strip: one sponsored slot for free members; PLUS members never see it.
   const [hubSponsor, setHubSponsor] = useState<Campaign | null>(null);
@@ -416,7 +415,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     borderColor: HOME_LINE }]}>
             <Text style={styles.opportunityBtnText}>View Profile</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Search')} style={[styles.opportunityIconBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+          <TouchableOpacity onPress={() => void Linking.openURL('https://www.linkupbuild.com/search/')} style={[styles.opportunityIconBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
             <Search size={15} color={textColor(isDark)} />
           </TouchableOpacity>
         </View>
@@ -487,7 +486,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         ListEmptyComponent={
           <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}>
             <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>{title==='Builder League'?(leagueLoading?'Loading real builders…':leagueError?'Builder profiles could not load':'Meet the builders'):'No professionals to display'}</Text>
-            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>{title==='Builder League'?(leagueLoading?'Fetching eligible public builder profiles. Activity sharing is not required.':'Open Builder League to refresh eligible public profiles. No fake members or automatic activity publication.'):'No relevant profiles are available in this view yet. Search the member directory or invite professionals from your network.'}</Text>
+            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>{title==='Builder League'?(leagueLoading?'Fetching eligible public builder profiles. Activity sharing is not required.':'Open Builder League to refresh eligible public profiles. No fake members or automatic activity publication.'):'No relevant profiles are available in this view yet. Explore public builders at linkupbuild.com or invite professionals from your network.'}</Text>
             <TouchableOpacity onPress={() => title==='Builder League'?navigation.navigate('TrendingBuilders'):void shareLinkupInvite()} style={styles.emptyBtn}>
               <Text style={styles.emptyBtnText}>{title==='Builder League'?'Open Builder League':'Invite Builders'}</Text>
             </TouchableOpacity>
@@ -507,28 +506,26 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
             <View style={[styles.heroCard, { backgroundColor: isDark ? COLORS.darkCard : '#FFF' }]}>
               <View style={styles.heroTop}>
-                <View style={styles.heroIconRow}>
-                  <View style={styles.heroBadge}>
-                    <Text style={[styles.heroBadgeText, { color: HOME_GOLD_DEEP }]}>Today</Text>
-                  </View>
-                </View>
                 <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>
-                  {people.length === 0 ? "Grow your professional network." : 'Your Daily 5 is ready.'}
+                  Grow your professional network.
                 </Text>
-                <Text style={[styles.heroSub, { color: textColor(isDark, 'muted') }]}>
+                <Text style={[styles.heroSub, { color: textColor(isDark, 'muted'), marginTop: 0 }]}>
                   {people.length === 0
                     ? `${people.length} discoverable builders loaded. Invite people you already trust, or talk to LINKUP concierge in Alerts.`
                     : "Discover recommended cofounders, startup collaborators, and active project opportunities in one place."}
                 </Text>
               </View>
 
-              <View
+              <TouchableOpacity
+                accessibilityRole="link"
+                accessibilityLabel="Search builders on the web"
+                onPress={() => void Linking.openURL('https://www.linkupbuild.com/search/')}
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: 10,
                   paddingHorizontal: 12,
-                  paddingVertical: 8,
+                  paddingVertical: 10,
                   borderRadius: 14,
                   backgroundColor: HOME_GOLD_TINT,
                   borderWidth: 1,
@@ -537,43 +534,10 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 }}
               >
                 <Search size={17} color={HOME_GOLD_DEEP} />
-                <TextInput
-                  value={homeSearchQuery}
-                  onChangeText={setHomeSearchQuery}
-                  onSubmitEditing={() => {
-                    const q = homeSearchQuery.trim();
-                    navigation.navigate('Search', { initialQuery: q });
-                  }}
-                  returnKeyType="search"
-                  placeholder="Search anyone on LINKUP by name, skill, or role..."
-                  placeholderTextColor={textColor(isDark, 'muted')}
-                  style={{
-                    flex: 1,
-                    fontSize: 14,
-                    fontWeight: '600',
-                    color: textColor(isDark),
-                    paddingVertical: 6,
-                  }}
-                />
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel="Search anyone on LINKUP"
-                  onPress={() => {
-                    const q = homeSearchQuery.trim();
-                    navigation.navigate('Search', { initialQuery: q });
-                  }}
-                  style={{
-                    paddingHorizontal: 14,
-                    paddingVertical: 8,
-                    borderRadius: 10,
-                    backgroundColor: HOME_GOLD,
-                    borderWidth: 1,
-                    borderColor: HOME_LINE,
-                  }}
-                >
-                  <Text style={{ fontWeight: '800', fontSize: 13, color: '#000' }}>Search</Text>
-                </TouchableOpacity>
-              </View>
+                <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: textColor(isDark) }}>
+                  Search builders by name, skill, or city on the web ↗
+                </Text>
+              </TouchableOpacity>
               <View style={styles.heroActions}>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('DailyFive')}
@@ -601,7 +565,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => navigation.navigate('Campaigns')}
+                onPress={() => Platform.OS === 'web' ? navigation.navigate('Campaigns') : void Linking.openURL('https://www.linkupbuild.com/campaigns/')}
                 activeOpacity={0.88}
                 style={[styles.ideaDeckBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
               >
@@ -762,33 +726,6 @@ const styles = StyleSheet.create({
   },
   heroTop: {
     gap: 8,
-  },
-  heroIconRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 4,
-  },
-  heroIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: HOME_GOLD,
-    borderWidth: 1,
-    borderColor: HOME_LINE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: HOME_GOLD_TINT,
-  },
-  heroBadgeText: {
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: -0.2,
   },
   heroTitle: {
     fontSize: 22,

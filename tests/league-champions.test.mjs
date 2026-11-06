@@ -5,8 +5,6 @@ import { leagueScore, LEAGUE_PERIODS } from '../shared/league.js';
 import { seasonWindow, seasonDocId, seasonLabel } from '../shared/league-season.js';
 import { awardSeasonChampion, awardSeasonChampions, readSeasonChampions, championFor, CHAMPION_COLLECTION } from '../api/_leagueChampions.js';
 import { momentumCardSvg, renderMomentumCard, renderCardSvg } from '../api/_momentumCard.js';
-import { awardWeek } from '../shared/campaign-reward.js';
-import { awardWeeklyChampion } from '../api/_campaignReward.js';
 
 const read = file => fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
 const at = Date.parse('2026-10-24T09:00:00Z');
@@ -119,16 +117,15 @@ test('month and year titles are public and never overwrite an earlier season', a
   assert.equal(JSON.stringify(db.store.get(CHAMPION_COLLECTION + '/month-2026-09')), before);
 });
 
-test('the card ribbon prefers year over month over week and only for the actual winner', async () => {
-  const week = awardWeek(at);
-  const docs = {};
-  docs['campaignRewards/' + week.weekKey] = { uid: 'alice', status: 'available' };
-  docs['leagueChampions/month-2026-09'] = { uid: 'bob', status: 'champion', points: 90 };
-  docs['leagueChampions/year-2025'] = { uid: 'carol', status: 'champion', points: 800 };
+test('the card ribbon prefers year over month and only for the actual winner', async () => {
+  const docs = {
+    'leagueChampions/month-2026-09': { uid: 'bob', status: 'champion', points: 90 },
+    'leagueChampions/year-2025': { uid: 'carol', status: 'champion', points: 800 },
+  };
   const db = memoryDb({ docs });
   assert.deepEqual(await championFor(db, 'carol', at), { kind: 'year', start: Date.UTC(2025, 0, 1), end: Date.UTC(2026, 0, 1) });
   assert.equal((await championFor(db, 'bob', at)).kind, 'month');
-  assert.deepEqual(await championFor(db, 'alice', at), { kind: 'week', start: week.start, end: week.end });
+  assert.equal(await championFor(db, 'alice', at), null);
   assert.equal(await championFor(db, 'dave', at), null);
 });
 
@@ -159,7 +156,7 @@ test('the bundled font really paints glyphs (empty text was the original card bu
 
 test('the hourly cron imports every league job it calls', () => {
   const source = read('api/_builderRuntime.js');
-  for (const name of ['awardWeeklyChampion', 'reconcileCampaignRewards', 'awardSeasonChampions']) {
+  for (const name of ['awardSeasonChampions']) {
     assert.match(source, new RegExp(`import\\s*\\{[^}]*${name}[^}]*\\}\\s*from`), name);
     assert.match(source, new RegExp(`await ${name}\\(`), name);
   }
@@ -183,28 +180,6 @@ test('a granted season title notifies the winner exactly once', async () => {
   assert.equal(pushes.length, 1);
   assert.equal(pushes[0].uid, 'alice');
   const replay = await awardSeasonChampion(db, 'month', at, { push });
-  assert.equal(replay.skipped, true);
-  assert.equal(pushes.length, 1);
-});
-
-test('a granted weekly title notifies the winner and names the campaign prize', async () => {
-  const { end, weekKey } = awardWeek(at);
-  const day = (ms) => new Date(ms).toISOString().slice(0, 10);
-  const users = { alice: profile('Alice') };
-  const contributions = { alice: activity({ points: 20, totalUpdates: 2, days: [day(end - 86400000), day(end - 2 * 86400000)] }) };
-  const db = memoryDb({ users, contributions });
-  const pushes = [];
-  const push = async (uid, msg) => { pushes.push({ uid, msg }); return { sent: 1 }; };
-  const out = await awardWeeklyChampion(db, at, { push });
-  assert.equal(out.granted, true);
-  assert.equal(out.weekKey, weekKey);
-  const note = db.store.get('notifications/league_win_week_' + weekKey);
-  assert.equal(note.userId, 'alice');
-  assert.equal(note.type, 'league');
-  assert.equal(note.kind, 'week');
-  assert.match(note.body, /campaign/);
-  assert.equal(pushes.length, 1);
-  const replay = await awardWeeklyChampion(db, at, { push });
   assert.equal(replay.skipped, true);
   assert.equal(pushes.length, 1);
 });

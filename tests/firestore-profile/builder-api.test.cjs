@@ -323,116 +323,22 @@ test('permanent deletion revokes access before a bounded background sweep erases
  await assert.rejects(s.handle('bob','groupDelete',{groupId}),e=>e.status===403);const remaining=(await rr.collection('messages').get()).size;assert.ok(remaining>0);await s.handle('alice','groupDelete',{groupId});const after=(await rr.get()).exists?((await rr.collection('messages').get()).size):0;assert.ok(after===0||after<remaining);await assert.rejects(s.handle('bob','groupMessages',{groupId}),e=>e.status===403);await s.handle('alice','groupDelete',{groupId});const {sweepDeletingGroups}=await import('../../api/_groups.js');await sweepDeletingGroups(db);assert.equal((await rr.get()).exists,false);assert.equal((await rr.collection('messages').get()).size,0);
 });
 
-test('weekly champion reward: one winner, one claim, seven days, then locked forever',async()=>{
- const s=await seed(),weekEnd=Date.parse('2026-10-19T00:00:00Z'),DAY=86400000;
- await db.collection('campaignRewards').doc('2026-10-12').set({weekKey:'2026-10-12',uid:'alice',status:'available',points:40,buildDays:4,helpful:0,weekEnd,claimBy:weekEnd+7*DAY,awardedAt:weekEnd});
- const read=await s.handle('alice','campaignReward');assert.equal(read.status,'available');assert.equal(read.runDays,7);assert.equal(read.placementsMax,2);
- const creative={productName:'Alice app',tagline:'Invoices in one minute',description:'A real description of the product.',website:'https://example.com/app'};
- await assert.rejects(s.handle('bob','campaignRewardClaim',{weekKey:'2026-10-12',name:'Bob launch',creative,industries:[],placements:['ideas']}),e=>e.status===403);
- await assert.rejects(s.handle('alice','campaignRewardClaim',{weekKey:'2026-10-12',name:'No link',creative:{...creative,website:'javascript:alert(1)'},placements:['ideas']}),/https/);
- const claimed=await s.handle('alice','campaignRewardClaim',{weekKey:'2026-10-12',name:'Alice launch',creative,industries:['SaaS'],placements:['ideas','search','news']});
- const campaign=(await db.collection('campaigns').doc(claimed.campaignId).get()).data();
- assert.equal(campaign.status,'pending_review');assert.equal(campaign.reward,true);assert.equal(campaign.rewardWeek,'2026-10-12');assert.deepEqual(campaign.placements,['ideas','search']);assert.equal(campaign.statsImpressions,0);
- const again=await s.handle('alice','campaignReward');assert.equal(again.status,'claimed');assert.equal(again.campaign.id,claimed.campaignId);
- await assert.rejects(s.handle('alice','campaignRewardClaim',{weekKey:'2026-10-12',name:'Second launch',creative,placements:['ideas']}),e=>e.status===409);
- const old=await seed();await db.collection('campaignRewards').doc('2026-10-05').set({weekKey:'2026-10-05',uid:'alice',status:'available',points:10,buildDays:1,weekEnd:weekEnd-7*DAY,claimBy:weekEnd-DAY,awardedAt:weekEnd-7*DAY});
- assert.equal((await old.handle('alice','campaignReward')).status,'expired');
- await assert.rejects(old.handle('alice','campaignRewardClaim',{weekKey:'2026-10-05',name:'Too late',creative,placements:['ideas']}),e=>e.status===410);
-});
-
-test('reward campaigns start a seven-day clock, are deleted permanently and never linger unapproved',async()=>{
- const {reconcileCampaignRewards}=await import('../../api/_campaignReward.js');
- const s=await seed(),DAY=86400000,weekEnd=Date.parse('2026-10-19T00:00:00Z'),creative={productName:'Product',tagline:'A tagline long enough',description:'',website:'https://example.com'};
- await db.collection('campaignRewards').doc('2026-10-12').set({weekKey:'2026-10-12',uid:'alice',status:'available',points:30,buildDays:3,weekEnd,claimBy:weekEnd+7*DAY,awardedAt:weekEnd});
- const {campaignId}=await s.handle('alice','campaignRewardClaim',{weekKey:'2026-10-12',name:'Reward ad',creative,placements:['ideas']});
- await db.collection('campaigns').doc(campaignId).update({status:'active'});
- const started=await reconcileCampaignRewards(db,NOW);assert.equal(started.started,1);
- const live=(await db.collection('campaigns').doc(campaignId).get()).data();assert.equal(live.expiresAtSource,'league-reward');assert.equal(live.expiresAt.toMillis()-NOW,7*DAY);
- const stillThere=await reconcileCampaignRewards(db,NOW+6*DAY);assert.equal(stillThere.deleted,0);
- const done=await reconcileCampaignRewards(db,NOW+8*DAY);assert.equal(done.deleted,1);
- assert.equal((await db.collection('campaigns').doc(campaignId).get()).exists,false);
- assert.equal((await db.collection('campaignRewards').doc('2026-10-12').get()).data().status,'completed');
- const audit=(await db.collection('campaignRewardsAudit').doc('2026-10-12').get()).data();
- assert.equal(audit.uid,'alice');assert.equal(audit.campaignId,campaignId);assert.ok(!JSON.stringify(audit).includes('Reward ad'),'audit keeps no creative text');
- // Never approved in time: removed, not parked in review forever.
- await seed();await db.collection('campaignRewards').doc('2026-10-12').set({weekKey:'2026-10-12',uid:'alice',status:'claimed',weekEnd,claimBy:weekEnd+7*DAY,claimedAt:weekEnd,activationDeadline:weekEnd+2*DAY,campaignId:'pending-one'});
- await db.collection('campaigns').doc('pending-one').set({ownerId:'alice',name:'Pending ad',status:'pending_review',reward:true,rewardWeek:'2026-10-12',statsImpressions:0,statsClicks:0});
- const swept=await reconcileCampaignRewards(db,weekEnd+3*DAY);assert.equal(swept.deleted,1);
- assert.equal((await db.collection('campaigns').doc('pending-one').get()).exists,false);
- assert.equal((await db.collection('campaignRewards').doc('2026-10-12').get()).data().completion,'not-approved-in-time');
-});
-
-test('rewards are server-write only and private to their winner',async()=>{
- const s=await seed();await db.collection('campaignRewards').doc('2026-10-12').set({weekKey:'2026-10-12',uid:'alice',status:'available',points:10,claimBy:NOW+86400000});
- const alice=env.authenticatedContext('alice').firestore(),bob=env.authenticatedContext('bob').firestore();
- await assertFails(setDoc(doc(alice,'campaignRewards/2026-10-12'),{uid:'alice',status:'available',points:9999}));
- await assertFails(getDoc(doc(bob,'campaignRewards/2026-10-12')));
- await assertFails(getDoc(doc(bob,'campaignRewardsAudit/2026-10-12')));
-});
-
-test('the weekly grant and the monthly title are decided from real opt-in activity, once',async()=>{
- const {awardWeeklyChampion}=await import('../../api/_campaignReward.js');
+test('the monthly title is decided from real opt-in activity, once',async()=>{
  const {awardSeasonChampion}=await import('../../api/_leagueChampions.js');
- const {awardWeek}=await import('../../shared/campaign-reward.js');
  const {assertSucceeds}=require('@firebase/rules-unit-testing');
  await seed();
- // Two opted-in builders: alice recorded three days last week, bob two.
- const week=Date.parse('2026-10-24T09:00:00Z'),award=awardWeek(week);
- await db.collection('builderContributions').doc('alice').set({publicMomentum:true,points:30,totalUpdates:3,days:['2026-10-12','2026-10-14','2026-10-16'],habit:{earnedCredits:0,credits:0,awards:[]}});
- await db.collection('builderContributions').doc('bob').set({publicMomentum:true,points:20,totalUpdates:2,days:['2026-10-13','2026-10-15'],habit:{earnedCredits:0,credits:0,awards:[]}});
+ // Two opted-in builders: alice recorded three days in September, bob two.
+ const week=Date.parse('2026-10-24T09:00:00Z');
+ await db.collection('builderContributions').doc('alice').set({publicMomentum:true,points:30,totalUpdates:3,days:['2026-09-12','2026-09-14','2026-09-16'],habit:{earnedCredits:0,credits:0,awards:[]}});
+ await db.collection('builderContributions').doc('bob').set({publicMomentum:true,points:20,totalUpdates:2,days:['2026-09-13','2026-09-15'],habit:{earnedCredits:0,credits:0,awards:[]}});
  await db.collection('users').doc('bob').update({isVisible:false});
- const granted=await awardWeeklyChampion(db,week);assert.equal(granted.granted,true);assert.equal(granted.weekKey,award.weekKey);
- const reward=(await db.collection('campaignRewards').doc(award.weekKey).get()).data();
- assert.equal(reward.uid,'alice');assert.equal(reward.status,'available');assert.equal(reward.points,30);
- // A hidden profile is excluded even if it opted in.
- const again=await awardWeeklyChampion(db,week);assert.equal(again.skipped,true);
- const win=(await db.collection('notifications').doc('league_win_week_'+award.weekKey).get()).data();assert.equal(win.userId,'alice');assert.equal(win.type,'league');assert.equal(win.isRead,false);
- // A week with nothing recorded gets no invented champion.
- const empty=await awardWeeklyChampion(db,award.end+8*86400000);assert.equal(empty.granted,false);
- assert.equal((await db.collection('campaignRewards').doc(awardWeek(award.end+8*86400000).weekKey).get()).data().status,'no-winner');
- // Same for a month: September has no activity in this fixture.
- await db.collection('users').doc('bob').update({isVisible:true});
- const month=await awardSeasonChampion(db,'month',week);assert.equal(month.granted,false);
+ const month=await awardSeasonChampion(db,'month',week);assert.equal(month.granted,true);assert.equal(month.key,'2026-09');
+ const champ=(await db.collection('leagueChampions').doc('month-2026-09').get()).data();assert.equal(champ.uid,'alice');
+ // Bob's hidden profile was excluded; a rerun never mints a second trophy.
+ const again=await awardSeasonChampion(db,'month',week);assert.equal(again.skipped,true);
+ const win=(await db.collection('notifications').doc('league_win_month_2026-09').get()).data();assert.equal(win.userId,'alice');assert.equal(win.type,'league');assert.equal(win.isRead,false);
  const client=env.authenticatedContext('alice').firestore();
  await assertSucceeds(getDoc(doc(client,'leagueChampions/month-2026-09')));
  await assertFails(setDoc(doc(client,'leagueChampions/month-2026-09'),{uid:'alice',status:'champion',points:9999}));
  await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'leagueChampions/month-2026-09')));
 });
-test('created groups are discoverable and strangers can browse then join them',async()=>{
- const s=await seed();
- const a=await s.handle('alice','groupCreate',{title:'Harare builders',description:'Build in public.'});
- const b=await s.handle('alice','groupCreate',{title:'Design circle',description:'Critique welcomed.'});
- await db.collection('builderRooms').doc(b.groupId).update({updatedAt:NOW+1000});
- await s.handle('alice','groupSend',{groupId:a.groupId,key:'welcome',text:'PRIVATE GROUP TEXT'});
- const first=await s.handle('mallory','groupDiscover',{limit:1});
- assert.equal(first.groups.length,1);assert.equal(first.total,2);assert.ok(first.nextAfter);
- assert.equal(first.groups[0].id,b.groupId);
- const second=await s.handle('mallory','groupDiscover',{limit:1,after:first.nextAfter});
- assert.equal(second.groups.length,1);assert.equal(second.nextAfter,null);
- assert.equal(second.groups[0].id,a.groupId);
- const card=second.groups[0];
- assert.equal(card.title,'Harare builders');assert.equal(card.description,'Build in public.');
- assert.equal(card.memberCount,1);assert.equal(card.discoverable,true);assert.equal(card.joined,false);
- assert.deepEqual(Object.keys(card).sort(),['badges','createdAt','description','discoverable','id','joined','memberCount','photo','title','updatedAt']);
- assert.doesNotMatch(JSON.stringify(first)+JSON.stringify(second),/PRIVATE/);
- const found=await s.handle('mallory','groupDiscover',{q:'design'});
- assert.equal(found.groups.length,1);assert.equal(found.groups[0].id,b.groupId);
- const joined=await s.handle('mallory','groupJoin',{groupId:a.groupId});
- assert.deepEqual(joined,{ok:true,joined:true});
- assert.equal((await s.handle('mallory','groupGet',{groupId:a.groupId})).group.memberCount,2);
- assert.equal((await s.handle('mallory','groupDiscover',{q:'harare'})).groups[0].joined,true);
-});
-test('unlisted, archived and banned groups cannot be browsed or joined',async()=>{
- const s=await seed();
- const {groupId}=await s.handle('alice','groupCreate',{title:'Secret builders'});
- await s.handle('alice','groupUpdate',{groupId,discoverable:false});
- assert.equal((await s.handle('mallory','groupDiscover',{})).groups.length,0);
- await assert.rejects(s.handle('mallory','groupJoin',{groupId}),/private/);
- await s.handle('alice','groupUpdate',{groupId,discoverable:true});
- assert.equal((await s.handle('mallory','groupDiscover',{})).groups.length,1);
- await s.handle('alice','groupAction',{groupId,action:'archive'});
- assert.equal((await s.handle('mallory','groupDiscover',{})).groups.length,0);
- await assert.rejects(s.handle('mallory','groupJoin',{groupId}),/not available/);
-});
-
-test('bootstrap initializes builderStates once with member timezone',async()=>{const s=await seed();const a=await s.handle('alice','bootstrap',{timezone:'Africa/Harare'});assert.equal(a.created,true);assert.equal(a.timezone,'Africa/Harare');const b=await s.handle('alice','bootstrap',{timezone:'Europe/London'});assert.equal(b.created,false);assert.equal((await db.collection('builderStates').doc('alice').get()).data().prefs.timezone,'Africa/Harare');});

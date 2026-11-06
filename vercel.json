@@ -194,6 +194,14 @@
       "destination": "/api/publicSeo?mode=campaign&id=:id"
     },
     {
+      "source": "/app/search",
+      "destination": "/api/publicSeo?mode=search"
+    },
+    {
+      "source": "/search",
+      "destination": "/api/publicSeo?mode=search"
+    },
+    {
       "source": "/startups",
       "destination": "/api/publicSeo?mode=startups"
     },

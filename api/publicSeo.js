@@ -3,6 +3,7 @@ import {serveContentSeo,contentSitemapIndex} from './_contentSeo.js';
 import {serveBlogSeo,blogSitemapIndex} from './_blogSeo.js';
 import {getNewsFeed} from './_newsFeed.js';
 import {selectProfileImage} from './_publicProfileImage.js';
+import {renderSearchPage, projectSearchMember} from './_searchGlobe.js';
 import { getDb } from './_firebaseAdmin.js';
 import crypto from 'node:crypto';
 import { aiText, aiReady } from './_gemini.js';
@@ -336,6 +337,7 @@ const single = value => typeof value === 'string' ? value : '';
 // for an hour at the edge and in browsers. Profile/directory/image bodies stay
 // no-store (privacy changes must bite on the very next request).
 const BUILDER_COUNT_CACHE = {'Cache-Control':'public, max-age=60','Vercel-CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600','CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600'};
+const SEARCH_PAGE_CACHE = {'Cache-Control':'public, max-age=60','Vercel-CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600','CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600'};
 const SEO_SITEMAP_CACHE = {'Cache-Control':'public, max-age=3600','Vercel-CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400','CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400'};
 export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai = null, now = Date.now) {
   return async (req, res) => {
@@ -414,6 +416,28 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
           return send(200, JSON.stringify({ profiles: members, nextCursor: next || null }), 'application/json; charset=utf-8');
         }
         return send(200,renderDirectory(profiles,cursor,next));
+      }
+      if (mode === 'search' || mode === 'search-data') {
+        // Public, opt-in member map. Bounded scan of the same lean index the
+        // directory pages use; only allowlisted public fields leave the API.
+        const db = database();
+        let snap;
+        try { snap = await db.collection('publicProfiles').orderBy('__name__').select().limit(600).get(); }
+        catch { return failure(503, 'Search is temporarily unavailable'); }
+        const ids = snap.docs.map(d => d.id);
+        const docs = ids.length ? await db.getAll(...ids.map(id => db.collection('users').doc(id)), {fieldMask: PUBLIC_FIELDS}) : [];
+        const members = docs
+          .filter(d => d.exists && publicEligible(d.data(), d.id))
+          .map(d => projectSearchMember(d.id, d.data(), selectProfileImage, safeUrl))
+          .filter(Boolean);
+        if (mode === 'search-data') {
+          res.setHeader('X-Robots-Tag', 'noindex');
+          res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+          return send(200, JSON.stringify({ members, total: members.length, generatedAt: new Date().toISOString() }), 'application/json; charset=utf-8', SEARCH_PAGE_CACHE);
+        }
+        res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src https: data: blob:; connect-src 'self'; font-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+        res.setHeader('X-Robots-Tag', 'noindex');
+        return send(200, renderSearchPage({ members }), 'text/html; charset=utf-8', SEARCH_PAGE_CACHE);
       }
       if (mode === 'builder-count') {
         // Live marketing counter: cheap count aggregation over public profiles,

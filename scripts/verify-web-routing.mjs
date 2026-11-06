@@ -39,6 +39,14 @@ for(const section of ['campaigns','startups','news']) {
   assert.doesNotMatch(result.body,/<script[^>]+src=/);
   console.log('PASS crawlable public content',section);
 }
+// The public 3D member map: reachable, renders its shell, stays noindex.
+for(const path of ['/search','/app/search']) {
+  const result=await get(marketing+path);assert.equal(result.res.status,200,path);
+  assert.match(result.res.headers.get('content-type'),/text\/html/);
+  assert.match(result.body,/<div id="globe"/);
+  assert.match(result.body,/name="robots" content="noindex/);
+  console.log('PASS public member globe',path);
+}
 const sitemapIndex=await get(app+'/sitemap.xml');
 for(const section of ['campaigns','startups']) {
   assert.ok(sitemapIndex.body.includes('sitemap-'+section+'-0.xml'));

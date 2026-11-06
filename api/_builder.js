@@ -1,6 +1,5 @@
 import {leadBrief} from '../shared/lead-brief.js';
 import {dailyPicks,pickDay} from '../shared/daily-picks.js';
-import {readCampaignReward,claimCampaignReward} from './_campaignReward.js';
 import {cleanupDeletedGroupData,sweepDeletedGroupData,sweepDeletingGroups,createGroupService} from './_groups.js';
 import {createHabitActions} from './_builderHabit.js';
 import {habitSnapshot,habitState} from '../shared/build-habit.js';
@@ -146,8 +145,6 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   // Bounded server-owned request counter, separate from the paid AI ledger.
   await db.runTransaction(async tx=>{const r=db.collection('builderRates').doc(uid),d=await tx.get(r),v=d.exists?d.data():{};const key=Math.floor(now()/60000),count=v.key===key?v.count:0;if(count>=60)throw problem('Please pause for a moment before trying again.',429);tx.set(r,{key,count:count+1});});
   if(['groups','groupCreate','groupGet','groupDiscover','groupJoin','groupMessages','groupSend','groupRead','groupInvite','groupRespond','groupAction','groupExport','groupUpdate','groupMessageAction','groupPrefs','groupBlock','groupDelete'].includes(op))return groups.handle(uid,op,input);
-  if(op==='campaignReward')return readCampaignReward(db,uid,now());
-  if(op==='campaignRewardClaim')return claimCampaignReward(db,uid,input,now());
   if(op==='ventureStatus')return venture.status(uid);
   if(op==='ventureConnectGithub')return venture.connectAndAnalyze(uid,input);
   if(op==='ventureSyncGithub')return venture.syncGithub(uid);

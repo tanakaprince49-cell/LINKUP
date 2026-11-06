@@ -168,8 +168,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         if (isRequest) return;
         if (notification.type === 'builder' && (notification as any).builderAction === 'ship') { navigation.navigate('ShipLog'); return; }
         if (notification.type === 'builder') { navigation.navigate('BuilderWorkspace', { section: (notification as any).section || 'Today' }); return; }
-        if (notification.type === 'league' && (notification as any).kind === 'week') { navigation.navigate('Campaigns', {}); return; }
-        if (notification.type === 'league') { navigation.navigate('Profile', {}); return; }
+        if (notification.type === 'league') { navigation.navigate('TrendingBuilders'); return; }
         if (notification.matchId) {
           navigation.navigate('Chat', {
             matchId: notification.matchId,

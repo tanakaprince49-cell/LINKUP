@@ -144,10 +144,7 @@ export default function TrendingBuildersScreen({navigation,local=false}:any){
 
     <View style={[styles.card,{backgroundColor:dark?'#141B12':'#EFF7E2',borderColor:dark?'#2C3A25':'#D7E6BE'}]}>
      <View style={{flexDirection:'row',alignItems:'center',gap:8}}><Crown size={16} color={ink}/><Text style={{color:ink,fontWeight:'900',fontSize:15}}>What winning gets you</Text></View>
-     <Text style={{color:ink,fontSize:13,lineHeight:20,fontWeight:'700'}}>Win the week and you run one campaign of your own for exactly seven days.</Text>
-     <Text style={{color:muted,fontSize:12,lineHeight:19}}>Claim it on the Campaigns page within seven days of the win, publish it once it is approved, and it stays live for one week. When that week ends the campaign is deleted for good and the reward locks—no extension, no second campaign, nothing carried to next week.</Text>
      <Text style={{color:muted,fontSize:12,lineHeight:19}}>Win the month or the year and you keep the title permanently: your name in the champions list and a champion version of your streak card.</Text>
-     {button('Open my campaigns',()=>navigation.navigate('Campaigns'),true)}
     </View>
 
     {!builders&&<View style={[styles.card,panel]}>

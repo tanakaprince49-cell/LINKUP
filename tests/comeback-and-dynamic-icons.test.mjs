@@ -428,15 +428,15 @@ test('Part B: Duolingo-style appearance transitions across 1d angry, 3d sad, 7d 
     'champion_crown',
   );
 
-  // 7. Navigation layout: Workspace on bottom nav bar, Search on Homescreen, Your next move banners removed
+  // 7. Navigation layout: Workspace on bottom nav bar, no Search screen (hosted on the public site), Your next move banners removed
   const appSrc = fs.readFileSync(path.join(root, 'mobile', 'App.tsx'), 'utf8');
   assert.match(appSrc, /<Tab\.Screen name="Workspace" component=\{BuilderWorkspaceScreen\}/);
   assert.doesNotMatch(appSrc, /<Tab\.Screen name="Search"/);
-  assert.match(appSrc, /<Stack\.Screen name="Search" component=\{SearchScreen\}/);
+  assert.doesNotMatch(appSrc, /<Stack\.Screen name="Search"/);
 
   const homeSrc = fs.readFileSync(path.join(root, 'mobile', 'src', 'screens', 'DiscoveryDashboardScreen.tsx'), 'utf8');
   assert.doesNotMatch(homeSrc, /Your next move · Build with Linky/);
-  assert.match(homeSrc, /Search anyone on LINKUP/);
+  assert.match(homeSrc, /https:\/\/www\.linkupbuild\.com\/search\//);
 
   const linkySrc = fs.readFileSync(path.join(root, 'mobile', 'src', 'screens', 'LinkyHomeScreen.tsx'), 'utf8');
   assert.doesNotMatch(linkySrc, /Your next move · progress & groups/);

@@ -210,7 +210,7 @@ export default function DynamicAppearanceController({ currentRoute }: { currentR
     const weekdayShort = new Intl.DateTimeFormat('en-GB', { weekday: 'short' }).format(nowMs);
     const protectedRestToday = Boolean(restDay && restDay === weekdayShort) || (!restDay && weekdayShort === 'Sun' && !todayRecorded && streakCount > 0);
     const isLeagueChampion = Boolean(
-      hasLinkupPro(profile) || (profile as any)?.leagueWinner || (profile as any)?.campaignRewardEligible,
+      hasLinkupPro(profile) || (profile as any)?.leagueWinner,
     );
 
     const resolved = resolveAttentionAppearance({

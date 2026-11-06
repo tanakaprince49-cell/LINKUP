@@ -15,7 +15,7 @@
     "file": "mobile/src/screens/ActiveOpportunitiesScreen.tsx",
     "line": 174,
     "before": "Try search to find builders by role, stage, or industry.",
-    "after": "Search by professional role, startup stage, or industry."
+    "after": "Search the web by professional role, startup stage, or industry."
   },
   {
     "file": "mobile/src/screens/ActiveOpportunityScreen.tsx",
@@ -285,7 +285,7 @@
     "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
     "line": 487,
     "before": "This list is empty because the network is still small. Invite 3 builders or search whoever is already on LINKUP.",
-    "after": "No relevant profiles are available in this view yet. Search the member directory or invite professionals from your network."
+    "after": "No relevant profiles are available in this view yet. Explore public builders at linkupbuild.com or invite professionals from your network."
   },
   {
     "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
@@ -1134,12 +1134,6 @@
     "after": "Recommendations consider shared skills, industries, professional goals, and work style to support relevant business connections."
   },
   {
-    "file": "mobile/src/screens/SearchScreen.tsx",
-    "line": 1079,
-    "before": "Search anyone on LINKUP",
-    "after": "Search professional profiles"
-  },
-  {
     "file": "mobile/src/screens/ShipLogScreen.tsx",
     "line": 24,
     "before": "Write what you shipped today in one line.",
@@ -1403,27 +1397,6 @@
     "kind": "fragment"
   },
   {
-    "file": "mobile/src/screens/SearchScreen.tsx",
-    "line": 749,
-    "before": "Find the missing person in your plan.",
-    "after": "Find the expertise your business needs.",
-    "kind": "fragment"
-  },
-  {
-    "file": "mobile/src/screens/SearchScreen.tsx",
-    "line": 751,
-    "before": "Search handles, skills, projects, locations, and live intent. Then rank results by builder compatibility.",
-    "after": "Search professional profiles by skills, projects, location, and collaboration goals. Review results ranked by relevance.",
-    "kind": "fragment"
-  },
-  {
-    "file": "mobile/src/screens/SearchScreen.tsx",
-    "line": 759,
-    "before": "placeholder=\"Search builders\"",
-    "after": "placeholder=\"Search professionals\"",
-    "kind": "fragment"
-  },
-  {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 936,
     "before": "A co-founder with sales experience, equity",
@@ -1500,10 +1473,5 @@
     "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
     "before": "What winning gets you",
     "after": "What winning gets you"
-  },
-  {
-    "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
-    "before": "Win the week and you run one campaign of your own for exactly seven days.",
-    "after": "Win the week and you run one campaign of your own for exactly seven days."
   }
 ]

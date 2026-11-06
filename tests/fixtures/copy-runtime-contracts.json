@@ -3,10 +3,6 @@
     [
       "navigate",
       "ActiveOpportunity"
-    ],
-    [
-      "navigate",
-      "Search"
     ]
   ],
   "mobile/src/screens/ActiveOpportunityScreen.tsx": [
@@ -51,11 +47,7 @@
     ],
     [
       "navigate",
-      "Campaigns"
-    ],
-    [
-      "navigate",
-      "Profile"
+      "TrendingBuilders"
     ],
     [
       "navigate",
@@ -124,10 +116,6 @@
       "property",
       "type",
       "subs"
-    ],
-    [
-      "navigate",
-      "CreateCampaign"
     ],
     [
       "navigate",
@@ -316,23 +304,11 @@
     ],
     [
       "navigate",
-      "Search"
-    ],
-    [
-      "navigate",
       "ActiveOpportunity"
     ],
     [
       "navigate",
       "TrendingBuilders"
-    ],
-    [
-      "navigate",
-      "Search"
-    ],
-    [
-      "navigate",
-      "Search"
     ],
     [
       "navigate",
@@ -2568,10 +2544,6 @@
       "save"
     ],
     [
-      "navigate",
-      "Main"
-    ],
-    [
       "replace",
       ""
     ],
@@ -2624,40 +2596,6 @@
     [
       "navigate",
       "Profile"
-    ],
-    [
-      "navigate",
-      "Search"
-    ]
-  ],
-  "mobile/src/screens/SearchScreen.tsx": [
-    [
-      "replace",
-      ""
-    ],
-    [
-      "replace",
-      ""
-    ],
-    [
-      "collection",
-      "publicProfiles"
-    ],
-    [
-      "doc",
-      "userPrivate"
-    ],
-    [
-      "doc",
-      "userPrivate"
-    ],
-    [
-      "doc",
-      "userPrivate"
-    ],
-    [
-      "navigate",
-      "Profile"
     ]
   ],
   "mobile/src/screens/ShipLogScreen.tsx": [
@@ -2677,10 +2615,6 @@
     [
       "navigate",
       "ShipLog"
-    ],
-    [
-      "navigate",
-      "Campaigns"
     ],
     [
       "navigate",

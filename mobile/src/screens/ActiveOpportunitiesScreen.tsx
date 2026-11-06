@@ -1,6 +1,6 @@
 import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { ChevronLeft, Briefcase, MapPin, Search, Target, Users } from 'lucide-react-native';
@@ -171,10 +171,10 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
           ListEmptyComponent={
             <View style={[styles.emptyCard, liquidGlass(isDark)]}>
               <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No active opportunities yet</Text>
-              <Text style={styles.emptySub}>Search by professional role, startup stage, or industry.</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.emptyBtn}>
+              <Text style={styles.emptySub}>Search the web by professional role, startup stage, or industry.</Text>
+              <TouchableOpacity onPress={() => void Linking.openURL('https://www.linkupbuild.com/search/')} style={styles.emptyBtn}>
                 <Search size={16} color="#000" />
-                <Text style={styles.emptyBtnText}>Open search</Text>
+                <Text style={styles.emptyBtnText}>Search on the web ↗</Text>
               </TouchableOpacity>
             </View>
           }

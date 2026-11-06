@@ -28,7 +28,6 @@ import LvlupDemoScreen from './src/screens/LvlupDemoScreen';
 
 const LinkyHomeScreen = lazyScreen(() => import('./src/screens/LinkyHomeScreen'));
 const IdeaDeckScreen = lazyScreen(() => import('./src/screens/IdeaDeckScreen'));
-const SearchScreen = lazyScreen(() => import('./src/screens/SearchScreen'));
 const AlertsScreen = lazyScreen(() => import('./src/screens/AlertsScreen'));
 const MessagesScreen = lazyScreen(() => import('./src/screens/MessagesScreen'));
 const ProfileScreen = lazyScreen(() => import('./src/screens/ProfileScreen'));
@@ -64,7 +63,6 @@ const CampaignDetailScreen = lazyScreen(() => import('./src/screens/CampaignDeta
 const PRELOADED_SCREENS = [
   LinkyHomeScreen,
   FeedScreen,
-  SearchScreen,
   MessagesScreen,
   BlogsScreen,
   ProfileScreen,
@@ -159,12 +157,13 @@ const linking: any = {
           Workspace: 'workspace',
           Feed: 'startup-feed',
           News: 'news-feed',
-          Campaigns: 'campaign-dashboard',
+          // The campaigns console only ships in the web build (Payonify web checkout).
+          ...(Platform.OS === 'web' ? { Campaigns: 'campaign-dashboard' } : {}),
         },
       },
-      Search: 'search',
-      Campaigns: 'campaign-manager',
-      CampaignDetail: 'campaign-manager/:campaignId',
+      ...(Platform.OS === 'web'
+        ? { Campaigns: 'campaign-manager', CampaignDetail: 'campaign-manager/:campaignId' }
+        : {}),
       Profile: 'profile/:userId',
       Messages: 'messages',
       Alerts: 'alerts',
@@ -437,7 +436,7 @@ function TabNavigator({ navigation }: any) {
       <Tab.Screen name="Feed" component={FeedScreen} />
       <Tab.Screen name="Workspace" component={BuilderWorkspaceScreen} />
       <Tab.Screen name="News" component={BlogsScreen} />
-      <Tab.Screen name="Campaigns" component={CampaignsScreen} />
+      {Platform.OS === 'web' ? <Tab.Screen name="Campaigns" component={CampaignsScreen} /> : null}
     </Tab.Navigator>
   );
 }
@@ -495,7 +494,11 @@ function AppContent() {
 
     if (targetUrl === '/ship' || targetUrl.startsWith('/ship?')) { navigationRef.navigate('ShipLog'); return; }
 
-    if (targetUrl === '/campaigns' || targetUrl.startsWith('/campaigns?')) { navigationRef.navigate('Main', { screen: 'Campaigns' }); return; }
+    if (targetUrl === '/campaigns' || targetUrl.startsWith('/campaigns?')) {
+      if (Platform.OS === 'web') navigationRef.navigate('Main', { screen: 'Campaigns' });
+      else void ExpoLinking.openURL('https://www.linkupbuild.com/campaigns/').catch(() => {});
+      return;
+    }
 
     if (targetUrl.startsWith('/builder') || data?.type === 'builder') {
       const section = new URL(targetUrl || '/builder', 'https://www.linkupbuild.com').searchParams.get('section') || 'Today';
@@ -769,14 +772,17 @@ function AppContent() {
               options={{ animation: Platform.OS === 'android' ? 'fade' : Platform.OS === 'web' ? 'none' : 'fade_from_bottom' }}
             />
             <Stack.Screen name="Alerts" component={AlertsScreen} />
-            <Stack.Screen name="Search" component={SearchScreen} />
             <Stack.Screen name="Messages" component={MessagesScreen} />
             <Stack.Screen name="ArchivedChats" component={MessagesScreen} initialParams={{ archivedOnly: true }} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="IdeaDeck" component={IdeaDeckScreen} />
-            <Stack.Screen name="Campaigns" component={CampaignsScreen} />
-            <Stack.Screen name="CreateCampaign" component={CreateCampaignScreen} />
-            <Stack.Screen name="CampaignDetail" component={CampaignDetailScreen} />
+            {Platform.OS === 'web' ? (
+              <>
+                <Stack.Screen name="Campaigns" component={CampaignsScreen} />
+                <Stack.Screen name="CreateCampaign" component={CreateCampaignScreen} />
+                <Stack.Screen name="CampaignDetail" component={CampaignDetailScreen} />
+              </>
+            ) : null}
             <Stack.Screen name="Viewers" component={ViewersScreen} />
             <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
             <Stack.Screen name="ActiveOpportunities" component={ActiveOpportunitiesScreen} />
@@ -829,7 +835,6 @@ const SCREEN_REGISTRY: Array<[string, any]> = [
   ['CampaignsScreen', CampaignsScreen],
   ['ChatScreen', ChatScreen],
   ['ViewersScreen', ViewersScreen],
-  ['SearchScreen', SearchScreen],
   ['MessagesScreen', MessagesScreen],
   ['AlertsScreen', AlertsScreen],
   ['NewsScreen', NewsScreen],
