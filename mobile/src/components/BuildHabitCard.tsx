@@ -29,14 +29,14 @@ export default function BuildHabitCard({navigation,isDark=false,compact=false,re
    {!h.mission.done&&!h.resting&&button('Log one sentence · about 60 seconds',()=>navigation.navigate('ShipLog'))}
    {compact?button('Choose goals, breaks and reminders',()=>navigation.navigate('ShipLog')):<>
     <View style={[styles.row,{justifyContent:'space-between'}]}><Text style={{color:ink,fontWeight:'900',flex:1}}>Public league & Google momentum</Text><Switch accessibilityLabel="Public league and Google momentum" value={!!h.publicMomentum} disabled={busy} onValueChange={v=>void act('habitPrefs',{publicMomentum:v})}/></View>
-    {label('Optional: publish your name, public location, activity totals and recorded calendar dates for anyone—including Google—to see. Your update text, links, wallet and group chat stay private. Turning this off removes the LINKUP page; search caches may take time to refresh.')}
+    {label('Optional: publish your name, public location, activity totals and recorded build days for anyone—including Google—to see. Your update text, links, wallet and group chat stay private. Turning this off removes the LINKUP page; search caches may take time to refresh.')}
     {h.publicMomentum&&button('Open my public momentum ↗',()=>void Linking.openURL(h.publicUrl+encodeURIComponent(uid||'')))}
     {button(expanded?'Hide goals, breaks and reminders':'Goals, breaks and reminders',()=>setExpanded(v=>!v))}
     {expanded&&<>
     <Text style={[styles.sub,{color:ink}]}>Choose your pace</Text><View style={styles.row}>{[3,5,7].map(n=><TouchableOpacity key={n} accessibilityRole="button" accessibilityLabel={`${n} build days per week`} accessibilityState={{selected:n===(h.weekly.pending?.target||h.weekly.target)}} disabled={busy} onPress={()=>void act('habitPrefs',{target:n})} style={[styles.chip,n===(h.weekly.pending?.target||h.weekly.target)&&{backgroundColor:'#FBE618',borderColor:'#AC9C00'}]}><Text style={{color:'#0A0B0D',fontWeight:'800'}}>{n} days</Text></TouchableOpacity>)}</View>
     {label(h.weekly.pending?`Next target: ${h.weekly.pending.target} days, from Monday ${h.weekly.pending.week} (UTC). This week stays unchanged.`:'Weekly targets use Monday–Sunday UTC. Once you start, target changes take effect next Monday.')}
     <Text style={[styles.sub,{color:ink}]}>Make room for real life</Text>
-    {label(`One free protected rest day per UTC week. ${h.tokens}/3 break tokens · ${h.credits} community credits. Rest protects your rhythm; it never adds work, contribution points or a calendar square.`)}
+    {label(`One free protected rest day per UTC week. ${h.tokens}/3 break tokens · ${h.credits} community credits. Rest protects your rhythm; it never adds work, contribution points or a recorded build day.`)}
     {h.canRestToday&&!h.resting&&button(h.freeRestAvailable?'Protect today’s rest · free':'Protect today’s rest · 1 break token',()=>void act('habitRest',{day:h.today}))}
     {h.canProtectYesterday&&button(h.freeYesterdayAvailable?'Protect yesterday’s gap · free':'Protect yesterday’s gap · 1 break token',()=>void act('habitRest',{day:h.yesterday}))}
     {h.resting&&<Text style={{color:ink,fontWeight:'800'}}>Today’s rest is protected. No check-in needed.</Text>}

@@ -108,9 +108,6 @@ export function momentumCardSvg({ uid, user = {}, c = {}, at = Date.now(), avata
   const weeks = calendarWeeks(days, at);
   const recent = weeks.flat().filter(d => d.active).length;
   const check = (x, y, color) => `<g transform="translate(${x} ${y})"><circle r="20" fill="${color}"/><path d="m-8 0 6 6 12-13" fill="none" stroke="white" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></g>`;
-  const cells = weeks.map((week, x) => week.map((d, y) =>
-    `<rect x="${88 + x * 34}" y="${742 + y * 30}" width="26" height="22" rx="6" fill="${d.active ? GOLD : '#2A2D35'}"/>`
-  ).join('')).join('');
   const tile = (x, label, value) => `<g><rect x="${x}" y="546" width="308" height="118" rx="24" fill="${PAPER}" stroke="${LINE}" stroke-width="2"/><text x="${x + 24}" y="586" font-size="13" letter-spacing="1.6" fill="${MUTED}">${esc(label)}</text><text x="${x + 24}" y="642" font-size="42" fill="${INK}">${esc(value)}</text></g>`;
   const ribbonLabel = badge ? badge.label : '';
   const ribbonSpanX = 276 + Math.ceil(ribbonLabel.length * 13.6) + 16;
@@ -162,15 +159,15 @@ ${tile(386, 'BUILD POINTS', String(stats.points))}
 ${tile(716, 'HELPFUL STEPS', String(helpful))}
 
 <rect x="56" y="688" width="968" height="292" rx="30" fill="${INK}"/>
-<text x="88" y="736" font-size="16" letter-spacing="2.2" fill="${GOLD}">LAST 12 WEEKS</text>
-${cells}
-<g transform="translate(600 742)">
-<text x="0" y="58" font-size="64" fill="${GOLD}">${recent}<tspan font-size="30" fill="#8D919C">/${weeks.flat().length}</tspan></text>
-<text x="0" y="92" font-size="15" letter-spacing="1.4" fill="#C7CAD2">DAYS RECORDED IN THIS WINDOW</text>
-<rect x="0" y="118" width="14" height="14" rx="4" fill="${GOLD}"/><text x="26" y="130" font-size="15" fill="#C7CAD2">A real recorded build day</text>
-<rect x="0" y="146" width="14" height="14" rx="4" fill="#2A2D35"/><text x="26" y="158" font-size="15" fill="#8D919C">No update recorded</text>
-<rect x="0" y="182" width="360" height="46" rx="23" fill="${GOLD}"/>
-<text x="180" y="212" text-anchor="middle" font-size="22" fill="${INK}">linkupbuild.com</text>
+<text x="88" y="736" font-size="16" letter-spacing="2.2" fill="${GOLD}">ACTIVITY WINDOW</text>
+<g transform="translate(88 742)">
+<text x="0" y="72" font-size="76" fill="${GOLD}">${recent}<tspan font-size="34" fill="#8D919C">/${weeks.flat().length}</tspan></text>
+<text x="0" y="112" font-size="16" letter-spacing="1.4" fill="#C7CAD2">DAYS RECORDED IN THE LAST 12 WEEKS</text>
+<text x="0" y="146" font-size="15" fill="#8D919C">Activity, recorded by LINKUP. Never a skill verdict.</text>
+</g>
+<g transform="translate(600 860)">
+<rect x="0" y="0" width="360" height="46" rx="23" fill="${GOLD}"/>
+<text x="180" y="30" text-anchor="middle" font-size="22" fill="${INK}">linkupbuild.com</text>
 </g>
 
 <text x="56" y="1030" font-size="15" letter-spacing="0.8" fill="${MUTED}">${esc(`${dayLabel(at).toUpperCase()} · ACTIVITY, NOT VERIFIED SKILL`)}</text>

@@ -31,16 +31,16 @@ test('own public rank is returned even outside the top hundred; output remains b
 test('league and momentum are server-rendered, canonical, crawlable, escaped and free of private notes',async()=>{
  const db=database({alice:profile('<script>Alice</script>')},{alice:activity()});
  const league=await request(db,{mode:'league',period:'week',city:'Nowhere'});assert.equal(league.code,200);for(const text of ['CollectionPage','ItemList','Builder League','/app/builder-league','&lt;script&gt;Alice'])assert.ok(league.body.includes(text));assert.doesNotMatch(league.body,/<script>Alice|PRIVATE UPDATE|earnedCredits/);
- const p=await request(db,{mode:'momentum-profile',uid:'alice'});assert.equal(p.code,200);assert.match(p.body,/ProfilePage/);assert.match(p.body,/#FBE618/);assert.match(p.body,/2026-10-24: Recorded update/);assert.doesNotMatch(p.body,/PRIVATE UPDATE|earnedCredits/);
+ const p=await request(db,{mode:'momentum-profile',uid:'alice'});assert.equal(p.code,200);assert.match(p.body,/ProfilePage/);assert.match(p.body,/Recorded activity/);assert.doesNotMatch(p.body,/class="calendar"|aria-label="Recorded build days/);assert.doesNotMatch(p.body,/PRIVATE UPDATE|earnedCredits/);
  const sitemap=await request(db,{mode:'momentum-sitemap'});assert.match(sitemap.body,/\/app\/momentum\/alice/);
 });
-test('opt-out and visibility changes stop serving the searchable calendar and sitemap immediately',async()=>{
+test('opt-out and visibility changes stop serving the searchable momentum page and sitemap immediately',async()=>{
  const users={alice:profile('Alice')},c={alice:activity()},db=database(users,c);
  c.alice.publicMomentum=false;assert.equal((await request(db,{mode:'momentum-profile',uid:'alice'})).code,404);assert.doesNotMatch((await request(db,{mode:'momentum-sitemap'})).body,/momentum\/alice/);
  c.alice.publicMomentum=true;users.alice.deleted=true;assert.equal((await request(db,{mode:'momentum-profile',uid:'alice'})).code,404);
  assert.equal((await request(db,{mode:'momentum-profile',uid:'../private'})).code,404);assert.equal((await request(db,{mode:'league',period:'bad'})).code,400);
 });
-test('Coach is gone, public consent can be revoked, groups are private and recorded squares remain solid yellow',()=>{
+test('Coach is gone, public consent can be revoked and groups are private',()=>{
  const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
  assert.match(read('mobile/src/components/BuildHabitCard.tsx'),/publicMomentum:v/);assert.match(read('mobile/src/components/BuildHabitCard.tsx'),/search caches may take time/);
  assert.doesNotMatch(read('api/_builderRuntime.js'),/generate:|gemini|generateContent/);assert.doesNotMatch(read('api/_linky.js'),/PRIVATE BUILDER CONTEXT|privateBuilderContext/);

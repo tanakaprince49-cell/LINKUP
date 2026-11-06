@@ -37,7 +37,7 @@ test('retention messages are opt-in, honest and quiet when there is nothing true
  const s=freshState(at);s.prefs.retention=true;
  const facts={localDay:'2026-10-23',localHour:9,weekDays:0,weekTarget:3,totalUpdates:0,points:0,streakDays:0,todayRecorded:false,followupsDue:0,profileMissing:[]};
  assert.equal(nextRetention({state:s,facts:{localDay:'2026-10-23',localHour:9}}),null,'no facts means no message, never an invented one');
- assert.match(nextRetention({state:s,facts}).body,/still empty/,'an empty calendar is itself a true fact');
+ assert.match(nextRetention({state:s,facts}).body,/not logged a build day yet/,'an empty build log is itself a true fact');
  s.prefs.retention=false;assert.equal(nextRetention({state:{...s,prefs:{...s.prefs,retention:false}},facts:{...facts,totalUpdates:9,lastUpdateDay:'2026-10-22'}}),null);
  s.prefs.retention=true;
  const real=nextRetention({state:s,facts:{...facts,totalUpdates:9,lastUpdateDay:'2026-10-22',weekDays:2}});

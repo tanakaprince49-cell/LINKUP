@@ -8,9 +8,9 @@
 // Slots are local-time windows, not timestamps, so a delayed cron run still
 // lands somewhere sensible and quiet hours are always respected:
 //
-//   08:00–11:00  a private kickoff from their own calendar
+//   08:00–11:00  a private kickoff built from their own recorded activity
 //   12:00–15:00  the league (their real rank/points) or real discovery numbers
-//   17:00–20:00  Linky's welcome-back invitation, or their own calendar for today
+//   17:00–20:00  Linky's welcome-back invitation, or their own recorded activity for today
 //   20:00–22:00  Sunday week recap, or a comeback line after a real gap
 //
 // A due follow-up and the member's own Friday drop follow the event, not the
@@ -93,8 +93,8 @@ export function retentionCandidates({ state = {}, facts = {}, now = Date.now(), 
         : `${plural(weekDays, 'build day', 'build days')} this week, target ${target}. One more useful step keeps it moving.`,
       '/ship', ['lastUpdateDay', 'weekDays']);
   } else if (facts.totalUpdates === 0) {
-    add('kickoff', 'Start your calendar',
-      'Your build calendar is still empty. Record what you actually moved forward — one sentence is enough.',
+    add('kickoff', 'Log your first build day',
+      'You have not logged a build day yet. Record what you actually moved forward — one sentence is enough.',
       '/ship', ['totalUpdates']);
   }
 

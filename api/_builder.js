@@ -1,5 +1,4 @@
 import {leadBrief} from '../shared/lead-brief.js';
-import {dailyPicks,pickDay} from '../shared/daily-picks.js';
 import {cleanupDeletedGroupData,sweepDeletedGroupData,sweepDeletingGroups,createGroupService} from './_groups.js';
 import {createHabitActions} from './_builderHabit.js';
 import {habitSnapshot,habitState} from '../shared/build-habit.js';
@@ -51,17 +50,16 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   // One bounded audit document per user; analytics must never refund a finished AI review.
   try{const r=db.collection('builderEvents').doc(uid);await db.runTransaction(async tx=>{const d=await tx.get(r);tx.set(r,{uid,events:[{type,at:now()},...(d.exists?d.data().events||[]:[])].slice(0,40)});});}catch(e){console.warn('[builder] audit unavailable');}
  }
- async function recommendations(uid,s,daily=false,timeZone='UTC'){
+ async function recommendations(uid,s){
   const candidates=await db.collection('publicProfiles').orderBy('__name__').limit(160).get();
   const ids=candidates.docs.map(d=>d.id).filter(k=>validId(k)&&k!==uid);if(!ids.length)return [];
   const [sources,states,outgoing,incoming]=await Promise.all([
    db.getAll(...ids.map(k=>db.collection('users').doc(k)),{fieldMask:fields}),
-   daily?Promise.resolve([]):db.getAll(...ids.map(k=>ref(k)),{fieldMask:['availability']}),
+   db.getAll(...ids.map(k=>ref(k)),{fieldMask:['availability']}),
    db.collection('blocks').where('blockedById','==',uid).get(),db.collection('blocks').where('blockedUserId','==',uid).get()]);
   const unavailable=new Set([...outgoing.docs.map(d=>d.data().blockedUserId),...incoming.docs.map(d=>d.data().blockedById)]);
   const availability=new Map(states.filter(d=>d.exists).map(d=>[d.id,d.data().availability]));
   const people=sources.filter(d=>d.exists&&!unavailable.has(d.id)&&publicEligible(d.data(),d.id)).map(d=>({uid:d.id,...d.data(),name:clean(d.data().displayName||d.data().fullName||d.data().name,100),availability:availability.get(d.id)}));
-  if(daily){const day=pickDay(now(),timeZone),chosen=await change(uid,current=>{let ids=current.dailyPicks?.day===day&&current.dailyPicks?.timeZone===timeZone?current.dailyPicks.uids.filter(id=>people.some(p=>p.uid===id)):[];if(ids.length<Math.min(2,people.length)){const previous=current.dailyPicks?.day!==day?current.dailyPicks?.uids||[]:[];let candidates=people.filter(p=>!ids.includes(p.uid)&&!previous.includes(p.uid));if(candidates.length<2-ids.length)candidates=people.filter(p=>!ids.includes(p.uid));ids=[...ids,...dailyPicks(candidates,uid,day).map(p=>p.uid)].slice(0,2);}current.dailyPicks={day,timeZone,uids:ids};return ids;}),photos=new Map(candidates.docs.map(d=>[d.id,d.data()]));return {day,eligible:people.length,people:chosen.map(id=>people.find(p=>p.uid===id)).filter(Boolean).map(p=>({uid:p.uid,name:p.name,occupation:p.occupation||'',city:p.city||'',country:p.country||'',skills:p.skills||[],verified:p.isVerified===true,image:(photos.get(p.uid)?.profilePic||p.profilePicUrl||p.photoURL||p.avatarUrl)?'https://www.linkupbuild.com/app/api/publicSeo?mode=image&uid='+encodeURIComponent(p.uid):'',why:p.occupation?'Profile lists '+clean(p.occupation,120)+'.':p.skills?.length?'Profile lists '+p.skills.slice(0,3).join(', ')+'.':'An eligible public LINKUP member; explore their profile to assess fit.'})),note:people.length<3?'The eligible pool is small, so a person may repeat. We never invent members.':'A new pair each local calendar day. Rotation is discovery, not a compatibility guarantee.'};}
   return relevantPeople(s,people,now());
  }
  async function listAsks(uid,input={}){
@@ -101,7 +99,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
  }
  async function contributionData(uid,target){
   const own=target===uid,person=await db.collection('users').doc(target).get();
-  if(!person.exists||person.data().deleted||person.data().banned||(!own&&(!publicEligible(person.data(),target)||await blocked(uid,target))))throw problem('This contribution calendar is not available.',403);
+  if(!person.exists||person.data().deleted||person.data().banned||(!own&&(!publicEligible(person.data(),target)||await blocked(uid,target))))throw problem('This public momentum page is not available.',403);
   const d=await db.collection('builderContributions').doc(target).get(),c=d.exists?d.data():{};
   // The full recorded-date history (bounded server-side), plus which days in it
  // have a private update. Dates only: no update text is ever returned to a
@@ -172,7 +170,6 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
    return {people};
   }
   if(op==='weeklyReview')return {review:await reviewFor(uid,await state(uid))};
-  if(op==='dailyPicks')return recommendations(uid,await state(uid),true,clean(input.timeZone,80)||'UTC');
   if(op==='recommendations')return {people:await recommendations(uid,await state(uid)),scope:'Up to 160 discovery candidates; only evidence-backed relevant members are shown.'};
   if(op==='recommendationFeedback'){ownId(input.uid);if(!['relevant','not_relevant','contacted'].includes(input.status))throw problem('Choose a feedback option.');await change(uid,s=>{s.feedback={...s.feedback,[input.uid]:{status:input.status,at:now()}};s.feedback=Object.fromEntries(Object.entries(s.feedback).sort((a,b)=>b[1].at-a[1].at).slice(0,100));});return {ok:true};}
   if(op==='followup'){

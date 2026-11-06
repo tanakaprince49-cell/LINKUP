@@ -355,7 +355,6 @@ function TabNavigator({ navigation }: any) {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
             LinkyHome: { active: 'Handshake', inactive: 'Handshake' },
             Feed: { active: 'Sprout', inactive: 'Sprout' },
-            Campaigns: { active: 'Megaphone', inactive: 'Megaphone' },
             Workspace: { active: 'Briefcase', inactive: 'Briefcase' },
             News: { active: 'BookOpen', inactive: 'BookOpen' },
           };

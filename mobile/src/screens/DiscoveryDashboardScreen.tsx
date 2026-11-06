@@ -1,4 +1,3 @@
-import useDailyPicks from '../hooks/useDailyPicks';
 import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Linking, Platform } from 'react-native';
@@ -9,7 +8,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfile } from '../types';
 import { COLORS, appBackground, getBrandFlavor, liquidGlass, textColor } from '../theme/theme';
-import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid, spreadTiedScores } from '../lib/matchmaking';
+import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
 import { activeOpportunityScore, displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { rankLeague } from '../lib/builderLeague';
 import { loadLeaguePool } from '../lib/leaguePool';
@@ -245,28 +244,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     };
   }, [isFocused, user?.uid, me?.uid, people]);
 
-  const daily=useDailyPicks(user?.uid,isFocused);
-  const recommended = useMemo(()=>daily.people.map((p:any)=>({...p,displayName:p.name,profilePic:p.image,isVerified:p.verified,dailyPick:true,onboarded:true,isVisible:true})),[daily.people]);
-
-  /**
-   * Display scores for the picks rail.
-   *
-   * The scorer clamps anything with fewer than two overlapping dimensions to
-   * 20, so with a small network both picks genuinely score the same and the
-   * rail showed "20% / 20%". Ranking is decided by `recommended`; this only
-   * spreads the DISPLAYED (and passed-on) numbers so two people standing next
-   * to each other never repeat a percentage.
-   */
-  const pickScoreById = useMemo(() => {
-    const entries = recommended.map((p:any) => ({
-      uid: p.uid,
-      score: Math.round(aiRank[p.uid]?.score ?? localRank[p.uid]?.score ?? 1),
-    }));
-    const map: Record<string, number> = {};
-    for (const entry of spreadTiedScores(entries)) map[entry.uid] = entry.score;
-    return map;
-  }, [recommended, aiRank, localRank]);
-
   // The Builder League preview uses the shared league pool + the exact same
   // ranker as the full league screen, so standings match on every device.
   const trending = useMemo(() => {
@@ -315,7 +292,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     const match = localMatch || aiMatch;
     // The picks rail shows de-duplicated scores so the two cards never read
     // the same percentage; every other rail keeps the raw score.
-    const score = (item as any).dailyPick?null:(showScore ? pickScoreById[item.uid] : undefined) ?? match?.score ?? null;
+    const score = showScore ? localMatch?.score ?? aiMatch?.score ?? null : undefined;
     return (
       <TouchableOpacity
         onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: score, compatibilityReason: match?.reason || '' })}

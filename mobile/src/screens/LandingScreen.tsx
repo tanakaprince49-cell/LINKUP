@@ -116,7 +116,6 @@ export default function LandingScreen({ navigation }: any) {
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 16 }}>
             {[
-              { label: 'Discover products', path: 'campaigns' },
               { label: 'Explore startups', path: 'startups' },
               { label: 'AI & startup news', path: 'news' },
             ].map((item) => {
