@@ -342,3 +342,41 @@ test('the monthly title is decided from real opt-in activity, once',async()=>{
  await assertFails(setDoc(doc(client,'leagueChampions/month-2026-09'),{uid:'alice',status:'champion',points:9999}));
  await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(),'leagueChampions/month-2026-09')));
 });
+test('created groups are discoverable and strangers can browse then join them',async()=>{
+ const s=await seed();
+ const a=await s.handle('alice','groupCreate',{title:'Harare builders',description:'Build in public.'});
+ const b=await s.handle('alice','groupCreate',{title:'Design circle',description:'Critique welcomed.'});
+ await db.collection('builderRooms').doc(b.groupId).update({updatedAt:NOW+1000});
+ await s.handle('alice','groupSend',{groupId:a.groupId,key:'welcome',text:'PRIVATE GROUP TEXT'});
+ const first=await s.handle('mallory','groupDiscover',{limit:1});
+ assert.equal(first.groups.length,1);assert.equal(first.total,2);assert.ok(first.nextAfter);
+ assert.equal(first.groups[0].id,b.groupId);
+ const second=await s.handle('mallory','groupDiscover',{limit:1,after:first.nextAfter});
+ assert.equal(second.groups.length,1);assert.equal(second.nextAfter,null);
+ assert.equal(second.groups[0].id,a.groupId);
+ const card=second.groups[0];
+ assert.equal(card.title,'Harare builders');assert.equal(card.description,'Build in public.');
+ assert.equal(card.memberCount,1);assert.equal(card.discoverable,true);assert.equal(card.joined,false);
+ assert.deepEqual(Object.keys(card).sort(),['badges','createdAt','description','discoverable','id','joined','memberCount','photo','title','updatedAt']);
+ assert.doesNotMatch(JSON.stringify(first)+JSON.stringify(second),/PRIVATE/);
+ const found=await s.handle('mallory','groupDiscover',{q:'design'});
+ assert.equal(found.groups.length,1);assert.equal(found.groups[0].id,b.groupId);
+ const joined=await s.handle('mallory','groupJoin',{groupId:a.groupId});
+ assert.deepEqual(joined,{ok:true,joined:true});
+ assert.equal((await s.handle('mallory','groupGet',{groupId:a.groupId})).group.memberCount,2);
+ assert.equal((await s.handle('mallory','groupDiscover',{q:'harare'})).groups[0].joined,true);
+});
+test('unlisted, archived and banned groups cannot be browsed or joined',async()=>{
+ const s=await seed();
+ const {groupId}=await s.handle('alice','groupCreate',{title:'Secret builders'});
+ await s.handle('alice','groupUpdate',{groupId,discoverable:false});
+ assert.equal((await s.handle('mallory','groupDiscover',{})).groups.length,0);
+ await assert.rejects(s.handle('mallory','groupJoin',{groupId}),/private/);
+ await s.handle('alice','groupUpdate',{groupId,discoverable:true});
+ assert.equal((await s.handle('mallory','groupDiscover',{})).groups.length,1);
+ await s.handle('alice','groupAction',{groupId,action:'archive'});
+ assert.equal((await s.handle('mallory','groupDiscover',{})).groups.length,0);
+ await assert.rejects(s.handle('mallory','groupJoin',{groupId}),/not available/);
+});
+
+test('bootstrap initializes builderStates once with member timezone',async()=>{const s=await seed();const a=await s.handle('alice','bootstrap',{timezone:'Africa/Harare'});assert.equal(a.created,true);assert.equal(a.timezone,'Africa/Harare');const b=await s.handle('alice','bootstrap',{timezone:'Europe/London'});assert.equal(b.created,false);assert.equal((await db.collection('builderStates').doc('alice').get()).data().prefs.timezone,'Africa/Harare');});
