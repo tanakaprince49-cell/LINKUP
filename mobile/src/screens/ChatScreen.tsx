@@ -10,7 +10,7 @@ import { db } from '../lib/firebase';
 import { linkyCall } from '../lib/linkyApi';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { ChevronLeft, Send, Camera, Users, MoreVertical, BellOff, Pin, Archive, Star, Calendar, ContactRound, Shield, UserX, FileText, Trash2, Reply, X, Flag } from 'lucide-react-native';
+import { ChevronLeft, Send, Camera, Users, MoreVertical, BellOff, Pin, Archive, Star, ContactRound, Shield, UserX, FileText, Trash2, Reply, X, Flag } from 'lucide-react-native';
 import { generateWarmIntro } from '../lib/ai';
 import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { profileLinkFor, publicProfileLink } from '../lib/profileLinks';

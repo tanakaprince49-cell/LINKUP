@@ -14,7 +14,7 @@ import { rankLeague } from '../lib/builderLeague';
 import { loadLeaguePool } from '../lib/leaguePool';
 import { getBestOpportunityAlerts, getRotatedOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, getRotatedProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, BellRing, Rocket, Lightbulb, Zap, Star, Flame, UserCheck, Megaphone, Globe } from 'lucide-react-native';
+import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, BellRing, Rocket, Zap, UserCheck, Globe } from 'lucide-react-native';
 import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS, websiteDisplay } from '../lib/campaigns';
 import { SponsoredSlot } from '../components/SponsoredCard';
 import { shareLinkupInvite } from '../lib/activation';

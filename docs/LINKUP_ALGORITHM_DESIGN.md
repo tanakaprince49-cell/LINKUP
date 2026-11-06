@@ -1458,3 +1458,662 @@ existing seams in this repo.
 
 Tickets 1–4 alone change what the product feels like. Tickets 5–6 are what make pairs
 survive a busy week. Everything after that is measurement.
+
+---
+
+# Part III — The Making: the chemistry that compounds into something wonderful
+
+Part II ends at the artefact (R3) and at survival (R4). But the pairs people describe as
+*wonderful* ten years later did not get there by matching well. They got there because the
+relationship kept **paying out**: every few days, each person got a small piece of evidence
+that the other was real, that the work was moving, and that the thing being built would not
+have existed if either had stayed home that month.
+
+Part III designs that loop. It is still a design, not a build: no code, no model, no new
+infrastructure beyond two small Firestore documents and one weekly job.
+
+---
+
+## 32. The three gaps Part II cannot see
+
+| Gap | What Part II measures | What actually decides the outcome |
+| --- | --- | --- |
+| **Stock vs flow** | a pair's vitality *now* | the **derivative**: is it rising, flat or falling? A pair at 0.6 and climbing beats a pair at 0.8 and falling, every time |
+| **The untested fault line** | how well two people agree in week one | how they behave in the **first real disagreement** — which almost never happens before an artefact exists, and always happens after one |
+| **The invisible scoreboard** | that artefacts exist | whether the **pair can see** what they have built together. Two founders with four artefacts and no memory of them feel exactly as unsuccessful as two founders with none |
+
+These three gaps produce a specific, common failure: a pair that sparks, meets, ships
+something small — and quietly dissolves in week six, both of them privately convinced they
+were the one doing the work.
+
+The definition Part III works to:
+
+> **Wonder is not a property of a pair. It is the second derivative of their collaboration:
+> the rate at which two people keep producing things neither would have produced alone, at a
+> coordination cost that stays affordable.**
+
+Three consequences, and the rest of Part III implements them:
+
+1. **Rank trajectories, not levels.** A pair's *trend* over the last three weeks predicts
+   month three better than any level score, and it is far harder to game (§34).
+2. **Manufacture the first disagreement.** Conflict avoidance is the single most reliable
+   predictor of a silent death. Waiting for a natural fight means finding out too late (§37).
+3. **Give the pair a memory.** The artefact catalogue is not a gamification feature. It is
+   the thing they consult when one of them is exhausted and considering quitting (§40).
+
+---
+
+## 33. Three chemistries, in sequence (and never out of order)
+
+Part II scores one chemistry. There are three, they peak at different times, and each one is
+measured by a different instrument. Selling a pair on the third before they have passed the
+first is how matching products create disappointment.
+
+| # | Chemistry | Window | Question it answers | Instrument | Cannot be measured before | Failure if skipped |
+| --- | --- | --- | --- | --- | --- | --- |
+| **X1** | **Spark** | day 0–7 | Do I want to keep talking to this person? | first two exchanges, question density, latency fit (§20) | — | the thread dies politely |
+| **X2** | **Grit** | day 7–45 | What happens to us when something goes wrong or we disagree? | the Trade-off Drill, one missed commitment, the repair (§37) | a small failure has occurred | honeymoon pair that shatters on the first real problem |
+| **X3** | **Wonder** | day 45–365 | Is what we make better *because* we are two? | the complement-surprise test (§35), proof velocity, portfolio (§40) | at least two artefacts exist | a partnership that is pleasant, busy, and adds nothing |
+
+**Sequencing rules**
+
+* The match card may promise **only** X1. Copy that implies a future ("your future cofounder")
+  is banned (§25.3 already bans the register; this extends it to the promise).
+* X2 is *provoked*, not waited for. Every pair that reaches rung W2 gets the Trade-off Drill.
+* X3 is *measured*, never claimed. A pair is told what they have made (§40), never what they
+  might become.
+* Each axis decays independently. A pair can keep high X1 (they like each other) long after
+  X2 collapses (they cannot disagree safely) — and that pair is the most dangerous to leave
+  alone, because it is pleasant and going nowhere. Detect exactly that combination.
+
+```
+dangerous_pleasant = X1 > 0.7 ∧ X2 < 0.35 ∧ weeks_since_artefact ≥ 4
+  → route to a decision drill, not to more encouragement
+```
+
+---
+
+## 34. The Wonder Loop: chemistry as a compounding account
+
+The unit of a good founding relationship is not the conversation and not the artefact. It is
+the **proof**: a small, checkable event that tells one person the other is real.
+
+| Proof | Examples | Weight | Cost to produce |
+| --- | --- | --- | --- |
+| **P1 — Answer** | a specific reply that resolves the open question | 0.5 | minutes |
+| **P2 — Keep** | a promise made last week, done | 1.0 | the week |
+| **P3 — Object** | a document, a frame, a stub, a recorded call, a commit | 1.5 | hours |
+| **P4 — Risk** | dissent logged, a hard truth said early, a bad idea killed | 2.0 | emotional |
+| **P5 — Introduction** | a user, a customer, an expert, a hire brought in | 2.0 | a favour |
+| **P6 — Sacrifice** | scope cut so the pair can ship; credit given publicly | 2.5 | rare, memorable |
+
+```
+belief_{t+1} = clamp( belief_t + 0.12·Σ proof_t − 0.18·debt_t , 0, 1 )
+debt_t       = unanswered questions > 48h  +  broken promises (90d)  +  undecided decisions > 7d
+W_t          = ( Σ proof over last 14d × distinctness ) / ( 1 + coordination_cost )
+
+coordination_cost = meetings/week + decisions_deferred + messages_per_decision_taken
+```
+
+**The design rule that follows from this arithmetic: make proofs cheap enough to be
+frequent.** A pair that produces one magnificent artefact a quarter and nothing in between
+has a *lower* belief integral than a pair that ships four small objects a month and keeps
+answering each other. This is counter-intuitive, it is what the data in every
+collaboration tool shows, and it is the reason LINKUP should never celebrate size over
+cadence.
+
+Operational consequences:
+
+1. **Weight the small.** Copy names the receipt, not the achievement: "he answered the
+   pricing question in 40 minutes on a Sunday" is worth more than "you two are building
+   something big".
+2. **Debt is visible to the pair, not just the model.** A single, honest banner: *"Two
+   decisions are open, and one promise from last Tuesday is still open."* No scores, no
+   percentages, no leaderboard.
+3. **Decay is default.** Ten days without a proof starts belief decay. The intervention is
+   never "try harder"; it is **shrink the next step** (§41).
+4. **Debt asymmetry is the early-warning system.** If one side accumulates debt and the
+   other keeps producing, the pair is becoming a service relationship, and it will end with
+   the producer feeling used. Surface it in week three, not month six.
+
+---
+
+## 35. Distinctness: measuring the "wonderful" in the thing
+
+R3 tells you an object exists. It says nothing about whether the object is *theirs*. The
+cheapest honest measurement is a two-tap question asked of both people, separately, after
+every artefact that reaches rung W2:
+
+> **"In this, what did your partner contribute that you would not have?"**
+> — a user insight · a technical option I hadn't considered · a cut we needed · a standard
+> we held · a connection I didn't have · nothing, I drove this one
+
+Then:
+
+```
+attribution_a, attribution_b ∈ {specific, nothing}
+distinctness = 0.5·[a specific] + 0.5·[b specific] − 0.35·[both 'nothing']
+             + 0.15·[both specific ∧ different categories]      -- complementarity bonus
+```
+
+Readings, and what each one obliges the product to do:
+
+| Pattern | Meaning | Product response |
+| --- | --- | --- |
+| both specific, different categories | **the loop is working** | name it in the Friday demo copy; this is the moment to propose W3 |
+| both specific, same category repeatedly | two of the same, agreeing | propose a rug-pull task (kill a feature, defend a cut) |
+| one specific, one "nothing" every time | a service relationship with a nice story | stop framing as cofounding; route the contributor to "advisor / contractor" framing, honestly |
+| both "nothing" | two people working in parallel | this is a co-working club, not a partnership. Say so kindly, and stop spending intro slots here |
+
+**Guard against politeness attribution.** The taxonomy forces a *named* category, and the
+question is asked asymmetrically in time (each person sees the other's answer only after
+both have answered, and only the *category*, never a comparison). A pair that always picks
+"a standard we held" with no artefact attached is flagged as low-signal and excluded from
+the distinctness term — flattery must not become a feature.
+
+**Why this is the right definition of "something wonderful".** It is not novelty, revenue or
+press. It is the observation, from both sides, that the output is *unattributable to one
+person* — the thing could not have happened alone. That is the exact experience founders
+describe when they say the partnership was worth it, and it is measurable with two taps.
+
+---
+
+## 36. The Two-Week Wonder: a 14-day sprint any pair can run (rung W2.5)
+
+Part II's ladder jumps from "compare two lists" (W1, 20 minutes) to "one shared object"
+(W2, 2–4 hours). That gap is where most pairs stall. Fill it with a structured **14-day
+sprint**: 20–45 minutes a day, asynchronous by default, one object per day, no meetings
+required until day 8.
+
+| Day | Object (each day produces exactly one) | Time | Why it is in this order |
+| --- | --- | --- | --- |
+| 1 | **The sentence**: each writes the problem in one sentence, no jargon, then reads the other's | 15 m | forces specificity early; two sentences that disagree are the most useful thing you'll learn |
+| 2 | **The user**: each names one real person with the problem, and one thing they said | 20 m | converts opinion into evidence before ego attaches to the idea |
+| 3 | **The cut**: agree on the *one* user you will serve first, and name the ones you won't | 20 m | the first real trade-off, cheap and reversible |
+| 4 | **The ugly version**: a landing page, a mock, a diagram, a spreadsheet — anything people can react to | 45 m | reaction beats speculation; asymmetry is fine (one builds, one writes copy) |
+| 5 | **One refusal**: each asks one person to try it and gets one "no", and both write down why | 20 m | inoculates against the first external rejection |
+| 6 | **The rest day** — no task, one question each: "what did this week tell you about how we work?" | 10 m | recovery is part of the protocol, not a lapse |
+| 7 | **The half-hour call**: three questions, agreed in advance, no slides | 30 m | first synchronous contact, earned |
+| 8 | **The decision log starts**: one page, one decision, the dissent recorded | 15 m | the habit that saves the partnership later (§38) |
+| 9 | **The disagreement** — the Trade-off Drill (this is deliberate, §37) | 30 m | a small, safe fight, engineered |
+| 10 | **The build**: the smallest working thing (form, script, prototype, doc) | 45 m | the object exists before the enthusiasm fades |
+| 11 | **The first user**: show it to one stranger, log what they did (not what they said) | 30 m | the first external proof |
+| 12 | **The repair or the revision**: fix the one thing the user broke | 30 m | follow-through loop closes |
+| 13 | **The straight answer**: "do I want to keep doing this with you?" — yes / yes but slower / no | 5 m | asked while it is still cheap to answer honestly |
+| 14 | **The artefact**: a one-page "what we learned and what we're doing next", published to the pair's portfolio | 30 m | the memory, and the R3 object |
+
+**Design rules**
+
+1. **Every day has an object, and no day needs more than 45 minutes.** A member with five
+   hours a week can complete the entire sprint. Capacity mismatch is handled by task size
+   (§23.3), never by exclusion.
+2. **Rest days are part of the protocol.** Day 6 exists so that finishing is possible and so
+   that "I missed a day" never becomes "we failed".
+3. **The sprint is offered once.** If a pair declines, they keep the ladder and no pressure.
+   The offer returns only on a new proof event.
+4. **No sprint before the pair has exchanged four messages.** Structure delivered too early
+   reads as an onboarding funnel, and the pair can smell it.
+5. **Day 13 is the honest exit, and it must be safe.** A "no" here is collected as a clean
+   label, closes the pair gracefully (§46), and never appears anywhere the other person can
+   see. Pairs that end on day 13 are a *success* of the design, not a failure of it.
+
+---
+
+## 37. Conflict inoculation: engineering the first fight
+
+Most founder partnerships do not die of disagreement. They die of **disagreement that never
+happened**, followed by resentment that did. Waiting for a natural conflict means
+discovering whether the pair can disagree only after real money, real users or real ego are
+attached.
+
+So the product provokes one: small, structured, recoverable, and *before* anything is at
+stake.
+
+### 37.1 The Trade-off Drill (30 minutes, at W2)
+
+> **The setup.** Linky hands the pair a real decision from their own sprint — something with
+> two defensible answers and a hard constraint. Example: *"You have three weeks and one
+> builder. Do you ship the payments flow with a manual reconciliation step, or ship the
+> onboarding flow properly and take payments in person for a month?"*
+
+> **The rule.** Before either argues their own view, each writes **the strongest case for the
+> option they like less** (200 words, 10 minutes). Then they read each other's steelman.
+
+> **The decision.** 15 minutes to decide, one decider named in advance (alternating by
+> domain, §38), dissent recorded verbatim in the decision log by the person who lost.
+
+> **The close.** One line each: *"what I'd need to change my mind later."*
+
+Why this specific design:
+
+* **Steelmanning first** converts a status contest into a shared model of the problem, and it
+  is the single highest-yield 20 minutes available to two smart people who disagree.
+* **A named decider** prevents the most expensive failure mode in early teams: unanimous
+  decisions that nobody owns.
+* **Recorded dissent** is what makes the decision revisitable without relitigating the
+  relationship. The dissent is about the option, never about the person.
+* **"What would change my mind"** pre-commits both sides to evidence, which is the only
+  cheap antidote to founder stubbornness.
+
+### 37.2 The repair protocol (when it goes badly — and it will)
+
+If the drill produces heat rather than a decision, Linky offers a **four-line scaffold**,
+never a message:
+
+```
+1. What I noticed:        "When we said X, I noticed I got defensive."
+2. What I own:            "I argued for my option before hearing yours."
+3. What I need:           "I need us to write the dissent down before we move on."
+4. What I propose:        "Let's decide now, log it, and review in two weeks."
+```
+
+Rules: the scaffold is *offered*, never injected into the thread; it is never personalised
+with the other person's weaknesses; and it is never sent automatically (§42). The point is to
+lower the activation energy of the repair, not to have the machine do the repairing.
+
+### 37.3 What the drill measures
+
+```
+grit = 0.35·[dissent logged at all]
+     + 0.30·[both sides steelmanned before arguing]
+     + 0.20·[decision made within the time box]
+     + 0.15·[next artefact shipped within 14 days of the drill]
+```
+
+**`disagreement survival`** — pairs that logged a dissent and *still produced an artefact
+within 14 days* — is the single best predictor Part III has of R4. A pair with a logged,
+survived dissent should outrank a pair with a flawless, dissent-free history, and the
+ranking must encode that explicitly.
+
+**Ethical boundary.** The drill is optional, labelled as a practice ("a fire drill, not a
+test"), never scored against a member, never shown to either person as a number, and never
+run on a pair that has not asked for it. We are teaching a skill, not screening for
+agreeableness.
+
+---
+
+## 38. Decision rights, agreed before they are needed
+
+Most early-stage cofounder conflict is not about vision. It is about **who decides**, and it
+is discovered at the worst possible moment — usually the first hire, the first price change,
+or the first investor conversation.
+
+Provide the pair with a **six-domain decision matrix** in week one. Defaults come from
+archetypes (§18.3), but both people confirm or change every row, and every change is logged
+with a date.
+
+| Domain | Default owner (by archetype) | Typical collision |
+| --- | --- | --- |
+| **Product** — what gets built next | Visionary / Artisan | two people with taste |
+| **Technology** — how it is built | Architect / Builder | two people who can code |
+| **Go-to-market** — who we sell to, and how | Connector / Operator | two people who can sell |
+| **Money** — pricing, spend, fundraising | Operator / Steward | nobody wants it, then everybody does |
+| **People** — hires, roles, credit | Operator | first contractor |
+| **Strategy** — direction, pivots, winding down | Visionary, with the other holding a veto | the pivot |
+
+Each cell is one of **Decider · Input (must be consulted) · Informed (told after)**. Rules:
+
+1. **Every domain has exactly one Decider.** "Both" is not an answer; it is a future
+   deadlock, and the UI should refuse it with a plain sentence saying why.
+2. **A predicted collision is surfaced as a question, never a verdict.** Where both people
+   claim Product, Linky asks: *"You both want product. Who decides if you disagree, and what
+   do you want the other to do when they think you're wrong?"*
+3. **Vetoes are named, limited and written down.** "I can block a pivot once per quarter,
+   and I have to say what evidence would stop me" is a usable rule; a vague "we'll talk it
+   out" is not.
+4. **Change is allowed and visible.** The matrix is a living document with a diff history. A
+   domain that flips owner three times in a month is a signal, not a failure.
+5. **It's a conversation prompt, not a legal instrument.** The matrix intentionally has no
+   legal weight and says so on every screen.
+
+---
+
+## 39. The two-page understanding (not a contract)
+
+Equity and expectations are where founders are most likely to be quietly dishonest — with
+each other and with themselves. The product's job is not to draft an agreement. It is to make
+five conversations impossible to postpone past day 30.
+
+| Prompt | What it asks for | Why it is here, and not later |
+| --- | --- | --- |
+| **Time** | a band, not a promise: *all in · 25 h+ · 10–15 h · weekends* | capacity mismatch is fatal, and it is knowable in week one |
+| **The 90-day goal** | one sentence both can repeat from memory | a goal neither can recite is a goal that will be quietly abandoned |
+| **What each owns** | the six domains from §38, in plain words | roles drift fastest when they are unspoken |
+| **Money** | *when* we will talk about equity and pay — a date, not a number | the date is the deliverable; the number is a lawyer's job |
+| **If one of us stops** | what happens to the work, the IP, the users, the name | the conversation nobody has, in the month everybody can still have it |
+| **The review date** | 90 days, in both calendars, in writing | the exit that makes commitment safe |
+
+**Hard rules**
+
+* **Words, not percentages.** The generator will not produce an equity split. Splits depend
+  on jurisdiction, contribution history, vesting, tax and negotiation, and a language model
+  is the wrong instrument for any of it. LINKUP may say *"talk to a lawyer before you sign
+  anything; splits are not decided in an app"* and nothing more.
+* **Drafts, not signatures.** Both sides edit a shared plain-language draft. No e-sign, no
+  PDF, no legal record, no auto-generation of a "founder agreement".
+* **Nothing here is shown to anyone else.** Not to the other members, not in the profile, not
+  in a public page, and not to the ranking.
+* **Skipping is allowed and recorded.** A pair that skips the money date is told, once, that
+  this is the most common cause of dead partnerships. Then the product stays quiet.
+
+---
+
+## 40. Cadence: the Monday 20 and the Friday 10
+
+Chemistry dies in gaps, not in conflicts. The cheapest structural fix is a ritual small
+enough that tired people still do it and concrete enough that it produces evidence.
+
+**Monday 20 (async, 20 minutes, each alone)**
+
+```
+1. One sentence: what I will prove this week.           (the commitment)
+2. One thing I need from you, with a deadline.          (the ask)
+3. One thing I'm worried about.                          (the honest half)
+```
+
+**Friday 10 (async, 10 minutes, both)**
+
+```
+1. The artefact: a link, a screenshot, a paragraph.      (the proof)
+2. The dissent: one thing I think we're getting wrong.   (the P4 proof)
+3. Next week's sentence.                                 (the loop)
+```
+
+Linky's role in the ceremony: **prompt, record, summarise, never grade.** It assembles the
+week's three artefacts into a single paragraph the pair can read in twenty seconds, and it
+keeps the dissent in the decision log so it cannot be memory-holed.
+
+**Cadence decay ladder** — the response to a missed ritual must get *smaller*, not louder:
+
+| Missed | Response |
+| --- | --- |
+| 1 week | nothing. One missed week is normal life. |
+| 2 weeks | one message, offering to shrink the ask to a single sentence |
+| 3 weeks | propose a **scope cut** — not more effort. "Which of these can we drop?" |
+| 4 weeks | propose a **pause** with a named restart date (§46). Never a guilt message. |
+
+The failure mode this ladder prevents: productivity software that responds to
+non-engagement with escalating notification pressure, which teaches the member to mute the
+product and then to leave the relationship.
+
+---
+
+## 41. The energy ledger and load symmetry
+
+Founding relationships rarely break in a single dramatic event. They break when one person
+has been carrying 70 % for three weeks and hasn't said so.
+
+Once a week, one tap each — coarse bands only, because precise time-tracking between two
+people is surveillance, and surveillance destroys the honesty it was meant to measure:
+
+```
+This week I gave:            light · steady · heavy · too much
+This partnership feels:      energising · neutral · draining
+One thing that would help:   free text, optional, private
+```
+
+```
+load_symmetry = 1 − |band_a − band_b| / 3          (bands mapped to 0,1,2,3)
+hero_victim   = load_symmetry < 0.4 for 3 consecutive weeks ∧ debt rising
+drain_flag    = draining reported by either side 2 weeks running
+```
+
+**Rules**
+
+* **Never show the other person's numbers.** Show the *question*: "You both reported a heavy
+  week. Do you want to talk about the load, or is this just a hard month?"
+* **Hero-victim is intervened on early and gently.** The intervention is a scope reduction
+  proposal, not a performance conversation, and never a comparison of who did more.
+* **"Draining" is data about the *pair and the week*, never about the person.** A pair told
+  "your partner finds this draining" is a pair that will start performing for each other.
+* **Burnout is a legitimate stopping reason.** "We paused because I had nothing left" is a
+  first-class state (§46), and a member who says it must not lose standing in any league,
+  streak or score. This is where LINKUP's league (§23 rule 5) must stay strictly separate
+  from pairing.
+
+---
+
+## 42. Linky as the third chair: rules of engagement
+
+The companion becomes a participant in the relationship the moment a pair opens a thread.
+That is a large amount of power over two people's trust in each other, so the boundaries are
+written down as product rules, not as prompt suggestions.
+
+**Linky may**
+
+| May | How |
+| --- | --- |
+| Run the ceremonies | Monday 20, Friday 10, the retrospective, the 90-day review |
+| Ask a question nobody is asking | always a question, never an assessment |
+| Offer a scaffold | the repair lines (§37.2), the decision frame (§38), the understanding prompts (§39) |
+| Summarise public artefacts | only objects the pair has produced, with links |
+| Name a pattern with evidence | "your last three Fridays slipped; want to shrink the ask?" |
+| Notice a missing proof | "one promise from Tuesday is still open" |
+
+**Linky may not**
+
+| May not | Why |
+| --- | --- |
+| Take a side in a disagreement | it would become the third vote, and the pair would stop talking to each other |
+| Quote one founder to the other | private words become ammunition the moment they are relayed |
+| Generate a message from one founder to the other | the relationship's voice must be the founders' (§25.2) |
+| Reveal any answer from §41, §35 or §33 | these are measurements, not disclosures |
+| Substitute for therapy or mediation | on any signal of coercion, threat or abuse, the product exits the loop and surfaces real-world help |
+| Increase pressure when engagement falls | the decay ladder only ever shrinks (§40) |
+
+**The five moments Linky speaks, and the fifth is the one that matters**
+
+1. The intro and its first task.
+2. The end of the sprint — what you learned, what's next.
+3. After a missed commitment — once, factually.
+4. At a decision, offering the frame and nothing else.
+5. **At 90 days: the honest question.** *"Is this still alive, and if not, do you want to end
+   it well?"* Most products never ask this. Asking it is what makes the other four credible.
+
+---
+
+## 43. The making-phase prompt contract
+
+Same discipline as §22: generated copy is a rendering of logged evidence, validated
+server-side, cached per pair per week, and never on the critical path.
+
+```json
+{
+  "kind": "weekly_review" | "decision_frame" | "repair_scaffold" | "ninety_day_question",
+  "pair": "canonical_pair_id",
+  "cites": [
+    { "atom": "proof", "id": "P3:artefact_123", "date": "2026-11-02" },
+    { "atom": "debt",  "id": "promise_88",      "since": "2026-10-28" }
+  ],
+  "copy": {
+    "headline": "≤ 12 words, no superlatives, no scores",
+    "body": "≤ 55 words, one observation + one question",
+    "question": "≤ 20 words, answerable by one founder alone",
+    "scaffold": ["4 lines, max, only for repair_scaffold"]
+  },
+  "next_rung": "W1" | "W2" | "W2_5" | "W3" | null,
+  "model_version": "v4",
+  "prompt_version": "making-3"
+}
+```
+
+**Validation, identical in spirit to §22.1**
+
+* Every factual clause must map to a `cites` entry whose text contains the cited substring.
+  No atom, no sentence.
+* Banned tokens for this phase: `soulmate`, `destiny`, `perfect match`, `meant to be`,
+  `you two are unstoppable`, `guaranteed`, `chemistry score`, `%`, `invest`, `equity split`,
+  `raise`, `valuation`.
+* One question per message, maximum. Two questions is an interview; zero is a broadcast.
+* Never name a person's weakness. Name a *pattern* with a date and an object attached.
+* If generation fails, the deterministic template ships (the ceremony still runs) — the loop
+  must never depend on a model being up.
+
+---
+
+## 44. Metrics for Part III
+
+| Metric | Definition | Target (year 1) | Guard |
+| --- | --- | --- | --- |
+| **M1 proof velocity** | proofs per pair per 14 days (weighted) | ≥ 3.0 | — |
+| **M2 belief trend** | share of live pairs whose `belief` is flat or rising over 3 weeks | ≥ 65 % | veto if falling 2 months running |
+| **M3 distinctness** | mean complement-surprise (§35) across pairs with ≥ 2 artefacts | ≥ 0.55 | — |
+| **M4 disagreement survival** | pairs that logged a dissent and shipped within 14 days | ≥ 60 % | north star for X2 |
+| **M5 decision latency** | median days from a logged open decision to a decision | ≤ 7 | — |
+| **M6 load symmetry** | pairs with `load_symmetry ≥ 0.6` in the last 4 weeks | ≥ 70 % | — |
+| **M7 good endings** | pairs ending in a recorded good ending / all endings | ≥ 50 % | — |
+| **M8 ninety-day honesty** | pairs that answer the 90-day question at all | ≥ 55 % | — |
+| **M9 assertion rate** | share of pairs that have *declined* a proposed task | 15–45 % | < 10 % means the tasks are too easy or the product is coercive |
+
+`M7` and `M9` are the ones a growth-focused organisation would delete, and they are the two
+that keep the network human: a product where nobody ever ends well and nobody ever says no
+is a product that is extracting, not matching.
+
+---
+
+## 45. Failure modes of the making phase
+
+| Failure | What it looks like | Rule that prevents it |
+| --- | --- | --- |
+| **Productivity theatre** | daily standups, streaks, dashboards; nothing ships | every ritual ends in an *object*, not a status (§40) |
+| **Honeymoon drift** | high X1, no artefact for a month, both "really enjoying it" | `dangerous_pleasant` detector (§33) routes to a drill |
+| **Hero and passenger** | one carries 70 % for three weeks | load symmetry + debt asymmetry surfaced in week 3 (§41) |
+| **Silent resentment** | no dissent logged, ever, in a 90-day pair | the drill is unscheduled into the sprint (§37); a dissent-free pair is treated as *unmeasured*, not ideal |
+| **Decision debt** | seven open questions, no owner | decision log with one decider per domain (§38) |
+| **Premature equity** | split negotiated in week two, based on enthusiasm | dates, not numbers; no equity tooling at all (§39) |
+| **Machine intimacy** | Linky becomes the confidant instead of the other founder | third-chair limits (§42) |
+| **Coercive encouragement** | notifications escalate as engagement drops | the decay ladder only shrinks (§40) |
+| **Scoreboard capture** | pair optimises the wonder metrics (fake artefacts, flattering attributions) | proofs must be *objects*, distinctness requires a named category, and both sides answer separately (§35) |
+| **Extractive ending** | ghosting, disappearance, no closure | four ending states, all recorded, all graceful (§46) |
+
+---
+
+## 46. Endings: how to stop well (and why it is a feature)
+
+Most partnerships end. A product that only knows how to start one is a product that teaches
+people to disappear. Four states, each with copy, each with a consequence:
+
+| State | When | Copy | Consequence |
+| --- | --- | --- | --- |
+| **Paused** | a real reason, with a date | "Parked until 12 March. Nothing lost." | no decay penalty, no league impact, revival offered once on a signal (§21.5) |
+| **Complete** | the artefact shipped; the collaboration was for a season | "You two made a thing. That's the whole point." | pair kept as a strong tie; both members get a portfolio entry |
+| **Closed well** | honest "no" (day 13, or the 90-day question) | "Ended because it wasn't the right shape. Nothing about you is on record." | reasons collected privately, never cross-shown, count as a *success* in M7 |
+| **Closed hard** | ghosting, rule breach, safety issue | no ceremony; the other person gets a neutral, non-blaming message | strikes, rate limits, and — for safety signals — human review |
+
+Rules:
+
+* **A "no" is never broadcast.** The other person is told the collaboration has ended, never
+  why, never by whom, never that a reason existed.
+* **Reasons are aggregated with a minimum cell size of 20** before they can influence the
+  model, so no individual's answer becomes a thumb on the scale.
+* **Endings do not cost standing.** No league points, no streak, no ranking change. If ending
+  a pair cost a member their public position, nobody would ever end one honestly.
+* **The goodbye is a proof too.** A pair that closes well has demonstrated something
+  valuable, and the copy should say so, because the next pair's chemistry depends on this
+  person still being willing to try.
+
+---
+
+## 47. Data model (Part III additions; nothing here is built)
+
+```
+pairLoop/{uidA__uidB}                 // canonical order, same doc family as pairState
+  belief: number                      // 0..1, updated by a nightly job
+  proofs: [{kind: 'P1'..'P6', at, ref}]
+  debt:   [{kind: 'unanswered'|'promise'|'decision', since, ref, closedAt?}]
+  vitalsTrend: {d7, d14, slope}       // trajectory, not level (§32)
+  loadSymmetry: {weeks: [0.8, 0.6, ...], heroVictim: bool}
+  distinctness: {byArtefact: [{artefactId, a, b, at}]}
+  sprint: {startedAt, day, completedDays: [], declined?}
+  drill:  {ranAt, steelmanned: {a, b}, decidedAt, dissentBy, survivedAt?}
+  state: 'paused'|'complete'|'closed_well'|'closed_hard'|null
+  outcomeReasons: {a: taxonomy, b: taxonomy}   // never cross-shown
+
+pairDecisionLog/{pairId}/entries/{id}  // append-only
+  domain, decision, decider, dissentBy?, dissentText?, evidence?, decidedAt, revisitAt?
+
+pairUnderstanding/{pairId}             // the two-page doc (§39)
+  fields{a..f}, editedBy, editedAt, legalWeight: false      // always false
+
+pairPortfolio/{pairId}
+  artefacts: [{id, title, url, rung, at, distinctness?}]
+```
+
+Rules: no message text; `pairDecisionLog` is append-only (corrections are new entries);
+`pairUnderstanding` has no legal status and says so in the document itself; deleting either
+account deletes every pair document, including the portfolio (the member may export their
+own first).
+
+---
+
+## 48. Rollout for Part III, slotted into C0–C3
+
+| Phase | Ships | Why now |
+| --- | --- | --- |
+| **C4 (2 days)** | Decision log + decision-rights matrix + the four-line repair scaffold. All deterministic, all copy templates. | Highest chemistry-per-line in Part III. Requires no model, no new data, and fixes the failure that kills most pairs. |
+| **C5 (1–2 weeks)** | The Two-Week Wonder sprint as a state machine on top of `pairState`; the energy ledger; the Monday/Friday ceremony with summarisation; the cadence decay ladder. | Converts the product from "introduces people" to "runs a collaboration". |
+| **C6 (1 month)** | The Trade-off Drill with steelman capture; complement-surprise; the portfolio; belief/debt job; the four ending states. | These need a few hundred pairs to have run the loop before the numbers mean anything. |
+| **C7 (quarter)** | Trajectory features into the ranker (`vitalsTrend.slope`, `grit`, `distinctness` as pair-level features); re-rank rails on *predicted* R4 rather than R1. | Only after C0–C6 have produced the labels. Ranking on trajectory without a loop to produce trajectories is astrology with extra steps. |
+
+---
+
+## 49. The first ten tickets of Part III (build-ready, no new infrastructure)
+
+| # | Ticket | Touches | Done when |
+| --- | --- | --- | --- |
+| 1 | **Decision log** — one page per pair, append-only, one decider per entry, dissent field | new `api/_pairDecisionLog.js`, `firestore.rules`, a section in `ChatScreen.tsx` | a decision can be logged and revisited from the thread; no edit path exists |
+| 2 | **Decision-rights matrix** — six domains, one decider each, collision surfaced as a question | `pairState` doc + a card in `RecommendedMatchesScreen.tsx` onboarding flow | "both" is impossible in the UI, and a collision generates exactly one question |
+| 3 | **Repair scaffold** — four lines, offered not sent, never personalised with the other side's weakness | `api/_linky.js` templates, `ChatScreen.tsx` | scaffold appears only after a disagree signal; tests assert it is never auto-sent |
+| 4 | **Two-Week Wonder state machine** — 14 days, one object per day, rest day, decline path | new `api/_pairSprint.js`, hourly advance job | a pair can run all 14 days asynchronously; day 13 "no" closes gracefully (§46) |
+| 5 | **Energy ledger** — three taps weekly, bands only, never cross-shown | `api/_builder.js`, a card in `ShipLogScreen.tsx` | each side sees only the question, never the other's answers |
+| 6 | **Monday 20 / Friday 10 ceremony** — prompts, records, a one-paragraph weekly summary | `shared/retention.js` + Linky job | summary cites the three artefacts and nothing else |
+| 7 | **Cadence decay ladder** — shrink, never escalate | notification layer | a 3-week-missed pair receives a scope-cut proposal, not a reminder |
+| 8 | **Trade-off Drill** — scenario from the pair's own sprint, steelman capture, time-box, dissent to the log | `api/_pairSprint.js`, `api/_linky.js` | drill runs in 30 minutes, produces one logged decision and one dissent |
+| 9 | **Complement-surprise** — two taps per artefact, category only, revealed after both answer | `mobile/src/screens/ProfileScreen.tsx` portfolio section + job | distinctness computed with no free text, no cross-comparison |
+| 10 | **Belief, debt and trajectory job** — nightly, per pair, no content | new `api/_pairLoop.js` | belief/debt/trend computed for 100 % of live pairs in under a minute |
+
+Tickets 1–3 are small, and they address the single most destructive gap in the current
+product: two capable people with no agreed way to decide anything.
+
+---
+
+## 50. Open questions for the founder (making-phase specific)
+
+1. **Provocation**: are we willing to *provoke* a disagreement in week two? It is the highest
+   -value intervention in this document and the one most likely to feel intrusive. It can be
+   opt-in; it should not be silent.
+2. **The 14-day sprint**: is a structured sprint acceptable to the audience, or does it read
+   as a course? The alternative is a lighter three-step ladder, which converts less.
+3. **Ending states**: do we let a pair mark a collaboration "complete" (shipped, done) without
+   either side feeling it as a rejection? That framing is the difference between a portfolio
+   and a graveyard.
+4. **Portfolio privacy**: should a completed artefact be showable on a public profile as
+   *evidence of collaboration* (opt-in, both sides must agree), or stay strictly private? The
+   public version is a much stronger signal to future matches and a much larger consent
+   problem.
+5. **League separation**: will we hold the line that no pairing reward ever touches league
+   points? It is the one rule that keeps the wonder metrics honest.
+6. **Third chair**: how much should Linky *remember* across pairs — a member's decision style,
+   their repair history? It makes the third chair far better and makes the privacy story much
+   harder to tell plainly.
+
+---
+
+## 51. What "wonderful" means, operationally
+
+The whole document reduces to five sentences a member could read and agree with:
+
+1. **We introduce you to someone for a reason we can name**, and we never show you a score.
+2. **You will be asked to make something small and real in the first two weeks** — not to
+   have a nice chat.
+3. **You will practise disagreeing, on purpose, while it is still cheap.**
+4. **The product will keep a record of what you made**, so neither of you can forget it.
+5. **If it doesn't work, it will end well, and nothing about you will be on the record.**
+
+The chemistry is not in the ranker. The ranker decides who gets a chance. The chemistry is in
+the fourteen days after the intro: one sentence, one user, one cut, one refusal, one small
+fight, one object, and a question asked honestly at the end. That is the whole engine.
+
+A pair that runs that loop and still goes quiet has taught the system something true. A pair
+that runs it and ships something neither of them would have built alone is the outcome this
+entire design exists to make ordinary.
