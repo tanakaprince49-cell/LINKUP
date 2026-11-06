@@ -1089,13 +1089,13 @@
     "file": "mobile/src/screens/RecommendedMatchesScreen.tsx",
     "line": 351,
     "before": "Recommended people for you",
-    "after": "Professionals recommended for you"
+    "after": "Who to meet"
   },
   {
     "file": "mobile/src/screens/RecommendedMatchesScreen.tsx",
     "line": 354,
     "before": "Ranked by shared skills, industries, goals, work style, and compatibility so you can find useful people faster.",
-    "after": "Recommendations consider shared skills, industries, professional goals, and work style to support relevant business connections."
+    "after": "Every card names one thing you share and one thing you don't — and offers a first move that takes 20 minutes. You will never see a percentage here."
   },
   {
     "file": "mobile/src/screens/ShipLogScreen.tsx",
