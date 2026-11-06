@@ -387,28 +387,3 @@ export function localCommonalityRank(me: UserProfile | null | undefined, people:
     .slice(0, limitCount)
     .map((entry) => ({ uid: entry.person.uid, score: entry.score, reason: entry.reason, cached: true as const }));
 }
-
-/**
- * Nudge duplicate scores apart, deterministically.
- *
- * The scorer is deliberately coarse: with a small network and sparse profiles
- * several people legitimately land on the exact same number (everything with
- * fewer than two overlapping dimensions is capped at 20), so a rail like
- * "Today's 2 picks" used to show two identical percentages side by side.
- *
- * Order is preserved and the highest score keeps its value — each later entry
- * is only ever pushed *below* the one before it, by `step` points, so the
- * ranking stays truthful while the numbers read as distinct.
- */
-export function spreadTiedScores<T extends { uid: string; score: number }>(
-  entries: T[],
-  step = 2
-): T[] {
-  let previous = Number.POSITIVE_INFINITY;
-  return entries.map((entry) => {
-    const raw = Number.isFinite(entry?.score) ? Math.round(entry.score) : 1;
-    const score = raw < previous ? raw : Math.max(1, previous - step);
-    previous = score;
-    return { ...entry, score };
-  });
-}
