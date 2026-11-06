@@ -14,7 +14,7 @@ import { rankLeague } from '../lib/builderLeague';
 import { loadLeaguePool } from '../lib/leaguePool';
 import { getBestOpportunityAlerts, getRotatedOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, getRotatedProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, Search, BellRing, Rocket, Lightbulb, Zap, Star, Flame, UserCheck, Megaphone, Globe } from 'lucide-react-native';
+import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, BellRing, Rocket, Lightbulb, Zap, Star, Flame, UserCheck, Megaphone, Globe } from 'lucide-react-native';
 import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS, websiteDisplay } from '../lib/campaigns';
 import { SponsoredSlot } from '../components/SponsoredCard';
 import { shareLinkupInvite } from '../lib/activation';
@@ -391,9 +391,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     borderWidth: 1,
     borderColor: HOME_LINE }]}>
             <Text style={styles.opportunityBtnText}>View Profile</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => void Linking.openURL('https://www.linkupbuild.com/search/')} style={[styles.opportunityIconBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-            <Search size={15} color={textColor(isDark)} />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
