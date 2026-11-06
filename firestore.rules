@@ -181,6 +181,9 @@ service cloud.firestore {
           validOptionalList(data, 'circles', 20) &&
           validOptionalMap(data, 'personalityAnswers', 30) &&
           validOptionalMap(data, 'roleAnswers', 30) &&
+          // The Work Style Card (docs/LINKUP_ALGORITHM_DESIGN.md §19.1):
+          // eight forced choices, opt-in, answers only, no free text.
+          validOptionalMap(data, 'workStyleCard', 12) &&
           validOptionalMap(data, 'resume', 10) &&
           validOptionalMap(data, 'socialLinks', 10) &&
           validOptionalBool(data, 'isVisible') &&
@@ -224,6 +227,7 @@ service cloud.firestore {
           'age', 'country', 'city',
           'skills', 'interests', 'goals', 'industries',
           'experience', 'personalityType', 'personalityAnswers', 'roleAnswers',
+          'workStyleCard',
           'commitmentLevel', 'startupStage', 'fundingStage',
           'availability', 'timezone', 'languages', 'workStyle',
           'lookingFor', 'networkingIntent',
@@ -260,6 +264,7 @@ service cloud.firestore {
           'age', 'country', 'city',
           'skills', 'interests', 'goals', 'industries',
           'experience', 'personalityType', 'personalityAnswers', 'roleAnswers',
+          'workStyleCard',
           'commitmentLevel', 'startupStage', 'fundingStage',
           'availability', 'timezone', 'languages', 'workStyle',
           'lookingFor', 'networkingIntent',

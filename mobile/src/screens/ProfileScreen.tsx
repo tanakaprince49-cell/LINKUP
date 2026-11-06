@@ -58,6 +58,7 @@ import { blurActiveElementOnWeb } from '../lib/webFocus';
 import { describeAIError, getLastAIDiagnostic } from '../lib/aiDiagnostics';
 import { normalizeIdeaDraft } from '../lib/ideas';
 import { displayNameFor } from '../lib/discovery';
+import { bandForScore } from '../lib/matchmaking';
 import { profileLinkFor } from '../lib/profileLinks';
 import { LINKUP_ROLE_LABELS, roleInfoFor } from '../lib/roles';
 import VerifiedBadge from '../components/VerifiedBadge';
@@ -2964,8 +2965,8 @@ export default function ProfileScreen({ navigation, route }: any) {
             <View style={[styles.compatCard, liquidGlass(isDark, false)]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <View>
-                  <Text style={[styles.compatPct, { color: textColor(isDark) }]}>{compatibility}%</Text>
-                  <Text style={styles.compatSub}>Compatibility</Text>
+                  <Text style={[styles.compatPct, { color: textColor(isDark) }]}>{bandForScore(compatibility).label}</Text>
+                  <Text style={styles.compatSub}>Why you two</Text>
                 </View>
                 <View style={styles.compatTagPill}>
                   <Text style={styles.compatTagText}>{(profile as any)?.workStyle || 'Execution-focused'}</Text>

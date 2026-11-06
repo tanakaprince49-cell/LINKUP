@@ -26,6 +26,7 @@ import { conversationAvatarUri, loadConversationProfile, normalizeConversationPr
 import { subscribeToConnectionGate, type ConnectionGate } from '../lib/connectionRequests';
 import { allowSendRate, reportSafetyIssue, scanMessageSafety, theyBlockedMe } from '../lib/messageSafety';
 import { ensureDirectMatch } from '../lib/chat';
+import { dismissPairMove, isActionableMove, pairNextMove, type PairMove } from '../lib/pairLoop';
 import { notifyUser } from '../lib/notify';
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '👏', '😮'] as const;
@@ -217,6 +218,11 @@ export default function ChatScreen({ route, navigation }: any) {
   const proLocked = isAndroidProLocked(profile);
   const openPaywall = (feature: string) => setPaywallFeature(feature);
   const [introBusy, setIntroBusy] = useState(false);
+  // The next move for this introduction (docs/LINKUP_ALGORITHM_DESIGN.md §21).
+  // Computed from message metadata on the device; nothing is uploaded and the
+  // suggestion is offered, never sent.
+  const [pairMove, setPairMove] = useState<PairMove | null>(null);
+  const [moveHidden, setMoveHidden] = useState(false);
   const handleDraftIntro = async () => {
     if (introBusy) return;
     if (proLocked) {
@@ -258,6 +264,26 @@ export default function ChatScreen({ route, navigation }: any) {
     !blockedByThem &&
     !hasBlockedUser &&
     (connectionGate.status === 'approved' || messages.length > 0);
+
+  useEffect(() => {
+    if (!myUid || !otherUserId) {
+      setPairMove(null);
+      return;
+    }
+    let cancelled = false;
+    const move = pairNextMove({
+      me: profile,
+      other: (otherUser || otherUserParam || null) as any,
+      messages,
+    });
+    if (cancelled) return;
+    setPairMove(move);
+    return () => {
+      cancelled = true;
+    };
+    // `messages.length` is deliberate: vitals only need counts and timings, so
+    // the strip does not recompute on every keystroke or reaction.
+  }, [myUid, otherUserId, otherUser?.uid, profile?.uid, messages.length]);
 
   useEffect(() => {
     if (!myUid || !otherUserId) {
@@ -1178,6 +1204,40 @@ export default function ChatScreen({ route, navigation }: any) {
         </View>
       )}
 
+      {/* NEXT MOVE — the chemistry layer, in the room rather than in a feed.
+          One suggestion per state, offered not sent, and dismissible for a day. */}
+      {!moveHidden && isActionableMove(pairMove) && pairMove ? (
+        <View style={[styles.nextMove, liquidGlass(isDark, false)]}>
+          <View style={styles.nextMoveTop}>
+            <Text style={styles.nextMoveStatus}>{pairMove.statusLabel.toUpperCase()}</Text>
+            {!!pairMove.band && <Text style={styles.nextMoveBand}>{pairMove.band}</Text>}
+            <TouchableOpacity
+              onPress={() => {
+                setMoveHidden(true);
+                void dismissPairMove(pairMove.pairId);
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <X size={14} color={textColor(isDark, 'muted')} />
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.nextMoveCopy, { color: textColor(isDark) }]}>{pairMove.suggestion}</Text>
+          {!!pairMove.tinyTask && <Text style={styles.nextMoveTask}>{pairMove.tinyTask}</Text>}
+          {!!pairMove.tempoNote && <Text style={styles.nextMoveTempo}>{pairMove.tempoNote}</Text>}
+          {!!pairMove.opener && (
+            <TouchableOpacity
+              style={styles.nextMoveBtn}
+              onPress={() => {
+                setInputText(pairMove.opener.slice(0, MOBILE_CHAT_MESSAGE_LIMIT));
+                blurActiveElementOnWeb();
+              }}
+            >
+              <Text style={styles.nextMoveBtnText}>DRAFT THE FIRST LINE</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : null}
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior="padding"
@@ -1436,6 +1496,67 @@ const styles = StyleSheet.create({
     top: 330,
     left: -120,
     transform: [{ rotate: '16deg' }],
+  },
+  nextMove: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  nextMoveTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  nextMoveStatus: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    color: COLORS.primaryStrong,
+  },
+  nextMoveBand: {
+    flex: 1,
+    textAlign: 'right',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    color: '#666',
+  },
+  nextMoveCopy: {
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
+  nextMoveTask: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 16,
+    color: '#666',
+  },
+  nextMoveTempo: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 16,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  nextMoveBtn: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  nextMoveBtnText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    color: '#000',
   },
   header: {
     flexDirection: 'row',

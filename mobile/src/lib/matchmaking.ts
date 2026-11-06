@@ -4,15 +4,56 @@ import { Platform } from 'react-native';
 import { auth, functions } from './firebase';
 import { UserProfile } from '../types';
 import { describeAIError, hasDirectAIKey, recordAIError, requestGeminiText } from './aiDiagnostics';
+import {
+  MODEL_VERSION,
+  bandOf,
+  composeCard,
+  composePortfolio,
+  rankPool,
+  type MatchCard,
+  type PairScore,
+} from '../../../shared/linkup-match';
 
+/**
+ * A ranked candidate, as the rest of the app consumes it.
+ *
+ * `score` is a 0–100 number that exists for sorting and for the debug payload.
+ * It is NEVER rendered as a percentage: members see `band`, two reasons and one
+ * thing to do (docs/LINKUP_ALGORITHM_DESIGN.md §3 L5, §22).
+ */
 export type RankedCandidate = {
   uid: string;
   score: number;
+  band: { id: string; min: number; label: string; line: string };
   reason: string;
+  why: { shared: string; complement: string };
+  opener: string;
+  tinyTask: string;
+  slot: 'mirror' | 'complement' | 'wildcard';
+  agenda: string[];
+  tempoNote: string | null;
+  repair: string | null;
+  cites: string[];
+  modelVersion: string;
   cached: boolean;
 };
 
 export type MatchScoreMap = Record<string, RankedCandidate>;
+
+/** Bands for any 0–100 surface score. The number never reaches the screen. */
+export const bandForScore = (score: number) =>
+  bandOf(Math.max(0, Math.min(100, Number(score) || 0)) / 100);
+
+/** Single-word band chips for compact pills. */
+export const BAND_SHORT: Record<string, string> = {
+  strong: 'STRONG',
+  good: 'GOOD',
+  worth_a_look: 'LOOK',
+  hidden: 'THIN',
+};
+
+/** What an LLM is allowed to return: a uid, a nudge, and a reason to validate. */
+type RankProposal = { uid: string; score: number; reason: string; cached: boolean };
 
 export const rankedCandidatesToMap = (ranked: RankedCandidate[]): MatchScoreMap => {
   const map: MatchScoreMap = {};
@@ -22,19 +63,39 @@ export const rankedCandidatesToMap = (ranked: RankedCandidate[]): MatchScoreMap 
   return map;
 };
 
+const cardFor = (score: PairScore) => composeCard(score);
+
+/**
+ * One pair, scored the same way the rail scores it: numeric score kept for
+ * sorting, band and reasons for the human reading it.
+ */
+export const toRankedCandidate = (score: PairScore): RankedCandidate => {
+  const card: MatchCard = cardFor(score);
+  const reason = [card.why.shared, card.why.complement].filter(Boolean).join(' ');
+  return {
+    uid: score.uid,
+    score: Math.max(1, Math.min(100, Math.round(score.display * 100))),
+    band: score.band,
+    reason,
+    why: card.why,
+    opener: card.opener,
+    tinyTask: card.tiny_task,
+    slot: card.slot,
+    agenda: card.agenda,
+    tempoNote: card.tempo_note,
+    repair: card.repair,
+    cites: card.cites,
+    modelVersion: score.modelVersion || MODEL_VERSION,
+    cached: true,
+  };
+};
+
 export const compatibilityForPair = (
   me: UserProfile | null | undefined,
   person: UserProfile | null | undefined
 ): RankedCandidate | null => {
   if (!person?.uid) return null;
-  return (
-    localCommonalityRank(me, [person], 1)[0] || {
-      uid: person.uid,
-      score: 1,
-      reason: 'Promising builder match',
-      cached: true,
-    }
-  );
+  return localCommonalityRank(me, [person], 1)[0] || null;
 };
 
 const isCallableMissing = (error: unknown) => {
@@ -67,7 +128,7 @@ const serverAIRankingEnabled = () =>
 const cloudFunctionRankingEnabled = () =>
   String(process.env.EXPO_PUBLIC_ENABLE_CLOUD_FUNCTIONS || '').toLowerCase() === 'true';
 
-export async function rankCandidatesWithAI(candidateIds: string[], maxCandidates = 20): Promise<RankedCandidate[]> {
+export async function rankCandidatesWithAI(candidateIds: string[], maxCandidates = 20): Promise<RankProposal[]> {
   if (!cloudFunctionRankingEnabled()) return [];
   try {
     const callable = httpsCallable(functions, 'rankCandidates');
@@ -81,7 +142,7 @@ export async function rankCandidatesWithAI(candidateIds: string[], maxCandidates
         reason: String(r?.reason ?? ''),
         cached: !!r?.cached,
       }))
-      .filter((r: RankedCandidate) => r.uid && Number.isFinite(r.score) && r.reason);
+      .filter((r: RankProposal) => r.uid && Number.isFinite(r.score) && r.reason);
   } catch (error) {
     if (isCallableMissing(error)) {
       return [];
@@ -105,7 +166,7 @@ const compactProfile = (profile: Partial<UserProfile> | null | undefined) => ({
   roleSignals: profile?.roleAnswers || {},
 });
 
-async function serverGeminiRank(me: UserProfile | null | undefined, candidates: UserProfile[], maxCandidates: number): Promise<RankedCandidate[]> {
+async function serverGeminiRank(me: UserProfile | null | undefined, candidates: UserProfile[], maxCandidates: number): Promise<RankProposal[]> {
   if (!serverAIRankingEnabled() || Platform.OS !== 'web' || typeof fetch !== 'function' || !me || candidates.length === 0) return [];
 
   const compactCandidates = candidates.slice(0, Math.min(maxCandidates, 20)).map(compactProfile);
@@ -137,12 +198,12 @@ async function serverGeminiRank(me: UserProfile | null | undefined, candidates: 
       reason: String(r?.reason ?? ''),
       cached: !!r?.cached,
     }))
-    .filter((r: RankedCandidate) => r.uid && Number.isFinite(r.score) && r.reason);
+    .filter((r: RankProposal) => r.uid && Number.isFinite(r.score) && r.reason);
 }
 
-const parseRankedLines = (text: string, candidates: UserProfile[], maxCandidates: number): RankedCandidate[] => {
+const parseRankedLines = (text: string, candidates: UserProfile[], maxCandidates: number): RankProposal[] => {
   const allowedIds = new Set(candidates.map((candidate) => candidate.uid));
-  const rows: RankedCandidate[] = [];
+  const rows: RankProposal[] = [];
   const seen = new Set<string>();
 
   text
@@ -183,7 +244,7 @@ const parseRankedLines = (text: string, candidates: UserProfile[], maxCandidates
   return rows.sort((left, right) => right.score - left.score).slice(0, maxCandidates);
 };
 
-const parseRankedJsonQuietly = (text: string, candidates: UserProfile[], maxCandidates: number): RankedCandidate[] => {
+const parseRankedJsonQuietly = (text: string, candidates: UserProfile[], maxCandidates: number): RankProposal[] => {
   const start = text.indexOf('[');
   const end = text.lastIndexOf(']');
   if (start === -1 || end === -1 || end <= start) return [];
@@ -199,15 +260,15 @@ const parseRankedJsonQuietly = (text: string, candidates: UserProfile[], maxCand
         reason: String(rank?.reason || 'Ranked startup fit').slice(0, 120),
         cached: false,
       }))
-      .filter((rank: RankedCandidate) => allowedIds.has(rank.uid) && Number.isFinite(rank.score) && rank.reason)
-      .sort((left: RankedCandidate, right: RankedCandidate) => right.score - left.score)
+      .filter((rank: RankProposal) => allowedIds.has(rank.uid) && Number.isFinite(rank.score) && rank.reason)
+      .sort((left: RankProposal, right: RankProposal) => right.score - left.score)
       .slice(0, maxCandidates);
   } catch {
     return [];
   }
 };
 
-async function directGeminiRank(me: UserProfile | null | undefined, candidates: UserProfile[], maxCandidates: number): Promise<RankedCandidate[]> {
+async function directGeminiRank(me: UserProfile | null | undefined, candidates: UserProfile[], maxCandidates: number): Promise<RankProposal[]> {
   if (Platform.OS === 'web' || !directGeminiRankingEnabled() || !hasDirectAIKey() || !me || candidates.length === 0) return [];
 
   const localTop = localCommonalityRank(me, candidates, Math.min(maxCandidates, 20));
@@ -239,6 +300,106 @@ async function directGeminiRank(me: UserProfile | null | undefined, candidates: 
   return parseRankedLines(String(text || ''), candidates, maxCandidates);
 }
 
+const normalizeText = (value: unknown) => String(value ?? '').trim().toLowerCase();
+
+/**
+ * Local, deterministic ranking — the real ranker.
+ *
+ * Everything below `rankPool` is the engine in shared/linkup-match.js: nine fit
+ * families, seven chemistry axes, the harmonic reciprocity guard, gating and
+ * bands. No model, no network, no randomness, so the same two profiles always
+ * produce the same card.
+ */
+export function localCommonalityRank(
+  me: UserProfile | null | undefined,
+  people: UserProfile[],
+  limitCount = 15
+): RankedCandidate[] {
+  if (!me?.uid || !Array.isArray(people) || people.length === 0) return [];
+
+  const out = rankPool(me as unknown as Record<string, unknown>, people as unknown as Record<string, unknown>[], {
+    limit: Math.max(limitCount, people.length),
+  });
+
+  return out.scored.slice(0, limitCount).map(toRankedCandidate);
+}
+
+/** Score every candidate and keep the pair scores, for callers that need the axes. */
+export function scorePool(me: UserProfile | null | undefined, people: UserProfile[]): PairScore[] {
+  if (!me?.uid || !Array.isArray(people) || people.length === 0) return [];
+  return rankPool(me as unknown as Record<string, unknown>, people as unknown as Record<string, unknown>[], {
+    limit: Math.max(people.length, 1),
+  }).scored;
+}
+
+/**
+ * The portfolio rail (§24): Mirror, Complement, Wildcard. Three different
+ * reasons rather than three near-copies, and it degrades to two honest cards
+ * under ~30 eligible members instead of padding a wildcard.
+ */
+export function composeMatchPortfolio(
+  me: UserProfile | null | undefined,
+  people: UserProfile[],
+  k = 3
+): RankedCandidate[] {
+  if (!me?.uid || !Array.isArray(people) || people.length === 0) return [];
+  const out = rankPool(me as unknown as Record<string, unknown>, people as unknown as Record<string, unknown>[], {
+    limit: Math.max(people.length, 1),
+  });
+  const slots = composePortfolio(out.scored, { k, poolSize: out.poolSize });
+  return slots.map((score) => ({ ...toRankedCandidate(score), slot: score.slot as RankedCandidate['slot'] }));
+}
+
+/**
+ * Band-limited tie-break (§3 L4b), applied on the client too: a model may only
+ * reorder people whose scores are within `band` points of each other.
+ */
+export function applyBandedReorder(
+  ranked: RankedCandidate[],
+  proposedOrder: string[],
+  band = 6
+): RankedCandidate[] {
+  if (!ranked.length || !proposedOrder.length) return ranked;
+
+  const desired = new Map<string, number>();
+  proposedOrder.forEach((uid, index) => desired.set(uid, index));
+
+  const next = [...ranked];
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < next.length * next.length) {
+    changed = false;
+    guard += 1;
+    for (let index = 0; index < next.length - 1; index += 1) {
+      const left = next[index];
+      const right = next[index + 1];
+      const leftWant = desired.get(left.uid) ?? index;
+      const rightWant = desired.get(right.uid) ?? index + 1;
+      const withinBand = Math.abs(left.score - right.score) <= band;
+      if (leftWant > rightWant && withinBand) {
+        next[index] = right;
+        next[index + 1] = left;
+        changed = true;
+      }
+    }
+  }
+  return next;
+}
+
+/** A reason survives only if it cites something in the pair's own ledger. */
+export function reasonCitesEvidence(reason: string, candidate: RankedCandidate): boolean {
+  const text = normalizeText(reason);
+  if (!text || text.length < 12) return false;
+  const banned = ['%', 'perfect', 'soulmate', 'synergy', 'chemistry', 'vibes', 'destined', 'astrology'];
+  if (banned.some((token) => text.includes(token))) return false;
+
+  const evidence = normalizeText(`${candidate.why.shared} ${candidate.why.complement}`)
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 4);
+  return evidence.some((word) => text.includes(word));
+}
+
 export async function rankCandidatesHybrid(
   me: UserProfile | null | undefined,
   candidates: UserProfile[],
@@ -246,144 +407,44 @@ export async function rankCandidatesHybrid(
 ): Promise<RankedCandidate[]> {
   const candidateIds = candidates.map((candidate) => candidate.uid).filter(Boolean).slice(0, Math.max(maxCandidates, 20));
 
-  // Always start with local ranking for consistency
+  // The deterministic engine always produces the order and the reasons. The
+  // model below may only nudge people who are already inside the same band.
   const localRanked = localCommonalityRank(me, candidates, maxCandidates);
+  if (!localRanked.length) return [];
 
+  let proposed: RankProposal[] = [];
   try {
-    const geminiRanked = await directGeminiRank(me, candidates, maxCandidates);
-    if (geminiRanked.length) return geminiRanked;
-  } catch (error) {
-    console.warn('Smart ranking unavailable:', describeAIError(error));
-    recordAIError(error, 'Smart ranking unavailable');
-  }
-
-  try {
-    const serverRanked = await serverGeminiRank(me, candidates, maxCandidates);
-    if (serverRanked.length) return serverRanked;
+    proposed = await directGeminiRank(me, candidates, maxCandidates);
   } catch (error) {
     recordAIError(error, 'Smart ranking unavailable');
   }
 
-  const functionRanked = await rankCandidatesWithAI(candidateIds, maxCandidates);
-  if (functionRanked.length) return functionRanked;
-
-  return localRanked;
-}
-
-const normalizeText = (value: unknown) => String(value ?? '').trim().toLowerCase();
-
-const toNormalizedArray = (value: unknown): string[] => {
-  if (Array.isArray(value)) return value.map((entry) => normalizeText(entry)).filter(Boolean);
-  const normalized = normalizeText(value);
-  return normalized ? [normalized] : [];
-};
-
-const countShared = (left: string[], right: string[]) => {
-  if (!left.length || !right.length) return 0;
-  const rightSet = new Set(right);
-  return Array.from(new Set(left)).filter((entry) => rightSet.has(entry)).length;
-};
-
-const flattenAnswers = (answers?: Record<string, string | string[]>) =>
-  Object.values(answers || {}).flatMap((value) => toNormalizedArray(value));
-
-const complementaryRoles: Record<string, string[]> = {
-  founder: ['developer', 'designer', 'marketer', 'operator', 'investor'],
-  developer: ['founder', 'designer', 'operator', 'marketer'],
-  designer: ['founder', 'developer', 'marketer'],
-  investor: ['founder', 'operator'],
-  marketer: ['founder', 'developer', 'designer', 'operator'],
-  student: ['founder', 'developer', 'designer', 'marketer', 'investor', 'operator'],
-  operator: ['founder', 'developer', 'marketer', 'investor'],
-};
-
-export function localCommonalityRank(me: UserProfile | null | undefined, people: UserProfile[], limitCount = 15) {
-  const mySkills = toNormalizedArray(me?.skills);
-  const myIndustries = toNormalizedArray(me?.industries);
-  const myLookingFor = toNormalizedArray(me?.lookingFor);
-  const myPersonality = toNormalizedArray(me?.personalityAnswers ? Object.values(me.personalityAnswers) : []);
-  const myRoleAnswers = flattenAnswers(me?.roleAnswers);
-  const myWorkStyle = normalizeText(me?.workStyle);
-  const myCommitment = normalizeText(me?.commitmentLevel);
-  const myStage = normalizeText(me?.startupStage);
-  const myRole = normalizeText(me?.occupation);
-  const myCity = normalizeText((me as any)?.city);
-  const myCountry = normalizeText((me as any)?.country);
-
-  const scorePerson = (person: UserProfile) => {
-    const skills = toNormalizedArray(person.skills);
-    const industries = toNormalizedArray(person.industries);
-    const lookingFor = toNormalizedArray(person.lookingFor);
-    const personality = toNormalizedArray(person.personalityAnswers ? Object.values(person.personalityAnswers) : []);
-    const roleSignals = flattenAnswers(person.roleAnswers);
-    const workStyle = normalizeText(person.workStyle);
-    const commitment = normalizeText(person.commitmentLevel);
-    const stage = normalizeText(person?.startupStage);
-    const role = normalizeText(person.occupation);
-    const city = normalizeText((person as any)?.city);
-    const country = normalizeText((person as any)?.country);
-
-    const sharedSkills = countShared(mySkills, skills);
-    const sharedIndustries = countShared(myIndustries, industries);
-    const sharedGoals = countShared(myLookingFor, lookingFor);
-    const sharedPersonality = countShared(myPersonality, personality);
-    const sharedRoleSignals = countShared(myRoleAnswers, roleSignals);
-    const sameWorkStyle = myWorkStyle && workStyle && myWorkStyle === workStyle ? 1 : 0;
-    const sameCommitment = myCommitment && commitment && myCommitment === commitment ? 1 : 0;
-    const sameStage = myStage && stage && myStage === stage ? 1 : 0;
-    const complementaryRole = myRole && role && complementaryRoles[myRole]?.includes(role) ? 1 : 0;
-    const sameRole = myRole && role && myRole === role ? 1 : 0;
-    // Location is a real compatibility signal AND the thing that most often
-    // separates two otherwise identical sparse profiles, which is why it is
-    // scored here instead of only being shown on the card.
-    const sameCity = myCity && city && myCity === city ? 1 : 0;
-    const sameCountry = !sameCity && myCountry && country && myCountry === country ? 1 : 0;
-
-    const overlapDimensions = [sharedSkills, sharedIndustries, sharedGoals, sharedPersonality, sameWorkStyle, sameCommitment, complementaryRole].filter(Boolean).length;
-
-    const rawScore =
-      sharedSkills * 14 +
-      sharedIndustries * 9 +
-      sharedGoals * 12 +
-      sharedRoleSignals * 7 +
-      sharedPersonality * 6 +
-      sameWorkStyle * 8 +
-      sameCommitment * 5 +
-      sameStage * 4 +
-      complementaryRole * 10 +
-      sameRole * 4 +
-      sameCity * 3 +
-      sameCountry * 1;
-
-    let score = Math.max(1, Math.min(100, Math.round(rawScore)));
-
-    if (overlapDimensions < 2 && score > 20) {
-      score = Math.min(score, 20);
+  if (!proposed.length) {
+    try {
+      proposed = await serverGeminiRank(me, candidates, maxCandidates);
+    } catch (error) {
+      recordAIError(error, 'Smart ranking unavailable');
     }
+  }
 
-    const reasonParts: string[] = [];
-    if (sharedSkills) reasonParts.push(`${sharedSkills} shared skill${sharedSkills === 1 ? '' : 's'}`);
-    if (sharedIndustries) reasonParts.push(`${sharedIndustries} shared interest${sharedIndustries === 1 ? '' : 's'}`);
-    if (sharedGoals) reasonParts.push(`${sharedGoals} shared goal${sharedGoals === 1 ? '' : 's'}`);
-    if (sharedRoleSignals) reasonParts.push(`${sharedRoleSignals} matching signal${sharedRoleSignals === 1 ? '' : 's'}`);
-    if (sharedPersonality) reasonParts.push(`${sharedPersonality} personality match${sharedPersonality === 1 ? '' : 'es'}`);
-    if (sameWorkStyle) reasonParts.push('same work style');
-    if (sameCommitment) reasonParts.push('same commitment level');
-    if (sameCity) reasonParts.push('same city');
-    else if (sameCountry) reasonParts.push('same country');
-    if (complementaryRole) reasonParts.push('complementary role match');
-    if (sameStage && !reasonParts.length) reasonParts.push('similar startup stage');
+  if (!proposed.length) {
+    proposed = await rankCandidatesWithAI(candidateIds, maxCandidates);
+  }
 
-    return {
-      score,
-      reason: reasonParts.slice(0, 3).join(' · ') || 'Promising builder match',
-    };
-  };
+  if (!proposed.length) return localRanked;
 
-  return people
-    .filter((person) => !!person?.uid)
-    .map((person) => ({ person, ...scorePerson(person) }))
-    .sort((left, right) => right.score - left.score)
-    .slice(0, limitCount)
-    .map((entry) => ({ uid: entry.person.uid, score: entry.score, reason: entry.reason, cached: true as const }));
+  // Keep only proposals we can defend: same set of people, reasons that cite
+  // evidence the pair actually has. Everything else falls back to the engine.
+  const byUid = new Map(localRanked.map((entry) => [entry.uid, entry]));
+  const order: string[] = [];
+  for (const proposal of proposed) {
+    const local = byUid.get(proposal.uid);
+    if (!local) continue;
+    if (!order.includes(proposal.uid)) order.push(proposal.uid);
+    if (reasonCitesEvidence(proposal.reason, local)) {
+      local.reason = proposal.reason.slice(0, 160);
+    }
+  }
+
+  return applyBandedReorder(localRanked, order, 6);
 }

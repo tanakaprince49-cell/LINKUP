@@ -1,6 +1,6 @@
 import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, FlatList, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { ChevronLeft, MessageSquare, Search, Target, User, Zap } from 'lucide-react-native';
@@ -9,6 +9,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { displayNameFor, handleFor, isDiscoverableProfile } from '../lib/discovery';
 import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
+import type { RankedCandidate } from '../lib/matchmaking';
 import { resolveConnectionGate, startTalkOrRequest } from '../lib/connectionRequests';
 import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
@@ -17,14 +18,42 @@ import { consumeWeeklyUsage, FREE_LIMITS, getCurrentWeekKey, getWeeklyUsage, has
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import ProCrownBadge from '../components/ProCrownBadge';
+import WorkStyleCard from '../components/WorkStyleCard';
 import { SponsoredSlot } from '../components/SponsoredCard';
 import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 import { notifyUser } from '../lib/notify';
 
-type MatchScore = {
-  score: number;
-  reason: string;
-  cached?: boolean;
+/**
+ * A card. Scores are deliberately absent from the rendered copy: members see a
+ * band, two reasons and one thing to do. The 0–100 number lives in the payload
+ * and the debug note only (docs/LINKUP_ALGORITHM_DESIGN.md §3 L5).
+ */
+type MatchScore = RankedCandidate;
+
+const FALLBACK_MATCH: MatchScore = {
+  uid: '',
+  score: 1,
+  band: { id: 'worth_a_look', min: 0.25, label: 'Worth a look', line: 'One shared signal worth a question' },
+  reason: 'Not enough shared signals yet — fill in your skills, goals and what you need.',
+  why: {
+    shared: 'Not enough shared signals yet.',
+    complement: 'Add your skills and what you need, and this card gets sharper.',
+  },
+  opener: '',
+  tinyTask: '',
+  slot: 'complement',
+  agenda: [],
+  tempoNote: null,
+  repair: null,
+  cites: [],
+  modelVersion: 'linkup-match/1.0.0',
+  cached: false,
+};
+
+const SLOT_LABEL: Record<string, string> = {
+  mirror: 'Peer review',
+  complement: 'The gap you named',
+  wildcard: 'Next user, not competitor',
 };
 
 const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase();
@@ -55,6 +84,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
   const [dailyRecommendationsUsed, setDailyRecommendationsUsed] = useState(0);
   const [lastRecommendationDate, setLastRecommendationDate] = useState<string | null>(null);
   const [lastRankedProfileIds, setLastRankedProfileIds] = useState<string[]>([]);
+  const [workStyleOpen, setWorkStyleOpen] = useState(false);
   const connectionNote = useConnectionNote();
 
   const localScores = useMemo(() => {
@@ -231,7 +261,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
   };
 
   const renderItem = ({ item, index }: { item: UserProfile; index: number }) => {
-    const match = scores[item.uid] || localScores[item.uid] || { score: 1, reason: 'Promising builder match' };
+    const match: MatchScore = scores[item.uid] || localScores[item.uid] || { ...FALLBACK_MATCH, uid: item.uid };
     const location = [item.city, item.country].filter(Boolean).join(', ') || 'Remote';
     const signals = sharedSignalsFor(me, item);
     const tags = signals.length
@@ -241,19 +271,21 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
     return (
       <View style={[styles.card, liquidGlass(isDark)]}>
         <View style={styles.cardTop}>
-          <TouchableOpacity
-            style={styles.scorePill}
-            onPress={() => notifyUser('Compatibility', `${match.score}%\n\n${match.reason}`)}
-            activeOpacity={0.85}
-          >
-
-            <Text style={styles.scoreText}>{match.score}%</Text>
-          </TouchableOpacity>
+          <View style={styles.bandPill}>
+            <Text style={styles.bandText}>{match.band.label.toUpperCase()}</Text>
+          </View>
+          <Text style={styles.slotText}>{SLOT_LABEL[match.slot] || ''}</Text>
         </View>
 
         <TouchableOpacity
           activeOpacity={0.88}
-          onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: match.score, compatibilityReason: match.reason })}
+          onPress={() =>
+            navigation.navigate('Profile', {
+              userId: item.uid,
+              compatibilityScore: match.score,
+              compatibilityReason: `${match.why.shared} ${match.why.complement}`.trim(),
+            })
+          }
           style={styles.profileRow}
         >
           <Image
@@ -274,12 +306,30 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           </View>
         </TouchableOpacity>
 
+        {/* Two reasons, one shared and one complementary. This is the whole point
+            of the card: a member reading three cards should learn three different
+            things about themselves (design §24). */}
         <View style={[styles.reasonBox, liquidGlass(isDark, false)]}>
-          <Zap size={14} color={COLORS.primaryStrong} />
-          <Text style={[styles.reasonText, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
-            {match.reason}
+          <Text style={[styles.reasonLabel, { color: COLORS.primaryStrong }]}>SHARED</Text>
+          <Text style={[styles.reasonText, { color: textColor(isDark, 'secondary') }]}>
+            {match.why.shared}
+          </Text>
+          <Text style={[styles.reasonLabel, { color: COLORS.primaryStrong, marginTop: 10 }]}>DIFFERENT</Text>
+          <Text style={[styles.reasonText, { color: textColor(isDark, 'secondary') }]}>
+            {match.why.complement}
           </Text>
         </View>
+
+        {match.tinyTask ? (
+          <View style={[styles.taskBox, liquidGlass(isDark, false)]}>
+            <Text style={styles.taskLabel}>FIRST MOVE · 20 MIN</Text>
+            <Text style={[styles.taskText, { color: textColor(isDark) }]}>{match.tinyTask}</Text>
+          </View>
+        ) : null}
+
+        {match.tempoNote ? (
+          <Text style={styles.tempoText}>{match.tempoNote}</Text>
+        ) : null}
 
         <View style={styles.infoRow}>
           <View style={styles.infoItem}>
@@ -297,9 +347,9 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         </View>
 
         <View style={styles.tagsRow}>
-          {tags.length ? tags.map((tag, index) => (
+          {tags.length ? tags.map((tag, tagIndex) => (
             <View
-              key={`${item.uid}-${tag}-${index}`}
+              key={`${item.uid}-${tag}-${tagIndex}`}
               style={[styles.tagChip, liquidGlass(isDark, false)]}
             >
               <Text style={[styles.tagText, { color: textColor(isDark) }]} numberOfLines={1}>
@@ -308,7 +358,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
             </View>
           )) : (
             <View style={[styles.tagChip, liquidGlass(isDark, false)]}>
-              <Text style={[styles.tagText, { color: textColor(isDark) }]}>PROMISING MATCH</Text>
+              <Text style={[styles.tagText, { color: textColor(isDark) }]}>THIN PROFILE</Text>
             </View>
           )}
         </View>
@@ -316,7 +366,13 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         <View style={styles.actionsRow}>
           <TouchableOpacity
             style={[styles.actionBtn, liquidGlass(isDark, false)]}
-            onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: match.score, compatibilityReason: match.reason })}
+            onPress={() =>
+              navigation.navigate('Profile', {
+                userId: item.uid,
+                compatibilityScore: match.score,
+                compatibilityReason: `${match.why.shared} ${match.why.complement}`.trim(),
+              })
+            }
           >
             <User size={16} color={textColor(isDark)} />
             <Text style={[styles.actionText, { color: textColor(isDark) }]}>PROFILE</Text>
@@ -327,7 +383,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
             disabled={busyUserId === item.uid}
           >
             {busyUserId === item.uid ? <ActivityIndicator size="small" color="#000" /> : <MessageSquare size={16} color="#000" />}
-            <Text style={[styles.actionText, { color: '#000' }]}>MESSAGE</Text>
+            <Text style={[styles.actionText, { color: '#000' }]}>OPEN INTRO</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -340,18 +396,21 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, liquidGlass(isDark, false)]}>
           <ChevronLeft size={22} color={textColor(isDark)} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Recommended matches</Text>
+        <Text style={[styles.headerTitle, { color: textColor(isDark) }]}>Who to meet</Text>
+        <TouchableOpacity onPress={() => setWorkStyleOpen(true)} style={[styles.backButton, liquidGlass(isDark, false)]}>
+          <Zap size={16} color={COLORS.primaryStrong} />
+        </TouchableOpacity>
         <ProCrownBadge />
-        <View style={styles.headerSpacer} />
       </View>
 
       <View style={[styles.heroCard, liquidGlass(isDark)]}>
         <View style={styles.heroRow}>
 
-          <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Professionals recommended for you</Text>
+          <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>Who you should meet next</Text>
         </View>
         <Text style={styles.heroSub}>
-          Recommendations consider shared skills, industries, professional goals, and work style to support relevant business connections.
+          Every card names one thing you share and one thing you don't — and offers a first move that takes
+          20 minutes. You will never see a percentage here.
         </Text>
         <Text style={styles.heroSub}>
           {isProUser
@@ -360,7 +419,9 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
               ? `${dailyRecommendationsUsed}/${FREE_LIMITS.weeklyRecommendations} weekly recommendations used`
               : `${FREE_LIMITS.weeklyRecommendations} weekly recommendations available`}
         </Text>
-        <Text style={styles.aiStatus}>{aiLoading ? 'RANKING...' : 'MATCHES READY'}</Text>
+        <Text style={styles.aiStatus}>
+          {aiLoading ? 'SCORING INTRODUCTIONS…' : `${recommended.length} ${recommended.length === 1 ? 'introduction' : 'introductions'} this week`}
+        </Text>
       </View>
 
       {loading && people.length === 0 ? (
@@ -387,17 +448,17 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
           }
           ListEmptyComponent={
             <View style={[styles.emptyCard, liquidGlass(isDark)]}>
-              <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No recommendations yet</Text>
-              <Text style={styles.emptySub}>Complete your profile while LINKUP learns your matching signals. You can also browse everyone on the web.</Text>
-              <TouchableOpacity onPress={() => void Linking.openURL('https://www.linkupbuild.com/search/')} style={styles.emptyBtn}>
-                <Search size={16} color="#000" />
-                <Text style={styles.emptyBtnText}>Search on the web ↗</Text>
-              </TouchableOpacity>
+              <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No good introductions this week</Text>
+              <Text style={styles.emptySub}>
+                That is an honest answer, not a bug. Add what you need and what you bring — the five intent
+                answers move this list more than anything else you can do.
+              </Text>
             </View>
           }
         />
       )}
       {connectionNote.modal}
+      <WorkStyleCard visible={workStyleOpen} onClose={() => setWorkStyleOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -469,20 +530,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  scorePill: {
+  bandPill: {
     height: 30,
     borderRadius: 15,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
   },
-  scoreText: {
-    fontSize: 11,
+  bandText: {
+    fontSize: 10,
     fontWeight: '900',
+    letterSpacing: 0.8,
     color: '#000',
+  },
+  slotText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: '#666',
   },
   profileRow: {
     flexDirection: 'row',
@@ -533,14 +601,42 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     padding: 12,
-    flexDirection: 'row',
-    gap: 8,
+  },
+  reasonLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    marginBottom: 4,
   },
   reasonText: {
-    flex: 1,
     fontSize: 12,
     fontWeight: '700',
     lineHeight: 17,
+  },
+  taskBox: {
+    marginTop: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
+  },
+  taskLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    color: COLORS.primaryStrong,
+    marginBottom: 4,
+  },
+  taskText: {
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
+  tempoText: {
+    marginTop: 10,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 16,
+    color: '#666',
   },
   infoRow: {
     gap: 8,

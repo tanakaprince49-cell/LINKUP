@@ -1,8 +1,10 @@
 # LINKUP Matching Algorithm — Design v2
 
-**Status:** proposal. Nothing here is built. This document designs the algorithm the AI
-should use, explains why each piece exists, and gives implementable numbers, formulas,
-pseudocode and a phased rollout.
+**Status:** design + implementation. The parts marked as shipped in
+[LINKUP_ALGORITHM_IMPLEMENTATION.md](./LINKUP_ALGORITHM_IMPLEMENTATION.md) are running
+today in `shared/linkup-match.js`; everything else here is still a proposal. This document
+designs the algorithm the AI should use, explains why each piece exists, and gives
+implementable numbers, formulas, pseudocode and a phased rollout.
 
 **Revision:** v2 adds **Part II — Chemistry** (§15–§30): the model of *why two founders
 would actually want to keep talking*, and the choreography that turns a good match into a

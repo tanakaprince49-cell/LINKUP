@@ -10,6 +10,7 @@ import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 import { useTheme } from '../contexts/ThemeContext';
 import { UserProfile } from '../types';
 import { activeOpportunityScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
+import { BAND_SHORT, bandForScore } from '../lib/matchmaking';
 import { getBestProjectRecommendations, scoreProjectFit } from '../lib/projectRecommendations';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
@@ -92,7 +93,7 @@ export default function ActiveOpportunitiesScreen({ navigation }: any) {
             <Text style={styles.handle} numberOfLines={1}>{handleFor(item)}</Text>
           </View>
           <View style={styles.livePill}>
-            <Text style={styles.liveText}>{recommendedProject ? `${recommendedProject.score}% FIT` : 'ACTIVE'}</Text>
+            <Text style={styles.liveText}>{recommendedProject ? BAND_SHORT[bandForScore(recommendedProject.score).id] : 'ACTIVE'}</Text>
           </View>
         </View>
 

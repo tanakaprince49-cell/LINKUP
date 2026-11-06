@@ -8,7 +8,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfile } from '../types';
 import { COLORS, appBackground, getBrandFlavor, liquidGlass, textColor } from '../theme/theme';
-import { localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
+import { BAND_SHORT, bandForScore, localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
 import { activeOpportunityScore, displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { rankLeague } from '../lib/builderLeague';
 import { loadLeaguePool } from '../lib/leaguePool';
@@ -322,12 +322,12 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           </Text>
           {!!showScore && typeof score === 'number' && (
             <TouchableOpacity
-              onPress={() => Alert.alert('Compatibility', `${score}%\n\n${match?.reason || ''}`)}
+              onPress={() => Alert.alert(bandForScore(score).label, `${match?.why?.shared || match?.reason || ''}\n\n${match?.why?.complement || ''}`.trim())}
               style={styles.scorePill}
               activeOpacity={0.85}
             >
               <Zap size={10} color="#000" />
-              <Text style={styles.scoreText}>{score}%</Text>
+              <Text style={styles.scoreText}>{BAND_SHORT[bandForScore(score).id] || 'LOOK'}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -414,7 +414,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           <Text style={[styles.handle, { color: HOME_GOLD_DEEP }]} numberOfLines={1}>{handleFor(item.owner)}</Text>
         </View>
         <View style={styles.projectScore}>
-          <Text style={styles.projectScoreText}>{item.score}%</Text>
+          <Text style={styles.projectScoreText}>{BAND_SHORT[bandForScore(item.score).id] || 'LOOK'}</Text>
         </View>
       </View>
       <Text style={[styles.projectSummary, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
@@ -534,7 +534,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                     <View style={[styles.radarScore, { backgroundColor: HOME_GOLD,
     borderWidth: 1,
     borderColor: HOME_LINE }]}>
-                      <Text style={styles.radarScoreText}>{topOpportunityAlert.score}%</Text>
+                      <Text style={styles.radarScoreText}>{BAND_SHORT[bandForScore(topOpportunityAlert.score).id] || 'LOOK'}</Text>
                     </View>
                   </View>
                   <Text style={[styles.radarSummary, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
