@@ -133,7 +133,9 @@ const linking: any = {
   getPathFromState: (state: any, options: any) =>
     scopedNavigationPath(getPathFromState(state, options), WEB_BASE_PATH),
   getStateFromPath: (path: string, options: any) => {
-    const normalizedPath = path.replace(/^(\/app)?\/blogs-feed(?=$|[/?#])/, '$1/news-feed');
+    const normalizedPath = path
+      .replace(/^(\/app)?\/blogs-feed(?=$|[/?#])/, '$1/news-feed')
+      .replace(/^(\/app)?\/inbox(?=$|[/?#])/, '$1/messages');
     // React Navigation 7 strips a root config.path to an empty string, which
     // misses its special '/' dashboard matcher. Handle only the mount's home;
     // regular deep links retain the library's full prefixed path handling.
@@ -155,7 +157,6 @@ const linking: any = {
           Dashboard: '',
           LinkyHome: 'linky',
           Workspace: 'workspace',
-          Inbox: 'inbox',
           Feed: 'startup-feed',
           News: 'news-feed',
           Campaigns: 'campaign-dashboard',
@@ -206,6 +207,7 @@ const AppHeader = ({ navigation, title }: any) => {
   const { user, profile } = useAuth();
   const isDark = theme === 'dark';
   const [unreadNotifications, setUnreadNotifications] = React.useState(0);
+  const [unreadMessages, setUnreadMessages] = React.useState(0);
   const profilePhoto = safeProfileImageUri(profile?.profilePic, IS_LOW_END_ANDROID ? 140_000 : 260_000);
   const isPro = hasLinkupPro(profile);
 
@@ -219,6 +221,25 @@ const AppHeader = ({ navigation, title }: any) => {
     const cancelStartupTask = runAfterStartup(() => {
       if (cancelled) return;
       unsubscribe = subscribeToUnreadNotificationsCount(user.uid, setUnreadNotifications);
+    });
+
+    return () => {
+      cancelled = true;
+      cancelStartupTask();
+      unsubscribe?.();
+    };
+  }, [user?.uid]);
+
+  React.useEffect(() => {
+    if (!user?.uid) {
+      setUnreadMessages(0);
+      return;
+    }
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    const cancelStartupTask = runAfterStartup(() => {
+      if (cancelled) return;
+      unsubscribe = subscribeToUnreadMessagesCount(user.uid, setUnreadMessages);
     });
 
     return () => {
@@ -276,6 +297,26 @@ const AppHeader = ({ navigation, title }: any) => {
             style={[styles.headerIconBtn, {
               backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
             }]}
+            onPress={() => {
+              const parentNav = navigation.getParent?.() || navigation;
+              parentNav.navigate('Messages');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Messages"
+          >
+            <SafeIcon name="MessageSquare" size={17} color={isDark ? '#E5E7EB' : '#4B5563'} />
+            {unreadMessages > 0 && (
+              <View style={styles.headerBadgeBubble}>
+                <Text style={styles.headerBadgeText} numberOfLines={1}>
+                  {unreadMessages > 99 ? '99+' : String(unreadMessages)}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerIconBtn, {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+            }]}
             onPressIn={preloadProfileScreen}
             onPress={() => {
               if (user?.uid) navigation.navigate('Profile', { userId: user.uid });
@@ -295,37 +336,15 @@ const AppHeader = ({ navigation, title }: any) => {
 
 function TabNavigator({ navigation }: any) {
   const { theme } = useTheme();
-  const { user } = useAuth();
   const isDark = theme === 'dark';
   const insets = useSafeAreaInsets();
-  const [unreadMessages, setUnreadMessages] = React.useState(0);
   const tabLabels: Record<string, string> = {
     Dashboard: 'Discover',
     LinkyHome: 'Linky',
     Feed: 'Startups',
     Workspace: 'Workspace',
-    Inbox: 'Messages',
     News: 'Blogs',
   };
-
-  React.useEffect(() => {
-    if (!user?.uid) {
-      setUnreadMessages(0);
-      return;
-    }
-    let unsubscribe: (() => void) | undefined;
-    let cancelled = false;
-    const cancelStartupTask = runAfterStartup(() => {
-      if (cancelled) return;
-      unsubscribe = subscribeToUnreadMessagesCount(user.uid, setUnreadMessages);
-    });
-
-    return () => {
-      cancelled = true;
-      cancelStartupTask();
-      unsubscribe?.();
-    };
-  }, [user?.uid]);
 
   return (
     <Tab.Navigator
@@ -343,7 +362,6 @@ function TabNavigator({ navigation }: any) {
             Feed: { active: 'Sprout', inactive: 'Sprout' },
             Campaigns: { active: 'Megaphone', inactive: 'Megaphone' },
             Workspace: { active: 'Briefcase', inactive: 'Briefcase' },
-            Inbox: { active: 'MessageSquare', inactive: 'MessageSquare' },
             News: { active: 'BookOpen', inactive: 'BookOpen' },
           };
           const iconName = (focused ? iconMap[route.name]?.active : iconMap[route.name]?.inactive) || 'Circle';
@@ -368,13 +386,6 @@ function TabNavigator({ navigation }: any) {
                   fill={focused ? COLORS.primary : 'transparent'}
                 />
               </View>
-              {route.name === 'Inbox' && unreadMessages > 0 && (
-                <View style={styles.badgeBubble}>
-                  <Text style={styles.badgeText} numberOfLines={1}>
-                    {unreadMessages > 99 ? '99+' : String(unreadMessages)}
-                  </Text>
-                </View>
-              )}
             </View>
           );
         },
@@ -415,7 +426,6 @@ function TabNavigator({ navigation }: any) {
             LinkyHome: 'Linky',
             Feed: 'Startups',
             Workspace: 'Workspace',
-            Inbox: 'Messages',
             News: 'Blogs',
           };
           return <AppHeader navigation={props.navigation} title={titles[props.route.name] || 'LINKUP'} />;
@@ -426,7 +436,6 @@ function TabNavigator({ navigation }: any) {
       <Tab.Screen name="LinkyHome" component={LinkyHomeScreen} options={{ headerShown: false, tabBarStyle: { display: 'none' } }} />
       <Tab.Screen name="Feed" component={FeedScreen} />
       <Tab.Screen name="Workspace" component={BuilderWorkspaceScreen} />
-      <Tab.Screen name="Inbox" component={MessagesScreen} options={{ headerShown: false }} />
       <Tab.Screen name="News" component={BlogsScreen} />
       <Tab.Screen name="Campaigns" component={CampaignsScreen} />
     </Tab.Navigator>

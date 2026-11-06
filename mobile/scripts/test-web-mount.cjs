@@ -58,11 +58,15 @@ test('mount boundary and internal URL prefixing are exact', () => {
 test('real React Navigation config parses and serializes root and /app deep links', () => {
   for (const base of ['', '/app']) {
     const l = linking(`${base}/landing`);
-    for (const route of ['/landing', '/login', '/profile/member-123', '/chat/a_b', '/linky/settings', '/inbox']) {
+    for (const route of ['/landing', '/login', '/profile/member-123', '/chat/a_b', '/linky/settings', '/messages']) {
       const state = l.getStateFromPath(base + route, l.config);
       assert.ok(state, `state for ${base + route}`);
       assert.equal(l.getPathFromState(state, l.config), base + route);
     }
+    // The old Messages tab URL stays valid: it resolves to the root Messages route.
+    const alias = l.getStateFromPath(base + '/inbox', l.config);
+    assert.ok(alias, `state for ${base}/inbox`);
+    assert.equal(l.getPathFromState(alias, l.config), `${base}/messages`);
     const state = l.getStateFromPath(base || '/', l.config);
     assert.equal(l.getPathFromState(state, l.config), `${base}/`);
   }

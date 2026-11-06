@@ -4,7 +4,7 @@ import { webAppPath } from './webPaths';
 const titles: Record<string, string> = {
   EmailAuth: 'Sign in', Onboarding: 'Professional profile setup',
   Dashboard: 'Discover professionals', LinkyHome: 'Linky AI networking assistant',
-  Feed: 'Startup directory', Search: 'Professional search', Inbox: 'Messages',
+  Feed: 'Startup directory', Search: 'Professional search', Messages: 'Messages', Inbox: 'Messages',
   Chat: 'Conversation', News: 'Community blogs', Profile: 'Professional profile',
   Alerts: 'Notifications', MyConnections: 'Professional connections',
   ActiveOpportunities: 'Collaboration opportunities', ActiveOpportunity: 'Project opportunity',
