@@ -157,8 +157,6 @@ const linking: any = {
           Workspace: 'workspace',
           Feed: 'startup-feed',
           News: 'news-feed',
-          // The campaigns console only ships in the web build (Payonify web checkout).
-          ...(Platform.OS === 'web' ? { Campaigns: 'campaign-dashboard' } : {}),
         },
       },
       ...(Platform.OS === 'web'
@@ -436,7 +434,6 @@ function TabNavigator({ navigation }: any) {
       <Tab.Screen name="Feed" component={FeedScreen} />
       <Tab.Screen name="Workspace" component={BuilderWorkspaceScreen} />
       <Tab.Screen name="News" component={BlogsScreen} />
-      {Platform.OS === 'web' ? <Tab.Screen name="Campaigns" component={CampaignsScreen} /> : null}
     </Tab.Navigator>
   );
 }
@@ -495,7 +492,7 @@ function AppContent() {
     if (targetUrl === '/ship' || targetUrl.startsWith('/ship?')) { navigationRef.navigate('ShipLog'); return; }
 
     if (targetUrl === '/campaigns' || targetUrl.startsWith('/campaigns?')) {
-      if (Platform.OS === 'web') navigationRef.navigate('Main', { screen: 'Campaigns' });
+      if (Platform.OS === 'web') navigationRef.navigate('Campaigns');
       else void ExpoLinking.openURL('https://www.linkupbuild.com/campaigns/').catch(() => {});
       return;
     }
