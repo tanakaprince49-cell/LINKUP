@@ -193,7 +193,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
       }
       return failure(404,'Page not found');
     } catch (error) {
-      console.error('Public SEO request failed:', error?.code || error?.name || 'unknown');
+      console.error('Public SEO request failed:', {code: error?.code, name: error?.name, message: error?.message});
       res.setHeader('Retry-After','60');
       return failure(503,'Temporarily unavailable');
     }
