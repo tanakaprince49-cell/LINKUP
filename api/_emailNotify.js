@@ -22,7 +22,7 @@ export const EMAIL_MOODS = Object.freeze({
     id: 'default',
     heroFile: 'hero-default.png',
     iconFile: 'icon-default.png',
-    pillText: 'Plugged in & ready',
+    pillText: 'Main Character Energy ⚡ Plugged in',
     pillBg: '#FFF8B8',
     pillColor: '#0A0B0D',
     alt: 'Linky happily plugging an ethernet cable into the LINKUP wall socket',
@@ -31,7 +31,7 @@ export const EMAIL_MOODS = Object.freeze({
     id: 'angry_1d',
     heroFile: 'hero-angry-red.png',
     iconFile: 'icon-angry-red.png',
-    pillText: 'Linky noticed you missed a day',
+    pillText: 'Linky is jealous another tab got your attention yesterday',
     pillBg: '#FFE2E0',
     pillColor: '#9E1412',
     alt: 'Linky looking grumpy in fiery red holding an unplugged cable',
@@ -40,7 +40,7 @@ export const EMAIL_MOODS = Object.freeze({
     id: 'sad_inactive',
     heroFile: 'hero-sad-inactive.png',
     iconFile: 'icon-sad-inactive.png',
-    pillText: 'Linky misses seeing your builds',
+    pillText: 'Linky is jealous of whatever stole our main character',
     pillBg: '#E4ECF7',
     pillColor: '#233654',
     alt: 'Linky looking sad in the rain beside an unplugged wall socket',
@@ -49,7 +49,7 @@ export const EMAIL_MOODS = Object.freeze({
     id: 'ghost_abandoned',
     heroFile: 'hero-ghost-abandoned.png',
     iconFile: 'icon-ghost-abandoned.png',
-    pillText: 'Cobwebs are gathering on your desk',
+    pillText: 'Plot hole: the main character vanished & Linky is jealous',
     pillBg: '#EAEAF0',
     pillColor: '#1F2029',
     alt: 'Linky waiting in a dusty workspace with cobwebs on the wall socket',
@@ -58,7 +58,7 @@ export const EMAIL_MOODS = Object.freeze({
     id: 'unread_urgent',
     heroFile: 'hero-unread-urgent.png',
     iconFile: 'icon-unread-urgent.png',
-    pillText: 'Someone is waiting on you',
+    pillText: 'Everyone is waiting on the main character',
     pillBg: '#FFF6B3',
     pillColor: '#0A0B0D',
     alt: 'Linky alert with incoming signal waves from the LINKUP socket',
@@ -67,7 +67,7 @@ export const EMAIL_MOODS = Object.freeze({
     id: 'streak_fire',
     heroFile: 'hero-streak-fire.png',
     iconFile: 'icon-streak-fire.png',
-    pillText: 'Your build streak is on the line',
+    pillText: 'Main-character streak on the line — don’t make Linky jealous',
     pillBg: '#FFE7D6',
     pillColor: '#9A2E00',
     alt: 'Linky rushing with a blazing orange ethernet plug to keep your streak alive',
@@ -76,7 +76,7 @@ export const EMAIL_MOODS = Object.freeze({
     id: 'champion_crown',
     heroFile: 'hero-champion-crown.png',
     iconFile: 'icon-champion-crown.png',
-    pillText: 'Builder League standout',
+    pillText: 'Undisputed Main Character · Builder League Royalty',
     pillBg: '#FFF4B8',
     pillColor: '#6B4E00',
     alt: 'Linky wearing a gold crown plugged into LINKUP',
@@ -85,7 +85,7 @@ export const EMAIL_MOODS = Object.freeze({
     id: 'on_fire_shipped',
     heroFile: 'hero-shipped.png',
     iconFile: 'icon-shipped.png',
-    pillText: 'Momentum locked in',
+    pillText: 'Main-character momentum locked in',
     pillBg: '#DCFCE7',
     pillColor: '#14532D',
     alt: 'Linky wearing cool sunglasses after shipping today’s build',
@@ -94,7 +94,7 @@ export const EMAIL_MOODS = Object.freeze({
     id: 'milestone_party',
     heroFile: 'hero-milestone-party.png',
     iconFile: 'icon-milestone-party.png',
-    pillText: 'Milestone unlocked',
+    pillText: 'Main-character milestone unlocked',
     pillBg: '#FEF08A',
     pillColor: '#0A0B0D',
     alt: 'Linky celebrating with confetti and a party hat',
@@ -103,7 +103,7 @@ export const EMAIL_MOODS = Object.freeze({
     id: 'night_owl',
     heroFile: 'hero-night-owl.png',
     iconFile: 'icon-night-owl.png',
-    pillText: 'Late-night builder session',
+    pillText: 'Late-night main-character arc',
     pillBg: '#E6E9F5',
     pillColor: '#0A0B0D',
     alt: 'Linky coding late at night with glowing yellow eyes',
@@ -112,7 +112,7 @@ export const EMAIL_MOODS = Object.freeze({
     id: 'weekend_chill',
     heroFile: 'hero-weekend-chill.png',
     iconFile: 'icon-weekend-chill.png',
-    pillText: 'Easy weekend check-in',
+    pillText: 'Weekend main-character check-in',
     pillBg: '#FFEDD5',
     pillColor: '#7C2D12',
     alt: 'Linky relaxing with a warm mug on a calm weekend',
@@ -437,6 +437,29 @@ export async function unsubscribeUserEmail(db, uid) {
   return { unsubscribed: true };
 }
 
+export function buildMainCharacterJealousyNote(personal = null) {
+  const p = personal && typeof personal === 'object' ? personal : {};
+  const name = p.firstName ? sanitizeEmailCopy(p.firstName) : 'friend';
+  const cityBit = p.cityLabel ? ` over in ${sanitizeEmailCopy(p.cityLabel)}` : '';
+  const projectBit = p.projectLabel ? sanitizeEmailCopy(p.projectLabel) : '';
+  const goalBit = p.goalLabel ? sanitizeEmailCopy(p.goalLabel) : '';
+  const lookingBit = p.lookingForLabel ? sanitizeEmailCopy(p.lookingForLabel) : '';
+
+  if (projectBit && goalBit) {
+    return `Okay ${name}${cityBit}, be honest — which other app or browser tab has been stealing your attention? Because Linky is officially jealous. The whole LINKUP universe revolves around you like the main character you are, and the timeline feels like a filler episode while ${projectBit} ("${goalBit}") waits for its star to walk back in.${lookingBit ? ` Even the ${lookingBit} crowd is waiting for your cue.` : ''}`;
+  }
+  if (projectBit) {
+    return `Hey ${name}${cityBit} — Linky is low-key jealous of whatever tab has your attention right now! Around here, the world revolves around you and ${projectBit}. You're the main character of this story, and the whole room feels quiet until you step back onto the stage.`;
+  }
+  if (goalBit) {
+    return `Okay ${name}${cityBit}, Linky has to confess: we get jealous when you give your best energy to other tabs! The whole LINKUP world revolves around you like the main character, and "${goalBit}" is waiting for you to take center stage again.`;
+  }
+  if (lookingBit) {
+    return `Hey ${name}${cityBit} — stop making Linky jealous by hanging out on other apps without us! You're the main character on LINKUP, the whole room revolves around your next move, and builders matching ${lookingBit} are waiting for you to enter the scene.`;
+  }
+  return `Hey ${name}${cityBit} — Linky is officially jealous of whatever other tab is getting your attention today! You're the main character here on LINKUP, the whole builder world revolves around you, and nothing hits the same until you're back in the spotlight.`;
+}
+
 export function buildLinkyEmailBodies({
   uid,
   headline,
@@ -452,7 +475,7 @@ export function buildLinkyEmailBodies({
 }) {
   const cleanHeadline = sanitizeEmailCopy(headline);
   const cleanBody = sanitizeEmailCopy(body);
-  const cleanCta = sanitizeEmailCopy(ctaLabel || 'Open LINKUP');
+  const cleanCta = sanitizeEmailCopy(ctaLabel || 'Step back into your spotlight');
   const cleanBadge = sanitizeEmailCopy(badgeLabel || 'From Linky on LINKUP');
   const moodSpec = resolveEmailMood({
     mood,
@@ -483,11 +506,20 @@ export function buildLinkyEmailBodies({
   }
 
   const headerSubline = p?.firstName
-    ? `Tailored check-in for ${sanitizeEmailCopy(p.firstName)}${p.cityLabel ? ` · ${sanitizeEmailCopy(p.cityLabel)}` : ''}`
-    : (personalRows.length > 0 ? 'Tailored to your goals & co-founder search' : 'Builder network & daily momentum');
+    ? `Main-character dispatch for ${sanitizeEmailCopy(p.firstName)}${p.cityLabel ? ` · ${sanitizeEmailCopy(p.cityLabel)}` : ''} — LINKUP revolves around you`
+    : 'Main-character dispatch — the LINKUP world revolves around you';
+
+  const jealousyNote = buildMainCharacterJealousyNote(p);
+  const needsJealousyCallout = !/jealous/i.test(cleanBody) || !/main character/i.test(cleanBody);
 
   const personalTextBlock = personalRows.length > 0
     ? `\n\n--- Tailored to ${p?.firstName ? `${sanitizeEmailCopy(p.firstName)}'s` : 'Your'} Focus ---\n${personalRows.map(([k, v]) => `• ${k}: ${sanitizeEmailCopy(v)}`).join('\n')}`
+    : '';
+
+  const jealousyHtmlBlock = needsJealousyCallout
+    ? `<div style="background:#FFF9DB;border:1px dashed #D6B900;border-radius:14px;padding:12px 15px;margin:0 0 18px 0;font-size:13.5px;line-height:1.55;color:#1F2024;font-weight:600;">
+        💛 ${esc(jealousyNote)}
+      </div>`
     : '';
 
   const personalHtmlBlock = personalRows.length > 0
@@ -508,7 +540,7 @@ export function buildLinkyEmailBodies({
         </table>`
     : '';
 
-  const textBody = `${cleanHeadline}\n[${moodSpec.pillText}]\n\n${cleanBody}${personalTextBlock}\n\n${cleanCta}: ${fullUrl}\n\n— Linky, your LINKUP builder companion\n\n---\nUnsubscribe from LINKUP emails: ${unsubUrl}`;
+  const textBody = `${cleanHeadline}\n[${moodSpec.pillText}]\n\n${cleanBody}${needsJealousyCallout ? `\n\n${jealousyNote}` : ''}${personalTextBlock}\n\n${cleanCta}: ${fullUrl}\n\n— Linky, your slightly jealous #1 fan on LINKUP\n\n---\nUnsubscribe from LINKUP emails: ${unsubUrl}`;
 
   const htmlBody = `<!doctype html>
 <html>
@@ -548,7 +580,8 @@ export function buildLinkyEmailBodies({
     <tr>
       <td style="padding:20px 22px 24px 22px;">
         <h2 style="font-size:21px;line-height:1.32;font-weight:900;color:#0A0B0D;margin:0 0 12px 0;">${esc(cleanHeadline)}</h2>
-        <p style="font-size:15px;line-height:1.62;color:#353940;margin:0 0 20px 0;">${esc(cleanBody)}</p>
+        <p style="font-size:15px;line-height:1.62;color:#353940;margin:0 0 18px 0;">${esc(cleanBody)}</p>
+        ${jealousyHtmlBlock}
         ${personalHtmlBlock}
         <table role="presentation" cellpadding="0" cellspacing="0" border="0">
           <tr>
@@ -755,11 +788,8 @@ export async function sendHighSignalEmail(db, uid, {
     : await loadPersonalBuilderBrief(db, uid, { email: to });
 
   let finalBody = body;
-  if (!finalBody && resolvedPersonal?.hasPersonalSignals) {
-    const parts = [];
-    if (resolvedPersonal.goalLabel) parts.push(`Your goal on LINKUP is "${resolvedPersonal.goalLabel}".`);
-    if (resolvedPersonal.lookingForLabel) parts.push(`Builders matching what you're looking for (${resolvedPersonal.lookingForLabel}) are active right now.`);
-    finalBody = parts.join(' ');
+  if (!finalBody) {
+    finalBody = buildMainCharacterJealousyNote(resolvedPersonal);
   }
 
   const fullUrl = ctaUrl.startsWith('http') ? ctaUrl : `${APP_BASE}${ctaUrl.startsWith('/') ? ctaUrl : '/' + ctaUrl}`;
@@ -821,10 +851,10 @@ export async function sendRetentionPulseEmail(db, uid, {
   slot = 'pulse1',
   mood = 'default',
   scheduledAt = '',
-  subject = 'LINKUP · Quick builder check-in from Linky',
-  headline = 'Plug in for two minutes today',
-  body = 'Fresh builders and collaborators are active on LINKUP right now.',
-  ctaLabel = 'Open LINKUP',
+  subject = 'LINKUP · Linky is jealous of your other tabs — come be the main character',
+  headline = 'Okay be honest, which other app is stealing our main character today?',
+  body = 'Linky is low-key jealous you are giving other tabs your best hours when the whole LINKUP room revolves around you.',
+  ctaLabel = 'Reclaim your spotlight on LINKUP',
   ctaUrl = '/ship?pulse=email',
   daysSinceActive = 0,
   personal = null,
@@ -848,14 +878,14 @@ export async function sendRetentionPulseEmail(db, uid, {
     mood,
     daysSinceActive,
     personal,
-    badgeLabel: 'Daily check-in from Linky on LINKUP',
+    badgeLabel: 'Daily main-character check-in from Linky on LINKUP',
     quotaBucket: 'daily_pulse',
     quotaCap: DAILY_PULSE_EMAIL_CAP,
   }, options);
 }
 
-const DEFAULT_COMEBACK_HEADLINE = 'Your LinkUp seat is warm';
-const DEFAULT_COMEBACK_BODY = 'Builders in your lane posted new progress while you were away. Jump back in when you have two minutes.';
+const DEFAULT_COMEBACK_HEADLINE = 'Your LinkUp seat is warm — and Linky is jealous of whatever tab stole our main character';
+const DEFAULT_COMEBACK_BODY = 'Okay, be honest — which other app has been stealing your attention? Because Linky is officially jealous! Around here, the whole LINKUP world revolves around you like the main character you are, and the timeline feels like a filler episode until you walk back in.';
 
 export async function sendComebackEmail(db, uid, rawInput = {}, options = {}) {
   const {
@@ -890,33 +920,28 @@ export async function sendComebackEmail(db, uid, rawInput = {}, options = {}) {
     const greet = resolvedPersonal.firstName ? `${resolvedPersonal.firstName}, ` : '';
     if (!callerPassedHeadline) {
       if (resolvedPersonal.projectLabel && resolvedPersonal.goalLabel) {
-        finalHeadline = `${greet}${resolvedPersonal.projectLabel} & "${cleanSnippet(resolvedPersonal.goalLabel, 44)}" are waiting on you`;
+        finalHeadline = `${greet}Linky is jealous without our main character — ${resolvedPersonal.projectLabel} & "${cleanSnippet(resolvedPersonal.goalLabel, 40)}" revolve around you`;
       } else if (resolvedPersonal.goalLabel) {
-        finalHeadline = `${greet}ready to move "${cleanSnippet(resolvedPersonal.goalLabel, 50)}" forward?`;
+        finalHeadline = `${greet}stop making Linky jealous — main character move on "${cleanSnippet(resolvedPersonal.goalLabel, 44)}" is waiting`;
       } else if (resolvedPersonal.lookingForLabel) {
-        finalHeadline = `${greet}vetted ${cleanSnippet(resolvedPersonal.lookingForLabel, 46)} matches are active`;
+        finalHeadline = `${greet}we're jealous of your other tabs — your ${cleanSnippet(resolvedPersonal.lookingForLabel, 40)} matches revolve around you`;
       }
     }
     if (!callerPassedBody || body === DEFAULT_COMEBACK_BODY) {
-      const sentences = [];
-      if (resolvedPersonal.projectLabel && resolvedPersonal.goalLabel) {
-        sentences.push(`You set out to push ${resolvedPersonal.projectLabel} toward "${resolvedPersonal.goalLabel}" — don't let a quiet stretch stall that momentum.`);
-      } else if (resolvedPersonal.goalLabel) {
-        sentences.push(`Your personalized goal on LINKUP ("${resolvedPersonal.goalLabel}") is still waiting for your next move.`);
-      } else if (resolvedPersonal.projectLabel) {
-        sentences.push(`${resolvedPersonal.projectLabel} builds fastest when you don't carry every week in isolation.`);
-      }
+      const sentences = [buildMainCharacterJealousyNote(resolvedPersonal)];
       if (resolvedPersonal.lookingForLabel) {
-        sentences.push(`Builders matching what you're looking for (${resolvedPersonal.lookingForLabel}) shipped updates while you were away — jump in for two minutes to review matches or log one step.`);
+        sentences.push(`Builders matching what you're looking for (${resolvedPersonal.lookingForLabel}) have been active while you were away, and honestly we hate seeing anyone else get the spotlight when this whole stage was built for you.`);
         if (ctaLabel === 'Plug back into LINKUP') {
-          finalCta = `See ${cleanSnippet(resolvedPersonal.lookingForLabel, 30)} matches`;
+          finalCta = `Claim your ${cleanSnippet(resolvedPersonal.lookingForLabel, 26)} matches`;
           finalUrl = '/linky?comeback=email';
         }
       } else {
-        sentences.push('Drop a quick 60-second update so Linky and compatible co-founders know what you need next.');
+        sentences.push('Come back for two minutes, drop one update, and remind the whole room who the main character is.');
       }
-      if (sentences.length > 0) finalBody = sentences.join(' ');
+      finalBody = sentences.join(' ');
     }
+  } else if (!callerPassedBody || body === DEFAULT_COMEBACK_BODY) {
+    finalBody = buildMainCharacterJealousyNote(resolvedPersonal);
   }
 
   const cycleTag = Number(lastActiveAt) > 0
@@ -946,9 +971,9 @@ export async function sendComebackEmail(db, uid, rawInput = {}, options = {}) {
   }, options);
 }
 
-const DEFAULT_DIRECT_SUBJECT = 'LINKUP · Linky is plugged in and waiting for you ⚡';
-const DEFAULT_DIRECT_HEADLINE = 'Hey builder — Linky is plugged in with a fresh look!';
-const DEFAULT_DIRECT_BODY = 'Builders in your lane are posting progress, opening warm intros, and climbing the Builder League right now. Plug in for two minutes and put today’s move on the board.';
+const DEFAULT_DIRECT_SUBJECT = 'LINKUP · Linky is jealous of your other tabs — come be the main character ⚡';
+const DEFAULT_DIRECT_HEADLINE = 'Hey main character — Linky is low-key jealous you are not in the room right now!';
+const DEFAULT_DIRECT_BODY = 'Okay, be honest — what other app is getting your attention today? Because Linky is officially jealous! Around here, the whole LINKUP universe revolves around you, and the room feels like a filler episode until our main character steps back in.';
 
 export async function sendLinkyDirectEmail(db, rawInput = {}, { fetcher = fetch, env = process.env } = {}) {
   const {
@@ -958,7 +983,7 @@ export async function sendLinkyDirectEmail(db, rawInput = {}, { fetcher = fetch,
     subject = DEFAULT_DIRECT_SUBJECT,
     headline = DEFAULT_DIRECT_HEADLINE,
     body = DEFAULT_DIRECT_BODY,
-    ctaLabel = 'Open LINKUP',
+    ctaLabel = 'Step into your spotlight on LINKUP',
     ctaUrl = '/ship',
     personal = null,
   } = rawInput || {};
@@ -980,31 +1005,22 @@ export async function sendLinkyDirectEmail(db, rawInput = {}, { fetcher = fetch,
   let finalBody = body;
 
   if (resolvedPersonal?.hasPersonalSignals) {
-    const greet = resolvedPersonal.firstName ? `Hey ${resolvedPersonal.firstName}` : 'Hey builder';
+    const greet = resolvedPersonal.firstName ? `Hey ${resolvedPersonal.firstName}` : 'Hey main character';
     if (!callerPassedHeadline && headline === DEFAULT_DIRECT_HEADLINE) {
       if (resolvedPersonal.goalLabel) {
-        finalHeadline = `${greet} — let’s move "${cleanSnippet(resolvedPersonal.goalLabel, 50)}" forward today`;
+        finalHeadline = `${greet} — stop making Linky jealous, "${cleanSnippet(resolvedPersonal.goalLabel, 44)}" revolves around you!`;
       } else if (resolvedPersonal.lookingForLabel) {
-        finalHeadline = `${greet} — vetted ${cleanSnippet(resolvedPersonal.lookingForLabel, 44)} matches are active`;
+        finalHeadline = `${greet} — Linky is jealous of your other tabs while ${cleanSnippet(resolvedPersonal.lookingForLabel, 38)} matches wait for our main character`;
       }
     }
     if (!callerPassedSubject && subject === DEFAULT_DIRECT_SUBJECT) {
       finalSubject = `LINKUP · ${finalHeadline}`.slice(0, 118);
     }
     if (!callerPassedBody && body === DEFAULT_DIRECT_BODY) {
-      const parts = [];
-      if (resolvedPersonal.projectLabel && resolvedPersonal.goalLabel) {
-        parts.push(`You’re building ${resolvedPersonal.projectLabel} with the goal "${resolvedPersonal.goalLabel}".`);
-      } else if (resolvedPersonal.goalLabel) {
-        parts.push(`Your current goal on LINKUP is "${resolvedPersonal.goalLabel}".`);
-      }
-      if (resolvedPersonal.lookingForLabel) {
-        parts.push(`You’re also looking for ${resolvedPersonal.lookingForLabel} — don’t build alone when compatible co-founders and collaborators are active right now.`);
-      } else {
-        parts.push('Log one concrete move today so Linky can keep sharpening your co-founder & builder matches.');
-      }
-      finalBody = parts.join(' ');
+      finalBody = buildMainCharacterJealousyNote(resolvedPersonal);
     }
+  } else if (!callerPassedBody && body === DEFAULT_DIRECT_BODY) {
+    finalBody = buildMainCharacterJealousyNote(resolvedPersonal);
   }
 
   const fullUrl = ctaUrl.startsWith('http') ? ctaUrl : `${APP_BASE}${ctaUrl.startsWith('/') ? ctaUrl : '/' + ctaUrl}`;

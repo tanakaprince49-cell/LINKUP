@@ -505,15 +505,21 @@ test('Part D: emails are hyper-personalized to each recipient’s specific proje
   assert.equal(captured.length, 1);
   assert.match(captured[0].subject, /Tariro/);
   assert.match(captured[0].subject, /PayPulse Africa|Onboard first 30/);
+  assert.match(captured[0].subject, /jealous|main character/i);
   assert.match(captured[0].html, /Tailored to Tariro&rsquo;s Goals &amp; Search/);
   assert.match(captured[0].html, /PayPulse Africa/);
   assert.match(captured[0].html, /Onboard first 30 paying merchants before demo day/);
   assert.match(captured[0].html, /Launch self-serve onboarding/);
   assert.match(captured[0].html, /Growth &amp; GTM Co-Founder/);
+  assert.match(captured[0].html, /jealous/i);
+  assert.match(captured[0].html, /main character/i);
+  assert.match(captured[0].html, /revolves around you/i);
   assert.doesNotMatch(captured[0].html, /display:flex/);
   assert.doesNotMatch(captured[0].html, /duolingo/i);
   assert.match(captured[0].text, /Building: PayPulse Africa/);
   assert.match(captured[0].text, /Your Goal: Onboard first 30 paying merchants before demo day/);
   assert.match(captured[0].text, /Looking For: Growth & GTM Co-Founder & Seed Design Partner/);
+  assert.match(captured[0].text, /jealous/i);
+  assert.match(captured[0].text, /main character/i);
 });
 

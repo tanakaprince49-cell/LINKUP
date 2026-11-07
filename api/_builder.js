@@ -284,7 +284,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
      sendHighSignalEmail(db,d.id,{receiptKey:'weekly_'+d.id+'_'+weekKey(now(),prefs.timezone),throttleMs:5*DAY,subject:'LINKUP · '+delivery.title,headline:delivery.title,body:delivery.body,ctaLabel:'View your weekly numbers',ctaUrl:delivery.url||'/trending-builders'},{now:now()}).catch(()=>null);
     }
     if(delivery.category==='comeback'){
-     sendComebackEmail(db,d.id,{daysSinceActive:deliveryFacts?.daysSinceActive,lastActiveAt:deliveryFacts?.lastActiveAt,headline:delivery.title,body:delivery.body,ctaLabel:'Plug back into LINKUP',ctaUrl:delivery.url||'/ship?comeback=email',prefs},{now:now()}).catch(()=>null);
+     sendComebackEmail(db,d.id,{daysSinceActive:deliveryFacts?.daysSinceActive,lastActiveAt:deliveryFacts?.lastActiveAt,ctaLabel:'Plug back into LINKUP',ctaUrl:delivery.url||'/ship?comeback=email',prefs},{now:now()}).catch(()=>null);
     }
     if(pushAllowed(prefs,delivery.kind)){
      const nr=delivery.kind==='build'?db.collection('builderContributions').doc(d.id):notifyRef;
