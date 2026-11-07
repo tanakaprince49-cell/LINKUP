@@ -32,8 +32,16 @@ export function getAdmin() {
   return admin;
 }
 
+let firestore;
 export function getDb() {
-  return getAdmin().firestore();
+  if (!firestore) {
+    firestore = getAdmin().firestore();
+    // Vercel's serverless network can leave Firestore's default gRPC channel
+    // unavailable until every request times out. The official REST transport
+    // uses the same Admin credentials and IAM, without that persistent channel.
+    firestore.settings({ preferRest: true });
+  }
+  return firestore;
 }
 
 export function serverTimestamp() {
