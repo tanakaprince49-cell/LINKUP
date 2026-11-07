@@ -329,3 +329,84 @@ export declare function parseModelAnswer(
 ): { order: string[]; reasons: Record<string, string> } | null;
 export declare function tokenize(text: string): string[];
 export declare function normalizeText(value: unknown): string;
+
+export interface WeeklyCofounderView {
+  pairId: string;
+  weekKey: string;
+  weekStart: number;
+  weekEnd: number;
+  daysRemaining: number;
+  viewerUid: string;
+  partnerUid: string;
+  partner: Record<string, any>;
+  score: number;
+  display: number;
+  mutualFit: number;
+  mutualUtility: number;
+  cofounderSynergy: number;
+  band: { id: string; min: number; label: string; line: string };
+  why: { shared: string; complement: string };
+  reason: string;
+  opener: string;
+  tinyTask: string;
+  agenda: string[];
+  slot: 'mirror' | 'complement' | 'wildcard';
+  cites: string[];
+  myOffers: string[];
+  partnerOffers: string[];
+  sharedDomains: string[];
+  symmetryVerified: boolean;
+  aiIntro?: string;
+  aiHeadline?: string;
+  emailSent?: boolean;
+  mutualInterest?: boolean;
+  viewerInterested?: boolean;
+  partnerInterested?: boolean;
+}
+
+export declare function cofounderWeekWindow(now?: number): {
+  key: string;
+  start: number;
+  end: number;
+  daysRemaining: number;
+};
+
+export declare function cofounderPairId(uidA: string, uidB: string): string;
+
+export declare function scoreMutualCofounderPair(
+  profileA: Record<string, any>,
+  profileB: Record<string, any>,
+  context?: Record<string, any>
+): Record<string, any>;
+
+export declare function assignWeeklyCofounderPairs(
+  profiles: Array<Record<string, any>>,
+  options?: {
+    now?: number;
+    weekKey?: string;
+    previousPairIds?: string[] | Set<string>;
+    lockedPairs?: Array<{ uidA: string; uidB: string }>;
+    aiTieBreakOrder?: string[];
+    corpus?: Corpus;
+  }
+): {
+  weekKey: string;
+  weekStart: number;
+  weekEnd: number;
+  daysRemaining: number;
+  pairs: Array<Record<string, any>>;
+  byUid: Record<string, WeeklyCofounderView>;
+};
+
+export declare function selectWeeklyCofounderForViewer(
+  viewer: Record<string, any> | null | undefined,
+  candidates?: Array<Record<string, any>>,
+  options?: {
+    now?: number;
+    weekKey?: string;
+    previousPairIds?: string[] | Set<string>;
+    lockedPairs?: Array<{ uidA: string; uidB: string }>;
+    aiTieBreakOrder?: string[];
+  }
+): WeeklyCofounderView | null;
+

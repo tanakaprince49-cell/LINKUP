@@ -1053,3 +1053,153 @@ export async function sendLinkyDirectEmail(db, rawInput = {}, { fetcher = fetch,
     return { sent: false, reason: 'network_error', detail: String(err?.message || '') };
   }
 }
+
+export function buildWeeklyCofounderIntroCopy({
+  weekKey = 'this week',
+  recipientProfile = {},
+  partnerProfile = {},
+  recipientBrief = null,
+  partnerBrief = null,
+  why = {},
+  myOffers = [],
+  partnerOffers = [],
+  aiIntro = '',
+  firstSprintTask = '',
+  bandLabel = 'Strong fit',
+} = {}) {
+  const meName = cleanSnippet(
+    recipientBrief?.firstName || extractFirstName(recipientProfile?.displayName, recipientProfile?.username) || 'Founder',
+    40
+  );
+  const meFullName = cleanSnippet(recipientProfile?.displayName || meName, 60);
+  const partnerFullName = cleanSnippet(
+    partnerProfile?.displayName || partnerBrief?.firstName || partnerProfile?.username || 'Your Co-Founder Match',
+    60
+  );
+  const partnerFirst = cleanSnippet(
+    partnerBrief?.firstName || extractFirstName(partnerProfile?.displayName, partnerProfile?.username) || partnerFullName,
+    40
+  );
+
+  const meRole = cleanSnippet(recipientBrief?.roleLabel || recipientProfile?.occupation || 'Builder & Founder', 60);
+  const meCity = cleanSnippet(recipientBrief?.cityLabel || [recipientProfile?.city, recipientProfile?.country].filter(Boolean).join(', ') || 'Remote', 50);
+  const meFocus = cleanSnippet(
+    recipientBrief?.projectLabel || recipientBrief?.goalLabel || recipientProfile?.bio || (recipientProfile?.skills || []).slice(0, 3).join(', ') || 'High-conviction startup building',
+    110
+  );
+  const meBrings = cleanSnippet((Array.isArray(myOffers) && myOffers.length ? myOffers : recipientProfile?.skills || ['Product Execution']).slice(0, 3).join(', '), 80);
+
+  const partnerRole = cleanSnippet(partnerBrief?.roleLabel || partnerProfile?.occupation || 'Builder & Founder', 60);
+  const partnerCity = cleanSnippet(partnerBrief?.cityLabel || [partnerProfile?.city, partnerProfile?.country].filter(Boolean).join(', ') || 'Remote', 50);
+  const partnerFocus = cleanSnippet(
+    partnerBrief?.projectLabel || partnerBrief?.goalLabel || partnerProfile?.bio || (partnerProfile?.skills || []).slice(0, 3).join(', ') || 'Building ambitious products',
+    110
+  );
+  const partnerBrings = cleanSnippet((Array.isArray(partnerOffers) && partnerOffers.length ? partnerOffers : partnerProfile?.skills || ['Technical & Growth Execution']).slice(0, 3).join(', '), 80);
+
+  const sharedLine = cleanSnippet(why?.shared || 'Shared startup ambition and builder velocity.', 140);
+  const complementLine = cleanSnippet(why?.complement || `${meBrings} meets ${partnerBrings}.`, 140);
+  const aiLine = cleanSnippet(aiIntro || `${sharedLine} ${complementLine}`, 200);
+  const sprintLine = cleanSnippet(firstSprintTask || 'Spend 20 minutes scoping one concrete customer problem and a 48-hour prototype.', 140);
+
+  const headline = `${meName}, Linky is almost too jealous to share you — meet ${partnerFullName}, your 1-of-1 Potential Co-Founder for ${weekKey}!`;
+  const subject = `LINKUP · ${meName} × ${partnerFirst}: Your 1-of-1 Weekly Potential Co-Founder Match (Linky is jealous ⚡)`.slice(0, 118);
+
+  const body = [
+    `Okay ${meName}, be honest — which other app or tab has been stealing your attention? Because Linky is officially jealous, and we are even a little jealous of ${partnerFullName} for getting paired with our main character this week! Around here the whole LINKUP universe revolves around you, and our matching algorithm + AI selected ${partnerFullName} as your ONLY potential co-founder for ${weekKey} (${bandLabel}).`,
+    `Here is the mutual introduction of BOTH profiles: [1] YOUR PROFILE (${meFullName} · ${meRole} · ${meCity}) — Focus: ${meFocus}; What you bring: ${meBrings}. [2] YOUR 1-OF-1 POTENTIAL CO-FOUNDER (${partnerFullName} · ${partnerRole} · ${partnerCity}) — Focus: ${partnerFocus}; What ${partnerFirst} brings: ${partnerBrings}.`,
+    `Why the LINKUP Algorithm & AI paired you two: ${aiLine} First 20-minute co-founder sprint idea: ${sprintLine}`,
+    `How your exclusive 1:1 pairing works: when ${partnerFirst} opens LINKUP this week, YOU are the single potential co-founder on their screen too. If both of you tap "Interested in Meeting", LINKUP immediately unlocks your direct introduction so you can meet!`,
+  ].join(' ');
+
+  return {
+    subject,
+    headline,
+    body,
+    ctaLabel: `Meet ${partnerFirst} on LINKUP`,
+    ctaUrl: `/profile/${encodeURIComponent(String(partnerProfile?.uid || ''))}?weeklyCofounder=1`,
+  };
+}
+
+export async function sendWeeklyCofounderIntroEmails(db, pairRecord = {}, options = {}) {
+  if (!db || !pairRecord?.uidA || !pairRecord?.uidB) {
+    return { sentA: false, sentB: false, reason: 'missing_pair' };
+  }
+  const weekKey = String(pairRecord.weekKey || 'current');
+  const uidA = String(pairRecord.uidA);
+  const uidB = String(pairRecord.uidB);
+  const profileA = pairRecord.profileA || { uid: uidA };
+  const profileB = pairRecord.profileB || { uid: uidB };
+
+  const [briefA, briefB] = await Promise.all([
+    loadPersonalBuilderBrief(db, uidA, { user: profileA }),
+    loadPersonalBuilderBrief(db, uidB, { user: profileB }),
+  ]);
+
+  const copyForA = buildWeeklyCofounderIntroCopy({
+    weekKey,
+    recipientProfile: profileA,
+    partnerProfile: profileB,
+    recipientBrief: briefA,
+    partnerBrief: briefB,
+    why: pairRecord.cardForA?.why || pairRecord.whyForA || {},
+    myOffers: pairRecord.aOffers || [],
+    partnerOffers: pairRecord.bOffers || [],
+    aiIntro: pairRecord.aiIntroForA || pairRecord.aiWhyMutual || pairRecord.whyMutual || '',
+    firstSprintTask: pairRecord.firstSprintTask || pairRecord.cardForA?.tiny_task || '',
+    bandLabel: pairRecord.band?.label || 'Strong fit',
+  });
+
+  const copyForB = buildWeeklyCofounderIntroCopy({
+    weekKey,
+    recipientProfile: profileB,
+    partnerProfile: profileA,
+    recipientBrief: briefB,
+    partnerBrief: briefA,
+    why: pairRecord.cardForB?.why || pairRecord.whyForB || {},
+    myOffers: pairRecord.bOffers || [],
+    partnerOffers: pairRecord.aOffers || [],
+    aiIntro: pairRecord.aiIntroForB || pairRecord.aiWhyMutual || pairRecord.whyMutual || '',
+    firstSprintTask: pairRecord.firstSprintTask || pairRecord.cardForB?.tiny_task || '',
+    bandLabel: pairRecord.band?.label || 'Strong fit',
+  });
+
+  const [resA, resB] = await Promise.all([
+    sendHighSignalEmail(db, uidA, {
+      receiptKey: `weekly_cofounder_${weekKey}_${uidA}_${uidB}`,
+      throttleMs: 0,
+      minUserGapMs: 0,
+      subject: copyForA.subject,
+      headline: copyForA.headline,
+      body: copyForA.body,
+      ctaLabel: copyForA.ctaLabel,
+      ctaUrl: copyForA.ctaUrl,
+      mood: 'celebration',
+      personal: briefA,
+      badgeLabel: `1-of-1 Weekly Co-Founder Intro · ${weekKey}`,
+    }, options),
+    sendHighSignalEmail(db, uidB, {
+      receiptKey: `weekly_cofounder_${weekKey}_${uidB}_${uidA}`,
+      throttleMs: 0,
+      minUserGapMs: 0,
+      subject: copyForB.subject,
+      headline: copyForB.headline,
+      body: copyForB.body,
+      ctaLabel: copyForB.ctaLabel,
+      ctaUrl: copyForB.ctaUrl,
+      mood: 'celebration',
+      personal: briefB,
+      badgeLabel: `1-of-1 Weekly Co-Founder Intro · ${weekKey}`,
+    }, options),
+  ]);
+
+  return {
+    sentA: !!resA?.sent,
+    sentB: !!resB?.sent,
+    resA,
+    resB,
+    copyForA,
+    copyForB,
+  };
+}
+

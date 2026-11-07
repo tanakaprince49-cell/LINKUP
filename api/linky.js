@@ -1,4 +1,4 @@
-import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runWeeklyFounderSpotlight} from './_builderRuntime.js';
+import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runWeeklyFounderSpotlight,runWeeklyCofounderCron} from './_builderRuntime.js';
 // LINKUP API: the active Linky app action is project-team matching and role
 // recommendations. Legacy conversational and messaging-channel actions return
 // 410/no-op responses; see LINKY_SETUP.md for the current scope.
@@ -1046,12 +1046,13 @@ export default async function handler(req, res) {
   if (wantsCron) {
     if (!(await cronAuthorized(req))) { sendError(res, 401, 'Bad cron token.'); return; }
     try {
-      const [out, weeklyFounderSpotlight] = await Promise.all([
+      const [out, weeklyFounderSpotlight, weeklyCofounders] = await Promise.all([
         runCron(),
         runWeeklyFounderSpotlight(getDb()).catch(() => null),
+        runWeeklyCofounderCron(getDb()).catch(() => null),
       ]);
       setCors(res);
-      res.status(200).json({ ...out, weeklyFounderSpotlight });
+      res.status(200).json({ ...out, weeklyFounderSpotlight, weeklyCofounders });
     } catch (err) {
       sendError(res, 500, 'Cron failed.', String(err?.message || err));
     }

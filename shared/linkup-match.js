@@ -2040,3 +2040,398 @@ export function rankPool(viewer, candidates = [], options = {}) {
     poolSize: scored.length,
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * Weekly 1-of-1 Mutual Co-Founder Matching
+ *
+ * Rules:
+ *   1. Exactly ONE potential co-founder per week per builder.
+ *   2. Strict symmetry: if A is shown to B as a potential co-founder,
+ *      B is shown to A as their potential co-founder.
+ *   3. Scored strictly by the LINKUP algorithm (fit + chemistry +
+ *      reciprocity + evidence ledger) with bounded AI tie-breaking
+ *      and explanation — never random or unvetted matches.
+ * ------------------------------------------------------------------ */
+
+const WEEK_MS = 7 * DAY;
+
+/**
+ * Compute the canonical Monday-to-Monday UTC week window and key (e.g. "2026-W45").
+ */
+export function cofounderWeekWindow(now = Date.now()) {
+  const ts = Number.isFinite(now) ? now : Date.now();
+  const date = new Date(ts);
+  const utcDay = date.getUTCDay(); // 0 = Sun, 1 = Mon, ...
+  const daysSinceMonday = (utcDay + 6) % 7;
+  const start = Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate() - daysSinceMonday,
+    0, 0, 0, 0
+  );
+  const end = start + WEEK_MS;
+  // ISO week number calculation
+  const thursday = new Date(start + 3 * DAY);
+  const yearStart = Date.UTC(thursday.getUTCFullYear(), 0, 1);
+  const weekNo = Math.ceil((((thursday.getTime() - yearStart) / DAY) + 1) / 7);
+  const key = `${thursday.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  const daysRemaining = Math.max(1, Math.ceil((end - ts) / DAY));
+  return { key, start, end, daysRemaining };
+}
+
+export function cofounderPairId(uidA, uidB) {
+  const a = String(uidA || '').trim();
+  const b = String(uidB || '').trim();
+  if (!a || !b || a === b) return '';
+  return a < b ? `${a}__${b}` : `${b}__${a}`;
+}
+
+function fnv1aUnit(input) {
+  const str = String(input || '');
+  let hash = 2166136261;
+  for (let i = 0; i < str.length; i += 1) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) % 100000) / 100000;
+}
+
+const COFOUNDER_INTENT_RE = /\b(co-?founder|cofounder|technical partner|growth partner|cto|ceo|cpo|founding|partner|builder|startup)\b/i;
+
+/**
+ * Symmetrically score an unordered candidate pair {A, B} as potential co-founders.
+ * Rejects any pair that fails eligibility, triggers a chemistry veto, or falls in the hidden band.
+ */
+export function scoreMutualCofounderPair(profileA, profileB, context = {}) {
+  const now = context.now || Date.now();
+  if (!profileA?.uid || !profileB?.uid || String(profileA.uid) === String(profileB.uid)) {
+    return { eligible: false, reason: 'same_or_missing_uid' };
+  }
+
+  // Canonical ordering so {A, B} and {B, A} always produce identical pair metrics
+  const [first, second] = String(profileA.uid) < String(profileB.uid)
+    ? [profileA, profileB]
+    : [profileB, profileA];
+
+  const gateAB = eligibility(first, second, { now });
+  if (!gateAB.eligible) return { eligible: false, reason: gateAB.reason };
+  const gateBA = eligibility(second, first, { now });
+  if (!gateBA.eligible) return { eligible: false, reason: gateBA.reason };
+
+  const corpus = context.corpus || EMPTY_CORPUS;
+  const facetsFirst = context.facetsMap?.get(first.uid) || first.__facets || deriveFacets(first, { now });
+  const facetsSecond = context.facetsMap?.get(second.uid) || second.__facets || deriveFacets(second, { now });
+
+  const scoreAB = scorePair(first, second, {
+    ...context,
+    now,
+    corpus,
+    facetsA: facetsFirst,
+    facetsB: facetsSecond,
+  });
+  const scoreBA = scorePair(second, first, {
+    ...context,
+    now,
+    corpus,
+    facetsA: facetsSecond,
+    facetsB: facetsFirst,
+  });
+
+  // Strict quality gate: no chemistry vetoes and must have real evidence in the ledger
+  if (scoreAB.veto !== null || scoreBA.veto !== null) {
+    return { eligible: false, reason: scoreAB.veto || scoreBA.veto || 'veto' };
+  }
+
+  const evidenceAtoms = [
+    ...(scoreAB.ledger || []),
+    ...(scoreBA.ledger || []),
+  ].filter((atom) => atom.kind === 'shared' || atom.kind === 'complement');
+  if (evidenceAtoms.length === 0) {
+    return { eligible: false, reason: 'no_evidence' };
+  }
+
+  const mutualFit = round3(harmonic(scoreAB.fit, scoreBA.fit));
+  const mutualUtility = round3(harmonic(scoreAB.utility, scoreBA.utility));
+
+  // Co-founder complementarity bonus grounded in the pair's evidence ledger
+  const ledgerTypes = new Set([
+    ...(scoreAB.ledger || []).map((atom) => atom.type),
+    ...(scoreBA.ledger || []).map((atom) => atom.type),
+  ]);
+  let complementBonus = 0;
+  if (ledgerTypes.has('complementary_craft')) complementBonus += 0.08;
+  if (ledgerTypes.has('archetype_pair')) complementBonus += 0.05;
+  if (ledgerTypes.has('need_met') && ledgerTypes.has('need_met_reverse')) {
+    complementBonus += 0.12;
+  } else if (ledgerTypes.has('need_met') || ledgerTypes.has('need_met_reverse')) {
+    complementBonus += 0.06;
+  }
+  if (ledgerTypes.has('shared_domain')) complementBonus += 0.07;
+  if (ledgerTypes.has('shared_voltage')) complementBonus += 0.05;
+  if (ledgerTypes.has('same_place')) complementBonus += 0.03;
+  if (ledgerTypes.has('capacity')) complementBonus += 0.03;
+
+  const aSeeksCofounder = COFOUNDER_INTENT_RE.test(
+    `${(first.lookingFor || []).join(' ')} ${first.goals || ''} ${first.bio || ''}`
+  );
+  const bSeeksCofounder = COFOUNDER_INTENT_RE.test(
+    `${(second.lookingFor || []).join(' ')} ${second.goals || ''} ${second.bio || ''}`
+  );
+  if (aSeeksCofounder && bSeeksCofounder) complementBonus += 0.04;
+
+  const cofounderSynergy = round3(clamp01(mutualUtility + Math.min(0.32, complementBonus)));
+  const display = Math.max(calibrateDisplay(cofounderSynergy), round3(clamp01(cofounderSynergy * 1.15)));
+  const band = bandOf(display);
+  if (band.id === 'hidden') {
+    return { eligible: false, reason: 'below_quality_threshold' };
+  }
+
+  const cardForFirst = composeCard(scoreAB);
+  const cardForSecond = composeCard(scoreBA);
+
+  const firstOffers = (facetsFirst.functionSkills.length
+    ? facetsFirst.functionSkills
+    : [facetsFirst.archetype || first.occupation || 'Product & Execution']
+  ).slice(0, 3);
+  const secondOffers = (facetsSecond.functionSkills.length
+    ? facetsSecond.functionSkills
+    : [facetsSecond.archetype || second.occupation || 'Product & Execution']
+  ).slice(0, 3);
+  const sharedDomains = facetsFirst.domains
+    .filter((domain) => facetsSecond.domains.includes(domain))
+    .slice(0, 3);
+
+  const pairId = cofounderPairId(first.uid, second.uid);
+
+  return {
+    eligible: true,
+    pairId,
+    uidA: first.uid,
+    uidB: second.uid,
+    profileA: first,
+    profileB: second,
+    mutualFit,
+    mutualUtility,
+    cofounderSynergy,
+    display,
+    score: Math.max(1, Math.min(100, Math.round(display * 100))),
+    band,
+    scoreAB,
+    scoreBA,
+    cardForA: cardForFirst,
+    cardForB: cardForSecond,
+    aOffers: firstOffers,
+    bOffers: secondOffers,
+    sharedDomains,
+    whyMutual: [cardForFirst.why.shared, cardForFirst.why.complement].filter(Boolean).join(' '),
+    firstSprintTask: cardForFirst.tiny_task || cardForSecond.tiny_task,
+  };
+}
+
+/**
+ * Global 1-to-1 symmetric co-founder assignment for a given week.
+ *
+ * Guarantees:
+ *   - Capacity = 1 per person (at most one co-founder match per week).
+ *   - Strict symmetry: if A is paired with B, B is paired with A.
+ *   - Order-invariant: sorting profiles by uid first ensures the exact same
+ *     disjoint pairs regardless of input array order.
+ */
+export function assignWeeklyCofounderPairs(profiles = [], options = {}) {
+  const now = options.now || Date.now();
+  const window = cofounderWeekWindow(now);
+  const weekKey = String(options.weekKey || window.key);
+  const previousPairIds = new Set(
+    Array.isArray(options.previousPairIds)
+      ? options.previousPairIds
+      : options.previousPairIds instanceof Set
+        ? Array.from(options.previousPairIds)
+        : []
+  );
+
+  // Deduplicate and sort canonically by uid for order invariance
+  const byId = new Map();
+  for (const raw of profiles || []) {
+    if (!raw?.uid) continue;
+    const uid = String(raw.uid).trim();
+    if (!uid || byId.has(uid)) continue;
+    if (raw.deleted || raw.banned || raw.isStealthMode || raw.isVisible === false || raw.onboarded === false) continue;
+    byId.set(uid, { ...raw, uid });
+  }
+
+  const canonicalProfiles = Array.from(byId.values()).sort((a, b) => a.uid.localeCompare(b.uid));
+  const facetsMap = new Map();
+  for (const profile of canonicalProfiles) {
+    facetsMap.set(profile.uid, deriveFacets(profile, { now }));
+  }
+  const corpus = options.corpus || buildCorpusFromFacets(Array.from(facetsMap.values()));
+
+  // Score all unordered pairs {u_i, u_j} with i < j
+  const candidateEdges = [];
+  for (let i = 0; i < canonicalProfiles.length; i += 1) {
+    for (let j = i + 1; j < canonicalProfiles.length; j += 1) {
+      const pA = canonicalProfiles[i];
+      const pB = canonicalProfiles[j];
+      const evaluated = scoreMutualCofounderPair(pA, pB, { now, corpus, facetsMap });
+      if (!evaluated.eligible) continue;
+
+      const repeatPenalty = previousPairIds.has(evaluated.pairId) ? 0.18 : 0;
+      const weeklyTieBreak = fnv1aUnit(`${weekKey}:${evaluated.pairId}`) * 0.004;
+      const effectiveUtility = round3(Math.max(0.01, evaluated.cofounderSynergy - repeatPenalty + weeklyTieBreak));
+
+      candidateEdges.push({
+        ...evaluated,
+        effectiveUtility,
+        effectiveDisplay: Math.round(effectiveUtility * 100),
+      });
+    }
+  }
+
+  // Primary sort by effectiveUtility descending, deterministic fallback by pairId
+  candidateEdges.sort((left, right) => {
+    if (right.effectiveUtility !== left.effectiveUtility) {
+      return right.effectiveUtility - left.effectiveUtility;
+    }
+    return left.pairId.localeCompare(right.pairId);
+  });
+
+  // Optional bounded AI tie-break order on pairIds (within TIE_BREAK_BAND points)
+  let orderedEdges = candidateEdges;
+  if (Array.isArray(options.aiTieBreakOrder) && options.aiTieBreakOrder.length > 0) {
+    const withUid = candidateEdges.map((edge) => ({ ...edge, uid: edge.pairId, display: edge.effectiveDisplay }));
+    orderedEdges = applyBandedOrder(withUid, options.aiTieBreakOrder, TIE_BREAK_BAND);
+  }
+
+  const assignedUid = new Set();
+  const selectedEdges = [];
+
+  // Lock any pre-committed pairs for this week first
+  if (Array.isArray(options.lockedPairs)) {
+    for (const locked of options.lockedPairs) {
+      const pid = cofounderPairId(locked?.uidA, locked?.uidB);
+      if (!pid) continue;
+      const found = orderedEdges.find((edge) => edge.pairId === pid);
+      if (found && !assignedUid.has(found.uidA) && !assignedUid.has(found.uidB)) {
+        assignedUid.add(found.uidA);
+        assignedUid.add(found.uidB);
+        selectedEdges.push(found);
+      }
+    }
+  }
+
+  // Greedy 1-to-1 symmetric matching over remaining builders
+  for (const edge of orderedEdges) {
+    if (assignedUid.has(edge.uidA) || assignedUid.has(edge.uidB)) continue;
+    assignedUid.add(edge.uidA);
+    assignedUid.add(edge.uidB);
+    selectedEdges.push(edge);
+  }
+
+  // 1-pass augmenting swap to avoid stranding an unmatched builder when a 2-swap improves total utility
+  const unmatchedUids = canonicalProfiles.map((p) => p.uid).filter((uid) => !assignedUid.has(uid));
+  if (unmatchedUids.length > 0 && selectedEdges.length > 0) {
+    const edgeLookup = new Map(orderedEdges.map((edge) => [edge.pairId, edge]));
+    for (const u of unmatchedUids) {
+      if (assignedUid.has(u)) continue;
+      let bestSwap = null;
+      for (let idx = 0; idx < selectedEdges.length; idx += 1) {
+        const current = selectedEdges[idx];
+        // Locked pairs cannot be swapped
+        if (Array.isArray(options.lockedPairs) && options.lockedPairs.some((l) => cofounderPairId(l?.uidA, l?.uidB) === current.pairId)) {
+          continue;
+        }
+        for (const [keepUid, freeUid] of [[current.uidA, current.uidB], [current.uidB, current.uidA]]) {
+          const edgeUKeep = edgeLookup.get(cofounderPairId(u, keepUid));
+          if (!edgeUKeep) continue;
+          // See if freeUid can pair with another unmatched v != u
+          for (const v of unmatchedUids) {
+            if (v === u || assignedUid.has(v)) continue;
+            const edgeFreeV = edgeLookup.get(cofounderPairId(freeUid, v));
+            if (!edgeFreeV) continue;
+            const gain = (edgeUKeep.effectiveUtility + edgeFreeV.effectiveUtility) - current.effectiveUtility;
+            if (gain > 0 && (!bestSwap || gain > bestSwap.gain)) {
+              bestSwap = { idx, edgeUKeep, edgeFreeV, u, v, gain };
+            }
+          }
+        }
+      }
+      if (bestSwap) {
+        selectedEdges.splice(bestSwap.idx, 1, bestSwap.edgeUKeep, bestSwap.edgeFreeV);
+        assignedUid.add(bestSwap.u);
+        assignedUid.add(bestSwap.v);
+      }
+    }
+  }
+
+  const byUid = {};
+  for (const edge of selectedEdges) {
+    const baseView = {
+      pairId: edge.pairId,
+      weekKey,
+      weekStart: window.start,
+      weekEnd: window.end,
+      daysRemaining: window.daysRemaining,
+      score: edge.score,
+      display: edge.display,
+      mutualFit: edge.mutualFit,
+      mutualUtility: edge.mutualUtility,
+      cofounderSynergy: edge.cofounderSynergy,
+      band: edge.band,
+      sharedDomains: edge.sharedDomains,
+      symmetryVerified: true,
+    };
+
+    byUid[edge.uidA] = {
+      ...baseView,
+      viewerUid: edge.uidA,
+      partnerUid: edge.uidB,
+      partner: edge.profileB,
+      why: edge.cardForA.why,
+      reason: [edge.cardForA.why.shared, edge.cardForA.why.complement].filter(Boolean).join(' '),
+      opener: edge.cardForA.opener,
+      tinyTask: edge.cardForA.tiny_task,
+      agenda: edge.cardForA.agenda,
+      slot: edge.cardForA.slot,
+      cites: edge.cardForA.cites,
+      myOffers: edge.aOffers,
+      partnerOffers: edge.bOffers,
+    };
+
+    byUid[edge.uidB] = {
+      ...baseView,
+      viewerUid: edge.uidB,
+      partnerUid: edge.uidA,
+      partner: edge.profileA,
+      why: edge.cardForB.why,
+      reason: [edge.cardForB.why.shared, edge.cardForB.why.complement].filter(Boolean).join(' '),
+      opener: edge.cardForB.opener,
+      tinyTask: edge.cardForB.tiny_task,
+      agenda: edge.cardForB.agenda,
+      slot: edge.cardForB.slot,
+      cites: edge.cardForB.cites,
+      myOffers: edge.bOffers,
+      partnerOffers: edge.aOffers,
+    };
+  }
+
+  return {
+    weekKey,
+    weekStart: window.start,
+    weekEnd: window.end,
+    daysRemaining: window.daysRemaining,
+    pairs: selectedEdges,
+    byUid,
+  };
+}
+
+/**
+ * Convenience helper: returns the viewer's single 1-of-1 mutual co-founder
+ * for the current week from the pool `[viewer, ...candidates]`.
+ */
+export function selectWeeklyCofounderForViewer(viewer, candidates = [], options = {}) {
+  if (!viewer?.uid) return null;
+  const all = [viewer, ...(Array.isArray(candidates) ? candidates : [])];
+  const assigned = assignWeeklyCofounderPairs(all, options);
+  return assigned.byUid[String(viewer.uid)] || null;
+}
+

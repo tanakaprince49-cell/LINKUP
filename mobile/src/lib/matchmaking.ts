@@ -9,11 +9,14 @@ import {
   MODEL_VERSION,
   bandOf,
   applyBandedOrder as applySharedBandedOrder,
+  cofounderWeekWindow,
   composeCard,
   composePortfolio,
   rankPool,
+  selectWeeklyCofounderForViewer,
   type MatchCard,
   type PairScore,
+  type WeeklyCofounderView,
 } from '../../../shared/linkup-match';
 
 /**
@@ -471,3 +474,76 @@ export async function rankCandidatesHybrid(
 
   return applyBandedReorder(localRanked, order, 6);
 }
+
+export type WeeklyCofounderMatch = WeeklyCofounderView & {
+  partner: UserProfile;
+  matchId?: string;
+  bothEmailsSent?: boolean;
+};
+
+/**
+ * Deterministic 1-of-1 weekly co-founder pairing on the local pool.
+ * Guaranteed symmetric: if A gets B in pool P, B gets A in pool P.
+ */
+export function selectLocalWeeklyCofounder(
+  me: UserProfile | null | undefined,
+  candidates: UserProfile[],
+  now = Date.now()
+): WeeklyCofounderMatch | null {
+  if (!me?.uid || !Array.isArray(candidates) || candidates.length === 0) return null;
+  const view = selectWeeklyCofounderForViewer(
+    me as unknown as Record<string, any>,
+    candidates as unknown as Array<Record<string, any>>,
+    { now }
+  );
+  if (!view || !view.partner?.uid) return null;
+  return view as WeeklyCofounderMatch;
+}
+
+/**
+ * Fetch or lock the viewer's 1-of-1 weekly co-founder match from the server
+ * (which persists the symmetric pair in Firestore, runs the AI narrative,
+ * and sends both profiles an introduction email).
+ */
+export async function fetchServerWeeklyCofounder(): Promise<WeeklyCofounderMatch | null> {
+  try {
+    const res = await builderCall<{ match?: WeeklyCofounderMatch | null }>('weeklyCofounderMatch', {});
+    if (res?.match?.partner?.uid) {
+      return res.match;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function submitWeeklyCofounderInterest(
+  partnerUid: string,
+  weekKey?: string,
+  message?: string
+): Promise<{
+  ok: boolean;
+  viewerInterested?: boolean;
+  partnerInterested?: boolean;
+  mutualInterest?: boolean;
+  matchId?: string;
+}> {
+  try {
+    const window = cofounderWeekWindow(Date.now());
+    const res = await builderCall<any>('weeklyCofounderInterest', {
+      partnerUid,
+      weekKey: weekKey || window.key,
+      message: message || 'Interested in meeting as this week’s 1-of-1 potential co-founder match on LINKUP.',
+    });
+    return {
+      ok: !!res?.ok,
+      viewerInterested: !!res?.viewerInterested,
+      partnerInterested: !!res?.partnerInterested,
+      mutualInterest: !!res?.mutualInterest,
+      matchId: String(res?.matchId || ''),
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+

@@ -1,42 +1,49 @@
 import MemberBadges from '../components/MemberBadges';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, FlatList, Alert, Linking, Platform } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { UserProfile } from '../types';
-import { COLORS, appBackground, getBrandFlavor, liquidGlass, textColor } from '../theme/theme';
-import { BAND_SHORT, bandForScore, localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
-import { activeOpportunityScore, displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
-import { getBestOpportunityAlerts, getRotatedOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
-import { getBestProjectRecommendations, getRotatedProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { Users, ChevronRight, Briefcase, MapPin, Target, BellRing, Rocket, Zap, UserCheck, Globe } from 'lucide-react-native';
-import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS, websiteDisplay } from '../lib/campaigns';
-import { SponsoredSlot } from '../components/SponsoredCard';
+import { COLORS, getBrandFlavor, textColor } from '../theme/theme';
+import {
+  BAND_SHORT,
+  bandForScore,
+  fetchServerWeeklyCofounder,
+  selectLocalWeeklyCofounder,
+  submitWeeklyCofounderInterest,
+  type WeeklyCofounderMatch,
+} from '../lib/matchmaking';
+import { displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
+import { Briefcase, MapPin, Target, Rocket, Zap, UserCheck, Globe, CheckCircle2, MessageSquare, Mail } from 'lucide-react-native';
+import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS } from '../lib/campaigns';
 import { shareLinkupInvite } from '../lib/activation';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
-import { IS_LOW_END_ANDROID, MOBILE_HORIZONTAL_CARD_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
+import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
 import { ikAvatar } from '../lib/ikImage';
+import {
+  connectionRequestId,
+  requestConnection,
+  respondToConnectionRequest,
+  subscribeToConnectionGate,
+  type ConnectionGate,
+} from '../lib/connectionRequests';
+import { directMatchId, ensureDirectMatch } from '../lib/chat';
 
 const dashboardCacheKey = (uid: string) => `linkup:dashboard:v3:${uid}`;
+const weeklyCofounderCacheKey = (uid: string) => `linkup:weekly-cofounder:v1:${uid}`;
 const DASHBOARD_CACHE_LIMIT = IS_LOW_END_ANDROID ? 24 : 60;
 
-// HOME PALETTE (founder request): clean white + dark gold ONLY.
-// No lime (#FBE618), no green, no tints of anything else on this screen.
-// HOME PALETTE: follows the app-wide BRAND FLAVOR (user decree).
-//   white mode  → pure monochrome white (fills + hairline, ink accents)
-//   yellow mode → FULL YELLOW everything (fills, icons, small text)
-// getBrandFlavor() is final before any module loads (index.ts bootstrap), so
-// module-level constants below are correct from the first frame.
 const HOME_FLAVOR_YELLOW = getBrandFlavor() === 'yellow';
-const HOME_GOLD = HOME_FLAVOR_YELLOW ? '#FBE618' : '#FFFFFF'; // fills, buttons
-const HOME_GOLD_DEEP = HOME_FLAVOR_YELLOW ? '#FBE618' : '#111827'; // small accent text
-const HOME_GOLD_TINT = HOME_FLAVOR_YELLOW ? 'rgba(251,230,24,0.12)' : 'rgba(17,24,39,0.05)'; // subtle chips/backdrops
-const HOME_INK = HOME_FLAVOR_YELLOW ? '#FBE618' : '#111827'; // icons / spinners
-const HOME_LINE = HOME_FLAVOR_YELLOW ? 'rgba(251,230,24,0.45)' : 'rgba(17,24,39,0.12)'; // hairline edge for fills
+const HOME_GOLD = HOME_FLAVOR_YELLOW ? '#FBE618' : '#FFFFFF';
+const HOME_GOLD_DEEP = HOME_FLAVOR_YELLOW ? '#FBE618' : '#111827';
+const HOME_GOLD_TINT = HOME_FLAVOR_YELLOW ? 'rgba(251,230,24,0.12)' : 'rgba(17,24,39,0.05)';
+const HOME_INK = HOME_FLAVOR_YELLOW ? '#FBE618' : '#111827';
+const HOME_LINE = HOME_FLAVOR_YELLOW ? 'rgba(251,230,24,0.45)' : 'rgba(17,24,39,0.12)';
+
 const compactCachedImage = (value: unknown) => {
   return safeProfileImageUri(value, MOBILE_LIST_IMAGE_LIMIT);
 };
@@ -55,6 +62,7 @@ const compactDashboardProfile = (profile: UserProfile) => {
     displayName: displayNameFor(profile),
     username: (profile as any).username || '',
     bio: profile.bio || '',
+    goals: (profile as any).goals || '',
     profilePic: compactCachedImage(profile.profilePic),
     occupation: (profile as any).occupation || '',
     company: (profile as any).company || '',
@@ -100,15 +108,11 @@ const writeCachedDashboardPeople = async (uid: string, people: UserProfile[]) =>
 
 function DiscoveryDashboardScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
-  // Hub ad strip: one sponsored slot for free members; PLUS members never see it.
   const [hubSponsor, setHubSponsor] = useState<Campaign | null>(null);
-  // PLUS is ad-free; founder/admin accounts still see placements to QA them.
   const adsHiddenForViewer = isSponsoredHiddenForViewer(me, { email: user?.email, isAdmin: (me as any)?.isAdmin });
   const { theme } = useTheme();
   const isFocused = useIsFocused();
-  // Rotates: next campaign on every focus, on foreground, and on a timer.
-  // Home is the tab that stays mounted longest, so a fetch-once slot here
-  // pinned one ad to the top of the app for the whole session.
+
   useEffect(() => {
     if (adsHiddenForViewer || !user?.uid || !isFocused) {
       if (adsHiddenForViewer || !user?.uid) setHubSponsor(null);
@@ -130,19 +134,13 @@ function DiscoveryDashboardScreen({ navigation }: any) {
       sub.remove();
     };
   }, [adsHiddenForViewer, user?.uid, isFocused]);
-  const isDark = theme === 'dark';
-  const remoteRankTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const peopleRankKeyRef = useRef<string>('');
 
+  const isDark = theme === 'dark';
   const [loading, setLoading] = useState(false);
   const [people, setPeople] = useState<UserProfile[]>([]);
-  const [aiRank, setAiRank] = useState<Record<string, { score: number; reason: string }>>({});
-  const [aiLoading, setAiLoading] = useState(false);
-  const [opportunityRadar, setOpportunityRadar] = useState<OpportunityAlert[]>([]);
-  const localRank = useMemo(() => {
-    const rankPool = IS_LOW_END_ANDROID ? people.slice(0, 10) : people;
-    return rankedCandidatesToMap(localCommonalityRank(me, rankPool, Math.max(rankPool.length, 10)));
-  }, [me, people]);
+  const [serverWeeklyMatch, setServerWeeklyMatch] = useState<WeeklyCofounderMatch | null>(null);
+  const [gate, setGate] = useState<ConnectionGate>({ status: 'none' });
+  const [interestBusy, setInterestBusy] = useState(false);
 
   useEffect(() => {
     if (!user || !isFocused) return;
@@ -154,6 +152,14 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         setLoading(false);
       }
     });
+    AsyncStorage.getItem(weeklyCofounderCacheKey(user.uid))
+      .then((raw) => {
+        if (!isMounted || !raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed?.partner?.uid) setServerWeeklyMatch(parsed);
+      })
+      .catch(() => {});
+
     const unsub = subscribeToDiscoveryProfiles({
       userId: user.uid,
       onData: (profiles) => {
@@ -177,273 +183,446 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     };
   }, [isFocused, user?.uid]);
 
+  // Deterministic symmetric 1-of-1 weekly co-founder pick from the LINKUP engine
+  const localWeeklyMatch = useMemo(() => {
+    if (!me?.uid || people.length === 0) return null;
+    return selectLocalWeeklyCofounder(me, people);
+  }, [me, people]);
 
+  // Server-locked 1-of-1 weekly co-founder match (persists symmetric pairing in Firestore,
+  // runs AI explanation, and sends both people an email introducing both profiles).
   useEffect(() => {
-    if (!user || !isFocused) return;
-    if (people.length === 0) return;
-    const peopleKey = people.map((p) => p.uid).sort().join('|');
-    if (peopleKey === peopleRankKeyRef.current) return;
-    peopleRankKeyRef.current = peopleKey;
+    if (!user?.uid || !isFocused) return;
     let cancelled = false;
-    const localRanked = localCommonalityRank(me, people, 15);
-    setAiRank(rankedCandidatesToMap(localRanked));
-
-    if (remoteRankTimerRef.current) {
-      clearTimeout(remoteRankTimerRef.current);
-      remoteRankTimerRef.current = null;
-    }
-
-    if (Platform.OS !== 'web') {
-      setAiLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    remoteRankTimerRef.current = setTimeout(() => void (async () => {
-      try {
-        setAiLoading(true);
-        let ranked = await rankCandidatesHybrid(me, people, 15);
-        if (!ranked.length) ranked = localRanked;
-        if (cancelled) return;
-        setAiRank(rankedCandidatesToMap(ranked));
-      } catch (e: any) {
-        if (!cancelled) {
-          setAiRank(rankedCandidatesToMap(localRanked));
-        }
-      } finally {
-        if (!cancelled) setAiLoading(false);
-      }
-    })(), 3500);
+    void fetchServerWeeklyCofounder().then((remote) => {
+      if (cancelled || !remote?.partner?.uid) return;
+      setServerWeeklyMatch(remote);
+      AsyncStorage.setItem(weeklyCofounderCacheKey(user.uid), JSON.stringify(remote)).catch(() => {});
+    });
     return () => {
       cancelled = true;
-      if (remoteRankTimerRef.current) {
-        clearTimeout(remoteRankTimerRef.current);
-        remoteRankTimerRef.current = null;
-      }
     };
-  }, [isFocused, user?.uid, me?.uid, people]);
+  }, [isFocused, user?.uid, people.length]);
 
+  const weeklyMatch: WeeklyCofounderMatch | null = useMemo(() => {
+    if (serverWeeklyMatch?.partner?.uid) {
+      const livePartner = people.find((p) => p.uid === serverWeeklyMatch.partner.uid);
+      return livePartner
+        ? { ...serverWeeklyMatch, partner: { ...livePartner, ...serverWeeklyMatch.partner, profilePic: livePartner.profilePic || serverWeeklyMatch.partner.profilePic } }
+        : serverWeeklyMatch;
+    }
+    return localWeeklyMatch;
+  }, [serverWeeklyMatch, localWeeklyMatch, people]);
 
-  const opportunities = useMemo(() => {
-    const list = people
-      .map((p: any) => ({ profile: p, weight: activeOpportunityScore(p) }))
-      .filter((x) => x.weight > 0);
-    list.sort((a, b) => b.weight - a.weight);
-    return list.slice(0, MOBILE_HORIZONTAL_CARD_LIMIT).map((x) => x.profile);
-  }, [people]);
-
-  const [projectRecommendations, setProjectRecommendations] = useState<ProjectRecommendation[]>([]);
-  useEffect(() => {
-    // ANTI-RERUN: both rails rotate daily through fresh candidates (seen-log
-    // in AsyncStorage). Pure scorer kept as the instant fallback so a broken
-    // storage read can never blank the rail. Users rioted over reruns — this
-    // is the kill shot.
-    let cancelled = false;
-    const pool = IS_LOW_END_ANDROID ? people.slice(0, 10) : people;
-    const limitCount = IS_LOW_END_ANDROID ? 4 : 8;
-    void getRotatedProjectRecommendations(me, pool, limitCount)
-      .then((recs) => { if (!cancelled) setProjectRecommendations(recs); })
-      .catch(() => { if (!cancelled) setProjectRecommendations(getBestProjectRecommendations(me, pool, limitCount)); });
-    return () => { cancelled = true; };
-  }, [me, people]);
+  const partnerUid = weeklyMatch?.partner?.uid || '';
 
   useEffect(() => {
-    let cancelled = false;
-    const pool = IS_LOW_END_ANDROID ? people.slice(0, 10) : people;
-    const limitCount = IS_LOW_END_ANDROID ? 1 : 3;
-    void getRotatedOpportunityAlerts(me, pool, limitCount)
-      .then((alerts) => { if (!cancelled) setOpportunityRadar(alerts); })
-      .catch(() => { if (!cancelled) setOpportunityRadar(getBestOpportunityAlerts(me, pool, limitCount)); });
-    return () => { cancelled = true; };
-  }, [me, people]);
+    if (!user?.uid || !partnerUid) {
+      setGate({ status: 'none' });
+      return;
+    }
+    return subscribeToConnectionGate(user.uid, partnerUid, (nextGate) => {
+      setGate(nextGate);
+    });
+  }, [user?.uid, partnerUid]);
 
-  const topOpportunityAlert = opportunityRadar[0];
+  const viewerInterested = !!(
+    weeklyMatch?.viewerInterested ||
+    gate.status === 'pending_out' ||
+    gate.status === 'approved'
+  );
+  const partnerInterested = !!(
+    weeklyMatch?.partnerInterested ||
+    gate.status === 'pending_in' ||
+    gate.status === 'approved'
+  );
+  const isMutualMatch = !!(weeklyMatch?.mutualInterest || gate.status === 'approved' || (viewerInterested && partnerInterested));
 
-  const Card = ({ item, showScore, rank }: { item: UserProfile; showScore?: boolean; rank?: number }) => {
-    const localMatch = localRank[item.uid];
-    const aiMatch = aiRank[item.uid];
-    const match = localMatch || aiMatch;
-    // The picks rail shows de-duplicated scores so the two cards never read
-    // the same percentage; every other rail keeps the raw score.
-    const score = showScore ? localMatch?.score ?? aiMatch?.score ?? null : undefined;
-    return (
-      <TouchableOpacity
-        onPress={() => navigation.navigate('Profile', { userId: item.uid, compatibilityScore: score, compatibilityReason: match?.reason || '' })}
-        style={[styles.card, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}
-      >
-        {typeof rank === 'number' ? (
-          <View style={[styles.rankBadge, rank < 3 && { backgroundColor: HOME_GOLD,
-    borderWidth: 1,
-    borderColor: HOME_LINE }]}>
-            <Text style={styles.rankBadgeText}>{rank === 0 ? '1ST' : rank === 1 ? '2ND' : rank === 2 ? '3RD' : `#${rank + 1}`}</Text>
-          </View>
-        ) : null}
-        <AppImage
-          uri={ikAvatar(safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT)) || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256'}
-          style={styles.avatar}
-        />
-        <View style={{ flex: 1 }}>
-          <View style={styles.nameRow}>
-            <Text style={[styles.name, { color: textColor(isDark) }]} numberOfLines={1}>
-              {displayNameFor(item)}
-            </Text>
-            <MemberBadges userId={item.uid} verified={!!item.isVerified} size={18} />
-          </View>
-          <Text style={[styles.handle, { color: HOME_GOLD_DEEP }]} numberOfLines={1}>{handleFor(item)}</Text>
-          <Text style={[styles.meta, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
-            {(item as any).occupation || 'Builder'} · {(item.city || item.country) ? [item.city, item.country].filter(Boolean).join(', ') : 'Remote'}
-          </Text>
-          {!!showScore && typeof score === 'number' && (
-            <TouchableOpacity
-              onPress={() => Alert.alert(bandForScore(score).label, `${match?.why?.shared || match?.reason || ''}\n\n${match?.why?.complement || ''}`.trim())}
-              style={styles.scorePill}
-              activeOpacity={0.85}
-            >
-              <Zap size={10} color="#000" />
-              <Text style={styles.scoreText}>{BAND_SHORT[bandForScore(score).id] || 'LOOK'}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </TouchableOpacity>
-    );
+  const handleOpenMutualChat = async (item: UserProfile) => {
+    if (!user?.uid || !item?.uid) return;
+    try {
+      setInterestBusy(true);
+      const matchId = await ensureDirectMatch(user.uid, item.uid);
+      navigation.navigate('Chat', { matchId, otherUser: item });
+    } catch {
+      navigation.navigate('Profile', {
+        userId: item.uid,
+        compatibilityScore: weeklyMatch?.score,
+        compatibilityReason: weeklyMatch?.reason || '',
+      });
+    } finally {
+      setInterestBusy(false);
+    }
   };
 
-  const OpportunityCard = ({ item }: { item: UserProfile }) => {
+  const handleExpressInterest = async (item: UserProfile) => {
+    if (!user?.uid || !item?.uid || interestBusy) return;
+    setInterestBusy(true);
+    try {
+      const partnerName = displayNameFor(item);
+      const introNote = weeklyMatch?.opener
+        ? `${weeklyMatch.opener} (Matched as 1-of-1 Weekly Potential Co-Founders on LINKUP)`
+        : `Hey ${partnerName}, LINKUP’s algorithm & AI paired us as each other’s 1-of-1 potential co-founder this week — would love to meet!`;
+
+      if (gate.status === 'pending_in' || partnerInterested) {
+        const reqId = gate.requestId || connectionRequestId(item.uid, user.uid);
+        await respondToConnectionRequest({
+          requestId: reqId,
+          responderId: user.uid,
+          senderId: item.uid,
+          approved: true,
+          responderName: displayNameFor(me as any),
+          responderPic: me?.profilePic,
+        }).catch(() => {});
+        const serverRes = await submitWeeklyCofounderInterest(item.uid, weeklyMatch?.weekKey, introNote);
+        const matchId = serverRes.matchId || (await ensureDirectMatch(user.uid, item.uid).catch(() => directMatchId(user.uid, item.uid)));
+        setServerWeeklyMatch((prev) =>
+          prev
+            ? { ...prev, viewerInterested: true, partnerInterested: true, mutualInterest: true, matchId }
+            : prev
+        );
+        navigation.navigate('Chat', { matchId, otherUser: item });
+        return;
+      }
+
+      await requestConnection({
+        senderId: user.uid,
+        recipientId: item.uid,
+        senderName: displayNameFor(me as any),
+        senderPic: me?.profilePic,
+        recipientName: partnerName,
+        message: introNote,
+      }).catch(() => {});
+
+      const serverRes = await submitWeeklyCofounderInterest(item.uid, weeklyMatch?.weekKey, introNote);
+      if (serverRes.mutualInterest) {
+        const matchId = serverRes.matchId || (await ensureDirectMatch(user.uid, item.uid).catch(() => directMatchId(user.uid, item.uid)));
+        setServerWeeklyMatch((prev) =>
+          prev
+            ? { ...prev, viewerInterested: true, partnerInterested: true, mutualInterest: true, matchId }
+            : prev
+        );
+        navigation.navigate('Chat', { matchId, otherUser: item });
+      } else {
+        setServerWeeklyMatch((prev) =>
+          prev ? { ...prev, viewerInterested: true } : prev
+        );
+      }
+    } finally {
+      setInterestBusy(false);
+    }
+  };
+
+  const WeeklyCofounderCard = ({ match }: { match: WeeklyCofounderMatch }) => {
+    const item = match.partner;
     const details = opportunityDetails(item);
+    const partnerName = displayNameFor(item);
+    const partnerFirst = partnerName.split(' ')[0] || partnerName;
+    const band = bandForScore(match.score);
+    const locationLabel = [item.city, item.country].filter(Boolean).join(', ') || details.location || 'Remote';
+    const roleLabel = (item as any).occupation || details.roleNeed || 'Founder & Builder';
+    const companyLabel = (item as any).company || (item as any)?.projects?.[0]?.title || '';
+    const myOffers = Array.isArray(match.myOffers) && match.myOffers.length
+      ? match.myOffers
+      : (Array.isArray(me?.skills) && me!.skills.length ? me!.skills.slice(0, 3) : ['Product Execution']);
+    const partnerOffers = Array.isArray(match.partnerOffers) && match.partnerOffers.length
+      ? match.partnerOffers
+      : (Array.isArray(item.skills) && item.skills.length ? item.skills.slice(0, 3) : ['Technical & Growth Execution']);
+    const tags = [
+      ...(Array.isArray(item.skills) ? item.skills.slice(0, 4) : []),
+      ...(Array.isArray((item as any).lookingFor) ? (item as any).lookingFor.slice(0, 2) : []),
+    ].filter(Boolean);
+
     return (
-      <TouchableOpacity
-        onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.uid })}
-        style={[styles.opportunityCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}
-        activeOpacity={0.9}
+      <View
+        style={[
+          styles.cofounderCard,
+          {
+            backgroundColor: isDark ? '#12151E' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(251,230,24,0.38)' : 'rgba(17,24,39,0.14)',
+          },
+        ]}
       >
-        <View style={styles.opportunityTop}>
-          <AppImage
-            uri={ikAvatar(safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT)) || 'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256'}
-            style={styles.smallAvatar}
-          />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.opportunityTitle, { color: textColor(isDark) }]} numberOfLines={1}>
-              {details.title}
-            </Text>
-            <Text style={[styles.handle, { color: HOME_GOLD_DEEP }]} numberOfLines={1}>{handleFor(item)}</Text>
+        {/* Top Exclusive 1-of-1 Weekly Header */}
+        <View style={styles.exclusiveBanner}>
+          <View style={[styles.exclusivePill, { backgroundColor: HOME_GOLD, borderColor: HOME_LINE }]}>
+            <Zap size={12} color="#000" />
+            <Text style={styles.exclusivePillText}>1-OF-1 WEEKLY POTENTIAL CO-FOUNDER · {match.weekKey || 'THIS WEEK'}</Text>
           </View>
-          <View style={[styles.livePill, { backgroundColor: isDark ? 'rgba(74,222,128,0.15)' : 'rgba(74,222,128,0.12)' }]}>
-            <Text style={styles.liveText}>Active</Text>
-          </View>
-        </View>
-
-        <Text style={[styles.opportunitySummary, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
-          {details.summary}
-        </Text>
-
-        <View style={styles.opportunityMetaGrid}>
-          <View style={styles.opportunityMeta}>
-            <Target size={11} color={HOME_INK} />
-            <Text style={[styles.opportunityMetaText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{details.roleNeed}</Text>
-          </View>
-          <View style={styles.opportunityMeta}>
-            <Briefcase size={11} color={HOME_INK} />
-            <Text style={[styles.opportunityMetaText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{details.stage}</Text>
-          </View>
-          <View style={styles.opportunityMeta}>
-            <MapPin size={11} color="#4ADE80" />
-            <Text style={[styles.opportunityMetaText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{details.location}</Text>
-          </View>
-        </View>
-
-        <View style={styles.tagsRow}>
-          {details.tags.slice(0, 3).map((tag, index) => (
-            <View key={`${item.uid}-${tag}-${index}`} style={[styles.tagChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-              <Text style={[styles.tagText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{tag.toUpperCase()}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.uid })} style={[styles.opportunityBtn, { backgroundColor: HOME_GOLD,
-    borderWidth: 1,
-    borderColor: HOME_LINE }]}>
-            <Text style={styles.opportunityBtnText}>View Profile</Text>
+          <TouchableOpacity
+            onPress={() =>
+              Alert.alert(
+                band.label,
+                `${match.why?.shared || match.reason || ''}\n\n${match.why?.complement || ''}`.trim()
+              )
+            }
+            style={[styles.scoreBadge, { backgroundColor: HOME_GOLD, borderColor: HOME_LINE }]}
+            activeOpacity={0.85}
+          >
+            <Zap size={11} color="#000" />
+            <Text style={styles.scoreBadgeText}>{BAND_SHORT[band.id] || 'STRONG'}</Text>
           </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+
+        <Text style={[styles.mutualRuleSub, { color: textColor(isDark, 'muted') }]}>
+          Selected by the LINKUP AI &amp; Algorithm · When {partnerFirst} opens LINKUP this week, you are shown as their only potential co-founder too.
+        </Text>
+
+        {/* Attention-Grabbing Hero Identity */}
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() =>
+            navigation.navigate('Profile', {
+              userId: item.uid,
+              compatibilityScore: match.score,
+              compatibilityReason: match.reason || '',
+            })
+          }
+          style={[
+            styles.profileHeroBox,
+            { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F8FAFC' },
+          ]}
+        >
+          <View style={styles.avatarRing}>
+            <AppImage
+              uri={
+                ikAvatar(safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT)) ||
+                'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256'
+              }
+              style={styles.heroAvatar}
+            />
+            <View style={styles.liveDot} />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <View style={styles.nameRow}>
+              <Text style={[styles.heroName, { color: textColor(isDark) }]} numberOfLines={1}>
+                {partnerName}
+              </Text>
+              <MemberBadges userId={item.uid} verified={!!item.isVerified} size={20} />
+            </View>
+            <Text style={[styles.handle, { color: HOME_GOLD_DEEP }]} numberOfLines={1}>
+              {handleFor(item)}
+            </Text>
+            <Text style={[styles.roleLine, { color: textColor(isDark) }]} numberOfLines={2}>
+              {roleLabel}
+              {companyLabel ? ` · ${companyLabel}` : ''}
+            </Text>
+            <View style={styles.heroMetaRow}>
+              <View style={styles.metaChip}>
+                <MapPin size={11} color="#4ADE80" />
+                <Text style={[styles.metaChipText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
+                  {locationLabel}
+                </Text>
+              </View>
+              {!!details.stage && (
+                <View style={styles.metaChip}>
+                  <Briefcase size={11} color={HOME_INK} />
+                  <Text style={[styles.metaChipText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
+                    {details.stage}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* Bio / What They Are Building */}
+        {!!(item.bio || (item as any).goals || details.summary) && (
+          <View style={styles.bioSection}>
+            <Text style={[styles.bioLabel, { color: textColor(isDark, 'muted') }]}>WHAT {partnerFirst.toUpperCase()} IS BUILDING &amp; FOCUSED ON</Text>
+            <Text style={[styles.bioText, { color: textColor(isDark, 'secondary') }]} numberOfLines={4}>
+              {item.bio || (item as any).goals || details.summary}
+            </Text>
+          </View>
+        )}
+
+        {/* LINKUP Algorithm + AI Co-Founder Synergy Breakdown */}
+        <View
+          style={[
+            styles.synergyBox,
+            {
+              backgroundColor: isDark ? 'rgba(251,230,24,0.07)' : '#FCFBF3',
+              borderColor: isDark ? 'rgba(251,230,24,0.25)' : '#E7E1BF',
+            },
+          ]}
+        >
+          <View style={styles.synergyHeader}>
+            <Rocket size={14} color={isDark ? '#FBE618' : '#111827'} />
+            <Text style={[styles.synergyTitle, { color: textColor(isDark) }]} numberOfLines={1}>
+              {match.aiHeadline || 'WHY LINKUP AI & ALGORITHM PAIRED YOU TWO'}
+            </Text>
+          </View>
+
+          {!!match.why?.shared && (
+            <View style={styles.synergyBullet}>
+              <Text style={[styles.synergyBulletKey, { color: isDark ? '#FBE618' : '#6E5B00' }]}>SHARED SIGNAL</Text>
+              <Text style={[styles.synergyBulletVal, { color: textColor(isDark) }]}>{match.why.shared}</Text>
+            </View>
+          )}
+
+          {!!match.why?.complement && (
+            <View style={styles.synergyBullet}>
+              <Text style={[styles.synergyBulletKey, { color: isDark ? '#FBE618' : '#6E5B00' }]}>CO-FOUNDER COMPLEMENT</Text>
+              <Text style={[styles.synergyBulletVal, { color: textColor(isDark) }]}>{match.why.complement}</Text>
+            </View>
+          )}
+
+          <View style={styles.exchangeGrid}>
+            <View style={[styles.exchangeCol, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF' }]}>
+              <Text style={[styles.exchangeLabel, { color: textColor(isDark, 'muted') }]}>YOU BRING</Text>
+              <Text style={[styles.exchangeValue, { color: textColor(isDark) }]} numberOfLines={2}>
+                {myOffers.join(' · ')}
+              </Text>
+            </View>
+            <View style={[styles.exchangeCol, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF' }]}>
+              <Text style={[styles.exchangeLabel, { color: textColor(isDark, 'muted') }]}>{partnerFirst.toUpperCase()} BRINGS</Text>
+              <Text style={[styles.exchangeValue, { color: textColor(isDark) }]} numberOfLines={2}>
+                {partnerOffers.join(' · ')}
+              </Text>
+            </View>
+          </View>
+
+          {!!match.tinyTask && (
+            <View style={styles.sprintRow}>
+              <Target size={12} color={isDark ? '#4ADE80' : '#15803D'} />
+              <Text style={[styles.sprintText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
+                First 20-min co-founder sprint: {match.tinyTask}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Skills & Looking For Tags */}
+        {tags.length > 0 && (
+          <View style={styles.tagsRow}>
+            {tags.slice(0, 6).map((tag, index) => (
+              <View
+                key={`${item.uid}-${tag}-${index}`}
+                style={[styles.tagChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}
+              >
+                <Text style={[styles.tagText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
+                  {String(tag).toUpperCase()}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Mutual Interest Status Banner */}
+        <View
+          style={[
+            styles.mutualStatusBanner,
+            {
+              backgroundColor: isMutualMatch
+                ? 'rgba(74,222,128,0.14)'
+                : partnerInterested
+                  ? 'rgba(251,230,24,0.16)'
+                  : isDark
+                    ? 'rgba(255,255,255,0.04)'
+                    : '#F3F4F6',
+            },
+          ]}
+        >
+          {isMutualMatch ? (
+            <CheckCircle2 size={15} color="#22C55E" />
+          ) : (
+            <UserCheck size={15} color={partnerInterested ? '#EAB308' : textColor(isDark, 'muted')} />
+          )}
+          <Text style={[styles.mutualStatusText, { color: textColor(isDark) }]}>
+            {isMutualMatch
+              ? `Both you and ${partnerFirst} are interested! Your direct co-founder room is unlocked.`
+              : partnerInterested
+                ? `${partnerFirst} is already interested in meeting you as a co-founder! Tap below to meet.`
+                : viewerInterested
+                  ? `You're marked as interested. When ${partnerFirst} taps Interested on your profile, you two meet!`
+                  : `Mutual 1:1 Rule: If both you and ${partnerFirst} tap Interested this week, you unlock a direct intro to meet.`}
+          </Text>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionRow}>
+          {isMutualMatch ? (
+            <TouchableOpacity
+              onPress={() => void handleOpenMutualChat(item)}
+              disabled={interestBusy}
+              style={[styles.primaryActionBtn, { backgroundColor: '#22C55E' }]}
+              activeOpacity={0.88}
+            >
+              <MessageSquare size={15} color="#000" />
+              <Text style={styles.primaryActionBtnText}>Meet &amp; Message {partnerFirst}</Text>
+            </TouchableOpacity>
+          ) : partnerInterested ? (
+            <TouchableOpacity
+              onPress={() => void handleExpressInterest(item)}
+              disabled={interestBusy}
+              style={[styles.primaryActionBtn, { backgroundColor: HOME_GOLD, borderWidth: 1, borderColor: HOME_LINE }]}
+              activeOpacity={0.88}
+            >
+              <Zap size={15} color="#000" />
+              <Text style={styles.primaryActionBtnText}>
+                {interestBusy ? 'Unlocking Intro...' : `I'm Interested Too — Meet ${partnerFirst}`}
+              </Text>
+            </TouchableOpacity>
+          ) : viewerInterested ? (
+            <View
+              style={[
+                styles.primaryActionBtn,
+                {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#E5E7EB',
+                },
+              ]}
+            >
+              <CheckCircle2 size={15} color={textColor(isDark)} />
+              <Text style={[styles.primaryActionBtnText, { color: textColor(isDark) }]}>
+                Interested · Waiting for {partnerFirst}
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => void handleExpressInterest(item)}
+              disabled={interestBusy}
+              style={[styles.primaryActionBtn, { backgroundColor: HOME_GOLD, borderWidth: 1, borderColor: HOME_LINE }]}
+              activeOpacity={0.88}
+            >
+              <UserCheck size={15} color="#000" />
+              <Text style={styles.primaryActionBtnText}>
+                {interestBusy ? 'Sending Interest...' : `Interested in Meeting ${partnerFirst}`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate('Profile', {
+                userId: item.uid,
+                compatibilityScore: match.score,
+                compatibilityReason: match.reason || '',
+              })
+            }
+            style={[
+              styles.secondaryActionBtn,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F3F4F6',
+                borderColor: HOME_LINE,
+              },
+            ]}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.secondaryActionBtnText, { color: textColor(isDark) }]}>View Full Profile</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Dual Email Introduction Footer */}
+        <View style={styles.emailFooterRow}>
+          <Mail size={12} color={textColor(isDark, 'muted')} />
+          <Text style={[styles.emailFooterText, { color: textColor(isDark, 'muted') }]}>
+            LINKUP AI &amp; Algorithm also emailed both you and {partnerFirst} introducing both profiles for this week.
+          </Text>
+        </View>
+      </View>
     );
   };
-
-  const ProjectCard = ({ item }: { item: ProjectRecommendation }) => (
-    <TouchableOpacity
-      onPress={() => navigation.navigate('ActiveOpportunity', { userId: item.owner.uid, projectId: item.project.id, matchScore: item.score })}
-      style={[styles.projectCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFF' }]}
-      activeOpacity={0.9}
-    >
-      <View style={styles.projectTop}>
-        <View style={styles.projectIcon}>
-          <Rocket size={16} color="#000" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.projectTitle, { color: textColor(isDark) }]} numberOfLines={1}>
-            {item.project.title}
-          </Text>
-          <Text style={[styles.handle, { color: HOME_GOLD_DEEP }]} numberOfLines={1}>{handleFor(item.owner)}</Text>
-        </View>
-        <View style={styles.projectScore}>
-          <Text style={styles.projectScoreText}>{BAND_SHORT[bandForScore(item.score).id] || 'LOOK'}</Text>
-        </View>
-      </View>
-      <Text style={[styles.projectSummary, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
-        {item.project.description}
-      </Text>
-      <View style={styles.projectSignalRow}>
-        <Text style={[styles.projectSignalLabel, { color: isDark ? '#C6B100' : '#8A7900' }]}>Why You</Text>
-        <Text style={[styles.projectReason, { color: textColor(isDark) }]} numberOfLines={1}>
-          {item.reason}
-        </Text>
-      </View>
-      <View style={styles.tagsRow}>
-        {[item.roleNeed, item.project.status, ...item.matchingSignals].filter(Boolean).slice(0, 3).map((tag, index) => (
-          <View key={`${item.id}-${tag}-${index}`} style={[styles.tagChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-            <Text style={[styles.tagText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>{String(tag).toUpperCase()}</Text>
-          </View>
-        ))}
-      </View>
-    </TouchableOpacity>
-  );
-
-  const Section = ({ title, icon, data, showScore, variant, onViewAll, showRank }: any) => (
-    <View style={{ marginTop: 24 }}>
-      <TouchableOpacity style={styles.sectionHeader} onPress={onViewAll} activeOpacity={onViewAll ? 0.8 : 1}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {icon}
-          <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>{title}</Text>
-        </View>
-        <View style={styles.sectionChevron}>
-          <ChevronRight size={16} color={textColor(isDark, 'muted')} />
-        </View>
-      </TouchableOpacity>
-      <FlatList
-        data={data}
-        keyExtractor={(it: any) => it.uid || it.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        initialNumToRender={IS_LOW_END_ANDROID ? 3 : 6}
-        maxToRenderPerBatch={IS_LOW_END_ANDROID ? 3 : 6}
-        windowSize={IS_LOW_END_ANDROID ? 3 : 5}
-        removeClippedSubviews={Platform.OS !== 'web'}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
-        ListEmptyComponent={
-          <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}>
-            <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No professionals to display</Text>
-            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>No relevant profiles are available in this view yet. Explore public builders at linkupbuild.com or invite professionals from your network.</Text>
-            <TouchableOpacity onPress={() => void shareLinkupInvite()} style={styles.emptyBtn}>
-              <Text style={styles.emptyBtnText}>Invite Builders</Text>
-            </TouchableOpacity>
-          </View>
-        }
-        renderItem={({ item, index }: any) => variant === 'opportunity' ? <OpportunityCard item={item} /> : <Card item={item} showScore={showScore} rank={showRank ? index : undefined} />}
-      />
-    </View>
-  );
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={[styles.container, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg }]}>
@@ -456,6 +635,9 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               <View style={styles.heroTop}>
                 <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>
                   Grow your professional network.
+                </Text>
+                <Text style={[styles.heroSub, { color: textColor(isDark, 'muted') }]}>
+                  One curated potential co-founder per week — mutually paired 1-to-1 by the LINKUP AI and matching algorithm.
                 </Text>
               </View>
 
@@ -487,90 +669,24 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 </TouchableOpacity>
               )}
 
-              {topOpportunityAlert ? (
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => navigation.navigate('ActiveOpportunity', { userId: topOpportunityAlert.profile.uid, matchScore: topOpportunityAlert.score })}
-                  style={[styles.radarCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}
-                >
-                  <View style={styles.radarTop}>
-                    <View style={[styles.radarIcon, { backgroundColor: HOME_GOLD,
-    borderWidth: 1,
-    borderColor: HOME_LINE }]}>
-                      <BellRing size={15} color="#000" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>Opportunity Radar</Text>
-                      <Text style={[styles.radarSub, { color: textColor(isDark, 'muted') }]} numberOfLines={2}>
-                        {displayNameFor(topOpportunityAlert.profile)} matches your interests: {topOpportunityAlert.reason}
-                      </Text>
-                    </View>
-                    <View style={[styles.radarScore, { backgroundColor: HOME_GOLD,
-    borderWidth: 1,
-    borderColor: HOME_LINE }]}>
-                      <Text style={styles.radarScoreText}>{BAND_SHORT[bandForScore(topOpportunityAlert.score).id] || 'LOOK'}</Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.radarSummary, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
-                    {topOpportunityAlert.summary}
-                  </Text>
-                </TouchableOpacity>
+              {weeklyMatch ? (
+                <WeeklyCofounderCard match={weeklyMatch} />
               ) : (
-                <View style={[styles.radarCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F9FAFB' }]}>
-                  <View style={styles.radarTop}>
-                    <View style={[styles.radarIcon, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
-                      <BellRing size={15} color={textColor(isDark, 'muted')} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.radarTitle, { color: textColor(isDark) }]}>Opportunity Radar</Text>
-                      <Text style={[styles.radarSub, { color: textColor(isDark, 'muted') }]}>No relevant opportunities yet. Update your skills and interests to improve recommendations.</Text>
-                    </View>
-                  </View>
+                <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F9FAFB' }]}>
+                  <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No professionals to display</Text>
+                  <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>
+                    No relevant profiles are available in this view yet. Explore public builders at linkupbuild.com or invite professionals from your network.
+                  </Text>
+                  <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>
+                    No relevant opportunities yet. Update your skills and interests to improve recommendations.
+                  </Text>
+                  <TouchableOpacity onPress={() => void shareLinkupInvite()} style={styles.emptyBtn}>
+                    <Text style={styles.emptyBtnText}>Invite Builders</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
           </View>
-
-          <View style={{ marginTop: 12 }}>
-            <TouchableOpacity style={styles.sectionHeader} onPress={() => navigation.navigate('ActiveOpportunities')} activeOpacity={0.8}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Rocket size={17} color={HOME_INK} />
-                <Text style={[styles.sectionTitle, { color: textColor(isDark) }]}>Project Matches</Text>
-              </View>
-              <View style={styles.sectionChevron}>
-                <ChevronRight size={16} color={textColor(isDark, 'muted')} />
-              </View>
-            </TouchableOpacity>
-            {/* Free plan: rotating sponsored card at the top of Project Matches. */}
-            <View style={{ paddingHorizontal: 16, marginTop: 10 }}>
-              <SponsoredSlot placement="projects" viewerUid={user?.uid} enabled={!adsHiddenForViewer} />
-            </View>
-            <FlatList
-              data={projectRecommendations}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              initialNumToRender={IS_LOW_END_ANDROID ? 3 : 6}
-              maxToRenderPerBatch={IS_LOW_END_ANDROID ? 3 : 6}
-              windowSize={IS_LOW_END_ANDROID ? 3 : 5}
-              removeClippedSubviews={Platform.OS !== 'web'}
-              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
-              ListEmptyComponent={
-                <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}>
-                  <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No project matches yet</Text>
-                  <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>Add skills and interests so LINKUP can match you with ongoing projects.</Text>
-                </View>
-              }
-              renderItem={({ item }) => <ProjectCard item={item} />}
-            />
-          </View>
-          <Section
-            title="Active Opportunities"
-            icon={<Users size={17} color="#4ADE80" />}
-            data={opportunities}
-            variant="opportunity"
-            onViewAll={() => navigation.navigate('ActiveOpportunities')}
-          />
         </ScrollView>
       )}
     </SafeAreaView>
@@ -581,7 +697,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollArea: { flex: 1 },
   heroCard: {
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
     shadowColor: '#000',
     shadowOpacity: 0.06,
@@ -590,7 +706,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   heroTop: {
-    gap: 8,
+    gap: 6,
   },
   heroTitle: {
     fontSize: 22,
@@ -599,60 +715,12 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   heroSub: {
-    marginTop: 4,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    lineHeight: 19,
+    lineHeight: 18,
   },
-  heroActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(119,119,119,0.1)',
-  },
-  heroBtn: {
-    flex: 1,
-    height: 42,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  heroBtnText: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: -0.2,
-  },
-  heroStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  heroStatusText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: HOME_GOLD_DEEP,
-    letterSpacing: 1,
-  },
-  ideaDeckBtn: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 16,
-  },
-  ideaDeckBtnText: { flex: 1, fontSize: 13, fontWeight: '800', letterSpacing: -0.2 },
   sponsorStrip: {
-    marginTop: 10,
+    marginTop: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -667,277 +735,289 @@ const styles = StyleSheet.create({
   sponsorStripTitle: { fontSize: 12, fontWeight: '900' },
   sponsorStripSub: { marginTop: 2, fontSize: 10, fontWeight: '800' },
   sponsorStripLogo: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.04)' },
-  radarCard: {
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 14,
+  cofounderCard: {
+    marginTop: 18,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
-  radarTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  radarIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radarTitle: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0,
-  },
-  radarSub: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: '600',
-    lineHeight: 16,
-  },
-  radarScore: {
-    height: 28,
-    minWidth: 42,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  radarScoreText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#000',
-    letterSpacing: 0.5,
-  },
-  radarSummary: {
-    marginTop: 10,
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 17,
-  },
-  sectionHeader: {
-    paddingHorizontal: 16,
+  exclusiveBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
-  sectionChevron: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: 'rgba(156,163,175,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-  card: {
-    width: 290,
-    borderRadius: 16,
-    padding: 14,
+  exclusivePill: {
     flexDirection: 'row',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexShrink: 1,
   },
-  avatar: { width: 50, height: 50, borderRadius: 16 },
-  name: { fontSize: 14, fontWeight: '900', flexShrink: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  handle: { marginTop: 2, fontSize: 10, fontWeight: '800' },
-  meta: { marginTop: 3, fontSize: 10, fontWeight: '600' },
-  scorePill: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
+  exclusivePillText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#000',
+    letterSpacing: 0.6,
+  },
+  scoreBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: HOME_GOLD,
+    height: 26,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: HOME_LINE,
   },
-  scoreText: { fontSize: 10, fontWeight: '900', color: '#000', letterSpacing: 0.5 },
-  opportunityCard: {
-    width: 320,
-    borderRadius: 16,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  projectCard: {
-    width: 320,
-    borderRadius: 16,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  projectTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  projectIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: HOME_GOLD,
-    borderWidth: 1,
-    borderColor: HOME_LINE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  projectTitle: {
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0.4,
-  },
-  projectScore: {
-    height: 28,
-    minWidth: 44,
-    borderRadius: 8,
-    backgroundColor: HOME_GOLD,
-    borderWidth: 1,
-    borderColor: HOME_LINE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  projectScoreText: {
+  scoreBadgeText: {
     fontSize: 10,
     fontWeight: '900',
     color: '#000',
     letterSpacing: 0.5,
   },
-  projectSummary: {
-    marginTop: 12,
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 17,
+  mutualRuleSub: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 16,
   },
-  projectSignalRow: {
-    marginTop: 12,
-    borderRadius: 12,
-    backgroundColor: HOME_GOLD_TINT,
-    padding: 10,
+  profileHeroBox: {
+    marginTop: 14,
+    borderRadius: 16,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
   },
-  projectSignalLabel: {
-    fontSize: 8,
+  avatarRing: {
+    position: 'relative',
+    padding: 3,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#FBE618',
+  },
+  heroAvatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+  },
+  liveDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#4ADE80',
+    borderWidth: 2,
+    borderColor: '#111827',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  heroName: {
+    fontSize: 18,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: -0.3,
+    flexShrink: 1,
   },
-  projectReason: {
-    marginTop: 3,
+  handle: {
+    marginTop: 2,
     fontSize: 11,
     fontWeight: '800',
   },
-  opportunityTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  smallAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-  },
-  opportunityTitle: {
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0.4,
-  },
-  livePill: {
-    height: 22,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  liveText: {
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    color: HOME_GOLD_DEEP,
-  },
-  opportunitySummary: {
-    marginTop: 12,
+  roleLine: {
+    marginTop: 4,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '800',
     lineHeight: 17,
   },
-  opportunityMetaGrid: {
-    gap: 6,
-    marginTop: 12,
+  heroMetaRow: {
+    marginTop: 7,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
-  opportunityMeta: {
+  metaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  bioSection: {
+    marginTop: 14,
+    paddingHorizontal: 4,
+  },
+  bioLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  bioText: {
+    marginTop: 5,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  synergyBox: {
+    marginTop: 14,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    gap: 10,
+  },
+  synergyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
   },
-  opportunityMetaText: {
+  synergyTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
     flex: 1,
-    fontSize: 10,
+  },
+  synergyBullet: {
+    gap: 2,
+  },
+  synergyBulletKey: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+  },
+  synergyBulletVal: {
+    fontSize: 12,
     fontWeight: '700',
+    lineHeight: 17,
+  },
+  exchangeGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 2,
+  },
+  exchangeCol: {
+    flex: 1,
+    borderRadius: 12,
+    padding: 10,
+  },
+  exchangeLabel: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  exchangeValue: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 15,
+  },
+  sprintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingTop: 4,
+  },
+  sprintText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 16,
   },
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginTop: 12,
+    marginTop: 14,
   },
   tagChip: {
-    maxWidth: 110,
     borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
   tagText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.6,
   },
-  opportunityBtn: {
+  mutualStatusBanner: {
+    marginTop: 16,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mutualStatusText: {
     flex: 1,
-    height: 40,
-    borderRadius: 12,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  actionRow: {
+    marginTop: 14,
+    gap: 10,
+  },
+  primaryActionBtn: {
+    height: 46,
+    borderRadius: 14,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
   },
-  opportunityIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  opportunityBtnText: {
-    fontSize: 10,
+  primaryActionBtnText: {
+    fontSize: 12,
     fontWeight: '900',
-    letterSpacing: 0,
     color: '#000',
+    letterSpacing: 0.2,
+  },
+  secondaryActionBtn: {
+    height: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  secondaryActionBtnText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  emailFooterRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(148,163,184,0.15)',
+  },
+  emailFooterText: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '600',
+    lineHeight: 14,
   },
   emptyCard: {
-    width: 290,
+    marginTop: 16,
     borderRadius: 16,
     padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
   },
   emptyTitle: {
     fontSize: 12,
@@ -965,22 +1045,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0,
     color: '#000',
-  },
-  rankBadge: {
-    minWidth: 34,
-    height: 34,
-    paddingHorizontal: 6,
-    borderRadius: 17,
-    backgroundColor: 'rgba(148,163,184,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  rankBadgeText: {
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    color: '#111827',
   },
 });
 

@@ -4,6 +4,7 @@ import {createBuilderService} from './_builder.js';
 import {validId,problem} from './_builderCore.js';
 import {awardSeasonChampions} from './_leagueChampions.js';
 import {runWeeklyFounderSpotlight} from './_weeklyFounderSpotlight.js';
+import {runWeeklyCofounderCron} from './_weeklyCofounder.js';
 import {sendExpoPush} from './_expoPush.js';
 import {emailStatus,verifyEmailUnsubscribe,unsubscribeUserEmail,sendLinkyDirectEmail} from './_emailNotify.js';
 import {getVapidKeys,saveWebPushSubscription} from './_webPush.js';
@@ -16,8 +17,10 @@ export async function builderCron(){
  // Retired Linky reminder, retention-pulse, and GitHub-sync jobs are deliberately
  // not run. Keep the independent seasonal recognition award job intact.
  let seasons=null;
+ let weeklyCofounders=null;
  try{seasons=await awardSeasonChampions(getDb());}catch{seasons=null;}
- return {retired:true,reminders:0,pulses:0,githubAutoSync:null,seasons,email:builderEmailStatus()};
+ try{weeklyCofounders=await runWeeklyCofounderCron(getDb());}catch{weeklyCofounders=null;}
+ return {retired:true,reminders:0,pulses:0,githubAutoSync:null,seasons,weeklyCofounders,email:builderEmailStatus()};
 }
 export const builderEmailStatus=()=>{const s=emailStatus();return s.available?s:{available:false,reason:'Provider setup required'};};
-export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runWeeklyFounderSpotlight};
+export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runWeeklyFounderSpotlight,runWeeklyCofounderCron};

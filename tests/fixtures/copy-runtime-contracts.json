@@ -258,12 +258,26 @@
       "setItem"
     ],
     [
+      "getItem"
+    ],
+    [
+      "setItem"
+    ],
+    [
+      "navigate",
+      "Chat"
+    ],
+    [
       "navigate",
       "Profile"
     ],
     [
       "navigate",
-      "ActiveOpportunity"
+      "Chat"
+    ],
+    [
+      "navigate",
+      "Chat"
     ],
     [
       "navigate",
@@ -271,19 +285,7 @@
     ],
     [
       "navigate",
-      "ActiveOpportunity"
-    ],
-    [
-      "navigate",
-      "ActiveOpportunity"
-    ],
-    [
-      "navigate",
-      "ActiveOpportunities"
-    ],
-    [
-      "navigate",
-      "ActiveOpportunities"
+      "Profile"
     ]
   ],
   "mobile/src/screens/EmailAuthScreen.tsx": [],

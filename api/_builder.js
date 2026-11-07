@@ -13,6 +13,7 @@ import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,containsCr
 import {createVentureWorkspaceOps} from './_ventureEngine.js';
 import {createBlogsService} from './_blogs.js';
 import {EXTERNAL_LEADS} from '../shared/builder-leads.js';
+import {getOrAssignWeeklyCofounder,expressWeeklyCofounderInterest} from './_weeklyCofounder.js';
 const fields=['displayName','fullName','name','occupation','skills','industries','city','country','onboarded','deleted','banned','isBot','isVisible','isStealthMode','startupStage','remoteOnly','isVerified','profilePicUrl','photoURL','avatarUrl'];
 const row=d=>({id:d.id,...d.data()});
 const ownId=value=>{if(!validId(value))throw problem('Invalid item identifier.');return value;};
@@ -220,6 +221,12 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
    let tz='UTC';try{if(typeof input.timezone==='string'&&input.timezone.trim())tz=sanitizePrefs({timezone:input.timezone.trim()}).timezone;}catch{tz='UTC';}
    let created=false;await db.runTransaction(async tx=>{const d=await tx.get(ref(uid));if(!d.exists){const fresh=freshState(now());fresh.prefs.timezone=tz;tx.set(ref(uid),fresh);created=true;}});
    return {ok:true,created,timezone:tz};
+  }
+  if(op==='weeklyCofounderMatch'){
+   return getOrAssignWeeklyCofounder(db,uid,{now:now()});
+  }
+  if(op==='weeklyCofounderInterest'){
+   return expressWeeklyCofounderInterest(db,uid,input||{},{now:now()});
   }
   throw problem('Unsupported builder action.');
  }

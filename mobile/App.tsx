@@ -70,7 +70,6 @@ import { setupNativeNotificationRuntimeAsync, subscribeToNotificationToasts, sub
 import { scheduleDailyReminder } from './src/lib/dailyReminder';
 import { seedConciergeWelcome } from './src/lib/activation';
 import { subscribeToUnreadMessagesCount } from './src/lib/chat';
-import OpportunityRadar from './src/components/OpportunityRadar';
 import WebAnalytics from './src/components/WebAnalytics';
 import PWAInstallPrompt from './src/components/PWAInstallPrompt';
 import DynamicAppearanceController from './src/components/DynamicAppearanceController';
@@ -782,7 +781,6 @@ function AppContent() {
       </Stack.Navigator>
       {Platform.OS === 'web' ? (
         <>
-          <OpportunityRadar />
           <WebAnalytics />
           <PWAInstallPrompt />
         </>
