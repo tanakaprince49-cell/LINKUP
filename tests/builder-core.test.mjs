@@ -65,9 +65,10 @@ test('V16 does not add a serverless function, bypass the existing ledger, or ena
  const runtime=fs.readFileSync(new URL('../api/_builderRuntime.js',import.meta.url),'utf8');assert.match(runtime,/available:false/);
  const handler=fs.readFileSync(new URL('../api/linky.js',import.meta.url),'utf8');assert.match(handler,/case 'builder'/);assert.match(handler,/cronAuthorized\(req\)/);
 });
-test('private workspace is reachable, noindex, and both native and in-app notifications deep-link correctly',()=>{
+test('private workspace is reachable, noindex, and exposes only Groups and Settings',()=>{
  const app=fs.readFileSync(new URL('../mobile/App.tsx',import.meta.url),'utf8');assert.match(app,/BuilderWorkspace: 'builder'/);assert.match(app,/name="BuilderWorkspace"/);assert.match(app,/targetUrl.startsWith\('\/builder'\)/);
- const ui=fs.readFileSync(new URL('../mobile/src/screens/BuilderWorkspaceScreen.tsx',import.meta.url),'utf8');for(const feature of ['Follow-ups','Groups','Help board','Plan','Leads','Settings'])assert.ok(ui.includes(feature));assert.ok(!ui.includes('mailto:'));assert.doesNotMatch(ui,/['"]Coach['"]|section===['"]Rooms['"]/);
+ const ui=fs.readFileSync(new URL('../mobile/src/screens/BuilderWorkspaceScreen.tsx',import.meta.url),'utf8');for(const feature of ['Groups','Settings'])assert.ok(ui.includes(feature));for(const removed of ['Today','Plan','People','Follow-ups','Help board','Leads'])assert.ok(!ui.includes(`section==='${removed}'`),removed);assert.ok(!ui.includes('mailto:'));assert.doesNotMatch(ui,/['"]Coach['"]|section===['"]Rooms['"]/);
+ const builderLib=fs.readFileSync(new URL('../mobile/src/lib/builder.ts',import.meta.url),'utf8');assert.match(builderLib,/BUILDER_SECTIONS=\['Groups','Settings'\]/);
  const metadata=fs.readFileSync(new URL('../mobile/src/lib/webMetadata.ts',import.meta.url),'utf8');assert.match(metadata,/const isPublic = routeName === 'Landing'/);
 });
 

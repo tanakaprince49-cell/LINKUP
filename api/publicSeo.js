@@ -3,7 +3,7 @@ import {serveContentSeo,contentSitemapIndex} from './_contentSeo.js';
 import {serveBlogSeo,blogSitemapIndex} from './_blogSeo.js';
 import {getNewsFeed} from './_newsFeed.js';
 import {selectProfileImage} from './_publicProfileImage.js';
-import {renderSearchPage, projectSearchMember, groupMembersByLocation} from './_searchGlobe.js';
+import {renderSearchPage, projectSearchMember, placeMembersOnEarth} from './_searchGlobe.js';
 import { getDb } from './_firebaseAdmin.js';
 import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, safeUrl, validId, publicEligible, projectProfile, profileUrl, renderProfile, renderDirectory, documentHtml, xmlIndex, xmlUrls } from './_publicSeo.js';
 
@@ -126,14 +126,14 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
           .map(d => projectSearchMember(d.id, d.data(), selectProfileImage, safeUrl))
           .filter(Boolean);
         const nextCursor = snap.docs.length > SEARCH_PAGE_SIZE ? pageDocs.at(-1)?.id || null : null;
-        const locationGroups = groupMembersByLocation(members).groups;
+        const placedMembers = placeMembersOnEarth(members);
         res.setHeader('X-Robots-Tag', 'noindex');
         if (mode === 'search-data') {
           res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
-          return send(200, JSON.stringify({ members, groups: locationGroups, nextCursor, generatedAt: new Date().toISOString() }), 'application/json; charset=utf-8', SEARCH_EDGE_CACHE);
+          return send(200, JSON.stringify({ members: placedMembers, nextCursor, generatedAt: new Date().toISOString() }), 'application/json; charset=utf-8', SEARCH_EDGE_CACHE);
         }
         res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src https: data: blob:; connect-src 'self'; font-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
-        return send(200, renderSearchPage({ members, groups: locationGroups, nextCursor }), 'text/html; charset=utf-8', SEARCH_EDGE_CACHE);
+        return send(200, renderSearchPage({ members: placedMembers, nextCursor }), 'text/html; charset=utf-8', SEARCH_EDGE_CACHE);
       }
       if (mode === 'builder-count') {
         // Live marketing counter: cheap count aggregation over public profiles,
