@@ -17,6 +17,7 @@ import AndroidReviewPrompt from './src/components/AndroidReviewPrompt';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { runBootDiagnostics } from './src/lib/bootDiagnostics';
+import PlusInviteWatcher from './src/components/PlusInviteWatcher';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { lazyScreen } from './src/lib/lazyScreen';
 
@@ -833,6 +834,10 @@ function AppContent() {
         </>
       ) : null}
       <DynamicAppearanceController currentRoute={activeReviewRoute} />
+      {/* Three invitations a day, at times that are never the same twice, for
+          members who have not gone PLUS. Mounted here so it survives screen
+          changes and only ever runs inside the signed-in tree. */}
+      {user && isOnboarded && online ? <PlusInviteWatcher /> : null}
       <AndroidReviewPrompt userId={user?.uid} ready={!loading && isOnboarded && online} routeName={activeReviewRoute} />
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </NavigationContainer>

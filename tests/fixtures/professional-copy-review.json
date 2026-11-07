@@ -1041,7 +1041,9 @@
     "file": "mobile/src/components/PaywallModal.tsx",
     "line": 46,
     "before": "Who Viewed You — names & profiles of everyone checking you out",
-    "after": "Profile viewer insights — review available names and professional profiles"
+    "after": "Profile viewer insights — review available names and professional profiles",
+    "current": "Profile viewer insights — see exactly who opened your profile, by name",
+    "voiceRevision": "plus-invite-v1: the perk list was rewritten to only claim what PLUS actually gates"
   },
   {
     "file": "mobile/src/components/PaywallModal.tsx",
@@ -1244,8 +1246,6 @@
     "line": 0,
     "before": "LINKUP database · chat, search, and build your team",
     "after": "LINKUP database · chat, search, and build your team",
-    "current": "The cat with your whole build in its head",
-    "voiceRevision": "2026-11-life-or-death-v1",
     "current": "Reads your brief before you speak",
     "voiceRevision": "2026-11-linky-redesign-v1"
   },
@@ -1412,8 +1412,6 @@
     "before": "LINKUP database · ",
     "after": "LINKUP database · ",
     "kind": "fragment",
-    "current": "public builders searched · still holding your brief",
-    "voiceRevision": "2026-11-life-or-death-v1",
     "current": "builders searched · brief still loaded",
     "voiceRevision": "2026-11-linky-redesign-v1"
   }

@@ -4,6 +4,7 @@
 // header, and full-width uncropped expressive Linky mood illustrations.
 import crypto from 'node:crypto';
 import { getAuth } from 'firebase-admin/auth';
+import { memberHasPlus } from './_memberTier.js';
 
 const APP_BASE = 'https://www.linkupbuild.com/app';
 const API_BASE = 'https://linkup-muqu.vercel.app';
@@ -477,6 +478,98 @@ export function buildMainCharacterJealousyNote(personal = null) {
   return `Hey ${name}${cityBit} — Linky is officially jealous of whatever other tab is getting your attention today! You're the main character here on LINKUP, the whole builder world revolves around you, and nothing hits the same until you're back in the spotlight.`;
 }
 
+/**
+ * PLUS in email: the same three-a-day pitch, once per email, for members who
+ * have not upgraded.
+ *
+ * Rules, learned the hard way with deliverability:
+ *   - it renders BELOW the content and BELOW the main CTA, never above the match
+ *   - plain tables and inline styles, no tracking pixels, no third-party images
+ *   - one benefit only, then "and N more", because a wall of perks reads as spam
+ *   - the CTA lands on /app/?plus=1, which opens the paywall in-app on arrival
+ */
+const PLUS_EMAIL_FEATURES = [
+  { id: 'noads', feature: 'No sponsored cards. Anywhere. Ever.', line: 'PLUS members never see a sponsored card — not on home, not on Linky, not in this email.' },
+  { id: 'viewers', feature: 'See exactly who opened your profile', line: 'Right now you get a number. PLUS gives you the names.' },
+  { id: 'recommendations', feature: 'Every weekly recommendation, not three', line: 'The algorithm finds more people for you than free is allowed to show.' },
+  { id: 'saved', feature: 'Save every profile worth coming back to', line: 'Five saves is not a shelf. PLUS makes it unlimited.' },
+  { id: 'posts', feature: 'Post as often as you ship', line: 'The builders who get matched are the ones who keep showing up.' },
+  { id: 'turbo', feature: 'Turbo Connect — stand at the front of Discover', line: 'Be found before the next person with the same skills is.' },
+  { id: 'badge', feature: 'The blue check and the PLUS crown', line: 'Being chosen starts with looking chosen.' },
+  { id: 'themes', feature: 'The PLUS app themes', line: 'Your app, your palette.' },
+];
+
+export const PLUS_EMAIL_MORE_COUNT = PLUS_EMAIL_FEATURES.length - 1;
+
+export const plusEmailUrl = () => `${APP_BASE}/?plus=1`;
+
+const plusHash = (text) => {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
+
+/** Which benefit leads in this member's email — stable per member per day. */
+export function plusFeatureForEmail(uid, dayKey) {
+  if (!PLUS_EMAIL_FEATURES.length) return null;
+  return PLUS_EMAIL_FEATURES[plusHash(`${uid}:${dayKey}:email`) % PLUS_EMAIL_FEATURES.length];
+}
+
+export function buildPlusInviteBlock({ firstName = '', building = '', featured = null, moreCount = PLUS_EMAIL_MORE_COUNT, plusUrl = plusEmailUrl() } = {}) {
+  const name = String(firstName || '').trim();
+  const head = name ? `${name}, are you ready to move beyond?` : 'Are you ready to move beyond?';
+  const context = String(building || '').trim() ? `You're building ${String(building).trim()}. ` : '';
+  const line = featured?.line || 'PLUS removes every limit between you and the right introduction.';
+  const feature = featured?.feature || 'Everything LINKUP can do for you';
+  const more = moreCount > 0 ? `And ${moreCount} more things you don't have yet — all in one plan.` : '';
+
+  const text = [
+    '',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    head.toUpperCase(),
+    `${context}${line}`,
+    `• ${feature}`,
+    more,
+    `See what PLUS gives you: ${plusUrl}`,
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+  ].filter((row) => row !== '').join('\n');
+
+  const html = `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0A0B0D;border-radius:16px;margin:20px 0 6px 0;">
+        <tr>
+          <td style="padding:16px 18px;">
+            <div style="font-size:10px;font-weight:900;letter-spacing:0.9px;text-transform:uppercase;color:#FBE618;margin:0 0 8px 0;">
+              LINKUP PLUS
+            </div>
+            <div style="font-size:17px;font-weight:900;color:#FFFFFF;line-height:1.35;margin:0 0 8px 0;">
+              ${esc(head)}
+            </div>
+            <div style="font-size:13px;font-weight:700;color:#D7DAE0;line-height:1.55;margin:0 0 10px 0;">
+              ${esc(context)}${esc(line)}
+            </div>
+            <div style="font-size:13px;font-weight:900;color:#FBE618;line-height:1.5;margin:0 0 6px 0;">
+              &#10003; ${esc(feature)}
+            </div>
+            ${more ? `<div style="font-size:12px;font-weight:700;color:#9AA1AC;line-height:1.5;margin:0 0 12px 0;">${esc(more)}</div>` : ''}
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" bgcolor="#FBE618" style="border-radius:12px;">
+                  <a href="${esc(plusUrl)}" style="display:inline-block;background:#FBE618;color:#0A0B0D;font-weight:900;font-size:14px;text-decoration:none;padding:11px 18px;border-radius:12px;">
+                    See what PLUS gives you &rarr;
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>`;
+
+  return { text, html, head, feature, more };
+}
+
 export function buildLinkyEmailBodies({
   uid,
   headline,
@@ -490,6 +583,7 @@ export function buildLinkyEmailBodies({
   daysSinceActive = null,
   personal = null,
   cofounderCard = null,
+  plusInvite = null,
 }) {
   const cleanHeadline = sanitizeEmailCopy(headline);
   const cleanBody = sanitizeEmailCopy(body);
@@ -705,7 +799,7 @@ export function buildLinkyEmailBodies({
     )
     .join('');
 
-  const textBody = `${cleanHeadline}\n[${moodSpec.pillText}]\n\n${cleanBody}${cofounderTextBlock}${needsJealousyCallout ? `\n\n${jealousyNote}` : ''}${personalTextBlock}\n\n${cleanCta}: ${fullUrl}\n\n— Linky, your slightly jealous #1 fan on LINKUP\n\n---\nUnsubscribe from LINKUP emails: ${unsubUrl}`;
+  const textBody = `${cleanHeadline}\n[${moodSpec.pillText}]\n\n${cleanBody}${cofounderTextBlock}${needsJealousyCallout ? `\n\n${jealousyNote}` : ''}${personalTextBlock}\n\n${cleanCta}: ${fullUrl}${plusInvite?.text || ''}\n\n— Linky, your slightly jealous #1 fan on LINKUP\n\n---\nUnsubscribe from LINKUP emails: ${unsubUrl}`;
 
   const htmlBody = `<!doctype html>
 <html>
@@ -758,6 +852,7 @@ export function buildLinkyEmailBodies({
             </td>
           </tr>
         </table>
+        ${plusInvite?.html || ''}
         <hr style="border:none;border-top:1px solid #ECEAE2;margin:24px 0 14px 0;"/>
         <p style="font-size:12px;line-height:1.5;color:#767A82;margin:0;">
           ${esc(cleanBadge)} &middot; <a href="${esc(unsubUrl)}" style="color:#575B60;text-decoration:underline;">Unsubscribe in one click</a>
@@ -960,6 +1055,25 @@ export async function sendHighSignalEmail(db, uid, {
   }
 
   const fullUrl = ctaUrl.startsWith('http') ? ctaUrl : `${APP_BASE}${ctaUrl.startsWith('/') ? ctaUrl : '/' + ctaUrl}`;
+
+  // A member who pays should never be sold PLUS in their own email. Everyone
+  // else gets one block, below the content, once per email.
+  let plusInvite = null;
+  try {
+    const userSnap = await db.collection('users').doc(uid).get().catch(() => null);
+    const userData = userSnap?.exists ? userSnap.data() || {} : {};
+    const isPlus = await memberHasPlus(db, uid, userData, nowMs);
+    if (!isPlus) {
+      plusInvite = buildPlusInviteBlock({
+        firstName: sanitizeEmailCopy(resolvedPersonal?.firstName || ''),
+        building: sanitizeEmailCopy(resolvedPersonal?.projectLabel || ''),
+        featured: plusFeatureForEmail(uid, new Date(nowMs).toISOString().slice(0, 10)),
+      });
+    }
+  } catch {
+    plusInvite = null;
+  }
+
   const { unsubUrl, textBody, htmlBody, mood: resolvedMood } = buildLinkyEmailBodies({
     uid,
     headline,
@@ -973,6 +1087,7 @@ export async function sendHighSignalEmail(db, uid, {
     daysSinceActive,
     personal: resolvedPersonal,
     cofounderCard,
+    plusInvite,
   });
 
   try {

@@ -29,10 +29,24 @@ import { notifyUser } from '../lib/notify';
 
 const IS_WEB = Platform.OS === 'web';
 
+type PaywallInvite = {
+  /** "Ariana, are you ready to move beyond?" — built from the member's own brief. */
+  headline: string;
+  subline: string;
+  /** The ONE benefit this exposure shows off. */
+  feature: string;
+  /** "And 7 more things you don't have yet" — always tells them there is more. */
+  moreLine?: string;
+  /** "Not now" — a real answer, so it gets a real button. */
+  onSnooze?: () => void;
+};
+
 type PaywallModalProps = {
   visible: boolean;
   feature?: string;
   description?: string;
+  /** Scheduled invitation mode: personalised headline, one benefit, "Not now". */
+  invite?: PaywallInvite;
   onClose: () => void;
   onUpgrade?: () => void;
   onUnlocked?: () => void;
@@ -42,14 +56,21 @@ type PaywallModalProps = {
 
 const LOGO = require('../../assets/logo-square.png');
 
+/**
+ * Every line here must be a thing PLUS actually gates today (grep hasLinkupPro).
+ * The old list sold "unlimited idea deck" — the idea deck has been free forever
+ * by decree (see IDEA_DECK_FREE_FOREVER in lib/paywall.ts) — and "advanced
+ * search", which lives on the web and is not sold here. Charging for a promise
+ * you do not gate is how a paywall loses the person who says yes.
+ */
 const PRO_PERKS = [
-  'More LINKUP team-match requests',
-  "Profile viewer insights — review available names and professional profiles",
-  'Advanced search, AI ranking & saved search alerts',
-  'AI-assisted role recommendations with evidence-based team matching',
-  'Turbo Connect visibility boost in Discover & search',
-  'Verified blue check + PLUS crown',
-  'Unlimited Startup Analyzer, idea deck & weekly picks',
+  'No sponsored cards anywhere — home, Linky, startups, blogs, notifications or email',
+  'Profile viewer insights — see exactly who opened your profile, by name',
+  'Every weekly recommendation, not three',
+  'Unlimited saved profiles and more posts per week',
+  'Turbo Connect — the Discover visibility boost',
+  'Verified blue check + the PLUS crown',
+  'The PLUS app themes',
 ];
 
 const PRICING_PLANS = [
@@ -94,6 +115,7 @@ export default function PaywallModal({
   visible,
   feature = 'PLUS feature',
   description,
+  invite,
   onClose,
   onUpgrade,
   onUnlocked,
@@ -468,13 +490,22 @@ export default function PaywallModal({
               ) : null}
             </View>
 
-            <Text style={[styles.title, { color: textColor(isDark) }]}>Expand your professional networking tools</Text>
+            <Text style={[styles.title, { color: textColor(isDark) }]}>
+              {invite ? invite.headline : 'Expand your professional networking tools'}
+            </Text>
             <Text style={[styles.copy, { color: textColor(isDark, 'secondary') }]}>
-              {description || 'Free members have limited team matching. LINKUP PLUS provides higher matching limits and broader discovery to help you find complementary teammates for your project.'}
+              {invite
+                ? invite.subline
+                : description || 'Free members have limited team matching. LINKUP PLUS provides higher matching limits and broader discovery to help you find complementary teammates for your project.'}
             </Text>
             <View style={[styles.featurePill, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}> 
-              <Text style={[styles.feature, { color: textColor(isDark) }]}>{feature}</Text>
+              <Text style={[styles.feature, { color: textColor(isDark) }]}>{invite ? invite.feature : feature}</Text>
             </View>
+            {invite?.moreLine ? (
+              <Text style={[styles.copy, { color: COLORS.primaryStrong, fontWeight: '900', marginTop: 2 }]}>
+                {invite.moreLine}
+              </Text>
+            ) : null}
 
             <View style={styles.pricingGrid}>
               {PRICING_PLANS.map((plan) => {
@@ -544,11 +575,32 @@ export default function PaywallModal({
                   ? 'PLUS ACTIVE'
                   : selectedTrial.hasTrial
                     ? `START ${selectedTrial.trialDays}-DAY FREE TRIAL`
-                    : IS_WEB
-                      ? `GET PLUS — ${selectedPrice.price}${selectedPrice.cadence}`
-                      : 'Build Faster with PLUS'}
+                    : invite
+                      ? IS_WEB
+                        ? `YES — MOVE ME BEYOND · ${selectedPrice.price}${selectedPrice.cadence}`
+                        : 'YES — MOVE ME BEYOND'
+                      : IS_WEB
+                        ? `GET PLUS — ${selectedPrice.price}${selectedPrice.cadence}`
+                        : 'Build Faster with PLUS'}
             </Text>
           </TouchableOpacity>
+
+          {/* "Not now" is a button, not an escape hatch: the member said no, and
+              the schedule counts it so we do not ask a fourth time today. */}
+          {invite?.onSnooze ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Not now"
+              onPress={() => {
+                invite.onSnooze?.();
+                onClose();
+              }}
+              style={styles.notNowBtn}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.notNowText, { color: textColor(isDark, 'secondary') }]}>Not now</Text>
+            </TouchableOpacity>
+          ) : null}
           {!isPro && storeError ? (
             <Text style={[styles.trialLegal, { color: COLORS.danger }]}>{storeError}</Text>
           ) : null}
@@ -851,6 +903,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     letterSpacing: 1.2,
+  },
+  notNowBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    marginTop: 4,
+  },
+  notNowText: {
+    fontSize: 14,
+    fontWeight: '800',
+    textDecorationLine: 'underline',
   },
   restoreBtn: {
     marginHorizontal: 16,
