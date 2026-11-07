@@ -113,6 +113,15 @@ const runAfterStartup = (task: () => void) => {
 };
 
 const WEB_BASE_PATH = Platform.OS === 'web' ? webBasePath() : '';
+
+/**
+ * /campaigns and /app/campaign-manager are the campaign manager: publish ads,
+ * buy the plan, read views and clicks. Both spellings resolve to the one screen,
+ * with or without a trailing slash, on the mount and on any later navigation.
+ */
+const CAMPAIGN_MANAGER_PATHS = ['/campaigns', '/campaign-manager'];
+const isCampaignManagerPath = (pathname = String((globalThis as any)?.location?.pathname || '')) =>
+  Platform.OS === 'web' && CAMPAIGN_MANAGER_PATHS.includes(webRoutePath(pathname).replace(/\/+$/, ''));
 const linking: any = {
   prefixes: [
     ExpoLinking.createURL('/'), 'linkup://',
@@ -635,6 +644,15 @@ function AppContent() {
     const publicPaths = new Set(['', '/', '/landing', '/login']);
     const isPublicSharedPath = pathname.startsWith('/profile/') || pathname.startsWith('/opportunity/');
 
+    // Someone who clicked "campaigns" wants the manager, not the sales page.
+    // Send them to sign-in and keep the intent: after auth they land in it.
+    if (isCampaignManagerPath()) {
+      const timer = setTimeout(() => {
+        if (navigationRef.isReady()) (navigationRef as any).navigate('EmailAuth');
+      }, 250);
+      return () => clearTimeout(timer);
+    }
+
     if (history?.replaceState && !publicPaths.has(pathname) && !isPublicSharedPath) {
       history.replaceState(null, '', webAppPath('/landing'));
     }
@@ -659,26 +677,20 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, [user?.uid, isOnboarded]);
 
-  // /campaigns (and /app/campaign-manager) is the advertiser's campaign
-  // manager: publish ads, buy the plan, watch views and clicks. Signed-out
-  // visitors are moved to the landing page, so remember the destination and
-  // open the manager as soon as they are signed in and onboarded.
-  const pendingCampaignManagerRef = React.useRef(
-    Platform.OS === 'web'
-      ? ['/campaigns', '/campaign-manager'].includes(
-          webRoutePath(String((globalThis as any)?.location?.pathname || '')).replace(/\/+$/, '')
-        )
-      : false
-  );
+  // Remembered from the first paint: a signed-out visitor who arrived on the
+  // manager URL is taken back to it the moment they are in.
+  const campaignIntentRef = React.useRef(isCampaignManagerPath());
   React.useEffect(() => {
     if (Platform.OS !== 'web' || !user?.uid || !isOnboarded) return;
-    if (!pendingCampaignManagerRef.current) return;
-    pendingCampaignManagerRef.current = false;
+    if (!campaignIntentRef.current && !isCampaignManagerPath()) return;
+    campaignIntentRef.current = false;
     const timer = setTimeout(() => {
-      if (navigationRef.isReady()) {
+      if (!navigationRef.isReady()) return;
+      (globalThis as any)?.history?.replaceState?.(null, '', webAppPath('/campaign-manager'));
+      if (navigationRef.getCurrentRoute()?.name !== 'Campaigns') {
         (navigationRef as any).navigate('Campaigns');
       }
-    }, 450);
+    }, 400);
     return () => clearTimeout(timer);
   }, [user?.uid, isOnboarded]);
 

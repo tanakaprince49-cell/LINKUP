@@ -51,15 +51,95 @@ function sanitizePublicPartnerProfile(profile = {}) {
   };
 }
 
+/** A named contribution in the dossier: what one founder brings, and what it unlocks. */
+const doesList = (value, max = 3) => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value
+    .map((entry) => ({
+      skill: cleanText(entry?.skill || entry?.name || '', 60),
+      unlocks: cleanText(entry?.unlocks || entry?.for || entry?.value || '', 140),
+    }))
+    .filter((entry) => {
+      if (!entry.skill) return false;
+      const key = entry.skill.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, max);
+};
+
+/**
+ * Deterministic dossier — the same shape the AI returns, assembled only from
+ * facts the algorithm already verified. Used when the model is unavailable so
+ * the deep read is never blank, and never invented.
+ */
+export function buildEngineDossier(pair = {}) {
+  const nameA = cleanText(pair?.profileA?.displayName || 'Builder A', 50);
+  const nameB = cleanText(pair?.profileB?.displayName || 'Builder B', 50);
+  const aOffers = (Array.isArray(pair?.aOffers) ? pair.aOffers : []).map((o) => cleanText(o, 60)).filter(Boolean);
+  const bOffers = (Array.isArray(pair?.bOffers) ? pair.bOffers : []).map((o) => cleanText(o, 60)).filter(Boolean);
+  const sharedDomains = (Array.isArray(pair?.sharedDomains) ? pair.sharedDomains : []).map((d) => cleanText(d, 40)).filter(Boolean);
+  const sharedA = cleanText(pair?.cardForA?.why?.shared, 220);
+  const sharedB = cleanText(pair?.cardForB?.why?.shared, 220);
+  const complementA = cleanText(pair?.cardForA?.why?.complement, 220);
+  const complementB = cleanText(pair?.cardForB?.why?.complement, 220);
+  const placeA = [pair?.profileA?.city, pair?.profileA?.country].filter(Boolean).join(', ');
+  const placeB = [pair?.profileB?.city, pair?.profileB?.country].filter(Boolean).join(', ');
+  const overlap = sharedDomains.length ? `You both work in ${sharedDomains.slice(0, 3).join(', ')}.` : '';
+  const joins = (parts) => parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+
+  // Three contributions each, always: the offers the algorithm verified first,
+  // then the person's own skills, so a thin profile still reads as a whole person.
+  const bring = (offers, profile, forName) => {
+    const seen = new Set();
+    const merged = [...offers, ...(Array.isArray(profile?.skills) ? profile.skills : []), 'Execution']
+      .map((value) => cleanText(value, 60))
+      .filter((value) => {
+        const key = value.toLowerCase();
+        if (!value || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    return merged.slice(0, 3).map((skill) => ({
+      skill,
+      unlocks: `lets ${forName} stop carrying the ${skill.toLowerCase()} work alone`,
+    }));
+  };
+
+  return {
+    headline: `${(aOffers[0] || pair?.profileA?.occupation || 'Product')} × ${(bOffers[0] || pair?.profileB?.occupation || 'Growth')}`,
+    whyChosenForA: joins([
+      sharedA || overlap,
+      complementA,
+      placeB ? `${nameB} is building from ${placeB}.` : '',
+    ]) || `${nameB} brings ${(bOffers.length ? bOffers : ['complementary execution']).join(', ')} against your ${(aOffers.length ? aOffers : ['builder strengths']).join(', ')}.`,
+    whyChosenForB: joins([
+      sharedB || overlap,
+      complementB,
+      placeA ? `${nameA} is building from ${placeA}.` : '',
+    ]) || `${nameA} brings ${(aOffers.length ? aOffers : ['complementary execution']).join(', ')} against your ${(bOffers.length ? bOffers : ['builder strengths']).join(', ')}.`,
+    whatABrings: bring(aOffers, pair?.profileA, nameB),
+    whatBBrings: bring(bOffers, pair?.profileB, nameA),
+    sharedGround: [
+      ...sharedDomains.slice(0, 3),
+      ...(placeA && placeA === placeB ? [placeA] : []),
+      ...(pair?.profileA?.startupStage && pair?.profileA?.startupStage === pair?.profileB?.startupStage ? [cleanText(pair.profileA.startupStage, 40)] : []),
+    ].filter(Boolean).slice(0, 4),
+    firstSprint: cleanText(pair?.firstSprintTask || pair?.cardForA?.tiny_task, 200) || 'Spend 20 minutes scoping one shared prototype and one customer to test it with.',
+    source: 'engine',
+  };
+}
+
 export async function generateAiCofounderNarrative(pair, { aiText = geminiText } = {}) {
   const nameA = cleanText(pair?.profileA?.displayName || 'Builder A', 50);
   const nameB = cleanText(pair?.profileB?.displayName || 'Builder B', 50);
-  const fallbackHeadline = `${(pair?.aOffers?.[0] || pair?.profileA?.occupation || 'Product')} × ${(pair?.bOffers?.[0] || pair?.profileB?.occupation || 'Growth')}`;
-  const fallbackWhyForA = [pair?.cardForA?.why?.shared, pair?.cardForA?.why?.complement].filter(Boolean).join(' ') ||
-    `${nameB} brings ${(pair?.bOffers || ['complementary execution']).join(', ')} to complement your ${(pair?.aOffers || ['builder strengths']).join(', ')}.`;
-  const fallbackWhyForB = [pair?.cardForB?.why?.shared, pair?.cardForB?.why?.complement].filter(Boolean).join(' ') ||
-    `${nameA} brings ${(pair?.aOffers || ['complementary execution']).join(', ')} to complement your ${(pair?.bOffers || ['builder strengths']).join(', ')}.`;
-  const fallbackSprint = pair?.firstSprintTask || pair?.cardForA?.tiny_task || 'Spend 20 minutes scoping one shared prototype and customer test.';
+  const engineDossier = buildEngineDossier(pair);
+  const fallbackWhyForA = engineDossier.whyChosenForA;
+  const fallbackWhyForB = engineDossier.whyChosenForB;
+  const fallbackHeadline = engineDossier.headline;
+  const fallbackSprint = engineDossier.firstSprint;
 
   if (typeof aiText !== 'function') {
     return {
@@ -68,44 +148,61 @@ export async function generateAiCofounderNarrative(pair, { aiText = geminiText }
       aiWhyForB: fallbackWhyForB,
       aiWhyMutual: fallbackWhyForA,
       aiFirstSprint: fallbackSprint,
+      aiDossier: engineDossier,
       source: 'engine',
     };
   }
 
+  const facts = (profile = {}) => JSON.stringify({
+    name: cleanText(profile?.displayName, 60),
+    occupation: cleanText(profile?.occupation || profile?.role, 60),
+    company: cleanText(profile?.company, 60),
+    skills: (profile?.skills || []).slice(0, 8).map((s) => cleanText(s, 40)),
+    lookingFor: (profile?.lookingFor || []).slice(0, 6).map((s) => cleanText(s, 50)),
+    industries: (profile?.industries || []).slice(0, 5).map((s) => cleanText(s, 40)),
+    stage: cleanText(profile?.startupStage, 40),
+    commitment: cleanText(profile?.commitmentLevel, 40),
+    place: [profile?.city, profile?.country].filter(Boolean).join(', '),
+    goals: cleanText(profile?.goals || profile?.bio, 320),
+    projects: (Array.isArray(profile?.projects) ? profile.projects : []).slice(0, 3).map((p) => ({
+      title: cleanText(p?.title, 80),
+      description: cleanText(p?.description, 180),
+      status: cleanText(p?.status, 40),
+      lookingFor: (p?.lookingFor || []).slice(0, 4).map((s) => cleanText(s, 40)),
+    })),
+  });
+
   try {
     const prompt = [
       'You are the LINKUP Co-Founder Matching AI.',
-      'A deterministic co-founder matching algorithm already verified this 1-of-1 mutual weekly co-founder pair.',
-      'Write concise, factual, high-conviction co-founder introduction copy grounded strictly in the provided profile facts.',
-      'Do not use percentages, "soulmate", "vibes", or unsupported claims.',
-      'Return STRICT JSON with schema:',
-      '{"headline":"short 4-7 word synergy title","whyForA":"1-2 sentences to Builder A explaining why Builder B is their co-founder fit","whyForB":"1-2 sentences to Builder B explaining why Builder A is their co-founder fit","firstSprint":"one concrete 20-minute first meeting build/validation task"}',
-      `Builder A: ${JSON.stringify({
-        name: nameA,
-        occupation: pair?.profileA?.occupation,
-        skills: (pair?.profileA?.skills || []).slice(0, 6),
-        lookingFor: (pair?.profileA?.lookingFor || []).slice(0, 5),
-        goals: cleanText(pair?.profileA?.goals || pair?.profileA?.bio, 160),
-        offers: pair?.aOffers,
-      })}`,
-      `Builder B: ${JSON.stringify({
-        name: nameB,
-        occupation: pair?.profileB?.occupation,
-        skills: (pair?.profileB?.skills || []).slice(0, 6),
-        lookingFor: (pair?.profileB?.lookingFor || []).slice(0, 5),
-        goals: cleanText(pair?.profileB?.goals || pair?.profileB?.bio, 160),
-        offers: pair?.bOffers,
-      })}`,
+      'The deterministic LINKUP algorithm has already locked these two people as each other\'s ONLY introduction this week.',
+      'Your job is the dossier they read before deciding whether to reach out. It has to be deep, specific and earned — the reasoning a sharp founder would give a friend about why these two should talk this week.',
+      'HARD RULES:',
+      '- Ground every claim in the facts below. Never invent employers, degrees, funding, revenue, follower counts or achievements. If something is thin, describe the gap instead of filling it.',
+      '- No percentages, no scores, no "soulmate", no "vibes", no horoscopes, no generic hype adjectives standing in for evidence.',
+      '- Write to each founder in second person ("you"), direct and a little blunt, like someone who read both profiles twice.',
+      '- whyChosenForA / whyChosenForB: 4 to 6 sentences each. Cover: (1) the actual mechanism — what specifically in the two profiles triggered the pairing, quoting the evidence; (2) what each person gains that they cannot easily get elsewhere right now; (3) the honest risk or friction in the pairing; (4) why this week, given their stage and goals.',
+      '- whatABrings / whatBBrings: exactly 3 entries each, each {"skill": concrete capability from that person\'s profile, "unlocks": one clause of at most 18 words saying what it lets the OTHER person do that they cannot do alone}.',
+      '- sharedGround: 2 to 4 fragments of genuine overlap (domain, stage, place, audience, tools, ambition), each at most 8 words. Empty array if there is no real overlap.',
+      '- firstSprint: one concrete 20-minute action for their first call, with a named artefact or question.',
+      'Return STRICT JSON, no prose outside it, with schema:',
+      '{"headline":"4-7 word pairing title, no punctuation tricks","whyChosenForA":"...","whyChosenForB":"...","whatABrings":[{"skill":"...","unlocks":"..."}],"whatBBrings":[{"skill":"...","unlocks":"..."}],"sharedGround":["..."],"firstSprint":"..."}',
+      `Builder A facts: ${facts(pair?.profileA)}`,
+      `Builder B facts: ${facts(pair?.profileB)}`,
+      `What each already offers, per the algorithm: ${JSON.stringify({ aOffers: pair?.aOffers || [], bOffers: pair?.bOffers || [] })}`,
       `Algorithm evidence: ${JSON.stringify({
-        sharedForA: pair?.cardForA?.why?.shared,
-        complementForA: pair?.cardForA?.why?.complement,
-        sharedDomains: pair?.sharedDomains,
+        sharedDomains: pair?.sharedDomains || [],
+        sharedForA: cleanText(pair?.cardForA?.why?.shared, 220),
+        complementForA: cleanText(pair?.cardForA?.why?.complement, 220),
+        sharedForB: cleanText(pair?.cardForB?.why?.shared, 220),
+        complementForB: cleanText(pair?.cardForB?.why?.complement, 220),
+        band: pair?.band?.label,
       })}`,
     ].join('\n');
 
     const raw = await aiText(prompt, {
-      temperature: 0.1,
-      maxOutputTokens: 320,
+      temperature: 0.35,
+      maxOutputTokens: 1400,
       responseMimeType: 'application/json',
     });
     const text = String(raw || '').trim();
@@ -113,17 +210,31 @@ export async function generateAiCofounderNarrative(pair, { aiText = geminiText }
     const end = text.lastIndexOf('}');
     if (start >= 0 && end > start) {
       const parsed = JSON.parse(text.slice(start, end + 1));
+      const dossier = {
+        headline: cleanText(parsed.headline, 80) || engineDossier.headline,
+        whyChosenForA: cleanText(parsed.whyChosenForA, 1400) || engineDossier.whyChosenForA,
+        whyChosenForB: cleanText(parsed.whyChosenForB, 1400) || engineDossier.whyChosenForB,
+        whatABrings: doesList(parsed.whatABrings).length ? doesList(parsed.whatABrings) : engineDossier.whatABrings,
+        whatBBrings: doesList(parsed.whatBBrings).length ? doesList(parsed.whatBBrings) : engineDossier.whatBBrings,
+        sharedGround: (Array.isArray(parsed.sharedGround) ? parsed.sharedGround : [])
+          .map((entry) => cleanText(entry, 60))
+          .filter(Boolean)
+          .slice(0, 4),
+        firstSprint: cleanText(parsed.firstSprint, 220) || engineDossier.firstSprint,
+        source: 'ai+engine',
+      };
       return {
-        aiHeadline: cleanText(parsed.headline, 80) || fallbackHeadline,
-        aiWhyForA: cleanText(parsed.whyForA, 240) || fallbackWhyForA,
-        aiWhyForB: cleanText(parsed.whyForB, 240) || fallbackWhyForB,
-        aiWhyMutual: cleanText(parsed.whyForA, 240) || fallbackWhyForA,
-        aiFirstSprint: cleanText(parsed.firstSprint, 180) || fallbackSprint,
+        aiHeadline: dossier.headline,
+        aiWhyForA: dossier.whyChosenForA,
+        aiWhyForB: dossier.whyChosenForB,
+        aiWhyMutual: dossier.whyChosenForA,
+        aiFirstSprint: dossier.firstSprint,
+        aiDossier: dossier,
         source: 'ai+engine',
       };
     }
   } catch {
-    // Graceful fallback to deterministic LINKUP engine copy
+    // Graceful fallback to the deterministic LINKUP dossier: never blank, never invented.
   }
 
   return {
@@ -132,6 +243,7 @@ export async function generateAiCofounderNarrative(pair, { aiText = geminiText }
     aiWhyForB: fallbackWhyForB,
     aiWhyMutual: fallbackWhyForA,
     aiFirstSprint: fallbackSprint,
+    aiDossier: engineDossier,
     source: 'engine',
   };
 }
@@ -191,6 +303,46 @@ async function resolveMutualGateState(db, viewerUid, partnerUid, matchData = {})
   return { viewerInterested, partnerInterested, mutualInterest, matchId };
 }
 
+/**
+ * The dossier as this member should read it: their own reason for the pairing,
+ * what the partner brings them, and what they bring the partner.
+ */
+export function dossierForViewer(matchDoc, isA, aiIntro = '') {
+  const stored = matchDoc?.aiDossier;
+  const cleanList = (value) => (Array.isArray(value) ? value.filter((entry) => entry && entry.skill) : []);
+  if (!stored) {
+    // A pair locked before the dossier existed still gets a readable deep read.
+    const engine = buildEngineDossier({
+      profileA: matchDoc?.profileA,
+      profileB: matchDoc?.profileB,
+      aOffers: matchDoc?.aOffers,
+      bOffers: matchDoc?.bOffers,
+      sharedDomains: matchDoc?.sharedDomains,
+      cardForA: matchDoc?.cardForA,
+      cardForB: matchDoc?.cardForB,
+      firstSprintTask: matchDoc?.firstSprintTask,
+    });
+    return {
+      headline: matchDoc?.aiHeadline || engine.headline,
+      whyChosen: cleanText(isA ? engine.whyChosenForA : engine.whyChosenForB, 1600) || aiIntro,
+      partnerBrings: isA ? engine.whatBBrings : engine.whatABrings,
+      youBring: isA ? engine.whatABrings : engine.whatBBrings,
+      sharedGround: engine.sharedGround,
+      firstSprint: engine.firstSprint,
+      source: 'engine',
+    };
+  }
+  return {
+    headline: cleanText(stored.headline || matchDoc?.aiHeadline, 90),
+    whyChosen: cleanText(isA ? stored.whyChosenForA : stored.whyChosenForB, 1600) || aiIntro,
+    partnerBrings: cleanList(isA ? stored.whatBBrings : stored.whatABrings),
+    youBring: cleanList(isA ? stored.whatABrings : stored.whatBBrings),
+    sharedGround: Array.isArray(stored.sharedGround) ? stored.sharedGround.slice(0, 4) : [],
+    firstSprint: cleanText(stored.firstSprint || matchDoc?.aiFirstSprint, 220),
+    source: cleanText(stored.source || matchDoc?.aiSource, 20) || 'engine',
+  };
+}
+
 function formatViewerPayload(matchDoc, viewerUid, partnerProfile, gate, window) {
   const isA = String(matchDoc.uidA) === String(viewerUid);
   const card = isA ? matchDoc.cardForA : matchDoc.cardForB;
@@ -228,6 +380,7 @@ function formatViewerPayload(matchDoc, viewerUid, partnerProfile, gate, window) 
     sharedDomains: Array.isArray(matchDoc.sharedDomains) ? matchDoc.sharedDomains : [],
     aiHeadline: matchDoc.aiHeadline || '',
     aiIntro: aiIntro || '',
+    dossier: dossierForViewer(matchDoc, isA, aiIntro),
     symmetryVerified: true,
     emailSent: !!(matchDoc.emailsSent?.[viewerUid]),
     bothEmailsSent: !!(matchDoc.emailsSent?.[matchDoc.uidA] && matchDoc.emailsSent?.[matchDoc.uidB]),
@@ -280,6 +433,7 @@ async function commitWeeklyPairAndNotify(db, edge, window, options = {}) {
     aiWhyForB: narrative.aiWhyForB,
     aiWhyMutual: narrative.aiWhyMutual,
     aiFirstSprint: narrative.aiFirstSprint,
+    aiDossier: narrative.aiDossier,
     aiSource: narrative.source,
     interests: {},
     mutualInterest: false,
@@ -390,6 +544,41 @@ export async function getOrAssignWeeklyCofounder(db, uid, options = {}) {
             [matchData.uidB]: !!(emailResult.sentB || matchData.emailsSent?.[matchData.uidB]),
           };
           await pairRef.set({ emailsSent: matchData.emailsSent }, { merge: true }).catch(() => {});
+        }
+      }
+
+      // Pairs locked before the deep dossier existed get one written now, so a
+      // member who already has this week's introduction reads the full read
+      // instead of two thin lines. Retried at most every six hours.
+      const lastDossierAttempt = Number(matchData.aiDossierAttemptAt || 0);
+      const dossierStale = !matchData.aiDossier || lastDossierAttempt < now - 6 * 3600 * 1000;
+      if (dossierStale) {
+        const viewerSnap = await db.collection('users').doc(uid).get().catch(() => null);
+        const viewerProfile = viewerSnap?.exists ? { uid, ...viewerSnap.data() } : null;
+        const profileA = String(matchData.uidA) === String(uid) ? viewerProfile || matchData.profileA : partnerProfile || matchData.profileA;
+        const profileB = String(matchData.uidB) === String(uid) ? viewerProfile || matchData.profileB : partnerProfile || matchData.profileB;
+        const narrative = await generateAiCofounderNarrative({
+          uidA: matchData.uidA,
+          uidB: matchData.uidB,
+          profileA,
+          profileB,
+          aOffers: matchData.aOffers,
+          bOffers: matchData.bOffers,
+          sharedDomains: matchData.sharedDomains,
+          cardForA: matchData.cardForA,
+          cardForB: matchData.cardForB,
+          band: matchData.band,
+          firstSprintTask: matchData.firstSprintTask,
+        }, options).catch(() => null);
+        if (narrative?.aiDossier) {
+          matchData.aiDossier = narrative.aiDossier;
+          matchData.aiHeadline = matchData.aiHeadline || narrative.aiHeadline;
+          const patch = { aiDossierAt: now, aiDossierAttemptAt: now };
+          if (narrative.source === 'ai+engine') {
+            patch.aiDossier = narrative.aiDossier;
+            patch.aiDossierSource = narrative.source;
+          }
+          await pairRef.set(patch, { merge: true }).catch(() => {});
         }
       }
 

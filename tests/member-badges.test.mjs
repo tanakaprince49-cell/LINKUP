@@ -58,8 +58,10 @@ test('public profile and directory render the same exclusive pair and exact CEO 
 });
 test('every existing member-name badge surface uses the identity-aware renderer',()=>{
  assert.match(read('mobile/src/screens/CityLeagueScreen.tsx'),/TrendingBuildersScreen/);
- const expected={MatchScreen:'otherUser.uid',MessagesScreen:'otherUser.uid',ChatScreen:'otherUser.uid',ActiveOpportunitiesScreen:'item.uid',RecommendedMatchesScreen:'item.uid',ActiveOpportunityScreen:'profile?.uid',IdeaDeckScreen:'idea.ownerId',DiscoveryDashboardScreen:'item.uid',FeedScreen:'post.authorId',ViewersScreen:'item.uid',TrendingBuildersScreen:'r.uid',ProfileScreen:'profile?.uid',LinkyHomeScreen:'member.uid',AlertsScreen:'notification.fromId',GamificationHubScreen:'c.senderId',CampaignsScreen:'campaign.ownerId'};
- for(const [name,id] of Object.entries(expected))assert.ok(read(`mobile/src/screens/${name}.tsx`).includes(`MemberBadges userId={${id}}`),name);
+ const expected={MatchScreen:'otherUser.uid',MessagesScreen:'otherUser.uid',ChatScreen:'otherUser.uid',ActiveOpportunitiesScreen:'item.uid',RecommendedMatchesScreen:'item.uid',ActiveOpportunityScreen:'profile?.uid',IdeaDeckScreen:'idea.ownerId',WeeklyPortrait:'uid',FeedScreen:'post.authorId',ViewersScreen:'item.uid',TrendingBuildersScreen:'r.uid',ProfileScreen:'profile?.uid',LinkyHomeScreen:'member.uid',AlertsScreen:'notification.fromId',GamificationHubScreen:'c.senderId',CampaignsScreen:'campaign.ownerId'};
+ // The weekly introduction's identity badge now lives in its portrait component.
+ for(const [name,id] of Object.entries(expected))assert.ok(read(name==='WeeklyPortrait'?`mobile/src/components/${name}.tsx`:`mobile/src/screens/${name}.tsx`).includes(`MemberBadges userId={${id}}`),name);
+ assert.match(read('mobile/src/components/WeeklyPortrait.tsx'),/<MemberBadges userId=\{uid\} verified=\{!!verified\} size=\{18\} \/>/);
  assert.match(read('mobile/src/screens/FeedScreen.tsx'),/MemberBadges userId=\{reply.userId\}/);
  assert.match(read('mobile/src/screens/FeedScreen.tsx'),/MemberBadges userId=\{item.userId\}/);
 });

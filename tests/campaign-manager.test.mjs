@@ -35,10 +35,12 @@ test('the app serves the manager at the redirect target and drops visitors into 
   const app = read('mobile/App.tsx');
   // The web linking path for the manager screen is exactly the redirect target.
   assert.match(app, /Platform\.OS === 'web'\s*\?\s*\{ Campaigns: 'campaign-manager', CampaignDetail: 'campaign-manager\/:campaignId' \}/);
-  // Signed-out visitors are remembered and taken to the manager once onboarded.
-  assert.match(app, /pendingCampaignManagerRef/);
-  assert.match(app, /\['\/campaigns', '\/campaign-manager'\]\.includes\(/);
-  assert.match(app, /pendingCampaignManagerRef\.current\) return;[\s\S]{0,400}navigate\('Campaigns'\)/);
+  // Signed-out visitors are remembered and taken to the manager once onboarded;
+  // signed-in ones are placed there even if the router missed the path.
+  assert.match(app, /const isCampaignManagerPath = /);
+  assert.match(app, /campaignIntentRef/);
+  assert.match(app, /history\?\.replaceState\?\.\(null, '', webAppPath\('\/campaign-manager'\)\)/);
+  assert.match(app, /navigate\('Campaigns'\)/);
   // The screen itself is registered for the web stack.
   assert.match(app, /<Stack\.Screen name="Campaigns" component=\{CampaignsScreen\} \/>/);
 });

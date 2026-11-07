@@ -328,6 +328,19 @@ export const DISCOVERY_VOICE = {
     cta: 'Ready to meet your people?',
   },
   cardLabel: (partnerFirst: string) => `WHY ${partnerFirst.toUpperCase()} AND YOU ARE THE SAME STORY`,
+  /**
+   * The dossier: the long, specific reasoning behind the week's one pick.
+   * Labels only — the substance comes from the AI, grounded in profile facts.
+   */
+  dossier: {
+    kicker: 'THE FULL READ',
+    whyLabel: 'WHY YOU, WHY THEM, WHY NOW',
+    partnerBrings: (partnerFirst: string) => `WHAT ${partnerFirst.toUpperCase()} BRINGS YOU`,
+    youBring: (partnerFirst: string) => `WHAT YOU BRING ${partnerFirst.toUpperCase()}`,
+    sharedGround: 'SHARED GROUND',
+    sprint: (task: string) => `Your first twenty minutes together: ${task}`,
+    engineNote: 'Written from the profile facts the algorithm verified.',
+  },
   youBring: 'YOU BRING',
   theyBring: (partnerFirst: string) => `${partnerFirst.toUpperCase()} BRINGS`,
   sprint: (task: string) => `Your first twenty minutes together: ${task}`,

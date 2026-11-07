@@ -358,6 +358,16 @@ export interface WeeklyCofounderView {
   symmetryVerified: boolean;
   aiIntro?: string;
   aiHeadline?: string;
+  /** The deep read: why this pair, what each brings, and the first 20 minutes. */
+  dossier?: {
+    headline: string;
+    whyChosen: string;
+    partnerBrings: Array<{ skill: string; unlocks: string }>;
+    youBring: Array<{ skill: string; unlocks: string }>;
+    sharedGround: string[];
+    firstSprint: string;
+    source?: string;
+  };
   emailSent?: boolean;
   mutualInterest?: boolean;
   viewerInterested?: boolean;

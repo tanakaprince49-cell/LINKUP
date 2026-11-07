@@ -23,6 +23,10 @@ import { displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportun
 import { Briefcase, MapPin, Target, Rocket, Zap, UserCheck, Globe, CheckCircle2, MessageSquare, Mail, ArrowDown } from 'lucide-react-native';
 import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS } from '../lib/campaigns';
 import { shareLinkupInvite } from '../lib/activation';
+import WeeklyPortrait from '../components/WeeklyPortrait';
+import WeeklyDossier from '../components/WeeklyDossier';
+import ProfileStrengthCard from '../components/ProfileStrengthCard';
+import DemandStrip from '../components/DemandStrip';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
@@ -368,6 +372,24 @@ function DiscoveryDashboardScreen({ navigation }: any) {
       ...(Array.isArray((item as any).lookingFor) ? (item as any).lookingFor.slice(0, 2) : []),
     ].filter(Boolean);
 
+    // The deep read: the AI dossier when it exists, the algorithm's own
+    // evidence when it does not. Never a blank paragraph, never invented facts.
+    const dossier = (match as any).dossier || null;
+    const brings = (list: any, fallback: string[]) =>
+      (Array.isArray(list) && list.length ? list : fallback.map((skill) => ({ skill, unlocks: '' })))
+        .filter((entry: any) => entry && entry.skill)
+        .slice(0, 3);
+    const partnerBrings = brings(dossier?.partnerBrings, partnerOffers);
+    const youBring = brings(dossier?.youBring, myOffers);
+    const sharedGround: string[] =
+      Array.isArray(dossier?.sharedGround) && dossier.sharedGround.length
+        ? dossier.sharedGround.slice(0, 4)
+        : (match.sharedDomains || []).slice(0, 4);
+    const deepWhy =
+      String(dossier?.whyChosen || match.aiIntro || '').trim() ||
+      [match.why?.shared, match.why?.complement].filter(Boolean).join(' ');
+    const firstSprint = String(dossier?.firstSprint || match.tinyTask || '').trim();
+
     return (
       <View
         style={[
@@ -418,48 +440,17 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F8FAFC' },
           ]}
         >
-          <View style={styles.avatarRing}>
-            <AppImage
-              uri={
-                ikAvatar(safeProfileImageUri(item.profilePic, MOBILE_LIST_IMAGE_LIMIT)) ||
-                'https://ui-avatars.com/api/?name=+&background=E5E7EB&color=9CA3AF&size=256'
-              }
-              style={styles.heroAvatar}
-            />
-            <View style={styles.liveDot} />
-          </View>
-
-          <View style={{ flex: 1 }}>
-            <View style={styles.nameRow}>
-              <Text style={[styles.heroName, { color: textColor(isDark) }]} numberOfLines={1}>
-                {partnerName}
-              </Text>
-              <MemberBadges userId={item.uid} verified={!!item.isVerified} size={20} />
-            </View>
-            <Text style={[styles.handle, { color: HOME_GOLD_DEEP }]} numberOfLines={1}>
-              {handleFor(item)}
-            </Text>
-            <Text style={[styles.roleLine, { color: textColor(isDark) }]} numberOfLines={2}>
-              {roleLabel}
-              {companyLabel ? ` · ${companyLabel}` : ''}
-            </Text>
-            <View style={styles.heroMetaRow}>
-              <View style={styles.metaChip}>
-                <MapPin size={11} color="#4ADE80" />
-                <Text style={[styles.metaChipText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
-                  {locationLabel}
-                </Text>
-              </View>
-              {!!details.stage && (
-                <View style={styles.metaChip}>
-                  <Briefcase size={11} color={HOME_INK} />
-                  <Text style={[styles.metaChipText, { color: textColor(isDark, 'muted') }]} numberOfLines={1}>
-                    {details.stage}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
+          <WeeklyPortrait
+            uid={item.uid}
+            name={partnerName}
+            handle={handleFor(item)}
+            roleLine={`${roleLabel}${companyLabel ? ` · ${companyLabel}` : ''}`}
+            location={locationLabel}
+            stage={details.stage}
+            profilePic={item.profilePic}
+            verified={!!item.isVerified}
+            isDark={isDark}
+          />
         </TouchableOpacity>
 
         {/* Bio / What They Are Building */}
@@ -472,61 +463,18 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           </View>
         )}
 
-        {/* LINKUP Algorithm + AI Co-Founder Synergy Breakdown */}
-        <View
-          style={[
-            styles.synergyBox,
-            {
-              backgroundColor: isDark ? 'rgba(251,230,24,0.07)' : '#FCFBF3',
-              borderColor: isDark ? 'rgba(251,230,24,0.25)' : '#E7E1BF',
-            },
-          ]}
-        >
-          <View style={styles.synergyHeader}>
-            <Rocket size={14} color={isDark ? '#FBE618' : '#111827'} />
-            <Text style={[styles.synergyTitle, { color: textColor(isDark) }]} numberOfLines={1}>
-              {match.aiHeadline || `WHY ${partnerFirst.toUpperCase()} IS THIS WEEK'S ONLY INTRODUCTION`}
-            </Text>
-          </View>
-
-          {!!match.why?.shared && (
-            <View style={styles.synergyBullet}>
-              <Text style={[styles.synergyBulletKey, { color: isDark ? '#FBE618' : '#6E5B00' }]}>SHARED SIGNAL</Text>
-              <Text style={[styles.synergyBulletVal, { color: textColor(isDark) }]}>{match.why.shared}</Text>
-            </View>
-          )}
-
-          {!!match.why?.complement && (
-            <View style={styles.synergyBullet}>
-              <Text style={[styles.synergyBulletKey, { color: isDark ? '#FBE618' : '#6E5B00' }]}>CO-FOUNDER COMPLEMENT</Text>
-              <Text style={[styles.synergyBulletVal, { color: textColor(isDark) }]}>{match.why.complement}</Text>
-            </View>
-          )}
-
-          <View style={styles.exchangeGrid}>
-            <View style={[styles.exchangeCol, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF' }]}>
-              <Text style={[styles.exchangeLabel, { color: textColor(isDark, 'muted') }]}>{DISCOVERY_VOICE.youBring}</Text>
-              <Text style={[styles.exchangeValue, { color: textColor(isDark) }]} numberOfLines={2}>
-                {myOffers.join(' · ')}
-              </Text>
-            </View>
-            <View style={[styles.exchangeCol, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF' }]}>
-              <Text style={[styles.exchangeLabel, { color: textColor(isDark, 'muted') }]}>{DISCOVERY_VOICE.theyBring(partnerFirst)}</Text>
-              <Text style={[styles.exchangeValue, { color: textColor(isDark) }]} numberOfLines={2}>
-                {partnerOffers.join(' · ')}
-              </Text>
-            </View>
-          </View>
-
-          {!!match.tinyTask && (
-            <View style={styles.sprintRow}>
-              <Target size={12} color={isDark ? '#4ADE80' : '#15803D'} />
-              <Text style={[styles.sprintText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
-                {DISCOVERY_VOICE.sprint(match.tinyTask)}
-              </Text>
-            </View>
-          )}
-        </View>
+        <WeeklyDossier
+          testID="weekly-dossier"
+          partnerFirst={partnerFirst}
+          headline={dossier?.headline || match.aiHeadline || ''}
+          whyChosen={deepWhy}
+          partnerBrings={partnerBrings}
+          youBring={youBring}
+          sharedGround={sharedGround}
+          firstSprint={firstSprint}
+          source={String(dossier?.source || '')}
+          isDark={isDark}
+        />
 
         {/* Skills & Looking For Tags */}
         {tags.length > 0 && (
@@ -725,6 +673,17 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 </View>
               )}
             </View>
+
+            {/* #4 — one honest number, and the single edit that moves it. */}
+            <ProfileStrengthCard profile={me as any} isDark={isDark} onFix={() => navigation.navigate('Profile')} />
+
+            {/* #5 — demand without handing out a second introduction. */}
+            <DemandStrip
+              me={me as any}
+              people={people as any}
+              isDark={isDark}
+              onOpenLinky={() => navigation.navigate('LinkyHome')}
+            />
           </View>
         </ScrollView>
       )}
@@ -823,6 +782,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
   },
+  // ── The chosen one's portrait: crown on top, big framed face ──
+  portraitStage: { marginTop: 18, alignItems: 'center' },
+  crownStage: { marginBottom: -9, zIndex: 3 },
+  portraitHalo: {
+    padding: 4,
+    borderRadius: 42,
+    backgroundColor: 'rgba(251,230,24,0.18)',
+    shadowColor: '#FBE618',
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  portraitFrame: { padding: 3, borderRadius: 38, borderWidth: 3, borderColor: '#FBE618' },
+  portraitImage: { width: 116, height: 116, borderRadius: 30 },
+  oneOfOneFlag: {
+    position: 'absolute',
+    bottom: -9,
+    right: -8,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#0A0B0D',
+    borderWidth: 1,
+    borderColor: '#FBE618',
+  },
+  oneOfOneText: { color: '#FBE618', fontSize: 8, fontWeight: '900', letterSpacing: 0.9 },
+  stageNameRow: { marginTop: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  stageName: { fontSize: 22, fontWeight: '900', letterSpacing: -0.6, textAlign: 'center', flexShrink: 1 },
+  stageHandle: { marginTop: 2, fontSize: 12, fontWeight: '900', textAlign: 'center' },
+  stageRole: { marginTop: 6, fontSize: 13, fontWeight: '800', textAlign: 'center', lineHeight: 18 },
+  stageMetaRow: { marginTop: 11, flexDirection: 'row', gap: 8, justifyContent: 'center', flexWrap: 'wrap' },
+
+  // ── The dossier: label, long read, two ledgers, shared ground ──
+  dossierBox: { marginTop: 16, borderRadius: 18, borderWidth: 1, padding: 16 },
+  dossierHead: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  dossierKicker: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  dossierHeadline: { marginTop: 10, fontSize: 19, fontWeight: '900', letterSpacing: -0.4, lineHeight: 24 },
+  dossierLabel: { marginTop: 16, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  dossierWhy: { marginTop: 8, fontSize: 13.5, fontWeight: '600', lineHeight: 21 },
+  ledger: { marginTop: 4 },
+  ledgerRow: { marginTop: 10, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  ledgerIndex: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FBE618',
+    marginTop: 1,
+  },
+  ledgerIndexText: { fontSize: 10, fontWeight: '900', color: '#0A0B0D' },
+  ledgerSkill: { fontSize: 13.5, fontWeight: '900', letterSpacing: -0.2 },
+  ledgerUnlocks: { marginTop: 2, fontSize: 12, fontWeight: '700', lineHeight: 17 },
+  groundRow: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  groundChip: { borderRadius: 999, paddingHorizontal: 11, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(17,24,39,0.08)' },
+  groundChipText: { fontSize: 10.5, fontWeight: '900', letterSpacing: 0.2 },
+  dossierSource: { marginTop: 12, fontSize: 9.5, fontWeight: '700', fontStyle: 'italic' },
+
   avatarRing: {
     position: 'relative',
     padding: 3,

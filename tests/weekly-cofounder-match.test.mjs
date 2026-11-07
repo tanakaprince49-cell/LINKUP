@@ -187,7 +187,8 @@ test('Opportunity Radar is removed and DiscoveryDashboardScreen shows one weekly
   assert.doesNotMatch(dashboardSrc, /title="Active Opportunities"/);
   assert.match(dashboardSrc, /1-OF-1 WEEKLY POTENTIAL CO-FOUNDER/);
   assert.match(dashboardSrc, /WeeklyCofounderCard/);
-  assert.match(dashboardSrc, /MemberBadges userId=\{item\.uid\}/);
+  // The identity badge moved with the portrait, still identity-aware.
+  assert.match('' + fs.readFileSync(path.join(root, 'mobile', 'src', 'components', 'WeeklyPortrait.tsx'), 'utf8'), /MemberBadges userId=\{uid\}/);
   assert.doesNotMatch(appSrc, /<OpportunityRadar/);
 });
 
