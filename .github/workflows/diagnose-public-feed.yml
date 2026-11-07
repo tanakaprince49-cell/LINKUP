@@ -29,5 +29,5 @@ jobs:
             echo "Member feed attempt $attempt: $STATUS"
             sleep 2
           done
-      - name: Read recent production 503 runtime logs
-        run: npx vercel@latest logs --environment production --status-code 503 --since 60m --token="$VERCEL_TOKEN"
+      - name: Read recent production runtime errors
+        run: npx vercel@latest logs runtime --environment production --query 'level:error' --since 60m --token="$VERCEL_TOKEN"
