@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, MessageCircle, Search, Send, Trash2, Users } from 'lucide-react-native';
+import { ArrowLeft, Search, Send, Trash2, Users } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -91,9 +91,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
     muted: textColor(dark, 'muted'),
     secondary: textColor(dark, 'secondary'),
     text: textColor(dark),
-    field: dark ? '#101A21' : '#F7F8F4',
-    linkyBubble: dark ? '#1E2A24' : '#F4F6EA',
-    chip: dark ? '#1D2830' : '#F0EFE8',
+    surface2: dark ? '#131A20' : '#FBFAF5',
   }), [dark]);
 
   const firstName = useMemo(() => {
@@ -255,18 +253,18 @@ export default function LinkyHomeScreen({ navigation }: any) {
         {!!member.why && <Text style={[styles.reason, { color: palette.text }]}>{member.why}</Text>}
         {!!member.unknowns?.length && <Text style={[styles.memberMeta, { color: palette.muted }]}>Still to verify: {member.unknowns.slice(0, 2).join(' · ')}</Text>}
         <TouchableOpacity accessibilityRole="button" onPress={() => navigation.navigate('Profile', { userId: member.uid })} style={styles.profileLink}>
-          <Text style={[styles.profileLinkText, { color: dark ? '#9ED8FF' : '#075EA8' }]}>View profile</Text>
+          <Text style={[styles.profileLinkText, { color: dark ? '#FBE618' : '#6E5B00' }]}>View profile</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
   const teamBlock = (team: TeamMatchTeam, messageId: string) => (
-    <View key={`${messageId}-${team.id}`} style={[styles.team, { borderColor: palette.border, backgroundColor: dark ? '#131C23' : '#FBFBF6' }]}>
+    <View key={`${messageId}-${team.id}`} style={[styles.team, { borderColor: palette.border, backgroundColor: palette.surface }]}>
       <View style={styles.teamHeading}>
         <View style={styles.teamHeadingLeft}>
-          <Users size={14} color={palette.secondary} />
-          <Text style={[styles.teamTitle, { color: palette.text }]}>Squad found</Text>
+          <Users size={14} color={YELLOW_DEEP} />
+          <Text style={[styles.teamTitle, { color: palette.text }]}>The squad</Text>
         </View>
         <Text style={styles.fitPill}>{team.score}% fit</Text>
       </View>
@@ -282,13 +280,17 @@ export default function LinkyHomeScreen({ navigation }: any) {
     </View>
   );
 
+  const catAvatar = (size: number) => (
+    <View style={[styles.catChip, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Image source={CAT} style={{ width: size * 0.86, height: size * 0.86 }} resizeMode="contain" />
+    </View>
+  );
+
   const linkyBubble = (message: ChatMessage) => (
     <View key={message.id} style={styles.linkyRow}>
-      <View style={styles.linkyAvatar}>
-        <MessageCircle size={15} color={COLORS.inkButtonText} />
-      </View>
+      {catAvatar(30)}
       <View style={styles.linkyColumn}>
-        <View style={[styles.linkyBubble, { backgroundColor: palette.linkyBubble, borderColor: palette.border }, message.failed && styles.failedBubble]}>
+        <View style={[styles.linkyBubble, { backgroundColor: palette.surface }, message.failed && styles.failedBubble]}>
           <Text style={[styles.linkyText, { color: palette.text }]}>{message.text}</Text>
           {!!message.roles?.length && (
             <Text style={[styles.searchMeta, { color: palette.muted }]}>Searching roles: {message.roles.join(' · ')}</Text>
@@ -304,8 +306,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
   const userBubble = (message: ChatMessage) => (
     <View key={message.id} style={styles.userRow}>
-      <View style={[styles.userBubble, { backgroundColor: COLORS.inkButton }]}>
-        <Text style={[styles.userText, { color: COLORS.inkButtonText }]}>{message.text}</Text>
+      <View style={styles.userBubble}>
+        <Text style={styles.userText}>{message.text}</Text>
       </View>
     </View>
   );
@@ -316,24 +318,97 @@ export default function LinkyHomeScreen({ navigation }: any) {
       : `${quota.remaining ?? 0} free message${quota.remaining === 1 ? '' : 's'} left today · resets at midnight UTC`
     : LINKY_VOICE.quotaFallback;
 
+  const hasSpoken = messages.some((message) => message.role === 'user');
+  const openingLine = messages.find((message) => message.role === 'linky' && !message.failed)?.text || LINKY_VOICE.greeting(facts);
+
+  /**
+   * THE OPENING. A member who has not typed anything yet does not get an empty
+   * grey box — they get the cat, their own name, their own build, the seat that
+   * is empty, and one unmissable promise: teammates in about three minutes.
+   * Everything below is read straight off their onboarding brief.
+   */
+  const opening = (
+    <View style={styles.opening}>
+      <View style={styles.catHalo}>
+        <Image source={CAT} style={styles.catLarge} resizeMode="contain" />
+      </View>
+      <Text style={[styles.openingHello, { color: palette.text }]}>
+        {facts.hasName ? `Hi ${facts.firstName}.` : 'Hi.'}
+      </Text>
+      <Text style={[styles.openingPromise, { color: palette.text }]}>
+        Teammates in{' '}
+        <Text style={styles.promiseHighlight}>~3 minutes</Text>
+      </Text>
+      <Text style={[styles.openingBody, { color: palette.secondary }]}>{openingLine}</Text>
+
+      <View style={styles.briefGrid}>
+        <View style={[styles.briefTile, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+          <Text style={styles.briefLabel}>You are building</Text>
+          <Text style={[styles.briefValue, { color: palette.text }]} numberOfLines={2}>
+            {facts.projectName || 'Tell me and I will remember'}
+          </Text>
+        </View>
+        <View style={[styles.briefTile, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+          <Text style={styles.briefLabel}>The empty seat</Text>
+          <Text style={[styles.briefValue, { color: palette.text }]} numberOfLines={2}>
+            {facts.seat || 'Name the chair I should fill'}
+          </Text>
+        </View>
+      </View>
+
+      <TouchableOpacity
+        accessibilityRole="button"
+        onPress={() => onChip('Find my teammates')}
+        disabled={busy}
+        style={[styles.primaryCta, busy && { opacity: 0.55 }]}
+        activeOpacity={0.9}
+      >
+        <Search size={17} color={INK} />
+        <Text style={styles.primaryCtaText}>{facts.seat ? `Find my ${facts.seat}` : 'Find my teammates'}</Text>
+      </TouchableOpacity>
+      <Text style={[styles.openingClock, { color: palette.muted }]}>{LINKY_VOICE.clock}</Text>
+
+      {!!chips.length && (
+        <View style={styles.suggestionList}>
+          {chips.slice(0, 3).map((chip) => (
+            <TouchableOpacity
+              key={chip}
+              accessibilityRole="button"
+              onPress={() => onChip(chip)}
+              disabled={busy}
+              style={[styles.suggestion, { borderColor: palette.border, backgroundColor: palette.surface, opacity: busy ? 0.5 : 1 }]}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.suggestionText, { color: palette.text }]} numberOfLines={1}>{chip}</Text>
+              <ArrowLeft size={14} color={palette.muted} style={{ transform: [{ rotate: '180deg' }] }} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <View style={[styles.root, appBackground(dark), { paddingTop: insets.top }]}>
-      <View style={[styles.header, { borderBottomColor: palette.border }]}>
+      <View style={[styles.header, { borderBottomColor: palette.border, backgroundColor: dark ? 'rgba(10,11,13,0.92)' : 'rgba(251,250,245,0.94)' }]}>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to LINKUP" onPress={() => navigation.navigate('Dashboard')} style={styles.headerButton}>
           <ArrowLeft size={21} color={palette.text} />
         </TouchableOpacity>
-        <View style={styles.headerTitle}>
-          <View style={styles.titleRow}>
-            <Text style={[styles.title, { color: palette.text }]}>Linky · Team chat</Text>
-            <View style={styles.liveDot} />
+        <View style={styles.headerIdentity}>
+          {catAvatar(36)}
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.title, { color: palette.text }]}>Linky</Text>
+            <View style={styles.statusRow}>
+              <View style={styles.liveDot} />
+              <Text style={[styles.subtitle, { color: palette.muted }]} numberOfLines={1}>
+                {checkedCount > 0
+                  ? `${checkedCount} builders searched · brief still loaded`
+                  : facts.projectName
+                    ? `${facts.projectName} · ${facts.seat || 'one seat'} still missing`
+                    : 'Reads your brief before you speak'}
+              </Text>
+            </View>
           </View>
-          <Text style={[styles.subtitle, { color: palette.muted }]} numberOfLines={1}>
-            {checkedCount > 0
-              ? `${checkedCount} public builders searched · still holding your brief`
-              : facts.projectName
-                ? `${facts.projectName} · ${facts.seat} still missing`
-                : 'The cat with your whole build in its head'}
-          </Text>
         </View>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear this conversation" onPress={() => void clearChat()} style={styles.headerButton}>
           <Trash2 size={18} color={palette.muted} />
@@ -348,34 +423,40 @@ export default function LinkyHomeScreen({ navigation }: any) {
           keyboardShouldPersistTaps="handled"
           onContentSizeChange={scrollToEnd}
         >
-          {messages.map((message) => (message.role === 'user' ? userBubble(message) : linkyBubble(message)))}
+          {!hasSpoken ? (
+            opening
+          ) : (
+            messages.map((message) => (message.role === 'user' ? userBubble(message) : linkyBubble(message)))
+          )}
           {busy && (
             <View style={styles.linkyRow}>
-              <View style={styles.linkyAvatar}><MessageCircle size={15} color={COLORS.inkButtonText} /></View>
-              <View style={[styles.linkyBubble, { backgroundColor: palette.linkyBubble, borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 9 }]}>
-                <ActivityIndicator size="small" color={palette.secondary} />
-                <Text style={[styles.linkyText, { color: palette.secondary }]}>{LINKY_VOICE.working}</Text>
+              {catAvatar(30)}
+              <View style={[styles.linkyBubble, { backgroundColor: palette.surface, flexDirection: 'row', alignItems: 'center', gap: 9, maxWidth: '88%' }]}>
+                <ActivityIndicator size="small" color={YELLOW_DEEP} />
+                <Text style={[styles.linkyText, { color: palette.secondary, flex: 1 }]}>{LINKY_VOICE.working}</Text>
               </View>
             </View>
           )}
-          <Text style={[styles.disclaimer, { color: palette.muted }]}>
-            {LINKY_VOICE.disclaimer}
-          </Text>
+          {hasSpoken && (
+            <Text style={[styles.disclaimer, { color: palette.muted }]}>{LINKY_VOICE.disclaimer}</Text>
+          )}
         </ScrollView>
 
-        <View style={[styles.composerWrap, { borderTopColor: palette.border, backgroundColor: dark ? '#0D1519' : '#FBFAF5', paddingBottom: Math.max(insets.bottom, 10) }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} keyboardShouldPersistTaps="handled">
-            <TouchableOpacity accessibilityRole="button" onPress={() => onChip('Find my teammates')} disabled={busy} style={[styles.searchChip, busy && { opacity: 0.5 }]}>
-              <Search size={13} color={COLORS.inkButtonText} />
-              <Text style={styles.searchChipText}>{facts.seat ? `Find my ${facts.seat}` : 'Find my teammates'}</Text>
-            </TouchableOpacity>
-            {chips.map((chip) => (
-              <TouchableOpacity key={chip} accessibilityRole="button" onPress={() => onChip(chip)} disabled={busy} style={[styles.chip, { backgroundColor: palette.chip, borderColor: palette.border, opacity: busy ? 0.5 : 1 }]}>
-                <Text style={[styles.chipText, { color: palette.text }]} numberOfLines={1}>{chip}</Text>
+        <View style={[styles.composerWrap, { borderTopColor: palette.border, backgroundColor: dark ? '#0B0C0F' : '#FBFAF5', paddingBottom: Math.max(insets.bottom, 10) }]}>
+          {hasSpoken && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} keyboardShouldPersistTaps="handled">
+              <TouchableOpacity accessibilityRole="button" onPress={() => onChip('Find my teammates')} disabled={busy} style={[styles.searchChip, busy && { opacity: 0.5 }]}>
+                <Search size={13} color={INK} />
+                <Text style={styles.searchChipText}>{facts.seat ? `Find my ${facts.seat}` : 'Find my teammates'}</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-          <View style={[styles.composer, { borderColor: palette.border, backgroundColor: palette.field }]}>
+              {chips.map((chip) => (
+                <TouchableOpacity key={chip} accessibilityRole="button" onPress={() => onChip(chip)} disabled={busy} style={[styles.chip, { borderColor: palette.border, backgroundColor: palette.surface, opacity: busy ? 0.5 : 1 }]}>
+                  <Text style={[styles.chipText, { color: palette.text }]} numberOfLines={1}>{chip}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+          <View style={[styles.composer, { borderColor: dark ? 'rgba(251,230,24,0.28)' : 'rgba(10,11,13,0.14)', backgroundColor: palette.surface }]}>
             <TextInput
               accessibilityLabel="Message Linky"
               value={draft}
@@ -394,9 +475,9 @@ export default function LinkyHomeScreen({ navigation }: any) {
               accessibilityState={{ disabled: busy || !draft.trim() }}
               disabled={busy || !draft.trim()}
               onPress={() => void send()}
-              style={[styles.sendButton, { backgroundColor: COLORS.inkButton, opacity: busy || !draft.trim() ? 0.4 : 1 }]}
+              style={[styles.sendButton, { opacity: busy || !draft.trim() ? 0.35 : 1 }]}
             >
-              {busy ? <ActivityIndicator size="small" color={COLORS.inkButtonText} /> : <Send size={17} color={COLORS.inkButtonText} />}
+              {busy ? <ActivityIndicator size="small" color={INK} /> : <Send size={17} color={INK} />}
             </TouchableOpacity>
           </View>
           <Text style={[styles.quotaLine, { color: palette.muted }]} numberOfLines={2}>{quotaLine}</Text>
@@ -415,53 +496,103 @@ export default function LinkyHomeScreen({ navigation }: any) {
   );
 }
 
+const INK = '#0A0B0D';
+const YELLOW = '#FBE618';
+// Ink-on-yellow is unreadable at small sizes in print-safe contrast terms, so
+// small yellow text (labels, links) uses this deep gold instead.
+const YELLOW_DEEP = '#6E5B00';
+const CAT = require('../../assets/logo-cat.png');
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { minHeight: 62, paddingHorizontal: 12, paddingVertical: 9, flexDirection: 'row', alignItems: 'center', gap: 8, borderBottomWidth: 1 },
-  headerButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  title: { fontSize: 18, fontWeight: '900' },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.success },
-  subtitle: { marginTop: 2, fontSize: 11.5, fontWeight: '600' },
-  thread: { paddingHorizontal: 14, paddingTop: 14, paddingBottom: 18, gap: 10 },
-  linkyRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  linkyAvatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.inkButton, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  header: { minHeight: 64, paddingHorizontal: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6, borderBottomWidth: 1 },
+  headerButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
+  headerIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  title: { fontSize: 19, fontWeight: '900', letterSpacing: -0.4 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#16A34A' },
+  subtitle: { fontSize: 11.5, fontWeight: '700', flex: 1 },
+  catChip: { backgroundColor: YELLOW, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  thread: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 22, gap: 12 },
+
+  // ── opening ───────────────────────────────────────────────────────────────
+  // Every vertical pixel here is contested: on a 667pt phone the promise and
+  // the yellow button have to clear the fold without a scroll.
+  opening: { alignItems: 'stretch', gap: 8, paddingTop: 2 },
+  catHalo: {
+    alignSelf: 'center',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: YELLOW,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  catLarge: { width: 76, height: 76 },
+  openingHello: { fontSize: 24, fontWeight: '900', letterSpacing: -0.6, textAlign: 'center' },
+  openingPromise: { fontSize: 23, fontWeight: '900', letterSpacing: -0.7, textAlign: 'center', lineHeight: 30 },
+  promiseHighlight: { backgroundColor: YELLOW, color: INK, paddingHorizontal: 6, overflow: 'hidden' },
+  openingBody: { fontSize: 13.5, lineHeight: 20, fontWeight: '600', textAlign: 'center', paddingHorizontal: 6 },
+  briefGrid: { flexDirection: 'row', gap: 9, marginTop: 6 },
+  briefTile: { flex: 1, borderWidth: 1, borderRadius: 16, padding: 12, gap: 3 },
+  briefLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase', color: YELLOW_DEEP },
+  briefValue: { fontSize: 14, fontWeight: '800', lineHeight: 19 },
+  primaryCta: {
+    marginTop: 6,
+    minHeight: 50,
+    borderRadius: 26,
+    backgroundColor: YELLOW,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  primaryCtaText: { color: INK, fontSize: 15.5, fontWeight: '900', letterSpacing: -0.2 },
+  openingClock: { textAlign: 'center', fontSize: 11, fontWeight: '700' },
+  suggestionList: { gap: 8, marginTop: 6 },
+  suggestion: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12 },
+  suggestionText: { fontSize: 13.5, fontWeight: '800', flex: 1 },
+
+  // ── thread ────────────────────────────────────────────────────────────────
+  linkyRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
   linkyColumn: { flex: 1, gap: 9 },
-  linkyBubble: { borderWidth: 1, borderRadius: RADIUS.md, borderTopLeftRadius: 5, paddingHorizontal: 13, paddingVertical: 11, alignSelf: 'flex-start', maxWidth: '100%' },
-  failedBubble: { borderColor: '#E9B4B8' },
-  linkyText: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
-  searchMeta: { marginTop: 7, fontSize: 11, lineHeight: 16, fontWeight: '600' },
+  linkyBubble: { borderLeftWidth: 3, borderLeftColor: YELLOW, borderRadius: 18, borderTopLeftRadius: 6, paddingHorizontal: 14, paddingVertical: 12, alignSelf: 'flex-start', maxWidth: '100%' },
+  failedBubble: { borderLeftColor: '#E11D48' },
+  linkyText: { fontSize: 14.5, lineHeight: 22, fontWeight: '600' },
+  searchMeta: { marginTop: 8, fontSize: 11, lineHeight: 16, fontWeight: '700' },
   userRow: { alignItems: 'flex-end' },
-  userBubble: { borderRadius: RADIUS.md, borderTopRightRadius: 5, paddingHorizontal: 13, paddingVertical: 10, maxWidth: '86%' },
-  userText: { fontSize: 14, lineHeight: 20, fontWeight: '700' },
-  team: { borderWidth: 1, borderRadius: RADIUS.lg, padding: 12, gap: 9 },
+  userBubble: { backgroundColor: INK, borderRadius: 18, borderTopRightRadius: 6, paddingHorizontal: 15, paddingVertical: 11, maxWidth: '86%' },
+  userText: { fontSize: 14.5, lineHeight: 21, fontWeight: '700', color: '#FFFFFF' },
+  team: { borderWidth: 1, borderRadius: 18, padding: 12, gap: 10 },
   teamHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   teamHeadingLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
-  teamTitle: { fontSize: 13, fontWeight: '900' },
-  fitPill: { backgroundColor: '#E8F3E5', color: '#214B2A', borderRadius: 20, paddingHorizontal: 9, paddingVertical: 5, fontSize: 11, fontWeight: '900', overflow: 'hidden' },
-  member: { borderWidth: 1, borderRadius: RADIUS.md, padding: 11, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  teamTitle: { fontSize: 13, fontWeight: '900', letterSpacing: 0.2 },
+  fitPill: { backgroundColor: YELLOW, color: INK, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, fontSize: 11, fontWeight: '900', overflow: 'hidden' },
+  member: { borderWidth: 1, borderRadius: 14, padding: 11, flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#273642' },
   initials: { alignItems: 'center', justifyContent: 'center' },
-  initialsText: { color: COLORS.inkButtonText, fontWeight: '900', fontSize: 15 },
+  initialsText: { color: '#FFFFFF', fontWeight: '900', fontSize: 15 },
   memberNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
-  memberName: { fontSize: 14, fontWeight: '900' },
-  memberMeta: { fontSize: 11.5, lineHeight: 16 },
-  roleBadge: { alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 9, backgroundColor: COLORS.inkButton, marginTop: 2 },
-  roleBadgeText: { color: COLORS.inkButtonText, fontSize: 11, fontWeight: '900' },
+  memberName: { fontSize: 14.5, fontWeight: '900' },
+  memberMeta: { fontSize: 11.5, lineHeight: 16, fontWeight: '600' },
+  roleBadge: { alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 9, backgroundColor: YELLOW },
+  roleBadgeText: { color: INK, fontSize: 11, fontWeight: '900' },
   reason: { fontSize: 12, lineHeight: 18, marginTop: 1 },
   profileLink: { alignSelf: 'flex-start', paddingVertical: 3 },
-  profileLinkText: { fontWeight: '800', fontSize: 12 },
-  secondaryButton: { minHeight: 40, borderWidth: 1, borderRadius: RADIUS.sm, alignItems: 'center', justifyContent: 'center' },
-  disclaimer: { textAlign: 'center', fontSize: 10.5, lineHeight: 16, paddingHorizontal: 8, marginTop: 6 },
-  composerWrap: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 8, gap: 7 },
+  profileLinkText: { fontWeight: '900', fontSize: 12 },
+  secondaryButton: { minHeight: 42, borderWidth: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  disclaimer: { textAlign: 'center', fontSize: 10.5, lineHeight: 16, paddingHorizontal: 8, marginTop: 8 },
+
+  // ── composer ──────────────────────────────────────────────────────────────
+  composerWrap: { borderTopWidth: 1, paddingHorizontal: 12, paddingTop: 10, gap: 8 },
   chipRow: { gap: 7, paddingRight: 4 },
-  searchChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: RADIUS.pill, backgroundColor: COLORS.inkButton },
-  searchChipText: { color: COLORS.inkButtonText, fontSize: 12, fontWeight: '900' },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: RADIUS.pill, borderWidth: 1, maxWidth: 230 },
-  chipText: { fontSize: 12, fontWeight: '700' },
-  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, borderWidth: 1, borderRadius: RADIUS.lg, paddingHorizontal: 10, paddingVertical: 7 },
-  input: { flex: 1, fontSize: 14, lineHeight: 20, maxHeight: 118, paddingTop: Platform.OS === 'web' ? 8 : 6, paddingBottom: 6 },
-  sendButton: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  searchChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 13, paddingVertical: 9, borderRadius: 22, backgroundColor: YELLOW },
+  searchChipText: { color: INK, fontSize: 12.5, fontWeight: '900' },
+  chip: { paddingHorizontal: 13, paddingVertical: 9, borderRadius: 22, borderWidth: 1, maxWidth: 240 },
+  chipText: { fontSize: 12.5, fontWeight: '700' },
+  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, borderWidth: 1.5, borderRadius: 26, paddingLeft: 16, paddingRight: 6, paddingVertical: 6 },
+  input: { flex: 1, fontSize: 14.5, lineHeight: 20, maxHeight: 118, paddingTop: Platform.OS === 'web' ? 10 : 8, paddingBottom: 8 },
+  sendButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: YELLOW },
   quotaLine: { textAlign: 'center', fontSize: 10.5, lineHeight: 15, fontWeight: '600' },
 });

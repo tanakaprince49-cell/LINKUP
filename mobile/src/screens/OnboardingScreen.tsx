@@ -40,9 +40,8 @@ import {
   URGENCY_CHOICES,
 } from '../lib/brandVoice';
 
-// One-time "finish your profile" notice at the end of onboarding. The flag is
-// set the moment the notice is answered either way, so it never nags twice.
-const PROFILE_SETUP_NOTICE_KEY = '@linkup/profileSetupNoticeSeen';
+// Marks a member who asked to fill in their bio and links straight after
+// onboarding, so the app opens the profile editor instead of a dead end.
 const PENDING_SELF_PROFILE_KEY = '@linkup/pendingSelfProfileSetup';
 
 type Choice = { id: string; label: string; desc?: string };
@@ -914,24 +913,6 @@ export default function OnboardingScreen({ navigation }: any) {
 
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
-  // null = still checking storage; only users who have never answered the
-  // end-of-onboarding notice get to see it.
-  const [profileNoticeSeen, setProfileNoticeSeen] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    AsyncStorage.getItem(PROFILE_SETUP_NOTICE_KEY)
-      .then((value) => {
-        if (!cancelled) setProfileNoticeSeen(value === '1');
-      })
-      .catch(() => {
-        if (!cancelled) setProfileNoticeSeen(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [ageText, setAgeText] = useState('');
@@ -2008,55 +1989,10 @@ export default function OnboardingScreen({ navigation }: any) {
         ),
         canNext: true,
       },
-      ...(profileNoticeSeen !== false
-        ? []
-        : [
-            {
-              key: 'profile-setup-notice',
-              title: "Your account is ready. Complete your professional profile.",
-              subtitle: 'It is recommended that you finish setting up your profile to get accurate matches.',
-              body: (
-                <View>
-                  <View
-                    style={{
-                      borderWidth: 1,
-                      borderRadius: 14,
-                      padding: 16,
-                      marginBottom: 18,
-                      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
-                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(11,18,32,0.03)',
-                    }}
-                  >
-                    <Text style={{ fontSize: 15, fontWeight: '900', color: textColor(isDark) }}>
-                      Complete your profile for more relevant recommendations
-                    </Text>
-                    <Text style={{ marginTop: 6, fontSize: 13, fontWeight: '600', lineHeight: 19, color: textColor(isDark, 'muted') }}>
-                      Your biography, skills, projects, and professional links help LINKUP recommend relevant collaborators. You can update these details at any time.
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    disabled={saving}
-                    onPress={finishToProfile}
-                    style={[styles.btn, styles.primaryBtn, { opacity: saving ? 0.5 : 1 }]}
-                  >
-                    {saving ? <ActivityIndicator color="#111" /> : <Text style={[styles.btnText, { color: '#111' }]}>Finish now</Text>}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    disabled={saving}
-                    onPress={finishToHome}
-                    style={{ marginTop: 14, alignItems: 'center', opacity: saving ? 0.5 : 1 }}
-                  >
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: textColor(isDark, 'muted') }}>I'll do it later</Text>
-                  </TouchableOpacity>
-                </View>
-              ),
-              canNext: true,
-            },
-          ]),
     ],
     [
       displayName, lookingFor, lookingForChoices, customLookingFor, finalLookingFor, profilePicUri,
-      role, rolePicks, customRole, finalRoles, isDark, ageText, country, city, profileNoticeSeen, saving,
+      role, rolePicks, customRole, finalRoles, isDark, ageText, country, city, saving,
       roleSteps, buildName, buildOneLiner, buildTraction, missingSeat, seatWhy, stakes, urgency,
       workPace, conflictStyle, decisionStyle, riskAppetite, equityView, weeklyHours, relocateView,
     ]
@@ -2200,16 +2136,11 @@ export default function OnboardingScreen({ navigation }: any) {
     }
   };
 
-  // Hoisted on purpose: the end-of-onboarding notice step references these
-  // before this point in the file.
+  // The last screen offers the profile editor as a second door. Nobody is
+  // forced through it — the brief alone is enough to be matched — but the bio
+  // and the professional links can be filled in on the spot.
   function finishToProfile() {
-    void AsyncStorage.setItem(PROFILE_SETUP_NOTICE_KEY, '1').catch(() => {});
     void AsyncStorage.setItem(PENDING_SELF_PROFILE_KEY, '1').catch(() => {});
-    void finish();
-  }
-
-  function finishToHome() {
-    void AsyncStorage.setItem(PROFILE_SETUP_NOTICE_KEY, '1').catch(() => {});
     void finish();
   }
 
@@ -2271,9 +2202,6 @@ export default function OnboardingScreen({ navigation }: any) {
             >
               <Text style={[styles.btnText, { color: '#111' }]}>Continue</Text>
             </TouchableOpacity>
-          ) : current.key === 'profile-setup-notice' ? (
-            // The notice step carries its own Finish now / later buttons.
-            <View style={{ flex: 1 }} />
           ) : (
             <TouchableOpacity
               disabled={!current.canNext || saving}
@@ -2285,17 +2213,15 @@ export default function OnboardingScreen({ navigation }: any) {
           )}
         </View>
 
-        {step >= 2 && current.key !== 'profile-setup-notice' ? (
+        {step >= 2 ? (
           <TouchableOpacity
             disabled={saving || displayName.trim().length < 2 || !role}
-            onPress={() => {
-              // Skippers still see the one-time profile-setup notice on the way out.
-              if (steps[steps.length - 1]?.key === 'profile-setup-notice') setStep(steps.length - 1);
-              else void finish();
-            }}
+            onPress={() => (step === steps.length - 1 ? finishToProfile() : void finish())}
             style={{ marginTop: 16, alignItems: 'center' }}
           >
-            <Text style={{ fontSize: 14, fontWeight: '800', color: textColor(isDark, 'muted') }}>Complete additional details later</Text>
+            <Text style={{ fontSize: 14, fontWeight: '800', color: textColor(isDark, 'muted') }}>
+              {step === steps.length - 1 ? 'Or fill in my bio and links now' : 'Complete additional details later'}
+            </Text>
           </TouchableOpacity>
         ) : null}
 

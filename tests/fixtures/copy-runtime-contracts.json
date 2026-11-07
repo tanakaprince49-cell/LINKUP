@@ -2282,9 +2282,6 @@
       "getItem"
     ],
     [
-      "getItem"
-    ],
-    [
       "setItem"
     ],
     [
@@ -2310,14 +2307,6 @@
     ],
     [
       "removeItem"
-    ],
-    [
-      "setItem",
-      "1"
-    ],
-    [
-      "setItem",
-      "1"
     ],
     [
       "setItem",

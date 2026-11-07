@@ -751,19 +751,25 @@
     "file": "mobile/src/screens/OnboardingScreen.tsx",
     "line": 1560,
     "before": "You're in. One more thing.",
-    "after": "Your account is ready. Complete your professional profile."
+    "after": "Your account is ready. Complete your professional profile.",
+    "current": "Or fill in my bio and links now",
+    "voiceRevision": "2026-11-nine-steps-v1"
   },
   {
     "file": "mobile/src/screens/OnboardingScreen.tsx",
     "line": 1575,
     "before": "Complete profiles get sharper matches",
-    "after": "Complete your profile for more relevant recommendations"
+    "after": "Complete your profile for more relevant recommendations",
+    "current": "Or fill in my bio and links now",
+    "voiceRevision": "2026-11-nine-steps-v1"
   },
   {
     "file": "mobile/src/screens/OnboardingScreen.tsx",
     "line": 1578,
     "before": "Bio, skills, projects and social links tell the matching engine who to put in front of you. It takes about two minutes and you can edit everything later.",
-    "after": "Your biography, skills, projects, and professional links help LINKUP recommend relevant collaborators. You can update these details at any time."
+    "after": "Your biography, skills, projects, and professional links help LINKUP recommend relevant collaborators. You can update these details at any time.",
+    "current": "This is the brief that gets emailed to the one person the algorithm pairs you with. Make it true.",
+    "voiceRevision": "2026-11-nine-steps-v1"
   },
   {
     "file": "mobile/src/screens/OnboardingScreen.tsx",
@@ -1229,7 +1235,9 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 0,
     "before": "Linky · Team chat",
-    "after": "Linky · Team chat"
+    "after": "Linky · Team chat",
+    "current": "Linky",
+    "voiceRevision": "2026-11-linky-redesign-v1"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
@@ -1237,7 +1245,9 @@
     "before": "LINKUP database · chat, search, and build your team",
     "after": "LINKUP database · chat, search, and build your team",
     "current": "The cat with your whole build in its head",
-    "voiceRevision": "2026-11-life-or-death-v1"
+    "voiceRevision": "2026-11-life-or-death-v1",
+    "current": "Reads your brief before you speak",
+    "voiceRevision": "2026-11-linky-redesign-v1"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
@@ -1277,7 +1287,9 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 0,
     "before": "Squad found",
-    "after": "Squad found"
+    "after": "Squad found",
+    "current": "The squad",
+    "voiceRevision": "2026-11-linky-redesign-v1"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
@@ -1401,6 +1413,8 @@
     "after": "LINKUP database · ",
     "kind": "fragment",
     "current": "public builders searched · still holding your brief",
-    "voiceRevision": "2026-11-life-or-death-v1"
+    "voiceRevision": "2026-11-life-or-death-v1",
+    "current": "builders searched · brief still loaded",
+    "voiceRevision": "2026-11-linky-redesign-v1"
   }
 ]

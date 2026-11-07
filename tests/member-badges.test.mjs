@@ -86,6 +86,8 @@ test('Linky screen is a chat with Linky that searches the member database, and i
 
 test('the chat screen does not badge Linky as a verified member or assistant',()=>{
  const s=read('mobile/src/screens/LinkyHomeScreen.tsx');
- assert.match(s,/>Linky · Team chat<\/Text>/);
+ // The header is the cat and the name — no "AI assistant" chip, no blue check.
+ assert.match(s,/>Linky<\/Text>/);
+ assert.match(s, /logo-cat\.png/);
  assert.doesNotMatch(s,/Verified Linky AI|VerifiedBadge/);
 });
