@@ -1,4 +1,5 @@
 import { webAppPath } from './webPaths';
+import { builderCall } from './builder';
 import { httpsCallable } from 'firebase/functions';
 import { Platform } from 'react-native';
 import { auth, functions } from './firebase';
@@ -7,6 +8,7 @@ import { describeAIError, hasDirectAIKey, recordAIError, requestGeminiText } fro
 import {
   MODEL_VERSION,
   bandOf,
+  applyBandedOrder as applySharedBandedOrder,
   composeCard,
   composePortfolio,
   rankPool,
@@ -154,22 +156,39 @@ export async function rankCandidatesWithAI(candidateIds: string[], maxCandidates
 
 const compactProfile = (profile: Partial<UserProfile> | null | undefined) => ({
   uid: profile?.uid || '',
-  role: profile?.occupation || '',
-  goals: Array.isArray(profile?.lookingFor) ? profile?.lookingFor?.slice(0, 5) : profile?.goals || '',
-  skills: Array.isArray(profile?.skills) ? profile.skills.slice(0, 8) : [],
-  industries: Array.isArray(profile?.industries) ? profile.industries.slice(0, 6) : [],
+  displayName: profile?.displayName || '',
+  occupation: profile?.occupation || '',
+  company: profile?.company || '',
+  bio: String(profile?.bio || '').slice(0, 700),
+  goals: String(profile?.goals || '').slice(0, 420),
+  lookingFor: Array.isArray(profile?.lookingFor) ? profile.lookingFor.slice(0, 8) : [],
+  skills: Array.isArray(profile?.skills) ? profile.skills.slice(0, 12) : [],
+  interests: Array.isArray(profile?.interests) ? profile.interests.slice(0, 12) : [],
+  industries: Array.isArray(profile?.industries) ? profile.industries.slice(0, 10) : [],
+  city: profile?.city || '',
+  country: profile?.country || '',
+  timezone: profile?.timezone || '',
+  remoteOnly: profile?.remoteOnly === true,
+  willingToRelocate: profile?.willingToRelocate === true,
   workStyle: profile?.workStyle || '',
-  commitment: profile?.commitmentLevel || '',
-  stage: profile?.startupStage || '',
+  commitmentLevel: profile?.commitmentLevel || '',
   availability: profile?.availability || '',
-  personality: profile?.personalityType || '',
-  roleSignals: profile?.roleAnswers || {},
+  startupStage: profile?.startupStage || '',
+  fundingStage: profile?.fundingStage || '',
+  ambition: profile?.ambition || '',
+  personalityType: profile?.personalityType || '',
+  roleAnswers: profile?.roleAnswers || {},
+  projects: Array.isArray(profile?.projects) ? profile.projects.slice(0, 3).map((project: any) => ({
+    title: String(project?.title || '').slice(0, 100),
+    description: String(project?.description || '').slice(0, 240),
+    tags: Array.isArray(project?.tags) ? project.tags.slice(0, 6) : [],
+  })) : [],
 });
 
 async function serverGeminiRank(me: UserProfile | null | undefined, candidates: UserProfile[], maxCandidates: number): Promise<RankProposal[]> {
   if (!serverAIRankingEnabled() || Platform.OS !== 'web' || typeof fetch !== 'function' || !me || candidates.length === 0) return [];
 
-  const compactCandidates = candidates.slice(0, Math.min(maxCandidates, 20)).map(compactProfile);
+  const compactCandidates = candidates.slice(0, 40).map(compactProfile);
   const token = await auth.currentUser?.getIdToken().catch(() => '');
   const response = await fetch(webAppPath('/api/rankCandidates'), {
     method: 'POST',
@@ -313,15 +332,17 @@ const normalizeText = (value: unknown) => String(value ?? '').trim().toLowerCase
 export function localCommonalityRank(
   me: UserProfile | null | undefined,
   people: UserProfile[],
-  limitCount = 15
+  limitCount = 15,
+  feedback: Record<string, { status: 'relevant' | 'not_relevant' | 'contacted'; at?: number }> = {}
 ): RankedCandidate[] {
   if (!me?.uid || !Array.isArray(people) || people.length === 0) return [];
 
   const out = rankPool(me as unknown as Record<string, unknown>, people as unknown as Record<string, unknown>[], {
     limit: Math.max(limitCount, people.length),
+    feedback,
   });
 
-  return out.scored.slice(0, limitCount).map(toRankedCandidate);
+  return out.ranked.slice(0, limitCount).map(toRankedCandidate);
 }
 
 /** Score every candidate and keep the pair scores, for callers that need the axes. */
@@ -360,44 +381,42 @@ export function applyBandedReorder(
   band = 6
 ): RankedCandidate[] {
   if (!ranked.length || !proposedOrder.length) return ranked;
-
-  const desired = new Map<string, number>();
-  proposedOrder.forEach((uid, index) => desired.set(uid, index));
-
-  const next = [...ranked];
-  let changed = true;
-  let guard = 0;
-  while (changed && guard < next.length * next.length) {
-    changed = false;
-    guard += 1;
-    for (let index = 0; index < next.length - 1; index += 1) {
-      const left = next[index];
-      const right = next[index + 1];
-      const leftWant = desired.get(left.uid) ?? index;
-      const rightWant = desired.get(right.uid) ?? index + 1;
-      const withinBand = Math.abs(left.score - right.score) <= band;
-      if (leftWant > rightWant && withinBand) {
-        next[index] = right;
-        next[index + 1] = left;
-        changed = true;
-      }
-    }
-  }
-  return next;
+  const withDisplay = ranked.map((entry) => ({ ...entry, display: entry.score }));
+  return applySharedBandedOrder(withDisplay, proposedOrder, band).map(({ display: _display, ...entry }) => entry);
 }
 
 /** A reason survives only if it cites something in the pair's own ledger. */
 export function reasonCitesEvidence(reason: string, candidate: RankedCandidate): boolean {
   const text = normalizeText(reason);
   if (!text || text.length < 12) return false;
-  const banned = ['%', 'perfect', 'soulmate', 'synergy', 'chemistry', 'vibes', 'destined', 'astrology'];
+  const banned = ['%', 'match', 'perfect', 'soulmate', 'synergy', 'chemistry', 'vibes', 'destined', 'compatible', 'astrology'];
   if (banned.some((token) => text.includes(token))) return false;
 
   const evidence = normalizeText(`${candidate.why.shared} ${candidate.why.complement}`)
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter((word) => word.length > 4);
-  return evidence.some((word) => text.includes(word));
+  const reasonWords = new Set(text.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean));
+  return evidence.some((word) => reasonWords.has(word));
+}
+
+let recommendationFeedbackCache: { uid: string; expiresAt: number; feedback: Record<string, any> } | null = null;
+
+async function loadRecommendationFeedback(uid: string) {
+  if (recommendationFeedbackCache?.uid === uid && recommendationFeedbackCache.expiresAt > Date.now()) {
+    return recommendationFeedbackCache.feedback;
+  }
+  try {
+    const result = await builderCall<{ feedback?: Record<string, any> }>('recommendationFeedbackRead');
+    const cutoff = Date.now() - 90 * 86400000;
+    const feedback = Object.fromEntries(Object.entries(result.feedback || {}).filter(([, row]) =>
+      row && Number(row.at) >= cutoff && ['relevant', 'not_relevant', 'contacted'].includes(row.status)
+    ));
+    recommendationFeedbackCache = { uid, expiresAt: Date.now() + 30 * 1000, feedback };
+    return feedback;
+  } catch {
+    return {};
+  }
 }
 
 export async function rankCandidatesHybrid(
@@ -405,23 +424,27 @@ export async function rankCandidatesHybrid(
   candidates: UserProfile[],
   maxCandidates = 20
 ): Promise<RankedCandidate[]> {
-  const candidateIds = candidates.map((candidate) => candidate.uid).filter(Boolean).slice(0, Math.max(maxCandidates, 20));
-
   // The deterministic engine always produces the order and the reasons. The
-  // model below may only nudge people who are already inside the same band.
-  const localRanked = localCommonalityRank(me, candidates, maxCandidates);
+  // model below sees only its shortlist, never an arbitrary prefix of the pool.
+  const feedbackCached = !!me?.uid && recommendationFeedbackCache?.uid === me.uid && recommendationFeedbackCache.expiresAt > Date.now();
+  const feedback = feedbackCached ? recommendationFeedbackCache!.feedback : {};
+  if (me?.uid && !feedbackCached) void loadRecommendationFeedback(me.uid);
+  const localRanked = localCommonalityRank(me, candidates, maxCandidates, feedback);
   if (!localRanked.length) return [];
+  const profilesByUid = new Map(candidates.map((candidate) => [candidate.uid, candidate]));
+  const modelCandidates = localRanked.slice(0, 40).map((row) => profilesByUid.get(row.uid)).filter(Boolean) as UserProfile[];
+  const candidateIds = modelCandidates.map((candidate) => candidate.uid).filter(Boolean);
 
   let proposed: RankProposal[] = [];
   try {
-    proposed = await directGeminiRank(me, candidates, maxCandidates);
+    proposed = await directGeminiRank(me, modelCandidates, maxCandidates);
   } catch (error) {
     recordAIError(error, 'Smart ranking unavailable');
   }
 
   if (!proposed.length) {
     try {
-      proposed = await serverGeminiRank(me, candidates, maxCandidates);
+      proposed = await serverGeminiRank(me, modelCandidates, maxCandidates);
     } catch (error) {
       recordAIError(error, 'Smart ranking unavailable');
     }
@@ -435,10 +458,10 @@ export async function rankCandidatesHybrid(
 
   // Keep only proposals we can defend: same set of people, reasons that cite
   // evidence the pair actually has. Everything else falls back to the engine.
-  const byUid = new Map(localRanked.map((entry) => [entry.uid, entry]));
+  const rankedByUid = new Map(localRanked.map((entry) => [entry.uid, entry]));
   const order: string[] = [];
   for (const proposal of proposed) {
-    const local = byUid.get(proposal.uid);
+    const local = rankedByUid.get(proposal.uid);
     if (!local) continue;
     if (!order.includes(proposal.uid)) order.push(proposal.uid);
     if (reasonCitesEvidence(proposal.reason, local)) {

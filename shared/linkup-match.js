@@ -19,7 +19,7 @@
  * Pure ES module: no imports, no I/O, no clock except the `now` you pass in.
  */
 
-export const MODEL_VERSION = 'linkup-match/1.0.0';
+export const MODEL_VERSION = 'linkup-match/1.1.0';
 
 /* ------------------------------------------------------------------ *
  * Small maths helpers
@@ -261,8 +261,8 @@ const EMPTY_CORPUS = {
  * ("cold-chain") earn a high idf; "ai" sits on the floor. This single change is
  * what stops every card reading the same generic 20%.
  */
-export function buildCorpus(profiles = []) {
-  return buildCorpusFromFacets(profiles.filter(Boolean).map((profile) => profile.__facets || deriveFacets(profile)));
+export function buildCorpus(profiles = [], { now = Date.now() } = {}) {
+  return buildCorpusFromFacets(profiles.filter(Boolean).map((profile) => profile.__facets || deriveFacets(profile, { now })));
 }
 
 /** Same table, from facets you already extracted (the common case in rankPool). */
@@ -389,7 +389,7 @@ const classifySkills = (rawSkills) => {
  * Turn a LINKUP `UserProfile` into the facet bundle the scorer consumes.
  * Cached by the caller; pure here.
  */
-export function deriveFacets(profile = {}) {
+export function deriveFacets(profile = {}, { now = Date.now() } = {}) {
   const skills = asArray(profile.skills).map(normalizeText).filter(Boolean);
   const interests = asArray(profile.interests).map(normalizeText).filter(Boolean);
   const industries = asArray(profile.industries).map(normalizeText).filter(Boolean);
@@ -437,9 +437,9 @@ export function deriveFacets(profile = {}) {
   const shipCount = Number(profile.shipCount) || 0;
   const shipLogs = asArray(profile.shipLogs).length;
   const shipped = Math.max(shipCount, shipLogs, asArray(profile.resume?.shippedProducts).length);
-  const lastShippedDays = daysSince(profile.lastShippedAt, Date.now());
-  const lastActiveDays = daysSince(profile.lastActiveAt, Date.now());
-  const createdAtDays = daysSince(profile.createdAt, Date.now());
+  const lastShippedDays = daysSince(profile.lastShippedAt, now);
+  const lastActiveDays = daysSince(profile.lastActiveAt, now);
+  const createdAtDays = daysSince(profile.createdAt, now);
 
   return {
     uid: String(profile.uid || ''),
@@ -489,6 +489,11 @@ export function deriveFacets(profile = {}) {
       createdAtDays,
       responseRate: Number(profile.reputationMetrics?.responseRate),
       reliability: Number(profile.reputationMetrics?.reliability),
+      evidence: {
+        activity: Number(profile.streakCount) > 0 || !!profile.lastActiveAt,
+        shipping: Number(profile.shipCount) > 0 || asArray(profile.shipLogs).length > 0 || !!profile.lastShippedAt || asArray(profile.resume?.shippedProducts).length > 0,
+        trust: (profile.reputationMetrics?.responseRate !== undefined && profile.reputationMetrics?.responseRate !== null) || (profile.reputationMetrics?.reliability !== undefined && profile.reputationMetrics?.reliability !== null),
+      },
     },
 
     // Values are opt-in data. When absent they stay null and the axis is
@@ -540,6 +545,64 @@ export function eligibility(viewer, candidate, options = {}) {
     return { eligible: true, reason: 'recently_contacted', demote: true };
   }
   return { eligible: true, reason: 'ok', demote: false };
+}
+
+/**
+ * Cheap multi-channel recall over an already-fetched pool. The deterministic
+ * scorer still decides the final order; this stage prevents a large pool from
+ * being truncated by one signal and reserves a fixed exploration slice.
+ */
+export function selectRecallCandidates(viewer, candidates = [], { limit = 300, now = Date.now() } = {}) {
+  const valid = candidates.filter((candidate) => candidate?.uid && candidate.uid !== viewer?.uid);
+  const target = Math.max(1, Math.floor(limit));
+  if (valid.length <= target) return valid;
+
+  const vf = deriveFacets(viewer, { now });
+  const facets = new Map(valid.map((candidate) => [candidate.uid, deriveFacets(candidate, { now })]));
+  const corpus = buildCorpusFromFacets([vf, ...facets.values()]);
+  const domainScore = (a, b) => weightedJaccard(new Set(a.domains), new Set(b.domains), (token) => corpus.idf(token)) ?? 0;
+  const intentRows = [];
+  const roleRows = [];
+  const localRows = [];
+  const explorationRows = [];
+  const day = Math.floor(now / 86400000);
+  const hash = (value) => {
+    let h = 2166136261;
+    for (let i = 0; i < value.length; i += 1) h = Math.imul(h ^ value.charCodeAt(i), 16777619);
+    return h >>> 0;
+  };
+
+  for (const candidate of valid) {
+    const f = facets.get(candidate.uid);
+    intentRows.push({ candidate, score: needFit(vf, f) ?? 0 });
+    const sharedDomain = domainScore(vf, f);
+    const functionGap = jaccard(vf.functionSkills, f.functionSkills);
+    const rolePrior = vf.archetype && f.archetype ? ARCHETYPE_PRIOR[vf.archetype]?.[f.archetype] ?? 0.5 : 0.5;
+    roleRows.push({ candidate, score: (0.4 * sharedDomain) + (0.35 * (functionGap === null ? 0.5 : 1 - functionGap)) + 0.25 * rolePrior });
+    const geo = geographyScore(vf, f);
+    localRows.push({ candidate, score: geo ?? 0 });
+    explorationRows.push({ candidate, score: hash(`${viewer?.uid || ''}:${day}:${candidate.uid}`) });
+  }
+
+  const chosen = new Map();
+  const take = (rows, count, descending = true) => {
+    rows.sort((a, b) => descending ? b.score - a.score : a.score - b.score);
+    for (const row of rows) {
+      if (chosen.size >= target || chosen.size >= count) break;
+      if (chosen.has(row.candidate.uid)) continue;
+      chosen.set(row.candidate.uid, row.candidate);
+    }
+  };
+  const intentBudget = Math.floor(target * 0.3);
+  const roleBudget = Math.floor(target * 0.25);
+  const localBudget = Math.floor(target * 0.1);
+  const explorationBudget = Math.floor(target * 0.15);
+  take(intentRows, intentBudget);
+  take(roleRows, intentBudget + roleBudget);
+  take(localRows, intentBudget + roleBudget + localBudget);
+  take(explorationRows, intentBudget + roleBudget + localBudget + explorationBudget, false);
+  take([...roleRows, ...intentRows, ...localRows], target);
+  return Array.from(chosen.values());
 }
 
 /* ------------------------------------------------------------------ *
@@ -618,12 +681,16 @@ const needFit = (from, to) => {
 };
 
 const executionScore = (facets) => {
-  const { streak, shipped, hasExit, verified, lastShippedDays, lastActiveDays, responseRate, reliability } = facets.execution;
-  const streakPart = saturate(streak, 10) * decay(lastActiveDays ?? 30, 30);
-  const shipPart = saturate(shipped, 2) * decay(lastShippedDays ?? 60, 45);
-  const trustPart = clamp01((Number.isFinite(responseRate) ? responseRate / 100 : 0.5) * 0.6 + (Number.isFinite(reliability) ? reliability / 100 : 0.5) * 0.4);
-  const credentialPart = (hasExit ? 1 : 0.4) * 0.5 + (verified ? 1 : 0.4) * 0.5;
-  return round3(clamp01(0.34 * streakPart + 0.3 * shipPart + 0.22 * trustPart + 0.14 * credentialPart));
+  const e = facets.execution;
+  const parts = [];
+  if (e.evidence?.activity) parts.push([0.34, saturate(e.streak, 10) * decay(e.lastActiveDays ?? 30, 30)]);
+  if (e.evidence?.shipping) parts.push([0.3, saturate(e.shipped, 2) * decay(e.lastShippedDays ?? 60, 45)]);
+  if (e.evidence?.trust) {
+    const values = [e.responseRate, e.reliability].filter(Number.isFinite).map((value) => clamp01(value / 100));
+    if (values.length) parts.push([0.22, values.reduce((sum, value) => sum + value, 0) / values.length]);
+  }
+  const weight = parts.reduce((sum, [w]) => sum + w, 0);
+  return weight ? round3(clamp01(parts.reduce((sum, [w, value]) => sum + w * value, 0) / weight)) : null;
 };
 
 const timezoneOverlap = (a, b) => {
@@ -643,6 +710,7 @@ const geographyScore = (a, b) => {
   if (a.country && b.country && a.country === b.country) return 0.8;
   const tz = timezoneOverlap(a, b);
   if (tz !== null) return round3(clamp01(0.45 + 0.25 * tz));
+  if ((!a.city || !b.city) && (!a.country || !b.country)) return null;
   return 0.4;
 };
 
@@ -658,10 +726,11 @@ const styleScore = (a, b) => {
 
 const freshnessScore = (facets) => {
   const { lastActiveDays, createdAtDays } = facets.execution;
-  if (lastActiveDays === null && createdAtDays === null) return null;
-  const active = lastActiveDays === null ? 0.5 : decay(lastActiveDays, 14);
-  const fresh = createdAtDays === null ? 0.5 : createdAtDays <= 14 ? 1 : decay(createdAtDays - 14, 45);
-  return round3(clamp01(0.6 * active + 0.4 * fresh));
+  const parts = [];
+  if (lastActiveDays !== null) parts.push([0.6, decay(lastActiveDays, 14)]);
+  if (createdAtDays !== null) parts.push([0.4, createdAtDays <= 14 ? 1 : decay(createdAtDays - 14, 45)]);
+  const weight = parts.reduce((sum, [w]) => sum + w, 0);
+  return weight ? round3(clamp01(parts.reduce((sum, [w, value]) => sum + w * value, 0) / weight)) : null;
 };
 
 /**
@@ -706,12 +775,18 @@ export function featureFamilies(a, b, context = {}) {
     intent,
     complement,
     domain: domainOverlap,
-    execution: round3((executionScore(a) + executionScore(b)) / 2),
+    execution: (() => {
+      const known = [executionScore(a), executionScore(b)].filter(Number.isFinite);
+      return known.length ? round3(known.reduce((sum, value) => sum + value, 0) / known.length) : null;
+    })(),
     commitment: capacityFit(a, b),
     style: styleScore(a, b),
     geo: geographyScore(a, b),
     social,
-    freshness: round3(((freshnessScore(a) ?? 0.5) + (freshnessScore(b) ?? 0.5)) / 2),
+    freshness: (() => {
+      const known = [freshnessScore(a), freshnessScore(b)].filter(Number.isFinite);
+      return known.length ? round3(known.reduce((sum, value) => sum + value, 0) / known.length) : null;
+    })(),
   };
 
   const penalties = {
@@ -760,7 +835,7 @@ export function fitProbability(features, side = 'ab') {
   const overlapping = [features.extras.domainOverlap, families.commitment, families.style].filter(
     (value) => value !== null && value !== undefined && value > 0.5
   ).length;
-  if (overlapping < 1) z = Math.min(z, Math.log(0.25 / 0.75));
+  if (overlapping < 2) z = Math.min(z, Math.log(0.25 / 0.75));
 
   return round3(clamp01(sigmoid(z)));
 }
@@ -1053,7 +1128,7 @@ export function chemistryPair(a, b, context = {}) {
     0.24 * (axes.ambition ?? 0.5) +
     0.2 * (axes.rhythm ?? 0.5) +
     0.16 * (axes.safety ?? 0.5) +
-    0.1 * executionScore(a) * executionScore(b);
+    0.1 * (executionScore(a) ?? 0.5) * (executionScore(b) ?? 0.5);
   const artifact = round3(clamp01(sigmoid(CHEM_SCALE * (artifactMix - 0.5) + CHEM_BIAS)));
 
   return {
@@ -1113,8 +1188,8 @@ export function scorePair(a, b, context = {}) {
   const now = context.now || Date.now();
   const corpus = context.corpus || EMPTY_CORPUS;
 
-  const facetsA = context.facetsA || a?.__facets || deriveFacets(a);
-  const facetsB = context.facetsB || b?.__facets || deriveFacets(b);
+  const facetsA = context.facetsA || a?.__facets || deriveFacets(a, { now });
+  const facetsB = context.facetsB || b?.__facets || deriveFacets(b, { now });
 
   const features = featureFamilies(facetsA, facetsB, { ...context, corpus });
   const fitAB = fitProbability(features, 'ab');
@@ -1123,10 +1198,13 @@ export function scorePair(a, b, context = {}) {
 
   const chemistry = chemistryPair(facetsA, facetsB, { ...context, corpus });
 
-  const utility = round3(
-    reciprocityGuard(fitAB, fitBA) *
-      (UTILITY_WEIGHTS.fit * fit + UTILITY_WEIGHTS.spark * chemistry.spark + UTILITY_WEIGHTS.artifact * chemistry.artifact)
-  );
+  let utility = reciprocityGuard(fitAB, fitBA) *
+    (UTILITY_WEIGHTS.fit * fit + UTILITY_WEIGHTS.spark * chemistry.spark + UTILITY_WEIGHTS.artifact * chemistry.artifact);
+  const feedbackStatus = context.feedback?.status;
+  if (feedbackStatus === 'not_relevant') utility *= 0.65;
+  else if (feedbackStatus === 'contacted') utility *= 0.9;
+  else if (feedbackStatus === 'relevant') utility *= 1.05;
+  utility = round3(clamp01(utility));
 
   const gated = fit < 0.3 || chemistry.veto !== null;
   const display = calibrateDisplay(utility);
@@ -1299,8 +1377,9 @@ export function applyBandedOrder(rows, order, band = TIE_BREAK_BAND) {
   if (!Array.isArray(rows) || !rows.length || !Array.isArray(order) || !order.length) return [...(rows || [])];
   const ranked = [...rows];
   const desired = new Map(order.map((uid, index) => [uid, index]));
-  const displayOf = (row) => (Number.isFinite(row.display) ? row.display : Math.round((row.utility || 0) * 100));
+  const displayOf = (row) => (Number.isFinite(row.display) ? row.display : Number.isFinite(row.score) ? row.score : Math.round((row.utility || 0) * 100));
 
+  const original = new Map(rows.map((row, index) => [row.uid, index]));
   let changed = true;
   let guard = 0;
   while (changed && guard < ranked.length * ranked.length) {
@@ -1309,10 +1388,12 @@ export function applyBandedOrder(rows, order, band = TIE_BREAK_BAND) {
     for (let index = 0; index < ranked.length - 1; index += 1) {
       const left = ranked[index];
       const right = ranked[index + 1];
-      const leftWant = desired.has(left.uid) ? desired.get(left.uid) : index;
-      const rightWant = desired.has(right.uid) ? desired.get(right.uid) : index + 1;
+      const leftWant = desired.get(left.uid) ?? original.get(left.uid) ?? index;
+      const rightWant = desired.get(right.uid) ?? original.get(right.uid) ?? index + 1;
       const withinBand = Math.abs(displayOf(left) - displayOf(right)) <= band;
-      if (leftWant > rightWant && withinBand) {
+      const sameBand = !left.band?.id || !right.band?.id || left.band.id === right.band.id;
+      const oneStepEach = Math.abs(index + 1 - original.get(left.uid)) <= 1 && Math.abs(index - original.get(right.uid)) <= 1;
+      if (leftWant > rightWant && withinBand && sameBand && oneStepEach) {
         ranked[index] = right;
         ranked[index + 1] = left;
         changed = true;
@@ -1330,13 +1411,13 @@ export function citesLedger(reason, atoms = []) {
   const value = normalizeText(reason);
   if (!value || value.length < 12) return false;
   if (BANNED_COPY.some((token) => value.includes(token))) return false;
-  const evidenceWords = atoms
-    .map((atom) => normalizeText(atom?.value).replace(/[^a-z0-9\s]/g, ' '))
-    .join(' ')
-    .split(/\s+/)
-    .filter((word) => word.length > 4);
-  if (!evidenceWords.length) return false;
-  return evidenceWords.some((word) => value.includes(word));
+  const reasonWords = new Set(value.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean));
+  return atoms.some((atom) => {
+    const evidence = normalizeText(atom?.value).replace(/[^a-z0-9\s]/g, ' ').trim();
+    if (!evidence) return false;
+    if (evidence.includes(' ')) return value.includes(evidence);
+    return evidence.length > 4 && reasonWords.has(evidence);
+  });
 }
 
 /**
@@ -1356,9 +1437,9 @@ export function parseModelAnswer(text, rows = []) {
   }
 
   const allowed = new Set(rows.map((row) => row.uid));
-  const order = Array.isArray(parsed?.order)
-    ? Array.from(new Set(parsed.order.map(String).filter((uid) => allowed.has(uid))))
-    : [];
+  if (!Array.isArray(parsed?.order) || parsed.order.length !== rows.length) return null;
+  const order = parsed.order.map(String);
+  if (new Set(order).size !== rows.length || order.some((uid) => !allowed.has(uid))) return null;
   const reasons = parsed?.reasons && typeof parsed.reasons === 'object' ? parsed.reasons : {};
 
   const cleanReasons = {};
@@ -1907,10 +1988,16 @@ export function rankPool(viewer, candidates = [], options = {}) {
   const limit = options.limit || 30;
 
   // Extract once, score many. Facet extraction is the only expensive step here.
-  const viewerFacets = options.viewerFacets || deriveFacets(viewer);
-  const pool = candidates.filter(Boolean).map((candidate) => ({
+  const viewerFacets = options.viewerFacets || deriveFacets(viewer, { now });
+  const eligibleCandidates = candidates.filter((candidate) => candidate && eligibility(viewer, candidate, {
+    now,
+    contactedAt: options.contactedAt?.[candidate.uid],
+    contactedWithinDays: options.contactedWithinDays ?? 30,
+  }).eligible);
+  const recalled = selectRecallCandidates(viewer, eligibleCandidates, { limit: options.recallLimit ?? 300, now });
+  const pool = recalled.filter(Boolean).map((candidate) => ({
     profile: candidate,
-    facets: deriveFacets(candidate),
+    facets: deriveFacets(candidate, { now }),
   }));
 
   const corpus = options.corpus || buildCorpusFromFacets([viewerFacets, ...pool.map((entry) => entry.facets)]);
@@ -1933,6 +2020,7 @@ export function rankPool(viewer, candidates = [], options = {}) {
       impressionsIgnored: options.impressionsIgnored?.[candidate.uid],
       vitals: options.vitals?.[candidate.uid],
       ghostRisk: options.ghostRisk?.[candidate.uid],
+      feedback: options.feedback?.[candidate.uid],
     });
 
     if (gate.demote) score.utility = round3(score.utility * 0.6);

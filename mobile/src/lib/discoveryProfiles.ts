@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, endAt, getDocs, getDocsFromCache, limit, onSnapshot, orderBy, query, setDoc, startAfter, startAt } from 'firebase/firestore';
+import { collection, deleteDoc, doc, endAt, endBefore, getDocs, getDocsFromCache, limit, onSnapshot, orderBy, query, setDoc, startAfter, startAt } from 'firebase/firestore';
 import { db } from './firebase';
 import { displayNameFor, isDiscoverableProfile } from './discovery';
 import { sanitizeSocialLinks } from './socialLinks';
@@ -319,9 +319,20 @@ const startSharedDiscovery = () => {
     return true;
   };
 
-  const leanQuery = query(collection(db, 'publicProfiles'), limit(MOBILE_DISCOVERY_QUERY_LIMIT));
+  // Rotate the starting document ID daily and wrap at the end of the index.
+  // The old plain `limit()` query repeatedly exposed only the alphabetically
+  // first profiles, regardless of relevance or member tenure.
+  const hash = (value: string) => {
+    let h = 2166136261;
+    for (let i = 0; i < value.length; i += 1) h = Math.imul(h ^ value.charCodeAt(i), 16777619);
+    return (h >>> 0).toString(16).padStart(8, '0');
+  };
+  const pivot = hash(`linkup-discovery:${new Date().toISOString().slice(0, 10)}`);
+  const tailQuery = query(collection(db, 'publicProfiles'), orderBy('__name__'), startAt(pivot), limit(MOBILE_DISCOVERY_QUERY_LIMIT));
+  const headQuery = query(collection(db, 'publicProfiles'), orderBy('__name__'), endBefore(pivot), limit(MOBILE_DISCOVERY_QUERY_LIMIT));
   const rowsFrom = (docs: any[]) =>
     docs
+      .slice(0, MOBILE_DISCOVERY_QUERY_LIMIT)
       .map((d) => compactProfileForList({ uid: d.id, ...(d.data() as any) }))
       .filter((p: any) => isDiscoverableProfile(p));
 
@@ -337,8 +348,10 @@ const startSharedDiscovery = () => {
   // misses/errors are silent — the watchdog below still guards first-run.
   void (async () => {
     try {
-      const snap = await getDocsFromCache(leanQuery);
-      const rows = rowsFrom(snap?.docs || []);
+      const snaps = await Promise.all([getDocsFromCache(tailQuery), getDocsFromCache(headQuery)]);
+      const tailDocs = snaps[0]?.docs || [];
+      const wrapCount = Math.max(0, MOBILE_DISCOVERY_QUERY_LIMIT - tailDocs.length);
+      const rows = rowsFrom([...tailDocs, ...(snaps[1]?.docs || []).slice(0, wrapCount)]);
       if (!delivered && rows.length > 0) emitShared(rows, 'publicProfiles');
     } catch {
       /* empty cache — network lanes handle it */
@@ -348,8 +361,10 @@ const startSharedDiscovery = () => {
   // Lane 1: one-shot read (plain HTTP — always works where streams die)
   void (async () => {
     try {
-      const snap = await getDocs(leanQuery);
-      const rows = rowsFrom(snap?.docs || []);
+      const snaps = await Promise.all([getDocs(tailQuery), getDocs(headQuery)]);
+      const tailDocs = snaps[0]?.docs || [];
+      const wrapCount = Math.max(0, MOBILE_DISCOVERY_QUERY_LIMIT - tailDocs.length);
+      const rows = rowsFrom([...tailDocs, ...(snaps[1]?.docs || []).slice(0, wrapCount)]);
       if (rows.length > 0) {
         mark();
         emitShared(rows, 'publicProfiles');
@@ -362,29 +377,41 @@ const startSharedDiscovery = () => {
   })();
 
   // Lane 2: live stream (when it delivers, it takes over freshness)
-  sharedUnsub = onSnapshot(
-    leanQuery,
-    (snapshot) => {
-      const rows = rowsFrom(snapshot?.docs || []);
-      if (!delivered) {
-        if (!mark()) return;
-        if (rows.length > 0) emitShared(rows, 'publicProfiles');
-        else void emitUsersFallback();
-        return;
-      }
+  let liveTail: any[] = [];
+  let liveHead: any[] = [];
+  let seenLiveTail = false;
+  let seenLiveHead = false;
+  const publishLive = () => {
+    if (!seenLiveTail || !seenLiveHead) return;
+    const wrapCount = Math.max(0, MOBILE_DISCOVERY_QUERY_LIMIT - liveTail.length);
+    const rows = rowsFrom([...liveTail, ...liveHead.slice(0, wrapCount)]);
+    if (!delivered) {
+      if (!mark()) return;
       if (rows.length > 0) emitShared(rows, 'publicProfiles');
-    },
-    (error) => {
-      console.error('Discovery onSnapshot error:', error);
-      sharedListeners.forEach((listener) => listener.onError?.(error));
-      if (mark()) void emitUsersFallback();
+      else void emitUsersFallback();
+      return;
     }
-  );
-
-  const originalUnsub = sharedUnsub;
+    if (rows.length > 0) emitShared(rows, 'publicProfiles');
+  };
+  const onStreamError = (error: unknown) => {
+    console.error('Discovery onSnapshot error:', error);
+    sharedListeners.forEach((listener) => listener.onError?.(error));
+    if (mark()) void emitUsersFallback();
+  };
+  const unsubTail = onSnapshot(tailQuery, (snapshot) => {
+    liveTail = snapshot.docs;
+    seenLiveTail = true;
+    publishLive();
+  }, onStreamError);
+  const unsubHead = onSnapshot(headQuery, (snapshot) => {
+    liveHead = snapshot.docs;
+    seenLiveHead = true;
+    publishLive();
+  }, onStreamError);
   sharedUnsub = () => {
     clearTimeout(watchdog);
-    originalUnsub();
+    unsubTail();
+    unsubHead();
   };
 };
 

@@ -46,7 +46,7 @@ const FALLBACK_MATCH: MatchScore = {
   tempoNote: null,
   repair: null,
   cites: [],
-  modelVersion: 'linkup-match/1.0.0',
+  modelVersion: 'linkup-match/1.1.0',
   cached: false,
 };
 
@@ -158,7 +158,7 @@ export default function RecommendedMatchesScreen({ navigation }: any) {
     const runRanking = async () => {
       setAiLoading(true);
       try {
-        const ranked = await rankCandidatesHybrid(me, people.slice(0, 40), 30);
+        const ranked = await rankCandidatesHybrid(me, people, 30);
         if (cancelled) return;
         setScores(rankedCandidatesToMap(ranked));
         setLastRankedProfileIds(people.map(p => p.uid));

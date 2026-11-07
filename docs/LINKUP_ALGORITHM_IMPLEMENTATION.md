@@ -4,20 +4,18 @@ This is the shipping companion to [LINKUP_ALGORITHM_DESIGN.md](./LINKUP_ALGORITH
 The design document says what the algorithm *should* be. This one says what is
 **in the app today**, where it lives, and what is deliberately still missing.
 
-Engine version: `linkup-match/1.0.0`
+Engine version: `linkup-match/1.1.0`
 
 ---
 
 ## 1. The one-paragraph version
 
-`shared/linkup-match.js` is a pure, dependency-free ES module that turns two
-profiles into a score, a band, two reasons, and one small thing to do together.
-It is the only thing in the product that decides who a member sees. It runs on
-the device and on the server from the same file, it never reads message text,
-it never calls a model, and it always returns the same answer for the same two
-profiles. A language model may reorder people who are already tied and may write
-reasons — but only from an evidence ledger the engine built, and only inside a
-six-point band. The app renders bands, never percentages.
+`shared/linkup-match.js` is the shared deterministic scorer for LINKUP's introduction
+surfaces. It turns profiles into a score, a band, reasons, and a small suggested task.
+It runs on-device and server-side, does not read message text, and uses a single
+explicit timestamp for recency. The optional LLM tie-break is capped at 2.5 seconds,
+may only swap an adjacent candidate in the same band, and must cite an exact ledger
+phrase or token. Members see bands, never percentages.
 
 ---
 
@@ -25,18 +23,19 @@ six-point band. The app renders bands, never percentages.
 
 | Design section | Code | Status |
 | --- | --- | --- |
-| §3 L0 Eligibility | `eligibility()` | ✅ live |
-| §3 L1 Recall (six channels) | brute force over the pool (`rankPool`) | ✅ for pools ≤ 2 000 |
+| §3 L0 Eligibility | `eligibility()` plus server canonical profile, visibility, and bilateral block checks | ✅ live |
+| §3 L1 Recall | rotating Firestore discovery window + deterministic intent/role/local/exploration shortlist (`selectRecallCandidates`) | ✅ bounded; semantic recall still uses the available public pool |
 | §3 L2 Nine feature families | `featureFamilies()`, `fitProbability()`, `FIT_WEIGHTS` | ✅ live |
 | §3 L2 idf / rarity weighting | `buildCorpus()`, `idf()` | ✅ live |
 | §3 L2 missing data renormalised | `fitProbability()` weight renormalisation | ✅ live (tested) |
 | §3 L3 Reciprocity harmonic mean | `harmonic()`, `fitAB`/`fitBA`, `reciprocityGuard()` | ✅ live |
 | §3 L3 Stable allocation | `stableAllocation()` | ✅ live (weekly allocation job not yet wired) |
 | §3 L4(a) extract, don't judge | `deriveFacets()` | ✅ deterministic extractor (LLM extraction is P3) |
-| §3 L4(b) banded tie-break | `applyBandedOrder()`, `TIE_BREAK_BAND` | ✅ live on client and server |
+| §3 L4(b) banded tie-break | `applyBandedOrder()`, `TIE_BREAK_BAND` | ✅ same-band, one-position and 2.5-second bounded on client and server |
 | §3 L4(c) ledger-bound reasons | `buildLedger()`, `citesLedger()`, `parseModelAnswer()` | ✅ live |
-| §3 L5 MMR + caps | `mmr()`, `composePortfolio()` | ✅ live |
+| §3 L5 MMR + caps | `mmr()`, `composePortfolio()`; local recommendations consume `ranked` | ✅ MMR live; hard role/company/city exposure caps remain incomplete |
 | §3 L5 Bands, not percentages | `bandOf()`, `BANDS` | ✅ live |
+| Feedback | Builder `relevant` / `not_relevant` / `contacted` is read by the ranker and cached briefly on-device | ✅ explicit feedback signal; outcome labels still need instrumentation before fitting weights |
 | §16 Wonder Ladder objective | `UTILITY_WEIGHTS`, `spark`/`artifact` heads | ✅ priors (no trained head yet) |
 | §17 C1–C7 chemistry axes | `voltageScore`, `shapeScore`, `rhythmScore`, `safetyScore`, `ambitionSymmetry`, `valuesAdjacency`, `effortSymmetry` | ✅ live |
 | §18.3 Archetype prior matrix | `ARCHETYPE_PRIOR`, `archetypeOf()` | ✅ live |
@@ -65,7 +64,7 @@ six-point band. The app renders bands, never percentages.
 | Active opportunities | `mobile/src/screens/ActiveOpportunitiesScreen.tsx` | `74% FIT` | band chip |
 | Chat thread | `mobile/src/screens/ChatScreen.tsx` | nothing | **next move** strip: vitality state, one suggestion, the 20-minute task, a one-tap first line |
 | Local ranking | `mobile/src/lib/matchmaking.ts` | 11 hand-tuned point weights | the engine, plus banded tie-break and evidence-checked reasons |
-| Server ranking | `api/rankCandidates.js` | asked Gemini for a 1–100 score | engine scores; Gemini may only reorder ties and cite the ledger |
+| Server ranking | `api/rankCandidates.js` | asked Gemini for a 1–100 score | canonical Firestore profiles + block/visibility checks; engine scores; Gemini only does a bounded cited tie-break |
 
 ---
 
@@ -94,13 +93,14 @@ change the order of two candidates.
 1. It receives at most twelve candidates, each with a band and up to three
    `must_cite` strings taken from that pair's ledger.
 2. It returns `{ order: [...], reasons: { uid: "…" } }`.
-3. Server-side, `parseModelAnswer()` drops unknown uids, non-permutations, and
-   any reason that does not contain a word from the ledger or that contains a
+3. Server-side, `parseModelAnswer()` rejects unknown, duplicate, or missing uids and
+   drops any reason that does not cite an exact ledger phrase/token or contains a
    banned token (`match`, `%`, `perfect`, `soulmate`, `synergy`, `chemistry`,
    `vibes`, `destined`, `compatible`).
-4. `applyBandedOrder()` only swaps neighbours within 6 display points.
-5. If the call throws, times out, or returns nonsense, the route answers from
-   the engine alone. **The rail never waits on a model.**
+4. `applyBandedOrder()` only swaps adjacent rows within 6 display points and the
+   same band; no candidate can move more than one position.
+5. The call has a 2.5-second timeout, no retry, and no provider failover. If it
+   throws, times out, or returns invalid output, the route answers from the engine.
 
 ---
 
@@ -123,7 +123,7 @@ change the order of two candidates.
 npm run test:match
 ```
 
-40 tests in `tests/linkup-match.test.mjs`, covering:
+44 tests in `tests/linkup-match.test.mjs`, covering:
 
 * the harmonic mean's one-sided penalty;
 * rarity weighting (a shared niche beats a shared buzzword);
@@ -139,6 +139,10 @@ npm run test:match
 * one nudge per state, ever, and a 72-hour graceful close;
 * vitals containing no text field;
 * the card being capped at ±3 positions;
+* timestamp-stable facet extraction and neutral unknown activity/geography;
+* deterministic bounded recall and exploration;
+* explicit feedback demotion;
+* exact LLM permutations, same-band reorders, and one-position movement;
 * a model being unable to promote a weak card, and invented people being dropped.
 
 ---
@@ -149,7 +153,7 @@ npm run test:match
 | --- | --- |
 | A trained `spark`/`artifact` head | there are no R1–R4 labels yet; the priors are honest until there are |
 | Persisted `pairState` + hourly advance job | the state machine and its copy are live and deterministic; persistence is a Firestore job and a rules change, not a design change |
-| Embedding-based recall (L1 channels) | brute force over the pool is exact and fast to 2 000 members |
+| Embedding/graph recall (L1) | current recall improves coverage within the rotating public-profile window; embeddings and graph reads need indexes and measurement |
 | Server-side vitals aggregation | would require the message text to leave the device, which the design forbids |
 | Trained archetype bilinear table `uᵀMu` | needs a few hundred observed pairs; `ARCHETYPE_PRIOR` is the fixed prior it will start from |
 

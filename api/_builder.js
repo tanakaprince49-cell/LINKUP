@@ -171,6 +171,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   }
   if(op==='weeklyReview')return {review:await reviewFor(uid,await state(uid))};
   if(op==='recommendations')return {people:await recommendations(uid,await state(uid)),scope:'Up to 160 discovery candidates; only evidence-backed relevant members are shown.'};
+  if(op==='recommendationFeedbackRead'){const s=await state(uid);return {feedback:s.feedback||{}};}
   if(op==='recommendationFeedback'){ownId(input.uid);if(!['relevant','not_relevant','contacted'].includes(input.status))throw problem('Choose a feedback option.');await change(uid,s=>{s.feedback={...s.feedback,[input.uid]:{status:input.status,at:now()}};s.feedback=Object.fromEntries(Object.entries(s.feedback).sort((a,b)=>b[1].at-a[1].at).slice(0,100));});return {ok:true};}
   if(op==='followup'){
    const other=await connectable(uid,input.targetUid),title=requireText(input.title,180,3),note=clean(input.note,2000),reason=clean(input.reason,500),dueAt=Number(input.dueAt);

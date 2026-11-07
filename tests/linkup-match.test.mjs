@@ -166,6 +166,38 @@ test('a sparse profile is not treated as a perfect match', () => {
   assert.ok(score.fit <= 0.5, `sparse fit should stay low, got ${score.fit}`);
 });
 
+
+test('facet recency uses the supplied clock and unknown activity is not a negative', () => {
+  const created = Date.parse('2026-01-01T00:00:00.000Z');
+  const profile = { uid: 'clock', createdAt: created, city: '', country: '', timezone: '' };
+  const early = M.deriveFacets(profile, { now: created + 10 * DAY });
+  const late = M.deriveFacets(profile, { now: created + 20 * DAY });
+  assert.equal(early.execution.createdAtDays, 10);
+  assert.equal(late.execution.createdAtDays, 20);
+  const unknown = M.deriveFacets({ uid: 'unknown' }, { now: NOW });
+  const other = M.deriveFacets({ uid: 'other' }, { now: NOW });
+  const features = M.featureFamilies(unknown, other);
+  assert.equal(features.families.execution, null);
+  assert.equal(features.families.geo, null);
+  assert.equal(features.families.freshness, null);
+});
+
+test('recall is bounded and deterministic with a reserved exploration slice', () => {
+  const candidates = Array.from({ length: 340 }, (_, index) => ({
+    uid: `recall-${index}`,
+    occupation: index % 2 ? 'developer' : 'designer',
+    skills: index % 2 ? ['node', 'typescript'] : ['figma', 'branding'],
+    industries: ['fintech'],
+    lookingFor: ['cofounder'],
+  }));
+  const options = { limit: 80, now: NOW };
+  const first = M.selectRecallCandidates(founder, candidates, options);
+  const second = M.selectRecallCandidates(founder, candidates, options);
+  assert.equal(first.length, 80);
+  assert.deepEqual(first.map((row) => row.uid), second.map((row) => row.uid));
+  assert.equal(new Set(first.map((row) => row.uid)).size, 80);
+});
+
 test('eligibility is one predicate and it rejects self, hidden and blocked people', () => {
   assert.equal(M.eligibility(founder, engineer).eligible, true);
   assert.equal(M.eligibility(founder, { ...founder }).reason, 'self');
@@ -459,6 +491,14 @@ test('a member who already ignored four cards sinks', () => {
  * L4 — what the model is allowed to do
  * ---------------------------------------------------------------- */
 
+
+test('explicit not-relevant feedback demotes a candidate without changing eligibility', () => {
+  const base = M.scorePair(founder, engineer, ctx());
+  const feedback = M.scorePair(founder, engineer, { ...ctx(), feedback: { status: 'not_relevant' } });
+  assert.ok(feedback.utility < base.utility);
+  assert.equal(feedback.gated, base.gated);
+});
+
 test('a model may shuffle a tie but cannot promote a weak card', () => {
   const rows = [
     { uid: 'strong', display: 82 },
@@ -473,10 +513,21 @@ test('a model may shuffle a tie but cannot promote a weak card', () => {
 
 test('a model may reorder two cards that are genuinely tied', () => {
   const rows = [
-    { uid: 'a', display: 61 },
-    { uid: 'b', display: 60 },
+    { uid: 'a', display: 61, band: { id: 'good' } },
+    { uid: 'b', display: 60, band: { id: 'good' } },
   ];
   assert.equal(M.applyBandedOrder(rows, ['b', 'a'], 6)[0].uid, 'b');
+});
+
+test('model reorder is blocked across bands and beyond one position', () => {
+  const rows = [
+    { uid: 'a', display: 62, band: { id: 'good' } },
+    { uid: 'b', display: 61, band: { id: 'good' } },
+    { uid: 'c', display: 60, band: { id: 'worth_a_look' } },
+  ];
+  const moved = M.applyBandedOrder(rows, ['c', 'b', 'a'], 6);
+  assert.equal(moved[0].uid, 'b');
+  assert.equal(moved[2].uid, 'c');
 });
 
 test('a reason that cites nothing is dropped, and so is a banned one', () => {
@@ -487,14 +538,22 @@ test('a reason that cites nothing is dropped, and so is a banned one', () => {
   assert.equal(M.citesLedger('Great fit', atoms), false);
 });
 
-test('invented people never survive parsing', () => {
-  const rows = [{ uid: 'real', ledger: [{ value: 'payments' }] }];
-  const answer = M.parseModelAnswer(
-    '{"order":["ghost","real"],"reasons":{"real":"Works on payments in Harare","ghost":"Also great"}}',
-    rows
+test('invented, missing, or duplicate people invalidate the model permutation', () => {
+  const rows = [
+    { uid: 'real', ledger: [{ value: 'payments' }] },
+    { uid: 'other', ledger: [{ value: 'design' }] },
+  ];
+  const invented = M.parseModelAnswer(
+    '{"order":["ghost","real"],"reasons":{"real":"Works on payments in Harare"}}', rows
   );
-  assert.deepEqual(answer.order, ['real']);
-  assert.deepEqual(Object.keys(answer.reasons), ['real']);
+  assert.equal(invented, null);
+  const incomplete = M.parseModelAnswer('{"order":["real"],"reasons":{}}', rows);
+  assert.equal(incomplete, null);
+  const valid = M.parseModelAnswer(
+    '{"order":["other","real"],"reasons":{"real":"Works on payments in Harare"}}', rows
+  );
+  assert.deepEqual(valid.order, ['other', 'real']);
+  assert.deepEqual(Object.keys(valid.reasons), ['real']);
 });
 
 test('malformed model output is a no-op, never a crash', () => {

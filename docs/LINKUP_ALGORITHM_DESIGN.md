@@ -162,8 +162,11 @@ function so every surface and every test shares it.
 
 ### L1 — Recall (the part everyone forgets)
 
-A great scorer over a bad candidate set is worthless, and today the pool is
-`publicProfiles.orderBy(__name__).limit(160)` — literally alphabetical. Fix that first.
+A great scorer over a bad candidate set is worthless. The original pool was
+`publicProfiles.orderBy(__name__).limit(160)` — literally alphabetical. The current
+client discovery query now rotates its document-ID start point daily and wraps at
+the end; scoring adds deterministic intent, role, local and exploration channels
+within that fetched pool. Indexed semantic and graph recall remain future work.
 Six parallel recall channels, unioned and de-duplicated, capped at 300:
 
 | Channel | Query | Budget |

@@ -84,6 +84,7 @@ export interface Facets {
     createdAtDays: number | null;
     responseRate: number;
     reliability: number;
+    evidence?: { activity: boolean; shipping: boolean; trust: boolean };
   };
   learnFor: { lookingFor: string[]; networkingIntent: string };
 }
@@ -168,10 +169,12 @@ export interface ScoreContext {
   impressionsIgnored?: number;
   contactedAt?: number | { toMillis?: () => number };
   ghostRisk?: number;
+  feedback?: { status?: 'relevant' | 'not_relevant' | 'contacted' } | null;
 }
 
-export declare function buildCorpus(profiles: Array<Record<string, any>>): Corpus;
-export declare function deriveFacets(profile: Record<string, any>): Facets;
+export declare function buildCorpus(profiles: Array<Record<string, any>>, options?: { now?: number }): Corpus;
+export declare function deriveFacets(profile: Record<string, any>, options?: { now?: number }): Facets;
+export declare function selectRecallCandidates(viewer: Record<string, any>, candidates: Array<Record<string, any>>, options?: { limit?: number; now?: number }): Array<Record<string, any>>;
 
 export declare function eligibility(
   viewer: Record<string, any>,
@@ -277,6 +280,7 @@ export declare function rankPool(
     impressionsIgnored?: Record<string, number>;
     vitals?: Record<string, Vitals>;
     ghostRisk?: Record<string, number>;
+    feedback?: Record<string, { status: 'relevant' | 'not_relevant' | 'contacted'; at?: number }>;
   }
 ): {
   modelVersion: string;

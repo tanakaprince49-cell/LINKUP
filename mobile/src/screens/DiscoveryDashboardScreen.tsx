@@ -223,7 +223,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     remoteRankTimerRef.current = setTimeout(() => void (async () => {
       try {
         setAiLoading(true);
-        let ranked = await rankCandidatesHybrid(me, people.slice(0, 40), 15);
+        let ranked = await rankCandidatesHybrid(me, people, 15);
         if (!ranked.length) ranked = localRanked;
         if (cancelled) return;
         setAiRank(rankedCandidatesToMap(ranked));

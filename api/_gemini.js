@@ -109,6 +109,7 @@ export function clippedJson(value, max = MAX_PROFILE_CHARS) {
 // shed load in bursts and the second attempt usually lands. Quota/4xx fail
 // straight through to Zen / deterministic fallbacks.
 export async function callGemini(prompt, options, apiKey) {
+  if (options.disableCapacityRetry === true) return callGeminiOnce(prompt, options, apiKey);
   try {
     return await callGeminiOnce(prompt, options, apiKey);
   } catch (err) {
@@ -181,7 +182,8 @@ async function zenOnce(model, prompt, options, apiKey) {
 
 export async function callZen(prompt, options = {}, apiKey = getZenKey()) {
   const errors = [];
-  for (const model of zenChain(options.model || ZEN_MODEL)) {
+  const models = zenChain(options.model || ZEN_MODEL);
+  for (const model of options.singleModel === true ? models.slice(0, 1) : models) {
     try {
       const out = await zenOnce(model, prompt, options, apiKey);
       zenHealthyModel = model;
@@ -210,6 +212,7 @@ export async function aiText(prompt, options = {}) {
     ['gemini', getGeminiKey(), callGemini],
     ['zen', getZenKey(), callZen],
   ].filter(([, key]) => !!key);
+  if (options.disableProviderFailover === true) attempts.splice(1);
   if (!attempts.length) {
     throw new Error('No AI provider configured (GEMINI_API_KEY or ZEN_API_KEY).');
   }
