@@ -55,6 +55,24 @@ test('the opening wears the real LINKUP logo cat, not an invented mascot', () =>
   assert.match(screen, /LINKUP/);
 });
 
+test('the opening sits on the brand yellow, ink on top, exactly like the logo plate', () => {
+  const screen = read('mobile/src/components/LinkupLaunchScreen.tsx');
+  // The stage background is the logo yellow — the same value as the native
+  // splash background, so cold start has no colour step into the app.
+  assert.match(screen, /backgroundColor: '#FBE618',\s*zIndex: 9999,/);
+  const app = JSON.parse(read('mobile/app.json')).expo;
+  const splash = app.plugins.find((plugin) => Array.isArray(plugin) && plugin[0] === 'expo-splash-screen');
+  assert.equal(splash[1].backgroundColor, '#FBE618', 'launch screen must match the native splash colour');
+  // Ink on yellow: every foreground mark is black, and the only light is the
+  // white lift behind the cat.
+  assert.match(screen, /letter: \{\s*color: '#0A0B0D',/);
+  assert.match(screen, /trackFill: \{[^}]*backgroundColor: '#0A0B0D'/);
+  assert.match(screen, /glow: \{[\s\S]{0,220}backgroundColor: 'rgba\(255,255,255,0\.72\)'/);
+  // No leftover gold-on-black styling from the dark version.
+  assert.doesNotMatch(screen, /backgroundColor: '#07080A'/);
+  assert.doesNotMatch(screen, /color: '#F7F7F2'/);
+});
+
 test('the cold-open can be skipped, and never blocks the app', () => {
   const screen = read('mobile/src/components/LinkupLaunchScreen.tsx');
   assert.match(screen, /onPress=\{\(\) => finish\(true\)\}/);

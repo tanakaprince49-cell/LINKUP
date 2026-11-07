@@ -174,7 +174,7 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
               style={[styles.shockwave, {
                 opacity: reduceMotion ? 0 : pulse.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [ring === 0 ? 0.42 : 0.24, 0],
+                  outputRange: [ring === 0 ? 0.3 : 0.18, 0],
                 }),
                 transform: [{
                   scale: pulse.interpolate({
@@ -196,7 +196,7 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
                   width: STAGE * (1.5 + ring * 0.34),
                   height: STAGE * (1.5 + ring * 0.34),
                   borderRadius: STAGE,
-                  borderColor: ring === 1 ? 'rgba(251,230,24,0.45)' : 'rgba(251,230,24,0.2)',
+                  borderColor: ring === 1 ? 'rgba(10,11,13,0.28)' : 'rgba(10,11,13,0.14)',
                   opacity: ring === 2 ? 0.5 : 1,
                   transform: [
                     { perspective: 900 },
@@ -230,14 +230,14 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
                 fadeDuration={0}
                 accessibilityIgnoresInvertColors
               />
-              {/* the plug bites: one gold flash + a spark burst */}
+              {/* the plug bites: one white flash + an ink spark burst */}
               <Animated.View style={[styles.flash, { opacity: beatFlash }]} pointerEvents="none" />
               <Animated.View style={[styles.spark, { opacity: sparkOpacity, transform: [{ scale: sparkScale }] }]} pointerEvents="none">
                 <Svg width="100%" height="100%" viewBox="0 0 300 200">
-                  <Path d="M246 28 L250 40 L262 44 L250 48 L246 60 L242 48 L230 44 L242 40 Z" fill="#FBE618" />
-                  <Path d="M282 76 L285 85 L294 88 L285 91 L282 100 L279 91 L270 88 L279 85 Z" fill="#FBE618" opacity={0.85} />
-                  <Circle cx={268} cy={20} r={3.4} fill="#FBE618" opacity={0.7} />
-                  <Circle cx={298} cy={54} r={2.6} fill="#FBE618" opacity={0.6} />
+                  <Path d="M246 28 L250 40 L262 44 L250 48 L246 60 L242 48 L230 44 L242 40 Z" fill="#0A0B0D" />
+                  <Path d="M282 76 L285 85 L294 88 L285 91 L282 100 L279 91 L270 88 L279 85 Z" fill="#0A0B0D" opacity={0.8} />
+                  <Circle cx={268} cy={20} r={3.4} fill="#0A0B0D" opacity={0.65} />
+                  <Circle cx={298} cy={54} r={2.6} fill="#0A0B0D" opacity={0.5} />
                 </Svg>
               </Animated.View>
             </Animated.View>
@@ -321,27 +321,31 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: '#07080A',
+    // Brand yellow, edge to edge: identical to the logo plate and to the native
+    // splash, so cold start flows out of the splash with no colour step.
+    backgroundColor: '#FBE618',
     zIndex: 9999,
     elevation: 9999,
   },
   fill: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  // Depth on a flat colour comes from ink vignettes and one white lift behind
+  // the cat — never from a second hue.
   lightPool: {
     position: 'absolute',
-    width: 520,
-    height: 520,
-    borderRadius: 260,
-    backgroundColor: 'rgba(251,230,24,0.10)',
+    width: 560,
+    height: 560,
+    borderRadius: 280,
+    backgroundColor: 'rgba(10,11,13,0.05)',
   },
-  poolTop: { top: -260, left: -180 },
-  poolBottom: { bottom: -300, right: -200, backgroundColor: 'rgba(251,230,24,0.07)' },
+  poolTop: { top: -280, left: -200 },
+  poolBottom: { bottom: -320, right: -220, backgroundColor: 'rgba(10,11,13,0.035)' },
   shockwave: {
     position: 'absolute',
     width: STAGE * 1.5,
     height: STAGE * 1.5,
     borderRadius: STAGE * 0.75,
     borderWidth: 1,
-    borderColor: 'rgba(251,230,24,0.5)',
+    borderColor: 'rgba(10,11,13,0.3)',
   },
   orbitStage: {
     position: 'absolute',
@@ -354,10 +358,10 @@ const styles = StyleSheet.create({
   stage: { width: CAT_WIDTH, height: CAT_HEIGHT + 30, alignItems: 'center', justifyContent: 'center' },
   glow: {
     position: 'absolute',
-    width: CAT_WIDTH * 1.35,
-    height: CAT_WIDTH * 1.35,
+    width: CAT_WIDTH * 1.3,
+    height: CAT_WIDTH * 1.3,
     borderRadius: CAT_WIDTH,
-    backgroundColor: 'rgba(251,230,24,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.72)',
   },
   catStage: { width: CAT_WIDTH, height: CAT_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   cat: { width: CAT_WIDTH, height: CAT_HEIGHT },
@@ -366,7 +370,7 @@ const styles = StyleSheet.create({
     width: CAT_WIDTH * 0.55,
     height: CAT_HEIGHT * 0.6,
     borderRadius: CAT_WIDTH,
-    backgroundColor: '#FBE618',
+    backgroundColor: 'rgba(255,255,255,0.95)',
   },
   spark: { position: 'absolute', right: -CAT_WIDTH * 0.02, top: -CAT_HEIGHT * 0.1, width: 300, height: 200, transform: [{ scale: 0.62 }] },
   floor: {
@@ -375,19 +379,19 @@ const styles = StyleSheet.create({
     width: CAT_WIDTH * 0.72,
     height: CAT_HEIGHT * 0.34,
     borderRadius: CAT_WIDTH,
-    backgroundColor: 'rgba(251,230,24,0.16)',
+    backgroundColor: 'rgba(10,11,13,0.16)',
     transform: [{ scaleY: 0.16 }],
   },
   wordmark: { flexDirection: 'row', marginTop: 26, gap: 2 },
   letter: {
-    color: '#F7F7F2',
+    color: '#0A0B0D',
     fontSize: 34,
     fontWeight: '900',
     letterSpacing: 2,
   },
   tagline: {
     marginTop: 10,
-    color: 'rgba(247,247,242,0.72)',
+    color: 'rgba(10,11,13,0.66)',
     fontSize: 12.5,
     fontWeight: '700',
     letterSpacing: 1.6,
@@ -399,12 +403,12 @@ const styles = StyleSheet.create({
     width: 160,
     height: 3,
     borderRadius: 2,
-    backgroundColor: 'rgba(247,247,242,0.16)',
+    backgroundColor: 'rgba(10,11,13,0.16)',
     overflow: 'hidden',
   },
-  trackFill: { width: 160, height: 3, borderRadius: 2, backgroundColor: '#FBE618' },
+  trackFill: { width: 160, height: 3, borderRadius: 2, backgroundColor: '#0A0B0D' },
   skip: {
-    color: 'rgba(247,247,242,0.45)',
+    color: 'rgba(10,11,13,0.5)',
     fontSize: 10.5,
     fontWeight: '700',
     letterSpacing: 1.2,
