@@ -31,7 +31,18 @@ for(const base of [original,app]) {
 }
 const robots=await get(marketing+'/robots.txt');assert.match(robots.body,/Sitemap: https:\/\/www.linkupbuild.com\/app\/sitemap.xml/);console.log('PASS authoritative robots advertises app sitemap');
 for(const path of ['/sitemap.xml','/sitemap-profiles-0.xml']) {const result=await get(app+path);assert.equal(result.res.status,200);assert.match(result.res.headers.get('content-type'),/xml/);assert.match(result.body,/<(?:sitemapindex|urlset)\b/);console.log('PASS profile sitemap',path);}
-for(const section of ['campaigns','startups','news']) {
+// /campaigns is the signed-in campaign manager, not a directory: it must
+// redirect into the app. The browsable sponsored products live at /sponsored.
+for(const path of ['/campaigns','/campaigns/','/app/campaigns']) {
+  const result=await get(marketing+path,{redirect:'manual'});
+  assert.equal(result.res.status,307,path);
+  assert.equal(result.res.headers.get('location'),'/app/campaign-manager',path);
+  console.log('PASS campaign manager redirect',path);
+}
+const manager=await get(app+'/campaign-manager');assert.equal(manager.res.status,200);
+assert.match(manager.res.headers.get('content-type'),/text\/html/);
+console.log('PASS campaign manager reachable');
+for(const section of ['sponsored','startups','news']) {
   const result=await get(app+'/'+section);assert.equal(result.res.status,200,section);
   assert.match(result.res.headers.get('content-type'),/text\/html/);
   assert.match(result.body,/<h1>/);assert.ok(result.body.includes('rel="canonical" href="'+app+'/'+section+'"'));
