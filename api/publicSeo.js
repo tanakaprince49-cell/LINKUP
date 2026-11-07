@@ -418,8 +418,14 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         return send(200,renderDirectory(profiles,cursor,next));
       }
       if (mode === 'search' || mode === 'search-data') {
-        // Public, opt-in member map. Bounded scan of the same lean index the
-        // directory pages use; only allowlisted public fields leave the API.
+        // The visible Search route is deliberately only the full-screen Earth scene.
+        // Keep profile data available only through the separate explicit JSON mode.
+        if (mode === 'search') {
+          res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src https: data: blob:; connect-src 'self'; font-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+          res.setHeader('X-Robots-Tag', 'noindex');
+          return send(200, renderSearchPage(), 'text/html; charset=utf-8', SEARCH_PAGE_CACHE);
+        }
+        // Explicit JSON mode remains a bounded, opt-in public profile feed.
         const db = database();
         let snap;
         try { snap = await db.collection('publicProfiles').orderBy('__name__').select().limit(600).get(); }

@@ -3,20 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { renderSearchPage } from '../api/_searchGlobe.js';
 
-const member = {
-  uid: 'profile-1', name: 'Builder One', occupation: 'Founder', company: 'LINKUP',
-  city: 'Harare', country: 'Zimbabwe', skills: ['Product'], image: '', url: '/app/p/profile-1',
-};
-
-test('search globe uses the bundled Earth map texture, not a fragile third-party texture URL', () => {
-  const html = renderSearchPage({ members: [member] });
+test('search route renders only a full-viewport Earth and space scene', () => {
+  const html = renderSearchPage();
   assert.match(html, /https:\/\/www\.linkupbuild\.com\/app\/assets\/earth-blue-marble\.jpg/);
   assert.doesNotMatch(html, /cdn\.jsdelivr\.net\/npm\/three-globe[^'" ]*earth-blue-marble/);
-  assert.match(html, /#earthSearch\{position:fixed;inset:0/);
-  assert.match(html, /city and country/);
-  assert.match(html, /attachPhoto\(m,sprite\)/);
-  assert.doesNotMatch(html, /Only members who opted into public discovery appear here/);
-  assert.doesNotMatch(html, /<footer|directory|builder-card/i);
+  assert.match(html, /#earthScene\{position:fixed;inset:0/);
+  assert.match(html, /new THREE\.SphereGeometry\(radius,88,64\)/);
+  assert.doesNotMatch(html, /globeFilter|globeCount|globePanel|globeTip|panelList|profile|builder|<input|<button|<footer/i);
   const script = html.match(/<script>\s*([\s\S]*?)<\/script>/)?.[1];
   assert.ok(script, 'inline globe script exists');
   assert.doesNotThrow(() => new Function(script), 'inline globe script parses');
