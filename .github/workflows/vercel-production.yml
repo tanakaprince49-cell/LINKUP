@@ -90,18 +90,6 @@ jobs:
       - name: Promote to production
         run: npx vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"
 
-      - name: Capture public feed runtime diagnostics on failure
-        if: always()
-        shell: bash
-        run: |
-          STATUS=$(curl -sS -o /tmp/linkup-members-response -w '%{http_code}' --max-time 35 \
-            'https://linkup-muqu.vercel.app/api/publicSeo?mode=members' || true)
-          echo "Public member feed diagnostic status: $STATUS"
-          if [ "$STATUS" = "200" ]; then exit 0; fi
-          sleep 3
-          npx vercel@latest logs --environment production --status-code 503 --since 10m \
-            --token="$VERCEL_TOKEN" || true
-
       - name: Verify production routing, PWA and payment handler reachability
         env:
           EXPECTED_APP_SHA: ${{ github.sha }}

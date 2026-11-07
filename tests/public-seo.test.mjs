@@ -154,6 +154,20 @@ test('member feed retries transient Firestore outages once and then serves live 
   assert.equal(queryAttempts,2);assert.equal(userAttempts,2);
 });
 
+test('Firestore quota exhaustion fails fast without another database attempt',async()=>{
+  let attempts=0;
+  const db={collection:()=>{
+    attempts++;
+    const error=new Error('8 RESOURCE_EXHAUSTED: Quota exceeded.');error.code=8;throw error;
+  }};
+  const old=console.error;console.error=()=>{};
+  try {
+    const res=await request(db,{mode:'members'});
+    assert.equal(res.code,503);assert.deepEqual(JSON.parse(res.body),{error:'Temporarily unavailable'});
+    assert.equal(attempts,1);
+  }finally{console.error=old;}
+});
+
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8ioAAAAASUVORK5CYII=';
 const schemaFrom=html=>JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)[1]);
 test('a personal search title contains only the name; company and role are separate and never inferred from LINKUP',async()=>{

@@ -10,7 +10,7 @@ import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, safeUrl, validId, publicEligible, p
 const SEARCH_PAGE_SIZE = 40;
 const SEARCH_EDGE_CACHE = {'Cache-Control':'private, no-store','Vercel-CDN-Cache-Control':'public, s-maxage=30','CDN-Cache-Control':'public, s-maxage=30'};
 const PUBLIC_FIELDS = ['displayName','fullName','name','username','bio','occupation','company','city','country','skills','lookingFor','profilePicUrl','photoURL','profilePic','avatarUrl','photos','socialLinks','projects','deleted','banned','isBot','onboarded','isVisible','isStealthMode'];
-const TRANSIENT_FIRESTORE_CODES = new Set([4,8,10,13,14]);
+const TRANSIENT_FIRESTORE_CODES = new Set([4,10,13,14]);
 // Firestore can briefly return UNAVAILABLE/DEADLINE_EXCEEDED during serverless
 // cold starts. Retry only transient failures once; never hide configuration,
 // permission or validation errors behind a longer request loop.
@@ -18,7 +18,9 @@ async function readFirestore(operation) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try { return await operation(); }
     catch (error) {
-      const transient = TRANSIENT_FIRESTORE_CODES.has(Number(error?.code)) || /UNAVAILABLE|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|ABORTED|INTERNAL/i.test(String(error?.message || ''));
+      // RESOURCE_EXHAUSTED (8) is deliberately excluded: quota retries only
+      // add latency and cannot restore the database's exhausted allowance.
+      const transient = TRANSIENT_FIRESTORE_CODES.has(Number(error?.code)) || /UNAVAILABLE|DEADLINE_EXCEEDED|ABORTED|INTERNAL/i.test(String(error?.message || ''));
       if (attempt === 1 || !transient) throw error;
       await new Promise(resolve => setTimeout(resolve, 200));
     }
