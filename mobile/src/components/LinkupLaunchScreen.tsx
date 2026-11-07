@@ -3,35 +3,41 @@ import {
   AccessibilityInfo,
   Animated,
   Easing,
+  Image,
   StyleSheet,
   Text,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import LinkyCatAlive from './LinkyCatAlive';
-import { playLaunchSound, stopLaunchSound } from '../lib/launchSound';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 /**
  * THE LINKUP COLD OPEN.
  *
- * The cat is the brand, so the cat is the loading screen — and the cat is
- * ALIVE: it breathes, blinks (sometimes twice), flicks each ear on its own
- * hinge, swishes its tail, glances around, and meows with a spark on the exact
- * beat the chime lands. Nothing here is a photograph or a spinning logo.
+ * The mascot is the brand mark itself: the black cat plugging the cable in.
+ * Nothing is redrawn or reimagined here — the artwork is the LOGO cat, rendered
+ * in 3D, with its yellow eyes and the socket it is about to light up.
  *
- * Around it, the stage is real 3D: gold halos orbit in a tilted plane, the
- * whole scene sways on its Y axis in perspective, shockwaves roll out from the
- * beat, and the LINKUP letters hinge up out of the floor.
+ * It stays alive without ever becoming a flat still: the cat hovers, breathes,
+ * leans on a real Y axis in perspective, and lands a spark when the opening
+ * beat hits. Behind it, gold halos orbit in a tilted 3D plane and shockwaves
+ * roll outward, while the LINKUP letters hinge up out of the floor.
+ *
+ * Silent by design: no audio is played on launch.
  *
  * Rules this screen keeps:
  *  - never blocks the app longer than ~2.6s, and a tap skips it instantly;
- *  - reduced-motion users get a short calm fade (no loops, no spin);
+ *  - reduced-motion users get a short calm fade (no loops, no sway);
  *  - transform/opacity work stays on the native driver;
  *  - it shows once per session, never on navigation or theme changes.
  */
 
+const CAT = require('../../assets/launch-cat.png');
+const CAT_ASPECT = 820 / 538;
+const CAT_WIDTH = 272;
+const CAT_HEIGHT = Math.round(CAT_WIDTH / CAT_ASPECT);
+const STAGE = 208;
 const WORDMARK = 'LINKUP';
-const STAGE = 176;
 const BEAT_AT = 900;
 
 let shownThisSession = false;
@@ -43,6 +49,8 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
   const intro = useRef(new Animated.Value(0)).current;
   const orbit = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
+  const float = useRef(new Animated.Value(0)).current;
+  const beat = useRef(new Animated.Value(0)).current;
   const progress = useRef(new Animated.Value(0)).current;
   const exit = useRef(new Animated.Value(1)).current;
   const finished = useRef(false);
@@ -50,7 +58,6 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
   const finish = useCallback((skipped = false) => {
     if (finished.current) return;
     finished.current = true;
-    if (skipped) stopLaunchSound();
     Animated.timing(exit, {
       toValue: 0,
       duration: skipped ? 120 : 340,
@@ -66,14 +73,9 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
     if (shownThisSession) return;
     shownThisSession = true;
     let cancelled = false;
-
-    // Audio goes first: it has to land on the same frame the cat appears.
-    playLaunchSound();
-
     void AccessibilityInfo.isReduceMotionEnabled?.()
       .then((reduced) => { if (!cancelled && reduced) setReduceMotion(true); })
       .catch(() => {});
-
     return () => { cancelled = true; };
   }, []);
 
@@ -98,8 +100,7 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
     }).start();
 
     if (!reduceMotion) {
-      // The halo ring turns a full revolution every 9s; the scene sways on the
-      // pulse so the 3D never reads as a flat card.
+      // one halo revolution every 9s; the scene sways so the 3D never flattens
       loops.push(Animated.loop(Animated.timing(orbit, {
         toValue: 1, duration: 9000, easing: Easing.linear, useNativeDriver: true,
       })));
@@ -107,32 +108,54 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
         Animated.timing(pulse, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
         Animated.timing(pulse, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
       ])));
+      // the cat hovers: slow, weightless, never a static picture
+      loops.push(Animated.loop(Animated.sequence([
+        Animated.timing(float, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(float, { toValue: 0, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])));
       loops.forEach((loop) => loop.start());
     }
+
+    // the beat: a spark and a glow flash where the plug bites
+    timers.push(setTimeout(() => {
+      Animated.sequence([
+        Animated.timing(beat, { toValue: 1, duration: 150, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(beat, { toValue: 0, duration: 600, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+      ]).start();
+    }, BEAT_AT));
 
     timers.push(setTimeout(() => finish(), hold));
     return () => {
       timers.forEach(clearTimeout);
       loops.forEach((loop) => loop.stop());
     };
-  }, [gone, reduceMotion, finish, intro, progress, pulse, orbit]);
+  }, [gone, reduceMotion, finish, intro, progress, pulse, orbit, float, beat]);
 
   if (gone) return null;
 
   const orbitDeg = orbit.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const swayDeg = pulse.interpolate({ inputRange: [0, 1], outputRange: ['-7deg', '7deg'] });
+  const swayDeg = pulse.interpolate({ inputRange: [0, 1], outputRange: ['-6deg', '6deg'] });
+  const hoverY = float.interpolate({ inputRange: [0, 1], outputRange: [5, -7] });
+  const hoverScale = float.interpolate({ inputRange: [0, 1], outputRange: [1, 1.018] });
   const glowScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
-  const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.32, 0.58] });
+  const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.30, 0.55] });
+  const floorScale = float.interpolate({ inputRange: [0, 1], outputRange: [1, 0.86] });
+  const floorOpacity = float.interpolate({ inputRange: [0, 1], outputRange: [0.34, 0.2] });
+  const sparkOpacity = beat.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  const sparkScale = beat.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.2] });
+  const beatFlash = beat.interpolate({ inputRange: [0, 1], outputRange: [0, 0.5] });
 
   const kickerOpacity = intro.interpolate({ inputRange: [0, 0.35], outputRange: [0, 1], extrapolate: 'clamp' });
   const taglineOpacity = intro.interpolate({ inputRange: [0.55, 1], outputRange: [0, 1], extrapolate: 'clamp' });
   const taglineShift = intro.interpolate({ inputRange: [0.55, 1], outputRange: [12, 0], extrapolate: 'clamp' });
+  const catOpacity = intro.interpolate({ inputRange: [0, 0.3], outputRange: [0, 1], extrapolate: 'clamp' });
+  const catRise = intro.interpolate({ inputRange: [0, 0.45], outputRange: [26, 0], extrapolate: 'clamp' });
 
   return (
     <Animated.View
       style={[styles.root, { opacity: exit }]}
       accessibilityViewIsModal
-      accessibilityLabel="LINKUP is starting. The LINKUP cat is waking up while the app loads."
+      accessibilityLabel="LINKUP is starting. The LINKUP cat is plugging you in while the app loads."
     >
       <TouchableWithoutFeedback
         accessibilityRole="button"
@@ -140,11 +163,10 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
         onPress={() => finish(true)}
       >
         <View style={styles.fill}>
-          {/* depth: two soft gold light pools behind everything */}
           <View style={[styles.lightPool, styles.poolTop]} pointerEvents="none" />
           <View style={[styles.lightPool, styles.poolBottom]} pointerEvents="none" />
 
-          {/* shockwaves on the chime's beat */}
+          {/* shockwaves rolling out on the beat */}
           {[0, 1, 2].map((ring) => (
             <Animated.View
               key={`wave-${ring}`}
@@ -152,7 +174,7 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
               style={[styles.shockwave, {
                 opacity: reduceMotion ? 0 : pulse.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [ring === 0 ? 0.42 : 0.26, 0],
+                  outputRange: [ring === 0 ? 0.42 : 0.24, 0],
                 }),
                 transform: [{
                   scale: pulse.interpolate({
@@ -160,21 +182,21 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
                     outputRange: [0.62 + ring * 0.06, 1.5 + ring * 0.22],
                   }),
                 }],
-              }, ring === 1 && { width: STAGE * 2.1, height: STAGE * 2.1, borderRadius: STAGE * 1.05 },
-                 ring === 2 && { width: STAGE * 2.9, height: STAGE * 2.9, borderRadius: STAGE * 1.45 }]}
+              }, ring === 1 && { width: STAGE * 2.2, height: STAGE * 2.2, borderRadius: STAGE * 1.1 },
+                 ring === 2 && { width: STAGE * 3, height: STAGE * 3, borderRadius: STAGE * 1.5 }]}
             />
           ))}
 
-          {/* orbit halo: rings tilted into perspective, turning behind the cat */}
+          {/* gold halos in a tilted 3D plane */}
           <View style={styles.orbitStage} pointerEvents="none">
             {[0, 1, 2].map((ring) => (
               <Animated.View
                 key={`orbit-${ring}`}
                 style={[styles.orbit, {
-                  width: STAGE * (1.55 + ring * 0.36),
-                  height: STAGE * (1.55 + ring * 0.36),
+                  width: STAGE * (1.5 + ring * 0.34),
+                  height: STAGE * (1.5 + ring * 0.34),
                   borderRadius: STAGE,
-                  borderColor: ring === 1 ? 'rgba(251,230,24,0.5)' : 'rgba(251,230,24,0.22)',
+                  borderColor: ring === 1 ? 'rgba(251,230,24,0.45)' : 'rgba(251,230,24,0.2)',
                   opacity: ring === 2 ? 0.5 : 1,
                   transform: [
                     { perspective: 900 },
@@ -186,20 +208,43 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
             ))}
           </View>
 
-          {/* THE CAT — breathing, blinking, flicking, swishing, meowing */}
+          {/* THE CAT — the real logo cat, hovering and leaning in 3D */}
           <View style={styles.stage} pointerEvents="none">
             <Animated.View style={[styles.glow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
             <Animated.View
-              style={{
+              style={[styles.catStage, {
+                opacity: catOpacity,
                 transform: [
                   { perspective: 1000 },
                   { rotateY: reduceMotion ? '0deg' : swayDeg },
+                  { translateY: reduceMotion ? 0 : hoverY },
+                  { translateY: catRise },
+                  { scale: reduceMotion ? 1 : hoverScale },
                 ],
-              }}
+              }]}
             >
-              <LinkyCatAlive size={STAGE} alive={!reduceMotion} beatAt={BEAT_AT} />
+              <Image
+                source={CAT}
+                style={styles.cat}
+                resizeMode="contain"
+                fadeDuration={0}
+                accessibilityIgnoresInvertColors
+              />
+              {/* the plug bites: one gold flash + a spark burst */}
+              <Animated.View style={[styles.flash, { opacity: beatFlash }]} pointerEvents="none" />
+              <Animated.View style={[styles.spark, { opacity: sparkOpacity, transform: [{ scale: sparkScale }] }]} pointerEvents="none">
+                <Svg width="100%" height="100%" viewBox="0 0 300 200">
+                  <Path d="M246 28 L250 40 L262 44 L250 48 L246 60 L242 48 L230 44 L242 40 Z" fill="#FBE618" />
+                  <Path d="M282 76 L285 85 L294 88 L285 91 L282 100 L279 91 L270 88 L279 85 Z" fill="#FBE618" opacity={0.85} />
+                  <Circle cx={268} cy={20} r={3.4} fill="#FBE618" opacity={0.7} />
+                  <Circle cx={298} cy={54} r={2.6} fill="#FBE618" opacity={0.6} />
+                </Svg>
+              </Animated.View>
             </Animated.View>
-            <Animated.View style={[styles.reflection, { opacity: kickerOpacity }]} pointerEvents="none" />
+            <Animated.View
+              style={[styles.floor, { opacity: floorOpacity, transform: [{ scaleX: floorScale }] }]}
+              pointerEvents="none"
+            />
           </View>
 
           {/* wordmark hinges up out of the floor */}
@@ -263,9 +308,10 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
 export const LAUNCH_SCREEN_COPY = {
   tagline: 'The cat is plugging you in…',
   skip: 'Tap to skip',
-  // The mascot is drawn, not photographed: see LinkyCatAlive.
-  cat: 'LinkyCatAlive',
+  /** The real brand mark, rendered in 3D. */
+  cat: 'launch-cat.png',
   beatAt: BEAT_AT,
+  silent: true,
 };
 
 const styles = StyleSheet.create({
@@ -295,7 +341,7 @@ const styles = StyleSheet.create({
     height: STAGE * 1.5,
     borderRadius: STAGE * 0.75,
     borderWidth: 1,
-    borderColor: 'rgba(251,230,24,0.55)',
+    borderColor: 'rgba(251,230,24,0.5)',
   },
   orbitStage: {
     position: 'absolute',
@@ -305,24 +351,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   orbit: { position: 'absolute', borderWidth: 1 },
-  stage: { width: STAGE, height: STAGE + 24, alignItems: 'center', justifyContent: 'center' },
+  stage: { width: CAT_WIDTH, height: CAT_HEIGHT + 30, alignItems: 'center', justifyContent: 'center' },
   glow: {
     position: 'absolute',
-    width: STAGE * 2,
-    height: STAGE * 2,
-    borderRadius: STAGE,
-    backgroundColor: 'rgba(251,230,24,0.18)',
-  },
-  reflection: {
-    position: 'absolute',
-    bottom: 0,
-    width: STAGE * 0.9,
-    height: STAGE * 0.5,
-    borderRadius: STAGE,
+    width: CAT_WIDTH * 1.35,
+    height: CAT_WIDTH * 1.35,
+    borderRadius: CAT_WIDTH,
     backgroundColor: 'rgba(251,230,24,0.16)',
-    transform: [{ scaleY: 0.2 }],
   },
-  wordmark: { flexDirection: 'row', marginTop: 30, gap: 2 },
+  catStage: { width: CAT_WIDTH, height: CAT_HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  cat: { width: CAT_WIDTH, height: CAT_HEIGHT },
+  flash: {
+    position: 'absolute',
+    width: CAT_WIDTH * 0.55,
+    height: CAT_HEIGHT * 0.6,
+    borderRadius: CAT_WIDTH,
+    backgroundColor: '#FBE618',
+  },
+  spark: { position: 'absolute', right: -CAT_WIDTH * 0.02, top: -CAT_HEIGHT * 0.1, width: 300, height: 200, transform: [{ scale: 0.62 }] },
+  floor: {
+    position: 'absolute',
+    bottom: 2,
+    width: CAT_WIDTH * 0.72,
+    height: CAT_HEIGHT * 0.34,
+    borderRadius: CAT_WIDTH,
+    backgroundColor: 'rgba(251,230,24,0.16)',
+    transform: [{ scaleY: 0.16 }],
+  },
+  wordmark: { flexDirection: 'row', marginTop: 26, gap: 2 },
   letter: {
     color: '#F7F7F2',
     fontSize: 34,
