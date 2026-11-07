@@ -139,9 +139,11 @@ test('the preference, settings control, push adapter and browser copy are wired 
   assert.equal(sanitizePrefs({ welcomeBack: false }).welcomeBack, false);
   assert.equal(sanitizePrefs({ welcomeBack: true }).welcomeBack, true);
   assert.throws(() => sanitizePrefs({ welcomeBack: 'yes' }));
-  const ui = read('mobile/src/screens/BuilderWorkspaceScreen.tsx');
-  assert.match(ui, /Linky welcome-back invitations/);
-  assert.match(ui, /rotate eight headlines/);
+  // The toggle used to live on the Settings page, which no longer exists
+  // (Builder workspace is Groups only), so the preference is asserted where it
+  // still has to hold: the sender honours an opt-out and the headline rotation
+  // stays in the service.
+  assert.match(read('api/_emailNotify.js'), /prefs\.welcomeBack === false\) return \{ sent: false, reason: 'welcome_back_opted_out' \}/);
   const service = read('api/_builder.js');
   assert.match(service, /collection\('presence'\)/);
   assert.match(service, /delivery\.pushTitle/);

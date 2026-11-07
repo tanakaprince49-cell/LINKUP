@@ -82,7 +82,10 @@ test('onboarding now asks the things the algorithm actually needs, and keeps the
   // The role question bank — skills, role answers, industries, personality —
   // used to be defined but never rendered. It is now in the flow.
   assert.match(onboarding, /const roleSteps = useMemo/);
-  assert.match(onboarding, /\.\.\.roleSteps,/);
+  // Nineteen steps became nine, so the bank is no longer spread as its own
+  // steps: it renders inside the single "profile-bank" step.
+  assert.match(onboarding, /key: 'profile-bank'/);
+  assert.match(onboarding, /roleSteps\.map\(\(entry\) =>/);
 
   // Every answer is written to the profile, and mirrored into the signal list
   // AI and the matching algorithm read.
