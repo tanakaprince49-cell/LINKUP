@@ -26,7 +26,7 @@ const root=createRoot(document.getElementById('root'));root.render(<Screen navig
   assert.equal(await page.getByRole('button',{name:'Today’s square is lit',exact:true}).isDisabled(),true);assert.equal(await page.getByLabel('Build update',{exact:true}).isEditable(),false);
   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.op==='shipUpdate').length),1);
   await page.getByRole('button',{name:'Today’s square is lit',exact:true}).isDisabled();
-  const league=page.getByRole('button',{name:'Take it to the Builder League →',exact:true});await league.click();const nav=await page.evaluate(()=>window.navigationResult);assert.equal(nav.name,'TrendingBuilders');
+  assert.equal(await page.getByRole('button',{name:'Take it to the Builder League →',exact:true}).count(),0,'standings page is removed from the app');await page.getByText(/weekly Founder Spotlight/).waitFor();
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Horizontal overflow');assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
   if(process.env.BUILDER_SCREENSHOT_DIR){fs.mkdirSync(process.env.BUILDER_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.BUILDER_SCREENSHOT_DIR,'contribution-'+width+'.png'),fullPage:true});}
   console.log('PASS '+width+'px: publish → two-sentence Linky insight → +10 points → duplicate prevention, competitive league route, reduced motion, no external requests');await context.close();

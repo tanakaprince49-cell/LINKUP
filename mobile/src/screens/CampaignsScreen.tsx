@@ -436,12 +436,12 @@ export default function CampaignsScreen({ navigation }: any) {
       <View style={s.arena}>
         <View style={s.liveRow}>
           <View style={s.liveDot} />
-          <Text style={s.liveText}>LIVE CAMPAIGNS</Text>
+          <Text style={s.liveText}>CAMPAIGN MANAGER</Text>
           <Megaphone size={12} color={INK} />
         </View>
-        <Text style={s.arenaTitle}>Your campaigns are active</Text>
+        <Text style={s.arenaTitle}>Campaign performance</Text>
         <Text style={s.arenaSub}>
-          Sponsored cards running across Idea Deck, Discover, Search, Feed, Hub and Linky picks.
+          Track views, clicks and CTR for your ads. Pause, edit or add campaigns across LINKUP placements.
         </Text>
         <View style={s.statRow}>
           <View style={s.statChip}>
@@ -622,9 +622,9 @@ export default function CampaignsScreen({ navigation }: any) {
             {Platform.OS === 'web' ? 'PAY ONCE · NO AUTO-RENEWAL' : `${trialForPlan(selectedCampaignsPlan).trialDays} DAYS FREE`}
           </Text>
         </View>
-        <Text style={s.arenaTitle}>Reach the LINKUP startup community</Text>
+        <Text style={s.arenaTitle}>Unlock your Campaigns manager</Text>
         <Text style={s.arenaSub}>
-          Sponsored cards placed natively across Idea Deck, Discover, Search, Feed, Hub and Linky's picks.
+          A Campaigns account gives you ad performance, controls to pause or edit campaigns, and the option to add more ads across LINKUP.
         </Text>
         <View style={s.statRow}>
           <View style={s.statChip}>

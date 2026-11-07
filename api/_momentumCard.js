@@ -90,7 +90,7 @@ export function championBadge(champion) {
   if (!['week', 'month', 'year'].includes(kind)) return null;
   const start = Number(champion.start) || 0, end = Number(champion.end) || 0;
   const span = start && end ? (kind === 'week' ? `${shortDay(start)} – ${shortDay(end - 1)}` : kind === 'month' ? `${MONTHS[new Date(start).getUTCMonth()]} ${new Date(start).getUTCFullYear()}` : String(new Date(start).getUTCFullYear())) : '';
-  return { kind, label: `${kind.toUpperCase()} CHAMPION`, span };
+  return { kind, label: kind === 'week' ? 'FOUNDER SPOTLIGHT' : `${kind.toUpperCase()} CHAMPION`, span };
 }
 
 export function momentumCardSvg({ uid, user = {}, c = {}, at = Date.now(), avatar = '', verified = false, champion = null }) {

@@ -305,12 +305,8 @@ const startSharedDiscovery = () => {
     }
   };
 
-  // RACE ARCHITECTURE (survives hostile networks): some carriers/proxies
-  // silently strangle Firestore streaming listeners — no data, no error, just
-  // eternity. So we NEVER wait on the stream alone: a one-shot getDocs races
-  // alongside it, first non-empty result wins, the stream keeps the deck live
-  // afterwards, and a watchdog guarantees SOMETHING renders within 10s even
-  // if both die. Empty decks are now structurally impossible.
+  // Streams provide cached results, then server updates. A watchdog still
+  // falls back to the users pool if a carrier silently stalls both listeners.
   let delivered = false;
   const mark = () => {
     if (delivered) return false;
@@ -358,23 +354,9 @@ const startSharedDiscovery = () => {
     }
   })();
 
-  // Lane 1: one-shot read (plain HTTP — always works where streams die)
-  void (async () => {
-    try {
-      const snaps = await Promise.all([getDocs(tailQuery), getDocs(headQuery)]);
-      const tailDocs = snaps[0]?.docs || [];
-      const wrapCount = Math.max(0, MOBILE_DISCOVERY_QUERY_LIMIT - tailDocs.length);
-      const rows = rowsFrom([...tailDocs, ...(snaps[1]?.docs || []).slice(0, wrapCount)]);
-      if (rows.length > 0) {
-        mark();
-        emitShared(rows, 'publicProfiles');
-      } else if (mark()) {
-        void emitUsersFallback();
-      }
-    } catch {
-      if (mark()) void emitUsersFallback();
-    }
-  })();
+  // No parallel server getDocs race: each query is already streamed below,
+  // and Firestore's listener emits cached rows before its server refresh. The
+  // watchdog keeps the legacy-users fallback for carriers that stall streams.
 
   // Lane 2: live stream (when it delivers, it takes over freshness)
   let liveTail: any[] = [];

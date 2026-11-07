@@ -5,7 +5,7 @@ import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Keyboard
 import * as ImagePicker from 'expo-image-picker';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocs, getDocsFromCache, setDoc, arrayUnion, arrayRemove, increment, limitToLast } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocsFromCache, setDoc, arrayUnion, arrayRemove, increment, limitToLast } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { linkyCall } from '../lib/linkyApi';
 import { useAuth } from '../contexts/AuthContext';
@@ -352,16 +352,9 @@ export default function ChatScreen({ route, navigation }: any) {
       })
       .catch(() => {});
 
-    // Lane 1 (race): paint history from a one-shot read instantly — streams
-    // can hang silently on hostile networks, one-shots can't.
-    void getDocs(q)
-      .then((snap) => {
-        if (!snap.empty) painted = true;
-        const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setMessages(msgs);
-        scrollToLatest();
-      })
-      .catch(() => {});
+    // onSnapshot emits cached history immediately when available, then keeps
+    // the same bounded query live. A parallel server getDocs(q) duplicated
+    // this history read whenever a chat was opened.
 
     // Lane 2: live stream keeps the thread real-time when it works.
     const unsub = onSnapshot(
@@ -635,7 +628,6 @@ export default function ChatScreen({ route, navigation }: any) {
         linkyCall('pushNotify', { toUid: recipientId, type: 'message', text, matchId }).catch(() => {});
       }
 
-      await setDoc(doc(db, 'presence', user.uid), { isOnline: true, lastActiveAt: serverTimestamp() }, { merge: true });
     } catch (e) {
       console.error(e);
       notifyUser('Message failed', "Unable to send your message. Check your connection and try again.");
@@ -744,7 +736,6 @@ export default function ChatScreen({ route, navigation }: any) {
         });
       }
 
-      await setDoc(doc(db, 'presence', user.uid), { isOnline: true, lastActiveAt: serverTimestamp() }, { merge: true });
     } catch (e) {
       console.error('Media message failed:', e);
       notifyUser('Media failed', 'Could not send this media. Check your connection and try a smaller file.');

@@ -1,4 +1,4 @@
-import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer,sweepConnectedGithubCommits} from './_builderRuntime.js';
+import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer,sweepConnectedGithubCommits,runWeeklyFounderSpotlight} from './_builderRuntime.js';
 // Linky endpoint: app actions, housekeeping cron, Telegram + WhatsApp webhooks.
 // One function on purpose (Vercel Hobby caps a deployment at 12).
 //
@@ -1147,14 +1147,15 @@ export default async function handler(req, res) {
   if (wantsCron) {
     if (!(await cronAuthorized(req))) { sendError(res, 401, 'Bad cron token.'); return; }
     try {
-      const [out, githubAutoSync] = await Promise.all([
+      const [out, githubAutoSync, weeklyFounderSpotlight] = await Promise.all([
         runCron(),
         typeof sweepConnectedGithubCommits === 'function'
           ? sweepConnectedGithubCommits({ db: getDb(), maxProfiles: 35, discoverFromProfiles: true }).catch(() => null)
           : Promise.resolve(null),
+        runWeeklyFounderSpotlight(getDb()).catch(() => null),
       ]);
       setCors(res);
-      res.status(200).json({ ...out, githubAutoSync });
+      res.status(200).json({ ...out, githubAutoSync, weeklyFounderSpotlight });
     } catch (err) {
       sendError(res, 500, 'Cron failed.', String(err?.message || err));
     }

@@ -366,7 +366,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
     if (!['GET','HEAD'].includes(req.method)) { res.setHeader('Allow','GET, HEAD'); return failure(405,'Method not allowed'); }
     try {
       if (mode === 'robots') return send(200,`User-agent: *\nAllow: /\n\nUser-agent: Googlebot-News\nAllow: /\n\nUser-agent: Googlebot-Image\nAllow: /\n\nSitemap: ${APP}/sitemap.xml\nSitemap: ${APP}/sitemap-google-news.xml\n`,'text/plain; charset=utf-8');
-      if (['league-json','builders-league-json','momentum-card'].includes(mode)) res.setHeader('X-Robots-Tag','noindex');
+      if (['league-json','builders-league-json','momentum-card','founder-spotlight-card'].includes(mode)) res.setHeader('X-Robots-Tag','noindex');
       if (await serveLeagueSeo(req,{database,send,failure,now})) return;
       if (await serveContentSeo(req,{database,send,failure,news})) return;
       if (await serveBlogSeo(req,{database,send,failure,now})) return;

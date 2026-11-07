@@ -34,6 +34,17 @@ test('league and momentum are server-rendered, canonical, crawlable, escaped and
  const p=await request(db,{mode:'momentum-profile',uid:'alice'});assert.equal(p.code,200);assert.match(p.body,/ProfilePage/);assert.match(p.body,/Recorded activity/);assert.doesNotMatch(p.body,/class="calendar"|aria-label="Recorded build days/);assert.doesNotMatch(p.body,/PRIVATE UPDATE|earnedCredits/);
  const sitemap=await request(db,{mode:'momentum-sitemap'});assert.match(sitemap.body,/\/app\/momentum\/alice/);
 });
+test('weekly Founder Spotlight page is shareable only for the current opted-in winner and never leaks private updates',async()=>{
+ const users={alice:profile('Alice Founder',{occupation:'Founder'})};
+ const contributions={alice:activity({publicMomentum:true,updates:[{text:'PRIVATE UPDATE'}]})};
+ const awards={'2026-10-19':{status:'awarded',uid:'alice',weekKey:'2026-10-19',weekStart:Date.parse('2026-10-19T00:00:00Z'),weekEnd:Date.parse('2026-10-26T00:00:00Z'),buildDays:3,helpful:1,points:35,participants:12}};
+ const db={collection(name){return{doc(id){const value=name==='users'?users[id]:name==='builderContributions'?contributions[id]:awards[id];return{get:async()=>({exists:!!value,data:()=>value})};}};}};
+ const page=await request(db,{mode:'founder-spotlight',uid:'alice',week:'2026-10-19'});
+ assert.equal(page.code,200);for(const text of ['Founder Spotlight','Alice Founder','og:image','founder-spotlight-card','12 founders','private update text'])assert.ok(page.body.includes(text),text);assert.doesNotMatch(page.body,/PRIVATE UPDATE|earnedCredits/);
+ contributions.alice.publicMomentum=false;assert.equal((await request(db,{mode:'founder-spotlight',uid:'alice',week:'2026-10-19'})).code,404);
+ awards['2026-10-19'].uid='someone-else';contributions.alice.publicMomentum=true;assert.equal((await request(db,{mode:'founder-spotlight',uid:'alice',week:'2026-10-19'})).code,404);
+});
+
 test('opt-out and visibility changes stop serving the searchable momentum page and sitemap immediately',async()=>{
  const users={alice:profile('Alice')},c={alice:activity()},db=database(users,c);
  c.alice.publicMomentum=false;assert.equal((await request(db,{mode:'momentum-profile',uid:'alice'})).code,404);assert.doesNotMatch((await request(db,{mode:'momentum-sitemap'})).body,/momentum\/alice/);
@@ -44,7 +55,7 @@ test('Coach is gone, public consent can be revoked and groups are private',()=>{
  const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
  assert.match(read('mobile/src/components/BuildHabitCard.tsx'),/publicMomentum:v/);assert.match(read('mobile/src/components/BuildHabitCard.tsx'),/search caches may take time/);
  assert.doesNotMatch(read('api/_builderRuntime.js'),/generate:|gemini|generateContent/);assert.doesNotMatch(read('api/_linky.js'),/PRIVATE BUILDER CONTEXT|privateBuilderContext/);
- assert.match(read('mobile/src/screens/GroupChatScreen.tsx'),/record\?\.viewerUid===user\?\.uid/);assert.match(read('mobile/src/screens/TrendingBuildersScreen.tsx'),/scopeKey===scope/);
+ assert.match(read('mobile/src/screens/GroupChatScreen.tsx'),/record\?\.viewerUid===user\?\.uid/);const app=read('mobile/App.tsx');assert.doesNotMatch(app,/TrendingBuildersScreen|CityLeagueScreen|name="TrendingBuilders"|name="CityLeague"/);assert.doesNotMatch(read('mobile/src/screens/DiscoveryDashboardScreen.tsx'),/loadLeaguePool|title="Builder League"/);assert.match(read('mobile/src/components/BuildHabitCard.tsx'),/weekly Founder Spotlight/);
  const rules=read('firestore.rules');assert.match(rules,/match \/messages\/\{messageId\} \{ allow read, write: if false; \}/);
 });
 test('standings show competing builders with photos, profiles and explicit verified status',async()=>{

@@ -24,6 +24,56 @@ let webAudioContext: any = null;
 const WEB_NOTIFICATIONS_STORAGE_KEY = 'linkup:web-notifications-enabled';
 const NOTIFICATION_QUERY_LIMIT = MOBILE_NOTIFICATION_QUERY_LIMIT;
 
+type NotificationQuerySubscriber = {
+  next: (snapshot: any) => void;
+  error?: (error: unknown) => void;
+};
+type NotificationQueryStream = {
+  subscribers: Set<NotificationQuerySubscriber>;
+  unsubscribe?: () => void;
+};
+const notificationQueryStreams = new Map<string, NotificationQueryStream>();
+
+// The app shell needs notifications for toasts while the appearance controller
+// needs the unread count. Share one bounded query/listener per signed-in user.
+function subscribeToNotificationQuery(
+  userId: string,
+  next: NotificationQuerySubscriber['next'],
+  error?: NotificationQuerySubscriber['error'],
+) {
+  let stream = notificationQueryStreams.get(userId);
+  if (!stream) {
+    stream = { subscribers: new Set() };
+    notificationQueryStreams.set(userId, stream);
+  }
+  const subscriber = { next, error };
+  stream.subscribers.add(subscriber);
+
+  if (!stream.unsubscribe) {
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', userId),
+      limit(NOTIFICATION_QUERY_LIMIT),
+    );
+    const activeStream = stream;
+    stream.unsubscribe = onSnapshot(
+      q,
+      (snapshot) => activeStream.subscribers.forEach((item) => {
+        try { item.next(snapshot); } catch (callbackError) { console.warn('Notification callback failed:', callbackError); }
+      }),
+      (listenerError) => activeStream.subscribers.forEach((item) => item.error?.(listenerError)),
+    );
+  }
+
+  return () => {
+    stream?.subscribers.delete(subscriber);
+    if (stream && stream.subscribers.size === 0) {
+      stream.unsubscribe?.();
+      notificationQueryStreams.delete(userId);
+    }
+  };
+}
+
 function getExpoConstants() {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -110,7 +160,8 @@ function notificationBody(data: any) {
   if (data?.type === 'intro_request') return content || 'Linky has an intro for you.';
   if (data?.type === 'intro_accepted') return content || 'Your intro was accepted.';
   if (data?.type === 'daily_brief') return content || 'Linky found someone worth your time.';
-  if (data?.type === 'league') return content || 'You won the Builder League!';
+  if (data?.type === 'league') return content || 'You have a LINKUP Builder recognition.';
+  if (data?.type === 'founder_spotlight') return content || 'You have been selected for this week’s LINKUP Founder Spotlight.';
   return content || 'Open LINKUP for the latest update.';
 }
 
@@ -118,6 +169,16 @@ function notificationTargetUrl(data: any) {
   if (data?.type === 'builder' && data.builderAction === 'ship') return '/ship';
   if (data?.type === 'builder') return '/builder?section='+encodeURIComponent(String(data.section || 'Today'));
   if (data?.type === 'league') return '/alerts';
+  if (data?.type === 'founder_spotlight') {
+    const raw = String(data?.shareUrl || data?.url || data?.targetUrl || '');
+    try {
+      const parsed = new URL(raw, 'https://www.linkupbuild.com');
+      if (parsed.hostname === 'www.linkupbuild.com' && parsed.pathname.startsWith('/app/founder-spotlight/')) {
+        return parsed.pathname + parsed.search;
+      }
+    } catch {}
+    return '/alerts';
+  }
   if (data?.matchId) return `/chat/${data.matchId}`;
   if (data?.type === 'game_challenge') {
     const gameMap: Record<string, string> = {
@@ -374,22 +435,16 @@ export function subscribeToNotificationToasts(userId: string) {
     return () => {};
   }
 
-  const q = query(
-    collection(db, 'notifications'),
-    where('userId', '==', userId),
-    limit(NOTIFICATION_QUERY_LIMIT)
-  );
-
   const seenIds = new Set<string>();
   let bootstrapped = false;
 
-  return onSnapshot(
-    q,
+  return subscribeToNotificationQuery(
+    userId,
     (snap) => {
       let playedSoundForBatch = false;
       snap.docs
-        .filter((notificationDoc) => (notificationDoc.data() as any)?.isRead === false)
-        .forEach((notificationDoc) => {
+        .filter((notificationDoc: any) => (notificationDoc.data() as any)?.isRead === false)
+        .forEach((notificationDoc: any) => {
         const data = notificationDoc.data() as any;
         const notificationId = notificationDoc.id;
 
@@ -478,14 +533,9 @@ export function subscribeToUnreadNotificationsCount(
     onCount(0);
     return () => {};
   }
-  const q = query(
-    collection(db, 'notifications'),
-    where('userId', '==', userId),
-    limit(NOTIFICATION_QUERY_LIMIT)
-  );
-  return onSnapshot(
-    q,
-    (snap) => onCount(snap.docs.filter((notificationDoc) => (notificationDoc.data() as any)?.isRead === false).length),
+  return subscribeToNotificationQuery(
+    userId,
+    (snap) => onCount(snap.docs.filter((notificationDoc: any) => (notificationDoc.data() as any)?.isRead === false).length),
     (err) => {
       console.warn('Unread notifications unavailable:', err);
       onCount(0);

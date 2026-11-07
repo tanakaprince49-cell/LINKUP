@@ -186,6 +186,14 @@ export interface AppNotification {
   body?: string;
   campaign?: string;
   headlineKey?: string;
+  url?: string;
+  targetUrl?: string;
+  shareUrl?: string;
+  weekKey?: string;
+  points?: number;
+  buildDays?: number;
+  helpful?: number;
+  participants?: number;
   serverPushManaged?: boolean;
   id: string;
   userId: string;
@@ -210,7 +218,8 @@ export interface AppNotification {
     | 'intro_declined'
     | 'daily_brief'
     | 'builder'
-    | 'league';
+    | 'league'
+    | 'founder_spotlight';
   content: string;
   timestamp: Timestamp | FieldValue;
   isRead: boolean;

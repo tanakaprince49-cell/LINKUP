@@ -44,7 +44,7 @@ export default function ShipLogScreen({navigation}:any){
      <Text style={[styles.insightText,{color:ink}]}>{receipt.insight}</Text>{[1,3,7,14,30,50,100,365].includes(receipt.habit?.totalUpdates)&&<Text style={{color:ink,fontWeight:'900'}}>Milestone unlocked · {receipt.habit.totalUpdates} recorded build {receipt.habit.totalUpdates===1?'day':'days'}</Text>}<Text style={{color:muted,fontSize:11}}>Instant topic-based coaching · no chat credit used · not a code audit</Text>
      <View style={{flexDirection:'row',flexWrap:'wrap',gap:10,alignItems:'center',marginTop:6}}>
       <TouchableOpacity accessibilityRole="button" onPress={()=>{if(user?.uid)void shareMomentumCard(user.uid).catch((e:any)=>setError(e?.message||'Enable public Momentum below to share your card.'));}} style={{backgroundColor:'#0A0B0D',paddingHorizontal:14,paddingVertical:9,borderRadius:12}}><Text style={{color:'#FBE618',fontWeight:'800',fontSize:13}}>Share my streak card</Text></TouchableOpacity>
-      <TouchableOpacity accessibilityRole="button" onPress={()=>navigation.navigate('TrendingBuilders')}><Text style={{color:ink,fontWeight:'800'}}>Take it to the Builder League →</Text></TouchableOpacity>
+      <Text style={{color:muted,fontSize:12,lineHeight:18}}>Keep Public Momentum enabled if you want to be considered for LINKUP’s weekly Founder Spotlight. It recognizes consistent recorded activity; your private update text stays private.</Text>
      </View>
     </View>}
     <View style={[styles.composer,panel]}>

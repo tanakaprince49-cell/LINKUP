@@ -3,7 +3,7 @@ import MemberBadges from '../components/MemberBadges';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, getDoc, getDocs, getDocsFromCache, limit } from 'firebase/firestore';
+import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, getDoc, getDocsFromCache, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -255,16 +255,9 @@ export default function MessagesScreen({ navigation, route }: any) {
       })
       .catch(() => {});
 
-    void getDocs(q)
-      .then((snap) => {
-        if (!snap.empty) painted = true;
-        if (!delivered) {
-          delivered = true;
-          clearTimeout(watchdog);
-          handleSnap(snap);
-        }
-      })
-      .catch(() => {});
+    // onSnapshot already serves its initial state from Firestore's local cache
+    // when available and then refreshes from the server. A parallel getDocs(q)
+    // duplicated the same bounded inbox query on every mount.
 
     const unsub = onSnapshot(
       q,

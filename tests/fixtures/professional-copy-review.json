@@ -99,7 +99,7 @@
     "file": "mobile/src/screens/CampaignsScreen.tsx",
     "line": 440,
     "before": "Your product is in the deck",
-    "after": "Your campaigns are active"
+    "after": "Campaign performance"
   },
   {
     "file": "mobile/src/screens/CampaignsScreen.tsx",
@@ -111,7 +111,7 @@
     "file": "mobile/src/screens/CampaignsScreen.tsx",
     "line": 623,
     "before": "Put your product in front of every founder",
-    "after": "Reach the LINKUP startup community"
+    "after": "Unlock your Campaigns manager"
   },
   {
     "file": "mobile/src/screens/CampaignsScreen.tsx",
@@ -376,12 +376,6 @@
     "line": 119,
     "before": "SHIP",
     "after": "PROGRESS"
-  },
-  {
-    "file": "mobile/src/screens/GamificationHubScreen.tsx",
-    "line": 122,
-    "before": "LEAGUE",
-    "after": "RANKINGS"
   },
   {
     "file": "mobile/src/screens/GamificationHubScreen.tsx",
@@ -1437,5 +1431,11 @@
     "file": "mobile/src/screens/TrendingBuildersScreen.tsx",
     "before": "What winning gets you",
     "after": "What winning gets you"
+  },
+  {
+    "file": "mobile/src/components/BuildHabitCard.tsx",
+    "line": 30,
+    "before": "Public league & Google momentum",
+    "after": "Public Momentum & weekly Founder Spotlight"
   }
 ]

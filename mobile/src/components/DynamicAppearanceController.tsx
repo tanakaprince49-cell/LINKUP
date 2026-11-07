@@ -1,7 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useGamification } from '../contexts/GamificationContext';
 import { subscribeToUnreadNotificationsCount } from '../lib/notifications';
@@ -21,10 +19,6 @@ import {
 
 const DAY_MS = 86_400_000;
 
-function todayUtcIso(now = Date.now()) {
-  return new Date(now).toISOString().slice(0, 10);
-}
-
 export default function DynamicAppearanceController({ currentRoute }: { currentRoute?: string }) {
   const { user, profile } = useAuth();
   const { streakCount } = useGamification();
@@ -38,8 +32,6 @@ export default function DynamicAppearanceController({ currentRoute }: { currentR
   });
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
-  const [contribDays, setContribDays] = useState<string[]>([]);
-  const [restDay, setRestDay] = useState<string>('');
   const [tick, setTick] = useState(0);
   const lastForegroundAtRef = useRef<number>(Date.now());
 
@@ -148,40 +140,22 @@ export default function DynamicAppearanceController({ currentRoute }: { currentR
     }
   }, [currentRoute, unreadMessages, unreadNotifications]);
 
-  // Live unread counts + builder contribution days for signed-in user
+  // Live unread counts for the signed-in user
   useEffect(() => {
     if (!user?.uid) {
       setUnreadNotifications(0);
       setUnreadMessages(0);
-      setContribDays([]);
-      setRestDay('');
       return;
     }
     let unsubNotifs: (() => void) | undefined;
     let unsubMsgs: (() => void) | undefined;
-    let unsubContrib: (() => void) | undefined;
     let cancelled = false;
 
     const timer = setTimeout(() => {
       if (cancelled) return;
       unsubNotifs = subscribeToUnreadNotificationsCount(user.uid, setUnreadNotifications);
       unsubMsgs = subscribeToUnreadMessagesCount(user.uid, setUnreadMessages);
-      if (db) {
-        try {
-          unsubContrib = onSnapshot(
-            doc(db, 'builderContributions', user.uid),
-            (snap) => {
-              const data = snap.exists() ? snap.data() : null;
-              const days = Array.isArray(data?.days)
-                ? data.days.filter((d: unknown): d is string => typeof d === 'string')
-                : [];
-              setContribDays(days);
-              setRestDay(typeof data?.habit?.restDay === 'string' ? data.habit.restDay : '');
-            },
-            () => {},
-          );
-        } catch {}
-      }
+
     }, 350);
 
     return () => {
@@ -189,7 +163,6 @@ export default function DynamicAppearanceController({ currentRoute }: { currentR
       clearTimeout(timer);
       unsubNotifs?.();
       unsubMsgs?.();
-      unsubContrib?.();
     };
   }, [user?.uid]);
 
@@ -205,10 +178,9 @@ export default function DynamicAppearanceController({ currentRoute }: { currentR
       ? 0
       : Math.max(0, Math.floor((nowMs - baselineActiveAt) / DAY_MS));
 
-    const todayIso = todayUtcIso(nowMs);
-    const todayRecorded = contribDays.includes(todayIso);
+    const todayRecorded = false; // Contributions are server/API-owned; no client Firestore listener is authorized.
     const weekdayShort = new Intl.DateTimeFormat('en-GB', { weekday: 'short' }).format(nowMs);
-    const protectedRestToday = Boolean(restDay && restDay === weekdayShort) || (!restDay && weekdayShort === 'Sun' && !todayRecorded && streakCount > 0);
+    const protectedRestToday = weekdayShort === 'Sun' && !todayRecorded && streakCount > 0;
     const isLeagueChampion = Boolean(
       hasLinkupPro(profile) || (profile as any)?.leagueWinner,
     );
@@ -238,8 +210,6 @@ export default function DynamicAppearanceController({ currentRoute }: { currentR
     isForeground,
     unreadMessages,
     unreadNotifications,
-    contribDays,
-    restDay,
     streakCount,
     tick,
   ]);

@@ -12,8 +12,8 @@ const titles: Record<string, string> = {
   LinkySettings: 'Introduction preferences', Campaigns: 'Product campaigns',
   CreateCampaign: 'Create a campaign', CreatePost: 'Publish a startup',
   BuilderWorkspace: 'Private builder workspace', Workspace: 'Private builder workspace',
-  ShipLog: 'Progress log', CityLeague: 'Local rankings',
-  GamificationHub: 'Professional development', TrendingBuilders: 'Community rankings',
+  ShipLog: 'Progress log',
+  GamificationHub: 'Professional development',
   Viewers: 'Profile insights', FounderFlip: 'Founder Flip', PitchPerfect: 'Pitch Perfect', NetworkQuiz: 'Business knowledge quiz', LvlupDemo: 'LvlUp Ventures deal flow demo',
 };
 

@@ -3,6 +3,7 @@ import {isPlusUser} from './_linky.js';
 import {createBuilderService} from './_builder.js';
 import {validId,problem} from './_builderCore.js';
 import {awardSeasonChampions} from './_leagueChampions.js';
+import {runWeeklyFounderSpotlight} from './_weeklyFounderSpotlight.js';
 import {sendExpoPush} from './_expoPush.js';
 import {emailStatus,verifyEmailUnsubscribe,unsubscribeUserEmail,sendLinkyDirectEmail} from './_emailNotify.js';
 import {getVapidKeys,saveWebPushSubscription} from './_webPush.js';
@@ -40,4 +41,4 @@ export async function builderCron(input={}){
  return {...result,nextCursor:combinedCursor,pulse,seasons,githubAutoSync,email:builderEmailStatus()};
 }
 export const builderEmailStatus=()=>{const s=emailStatus();return s.available?s:{available:false,reason:'Provider setup required'};};
-export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runDailyRetentionPulsePage,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer,sweepConnectedGithubCommits,maybeAutoSweepGithubCommits};
+export {getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runDailyRetentionPulsePage,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer,sweepConnectedGithubCommits,maybeAutoSweepGithubCommits,runWeeklyFounderSpotlight};

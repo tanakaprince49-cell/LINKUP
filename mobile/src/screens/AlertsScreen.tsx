@@ -1,6 +1,6 @@
 import MemberBadges from '../components/MemberBadges';
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Linking, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collection, query, where, onSnapshot, doc, updateDoc, limit, writeBatch } from 'firebase/firestore';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
@@ -15,7 +15,6 @@ import { COLORS, appBackground, hairline, liquidGlass, textColor } from '../them
 import { respondToConnectionRequest } from '../lib/connectionRequests';
 import { notifyUser } from '../lib/notify';
 import { challengeId as makeChallengeId } from '../lib/gameChallenges';
-import { shareLeagueCard } from '../lib/momentumShare';
 import { MOBILE_LIST_IMAGE_LIMIT, MOBILE_NOTIFICATION_QUERY_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { Bell, Eye, Heart, MessageSquare, UserPlus, Check, X, Megaphone, ThumbsDown, Trophy } from 'lucide-react-native';
 import ScreenHeader from '../components/ScreenHeader';
@@ -106,6 +105,7 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
       case 'plus_expiring':
         return badgeFor('#B45309', Bell);
       case 'league':
+      case 'founder_spotlight':
         return badgeFor('#B45309', Trophy);
       case 'intro_request':
       case 'intro_accepted':
@@ -168,7 +168,16 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
         if (isRequest) return;
         if (notification.type === 'builder' && (notification as any).builderAction === 'ship') { navigation.navigate('ShipLog'); return; }
         if (notification.type === 'builder') { navigation.navigate('BuilderWorkspace', { section: (notification as any).section || 'Today' }); return; }
-        if (notification.type === 'league') { navigation.navigate('TrendingBuilders'); return; }
+        if (notification.type === 'founder_spotlight') {
+          const spotlightUrl = (notification as any).shareUrl || notification.url || notification.targetUrl;
+          if (spotlightUrl) void Linking.openURL(String(spotlightUrl)).catch(() => {});
+          return;
+        }
+        if (notification.type === 'league') {
+          const momentumUrl = `https://www.linkupbuild.com/app/momentum/${encodeURIComponent(notification.userId)}`;
+          void Linking.openURL(momentumUrl).catch(() => {});
+          return;
+        }
         if (notification.matchId) {
           navigation.navigate('Chat', {
             matchId: notification.matchId,
@@ -238,19 +247,24 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
             <Text style={[styles.noteText, { color: textColor(isDark) }]}>“{notification.note}”</Text>
           </View>
         ) : null}
-        {notification.type === 'league' ? (
+        {notification.type === 'founder_spotlight' ? (
           <View style={{ flexDirection: 'row', marginTop: 8 }}>
             <TouchableOpacity
               accessibilityRole="button"
               activeOpacity={0.88}
               onPress={(event: any) => {
                 event?.stopPropagation?.();
-                const k = (notification as any).kind;
-                void shareLeagueCard(k === 'month' || k === 'year' ? k : 'week').catch(() => {});
+                const url = String((notification as any).shareUrl || notification.url || notification.targetUrl || '');
+                if (!url) return;
+                void Share.share({
+                  title: 'LINKUP Weekly Founder Spotlight',
+                  message: `I was recognized in this week’s LINKUP Founder Spotlight for consistent recorded progress. Your turn next week? ${url}`,
+                  url,
+                }).catch(() => {});
               }}
               style={{ backgroundColor: '#FBE618', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10 }}
             >
-              <Text style={{ color: '#0A0B0D', fontSize: 12, fontWeight: '800' }}>Share win card</Text>
+              <Text style={{ color: '#0A0B0D', fontSize: 12, fontWeight: '800' }}>Share your spotlight</Text>
             </TouchableOpacity>
           </View>
         ) : null}

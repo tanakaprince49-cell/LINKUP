@@ -10,11 +10,9 @@ import { UserProfile } from '../types';
 import { COLORS, appBackground, getBrandFlavor, liquidGlass, textColor } from '../theme/theme';
 import { BAND_SHORT, bandForScore, localCommonalityRank, rankedCandidatesToMap, rankCandidatesHybrid } from '../lib/matchmaking';
 import { activeOpportunityScore, displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
-import { rankLeague } from '../lib/builderLeague';
-import { loadLeaguePool } from '../lib/leaguePool';
 import { getBestOpportunityAlerts, getRotatedOpportunityAlerts, OpportunityAlert } from '../lib/opportunityAlerts';
 import { getBestProjectRecommendations, getRotatedProjectRecommendations, ProjectRecommendation } from '../lib/projectRecommendations';
-import { TrendingUp, Users, ChevronRight, Briefcase, MapPin, Target, BellRing, Rocket, Zap, UserCheck, Globe } from 'lucide-react-native';
+import { Users, ChevronRight, Briefcase, MapPin, Target, BellRing, Rocket, Zap, UserCheck, Globe } from 'lucide-react-native';
 import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS, websiteDisplay } from '../lib/campaigns';
 import { SponsoredSlot } from '../components/SponsoredCard';
 import { shareLinkupInvite } from '../lib/activation';
@@ -139,9 +137,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 
   const [loading, setLoading] = useState(false);
   const [people, setPeople] = useState<UserProfile[]>([]);
-  const [leaguePeople, setLeaguePeople] = useState<any[]>([]);
-  const [leagueLoading, setLeagueLoading] = useState(true);
-  const [leagueError, setLeagueError] = useState(false);
   const [aiRank, setAiRank] = useState<Record<string, { score: number; reason: string }>>({});
   const [aiLoading, setAiLoading] = useState(false);
   const [opportunityRadar, setOpportunityRadar] = useState<OpportunityAlert[]>([]);
@@ -183,20 +178,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     };
   }, [isFocused, user?.uid]);
 
-  useEffect(() => {
-    if (!user?.uid || !isFocused) return;
-    let alive = true;
-    setLeagueLoading(true);setLeagueError(false);
-    loadLeaguePool()
-      .then((rows) => {
-        if (alive) setLeaguePeople(rows);
-      })
-      .catch(() => {if(alive)setLeagueError(true);})
-      .finally(() => {if(alive)setLeagueLoading(false);});
-    return () => {
-      alive = false;
-    };
-  }, [isFocused, user?.uid]);
 
   useEffect(() => {
     if (!user || !isFocused) return;
@@ -244,12 +225,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     };
   }, [isFocused, user?.uid, me?.uid, people]);
 
-  // The Builder League preview uses the shared league pool + the exact same
-  // ranker as the full league screen, so standings match on every device.
-  const trending = useMemo(() => {
-    const pool = leaguePeople;
-    return rankLeague(pool as any, me).slice(0, MOBILE_HORIZONTAL_CARD_LIMIT);
-  }, [leaguePeople, people, me]);
 
   const opportunities = useMemo(() => {
     const list = people
@@ -459,10 +434,10 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 12 }}
         ListEmptyComponent={
           <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFF' }]}>
-            <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>{title==='Builder League'?(leagueLoading?'Loading real builders…':leagueError?'Builder profiles could not load':'Meet the builders'):'No professionals to display'}</Text>
-            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>{title==='Builder League'?(leagueLoading?'Fetching eligible public builder profiles. Activity sharing is not required.':'Open Builder League to refresh eligible public profiles. No fake members or automatic activity publication.'):'No relevant profiles are available in this view yet. Explore public builders at linkupbuild.com or invite professionals from your network.'}</Text>
-            <TouchableOpacity onPress={() => title==='Builder League'?navigation.navigate('TrendingBuilders'):void shareLinkupInvite()} style={styles.emptyBtn}>
-              <Text style={styles.emptyBtnText}>{title==='Builder League'?'Open Builder League':'Invite Builders'}</Text>
+            <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No professionals to display</Text>
+            <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>No relevant profiles are available in this view yet. Explore public builders at linkupbuild.com or invite professionals from your network.</Text>
+            <TouchableOpacity onPress={() => void shareLinkupInvite()} style={styles.emptyBtn}>
+              <Text style={styles.emptyBtnText}>Invite Builders</Text>
             </TouchableOpacity>
           </View>
         }
@@ -592,13 +567,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               renderItem={({ item }) => <ProjectCard item={item} />}
             />
           </View>
-          <Section
-            title="Builder League"
-            icon={<TrendingUp size={17} color={HOME_INK} />}
-            data={trending}
-            showRank
-            onViewAll={() => navigation.navigate('TrendingBuilders')}
-          />
           <Section
             title="Active Opportunities"
             icon={<Users size={17} color="#4ADE80" />}

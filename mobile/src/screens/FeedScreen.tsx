@@ -33,6 +33,7 @@ import {
   serverTimestamp, 
   orderBy, 
   limit, 
+  startAfter,
   deleteDoc,
   increment,
   where,
@@ -69,6 +70,7 @@ const permissionHint = (error: unknown) => {
 const FEED_FIRST_AD_AFTER = 2;
 /** ...then one after every N posts to the bottom of the list. */
 const FEED_AD_EVERY = 4;
+const FEED_PAGE_SIZE = 30;
 
 const { width } = Dimensions.get('window');
 const USE_NATIVE_ANIMATION_DRIVER = Platform.OS !== 'web';
@@ -656,12 +658,18 @@ export default function FeedScreen({ navigation }: any) {
   const isDark = theme === 'dark';
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const lastPostDocRef = useRef<any>(null);
+  const loadingMoreRef = useRef(false);
 
   useEffect(() => {
-    const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
+    const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'), limit(FEED_PAGE_SIZE));
     const unsub = onSnapshot(
       q,
       (snap) => {
+        lastPostDocRef.current = snap.docs[snap.docs.length - 1] || null;
+        setHasMore(snap.size === FEED_PAGE_SIZE);
         setPosts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post)));
         setLoading(false);
       },
@@ -674,34 +682,36 @@ export default function FeedScreen({ navigation }: any) {
     return () => unsub();
   }, []);
 
-  // One-time migration: the Startups feed is now strictly startups, so any
-  // legacy (non-startup) posts authored by the signed-in member are removed on
-  // first load. This deletes the requesting user's old placeholder post and
-  // keeps only real startup listings. It only ever touches the user's own
-  // posts and is idempotent (runs once per app session).
-  useEffect(() => {
-    if (!user?.uid) return;
-    const cleaned = (globalThis as any)?.__startupsLegacyCleaned || {};
-    if (cleaned[user.uid]) return;
-    (async () => {
-      try {
-        const q = query(collection(db, 'posts'), where('authorId', '==', user.uid));
-        const snap = await getDocs(q);
-        const legacy = snap.docs.filter((d) => {
-          const data = d.data() as any;
-          return data.type !== 'startup' && !data.startupName;
-        });
-        await Promise.all(legacy.map((d) => deleteDoc(doc(db, 'posts', d.id))));
-        if (legacy.length) {
-          console.info(`Startups: removed ${legacy.length} legacy post(s) for ${user.uid}`);
-        }
-      } catch (err) {
-        console.warn('Startups legacy cleanup skipped:', err);
-      } finally {
-        (globalThis as any).__startupsLegacyCleaned = { ...cleaned, [user.uid]: true };
+  const loadMorePosts = async () => {
+    const cursor = lastPostDocRef.current;
+    if (!cursor || !hasMore || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const older = await getDocs(query(
+        collection(db, 'posts'),
+        orderBy('timestamp', 'desc'),
+        startAfter(cursor),
+        limit(FEED_PAGE_SIZE),
+      ));
+      if (older.empty) {
+        setHasMore(false);
+        return;
       }
-    })();
-  }, [user?.uid]);
+      lastPostDocRef.current = older.docs[older.docs.length - 1];
+      setHasMore(older.size === FEED_PAGE_SIZE);
+      const rows = older.docs.map((postDoc) => ({ id: postDoc.id, ...postDoc.data() } as Post));
+      setPosts((current) => {
+        const existingIds = new Set(current.map((post) => post.id));
+        return [...current, ...rows.filter((post) => !existingIds.has(post.id))];
+      });
+    } catch (error) {
+      console.warn('Older startups unavailable:', error);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  };
 
   // Sponsored slots for FREE members only. PLUS is ad-free (founder/admin
   // accounts still see the placement so they can review it).
@@ -734,7 +744,7 @@ export default function FeedScreen({ navigation }: any) {
       return item.ad ? (
         <SponsoredCard campaign={item.ad} viewerUid={user?.uid} />
       ) : (
-        <FeedHouseCard isDark={isDark} />
+        <FeedHouseCard isDark={isDark} navigation={navigation} />
       );
     }
     return <PostCard post={item.row} navigation={navigation} />;
@@ -761,6 +771,9 @@ export default function FeedScreen({ navigation }: any) {
         renderItem={renderRow}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        onEndReached={() => { void loadMorePosts(); }}
+        onEndReachedThreshold={0.65}
+        ListFooterComponent={loadingMore ? <ActivityIndicator color={COLORS.primaryStrong} style={{ marginVertical: 20 }} /> : null}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <SafeIcon name="Rocket" size={48} color="#222" />
@@ -775,9 +788,15 @@ export default function FeedScreen({ navigation }: any) {
 
 // The house promo that fills an unsold ad slot: it keeps the cadence identical
 // for free members and points them at the paywall/Linky rather than a paid ad.
-function FeedHouseCard({ isDark }: { isDark: boolean }) {
+function FeedHouseCard({ isDark, navigation }: { isDark: boolean; navigation: any }) {
   return (
-    <TouchableOpacity activeOpacity={0.9} style={[styles.houseCard, liquidGlass(isDark)]}>
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel="Manage or start a LINKUP campaign"
+      activeOpacity={0.9}
+      onPress={() => navigation.navigate('Campaigns')}
+      style={[styles.houseCard, liquidGlass(isDark)]}
+    >
       <View style={styles.housePill}>
         <Text style={styles.housePillText}>SPONSORED</Text>
       </View>

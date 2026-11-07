@@ -5,7 +5,7 @@ const FIELDS=['displayName','fullName','name','username','city','country','occup
 const path=period=>APP+'/builder-league'+(period==='week'?'':'/'+period);
 const PERIOD_LABEL={week:'This week',month:'This month',year:'This year',all:'All time'};
 const brand=html=>html.replace('</head>',`<style>body{background:#F1F0EC;color:#0A0B0D}.button,.tag.win{background:#FBE618;color:#111}.arena{background:#FBE618;border:2px solid #111}.arena h1{font-weight:950}.board{width:100%;border-collapse:collapse}.board td,.board th{text-align:left;padding:14px 8px;border-bottom:1px solid #ddd}.score{font-weight:900;font-size:22px}.periods{display:flex;gap:10px;flex-wrap:wrap}</style></head>`);
-export async function loadActivityLeague(db,{period='week',at=Date.now(),city='',country='',viewerUid=''}={}){
+export async function loadActivityLeague(db,{period='week',at=Date.now(),city='',country='',viewerUid='',includeAll=false}={}){
  if(!['week','month','year','all'].includes(period))throw new Error('Invalid league period');
  const docs=[];let after='',complete=false;
  // Exhaustive up to a disclosed 5,000 opt-in records; never claim a sampled
@@ -21,7 +21,7 @@ export async function loadActivityLeague(db,{period='week',at=Date.now(),city=''
    people.push({uid:d.id,name:p.name,image:p.image||'',city:String(u.data().city||'').slice(0,80),country:String(u.data().country||'').slice(0,80),occupation:p.occupation,verified:p.verified,...score,url:APP+'/momentum/'+encodeURIComponent(d.id),profileUrl:profileUrl(d.id)});
   }
  }
- const ranked=rankActivity(people),me=ranked.find(r=>r.uid===viewerUid)||null;return {period,asOf:new Date(at).toISOString(),rows:ranked.slice(0,100),me,next:me?ranked.filter(r=>r.rank<me.rank).at(-1)||null:null,participants:ranked.length,scanned:docs.length,complete,scope:complete?'All currently eligible, publicly opted-in participants.':'Ranked within the first 5,000 opt-in records; not a complete global ranking.',rules:LEAGUE_RULES};
+ const ranked=rankActivity(people),me=ranked.find(r=>r.uid===viewerUid)||null;return {period,asOf:new Date(at).toISOString(),rows:ranked.slice(0,100),...(includeAll?{candidateRows:ranked}:{}),me,next:me?ranked.filter(r=>r.rank<me.rank).at(-1)||null:null,participants:ranked.length,scanned:docs.length,complete,scope:complete?'All currently eligible, publicly opted-in participants.':'Ranked within the first 5,000 opt-in records; not a complete global ranking.',rules:LEAGUE_RULES};
 }
 export async function loadBuilderLeague(db,{city='',country='',viewerUid='',at=Date.now()}={}){
  const s=await db.collection('publicProfiles').orderBy('__name__').limit(301).get(),docs=s.docs.slice(0,300),people=[];
@@ -43,7 +43,7 @@ export function publicMomentumSection(uid,c={},at=Date.now()){
  if(c.publicMomentum!==true)return '';return '<section aria-label="Public Builder Momentum"><h2>Builder Momentum</h2><p>'+Number(c.totalUpdates||0)+' recorded build days · '+Number(c.points||0)+' build points</p><p>Actual update days only. Activity, not verified skill.</p><a class="button" href="'+APP+'/momentum/'+encodeURIComponent(uid)+'">View Momentum and streak card →</a></section>';
 }
 export async function serveLeagueSeo(req,{database,send,failure,now=Date.now}){
- const mode=req.query?.mode;if(!['league','league-json','league-card','momentum','momentum-profile','momentum-sitemap','builders-league-json','momentum-card'].includes(mode))return false;
+ const mode=req.query?.mode;if(!['league','league-json','league-card','momentum','momentum-profile','momentum-sitemap','builders-league-json','momentum-card','founder-spotlight','founder-spotlight-card'].includes(mode))return false;
  if(mode==='builders-league-json'){const value=k=>typeof req.query?.[k]==='string'?req.query[k].trim().slice(0,80):'';const b=await loadBuilderLeague(database(),{city:value('city'),country:value('country'),viewerUid:validId(req.query?.uid)?req.query.uid:'',at:now()});send(200,JSON.stringify(b),'application/json; charset=utf-8');return true;}
  if(mode==='league'||mode==='league-json'){
   const period=req.query?.period||'week';if(!['week','month','year','all'].includes(period)){failure(400,'Invalid league period');return true;}
@@ -64,6 +64,30 @@ export async function serveLeagueSeo(req,{database,send,failure,now=Date.now}){
   const png=await renderLeagueCard({period,board:{...board,rows:withUsers},at:now()});
   send(200,png,'image/png',{'Cache-Control':'public, max-age=60, s-maxage=300','Content-Disposition':'inline; filename="linkup-builder-league-top3.png"'});
   return true;
+ }
+ if(mode==='founder-spotlight'||mode==='founder-spotlight-card'){
+  const uid=typeof req.query?.uid==='string'?req.query.uid:'';
+  const week=typeof req.query?.week==='string'?req.query.week:'';
+  if(!validId(uid)||!/^\d{4}-\d{2}-\d{2}$/.test(week)){failure(404,'Founder Spotlight not available');return true;}
+  const db=database(),award=await db.collection('weeklyFounderSpotlights').doc(week).get();
+  if(!award.exists||award.data().status!=='awarded'||award.data().uid!==uid){failure(404,'Founder Spotlight not available');return true;}
+  const [u,c]=await Promise.all([db.collection('users').doc(uid).get(),db.collection('builderContributions').doc(uid).get()]);
+  if(!u.exists||u.data().banned||!publicEligible(u.data(),uid)||!c.exists||c.data().publicMomentum!==true){failure(404,'Founder Spotlight not available');return true;}
+  const awardData=award.data(),person=projectProfile(uid,u.data()),weekStart=Number(awardData.weekStart)||Date.parse(`${week}T00:00:00.000Z`),weekEnd=Number(awardData.weekEnd)||weekStart+7*86400000;
+  const canonical=APP+'/founder-spotlight/'+encodeURIComponent(uid)+'/'+week;
+  const image=APP+'/api/publicSeo?mode=founder-spotlight-card&uid='+encodeURIComponent(uid)+'&week='+encodeURIComponent(week);
+  const champion={kind:'week',start:weekStart,end:weekEnd};
+  if(mode==='founder-spotlight-card'){
+   const {cardAvatar,renderMomentumCard}=await import('./_momentumCard.js');
+   const avatar=await cardAvatar(uid,u.data());
+   const verified=u.data().isVerified===true||await memberHasPlus(db,uid,u.data(),now());
+   send(200,renderMomentumCard({uid,user:u.data(),c:c.data(),at:now(),avatar,verified,champion}),'image/png',{'Cache-Control':'public, max-age=60, s-maxage=300','Content-Disposition':'inline; filename="linkup-founder-spotlight.png"'});
+   return true;
+  }
+  const title=`${person.name} — LINKUP Weekly Founder Spotlight`;
+  const description=`${person.name} was recognized for sustained recorded founder activity this week on LINKUP: ${Number(awardData.buildDays)||0} build days and ${Number(awardData.helpful)||0} acknowledged helpful steps.`;
+  const participants=Number(awardData.participants)||0;
+  send(200,brand(documentHtml({title,description,canonical,image,imageAlt:`${person.name} — LINKUP Weekly Founder Spotlight`,schema:{'@context':'https://schema.org','@type':'ProfilePage',name:title,url:canonical,mainEntity:{'@type':'Person',name:person.name,url:profileUrl(uid)}},content:`<section class="arena"><p>ONE WEEK. REAL BUILD DAYS.</p><h1>${e(person.name)} is this week’s Founder Spotlight.</h1><p>${e([person.occupation,person.location].filter(Boolean).join(' · '))}</p><p class="score">${Number(awardData.buildDays)||0} recorded build days · ${Number(awardData.helpful)||0} acknowledged helpful steps</p></section><article><img src="${e(image)}" width="1080" height="1080" style="width:100%;height:auto;border-radius:24px" alt="${e(person.name)}’s LINKUP Founder Spotlight card"/><h2>What earned the spotlight?</h2><p>This week, ${e(person.name)} led recorded activity among ${participants} founders who opted into public Momentum and earned points this week. LINKUP recognizes sustained participation—not a claim about skill, company outcomes or investment quality.</p><p>Only recorded activity totals appear here. Your private update text, chats, wallet balances and personal notes stay private. Public Momentum can be switched off at any time.</p><a class="button" href="${APP}/landing">Build your own momentum on LINKUP →</a></article><p>Know a founder who should be next week’s standout? Invite them to build with LINKUP.</p>`})));return true;
  }
  if(mode==='momentum'){
   const url=APP+'/momentum',title='Builder Momentum — track startup progress and build in public | LINKUP';

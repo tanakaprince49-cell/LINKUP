@@ -47,10 +47,6 @@
     ],
     [
       "navigate",
-      "TrendingBuilders"
-    ],
-    [
-      "navigate",
       "Chat"
     ],
     [
@@ -189,10 +185,6 @@
       "message"
     ],
     [
-      "doc",
-      "presence"
-    ],
-    [
       "collection",
       "matches",
       "messages"
@@ -209,10 +201,6 @@
       "property",
       "type",
       "message"
-    ],
-    [
-      "doc",
-      "presence"
     ],
     [
       "doc",
@@ -291,19 +279,11 @@
     ],
     [
       "navigate",
-      "TrendingBuilders"
-    ],
-    [
-      "navigate",
       "ActiveOpportunity"
     ],
     [
       "navigate",
       "ActiveOpportunities"
-    ],
-    [
-      "navigate",
-      "TrendingBuilders"
     ],
     [
       "navigate",
@@ -431,10 +411,6 @@
       "posts"
     ],
     [
-      "doc",
-      "posts"
-    ],
-    [
       "property",
       "kind",
       "row"
@@ -442,6 +418,10 @@
     [
       "navigate",
       "CreatePost"
+    ],
+    [
+      "navigate",
+      "Campaigns"
     ]
   ],
   "mobile/src/screens/FounderFlipScreen.tsx": [
@@ -504,10 +484,6 @@
     [
       "navigate",
       "ShipLog"
-    ],
-    [
-      "navigate",
-      "CityLeague"
     ],
     [
       "navigate",
@@ -2565,10 +2541,6 @@
   "mobile/src/screens/ShipLogScreen.tsx": [
     [
       "get"
-    ],
-    [
-      "navigate",
-      "TrendingBuilders"
     ]
   ],
   "mobile/src/screens/TrendingBuildersScreen.tsx": [

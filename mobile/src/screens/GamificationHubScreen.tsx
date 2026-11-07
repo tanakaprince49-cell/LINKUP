@@ -116,9 +116,6 @@ const GamificationHubScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
           <TouchableOpacity onPress={() => navigation.navigate('ShipLog')} style={[styles.loopBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
             <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>PROGRESS</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('CityLeague')} style={[styles.loopBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
-            <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>RANKINGS</Text>
-          </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('IdeaDeck')} style={[styles.loopBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
             <Text style={[styles.loopBtnText, { color: textColor(isDark) }]}>IDEAS</Text>
           </TouchableOpacity>

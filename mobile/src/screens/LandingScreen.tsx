@@ -95,7 +95,7 @@ export default function LandingScreen({ navigation }: any) {
           ) : null}
 
           <Text style={[styles.sub, {color:textColor(isDark,'secondary')}]}>
-            Build with Linky: record progress, enter the Builder League and bring your people into a private group chat.
+            Build with Linky: record progress, earn a chance at the weekly Founder Spotlight, and bring your people into a private group chat.
           </Text>
           <TouchableOpacity
             style={[styles.emailBtn, { borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)' }]}

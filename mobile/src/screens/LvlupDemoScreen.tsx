@@ -591,7 +591,7 @@ export default function LvlupDemoScreen({ route }: any = {}) {
                 </Text>
               </View>
               <Text style={[styles.sectionSub, { color: sub }]}>
-                Live squads and GitHub-verified engineers climbing the Builder League automatically from real code commits. Dispatch a cryptographically timestamped $50,000 SAFE offer in one click.
+                Live squads and founders building consistent Momentum from verified code activity. Dispatch a cryptographically timestamped $50,000 SAFE offer in one click.
               </Text>
               {breakouts.slice(0, 3).map(b => (
                 <View key={b.id} style={[styles.breakoutCard, { backgroundColor: '#FFFBEB', borderColor: '#D4A000' }]}>

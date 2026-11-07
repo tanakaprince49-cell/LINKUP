@@ -86,6 +86,14 @@
       "destination": "/api/publicSeo?mode=league&period=all"
     },
     {
+      "source": "/app/founder-spotlight/:uid/:week/card",
+      "destination": "/api/publicSeo?mode=founder-spotlight-card&uid=:uid&week=:week"
+    },
+    {
+      "source": "/app/founder-spotlight/:uid/:week",
+      "destination": "/api/publicSeo?mode=founder-spotlight&uid=:uid&week=:week"
+    },
+    {
       "source": "/app/momentum",
       "destination": "/api/publicSeo?mode=momentum"
     },

@@ -35,7 +35,6 @@ const ChatScreen = lazyScreen(() => import('./src/screens/ChatScreen'));
 const ViewersScreen = lazyScreen(() => import('./src/screens/ViewersScreen'));
 const ActiveOpportunityScreen = lazyScreen(() => import('./src/screens/ActiveOpportunityScreen'));
 const ActiveOpportunitiesScreen = lazyScreen(() => import('./src/screens/ActiveOpportunitiesScreen'));
-const TrendingBuildersScreen = lazyScreen(() => import('./src/screens/TrendingBuildersScreen'));
 const RecommendedMatchesScreen = lazyScreen(() => import('./src/screens/RecommendedMatchesScreen'));
 const FeedScreen = lazyScreen(() => import('./src/screens/FeedScreen'));
 const CreatePostScreen = lazyScreen(() => import('./src/screens/CreatePostScreen'));
@@ -45,7 +44,6 @@ const NetworkQuizScreen = lazyScreen(() => import('./src/screens/NetworkQuizScre
 const BuilderWorkspaceScreen = lazyScreen(() => import('./src/screens/BuilderWorkspaceScreen'));
 const ShipLogScreen = lazyScreen(() => import('./src/screens/ShipLogScreen'));
 const GroupChatScreen = lazyScreen(() => import('./src/screens/GroupChatScreen'));
-const CityLeagueScreen = lazyScreen(() => import('./src/screens/CityLeagueScreen'));
 const LinkyProfileScreen = lazyScreen(() => import('./src/screens/LinkyProfileScreen'));
 const LinkySettingsScreen = lazyScreen(() => import('./src/screens/LinkySettingsScreen'));
 const LinkyAuditScreen = lazyScreen(() => import('./src/screens/LinkyAuditScreen'));
@@ -70,7 +68,6 @@ const PRELOADED_SCREENS = [
   RecommendedMatchesScreen,
   ViewersScreen,
   IdeaDeckScreen,
-  TrendingBuildersScreen,
 ];
 import { GamificationProvider } from './src/contexts/GamificationContext';
 import { setupNativeNotificationRuntimeAsync, subscribeToNotificationToasts, subscribeToUnreadNotificationsCount } from './src/lib/notifications';
@@ -173,14 +170,12 @@ const linking: any = {
       Viewers: 'viewers',
       ActiveOpportunity: 'opportunity/:userId',
       ActiveOpportunities: 'opportunities',
-      TrendingBuilders: 'trending-builders',
       RecommendedMatches: 'recommended-matches',
       FounderFlip: 'FounderFlip',
       PitchPerfect: 'PitchPerfect',
       NetworkQuiz: 'NetworkQuiz',
       BuilderWorkspace: 'builder',
       ShipLog: 'ship',
-      CityLeague: 'league',
       GroupChat: 'groups/:groupId',
     },
   },
@@ -489,8 +484,10 @@ function AppContent() {
     if (targetUrl === '/ship' || targetUrl.startsWith('/ship?')) { navigationRef.navigate('ShipLog'); return; }
 
     if (targetUrl === '/campaigns' || targetUrl.startsWith('/campaigns?')) {
-      if (Platform.OS === 'web') navigationRef.navigate('Campaigns');
-      else void ExpoLinking.openURL('https://www.linkupbuild.com/campaigns/').catch(() => {});
+      // Campaign links are an account-management destination, not the public
+      // Campaigns marketing page. The screen shows the dashboard to active
+      // advertisers and the Campaigns paywall to everyone else.
+      navigationRef.navigate('Campaigns');
       return;
     }
 
@@ -780,7 +777,6 @@ function AppContent() {
             <Stack.Screen name="Viewers" component={ViewersScreen} />
             <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
             <Stack.Screen name="ActiveOpportunities" component={ActiveOpportunitiesScreen} />
-            <Stack.Screen name="TrendingBuilders" component={TrendingBuildersScreen} />
             <Stack.Screen name="RecommendedMatches" component={RecommendedMatchesScreen} />
             <Stack.Screen name="FounderFlip" component={FounderFlipScreen} />
             <Stack.Screen name="PitchPerfect" component={PitchPerfectScreen} />
@@ -792,7 +788,6 @@ function AppContent() {
             <Stack.Screen name="BuilderWorkspace" component={BuilderWorkspaceScreen} />
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
             <Stack.Screen name="GroupChat" component={GroupChatScreen} />
-            <Stack.Screen name="CityLeague" component={CityLeagueScreen} />
           <Stack.Screen name="LvlupDemo" component={LvlupDemoScreen} />
           </>
         ) : null}

@@ -154,7 +154,7 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
       notifyUser(
         'Codebase analyzed by Linky',
         pts > 0
-          ? `Verified today's GitHub push and automatically added +${pts} Builder League points.`
+          ? `Verified today's GitHub push and added +${pts} activity points to your LINKUP Momentum.`
           : 'Project stack, coding rhythm, and co-founder skill gaps updated.'
       );
       onRefreshWorkspace?.();
@@ -166,10 +166,10 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
       setStatus(res);
       const pts = res?.autoLeagueSync?.leaguePointsAdded || 0;
       notifyUser(
-        pts > 0 ? `+${pts} League points auto-credited` : 'GitHub synced',
+        pts > 0 ? `+${pts} Momentum points auto-credited` : 'GitHub synced',
         pts > 0
-          ? 'Your latest commit advanced your Builder League standing automatically.'
-          : `Verified commits: ${res?.verifiedCommitCount || 0}. Push code today to advance your streak.`
+          ? 'Your latest verified commit added to your recorded build activity.'
+          : `Verified commits: ${res?.verifiedCommitCount || 0}. Push code today to record your build activity.`
       );
       onRefreshWorkspace?.();
     });
@@ -258,7 +258,7 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
         </View>
       )}
 
-      {/* Pillar 1 & 2: Linky Quiet Codebase Manager + Passive GitHub Auto-Rank */}
+      {/* Pillar 1 & 2: Linky Quiet Codebase Manager + Passive GitHub Activity */}
       {mode === 'full' && (
         <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
           <View style={styles.badgeRow}>
@@ -273,10 +273,10 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
           </View>
 
           <Text style={[styles.title, { color: ink }]}>
-            Linky Codebase Manager & Passive GitHub League
+            Linky Codebase Manager & Passive GitHub Activity
           </Text>
           <Text style={[styles.body, { color: sub }]}>
-            Connect your GitHub repo or Cursor manifest. Linky inspects your stack and file structure without reading private source code, figures out the exact co-founder role you are missing, and raises your Builder League rank automatically whenever you commit code.
+            Connect your GitHub repo or Cursor manifest. Linky inspects your stack and file structure without reading private source code, identifies potential co-founder skill gaps, and records verified commit activity in your LINKUP Momentum.
           </Text>
 
           {error ? (
@@ -383,7 +383,7 @@ export default function VentureEnginePanel({ navigation, isDark, mode = 'full', 
                 ) : null}
               </View>
               <Text style={{ fontSize: 12, lineHeight: 18, color: isDark ? '#D1FAE5' : '#065F46' }}>
-                Linky watches your GitHub automatically in the background. Whenever you commit & push code, Linky records the commit here, credits Builder League, and sends you a notification without you needing to open LINKUP.
+                Linky watches your GitHub automatically in the background. Whenever you commit and push code, Linky records verified activity here and sends you a notification without you needing to open LINKUP.
               </Text>
               {!pushReady ? (
                 <View style={[styles.row, { marginTop: 2 }]}>
