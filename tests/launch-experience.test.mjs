@@ -25,17 +25,48 @@ test('the Linky tab wears the cat instead of a line icon', () => {
   assert.match(app, /LinkyHome: 'Linky'/);
 });
 
-test('the cold-open is a real 3D cat scene, not a flat spinner', () => {
+test('the cat is drawn and genuinely alive, never a photo or a spinning logo', () => {
   const screen = read('mobile/src/components/LinkupLaunchScreen.tsx');
-  assert.match(screen, /require\('\.\.\/\.\.\/assets\/logo-cat\.png'\)/, 'the cat is the loading screen');
-  // Real perspective + Y-axis rotation on the coin, and a 3D hinge on the wordmark.
-  assert.ok((screen.match(/perspective:/g) || []).length >= 3);
-  assert.match(screen, /rotateY: reduceMotion \? '0deg' : spinDeg/);
-  assert.match(screen, /outputRange: \['74deg', '0deg'\]/, 'the wordmark hinges up out of the floor');
-  assert.match(screen, /backfaceVisibility: 'hidden'/, 'two faces, front cat / back wordmark');
-  assert.match(screen, /Animated\.loop/);
+  const cat = read('mobile/src/components/LinkyCatAlive.tsx');
+
+  // No photograph anywhere in the opening: the mascot is vector art.
+  assert.doesNotMatch(screen, /logo-cat\.png/);
+  assert.doesNotMatch(cat, /logo-cat\.png/);
+  assert.doesNotMatch(cat, /<Image/);
+  assert.match(cat, /from 'react-native-svg'/);
+  assert.match(cat, /<Path/);
+  assert.match(cat, /<Ellipse/);
+  assert.match(screen, /import LinkyCatAlive from '\.\/LinkyCatAlive'/);
+  assert.match(screen, /<LinkyCatAlive size=\{STAGE\} alive=\{!reduceMotion\} beatAt=\{BEAT_AT\} \/>/);
+
+  // Alive: breathing, blinking (with a double blink), independent ear flicks,
+  // a swishing tail, darting pupils, and a meow with a spark on the chime beat.
+  assert.match(cat, /breathing/i);
+  assert.match(cat, /const blink = useRef\(new Animated\.Value\(0\)\)/);
+  assert.match(cat, /const earLeft = useRef\(new Animated\.Value\(0\)\)/);
+  assert.match(cat, /const earRight = useRef\(new Animated\.Value\(0\)\)/);
+  assert.match(cat, /const tail = useRef\(new Animated\.Value\(0\)\)/);
+  assert.match(cat, /const glance = useRef\(new Animated\.Value\(0\)\)/);
+  assert.match(cat, /const meow = useRef\(new Animated\.Value\(0\)\)/);
+  assert.match(cat, /const spark = useRef\(new Animated\.Value\(0\)\)/);
+  // Two blinks in a row, then a long gap: irregular on purpose.
+  assert.match(cat, /Animated\.delay\(160\)/);
+  assert.match(cat, /eyesOpen/);
+  assert.match(cat, /eyesClosed/);
+  assert.match(cat, /transformOrigin: '74% 76%'/, 'the tail is hinged at its base');
+  assert.match(cat, /setTimeout\(\(\) => \{[\s\S]{0,80}meow/, 'the meow lands on the chime beat');
+  assert.match(cat, /beatAt/);
+
+  // The rotating "L" coin is gone for good.
+  assert.doesNotMatch(screen, /faceBack/);
+  assert.doesNotMatch(screen, /backfaceVisibility/);
+  assert.doesNotMatch(screen, /rotateY: reduceMotion \? '0deg' : spinDeg/);
+
+  // Real 3D stays: perspective, orbiting tilted rings, and the wordmark hinge.
+  assert.ok((screen.match(/perspective:/g) || []).length >= 2);
+  assert.match(screen, /rotateX: `\$\{64 \+ ring \* 5\}deg`/);
+  assert.match(screen, /outputRange: \['74deg', '0deg'\]/);
   assert.match(screen, /useNativeDriver: true/);
-  assert.doesNotMatch(screen, /useNativeDriver: false/, 'every launch animation stays on the native driver');
   assert.match(screen, /LINKUP/);
 });
 

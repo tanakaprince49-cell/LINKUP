@@ -3,35 +3,36 @@ import {
   AccessibilityInfo,
   Animated,
   Easing,
-  Image,
-  Platform,
   StyleSheet,
   Text,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import LinkyCatAlive from './LinkyCatAlive';
 import { playLaunchSound, stopLaunchSound } from '../lib/launchSound';
 
 /**
  * THE LINKUP COLD OPEN.
  *
- * The cat is the brand, so the cat is the loading screen: a 3D coin that spins
- * on its Y axis in real perspective, front face the cat plugging the cable in,
- * back face the wordmark. Gold halos orbit it in a tilted 3D plane, shockwaves
- * roll out on the beat of the opening chime, and the LINKUP letters rise out of
- * the floor on a staggered 3D hinge.
+ * The cat is the brand, so the cat is the loading screen — and the cat is
+ * ALIVE: it breathes, blinks (sometimes twice), flicks each ear on its own
+ * hinge, swishes its tail, glances around, and meows with a spark on the exact
+ * beat the chime lands. Nothing here is a photograph or a spinning logo.
+ *
+ * Around it, the stage is real 3D: gold halos orbit in a tilted plane, the
+ * whole scene sways on its Y axis in perspective, shockwaves roll out from the
+ * beat, and the LINKUP letters hinge up out of the floor.
  *
  * Rules this screen keeps:
- *  - it never blocks the app for more than ~2.6s and a tap skips it instantly;
- *  - reduced-motion users get a short, calm fade (no loops, no spin);
- *  - every animation is transform/opacity only, so it runs on the native driver
- *    and stays smooth on low-end Android;
- *  - it shows once per session, never again on navigation or theme changes.
+ *  - never blocks the app longer than ~2.6s, and a tap skips it instantly;
+ *  - reduced-motion users get a short calm fade (no loops, no spin);
+ *  - transform/opacity work stays on the native driver;
+ *  - it shows once per session, never on navigation or theme changes.
  */
 
-const CAT = require('../../assets/logo-cat.png');
 const WORDMARK = 'LINKUP';
-const COIN = 136;
+const STAGE = 176;
+const BEAT_AT = 900;
 
 let shownThisSession = false;
 
@@ -40,7 +41,7 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
   const [reduceMotion, setReduceMotion] = useState(false);
 
   const intro = useRef(new Animated.Value(0)).current;
-  const spin = useRef(new Animated.Value(0)).current;
+  const orbit = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
   const progress = useRef(new Animated.Value(0)).current;
   const exit = useRef(new Animated.Value(1)).current;
@@ -97,9 +98,10 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
     }).start();
 
     if (!reduceMotion) {
-      // One full Y-axis revolution per 3.2s: slow enough to read the cat.
-      loops.push(Animated.loop(Animated.timing(spin, {
-        toValue: 1, duration: 3200, easing: Easing.linear, useNativeDriver: true,
+      // The halo ring turns a full revolution every 9s; the scene sways on the
+      // pulse so the 3D never reads as a flat card.
+      loops.push(Animated.loop(Animated.timing(orbit, {
+        toValue: 1, duration: 9000, easing: Easing.linear, useNativeDriver: true,
       })));
       loops.push(Animated.loop(Animated.sequence([
         Animated.timing(pulse, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
@@ -113,14 +115,14 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
       timers.forEach(clearTimeout);
       loops.forEach((loop) => loop.stop());
     };
-  }, [gone, reduceMotion, finish, intro, progress, pulse, spin]);
+  }, [gone, reduceMotion, finish, intro, progress, pulse, orbit]);
 
   if (gone) return null;
 
-  const spinDeg = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const orbitDeg = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-360deg'] });
-  const glowScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.14] });
-  const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.34, 0.6] });
+  const orbitDeg = orbit.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const swayDeg = pulse.interpolate({ inputRange: [0, 1], outputRange: ['-7deg', '7deg'] });
+  const glowScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
+  const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.32, 0.58] });
 
   const kickerOpacity = intro.interpolate({ inputRange: [0, 0.35], outputRange: [0, 1], extrapolate: 'clamp' });
   const taglineOpacity = intro.interpolate({ inputRange: [0.55, 1], outputRange: [0, 1], extrapolate: 'clamp' });
@@ -130,7 +132,7 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
     <Animated.View
       style={[styles.root, { opacity: exit }]}
       accessibilityViewIsModal
-      accessibilityLabel="LINKUP is starting. The LINKUP cat spins as the app loads."
+      accessibilityLabel="LINKUP is starting. The LINKUP cat is waking up while the app loads."
     >
       <TouchableWithoutFeedback
         accessibilityRole="button"
@@ -158,25 +160,25 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
                     outputRange: [0.62 + ring * 0.06, 1.5 + ring * 0.22],
                   }),
                 }],
-              }, ring === 1 && { width: COIN * 2.1, height: COIN * 2.1, borderRadius: COIN * 1.05 },
-                 ring === 2 && { width: COIN * 2.9, height: COIN * 2.9, borderRadius: COIN * 1.45 }]}
+              }, ring === 1 && { width: STAGE * 2.1, height: STAGE * 2.1, borderRadius: STAGE * 1.05 },
+                 ring === 2 && { width: STAGE * 2.9, height: STAGE * 2.9, borderRadius: STAGE * 1.45 }]}
             />
           ))}
 
-          {/* orbit halo: real 3D rings tilted into perspective */}
+          {/* orbit halo: rings tilted into perspective, turning behind the cat */}
           <View style={styles.orbitStage} pointerEvents="none">
-            {[0, 1, 2].map((orbit) => (
+            {[0, 1, 2].map((ring) => (
               <Animated.View
-                key={`orbit-${orbit}`}
+                key={`orbit-${ring}`}
                 style={[styles.orbit, {
-                  width: COIN * (1.85 + orbit * 0.42),
-                  height: COIN * (1.85 + orbit * 0.42),
-                  borderRadius: COIN,
-                  borderColor: orbit === 1 ? 'rgba(251,230,24,0.5)' : 'rgba(251,230,24,0.22)',
-                  opacity: orbit === 2 ? 0.5 : 1,
+                  width: STAGE * (1.55 + ring * 0.36),
+                  height: STAGE * (1.55 + ring * 0.36),
+                  borderRadius: STAGE,
+                  borderColor: ring === 1 ? 'rgba(251,230,24,0.5)' : 'rgba(251,230,24,0.22)',
+                  opacity: ring === 2 ? 0.5 : 1,
                   transform: [
                     { perspective: 900 },
-                    { rotateX: `${64 + orbit * 5}deg` },
+                    { rotateX: `${64 + ring * 5}deg` },
                     { rotateZ: orbitDeg },
                   ],
                 }]}
@@ -184,33 +186,23 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
             ))}
           </View>
 
-          {/* the stage: cat coin + floor reflection */}
+          {/* THE CAT — breathing, blinking, flicking, swishing, meowing */}
           <View style={styles.stage} pointerEvents="none">
             <Animated.View style={[styles.glow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
             <Animated.View
-              style={[styles.coin, {
+              style={{
                 transform: [
                   { perspective: 1000 },
-                  { rotateY: reduceMotion ? '0deg' : spinDeg },
-                  { rotateX: '-7deg' },
+                  { rotateY: reduceMotion ? '0deg' : swayDeg },
                 ],
-              }]}
+              }}
             >
-              {/* FRONT — the cat */}
-              <View style={[styles.face, styles.faceFront]}>
-                <Image source={CAT} style={styles.cat} resizeMode="cover" fadeDuration={0} />
-                <View style={styles.faceShine} pointerEvents="none" />
-              </View>
-              {/* BACK — the wordmark */}
-              <View style={[styles.face, styles.faceBack]}>
-                <Text style={styles.faceBackText}>L</Text>
-                <View style={styles.faceBackRule} />
-              </View>
+              <LinkyCatAlive size={STAGE} alive={!reduceMotion} beatAt={BEAT_AT} />
             </Animated.View>
             <Animated.View style={[styles.reflection, { opacity: kickerOpacity }]} pointerEvents="none" />
           </View>
 
-          {/* wordmark rises out of the floor on a 3D hinge */}
+          {/* wordmark hinges up out of the floor */}
           <View style={styles.wordmark} pointerEvents="none">
             {WORDMARK.split('').map((letter, index) => {
               const start = 0.16 + index * 0.055;
@@ -271,7 +263,9 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
 export const LAUNCH_SCREEN_COPY = {
   tagline: 'The cat is plugging you in…',
   skip: 'Tap to skip',
-  cat: 'logo-cat.png',
+  // The mascot is drawn, not photographed: see LinkyCatAlive.
+  cat: 'LinkyCatAlive',
+  beatAt: BEAT_AT,
 };
 
 const styles = StyleSheet.create({
@@ -297,84 +291,38 @@ const styles = StyleSheet.create({
   poolBottom: { bottom: -300, right: -200, backgroundColor: 'rgba(251,230,24,0.07)' },
   shockwave: {
     position: 'absolute',
-    width: COIN * 1.5,
-    height: COIN * 1.5,
-    borderRadius: COIN * 0.75,
+    width: STAGE * 1.5,
+    height: STAGE * 1.5,
+    borderRadius: STAGE * 0.75,
     borderWidth: 1,
     borderColor: 'rgba(251,230,24,0.55)',
   },
   orbitStage: {
     position: 'absolute',
-    width: COIN * 3.2,
-    height: COIN * 3.2,
+    width: STAGE * 3.2,
+    height: STAGE * 3.2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   orbit: { position: 'absolute', borderWidth: 1 },
-  stage: { width: COIN, height: COIN, alignItems: 'center', justifyContent: 'center' },
+  stage: { width: STAGE, height: STAGE + 24, alignItems: 'center', justifyContent: 'center' },
   glow: {
     position: 'absolute',
-    width: COIN * 2,
-    height: COIN * 2,
-    borderRadius: COIN,
-    backgroundColor: 'rgba(251,230,24,0.20)',
+    width: STAGE * 2,
+    height: STAGE * 2,
+    borderRadius: STAGE,
+    backgroundColor: 'rgba(251,230,24,0.18)',
   },
-  coin: {
-    width: COIN,
-    height: COIN,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  face: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    borderRadius: COIN * 0.28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backfaceVisibility: 'hidden',
-    overflow: 'hidden',
-  },
-  faceFront: {
-    backgroundColor: '#FBE618',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.65)',
-    shadowColor: '#FBE618',
-    shadowOpacity: 0.55,
-    shadowRadius: 26,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: Platform.OS === 'android' ? 12 : 0,
-  },
-  faceBack: {
-    backgroundColor: '#12141A',
-    borderWidth: 2,
-    borderColor: '#FBE618',
-    transform: [{ rotateY: '180deg' }],
-  },
-  faceShine: {
-    position: 'absolute',
-    top: -COIN * 0.55,
-    left: -COIN * 0.15,
-    width: COIN * 0.7,
-    height: COIN * 1.7,
-    backgroundColor: 'rgba(255,255,255,0.20)',
-    transform: [{ rotate: '22deg' }],
-  },
-  cat: { width: '100%', height: '100%' },
-  faceBackText: { color: '#FBE618', fontSize: COIN * 0.46, fontWeight: '900', letterSpacing: -2 },
-  faceBackRule: { width: COIN * 0.28, height: 3, borderRadius: 2, backgroundColor: '#FBE618', marginTop: 5 },
   reflection: {
     position: 'absolute',
-    bottom: -COIN * 0.42,
-    width: COIN * 0.9,
-    height: COIN * 0.5,
-    borderRadius: COIN,
+    bottom: 0,
+    width: STAGE * 0.9,
+    height: STAGE * 0.5,
+    borderRadius: STAGE,
     backgroundColor: 'rgba(251,230,24,0.16)',
-    transform: [{ scaleY: 0.22 }],
+    transform: [{ scaleY: 0.2 }],
   },
-  wordmark: { flexDirection: 'row', marginTop: 46, gap: 2 },
+  wordmark: { flexDirection: 'row', marginTop: 30, gap: 2 },
   letter: {
     color: '#F7F7F2',
     fontSize: 34,
