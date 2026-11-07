@@ -125,11 +125,28 @@ const FORBIDDEN_EMAIL_PATTERNS = [
 ];
 
 export function sanitizeEmailCopy(raw) {
-  let clean = String(raw ?? '');
+  let clean = String(raw ?? '').replace(/\r\n/g, '\n');
   for (const rx of FORBIDDEN_EMAIL_PATTERNS) {
     clean = clean.replace(rx, 'expressive');
   }
-  return clean.replace(/\s{2,}/g, ' ').trim();
+  return clean
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+export function formatHumanName(raw = '') {
+  const trimmed = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!trimmed) return '';
+  return trimmed
+    .split(' ')
+    .map((word) => {
+      if (word.length >= 2 && (word === word.toUpperCase() || word === word.toLowerCase())) {
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      }
+      return word;
+    })
+    .join(' ');
 }
 
 function cleanSnippet(value = '', maxLen = 84) {
@@ -179,7 +196,7 @@ export function buildPersonalBuilderBrief({ user = {}, state = {}, venture = {} 
   const v = venture && typeof venture === 'object' ? venture : {};
   const ctx = s.context && typeof s.context === 'object' ? s.context : {};
 
-  const rawName = String(u.displayName || u.fullName || u.name || '').trim();
+  const rawName = formatHumanName(String(u.displayName || u.fullName || u.name || '').trim());
   const firstName = rawName
     ? rawName.split(/\s+/)[0].replace(/[^A-Za-z0-9'-]/g, '').slice(0, 24)
     : '';
@@ -472,6 +489,7 @@ export function buildLinkyEmailBodies({
   subject = '',
   daysSinceActive = null,
   personal = null,
+  cofounderCard = null,
 }) {
   const cleanHeadline = sanitizeEmailCopy(headline);
   const cleanBody = sanitizeEmailCopy(body);
@@ -510,9 +528,9 @@ export function buildLinkyEmailBodies({
     : 'Main-character dispatch — the LINKUP world revolves around you';
 
   const jealousyNote = buildMainCharacterJealousyNote(p);
-  const needsJealousyCallout = !/jealous/i.test(cleanBody) || !/main character/i.test(cleanBody);
+  const needsJealousyCallout = !cofounderCard && (!/jealous/i.test(cleanBody) || !/main character/i.test(cleanBody));
 
-  const personalTextBlock = personalRows.length > 0
+  const personalTextBlock = !cofounderCard && personalRows.length > 0
     ? `\n\n--- Tailored to ${p?.firstName ? `${sanitizeEmailCopy(p.firstName)}'s` : 'Your'} Focus ---\n${personalRows.map(([k, v]) => `• ${k}: ${sanitizeEmailCopy(v)}`).join('\n')}`
     : '';
 
@@ -522,7 +540,7 @@ export function buildLinkyEmailBodies({
       </div>`
     : '';
 
-  const personalHtmlBlock = personalRows.length > 0
+  const personalHtmlBlock = !cofounderCard && personalRows.length > 0
     ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FCFBF3;border:1px solid #E7E1BF;border-radius:14px;margin:0 0 20px 0;">
           <tr>
             <td style="padding:13px 15px;">
@@ -540,7 +558,154 @@ export function buildLinkyEmailBodies({
         </table>`
     : '';
 
-  const textBody = `${cleanHeadline}\n[${moodSpec.pillText}]\n\n${cleanBody}${needsJealousyCallout ? `\n\n${jealousyNote}` : ''}${personalTextBlock}\n\n${cleanCta}: ${fullUrl}\n\n— Linky, your slightly jealous #1 fan on LINKUP\n\n---\nUnsubscribe from LINKUP emails: ${unsubUrl}`;
+  const renderSkillPills = (rawList = '', bg = '#F1EFE6', color = '#1F2024', border = '#DDD7C2') =>
+    String(rawList || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 5)
+      .map(
+        (chip) =>
+          `<span style="display:inline-block;background:${bg};color:${color};border:1px solid ${border};border-radius:999px;padding:3px 10px;font-size:11.5px;font-weight:800;margin:2px 5px 2px 0;">${esc(chip)}</span>`
+      )
+      .join('');
+
+  const c = cofounderCard && typeof cofounderCard === 'object' ? cofounderCard : null;
+  const cofounderTextBlock = c
+    ? [
+        '',
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        `1. YOUR PROFILE (MAIN CHARACTER)`,
+        `   • Name: ${c.meFullName} (${c.meRole} · ${c.meCity})`,
+        `   • Focus: ${c.meFocus}`,
+        `   • What you bring: ${c.meBrings}`,
+        '',
+        `2. YOUR 1-OF-1 POTENTIAL CO-FOUNDER (${c.bandLabel} · ${c.weekKey})`,
+        `   • Name: ${c.partnerFullName} (${c.partnerRole} · ${c.partnerCity})`,
+        `   • Focus: ${c.partnerFocus}`,
+        `   • What ${c.partnerFirst} brings: ${c.partnerBrings}`,
+        '',
+        `3. WHY LINKUP AI & ALGORITHM PAIRED YOU TWO`,
+        `   • Shared Signal: ${c.sharedLine}`,
+        `   • Co-Founder Complement: ${c.complementLine}`,
+        `   • First 20-Minute Sprint: ${c.sprintLine}`,
+        '',
+        `4. HOW YOUR EXCLUSIVE 1:1 PAIRING WORKS`,
+        `   • When ${c.partnerFirst} opens LINKUP this week, YOU are the single potential co-founder on their screen too.`,
+        `   • If both of you tap "Interested in Meeting", LINKUP unlocks your direct room so you can meet!`,
+        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      ].join('\n')
+    : '';
+
+  const cofounderHtmlBlock = c
+    ? `
+      <!-- Card 1: Your Profile -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FCFBF4;border:1px solid #E6DFC0;border-radius:16px;margin:0 0 14px 0;">
+        <tr>
+          <td style="padding:15px 17px;">
+            <div style="font-size:10px;font-weight:900;letter-spacing:0.8px;text-transform:uppercase;color:#7A6500;margin:0 0 6px 0;">
+              1 &middot; YOUR PROFILE &middot; MAIN CHARACTER
+            </div>
+            <div style="font-size:16px;font-weight:900;color:#0A0B0D;line-height:1.3;">
+              ${esc(c.meFullName)}
+            </div>
+            <div style="font-size:12.5px;font-weight:700;color:#575B60;margin:2px 0 10px 0;">
+              ${esc(c.meRole)} &middot; ${esc(c.meCity)}
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="top" width="110" style="font-size:12px;font-weight:800;color:#575B60;padding:0 8px 6px 0;">Focus:</td>
+                <td valign="top" style="font-size:13px;font-weight:700;color:#0A0B0D;padding:0 0 6px 0;">${esc(c.meFocus)}</td>
+              </tr>
+              <tr>
+                <td valign="top" width="110" style="font-size:12px;font-weight:800;color:#575B60;padding:2px 8px 0 0;">What you bring:</td>
+                <td valign="top" style="padding:0;">${renderSkillPills(c.meBrings, '#FFF8C5', '#1F2024', '#E5D462')}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Card 2: Your 1-of-1 Potential Co-Founder -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#11131A;border:2px solid #FBE618;border-radius:16px;margin:0 0 14px 0;">
+        <tr>
+          <td style="padding:16px 18px;">
+            <div style="margin:0 0 8px 0;">
+              <span style="display:inline-block;background:#FBE618;color:#0A0B0D;font-size:10px;font-weight:900;letter-spacing:0.8px;text-transform:uppercase;padding:4px 9px;border-radius:999px;">
+                2 &middot; YOUR 1-OF-1 POTENTIAL CO-FOUNDER &middot; ${esc(c.bandLabel.toUpperCase())}
+              </span>
+            </div>
+            <div style="font-size:18px;font-weight:900;color:#FFFFFF;line-height:1.3;">
+              ${esc(c.partnerFullName)}
+            </div>
+            <div style="font-size:12.5px;font-weight:700;color:#CBD5E1;margin:3px 0 12px 0;">
+              ${esc(c.partnerRole)} &middot; ${esc(c.partnerCity)}
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="top" width="118" style="font-size:12px;font-weight:800;color:#94A3B8;padding:0 8px 7px 0;">Focus:</td>
+                <td valign="top" style="font-size:13px;font-weight:700;color:#F8FAFC;padding:0 0 7px 0;">${esc(c.partnerFocus)}</td>
+              </tr>
+              <tr>
+                <td valign="top" width="118" style="font-size:12px;font-weight:800;color:#94A3B8;padding:2px 8px 0 0;">${esc(c.partnerFirst)} brings:</td>
+                <td valign="top" style="padding:0;">${renderSkillPills(c.partnerBrings, '#222634', '#FBE618', '#524B16')}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Card 3: Why LINKUP AI & Algorithm Paired You Two -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:16px;margin:0 0 14px 0;">
+        <tr>
+          <td style="padding:15px 17px;">
+            <div style="font-size:10.5px;font-weight:900;letter-spacing:0.8px;text-transform:uppercase;color:#0F172A;margin:0 0 10px 0;">
+              &#9889; WHY LINKUP AI &amp; ALGORITHM PAIRED YOU TWO
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td valign="top" width="110" style="font-size:12px;font-weight:800;color:#475569;padding:0 8px 7px 0;">Shared Signal:</td>
+                <td valign="top" style="font-size:13px;line-height:1.5;font-weight:700;color:#0F172A;padding:0 0 7px 0;">${esc(c.sharedLine)}</td>
+              </tr>
+              <tr>
+                <td valign="top" width="110" style="font-size:12px;font-weight:800;color:#475569;padding:0 8px 10px 0;">Complement:</td>
+                <td valign="top" style="font-size:13px;line-height:1.5;font-weight:700;color:#0F172A;padding:0 0 10px 0;">${esc(c.complementLine)}</td>
+              </tr>
+            </table>
+            <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-left:4px solid #FBE618;border-radius:10px;padding:10px 12px;">
+              <div style="font-size:10px;font-weight:900;letter-spacing:0.7px;text-transform:uppercase;color:#6E5B00;margin:0 0 3px 0;">
+                First 20-Minute Co-Founder Sprint
+              </div>
+              <div style="font-size:13px;line-height:1.5;font-weight:600;color:#1E293B;">
+                ${esc(c.sprintLine)}
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Card 4: Mutual 1:1 Rule -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:14px;margin:0 0 20px 0;">
+        <tr>
+          <td style="padding:12px 15px;font-size:13px;line-height:1.55;color:#065F46;font-weight:700;">
+            &#129309; <strong>How your exclusive 1:1 pairing works:</strong> When ${esc(c.partnerFirst)} opens LINKUP this week, <strong>you</strong> are the single potential co-founder on their screen too. If both of you tap <em>&ldquo;Interested in Meeting&rdquo;</em>, LINKUP immediately unlocks your direct chat so you can meet!
+          </td>
+        </tr>
+      </table>
+    `
+    : '';
+
+  const bodyParagraphsHtml = cleanBody
+    .split(/\n{2,}/)
+    .map((para) => para.trim())
+    .filter(Boolean)
+    .map(
+      (para) =>
+        `<p style="font-size:15px;line-height:1.65;color:#2C3038;margin:0 0 14px 0;">${esc(para).replace(/\n/g, '<br/>')}</p>`
+    )
+    .join('');
+
+  const textBody = `${cleanHeadline}\n[${moodSpec.pillText}]\n\n${cleanBody}${cofounderTextBlock}${needsJealousyCallout ? `\n\n${jealousyNote}` : ''}${personalTextBlock}\n\n${cleanCta}: ${fullUrl}\n\n— Linky, your slightly jealous #1 fan on LINKUP\n\n---\nUnsubscribe from LINKUP emails: ${unsubUrl}`;
 
   const htmlBody = `<!doctype html>
 <html>
@@ -580,7 +745,8 @@ export function buildLinkyEmailBodies({
     <tr>
       <td style="padding:20px 22px 24px 22px;">
         <h2 style="font-size:21px;line-height:1.32;font-weight:900;color:#0A0B0D;margin:0 0 12px 0;">${esc(cleanHeadline)}</h2>
-        <p style="font-size:15px;line-height:1.62;color:#353940;margin:0 0 18px 0;">${esc(cleanBody)}</p>
+        ${bodyParagraphsHtml}
+        ${cofounderHtmlBlock}
         ${jealousyHtmlBlock}
         ${personalHtmlBlock}
         <table role="presentation" cellpadding="0" cellspacing="0" border="0">
@@ -751,6 +917,7 @@ export async function sendHighSignalEmail(db, uid, {
   quotaBucket = 'transactional',
   quotaCap = DAILY_EMAIL_HARD_CAP,
   personal = null,
+  cofounderCard = null,
 } = {}, { fetcher = fetch, env = process.env, now = Date.now() } = {}) {
   const status = emailStatus(env);
   if (!status.available || !db || !uid) return { sent: false, reason: status.reason || 'disabled' };
@@ -805,6 +972,7 @@ export async function sendHighSignalEmail(db, uid, {
     subject,
     daysSinceActive,
     personal: resolvedPersonal,
+    cofounderCard,
   });
 
   try {
@@ -1067,18 +1235,24 @@ export function buildWeeklyCofounderIntroCopy({
   firstSprintTask = '',
   bandLabel = 'Strong fit',
 } = {}) {
-  const meName = cleanSnippet(
-    recipientBrief?.firstName || extractFirstName(recipientProfile?.displayName, recipientProfile?.username) || 'Founder',
-    40
+  const meName = formatHumanName(
+    cleanSnippet(
+      recipientBrief?.firstName || extractFirstName(recipientProfile?.displayName, recipientProfile?.username) || 'Founder',
+      40
+    )
   );
-  const meFullName = cleanSnippet(recipientProfile?.displayName || meName, 60);
-  const partnerFullName = cleanSnippet(
-    partnerProfile?.displayName || partnerBrief?.firstName || partnerProfile?.username || 'Your Co-Founder Match',
-    60
+  const meFullName = formatHumanName(cleanSnippet(recipientProfile?.displayName || meName, 60));
+  const partnerFullName = formatHumanName(
+    cleanSnippet(
+      partnerProfile?.displayName || partnerBrief?.firstName || partnerProfile?.username || 'Your Co-Founder Match',
+      60
+    )
   );
-  const partnerFirst = cleanSnippet(
-    partnerBrief?.firstName || extractFirstName(partnerProfile?.displayName, partnerProfile?.username) || partnerFullName,
-    40
+  const partnerFirst = formatHumanName(
+    cleanSnippet(
+      partnerBrief?.firstName || extractFirstName(partnerProfile?.displayName, partnerProfile?.username) || partnerFullName,
+      40
+    )
   );
 
   const meRole = cleanSnippet(recipientBrief?.roleLabel || recipientProfile?.occupation || 'Builder & Founder', 60);
@@ -1106,16 +1280,36 @@ export function buildWeeklyCofounderIntroCopy({
   const subject = `LINKUP · ${meName} × ${partnerFirst}: Your 1-of-1 Weekly Potential Co-Founder Match (Linky is jealous ⚡)`.slice(0, 118);
 
   const body = [
-    `Okay ${meName}, be honest — which other app or tab has been stealing your attention? Because Linky is officially jealous, and we are even a little jealous of ${partnerFullName} for getting paired with our main character this week! Around here the whole LINKUP universe revolves around you, and our matching algorithm + AI selected ${partnerFullName} as your ONLY potential co-founder for ${weekKey} (${bandLabel}).`,
-    `Here is the mutual introduction of BOTH profiles: [1] YOUR PROFILE (${meFullName} · ${meRole} · ${meCity}) — Focus: ${meFocus}; What you bring: ${meBrings}. [2] YOUR 1-OF-1 POTENTIAL CO-FOUNDER (${partnerFullName} · ${partnerRole} · ${partnerCity}) — Focus: ${partnerFocus}; What ${partnerFirst} brings: ${partnerBrings}.`,
-    `Why the LINKUP Algorithm & AI paired you two: ${aiLine} First 20-minute co-founder sprint idea: ${sprintLine}`,
-    `How your exclusive 1:1 pairing works: when ${partnerFirst} opens LINKUP this week, YOU are the single potential co-founder on their screen too. If both of you tap "Interested in Meeting", LINKUP immediately unlocks your direct introduction so you can meet!`,
-  ].join(' ');
+    `Okay ${meName}, be honest — which other app or tab has been stealing your attention? Because Linky is officially jealous, and we are even a little jealous of ${partnerFullName} for getting paired with our main character this week!`,
+    `Around here, the whole LINKUP universe revolves around you. Our matching algorithm and AI selected ${partnerFullName} as your ONLY potential co-founder for ${weekKey} (${bandLabel}). Here is your mutual introduction below:`,
+  ].join('\n\n');
+
+  const cofounderCard = {
+    weekKey,
+    bandLabel,
+    meName,
+    meFullName,
+    meRole,
+    meCity,
+    meFocus,
+    meBrings,
+    partnerFirst,
+    partnerFullName,
+    partnerRole,
+    partnerCity,
+    partnerFocus,
+    partnerBrings,
+    sharedLine,
+    complementLine,
+    aiLine,
+    sprintLine,
+  };
 
   return {
     subject,
     headline,
     body,
+    cofounderCard,
     ctaLabel: `Meet ${partnerFirst} on LINKUP`,
     ctaUrl: `/profile/${encodeURIComponent(String(partnerProfile?.uid || ''))}?weeklyCofounder=1`,
   };
@@ -1172,6 +1366,7 @@ export async function sendWeeklyCofounderIntroEmails(db, pairRecord = {}, option
       subject: copyForA.subject,
       headline: copyForA.headline,
       body: copyForA.body,
+      cofounderCard: copyForA.cofounderCard,
       ctaLabel: copyForA.ctaLabel,
       ctaUrl: copyForA.ctaUrl,
       mood: 'celebration',
@@ -1185,6 +1380,7 @@ export async function sendWeeklyCofounderIntroEmails(db, pairRecord = {}, option
       subject: copyForB.subject,
       headline: copyForB.headline,
       body: copyForB.body,
+      cofounderCard: copyForB.cofounderCard,
       ctaLabel: copyForB.ctaLabel,
       ctaUrl: copyForB.ctaUrl,
       mood: 'celebration',
