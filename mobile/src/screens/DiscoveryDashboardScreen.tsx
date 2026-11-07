@@ -1,6 +1,6 @@
 import MemberBadges from '../components/MemberBadges';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,7 +21,8 @@ import {
 } from '../lib/matchmaking';
 import { displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
 import { Briefcase, MapPin, Target, Rocket, Zap, UserCheck, Globe, CheckCircle2, MessageSquare, Mail, ArrowDown } from 'lucide-react-native';
-import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS } from '../lib/campaigns';
+import { isSponsoredHiddenForViewer, recordCampaignClick } from '../lib/campaigns';
+import { useSponsoredSlot } from '../components/SponsoredCard';
 import { shareLinkupInvite } from '../lib/activation';
 import WeeklyPortrait from '../components/WeeklyPortrait';
 import WeeklyDossier from '../components/WeeklyDossier';
@@ -122,32 +123,12 @@ const weeklyMatchKey = (uid: string | undefined, match: { weekKey?: string; part
 
 function DiscoveryDashboardScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
-  const [hubSponsor, setHubSponsor] = useState<Campaign | null>(null);
   const adsHiddenForViewer = isSponsoredHiddenForViewer(me, { email: user?.email, isAdmin: (me as any)?.isAdmin });
   const { theme } = useTheme();
   const isFocused = useIsFocused();
-
-  useEffect(() => {
-    if (adsHiddenForViewer || !user?.uid || !isFocused) {
-      if (adsHiddenForViewer || !user?.uid) setHubSponsor(null);
-      return;
-    }
-    let cancelled = false;
-    const load = async () => {
-      const pick = await pickSponsoredCampaign('hub', user.uid).catch(() => null);
-      if (!cancelled) setHubSponsor(pick);
-    };
-    void load();
-    const timer = setInterval(load, SPONSORED_SLOT_ROTATE_MS);
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void load();
-    });
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-      sub.remove();
-    };
-  }, [adsHiddenForViewer, user?.uid, isFocused]);
+  // The hub slot used to run its own 45s getDocs loop; it now shares the one
+  // servable-inventory listener and rotates locally (see lib/campaigns.ts).
+  const hubSponsor = useSponsoredSlot('hub', user?.uid, !adsHiddenForViewer);
 
   const isDark = theme === 'dark';
   const [loading, setLoading] = useState(false);

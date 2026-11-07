@@ -7,11 +7,12 @@ import { COLORS, RADIUS, liquidGlass, textColor } from '../theme/theme';
 import { ikAvatar } from '../lib/ikImage';
 import {
   Campaign,
-  pickSponsoredCampaign,
-  pickSponsoredCampaigns,
   recordCampaignClick,
+  recordCampaignImpression,
   SPONSORED_SLOT_ROTATE_MS,
+  sponsoredPool,
   sponsorOneLiner,
+  subscribeServableCampaigns,
 } from '../lib/campaigns';
 
 type Props = {
@@ -111,11 +112,12 @@ export function SponsoredSlot({
 /**
  * Hook form, for screens that need to weave the card into their own data.
  *
- * Rotation is built in: the slot takes the NEXT campaign in the viewer's
- * rotation on mount, every time the screen regains focus, every time the app
- * comes back to the foreground, and on a timer while it stays on screen. The
- * old version fetched once on mount and kept it - on a tab screen that meant
- * the first ad it ever loaded stayed up until the app was killed.
+ * Rotation is built in: the slot takes the next campaign in the viewer's
+ * rotation on mount and moves on every SPONSORED_SLOT_ROTATE_MS while it stays
+ * on screen. Both of those steps are now LOCAL - the inventory arrives once
+ * through the shared `subscribeServableCampaigns` listener (and again only when
+ * an advertiser changes something), so a slot that sits open on a tab for an
+ * hour costs a handful of reads instead of ~1,900.
  */
 export function useSponsoredSlot(placement: string, viewerUid?: string, enabled = true) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -127,19 +129,45 @@ export function useSponsoredSlot(placement: string, viewerUid?: string, enabled 
       return;
     }
     let cancelled = false;
-    const load = async () => {
-      const pick = await pickSponsoredCampaign(placement, viewerUid).catch(() => null);
-      if (!cancelled) setCampaign(pick);
+    let pool: Campaign[] = [];
+    let index = 0;
+    const show = () => {
+      if (cancelled || !pool.length) return;
+      const next = pool[index % pool.length];
+      setCampaign(next);
+      // Capped per viewer per campaign per day inside recordCampaignImpression,
+      // so rotating locally never becomes a write loop.
+      void recordCampaignImpression(next.id, viewerUid);
     };
-    void load();
-    const timer = setInterval(load, SPONSORED_SLOT_ROTATE_MS);
+    const stop = subscribeServableCampaigns((rows) => {
+      if (cancelled) return;
+      const currentId = pool.length ? pool[index % pool.length].id : null;
+      pool = sponsoredPool(rows, placement, viewerUid);
+      const keep = currentId ? pool.findIndex((campaign) => campaign.id === currentId) : -1;
+      if (keep >= 0) {
+        // Same advertiser, fresher document: stay on it rather than snapping
+        // back to the top of the rotation mid-view.
+        index = keep;
+        setCampaign(pool[keep]);
+      } else {
+        show();
+      }
+    });
+    const timer = setInterval(() => {
+      index += 1;
+      show();
+    }, SPONSORED_SLOT_ROTATE_MS);
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void load();
+      if (state === 'active') {
+        index += 1;
+        show();
+      }
     });
     return () => {
       cancelled = true;
       clearInterval(timer);
       sub.remove();
+      stop();
     };
   }, [placement, viewerUid, enabled, isFocused]);
 
@@ -162,19 +190,37 @@ export function useSponsoredSlots(placement: string, viewerUid: string | undefin
       return;
     }
     let cancelled = false;
-    const load = async () => {
-      const picks = await pickSponsoredCampaigns(placement, viewerUid, count).catch(() => [] as Campaign[]);
-      if (!cancelled) setCampaigns(picks);
+    let pool: Campaign[] = [];
+    let index = 0;
+    const fill = () => {
+      if (cancelled || !pool.length) return;
+      const picks: Campaign[] = [];
+      for (let slot = 0; slot < count; slot += 1) picks.push(pool[(index + slot) % pool.length]);
+      setCampaigns(picks);
+      picks.slice(0, Math.min(count, pool.length)).forEach((pick) => {
+        void recordCampaignImpression(pick.id, viewerUid);
+      });
     };
-    void load();
-    const timer = setInterval(load, SPONSORED_SLOT_ROTATE_MS);
+    const stop = subscribeServableCampaigns((rows) => {
+      if (cancelled) return;
+      pool = sponsoredPool(rows, placement, viewerUid);
+      fill();
+    });
+    const timer = setInterval(() => {
+      index += 1;
+      fill();
+    }, SPONSORED_SLOT_ROTATE_MS);
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void load();
+      if (state === 'active') {
+        index += 1;
+        fill();
+      }
     });
     return () => {
       cancelled = true;
       clearInterval(timer);
       sub.remove();
+      stop();
     };
   }, [placement, viewerUid, count, enabled, isFocused]);
 
