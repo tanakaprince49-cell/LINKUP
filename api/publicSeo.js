@@ -10,11 +10,26 @@ import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, safeUrl, validId, publicEligible, p
 const SEARCH_PAGE_SIZE = 40;
 const SEARCH_EDGE_CACHE = {'Cache-Control':'private, no-store','Vercel-CDN-Cache-Control':'public, s-maxage=30','CDN-Cache-Control':'public, s-maxage=30'};
 const PUBLIC_FIELDS = ['displayName','fullName','name','username','bio','occupation','company','city','country','skills','lookingFor','profilePicUrl','photoURL','profilePic','avatarUrl','photos','socialLinks','projects','deleted','banned','isBot','onboarded','isVisible','isStealthMode'];
+const TRANSIENT_FIRESTORE_CODES = new Set([4,8,10,13,14]);
+// Firestore can briefly return UNAVAILABLE/DEADLINE_EXCEEDED during serverless
+// cold starts. Retry only transient failures once; never hide configuration,
+// permission or validation errors behind a longer request loop.
+async function readFirestore(operation) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { return await operation(); }
+    catch (error) {
+      const transient = TRANSIENT_FIRESTORE_CODES.has(Number(error?.code)) || /UNAVAILABLE|DEADLINE_EXCEEDED|RESOURCE_EXHAUSTED|ABORTED|INTERNAL/i.test(String(error?.message || ''));
+      if (attempt === 1 || !transient) throw error;
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+  throw new Error('Firestore retry failed');
+}
 async function currentProfiles(db, ids) {
   if (!ids.length) return [];
   // The source of truth is users, NOT the eventually consistent discovery
   // index. Field masks reduce bandwidth; projection prevents private leaks.
-  const docs = await db.getAll(...ids.map(id => db.collection('users').doc(id)), {fieldMask: PUBLIC_FIELDS});
+  const docs = await readFirestore(() => db.getAll(...ids.map(id => db.collection('users').doc(id)), {fieldMask: PUBLIC_FIELDS}));
   return docs.filter(d => d.exists && publicEligible(d.data(), d.id)).map(d => projectProfile(d.id, d.data()));
 }
 const single = value => typeof value === 'string' ? value : '';
@@ -62,7 +77,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         const uid = single(req.query?.uid);
         if (!validId(uid)) return failure(404,'Profile image not found');
         const db = database();
-        const [source] = await db.getAll(db.collection('users').doc(uid), {fieldMask: PUBLIC_FIELDS});
+        const [source] = await readFirestore(() => db.getAll(db.collection('users').doc(uid), {fieldMask: PUBLIC_FIELDS}));
         if (!source?.exists || !publicEligible(source.data(), uid)) return failure(404,'Profile image not found');
         const photo = selectProfileImage(uid, source.data(), safeUrl);
         if (!photo) return failure(404,'Profile image not found');
@@ -88,7 +103,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         const db = database();
         let query = db.collection('publicProfiles').orderBy('__name__');
         if (cursor) query = query.startAfter(cursor);
-        const snap = await query.select().limit(PAGE_SIZE + 1).get();
+        const snap = await readFirestore(() => query.select().limit(PAGE_SIZE + 1).get());
         const docs = snap.docs.slice(0, PAGE_SIZE);
         const profiles = await currentProfiles(db, docs.map(d => d.id));
         const next = snap.docs.length > PAGE_SIZE ? docs.at(-1).id : '';
@@ -120,11 +135,11 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
           try {
             let q = db.collection('publicProfiles').orderBy('__name__');
             if (cursor) q = q.startAfter(cursor);
-            snap = await q.select().limit(SEARCH_PAGE_SIZE + 1).get();
+            snap = await readFirestore(() => q.select().limit(SEARCH_PAGE_SIZE + 1).get());
           } catch { return failure(503, 'Search is temporarily unavailable'); }
           const pageDocs = snap.docs.slice(0, SEARCH_PAGE_SIZE);
           const ids = pageDocs.map(d => d.id);
-          const docs = ids.length ? await db.getAll(...ids.map(id => db.collection('users').doc(id)), {fieldMask: PUBLIC_FIELDS}) : [];
+          const docs = ids.length ? await readFirestore(() => db.getAll(...ids.map(id => db.collection('users').doc(id)), {fieldMask: PUBLIC_FIELDS})) : [];
           for (const d of docs) {
             if (d.exists && publicEligible(d.data(), d.id)) {
               const projected = projectSearchMember(d.id, d.data(), selectProfileImage, safeUrl);
@@ -149,12 +164,12 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         // refreshed at most every 5 minutes at the edge. No profile data leaves.
         res.setHeader('X-Robots-Tag', 'noindex');
         const db = database();
-        const count = (await db.collection('publicProfiles').count().get()).data().count;
+        const count = (await readFirestore(() => db.collection('publicProfiles').count().get())).data().count;
         return send(200, JSON.stringify({ count, updatedAt: new Date().toISOString() }), 'application/json; charset=utf-8', BUILDER_COUNT_CACHE);
       }
       if (mode === 'sitemap') {
         const db = database();
-        const count = (await db.collection('publicProfiles').count().get()).data().count;
+        const count = (await readFirestore(() => db.collection('publicProfiles').count().get())).data().count;
         const pages = Math.max(1,Math.ceil(count / SITEMAP_SIZE));
         // Sitemap indexes may contain at most 50,000 child sitemaps.
         if (pages > 50000) throw new Error('Sitemap index capacity exceeded');
@@ -168,11 +183,11 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         if (!/^(0|[1-9]\d{0,4})$/.test(raw)) return failure(400,'Invalid sitemap');
         const page = Number(raw);
         const db = database();
-        const count = (await db.collection('publicProfiles').count().get()).data().count;
+        const count = (await readFirestore(() => db.collection('publicProfiles').count().get())).data().count;
         if (page >= Math.max(1,Math.ceil(count / SITEMAP_SIZE))) return failure(404,'Sitemap not found');
         // Bounded shards; offset trades some reads for simple, stable sitemap
         // URLs. At very large scale replace this with stored cursor manifests.
-        const snap = await db.collection('publicProfiles').orderBy('__name__').select().offset(page * SITEMAP_SIZE).limit(SITEMAP_SIZE).get();
+        const snap = await readFirestore(() => db.collection('publicProfiles').orderBy('__name__').select().offset(page * SITEMAP_SIZE).limit(SITEMAP_SIZE).get());
         const profiles = await currentProfiles(db,snap.docs.map(d => d.id));
         return send(200,xmlUrls(profiles.map(p => ({url:profileUrl(p.uid),image:p.image}))),'application/xml; charset=utf-8',SEO_SITEMAP_CACHE);
       }

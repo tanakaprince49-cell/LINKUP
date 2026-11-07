@@ -128,6 +128,32 @@ test('member API returns JSON errors, respects HEAD and does not manufacture fal
   }finally{console.error=old;}
 });
 
+test('member feed retries transient Firestore outages once and then serves live profiles',async()=>{
+  const db=database();
+  const collection=db.collection.bind(db),getAll=db.getAll.bind(db);
+  let queryAttempts=0,userAttempts=0;
+  db.collection=name=>{
+    const query=collection(name);
+    if(name==='publicProfiles'){
+      const get=query.get;
+      query.get=async()=>{
+        queryAttempts++;
+        if(queryAttempts===1){const error=new Error('14 UNAVAILABLE: transient test outage');error.code=14;throw error;}
+        return get();
+      };
+    }
+    return query;
+  };
+  db.getAll=async(...args)=>{
+    userAttempts++;
+    if(userAttempts===1){const error=new Error('4 DEADLINE_EXCEEDED: transient test outage');error.code=4;throw error;}
+    return getAll(...args);
+  };
+  const res=await request(db,{mode:'members'});
+  assert.equal(res.code,200);assert.equal(JSON.parse(res.body).profiles[0].uid,'alice');
+  assert.equal(queryAttempts,2);assert.equal(userAttempts,2);
+});
+
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8ioAAAAASUVORK5CYII=';
 const schemaFrom=html=>JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)[1]);
 test('a personal search title contains only the name; company and role are separate and never inferred from LINKUP',async()=>{
