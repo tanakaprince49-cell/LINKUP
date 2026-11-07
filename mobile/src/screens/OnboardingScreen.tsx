@@ -1618,16 +1618,49 @@ export default function OnboardingScreen({ navigation }: any) {
               autoCapitalize="words"
               returnKeyType="done"
             />
+            {/* The face goes with the name. It is mandatory: nobody walks in
+                faceless, and the review of the first screen is the only chance
+                to ask for it before they are in the app. */}
+            <View style={{ marginTop: 22 }}>
+              <Text style={{ fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>
+                {ONBOARDING_VOICE.photoTitle}
+              </Text>
+              <Text style={{ marginTop: 4, marginBottom: 14, fontSize: 12, fontWeight: '700', lineHeight: 17, color: textColor(isDark, 'muted') }}>
+                {ONBOARDING_VOICE.photoSub}
+              </Text>
+              <View style={{ alignItems: 'center' }}>
+                <PhotoSlot
+                  label="Profile Photo"
+                  uri={profilePicUri || null}
+                  onPress={pickPhoto}
+                  isDark={isDark}
+                  circular
+                />
+                <Text
+                  style={{
+                    marginTop: 12,
+                    fontSize: 12,
+                    fontWeight: '800',
+                    lineHeight: 17,
+                    textAlign: 'center',
+                    color: profilePicUri ? '#16A34A' : textColor(isDark, 'muted'),
+                  }}
+                >
+                  {profilePicUri ? ONBOARDING_VOICE.photoAdded : ONBOARDING_VOICE.photoMissing}
+                </Text>
+              </View>
+            </View>
           </View>
         ),
-        canNext: displayName.trim().length >= 2,
+        canNext: displayName.trim().length >= 2 && !!profilePicUri,
       },
       {
-        key: 'age',
-        title: ONBOARDING_VOICE.ageTitle,
-        subtitle: ONBOARDING_VOICE.ageSub,
+        key: 'homebase',
+        title: ONBOARDING_VOICE.placeTitle,
+        subtitle: ONBOARDING_VOICE.placeSub,
         body: (
-          <View>
+          <View style={{ gap: 12 }}>
+            <Text style={{ fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>How old are you?</Text>
             <TextInput
               value={ageText}
               onChangeText={(text) => setAgeText(text.replace(/[^0-9]/g, '').slice(0, 2))}
@@ -1644,19 +1677,9 @@ export default function OnboardingScreen({ navigation }: any) {
                 },
               ]}
             />
-          </View>
-        ),
-        canNext: (() => {
-          const age = Number(ageText);
-          return ageText.trim().length > 0 && Number.isInteger(age) && age >= 16 && age <= 99;
-        })(),
-      },
-      {
-        key: 'homebase',
-        title: ONBOARDING_VOICE.placeTitle,
-        subtitle: ONBOARDING_VOICE.placeSub,
-        body: (
-          <View style={{ gap: 10 }}>
+            <Text style={{ marginTop: 8, fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>
+              Where do you build from?
+            </Text>
             <TextInput
               value={country}
               onChangeText={setCountry}
@@ -1689,7 +1712,13 @@ export default function OnboardingScreen({ navigation }: any) {
             />
           </View>
         ),
-        canNext: country.trim().length >= 2 && city.trim().length >= 2,
+        canNext: (() => {
+          const age = Number(ageText);
+          return (
+            ageText.trim().length > 0 && Number.isInteger(age) && age >= 16 && age <= 99 &&
+            country.trim().length >= 2 && city.trim().length >= 2
+          );
+        })(),
       },
       {
         key: 'identity',
@@ -1851,10 +1880,31 @@ export default function OnboardingScreen({ navigation }: any) {
         canNext: !!stakes && !!urgency,
       },
 
-      // The role question bank: skills, role-specific answers, industries,
-      // experience, work style and personality. This is the data the
-      // algorithm actually scores against, so it is wired into the flow.
-      ...roleSteps,
+      // The role question bank — goals, industries, skills, stage, funding and
+      // the role-specific questions — used to be five or six separate screens,
+      // which is how onboarding reached nineteen. The questions are unchanged;
+      // they now share one screen, answered top to bottom.
+      {
+        key: 'profile-bank',
+        title: 'Your professional profile',
+        subtitle: 'The rest of what the algorithm scores you on. Answer honestly — this is what gets you introduced.',
+        body: (
+          <View style={{ gap: 26 }}>
+            {roleSteps.map((entry) => (
+              <View key={entry.key} style={{ gap: 9 }}>
+                <Text style={{ fontSize: 13, fontWeight: '900', color: textColor(isDark) }}>{entry.title}</Text>
+                {!!entry.subtitle && (
+                  <Text style={{ fontSize: 12, fontWeight: '700', lineHeight: 17, color: textColor(isDark, 'muted') }}>
+                    {entry.subtitle}
+                  </Text>
+                )}
+                {entry.body}
+              </View>
+            ))}
+          </View>
+        ),
+        canNext: roleSteps.every((entry) => entry.canNext),
+      },
 
       // ---- HOW TO BE BUILT WITH --------------------------------------
       {
@@ -1958,35 +2008,6 @@ export default function OnboardingScreen({ navigation }: any) {
         ),
         canNext: true,
       },
-      {
-        key: 'photos',
-        title: ONBOARDING_VOICE.photoTitle,
-        subtitle: ONBOARDING_VOICE.photoSub,
-        body: (
-          <View style={{ alignItems: 'center' }}>
-            <PhotoSlot
-              label="Profile Photo"
-              uri={profilePicUri || null}
-              onPress={pickPhoto}
-              isDark={isDark}
-              circular
-            />
-            <Text
-              style={{
-                marginTop: 14,
-                fontSize: 12,
-                fontWeight: '800',
-                lineHeight: 17,
-                textAlign: 'center',
-                color: profilePicUri ? '#16A34A' : textColor(isDark, 'muted'),
-              }}
-            >
-              {profilePicUri ? ONBOARDING_VOICE.photoAdded : ONBOARDING_VOICE.photoMissing}
-            </Text>
-          </View>
-        ),
-        canNext: !!profilePicUri,
-      },
       ...(profileNoticeSeen !== false
         ? []
         : [
@@ -2055,7 +2076,7 @@ export default function OnboardingScreen({ navigation }: any) {
     // someone in the app with a faceless profile.
     if (!profilePicUri) {
       notifyUser('Photo required', 'Add a profile photo to finish setting up your account.');
-      const photoStep = steps.findIndex((entry) => entry.key === 'photos');
+      const photoStep = steps.findIndex((entry) => entry.key === 'name');
       if (photoStep >= 0) setStep(photoStep);
       return;
     }

@@ -77,11 +77,8 @@ import {
 import {
   buildLocalFreeEntitlement,
   clearLocalProEntitlement,
-  consumeDailyUsage,
-  FREE_LIMITS,
   GOOGLE_PLAY_SUBSCRIPTION_URL,
   hasLinkupPro,
-  isAndroidProLocked,
   LINKUP_PLUS_PRODUCT_ID,
   LINKUP_PLUS_YEARLY_PRODUCT_ID,
   PRO_FEATURES,
@@ -468,7 +465,6 @@ export default function ProfileScreen({ navigation, route }: any) {
     return subscribeToConnectionGate(myProfile.uid, targetUserId, setConnectionGate);
   }, [isViewingOther, myProfile?.uid, targetUserId]);
   const profile = isViewingOther ? viewedProfile : myProfile;
-  const proLocked = isAndroidProLocked(myProfile);
   const openPaywall = (feature: string) => setPaywallFeature(feature);
 
   useEffect(() => {
@@ -1844,14 +1840,9 @@ export default function ProfileScreen({ navigation, route }: any) {
       return;
     }
 
-    if (proLocked) {
-      const usage = await consumeDailyUsage(myProfile?.uid || user?.uid || 'anonymous', 'startup-analyzer', FREE_LIMITS.dailyStartupAnalyzer);
-      if (!usage.allowed) {
-        openPaywall(PRO_FEATURES.startupAnalyzer);
-        return;
-      }
-    }
-
+    // The 3-per-day analyzer gate is gone. It priced a feature nobody was
+    // being sold, and it stopped the one thing that makes a thin profile worth
+    // reading. The analyzer is unlimited for every member now.
     setStartupAnalyzing(true);
     const previousDiagnosticAt = getLastAIDiagnostic()?.timestamp || 0;
     try {

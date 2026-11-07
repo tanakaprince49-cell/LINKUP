@@ -26,9 +26,11 @@ export const PRO_FEATURES = {
  */
 export const IDEA_DECK_FREE_FOREVER = true;
 
+// `swipesPer12Hours` and `dailyStartupAnalyzer` used to live here. Both capped
+// features that no longer exist (endless swipe decks, 3 AI analyses a day), and
+// every plan that leaned on them read as a hostage negotiation. They are not
+// coming back: a limit here must map to something we actually charge for.
 export const FREE_LIMITS = {
-  swipesPer12Hours: 12,
-  dailyStartupAnalyzer: 3,
   savedProfiles: 5,
   projects: 3,
   weeklyRecommendations: 3,

@@ -277,6 +277,13 @@ service cloud.firestore {
           'isPro', 'plan', 'subscriptionPlan', 'subscriptionStatus',
           'proUnlockedAt', 'subscriptionUpdatedAt',
           'settings',
+          // The builder brief + work-style answers collected by onboarding.
+          // These are the signal the matcher and Linky read, so a new account
+          // could not finish setup at all until they were whitelisted here.
+          'buildingName', 'buildingOneLiner', 'buildingTraction',
+          'missingSeat', 'seatWhy', 'stakes', 'urgency',
+          'workPace', 'conflictStyle', 'decisionStyle', 'riskAppetite',
+          'equityView', 'weeklyHours', 'relocateView', 'matchingSignals',
           'isVerified', 'verificationProgram', 'verifiedBy', 'verifiedAt',
           'onboarded',
           'lastActiveAt', 'shipLogs', 'shipCount', 'lastShippedAt',
@@ -460,6 +467,11 @@ service cloud.firestore {
             data.lastShippedAt is string ||
             data.lastShippedAt == null) &&
           (!changed.hasAny(['personalityAnswers']) || (data.personalityAnswers is map && data.personalityAnswers.size() <= 30)) &&
+          // NOTE: the profile validator is already at Firebase's hard limit of
+          // 1000 expressions per evaluation. Adding even three more per-field
+          // bounds here makes every profile save fail with `permission-denied`,
+          // which is exactly how onboarding broke. New fields get a whitelist
+          // entry in safeProfileKeys() and nothing more.
           (!changed.hasAny(['roleAnswers']) || (data.roleAnswers is map && data.roleAnswers.size() <= 30)) &&
           (!changed.hasAny(['resume']) || (data.resume is map && data.resume.size() <= 10)) &&
           (!changed.hasAny(['socialLinks']) || (data.socialLinks is map && data.socialLinks.size() <= 10)) &&
