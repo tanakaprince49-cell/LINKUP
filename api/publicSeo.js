@@ -3,10 +3,12 @@ import {serveContentSeo,contentSitemapIndex} from './_contentSeo.js';
 import {serveBlogSeo,blogSitemapIndex} from './_blogSeo.js';
 import {getNewsFeed} from './_newsFeed.js';
 import {selectProfileImage} from './_publicProfileImage.js';
-import {renderSearchPage, projectSearchMember} from './_searchGlobe.js';
+import {renderSearchPage, projectSearchMember, groupMembersByLocation} from './_searchGlobe.js';
 import { getDb } from './_firebaseAdmin.js';
 import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, safeUrl, validId, publicEligible, projectProfile, profileUrl, renderProfile, renderDirectory, documentHtml, xmlIndex, xmlUrls } from './_publicSeo.js';
 
+const SEARCH_PAGE_SIZE = 40;
+const SEARCH_EDGE_CACHE = {'Cache-Control':'private, no-store','Vercel-CDN-Cache-Control':'public, s-maxage=30','CDN-Cache-Control':'public, s-maxage=30'};
 const PUBLIC_FIELDS = ['displayName','fullName','name','username','bio','occupation','company','city','country','skills','lookingFor','profilePicUrl','photoURL','profilePic','avatarUrl','photos','socialLinks','projects','deleted','banned','isBot','onboarded','isVisible','isStealthMode'];
 async function currentProfiles(db, ids) {
   if (!ids.length) return [];
@@ -104,25 +106,34 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         return send(200,renderDirectory(profiles,cursor,next));
       }
       if (mode === 'search' || mode === 'search-data') {
-        // Both the visible Earth search and its explicit JSON counterpart use
-        // the same bounded, live-checked public-profile projection.
+        // Page the directory instead of reading 600 public index rows and then
+        // re-reading 600 source users for every page view. Each bounded page is
+        // live-checked, and Vercel shares identical pages for only 30 seconds.
+        const after = single(req.query?.after);
+        if (after && !validId(after)) return failure(400, 'Invalid Search page');
         const db = database();
         let snap;
-        try { snap = await db.collection('publicProfiles').orderBy('__name__').select().limit(600).get(); }
-        catch { return failure(503, 'Search is temporarily unavailable'); }
-        const ids = snap.docs.map(d => d.id);
+        try {
+          let q = db.collection('publicProfiles').orderBy('__name__');
+          if (after) q = q.startAfter(after);
+          snap = await q.select().limit(SEARCH_PAGE_SIZE + 1).get();
+        } catch { return failure(503, 'Search is temporarily unavailable'); }
+        const pageDocs = snap.docs.slice(0, SEARCH_PAGE_SIZE);
+        const ids = pageDocs.map(d => d.id);
         const docs = ids.length ? await db.getAll(...ids.map(id => db.collection('users').doc(id)), {fieldMask: PUBLIC_FIELDS}) : [];
         const members = docs
           .filter(d => d.exists && publicEligible(d.data(), d.id))
           .map(d => projectSearchMember(d.id, d.data(), selectProfileImage, safeUrl))
           .filter(Boolean);
+        const nextCursor = snap.docs.length > SEARCH_PAGE_SIZE ? pageDocs.at(-1)?.id || null : null;
+        const locationGroups = groupMembersByLocation(members).groups;
         res.setHeader('X-Robots-Tag', 'noindex');
         if (mode === 'search-data') {
           res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
-          return send(200, JSON.stringify({ members, total: members.length, generatedAt: new Date().toISOString() }), 'application/json; charset=utf-8');
+          return send(200, JSON.stringify({ members, groups: locationGroups, nextCursor, generatedAt: new Date().toISOString() }), 'application/json; charset=utf-8', SEARCH_EDGE_CACHE);
         }
         res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src https: data: blob:; connect-src 'self'; font-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
-        return send(200, renderSearchPage({ members }), 'text/html; charset=utf-8');
+        return send(200, renderSearchPage({ members, groups: locationGroups, nextCursor }), 'text/html; charset=utf-8', SEARCH_EDGE_CACHE);
       }
       if (mode === 'builder-count') {
         // Live marketing counter: cheap count aggregation over public profiles,

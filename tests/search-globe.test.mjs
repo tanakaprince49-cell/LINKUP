@@ -3,17 +3,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { renderSearchPage, groupMembersByLocation } from '../api/_searchGlobe.js';
 import { createPublicSeoHandler } from '../api/publicSeo.js';
+const rules = fs.readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
 
 const member = (uid, name, city, country, image='') => ({uid,name,city,country,image,occupation:'Founder',company:'LINKUP project',skills:['Product','Engineering'],verified:true,url:`/app/p/${uid}`});
 
-test('Search shows live public profiles on the Earth and in a searchable photo rail', () => {
+test('Search shows live public profiles on the Earth and in a searchable, paginated photo rail', () => {
   const people=[member('harare','Ada Moyo','Harare','Zimbabwe','https://ik.imagekit.io/demo/ada.jpg'),member('london','Bola Ade','London','United Kingdom')];
-  const html=renderSearchPage({members:people});
+  const html=renderSearchPage({members:people,nextCursor:'next-id'});
   assert.match(html,/https:\/\/www\.linkupbuild\.com\/app\/assets\/earth-blue-marble\.jpg/);
   assert.match(html,/#earthScene\{position:fixed;inset:0/);
   assert.match(html,/new THREE\.SphereGeometry\(radius,88,64\)/);
   assert.match(html,/Search LINKUP public profiles/);
   assert.match(html,/id="markerLayer"/);assert.match(html,/id="profileFilter"/);assert.match(html,/id="profiles"/);
+  assert.match(html,/id="loadMore"/);assert.match(html,/mode=search-data&after=/);
   assert.match(html,/Ada Moyo/);assert.match(html,/Bola Ade/);assert.match(html,/Harare, Zimbabwe/);
   assert.match(html,/LINKUP_SEARCH=/);assert.match(html,/aria-label="Open Ada Moyo’s profile"/);
   assert.doesNotMatch(html,/cdn\.jsdelivr\.net\/npm\/three-globe[^'" ]*earth-blue-marble/);
@@ -29,18 +31,32 @@ test('member locations group into usable Earth markers while unknown locations r
   assert.deepEqual(result.unlocated,[2]);
 });
 
-test('Search API embeds only currently eligible profiles and is never edge-cached',async()=>{
-  const users={
-    alice:{displayName:'Alice Public',onboarded:true,isVisible:true,isStealthMode:false,city:'Harare',country:'Zimbabwe',skills:['Design']},
-    hidden:{displayName:'Hidden Person',onboarded:true,isVisible:false,isStealthMode:false,city:'Harare',country:'Zimbabwe'},
-  };
+test('Search reads and live-checks one bounded profile page, then returns a cursor and short edge cache',async()=>{
+  assert.match(rules,/match \/publicProfiles\/\{userId\}[\s\S]*?allow list: if isSignedIn\(\) && request\.query\.limit != null && request\.query\.limit <= 100;/);
+  assert.match(rules,/match \/users\/\{userId\}[\s\S]*?allow list: if isSignedIn\(\) && request\.query\.limit != null && request\.query\.limit <= 100;/);
+  const users={};
+  for(let i=0;i<45;i++) users[`profile_${String(i).padStart(3,'0')}`]={displayName:i===0?'Alice Public':`Person ${i}`,onboarded:true,isVisible:true,isStealthMode:false,city:'Harare',country:'Zimbabwe',skills:['Design']};
+  users.profile_001.isVisible=false;
+  const calls={limit:0,after:[],getAll:0};
+  const ids=Object.keys(users).sort();
   const database={
-    collection(name){let q; q={orderBy:()=>q,select:()=>q,limit:()=>q,doc:id=>({id}),get:async()=>({docs:Object.keys(users).map(id=>({id}))})};return q;},
-    async getAll(...refs){return refs.map(({id})=>({id,exists:!!users[id],data:()=>users[id]}));},
+    collection(name){let cursor='';const q={orderBy:()=>q,startAfter(value){cursor=value;calls.after.push(value);return q;},select:()=>q,limit(n){calls.limit=n;return q;},doc:id=>({id}),get:async()=>{const filtered=cursor?ids.filter(id=>id>cursor):ids;return{docs:filtered.slice(0,calls.limit).map(id=>({id}))}}};return q;},
+    async getAll(...args){calls.getAll++;return args.filter(x=>x&&x.id).map(({id})=>({id,exists:!!users[id],data:()=>users[id]}));},
   };
-  const response={headers:{},code:0,body:'',setHeader(k,v){this.headers[k.toLowerCase()]=v;},status(c){this.code=c;return this;},send(body){this.body=body;return this;}};
-  await createPublicSeoHandler(()=>database)({method:'GET',query:{mode:'search'}},response);
-  assert.equal(response.code,200);assert.match(response.body,/Alice Public/);assert.doesNotMatch(response.body,/Hidden Person/);
-  assert.equal(response.headers['cache-control'],'private, no-store');
-  assert.match(response.headers['content-security-policy'],/img-src https:/);
+  const response=()=>({headers:{},code:0,body:'',setHeader(k,v){this.headers[k.toLowerCase()]=v;},status(c){this.code=c;return this;},send(body){this.body=body;return this;}});
+  const handler=createPublicSeoHandler(()=>database);
+  const htmlRes=response();
+  await handler({method:'GET',query:{mode:'search'}},htmlRes);
+  assert.equal(htmlRes.code,200);assert.match(htmlRes.body,/Alice Public/);assert.doesNotMatch(htmlRes.body,/Hidden Person/);
+  assert.match(htmlRes.body,/Person 39/);assert.doesNotMatch(htmlRes.body,/Person 40/);
+  assert.equal(calls.limit,41);assert.equal(calls.getAll,1);
+  assert.equal(htmlRes.headers['cache-control'],'private, no-store');
+  assert.equal(htmlRes.headers['vercel-cdn-cache-control'],'public, s-maxage=30');
+  assert.match(htmlRes.headers['content-security-policy'],/img-src https:/);
+
+  const dataRes=response();
+  await handler({method:'GET',query:{mode:'search-data',after:'profile_039'}},dataRes);
+  assert.equal(dataRes.code,200);const body=JSON.parse(dataRes.body);
+  assert.equal(body.members.length,5);assert.equal(body.nextCursor,null);assert.equal(calls.after[0],'profile_039');
+  assert.equal(dataRes.headers['vercel-cdn-cache-control'],'public, s-maxage=30');
 });

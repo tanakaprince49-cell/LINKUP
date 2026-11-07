@@ -2,7 +2,7 @@ const {test,before,after}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
-const {doc,setDoc,getDoc,deleteField,Timestamp}=require('firebase/firestore');
+const {doc,setDoc,getDoc,getDocs,collection,query,limit,deleteField,Timestamp}=require('firebase/firestore');
 let env;
 before(async()=>{
  if(!process.env.FIRESTORE_EMULATOR_HOST)throw Error('Run npm run test:firestore; never point these tests at production.');
@@ -57,6 +57,21 @@ test('new normal profiles remain creatable without minting paid or verification 
  await env.clearFirestore();const db=env.authenticatedContext('new-member').firestore();await assertSucceeds(setDoc(doc(db,'users/new-member'),{uid:'new-member',displayName:'New Member',bio:'Hello',turboConnect:false}));
  await assertFails(setDoc(doc(env.authenticatedContext('imposter').firestore(),'users/imposter'),{uid:'imposter',displayName:'Imposter',isPro:true,isVerified:true}));
 });
+test('public directory reads require a bounded client query on both profile collections',async()=>{
+ await env.clearFirestore();
+ await env.withSecurityRulesDisabled(async context=>{
+  const db=context.firestore();
+  await setDoc(doc(db,'publicProfiles/owner'),{uid:'owner',displayName:'Tanaka Fixture'});
+  await setDoc(doc(db,'users/owner'),{uid:'owner',displayName:'Tanaka Fixture'});
+ });
+ const db=env.authenticatedContext('owner').firestore();
+ for(const name of ['publicProfiles','users']){
+  await assertSucceeds(getDocs(query(collection(db,name),limit(100))));
+  await assertFails(getDocs(query(collection(db,name),limit(101))));
+  await assertFails(getDocs(collection(db,name)));
+ }
+});
+
 test('owners can publish a hosted banner URL to the public index but not oversized values',async()=>{
  await env.clearFirestore();
  const db=env.authenticatedContext('owner').firestore(),ref=doc(db,'publicProfiles/owner');

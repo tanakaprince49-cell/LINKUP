@@ -533,9 +533,9 @@ service cloud.firestore {
         !exists(/databases/$(database)/documents/blocks/$(userId + "_" + request.auth.uid))
       );
 
-      // Search/discovery fetches a signed-in profile pool and the app filters stealth/hidden
-      // profiles locally. This keeps older profiles without visibility fields discoverable.
-      allow list: if isSignedIn();
+      // Signed-in discovery queries are bounded to prevent accidental full
+      // collection downloads. Current app fallback queries stay at <=24 docs.
+      allow list: if isSignedIn() && request.query.limit != null && request.query.limit <= 100;
 
       // Create: a brand-new profile. Shape-validated (displayName sane), and
       // the key whitelist + escalation guards stop a first write from minting
@@ -673,9 +673,10 @@ service cloud.firestore {
       }
 
       // Single shared profile links must open for people who are not signed
-      // in yet (growth loop). Lists stay signed-in so the index cannot be scraped.
+      // in yet (growth loop). Directory list reads require sign-in and a hard
+      // client-side query cap; Admin SDK SEO reads are separately paginated.
       allow get: if true;
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() && request.query.limit != null && request.query.limit <= 100;
       // The paid/verification/boost fields mirror users/{uid} and are stamped
       // by the server (Admin SDK) only. A client write may not carry them at
       // all, otherwise anyone could mint a crown/tick for the whole app.
