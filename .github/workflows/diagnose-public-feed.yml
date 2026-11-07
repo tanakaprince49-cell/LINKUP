@@ -30,4 +30,4 @@ jobs:
             sleep 2
           done
       - name: Read recent production runtime errors
-        run: npx vercel@latest logs runtime --environment production --query 'level:error' --since 60m --token="$VERCEL_TOKEN"
+        run: npx vercel@latest logs runtime --environment production --query 'level:error' --since 10m --token="$VERCEL_TOKEN"
