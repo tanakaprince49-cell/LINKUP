@@ -43,12 +43,20 @@ test('Turbo Connect remains restricted to existing PLUS entitlements',async()=>{
  let db=await seed();await assertFails(setDoc(doc(db,'users/owner'),{turboConnect:true},{merge:true}));await assertFails(setDoc(doc(db,'users/owner'),{settings:{turboConnect:true}},{merge:true}));
  db=await seed({isPro:true});await assertSucceeds(setDoc(doc(db,'users/owner'),{turboConnect:true,settings:{turboConnect:true}},{merge:true}));
 });
-test('new values still obey type, length, range and map-key limits',async()=>{
+test('new values still obey type, range and map-key limits',async()=>{
  const db=await seed();
- for(const patch of [{username:'x'.repeat(31)},{occupation:'x'.repeat(81)},{bio:'x'.repeat(2001)},{company:42},{age:12},{age:121},{age:25.5},{skills:'React'},{photos:['a','b','c','d']},{roleAnswers:Array.from({length:31},(_,i)=>[i,i]).reduce((o,[k,v])=>({...o,[k]:v}),{})},{settings:{darkMode:'yes'}},{settings:{admin:true}},{founderScore:101},{reputationMetrics:{responseRate:'50'}},{reputationMetrics:{reliability:-1}},{reputationMetrics:{reliability:NaN}}])await assertFails(setDoc(doc(db,'users/owner'),patch,{merge:true}));
+ for(const patch of [{bio:'x'.repeat(2001)},{age:12},{age:121},{age:25.5},{skills:'React'},{photos:['a','b','c','d']},{roleAnswers:Array.from({length:31},(_,i)=>[i,i]).reduce((o,[k,v])=>({...o,[k]:v}),{})},{settings:{darkMode:'yes'}},{settings:{admin:true}},{founderScore:101},{reputationMetrics:{responseRate:'50'}},{reputationMetrics:{reliability:-1}},{reputationMetrics:{reliability:NaN}}])await assertFails(setDoc(doc(db,'users/owner'),patch,{merge:true}));
 });
-test('short-string validation accepts line breaks and Unicode without dropping length limits',async()=>{
- const db=await seed();await assertSucceeds(setDoc(doc(db,'users/owner'),{company:'A\nB',city:'São Tomé',occupation:'開発者'},{merge:true}));await assertFails(setDoc(doc(db,'users/owner'),{occupation:'開'.repeat(81)},{merge:true}));
+// The per-field character caps — and the `is string` test that shared their clause —
+// on the 19 small profile strings were removed to stay under the 1,000-expression
+// rule budget (see BUDGET NOTE in firestore.rules). Range, map, list, bool and
+// bulk-field caps (bio, photos, media) are still enforced; the cheap probe in
+// tests/firestore-profile/budget_probe.cjs is the guard against creeping back up.
+test('a numeric company on the small-string set is no longer a rules concern',async()=>{
+ const db=await seed();await assertSucceeds(setDoc(doc(db,'users/owner'),{company:42},{merge:true}));
+});
+test('short-string fields accept line breaks and Unicode without rejecting the write',async()=>{
+ const db=await seed();await assertSucceeds(setDoc(doc(db,'users/owner'),{company:'A\nB',city:'São Tomé',occupation:'開発者'},{merge:true}));
 });
 test('profile updates cannot delete a validated field or write the server quota ledger',async()=>{
  const db=await seed({bio:'Existing bio'});await assertFails(setDoc(doc(db,'users/owner'),{bio:deleteField()},{merge:true}));await assertFails(setDoc(doc(db,'linkyUsage/owner'),{month:{count:0}},{merge:true}));
