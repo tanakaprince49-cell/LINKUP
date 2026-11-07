@@ -864,9 +864,78 @@ export const peekRotatedCampaigns = async (
   return [...pool.slice(cursor), ...pool.slice(0, cursor)];
 };
 
-/** Several slots mount together; share one read for a few seconds. */
-const SERVABLE_CACHE_MS = 15_000;
+/**
+ * Several slots mount together; share one read.
+ *
+ * Was 15s, which was shorter than the 45s rotation timer it was meant to serve,
+ * so every single tick re-read the whole active-campaign collection: ~24 reads
+ * per slot per tick, ~1,900 reads an hour per slot, on a Spark plan that gets
+ * 50,000 a day. Inventory turns over on the scale of hours, not seconds, so the
+ * cache now outlives a rotation, and a mounted slot uses the shared listener
+ * below instead of polling at all.
+ */
+const SERVABLE_CACHE_MS = 5 * 60_000;
 let servableCache: { at: number; rows: Campaign[] } | null = null;
+
+/**
+ * Which campaigns a surface may show: inventory that bought this placement
+ * first, any live campaign second (thin-inventory fallback), never the
+ * viewer's own campaign. Pure and exported so slots and tests agree.
+ */
+export const sponsoredPool = (campaigns: Campaign[], placement: string, viewerUid: string): Campaign[] => {
+  const notMine = campaigns.filter((campaign) => campaign.ownerId !== viewerUid);
+  const targeted = notMine.filter(
+    (campaign) => Array.isArray(campaign.placements) && campaign.placements.includes(placement)
+  );
+  return targeted.length ? targeted : notMine;
+};
+
+/**
+ * ONE realtime listener for servable inventory, shared by every sponsored slot
+ * on screen and ref-counted so it dies with the last one.
+ *
+ * This is the read fix: a mounted slot used to poll `getDocs` every 45 seconds
+ * for its whole life. Now the collection is read once (<=24 docs), kept warm by
+ * deltas, and handed to every slot; rotation happens locally. It also refreshes
+ * the one-shot cache, so a screen that calls pickSponsoredCampaign instead of
+ * subscribing rides on the same data.
+ */
+let servableListener: { stop: () => void; subscribers: Set<(rows: Campaign[]) => void>; rows: Campaign[] } | null = null;
+
+export const subscribeServableCampaigns = (onData: (campaigns: Campaign[]) => void): (() => void) => {
+  if (!servableListener) {
+    const subscribers = new Set<(rows: Campaign[]) => void>();
+    const entry = { stop: () => {}, subscribers, rows: [] as Campaign[] };
+    servableListener = entry;
+    entry.stop = onSnapshot(
+      query(collection(db, 'campaigns'), where('status', '==', 'active'), limit(24)),
+      (snap) => {
+        const now = Date.now();
+        const rows = snap.docs
+          .map((row) => ({ id: row.id, ...row.data() }) as Campaign)
+          .filter((campaign) => isCampaignServable(campaign, now) && !!campaign.creative);
+        entry.rows = rows;
+        servableCache = { at: now, rows };
+        subscribers.forEach((notify) => {
+          try { notify(rows); } catch {}
+        });
+      },
+      () => {
+        // Offline or denied: keep serving whatever the cache already holds.
+      }
+    );
+  }
+  const entry = servableListener;
+  entry.subscribers.add(onData);
+  if (entry.rows.length) onData(entry.rows);
+  return () => {
+    entry.subscribers.delete(onData);
+    if (!entry.subscribers.size) {
+      entry.stop();
+      if (servableListener === entry) servableListener = null;
+    }
+  };
+};
 
 /** Every servable campaign, unfiltered by placement. One Firestore read. */
 export const fetchServableCampaigns = async (): Promise<Campaign[]> => {
@@ -934,12 +1003,7 @@ export const pickSponsoredCampaign = async (
   options: { recordImpression?: boolean } = {}
 ): Promise<Campaign | null> => {
   if (!viewerUid) return null;
-  const all = await fetchServableCampaigns();
-  const notMine = all.filter((campaign) => campaign.ownerId !== viewerUid);
-  const targeted = notMine.filter(
-    (campaign) => Array.isArray(campaign.placements) && campaign.placements.includes(placement)
-  );
-  const pool = targeted.length ? targeted : notMine;
+  const pool = sponsoredPool(await fetchServableCampaigns(), placement, viewerUid);
   if (!pool.length) return null;
   const [next] = await rotateCampaignsForViewer(pool, viewerUid, 'global');
   if (next && options.recordImpression !== false) void recordCampaignImpression(next.id, viewerUid);
@@ -965,12 +1029,7 @@ export const pickSponsoredCampaigns = async (
   options: { recordImpression?: boolean } = {}
 ): Promise<Campaign[]> => {
   if (!viewerUid || count <= 0) return [];
-  const all = await fetchServableCampaigns();
-  const notMine = all.filter((campaign) => campaign.ownerId !== viewerUid);
-  const targeted = notMine.filter(
-    (campaign) => Array.isArray(campaign.placements) && campaign.placements.includes(placement)
-  );
-  const pool = targeted.length ? targeted : notMine;
+  const pool = sponsoredPool(await fetchServableCampaigns(), placement, viewerUid);
   if (!pool.length) return [];
   const rotated = await rotateCampaignsForViewer(pool, viewerUid, 'global');
   const out: Campaign[] = [];
