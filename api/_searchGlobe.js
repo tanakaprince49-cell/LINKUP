@@ -1,9 +1,6 @@
-// The /search page: a smooth 3D globe of the public LINKUP membership.
-// Every dot is an opted-in, public-eligible profile (same rules as /builders).
-// Positions come from each member's city (falls back to their country), resolved
-// offline by _cityCoords.js. The whole dataset is embedded in the HTML, so the
-// page renders from one request and never calls home from the client.
-import { SITE, APP, profileUrl, escapeHtml, documentHtml } from './_publicSeo.js';
+// Public member search rendered as a full-screen, interactive Earth.
+// Profile photos and city/country labels come only from opted-in public profiles.
+import { SITE, APP, profileUrl, escapeHtml } from './_publicSeo.js';
 import { resolveLocation } from './_cityCoords.js';
 
 const e = escapeHtml;
@@ -32,375 +29,75 @@ export function groupMembersByLocation(members) {
   members.forEach((member, index) => {
     const place = resolveLocation(member.city, member.country);
     if (!place) { unlocated.push(index); return; }
-    const key = `${place.precision}:${place.label}`;
-    if (!groups.has(key)) groups.set(key, { label: place.label, precision: place.precision, lat: place.lat, lng: place.lng, members: [] });
+    const key = `${place.precision}:${place.label}:${String(member.country || '').toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, { label: place.label, country: member.country || '', precision: place.precision, lat: place.lat, lng: place.lng, members: [] });
     groups.get(key).members.push(index);
   });
   return { groups: [...groups.values()].sort((a, b) => b.members.length - a.members.length), unlocated };
 }
 
 export function renderSearchPage({ members }) {
-  const { groups, unlocated } = groupMembersByLocation(members);
-  const countries = new Set(members.map(m => m.country).filter(Boolean)).size;
-  const cities = groups.filter(g => g.precision === 'city').length;
-  const placed = members.length - unlocated.length;
   const dataJson = JSON.stringify({
     members: members.map(m => ({ ...m, location: resolveLocation(m.city, m.country) })),
-    groups,
   }).replace(/</g, '\\u003c');
-
-  const topCities = groups.slice(0, 8).map(g =>
-    `<button class="chip" type="button" data-lat="${g.lat}" data-lng="${g.lng}" data-label="${e(g.label)}">${e(g.label)} · ${g.members.length}</button>`
-  ).join('');
-
-  const grid = members.slice(0, 24).map(m => `
-    <article class="card g-card">
-      ${m.image ? `<a href="${e(m.url)}" aria-label="Open ${e(m.name)} profile"><img class="avatar" src="${e(m.image)}" alt="${e(m.name)} profile photo" width="100" height="100" loading="lazy" decoding="async" referrerpolicy="no-referrer"></a>` : `<a class="avatar avatar-initials" href="${e(m.url)}" aria-hidden="true">${e(initials(m.name))}</a>`}
-      <h2><a href="${e(m.url)}">${e(m.name)}</a></h2>
-      ${m.occupation ? `<p>${e(m.occupation)}</p>` : ''}
-      <p class="muted">${e([m.city, m.country].filter(Boolean).join(', '))}</p>
-    </article>`).join('');
-
-  const content = `
-<style>
-.globe-hero{padding:8px 0 4px}
-.kicker{display:inline-block;border:1px solid #deded6;border-radius:30px;padding:5px 14px;font-size:12px;letter-spacing:2px;font-weight:800;color:#6b6f66}
-.globe-stats{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 0}
-.stat{background:#fff;border:1px solid #deded6;border-radius:16px;padding:10px 16px;font-size:13px}
-.stat strong{display:block;font-size:22px;letter-spacing:-0.5px}
-.globe-shell{position:relative;margin:18px 0;border:1px solid #deded6;border-radius:24px;overflow:hidden;background:radial-gradient(1200px 600px at 50% 120%,#12263a 0%,#05070c 70%)}
-#globe{width:100%;height:min(66vh,560px);min-height:420px;touch-action:none}
-.globe-overlay{position:absolute;left:16px;right:16px;top:14px;display:flex;gap:10px;align-items:center;pointer-events:none}
-.globe-overlay>*{pointer-events:auto}
-#globeFilter{flex:1;border:1px solid rgba(255,255,255,.18);background:rgba(10,14,20,.72);color:#f5f7fa;border-radius:30px;padding:12px 18px;font-size:15px;outline:none;backdrop-filter:blur(4px)}
-#globeFilter::placeholder{color:#9aa6b2}
-#globeFilter:focus-visible{outline:2px solid #fbe618;border-color:transparent}
-#globeCount{background:rgba(10,14,20,.72);color:#f5f7fa;border-radius:30px;padding:10px 16px;font-size:13px;font-weight:700;white-space:nowrap;border:1px solid rgba(255,255,255,.1)}
-#globeTip{position:absolute;pointer-events:none;background:#0c1118;border:1px solid rgba(255,255,255,.16);color:#f5f7fa;border-radius:12px;padding:8px 10px;font-size:12px;line-height:1.45;display:none;max-width:240px;z-index:6}
-#globeTip strong{display:block;font-size:13px}
-.globe-hint{position:absolute;bottom:12px;left:16px;color:#8fa3b8;font-size:12px}
-.globe-panel{position:absolute;right:0;top:0;bottom:0;width:min(320px,84vw);background:rgba(8,12,18,.88);backdrop-filter:blur(8px);border-left:1px solid rgba(255,255,255,.12);color:#f5f7fa;transform:translateX(102%);transition:transform .28s ease;z-index:5;display:flex;flex-direction:column}
-.globe-panel.open{transform:translateX(0)}
-.globe-panel header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.1)}
-.globe-panel header h2{margin:0;font-size:16px;color:#f5f7fa}
-.globe-panel .panel-close{background:none;border:1px solid rgba(255,255,255,.2);color:#f5f7fa;border-radius:10px;width:34px;height:34px;font-size:16px;cursor:pointer}
-.panel-list{overflow-y:auto;padding:10px}
-.panel-member{display:flex;gap:10px;align-items:center;padding:9px 8px;border-radius:14px;text-decoration:none;color:inherit}
-.panel-member:hover,.panel-member:focus-visible{background:rgba(255,255,255,.07)}
-.panel-member img,.panel-initials{width:46px;height:46px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid rgba(255,255,255,.14)}
-.panel-initials{display:flex;align-items:center;justify-content:center;background:#1f2c3d;font-weight:800;font-size:15px}
-.panel-member b{display:block;font-size:13.5px}
-.panel-member small{color:#9aa6b2;font-size:11.5px;display:block}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 10px}
-.chip{background:#fff;border:1px solid #deded6;border-radius:30px;padding:7px 14px;font-size:13px;cursor:pointer}
-.chip:hover{border-color:#171918}
-.globe-foot{font-size:13px;color:#565b55}
-.g-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
-.avatar-initials{display:flex;align-items:center;justify-content:center;background:#171918;color:#fbe618;font-weight:900;text-decoration:none;font-size:28px;letter-spacing:1px}
-@media (prefers-reduced-motion:reduce){.globe-panel{transition:none}}
-</style>
-<section class="globe-hero">
-  <span class="kicker">LINKUP · LIVE MEMBER MAP</span>
-  <h1>Where the builders are.</h1>
-  <p class="muted">Every light is an opted-in LINKUP member, plotted from their public city. Drag the globe, filter below, click a face.</p>
-  <div class="globe-stats">
-    <div class="stat"><strong>${members.length}</strong>public builders</div>
-    <div class="stat"><strong>${countries}</strong>countries</div>
-    <div class="stat"><strong>${cities}</strong>cities</div>
-  </div>
-</section>
-<div class="globe-shell">
-  <div id="globe" role="application" aria-label="Interactive 3D globe of public LINKUP members"></div>
-  <div class="globe-overlay">
-    <input id="globeFilter" type="search" autocomplete="off" placeholder="Filter by name, skill, role or city…" aria-label="Filter members">
-    <span id="globeCount">${members.length} builders</span>
-  </div>
-  <div id="globeTip" role="status"></div>
-  <div class="globe-hint">Drag to spin · Scroll to zoom · Click a face</div>
-  <aside class="globe-panel" id="globePanel" aria-hidden="true" aria-label="Member details">
-    <header><h2 id="panelTitle">Builders</h2><button class="panel-close" id="panelClose" type="button" aria-label="Close panel">×</button></header>
-    <div class="panel-list" id="panelList"></div>
-  </aside>
-</div>
-${topCities ? `<div class="chips" aria-label="Jump to a city">${topCities}</div>` : ''}
-<noscript><p class="globe-foot">Enable JavaScript to fly around the globe — or browse the same public members in the grid below.</p></noscript>
-<section aria-label="Public member directory">
-  <h2>Browse builders</h2>
-  <div class="grid">${grid || '<p>No public profiles yet — check back soon.</p>'}</div>
-  <p class="globe-foot">Only opted-in, public profiles appear here — the same people you can meet at <a href="${APP}/builders">/builders</a>. Want to be on the globe? <a href="${APP}/landing">Join LINKUP</a> and keep your profile public.</p>
-</section>
+  const canonical = `${SITE}/search`;
+  const description = 'Explore public LINKUP builders on a full-screen 3D Earth. Search skills and locations, then open profiles to connect.';
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Search the LINKUP community</title>
+<meta name="description" content="${e(description)}"><meta name="robots" content="noindex,follow">
+<link rel="canonical" href="${e(canonical)}">
+<meta name="theme-color" content="#03070d"><style>
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#03070d;color:#f5f7fa;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{min-height:100svh}#earthSearch{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;overflow:hidden;background:radial-gradient(ellipse at 50% 52%,#10263b 0%,#07111c 45%,#03070d 83%)}#globe{position:absolute;inset:0;width:100%;height:100%;touch-action:none}#globe canvas{display:block;width:100%;height:100%;outline:none}.globe-overlay{position:absolute;z-index:3;top:max(16px,env(safe-area-inset-top));left:16px;right:16px;display:flex;align-items:center;gap:10px;pointer-events:none}.globe-overlay>*{pointer-events:auto}#globeFilter{min-width:0;flex:1;height:48px;padding:0 18px;border:1px solid rgba(255,255,255,.17);border-radius:999px;background:rgba(5,12,20,.72);backdrop-filter:blur(14px);color:#f5f7fa;font-size:15px;outline:none}#globeFilter::placeholder{color:#aab8c8}#globeFilter:focus-visible{border-color:#fbe618;box-shadow:0 0 0 2px rgba(251,230,24,.3)}#globeCount{white-space:nowrap;padding:12px 16px;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(5,12,20,.72);backdrop-filter:blur(14px);font-size:12px;font-weight:800}#globeTip{position:absolute;z-index:4;display:none;max-width:260px;padding:9px 12px;border:1px solid rgba(255,255,255,.18);border-radius:14px;background:rgba(4,10,17,.9);box-shadow:0 10px 32px rgba(0,0,0,.35);color:#f8fafc;font-size:12px;line-height:1.45;pointer-events:none;backdrop-filter:blur(12px)}#globeTip strong{display:block;font-size:13px}.globe-panel{position:absolute;z-index:5;top:0;right:0;bottom:0;width:min(360px,88vw);display:flex;flex-direction:column;border-left:1px solid rgba(255,255,255,.14);background:rgba(5,11,19,.88);color:#f5f7fa;backdrop-filter:blur(18px);transform:translateX(102%);transition:transform .24s ease}.globe-panel.open{transform:translateX(0)}.globe-panel header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 16px;border-bottom:1px solid rgba(255,255,255,.1)}.globe-panel header h2{margin:0;color:#fff;font-size:16px;line-height:1.3}.panel-close{width:36px;height:36px;border:1px solid rgba(255,255,255,.18);border-radius:11px;background:rgba(255,255,255,.05);color:#fff;font-size:19px;cursor:pointer}.panel-list{overflow:auto;padding:9px}.panel-member{display:flex;align-items:center;gap:11px;padding:10px 8px;border-radius:14px;color:inherit;text-decoration:none}.panel-member:hover,.panel-member:focus-visible{outline:none;background:rgba(255,255,255,.08)}.panel-member img,.panel-initials{width:48px;height:48px;flex:none;border:2px solid rgba(255,255,255,.16);border-radius:50%;object-fit:cover}.panel-initials{display:grid;place-items:center;background:#152a3d;color:#fbe618;font-weight:900}.panel-member span:nth-child(2){min-width:0;flex:1}.panel-member b,.panel-member small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.panel-member b{font-size:13px}.panel-member small{margin-top:3px;color:#aab8c8;font-size:11px}.earth-vignette{position:absolute;z-index:2;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 48%,rgba(0,0,0,.16) 76%,rgba(0,0,0,.48) 100%)}@media(max-width:560px){.globe-overlay{top:max(10px,env(safe-area-inset-top));left:10px;right:10px;gap:6px}#globeFilter{height:44px;padding:0 14px;font-size:13px}#globeCount{padding:11px 12px;font-size:11px}.globe-panel{width:min(340px,92vw)}}@media(prefers-reduced-motion:reduce){.globe-panel{transition:none}}
+</style></head><body>
+<main id="earthSearch" aria-label="Interactive public LINKUP member search">
+  <div id="globe" role="application" aria-label="Full-screen interactive Earth showing public LINKUP member photos by city and country"></div>
+  <div class="globe-overlay"><input id="globeFilter" type="search" autocomplete="off" placeholder="Search people, skills, city or country…" aria-label="Search public LINKUP members"><span id="globeCount">${members.length}</span></div>
+  <div id="globeTip" role="status" aria-live="polite"></div>
+  <aside class="globe-panel" id="globePanel" aria-hidden="true" aria-label="Selected location profiles"><header><h2 id="panelTitle">Public builders</h2><button class="panel-close" id="panelClose" type="button" aria-label="Close location results">×</button></header><div class="panel-list" id="panelList"></div></aside>
+</main>
 <script type="application/json" id="globe-data">${dataJson}</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" crossorigin="anonymous"></script>
 <script>
-(function () {
-  'use strict';
-  var countEl = document.getElementById('globeCount');
-  var tip = document.getElementById('globeTip');
-  var filter = document.getElementById('globeFilter');
-  var panel = document.getElementById('globePanel');
-  var panelList = document.getElementById('panelList');
-  var panelTitle = document.getElementById('panelTitle');
-  var closeBtn = document.getElementById('panelClose');
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  var DATA;
-  try { DATA = JSON.parse(document.getElementById('globe-data').textContent); } catch (e) { return; }
-  var members = DATA.members || [], groups = DATA.groups || [];
-  var visible = new Array(members.length).fill(true);
-
-  function matches(m, q) {
-    if (!q) return true;
-    var hay = [m.name, m.occupation, m.company, m.city, m.country].concat(m.skills || []).join(' ').toLowerCase();
-    return q.toLowerCase().split(/\\s+/).filter(Boolean).every(function (t) { return hay.indexOf(t) !== -1; });
-  }
-  function initials(n) { var p = String(n || '').trim().split(/\\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); }
-  function locationOf(m) { return m.location; }
-
-  function renderPanel(list, title) {
-    panelTitle.textContent = title;
-    panelList.innerHTML = list.map(function (m) {
-      var img = m.image
-        ? '<img class="panel-photo" src="' + esc(m.image) + '" alt="' + esc(m.name) + ' profile photo" referrerpolicy="no-referrer" data-name="' + esc(m.name) + '">'
-        : '<span class="panel-initials">' + esc(initials(m.name)) + '</span>';
-      return '<a class="panel-member" href="' + esc(m.url) + '">' + img + '<span><b>' + esc(m.name) + (m.verified ? ' ✓' : '') + '</b><small>' + esc([m.occupation, [m.city, m.country].filter(Boolean).join(', ')].filter(Boolean).join(' · ')) + '</small></span></a>';
-    }).join('') || '<p style="color:#9aa6b2;padding:12px">Nobody matches that yet.</p>';
-    panelList.querySelectorAll('img.panel-photo').forEach(function (im) {
-      im.addEventListener('error', function () {
-        var s = document.createElement('span');
-        s.className = 'panel-initials';
-        s.textContent = initials(im.getAttribute('data-name') || '?');
-        im.replaceWith(s);
-      });
-    });
-    panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false');
-  }
-  closeBtn.addEventListener('click', function () { panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true'); });
-
-  // ── Globe ─────────────────────────────────────────────────────────
-  var container = document.getElementById('globe');
-  var globeReady = typeof THREE !== 'undefined';
-  if (!globeReady) {
-    filter.disabled = true;
-    countEl.textContent = members.length + ' builders';
-    return;
-  }
-  try { initGlobe(); } catch (err) {
-    container.innerHTML = '<p style="color:#9aa6b2;padding:24px">The 3D globe could not start on this device. Scroll down — the full public directory is right below.</p>';
-    return;
-  }
-
-  function initGlobe() {
-    var RADIUS = 1.6;
-    var scene = new THREE.Scene();
-    var camera = new THREE.PerspectiveCamera(38, 1, 0.1, 120);
-    camera.position.set(0, 0.9, 5.1);
-    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setClearColor(0x000000, 0);
-    container.appendChild(renderer.domElement);
-
-    var controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; controls.dampingFactor = 0.06;
-    controls.enablePan = false; controls.minDistance = 2.2; controls.maxDistance = 7.5;
-    controls.autoRotate = true; controls.autoRotateSpeed = 0.55;
-    controls.addEventListener('start', function () { controls.autoRotate = false; });
-
-    scene.add(new THREE.AmbientLight(0xbfd4ff, 0.85));
-    var sun = new THREE.DirectionalLight(0xffffff, 1.05); sun.position.set(5, 2.5, 4); scene.add(sun);
-
-    // Starfield
-    (function stars() {
-      var n = 1400, pos = new Float32Array(n * 3);
-      for (var i = 0; i < n; i++) {
-        var r = 46 + Math.random() * 28, t = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
-        pos[i * 3] = r * Math.sin(ph) * Math.cos(t); pos[i * 3 + 1] = r * Math.cos(ph); pos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(t);
-      }
-      var g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xcfe0ff, size: 0.075, sizeAttenuation: true, transparent: true, opacity: 0.9 })));
-    })();
-
-    // Atmosphere halo
-    (function halo() {
-      var c = document.createElement('canvas'); c.width = c.height = 128;
-      var ctx = c.getContext('2d'), grad = ctx.createRadialGradient(64, 64, 20, 64, 64, 64);
-      grad.addColorStop(0, 'rgba(90,160,255,0)'); grad.addColorStop(0.62, 'rgba(90,160,255,0)'); grad.addColorStop(0.78, 'rgba(110,185,255,0.5)'); grad.addColorStop(1, 'rgba(110,185,255,0)');
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, 128, 128);
-      var spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-      spr.scale.set(RADIUS * 2.72, RADIUS * 2.72, 1); scene.add(spr);
-    })();
-
-    var earth = new THREE.Mesh(
-      new THREE.SphereGeometry(RADIUS, 64, 48),
-      new THREE.MeshPhongMaterial({ color: 0x16324f, emissive: 0x02070d, shininess: 6, specular: 0x334455 })
-    );
-    scene.add(earth);
-    new THREE.TextureLoader().setCrossOrigin('anonymous').load(
-      '${APP}/assets/earth-blue-marble.jpg',
-      function (tex) { earth.material.map = tex; earth.material.color.set(0xffffff); earth.material.needsUpdate = true; },
-      undefined,
-      function () { /* keep the procedural ocean — dots still land correctly */ }
-    );
-
-    function latLngToVec3(lat, lng, radius) {
-      var phi = (90 - lat) * Math.PI / 180, theta = (lng + 180) * Math.PI / 180;
-      return new THREE.Vector3(-radius * Math.sin(phi) * Math.cos(theta), radius * Math.cos(phi), radius * Math.sin(phi) * Math.sin(theta));
-    }
-
-    // ── Member sprites: one face each, spiralled around the city point ──
-    var faceGroup = new THREE.Group(); scene.add(faceGroup);
-    var sprites = [];
-    var loader = new THREE.TextureLoader(); loader.crossOrigin = 'anonymous';
-    function disposableInitialSprite(m) {
-      var c = document.createElement('canvas'); c.width = c.height = 96; var ctx = c.getContext('2d');
-      ctx.beginPath(); ctx.arc(48, 48, 46, 0, Math.PI * 2); ctx.fillStyle = m.verified ? '#8a6d1a' : '#1d2b3f'; ctx.fill();
-      ctx.lineWidth = 5; ctx.strokeStyle = m.verified ? '#fbe618' : 'rgba(255,255,255,.55)'; ctx.stroke();
-      ctx.fillStyle = m.verified ? '#fbe618' : '#cfe0ff'; ctx.font = '800 34px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(initials(m.name), 48, 50);
-      return new THREE.CanvasTexture(c);
-    }
-    function memberSpriteTexture(m, done) {
-      if (!m.image) return done(disposableInitialSprite(m));
-      loader.load(m.image, function (tex) {
-        try {
-          var c = document.createElement('canvas'); c.width = c.height = 96; var ctx = c.getContext('2d');
-          ctx.beginPath(); ctx.arc(48, 48, 46, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
-          ctx.drawImage(tex.image, 0, 0, 96, 96);
-          ctx.beginPath(); ctx.arc(48, 48, 45, 0, Math.PI * 2); ctx.lineWidth = 5; ctx.strokeStyle = m.verified ? '#fbe618' : 'rgba(255,255,255,.75)'; ctx.stroke();
-          done(new THREE.CanvasTexture(c));
-        } catch (e) { done(disposableInitialSprite(m)); }
-      }, undefined, function () { done(disposableInitialSprite(m)); });
-    }
-
-    var GOLD = Math.PI * (3 - Math.sqrt(5)); // golden angle
-    members.forEach(function (m, index) {
-      var loc = locationOf(m); if (!loc) return;
-      var spread = loc.precision === 'city' ? 0.02 : 0.055;
-      // stable per-member offset so reloads plot the same dots
-      var seed = (index * 2654435761) % 100000 / 100000;
-      var angle = index * GOLD, rad = spread * (0.35 + 0.65 * Math.sqrt(seed));
-      var lat = Math.max(-84, Math.min(84, loc.lat + Math.cos(angle) * rad * 57));
-      var lng = loc.lng + Math.sin(angle) * rad * 57;
-      var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: disposableInitialSprite(m), transparent: true, depthTest: true }));
-      var pos = latLngToVec3(lat, lng, RADIUS + 0.035);
-      sprite.position.copy(pos); sprite.scale.set(0.16, 0.16, 1);
-      sprite.userData.memberIndex = index;
-      faceGroup.add(sprite); sprites.push(sprite);
-      memberSpriteTexture(m, function (tex) { sprite.material.map = tex; sprite.material.needsUpdate = true; });
-    });
-
-    // ── Picking ─────────────────────────────────────────────────────
-    var ray = new THREE.Raycaster(); var pointer = new THREE.Vector2();
-    var hovered = null;
-    function setPointer(ev) {
-      var r = renderer.domElement.getBoundingClientRect();
-      var cx = (ev.touches && ev.touches.length ? ev.touches[0].clientX : ev.clientX) - r.left;
-      var cy = (ev.touches && ev.touches.length ? ev.touches[0].clientY : ev.clientY) - r.top;
-      pointer.x = (cx / r.width) * 2 - 1; pointer.y = -(cy / r.height) * 2 + 1;
-      return { x: cx, y: cy };
-    }
-    function pickVisible(ev) {
-      setPointer(ev);
-      ray.setFromCamera(pointer, camera);
-      var hits = ray.intersectObjects(sprites);
-      var camDir = camera.position.clone().normalize();
-      for (var i = 0; i < hits.length; i++) {
-        var mPos = hits[i].object.position.clone().normalize();
-        if (mPos.dot(camDir) > 0.08) return hits[i].object; // near side only
-      }
-      return null;
-    }
-    function showTip(sprite, x, y) {
-      var m = members[sprite.userData.memberIndex]; if (!m) return;
-      tip.innerHTML = '<strong>' + esc(m.name) + (m.verified ? ' ✓' : '') + '</strong>' + esc([m.occupation, [m.city, m.country].filter(Boolean).join(', ')].filter(Boolean).join('<br>'));
-      tip.style.left = Math.min(Math.max(x + 12, 8), container.clientWidth - 180) + 'px';
-      tip.style.top = Math.max(y + 12, 8) + 'px'; tip.style.display = 'block';
-    }
-    renderer.domElement.addEventListener('pointermove', function (ev) {
-      var s = pickVisible(ev); hovered = s;
-      renderer.domElement.style.cursor = s ? 'pointer' : 'grab';
-      if (s) { var r = renderer.domElement.getBoundingClientRect(); showTip(s, ev.clientX - r.left, ev.clientY - r.top); } else { tip.style.display = 'none'; }
-    });
-    renderer.domElement.addEventListener('pointerleave', function () { tip.style.display = 'none'; });
-    renderer.domElement.addEventListener('click', function (ev) {
-      var s = pickVisible(ev); if (!s) return;
-      var m = members[s.userData.memberIndex];
-      renderPanel([m], m.name);
-    });
-
-    // ── Cities: fly-to chips ────────────────────────────────────────
-    var fly = null;
-    function flyTo(lat, lng) {
-      var target = latLngToVec3(lat, lng, RADIUS + 0.02).normalize().multiplyScalar(5.1);
-      fly = { from: camera.position.clone(), to: target, t: 0 };
-      controls.autoRotate = false;
-    }
-    document.querySelectorAll('.chip[data-lat]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var lat = parseFloat(btn.dataset.lat), lng = parseFloat(btn.dataset.lng);
-        flyTo(lat, lng);
-        var here = members.filter(function (m) { var l = locationOf(m); return l && l.label === btn.dataset.label; });
-        renderPanel(here, btn.dataset.label + ' · ' + here.length + (here.length === 1 ? ' builder' : ' builders'));
-      });
-    });
-
-    // ── Filter ───────────────────────────────────────────────────────
-    function applyFilter(openPanel) {
-      var q = filter.value.trim(); var shown = 0;
-      members.forEach(function (m, i) { visible[i] = matches(m, q); if (visible[i]) shown++; });
-      sprites.forEach(function (s) { var on = visible[s.userData.memberIndex]; s.material.opacity = on ? 1 : 0.08; s.material.transparent = true; s.visible = true; });
-      countEl.textContent = shown + (shown === 1 ? ' builder' : ' builders');
-      if (q && openPanel !== false) renderPanel(members.filter(function (m) { return matches(m, q); }).slice(0, 60), '“' + q + '” · ' + shown);
-    }
-    var debounce;
-    filter.addEventListener('input', function () { clearTimeout(debounce); debounce = setTimeout(function () { applyFilter(true); }, 120); });
-    // Deep link: /search/?q=<skill|role|city> pre-fills the filter without opening the panel.
-    try {
-      var q0 = new URLSearchParams(window.location.search).get('q');
-      if (q0) { filter.value = q0; applyFilter(false); }
-    } catch (e) { /* URLSearchParams unavailable — the filter simply starts empty */ }
-
-    // ── Resize + render loop ─────────────────────────────────────────
-    function resize() {
-      var w = container.clientWidth, h = container.clientHeight;
-      camera.aspect = w / h; camera.updateProjectionMatrix();
-      renderer.setSize(w, h, false);
-    }
-    window.addEventListener('resize', resize); resize();
-
-    var clockStart = Date.now();
-    function tick() {
-      requestAnimationFrame(tick);
-      if (fly) {
-        fly.t = Math.min(1, fly.t + 0.022);
-        var k = 1 - Math.pow(1 - fly.t, 3);
-        camera.position.lerpVectors(fly.from, fly.to, k);
-        if (fly.t >= 1) fly = null;
-      }
-      controls.update();
-      // gentle marker breathing, cheaper than per-frame raycasts
-      var t = (Date.now() - clockStart) / 1000;
-      for (var i = 0; i < sprites.length; i++) {
-        var s = sprites[i]; var base = visible[s.userData.memberIndex] ? 1 : 0.55;
-        var pulse = 1 + 0.05 * Math.sin(t * 2 + i * 0.7);
-        s.scale.set(0.16 * pulse * base, 0.16 * pulse * base, 1);
-      }
-      renderer.render(scene, camera);
-    }
-    tick();
-  }
+(function(){
+'use strict';
+var host=document.getElementById('globe'),tip=document.getElementById('globeTip'),filter=document.getElementById('globeFilter'),countEl=document.getElementById('globeCount'),panel=document.getElementById('globePanel'),panelList=document.getElementById('panelList'),panelTitle=document.getElementById('panelTitle'),closeBtn=document.getElementById('panelClose');
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function initials(n){var p=String(n||'').trim().split(/\\s+/);return((p[0]||'?')[0]+(p.length>1?p[p.length-1][0]:'')).toUpperCase()}
+var data;try{data=JSON.parse(document.getElementById('globe-data').textContent)}catch(_){return}
+var members=data.members||[],visible=members.map(function(){return true});
+function renderPanel(list,title){panelTitle.textContent=title;panelList.innerHTML=list.map(function(m){var photo=m.image?'<img src="'+esc(m.image)+'" alt="'+esc(m.name)+' profile photo" referrerpolicy="no-referrer" data-name="'+esc(m.name)+'">':'<span class="panel-initials">'+esc(initials(m.name))+'</span>';var place=[m.city,m.country].filter(Boolean).join(', ');return'<a class="panel-member" href="'+esc(m.url)+'">'+photo+'<span><b>'+esc(m.name)+(m.verified?' ✓':'')+'</b><small>'+esc(place||m.occupation||m.skills.join(', '))+'</small></span></a>'}).join('')||'<p style="padding:12px;color:#9aa6b2">No public profiles match.</p>';panelList.querySelectorAll('img').forEach(function(img){img.addEventListener('error',function(){var el=document.createElement('span');el.className='panel-initials';el.textContent=initials(img.dataset.name);img.replaceWith(el)})});panel.classList.add('open');panel.setAttribute('aria-hidden','false')}
+closeBtn.addEventListener('click',function(){panel.classList.remove('open');panel.setAttribute('aria-hidden','true')});
+if(typeof THREE==='undefined'){host.setAttribute('aria-label','Earth globe unavailable; search profiles using the field above');return}
+try{
+var radius=1.6,scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(38,1,.1,120);camera.position.set(0,.7,5.2);
+var renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));renderer.setClearColor(0,0);host.appendChild(renderer.domElement);
+var controls=new THREE.OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.dampingFactor=.06;controls.enablePan=false;controls.minDistance=2.3;controls.maxDistance=7;controls.autoRotate=true;controls.autoRotateSpeed=.42;controls.addEventListener('start',function(){controls.autoRotate=false});
+scene.add(new THREE.AmbientLight(0xbfd4ff,.9));var sun=new THREE.DirectionalLight(0xffffff,1.1);sun.position.set(5,2.5,4);scene.add(sun);
+var globeGroup=new THREE.Group();globeGroup.rotation.y=1.0;scene.add(globeGroup);
+var earth=new THREE.Mesh(new THREE.SphereGeometry(radius,72,56),new THREE.MeshPhongMaterial({color:0xffffff,emissive:0x02070d,shininess:7,specular:0x334455}));globeGroup.add(earth);
+new THREE.TextureLoader().setCrossOrigin('anonymous').load('${APP}/assets/earth-blue-marble.jpg',function(tex){earth.material.map=tex;earth.material.needsUpdate=true},undefined,function(){});
+var atmosphere=new THREE.Mesh(new THREE.SphereGeometry(radius*1.035,64,48),new THREE.MeshBasicMaterial({color:0x35bdf0,transparent:true,opacity:.075,side:THREE.BackSide,depthWrite:false}));globeGroup.add(atmosphere);
+var starsPos=new Float32Array(1000*3);for(var si=0;si<1000;si++){var rr=42+Math.random()*30,tt=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);starsPos[si*3]=rr*Math.sin(ph)*Math.cos(tt);starsPos[si*3+1]=rr*Math.cos(ph);starsPos[si*3+2]=rr*Math.sin(ph)*Math.sin(tt)}var starGeo=new THREE.BufferGeometry();starGeo.setAttribute('position',new THREE.BufferAttribute(starsPos,3));scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({color:0xcfe0ff,size:.07,transparent:true,opacity:.8})));
+function latLng(lat,lng,r){var phi=(90-lat)*Math.PI/180,theta=(lng+180)*Math.PI/180;return new THREE.Vector3(-r*Math.sin(phi)*Math.cos(theta),r*Math.cos(phi),r*Math.sin(phi)*Math.sin(theta))}
+function initialsTexture(m){var c=document.createElement('canvas');c.width=c.height=96;var x=c.getContext('2d');x.beginPath();x.arc(48,48,46,0,Math.PI*2);x.fillStyle=m.verified?'#746018':'#142a3d';x.fill();x.lineWidth=5;x.strokeStyle=m.verified?'#fbe618':'rgba(255,255,255,.8)';x.stroke();x.fillStyle=m.verified?'#fbe618':'#dcecff';x.font='800 34px system-ui,sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(initials(m.name),48,50);return new THREE.CanvasTexture(c)}
+var group=new THREE.Group();globeGroup.add(group);var sprites=[],loader=new THREE.TextureLoader();loader.crossOrigin='anonymous';var golden=Math.PI*(3-Math.sqrt(5));
+function attachPhoto(m,sprite){if(!m.image)return;loader.load(m.image,function(tex){try{var c=document.createElement('canvas');c.width=c.height=96;var x=c.getContext('2d');x.beginPath();x.arc(48,48,46,0,Math.PI*2);x.closePath();x.clip();x.drawImage(tex.image,0,0,96,96);x.beginPath();x.arc(48,48,45,0,Math.PI*2);x.lineWidth=5;x.strokeStyle=m.verified?'#fbe618':'rgba(255,255,255,.8)';x.stroke();var map=new THREE.CanvasTexture(c);tex.dispose();sprite.material.map.dispose();sprite.material.map=map;sprite.material.needsUpdate=true}catch(_){tex.dispose()}},undefined,function(){})}
+members.forEach(function(m,i){var loc=m.location;if(!loc)return;var spread=loc.precision==='city'?.022:.055,seed=(i*2654435761)%100000/100000,angle=i*golden,rad=spread*(.35+.65*Math.sqrt(seed)),lat=Math.max(-84,Math.min(84,loc.lat+Math.cos(angle)*rad*57)),lng=loc.lng+Math.sin(angle)*rad*57,sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:initialsTexture(m),transparent:true,depthTest:true}));sprite.position.copy(latLng(lat,lng,radius+.045));sprite.scale.set(.17,.17,1);sprite.userData.memberIndex=i;group.add(sprite);sprites.push(sprite);attachPhoto(m,sprite)});
+var ray=new THREE.Raycaster(),pointer=new THREE.Vector2();function pick(ev){var r=renderer.domElement.getBoundingClientRect();pointer.x=((ev.clientX-r.left)/r.width)*2-1;pointer.y=-((ev.clientY-r.top)/r.height)*2+1;ray.setFromCamera(pointer,camera);var mh=ray.intersectObjects(sprites,false)[0],eh=ray.intersectObject(earth,false)[0];return mh&&(!eh||mh.distance<eh.distance)?mh.object:null}
+renderer.domElement.addEventListener('pointermove',function(ev){var s=pick(ev);renderer.domElement.style.cursor=s?'pointer':'grab';if(!s){tip.style.display='none';return}var m=members[s.userData.memberIndex],r=host.getBoundingClientRect(),place=[m.city,m.country].filter(Boolean).join(', ');tip.innerHTML='<strong>'+esc(place||'Public member location')+'</strong>'+esc(m.name)+(m.occupation?' · '+esc(m.occupation):'');tip.style.left=Math.min(ev.clientX-r.left+12,host.clientWidth-270)+'px';tip.style.top=Math.max(ev.clientY-r.top+12,8)+'px';tip.style.display='block'});
+renderer.domElement.addEventListener('pointerleave',function(){tip.style.display='none'});renderer.domElement.addEventListener('click',function(ev){var s=pick(ev);if(!s)return;var m=members[s.userData.memberIndex],place=[m.city,m.country].filter(Boolean).join(', ');renderPanel([m],place||m.name)});
+function applyFilter(){var q=filter.value.trim().toLowerCase(),shown=0;members.forEach(function(m,i){var hay=[m.name,m.occupation,m.company,m.city,m.country].concat(m.skills||[]).join(' ').toLowerCase(),ok=!q||q.split(/\\s+/).every(function(t){return hay.includes(t)});visible[i]=ok;if(ok)shown++});sprites.forEach(function(s){s.visible=visible[s.userData.memberIndex]});countEl.textContent=shown+' '+(shown===1?'builder':'builders');if(q)renderPanel(members.filter(function(m){return [m.name,m.occupation,m.company,m.city,m.country].concat(m.skills||[]).join(' ').toLowerCase().includes(q)}).slice(0,60),'Search results')}
+var debounce;filter.addEventListener('input',function(){clearTimeout(debounce);debounce=setTimeout(applyFilter,120)});try{var initial=new URLSearchParams(window.location.search).get('q');if(initial){filter.value=initial;applyFilter()}}catch(_){}
+function resize(){var w=Math.max(1,host.clientWidth),h=Math.max(1,host.clientHeight);camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false)}var observer=new ResizeObserver(resize);observer.observe(host);resize();function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)}animate();
+}catch(err){host.setAttribute('aria-label','Interactive Earth could not initialize in this browser')}
 })();
-</script>`;
-
-  return documentHtml({
-    title: 'Builders on the globe | LINKUP',
-    description: 'Spin a 3D globe of public LINKUP members — see where builders, founders and collaborators live, filter by skill or city, and open their profiles.',
-    canonical: `${SITE}/search`,
-    noindex: true,
-    content,
-  });
+</script></body></html>`;
 }
 
 function initials(name) {
-  const parts = String(name || '').trim().split(/\s+/);
+  const parts = String(name || '').trim().split(/\\s+/);
   return ((parts[0]?.[0] || '?') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 }
