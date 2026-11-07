@@ -235,7 +235,7 @@ ${topCities ? `<div class="chips" aria-label="Jump to a city">${topCities}</div>
     );
     scene.add(earth);
     new THREE.TextureLoader().setCrossOrigin('anonymous').load(
-      'https://cdn.jsdelivr.net/npm/three-globe@2.31.0/example/img/earth-blue-marble.jpg',
+      '${APP}/assets/earth-blue-marble.jpg',
       function (tex) { earth.material.map = tex; earth.material.color.set(0xffffff); earth.material.needsUpdate = true; },
       undefined,
       function () { /* keep the procedural ocean — dots still land correctly */ }
