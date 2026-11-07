@@ -1,5 +1,5 @@
 // Server-only, transactional allowance shared by app, Telegram and WhatsApp.
-// Kept outside linkyState so Clear chat / Forget cannot refill credits.
+// Kept outside team-match results so retries or client-side resets cannot refill credits.
 //
 // The free allowance is DAILY-ONLY: LINKY_FREE_DAILY messages (default 5)
 // per UTC day, resetting at midnight UTC. There is no monthly bucket: the
@@ -46,9 +46,9 @@ export function messageQuota(usage = {}, { plus = false, now = Date.now(), legac
   };
 }
 export function quotaMessage(quota) {
-  if (quota.unlimited) return 'LINKUP PLUS includes unlimited Linky messages.';
-  if (!quota.limit) return 'Free Linky messages are currently paused on this deployment. Upgrade to LINKUP PLUS to keep chatting.';
-  return `You have used your ${quota.limit} free Linky messages for today. Upgrade to LINKUP PLUS to keep chatting, or come back tomorrow — your allowance resets at midnight UTC.`;
+  if (quota.unlimited) return 'LINKUP PLUS includes unlimited team matching.';
+  if (!quota.limit) return 'Free team matching is currently paused on this deployment. Upgrade to LINKUP PLUS to continue matching.';
+  return `You have used your ${quota.limit} free team matches for today. Upgrade to LINKUP PLUS to continue matching, or come back tomorrow — your allowance resets at midnight UTC.`;
 }
 export async function readMessageQuota(database, uid, options) {
   const snap = await database.collection('linkyUsage').doc(uid).get();
@@ -74,7 +74,7 @@ export async function reserveMessage(database, uid, options) {
       // Unlimited means no hidden deployment-wide allowance for PLUS either.
       // PLUS still increments the counter so budget reports retain actual use.
       if (!quota.unlimited && shared >= config.globalDailyMessages) {
-        const error = new Error('Linky has reached today\'s shared capacity for this deployment. Your message allowance was not used. Try again after midnight UTC.');
+        const error = new Error('Team matching has reached today\'s shared capacity for this deployment. Your daily allowance was not used. Try again after midnight UTC.');
         error.code = 'capacity'; error.messageQuota = quota; error.retryAt = nextResetAt(true, options?.now);
         throw error;
       }

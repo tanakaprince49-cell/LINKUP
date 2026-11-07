@@ -3633,7 +3633,7 @@ export default function ProfileScreen({ navigation, route }: any) {
       <PaywallModal
         visible={!!paywallFeature}
         feature={paywallFeature || PRO_FEATURES.startupAnalyzer}
-        description={`LINKUP PLUS unlocks the startup analyzer, verified badge, warm intros, and Linky AI.`}
+        description={`LINKUP PLUS unlocks the startup analyzer, verified badge, team matching, and role recommendations.`}
         onClose={() => setPaywallFeature('')}
       />
     </SafeAreaView>

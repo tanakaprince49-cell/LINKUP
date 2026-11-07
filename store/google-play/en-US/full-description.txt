@@ -8,8 +8,8 @@ Explore professional profiles by skills, industry, location, experience, and col
 BUILD A PROFESSIONAL PROFILE
 Present your skills, experience, projects, and professional links. Explain what you are building, what you can contribute, and the co-founder or startup team you would like to meet.
 
-USE AI-ASSISTED NETWORKING
-Describe your requirements to Linky, the LINKUP AI networking assistant. Review recommendations supported by available profile information, prepare introduction drafts, and manage your introduction preferences. AI recommendations are suggestions, not guarantees of compatibility or business success.
+FORM A TEAM AROUND YOUR PROJECT
+Describe your project idea and your contribution. LINKUP’s matching algorithm finds public member profiles with complementary skills and evidence; AI may help recommend role gaps. For an existing team, get role recommendations for each person. Matches are suggestions, not guarantees of availability, commitment, or business success.
 
 CONNECT WITH PURPOSE
 Send a connection request and explain the collaboration you are proposing. Messaging becomes available after approval, so professional conversations begin with mutual agreement.
@@ -21,6 +21,6 @@ DEVELOP YOUR NETWORK
 Review daily recommendations, take part in business knowledge challenges, and explore startup news. Use profile insights and networking tools to understand engagement with your work.
 
 FREE ACCESS AND OPTIONAL PAID FEATURES
-Free accounts include 5 Linky messages per day (UTC). The optional LINKUP PLUS plan includes unlimited Linky messages. LINKUP also offers paid promotional placements. Feature availability, plan limits, and applicable prices are shown in the app. Review the details before purchasing.
+Free accounts include 5 team matches per day (UTC). The optional LINKUP PLUS plan includes unlimited team matching. LINKUP also offers paid promotional placements. Feature availability, plan limits, and applicable prices are shown in the app. Review the details before purchasing.
 
 Create your professional profile and start exploring cofounder and startup collaboration opportunities on LINKUP.

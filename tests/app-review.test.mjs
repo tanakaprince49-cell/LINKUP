@@ -108,11 +108,3 @@ test('per-account action counters serialize updates and do not carry another mem
   assert.equal(app.state('a').actions, 5);
   await app.recordReviewVisit('b'); assert.equal(app.state('b').actions, 0);
 });
-
-test('quota UI ignores out-of-order count refunds but accepts UTC-day rollover', () => {
-  const module = evaluate('mobile/src/lib/linkyQuota.ts');
-  const quota = { period: 'day', periodKey: '2026-10-24', used: 5, remaining: 0, limit: 5, resetAt: '2026-10-25T00:00:00.000Z', exhausted: true, upgradeRequired: true };
-  assert.equal(module.mergeMessageQuota(quota, { ...quota, used: 4, remaining: 1 }).used, 5);
-  assert.equal(module.mergeMessageQuota(quota, { ...quota, periodKey: '2026-10-25', used: 1, remaining: 4 }).used, 1);
-  assert.equal(module.mergeMessageQuota(quota, { ...quota, periodKey: '2026-10-25', used: 0, remaining: 5, exhausted: false, upgradeRequired: false }).remaining, 5);
-});

@@ -29,6 +29,7 @@ function core(db,{ai=false,aiMode="search",externalSearch=null,prompts=null}={})
  const module={exports:{}};
  const mocks={
   './_linkyWorkbench.js':workbench,'node:crypto':crypto,'./_linkyQuality.js':quality,'./_linkyCompanion.js':companion,'./_publicSeo.js':{publicEligible},'./_linkyUsage.js':usage,
+  '../shared/team-roles.js':{fallbackTeamRoles:()=>[]},
   './_firebaseAdmin.js':{getDb:()=>db,getAdmin:()=>({firestore:{FieldValue:{serverTimestamp:()=>Date.now(),delete:()=>null},Timestamp:{fromMillis:ms=>ms}}})},
   './_gemini.js':{aiReady:()=>ai,aiStatus:()=>({gemini:{},zen:{}}),aiText:async(prompt)=>{prompts?.push(prompt);return {text:JSON.stringify({mode:aiMode,picks:[{uid:'irrelevant',score:100}],reply:'I found ten perfect matches'})}},geminiText:async()=>'{"picks":[{"uid":"irrelevant","score":100}]}'},
   './_serpapi.js':{safeLinkedinProfile,findLeads:externalSearch || (async()=>({leads:[],searches:0,note:'not-configured'}))},'./_expoPush.js':{sendExpoPush:async()=>({sent:0})},'./_emailNotify.js':{sendHighSignalEmail:async()=>({sent:false})},'./_proof.js':{proofPoints:()=>[],badgeLine:()=>''}
@@ -253,12 +254,12 @@ for(const channel of ['telegram','whatsapp'])test(`${channel} adapter shares str
  assert.equal(db.rows.get('linkyUsage/member').daily.count,6);
  }finally{ if(previousCap===undefined)delete process.env.LINKY_FREE_DAILY;else process.env.LINKY_FREE_DAILY=previousCap; }
 });
-test('authenticated app prefs route persists the shared companion tone',async()=>{
+test('legacy Linky preference endpoint is retired without mutating stored state',async()=>{
  const db=new Database();seed(db,[member]);const api=core(db),route=adapter(db,api);
  const response={status(code){this.code=code;return this;},json(body){this.body=body;}};
  await route.default({method:'POST',query:{},body:{action:'prefs',companionTone:'direct'},headers:{}},response);
- assert.equal(response.code,200);assert.equal(db.rows.get('linkyState/member').companionTone,'direct');
- assert.match((await api.ask('member','hello',{userDoc:member})).reply,/What's on your mind/);
+ assert.equal(response.code,410);assert.match(response.body.error,/only matches project teams/i);
+ assert.equal(db.rows.has('linkyState/member'),false);
 });
 
 test('quantitative experience, rate and current availability are not invented from a skill tag',()=>{
@@ -285,13 +286,13 @@ test('squads require every slot and retain full slot constraints on reload',asyn
  assert.equal((await api.findSquads('member',q,{...ctx,candidates:[profiles[0]]},{user:member,state:{},slots})).squads.length,0);
 });
 
-test('legacy app external-search action cannot bypass an exhausted message ledger',async()=>{
+test('legacy external-search endpoint is retired before spending quota or invoking discovery',async()=>{
  const db=new Database();seed(db,[member]);const api=core(db),route=adapter(db,api);
- // An exhausted daily ledger: all five of today's messages are spent.
  db.rows.set('linkyUsage/member',{daily:{key:usage.dayKey(Date.now()),count:5}});
  const response={status(code){this.code=code;return this;},json(body){this.body=body;}};
  await route.default({method:'POST',query:{},body:{action:'pointers',need:'Flutter developer'},headers:{}},response);
- assert.equal(response.code,402);assert.equal(response.body.code,'ask_limit');
+ assert.equal(response.code,410);assert.match(response.body.error,/only matches project teams/i);
+ assert.equal(db.rows.get('linkyUsage/member').daily.count,5);
 });
 
 

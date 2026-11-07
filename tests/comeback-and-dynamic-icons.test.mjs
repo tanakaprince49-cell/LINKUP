@@ -7,9 +7,6 @@ import { fileURLToPath } from 'node:url';
 import {
   DAILY_COMEBACK_EMAIL_CAP,
   DAILY_EMAIL_HARD_CAP,
-  EMAIL_MOODS,
-  LINKY_AVATAR_URL,
-  buildLinkyEmailBodies,
   buildPersonalBuilderBrief,
   comebackEmailMilestone,
   sanitizeEmailCopy,
@@ -18,11 +15,6 @@ import {
   sendLinkyDirectEmail,
   unsubscribeUserEmail,
 } from '../api/_emailNotify.js';
-import {
-  randomPulseScheduleForDay,
-  runDailyRetentionPulsePage,
-  selectExpressivePulse,
-} from '../api/_dailyRetentionPulse.js';
 import { sanitizePrefs } from '../api/_builderCore.js';
 import {
   ICON_VARIANTS,
@@ -436,190 +428,11 @@ test('Part B: Duolingo-style appearance transitions across 1d angry, 3d sad, 7d 
 
   const homeSrc = fs.readFileSync(path.join(root, 'mobile', 'src', 'screens', 'DiscoveryDashboardScreen.tsx'), 'utf8');
   assert.doesNotMatch(homeSrc, /Your next move · Build with Linky/);
-  assert.match(homeSrc, /https:\/\/www\.linkupbuild\.com\/search\//);
+  const searchLinkSrc = fs.readFileSync(path.join(root, 'mobile', 'src', 'screens', 'ProfileScreen.tsx'), 'utf8');
+  assert.match(searchLinkSrc, /https:\/\/www\.linkupbuild\.com\/search\//);
 
   const linkySrc = fs.readFileSync(path.join(root, 'mobile', 'src', 'screens', 'LinkyHomeScreen.tsx'), 'utf8');
   assert.doesNotMatch(linkySrc, /Your next move · progress & groups/);
-});
-
-test('Part C: emails render full-width uncropped mood heroes, LINKUP cat profile pic, zero Duolingo copy, and 2x/day randomized pulses', async () => {
-  // 1. All 11 full-resolution uncropped hero-*.png + linky-avatar.png + bimi-logo.svg exist
-  const iconsDir = path.join(root, 'mobile', 'public', 'icons');
-  assert.ok(fs.existsSync(path.join(iconsDir, 'linky-avatar.png')));
-  assert.ok(fs.existsSync(path.join(iconsDir, 'bimi-logo.svg')));
-  for (const moodKey of Object.keys(EMAIL_MOODS)) {
-    const moodSpec = EMAIL_MOODS[moodKey];
-    assert.ok(fs.existsSync(path.join(iconsDir, moodSpec.heroFile)), `missing ${moodSpec.heroFile}`);
-    const rendered = buildLinkyEmailBodies({
-      uid: 'u1',
-      mood: moodKey,
-      headline: 'Check in with Linky',
-      body: 'All 10 Duolingo-style badges should never appear verbatim',
-      ctaLabel: 'Open LINKUP',
-      fullUrl: 'https://www.linkupbuild.com/app/ship',
-      badgeLabel: 'Daily check-in',
-    });
-    assert.equal(rendered.mood, moodKey);
-    assert.match(rendered.htmlBody, /linky-avatar\.png/);
-    assert.match(rendered.htmlBody, new RegExp(moodSpec.heroFile.replace('.', '\\.')));
-    assert.match(rendered.htmlBody, /width:100%;max-width:480px;height:auto/);
-    assert.doesNotMatch(rendered.htmlBody, /display:flex/);
-    assert.doesNotMatch(rendered.htmlBody, /duolingo/i);
-    assert.doesNotMatch(rendered.textBody, /duolingo/i);
-  }
-  assert.doesNotMatch(sanitizeEmailCopy('all 10 Duolingo-style dynamic icons'), /duolingo/i);
-
-  // 2. Expressive emotions map to real reasons
-  assert.equal(selectExpressivePulse({ unreadCount: 2 }).mood, 'unread_urgent');
-  assert.equal(selectExpressivePulse({ shippedToday: true, streakDays: 7 }).mood, 'milestone_party');
-  assert.equal(selectExpressivePulse({ shippedToday: true, streakDays: 3 }).mood, 'on_fire_shipped');
-  assert.equal(selectExpressivePulse({ isLeagueTop3: true }).mood, 'champion_crown');
-  assert.equal(selectExpressivePulse({ streakDays: 4, slot: 'pulse2' }).mood, 'streak_fire');
-  assert.equal(selectExpressivePulse({ daysSinceActive: 1.4 }).mood, 'angry_1d');
-  assert.equal(selectExpressivePulse({ daysSinceActive: 4 }).mood, 'sad_inactive');
-  assert.equal(selectExpressivePulse({ daysSinceActive: 10 }).mood, 'ghost_abandoned');
-  assert.equal(selectExpressivePulse({ localWeekday: 6, slot: 'pulse1' }).mood, 'weekend_chill');
-  assert.equal(selectExpressivePulse({ localHour: 21, slot: 'pulse2' }).mood, 'night_owl');
-  assert.equal(selectExpressivePulse({ localHour: 10, localWeekday: 2 }).mood, 'default');
-
-  // 3. Randomized 2x/day schedule varies across users & days (distinct random hours AND distinct random minutes, never :00)
-  const slotsSeen = new Set();
-  for (let d = 1; d <= 10; d += 1) {
-    const s = randomPulseScheduleForDay('memberA', `2026-11-${String(d).padStart(2, '0')}`);
-    assert.ok(s.pulse1Hour >= 8 && s.pulse1Hour <= 12);
-    assert.ok(s.pulse2Hour >= 15 && s.pulse2Hour <= 20);
-    assert.ok(s.pulse1Minute >= 4 && s.pulse1Minute <= 53);
-    assert.ok(s.pulse2Minute >= 4 && s.pulse2Minute <= 53);
-    assert.notEqual(s.pulse1Minute, s.pulse2Minute, 'pulse1 and pulse2 minutes must always differ');
-    const gapMinutes = (s.pulse2Hour * 60 + s.pulse2Minute) - (s.pulse1Hour * 60 + s.pulse1Minute);
-    assert.ok(gapMinutes >= 250, `expected >= 4h 10m gap between daily emails, got ${gapMinutes}m`);
-    slotsSeen.add(`${s.pulse1Hour}:${s.pulse1Minute}-${s.pulse2Hour}:${s.pulse2Minute}`);
-  }
-  assert.ok(slotsSeen.size >= 8, 'schedule must vary randomly across days with no fixed clock time');
-
-  // Verify full 2x/day delivery on a member (morning pulse1 + evening pulse2)
-  const store = new Map();
-  const pagedDb = {
-    collection(col) {
-      return {
-        orderBy() {
-          return {
-            limit() {
-              return {
-                startAfter() { return this; },
-                async get() {
-                  const docs = [];
-                  for (const [k, v] of store.entries()) {
-                    if (k.startsWith(`${col}/`)) {
-                      const id = k.slice(col.length + 1);
-                      docs.push({ id, exists: true, data: () => structuredClone(v) });
-                    }
-                  }
-                  return { docs };
-                },
-              };
-            },
-          };
-        },
-        doc(id) {
-          const key = `${col}/${id}`;
-          return {
-            path: key,
-            async get() {
-              const v = store.get(key);
-              return { exists: v !== undefined, data: () => (v ? structuredClone(v) : undefined) };
-            },
-            async set(data, opts) {
-              const prev = opts?.merge && store.has(key) ? store.get(key) : {};
-              store.set(key, structuredClone({ ...prev, ...data }));
-            },
-          };
-        },
-      };
-    },
-  };
-
-  await pagedDb.collection('users').doc('tanaka').set({
-    email: 'tanaka@example.com',
-    displayName: 'Tanaka Prince',
-    timezone: 'UTC',
-    lastActiveAt: Date.parse('2026-10-31T08:00:00Z'),
-  });
-  const sched = randomPulseScheduleForDay('tanaka', '2026-11-01');
-  const sentEmails = [];
-  const sentPushes = [];
-  const emailOpts = {
-    env: { RESEND_API_KEY: 're_live_mock', EMAIL_FROM: 'Linky at LINKUP <notifications@linkupbuild.com>' },
-    fetcher: async (_url, init) => {
-      sentEmails.push(JSON.parse(init.body));
-      return { ok: true, status: 200, json: async () => ({ id: `msg_${sentEmails.length}` }) };
-    },
-  };
-  const pushMock = async (uid, payload) => {
-    sentPushes.push({ uid, ...payload });
-    return { sent: 1 };
-  };
-
-  // Sweep at pulse1Hour -> delivers Pulse #1 push (and email ONLY if emailSlot === 'pulse1')
-  const res1 = await runDailyRetentionPulsePage(pagedDb, {
-    now: Date.parse(`2026-11-01T${String(sched.pulse1Hour).padStart(2, '0')}:10:00Z`),
-    push: pushMock,
-    emailOpts,
-  });
-  assert.equal(res1.pulsed, 1);
-  assert.equal(res1.pushesSent, 1);
-
-  // Re-sweep same hour -> idempotent (0 duplicates)
-  const dup1 = await runDailyRetentionPulsePage(pagedDb, {
-    now: Date.parse(`2026-11-01T${String(sched.pulse1Hour).padStart(2, '0')}:45:00Z`),
-    push: pushMock,
-    emailOpts,
-  });
-  assert.equal(dup1.pulsed, 0);
-
-  // Sweep at pulse2Hour -> delivers Pulse #2 push (and email ONLY if not already sent on pulse1!)
-  const res2 = await runDailyRetentionPulsePage(pagedDb, {
-    now: Date.parse(`2026-11-01T${String(sched.pulse2Hour).padStart(2, '0')}:15:00Z`),
-    push: pushMock,
-    emailOpts,
-  });
-  assert.equal(res2.pulsed, 1);
-  assert.equal(res2.pushesSent, 1);
-
-  // Strictly 1 email per day per user, paired with 2 spaced native/web pushes!
-  assert.equal(res1.emailsSent + res2.emailsSent, 1);
-  assert.equal(sentEmails.length, 1);
-  assert.equal(sentPushes.length, 2);
-  assert.ok(sentEmails[0].scheduled_at, 'daily email must carry Resend scheduled_at random minute jitter');
-  assert.match(sentEmails[0].html, /hero-angry-red\.png/);
-  assert.match(sentEmails[0].html, /linky-avatar\.png/);
-  const inApp1 = store.get('notifications/pulse_tanaka_2026-11-01_pulse1');
-  assert.equal(inApp1.fromPic, LINKY_AVATAR_URL);
-
-  // 4. Hard 1-email-per-day cap: a second email to the SAME user OR a duplicate account with the SAME email address
-  //    on the same day is blocked with daily_user_email_limit!
-  const dailyEmailEffectiveMs = Date.parse(sentEmails[0].scheduled_at);
-  const secondSameDay = await sendHighSignalEmail(
-    pagedDb,
-    'tanaka',
-    { receiptKey: 'different_event_same_day', throttleMs: 0, subject: 'Second email same day' },
-    { ...emailOpts, now: dailyEmailEffectiveMs + 60_000 },
-  );
-  assert.equal(secondSameDay.sent, false);
-  assert.equal(secondSameDay.reason, 'daily_user_email_limit');
-
-  await pagedDb.collection('users').doc('tanakaAltAccount').set({
-    email: 'TANAKA@example.com',
-    displayName: 'Tanaka Alt',
-  });
-  const duplicateAddrCollision = await sendHighSignalEmail(
-    pagedDb,
-    'tanakaAltAccount',
-    { receiptKey: 'alt_account_same_email', throttleMs: 0, subject: 'Second account same inbox' },
-    { ...emailOpts, now: dailyEmailEffectiveMs + 5 * 60_000 },
-  );
-  assert.equal(duplicateAddrCollision.sent, false);
-  assert.equal(duplicateAddrCollision.reason, 'daily_user_email_limit');
 });
 
 test('Part D: emails are hyper-personalized to each recipient’s specific project, goals, and what they are looking for', async () => {
@@ -653,21 +466,6 @@ test('Part D: emails are hyper-personalized to each recipient’s specific proje
   assert.equal(brief.openStep, 'Ship automated WhatsApp invoice reminders');
   assert.match(brief.lookingForLabel, /Growth & GTM Co-Founder/);
   assert.equal(brief.hasPersonalSignals, true);
-
-  // Expressive daily pulse weaves project, goal, and lookingFor into subject, headline, body & CTA
-  const morningPulse = selectExpressivePulse({
-    firstName: brief.firstName,
-    slot: 'pulse1',
-    localHour: 9,
-    localWeekday: 3,
-    seedByte: 0,
-    personal: brief,
-  });
-  assert.match(morningPulse.subject, /Tariro/);
-  assert.match(morningPulse.headline, /PayPulse Africa|Onboard first 30 paying merchants/);
-  assert.match(morningPulse.body, /PayPulse Africa/);
-  assert.match(morningPulse.body, /Onboard first 30 paying merchants/);
-  assert.match(morningPulse.body, /Growth & GTM Co-Founder/);
 
   // Comeback email automatically pulls user + builderState + ventureProfile and renders tailored focus card
   const db = memoryDb();

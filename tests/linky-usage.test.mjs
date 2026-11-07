@@ -46,6 +46,7 @@ function core(database) {
   const module = { exports: {} }; let aiCalls = 0;
   const mocks = {
     './_linkyWorkbench.js':workbench,'node:crypto': crypto, './_linkyUsage.js': usage, './_linkyQuality.js': quality, './_linkyCompanion.js': companion, './_publicSeo.js': {publicEligible},
+    '../shared/team-roles.js':{fallbackTeamRoles:()=>[]},
     './_firebaseAdmin.js': { getDb: () => database, getAdmin: () => ({ firestore: { FieldValue: { delete: () => DELETE, serverTimestamp: () => Date.now() } } }) },
     './_gemini.js': { aiReady: () => false, geminiText: () => { aiCalls++; throw Error('unexpected AI call'); } },
     './_serpapi.js': {}, './_expoPush.js':{sendExpoPush:async()=>({sent:0})},'./_emailNotify.js':{sendHighSignalEmail:async()=>({sent:false})},'./_proof.js': {},
@@ -82,7 +83,7 @@ test('fifth reservation signals immediate paywall and sixth cannot spend or invo
   const spent = await spendFree(db, 'member', 5);
   quota = spent.at(-1);
   assert.equal(quota.remaining, 0); assert.equal(quota.upgradeRequired, true);
-  await assert.rejects(usage.reserveMessage(db, 'member', { now: october }), (e) => e.code === 'ask_limit' && e.messageQuota.used === 5 && /5 free Linky messages for today/.test(e.message));
+  await assert.rejects(usage.reserveMessage(db, 'member', { now: october }), (e) => e.code === 'ask_limit' && e.messageQuota.used === 5 && /5 free team matches for today/.test(e.message));
   assert.equal(db.rows.get('linkyUsage/member').daily.count, 5);
 });
 
@@ -219,38 +220,19 @@ test('home publishes the daily allowance and retired monthly aliases without rea
   assert.equal(home.limits.asksPerMonth, null); assert.equal(home.limits.asksUsedThisMonth, null);
 });
 
-test('client opens the free paywall from exhaustion and renders PLUS as unlimited', () => {
-  const source = read('mobile/src/screens/LinkyHomeScreen.tsx');
-  assert.match(source, /quota\?\.upgradeRequired/); assert.match(source, /setPaywall\(FREE_LINKY_LIMIT_MESSAGE\)/);
-  assert.match(source, /Unlimited messages · PLUS/); assert.doesNotMatch(source, /messages left today · PLUS/);
-  // Daily-only header plus a locked composer once today's five are used up.
-  assert.match(source, /free messages today/); assert.match(source, /composerLocked/);
-  assert.match(source, /Today's free messages are used up/);
-  assert.doesNotMatch(source, /left this month/);
-  assert.ok(source.indexOf('if (atMessageLimit &&') < source.indexOf('const out = await linkyAsk(msg)'));
+test('Linky client exposes only project-team matching with structured upgrade handling', () => {
+  const screen = read('mobile/src/screens/LinkyHomeScreen.tsx');
+  const client = read('mobile/src/lib/linkyApi.ts');
+  assert.match(screen, /linkyTeamMatch/); assert.match(screen, /err\.status === 402/);
+  assert.match(screen, /Find teammates/); assert.match(screen, /Assign roles to a team/);
+  assert.match(screen, /LINKUP’s matching algorithm/); assert.match(screen, /AI helps identify role gaps/);
+  assert.match(client, /linkyTeamMatch/);
+  assert.doesNotMatch(client, /export const linky(?:Home|Ask|Meet|Respond|Prefs|Audit|Facts|Pointers|DraftLead|Forget|LinkCode)/);
+  assert.doesNotMatch(client, /action:\s*string/);
   assert.match(read('firestore.rules'), /match \/linkyUsage\/\{userId\}\s*\{\s*allow read, write: if false;/);
 });
 
-test('client compatibility fallback understands nullable unlimited PLUS aliases', () => {
-  const module = { exports: {} };
-  const code = ts.transpileModule(read('mobile/src/lib/linkyQuota.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  vm.runInNewContext(code, { module, exports: module.exports });
-  const home = { plus: true, limits: { asksPerDay: null, asksUsedToday: 42, asksPeriod: 'day', asksResetAt: '' } };
-  const quota = module.exports.quotaFromHome(home);
-  assert.equal(quota.unlimited, true); assert.equal(quota.limit, null);
-  assert.equal(quota.remaining, null); assert.equal(quota.exhausted, false);
-  assert.equal(quota.used, 42); assert.equal(quota.resetAt, '');
-  const updated = module.exports.homeWithQuota(home, { ...quota, used: 43 });
-  assert.equal(updated.limits.asksPerDay, null); assert.equal(updated.limits.asksUsedToday, 43);
-  // The legacy fallback derives a day-shaped quota: the monthly bucket is gone.
-  const free = module.exports.quotaFromHome({ plus: false, limits: { asksPerDay: 5, asksUsedToday: 2, asksResetAt: '' } });
-  assert.equal(free.period, 'day'); assert.equal(free.remaining, 3);
-  assert.equal(free.exhausted, false); assert.equal(free.upgradeRequired, false);
-  const spent = module.exports.quotaFromHome({ plus: false, limits: { asksPerDay: 5, asksUsedToday: 5, asksResetAt: '' } });
-  assert.equal(spent.exhausted, true); assert.equal(spent.upgradeRequired, true);
-});
-
-test('authenticated app API returns structured 402 quota data without losing the upgrade signal', async () => {
+test('legacy Linky assistant API retires before quota spending', async () => {
   const db = new Database(); const api = core(db);
   db.rows.set('users/member', member);
   // `ask()` bills against the real current UTC day, so exhaust today directly.
@@ -265,8 +247,8 @@ test('authenticated app API returns structured 402 quota data without losing the
   vm.runInNewContext(code, { module, exports: module.exports, require: (name) => { assert.ok(name in mocks, name); return mocks[name]; }, process: { env: {} }, console, Date, Buffer, Set, Map });
   const response = { status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
   await module.exports.default({ method: 'POST', query: {}, body: { action: 'ask', message: 'hello' }, headers: {} }, response);
-  assert.equal(response.code, 402); assert.equal(response.body.code, 'ask_limit');
-  assert.equal(response.body.messageQuota.period, 'day'); assert.equal(response.body.upgradeRequired, true);
+  assert.equal(response.code, 410); assert.match(response.body.error, /only matches project teams/i);
+  assert.equal((await usage.readMessageQuota(db, 'member', { now: Date.now() })).used, 5);
 });
 
 

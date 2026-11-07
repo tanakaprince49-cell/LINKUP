@@ -54,10 +54,6 @@
       "ActiveOpportunity"
     ],
     [
-      "navigate",
-      "Main"
-    ],
-    [
       "navigate"
     ],
     [
@@ -550,62 +546,7 @@
       "EmailAuth"
     ]
   ],
-  "mobile/src/screens/LinkyAuditScreen.tsx": [
-    [
-      "navigate",
-      "Main"
-    ]
-  ],
   "mobile/src/screens/LinkyHomeScreen.tsx": [
-    [
-      "property",
-      "kind",
-      "squad"
-    ],
-    [
-      "navigate",
-      "Chat"
-    ],
-    [
-      "property",
-      "kind",
-      "meet"
-    ],
-    [
-      "navigate",
-      "Chat"
-    ],
-    [
-      "get"
-    ],
-    [
-      "property",
-      "kind",
-      "meet"
-    ],
-    [
-      "property",
-      "kind",
-      "lead"
-    ],
-    [
-      "property",
-      "kind",
-      "lead"
-    ],
-    [
-      "navigate",
-      "LinkyAudit"
-    ],
-    [
-      "navigate",
-      "LinkySettings"
-    ],
-    [
-      "property",
-      "kind",
-      "person"
-    ],
     [
       "navigate",
       "Profile"
@@ -613,50 +554,6 @@
     [
       "navigate",
       "Dashboard"
-    ],
-    [
-      "navigate",
-      "LinkySettings"
-    ],
-    [
-      "navigate",
-      "LinkyAudit"
-    ],
-    [
-      "navigate",
-      "BuilderWorkspace"
-    ],
-    [
-      "navigate",
-      "Profile"
-    ],
-    [
-      "navigate",
-      "Profile"
-    ],
-    [
-      "navigate",
-      "Profile"
-    ]
-  ],
-  "mobile/src/screens/LinkyProfileScreen.tsx": [
-    [
-      "navigate",
-      "Main"
-    ]
-  ],
-  "mobile/src/screens/LinkySettingsScreen.tsx": [
-    [
-      "replace",
-      ""
-    ],
-    [
-      "replace",
-      ""
-    ],
-    [
-      "navigate",
-      "Main"
     ]
   ],
   "mobile/src/screens/MatchScreen.tsx": [
@@ -696,27 +593,11 @@
     ],
     [
       "navigate",
-      "LinkyHome"
+      "Main"
     ]
   ],
   "mobile/src/screens/NetworkQuizScreen.tsx": [],
   "mobile/src/screens/NewsScreen.tsx": [
-    [
-      "getItem"
-    ],
-    [
-      "doc",
-      "notifications"
-    ],
-    [
-      "property",
-      "type",
-      "system"
-    ],
-    [
-      "setItem",
-      "1"
-    ],
     [
       "property",
       "kind",
@@ -2605,16 +2486,6 @@
     ]
   ],
   "mobile/src/components/LinkupAlertProvider.tsx": [],
-  "mobile/src/components/LinkyCardsSection.tsx": [
-    [
-      "navigate",
-      "Chat"
-    ],
-    [
-      "navigate",
-      "Profile"
-    ]
-  ],
   "mobile/src/components/OfflineScreen.tsx": [],
   "mobile/src/components/OpportunityRadar.tsx": [],
   "mobile/src/components/PWAInstallPrompt.tsx": [],

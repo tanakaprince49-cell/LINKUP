@@ -58,9 +58,8 @@ test('public profile and directory render the same exclusive pair and exact CEO 
 });
 test('every existing member-name badge surface uses the identity-aware renderer',()=>{
  assert.match(read('mobile/src/screens/CityLeagueScreen.tsx'),/TrendingBuildersScreen/);
- const expected={MatchScreen:'otherUser.uid',MessagesScreen:'otherUser.uid',ChatScreen:'otherUser.uid',ActiveOpportunitiesScreen:'item.uid',RecommendedMatchesScreen:'item.uid',ActiveOpportunityScreen:'profile?.uid',IdeaDeckScreen:'idea.ownerId',DiscoveryDashboardScreen:'item.uid',FeedScreen:'post.authorId',ViewersScreen:'item.uid',TrendingBuildersScreen:'r.uid',ProfileScreen:'profile?.uid',LinkyHomeScreen:'card.targetUid',AlertsScreen:'notification.fromId',GamificationHubScreen:'c.senderId',CampaignsScreen:'campaign.ownerId'};
+ const expected={MatchScreen:'otherUser.uid',MessagesScreen:'otherUser.uid',ChatScreen:'otherUser.uid',ActiveOpportunitiesScreen:'item.uid',RecommendedMatchesScreen:'item.uid',ActiveOpportunityScreen:'profile?.uid',IdeaDeckScreen:'idea.ownerId',DiscoveryDashboardScreen:'item.uid',FeedScreen:'post.authorId',ViewersScreen:'item.uid',TrendingBuildersScreen:'r.uid',ProfileScreen:'profile?.uid',LinkyHomeScreen:'member.uid',AlertsScreen:'notification.fromId',GamificationHubScreen:'c.senderId',CampaignsScreen:'campaign.ownerId'};
  for(const [name,id] of Object.entries(expected))assert.ok(read(`mobile/src/screens/${name}.tsx`).includes(`MemberBadges userId={${id}}`),name);
- assert.match(read('mobile/src/components/LinkyCardsSection.tsx'),/MemberBadges userId=\{card.targetUid\}/);
  assert.match(read('mobile/src/screens/FeedScreen.tsx'),/MemberBadges userId=\{reply.userId\}/);
  assert.match(read('mobile/src/screens/FeedScreen.tsx'),/MemberBadges userId=\{item.userId\}/);
 });
@@ -71,23 +70,19 @@ test('profile CEO label stays immediately after the existing high-signal notice,
  const gold=s.indexOf('GOLD member CEO',text);
  assert.ok(text>0&&gold>text&&gold-text<1200);
 });
-test('Linky owns its full screen and keeps activity out of the main conversation',()=>{
- const app=read('mobile/App.tsx');
+test('Linky screen is only a two-mode team matcher and preserves evidence badges',()=>{
+ const app=read('mobile/App.tsx'),screen=read('mobile/src/screens/LinkyHomeScreen.tsx');
  assert.match(app,/<Tab.Screen name="LinkyHome"[^\n]+headerShown: false[^\n]+display: 'none'/);
- const screen=read('mobile/src/screens/LinkyHomeScreen.tsx');
- assert.match(screen,/accessibilityLabel="Back to network" onPress=\{\(\) => navigation.navigate\('Dashboard'\)/);
- const start=screen.indexOf('<ScrollView\n        ref={scrollRef}');
- const end=screen.indexOf('</ScrollView>',start),chat=screen.slice(start,end);
- assert.ok(start>0&&end>start);assert.match(chat,/styles.conversation/);
- assert.doesNotMatch(chat,/Waiting on you|home\.loop|SponsoredSlot|styles\.hero/);
- assert.match(screen.slice(screen.indexOf('<Modal visible={activityOpen}')),/Waiting on you/);
- assert.match(screen,/paddingBottom: composerHeight \+ 16/);
- assert.match(screen,/bottom: Platform.OS === 'android' \? androidKeyboardHeight : 0/);
- assert.match(screen,/accessibilityLabel="Message Linky"/);
+ assert.match(screen,/Find teammates/);assert.match(screen,/Assign roles to a team/);
+ assert.match(screen,/What are you building/);assert.match(screen,/Recommend roles/);
+ assert.match(screen,/LINKUP’s matching algorithm/);assert.match(screen,/AI helps identify role gaps/);
+ assert.match(screen,/MemberBadges userId=\{member.uid\} verified=\{member.verified\}/);
+ assert.doesNotMatch(screen,/linkyAsk|Linky conversation|SponsoredSlot|intro_request/);
 });
 
 
-test('Linky header includes an accessible blue verification check beside its title',()=>{
+test('team matcher does not badge Linky as a verified member or assistant',()=>{
  const s=read('mobile/src/screens/LinkyHomeScreen.tsx');
- assert.match(s,/>Linky<\/Text>\s*<VerifiedBadge size=\{18\} accessibilityLabel="Verified Linky AI"/);
+ assert.match(s,/>Linky · Team matcher<\/Text>/);
+ assert.doesNotMatch(s,/Verified Linky AI|VerifiedBadge/);
 });

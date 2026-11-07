@@ -9,7 +9,7 @@ import {loadActivityLeague} from './_leagueSeo.js';
 import {publicEligible} from './_publicSeo.js';
 import {readMessageQuota} from './_linkyUsage.js';
 import {sendHighSignalEmail,sendComebackEmail,emailStatus} from './_emailNotify.js';
-import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,contributionInsight,containsCredential,normalizeUpdate} from '../shared/contributions.js';
+import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,containsCredential,normalizeUpdate} from '../shared/contributions.js';
 import {createVentureWorkspaceOps} from './_ventureEngine.js';
 import {createBlogsService} from './_blogs.js';
 import {EXTERNAL_LEADS} from '../shared/builder-leads.js';
@@ -94,8 +94,9 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   return {state:s,brief:brief(s,now(),rooms,invitations),rooms,invitations,messageQuota:quota,emailAvailable:emailStatus().available};
  }
  function contributionHistory(c,person){
-  const legacy=(Array.isArray(person.shipLogs)?person.shipLogs:[]).slice(0,20).map(u=>({id:clean(u.id,128),text:clean(u.text,180),link:safeLink(u.link),createdAt:clean(u.createdAt,32)})).filter(u=>u.id&&u.text);
-  return [...(c.updates||[]),...legacy].filter((u,i,all)=>all.findIndex(v=>v.id===u.id)===i).slice(0,20);
+  const cleanUpdate=u=>({id:clean(u.id,128),key:clean(u.key,128),text:clean(u.text,180),link:safeLink(u.link),createdAt:clean(u.createdAt,32),day:clean(u.day,10),pointsAwarded:Number(u.pointsAwarded)||0});
+  const legacy=(Array.isArray(person.shipLogs)?person.shipLogs:[]).slice(0,20).map(cleanUpdate).filter(u=>u.id&&u.text);
+  return [...(c.updates||[]).map(cleanUpdate),...legacy].filter((u,i,all)=>all.findIndex(v=>v.id===u.id)===i).slice(0,20);
  }
  async function contributionData(uid,target){
   const own=target===uid,person=await db.collection('users').doc(target).get();
@@ -119,20 +120,19 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
    const [cd,ud,sd]=await Promise.all([tx.get(cr),tx.get(ur),tx.get(ref(uid))]);
    if(!ud.exists||ud.data().deleted||ud.data().banned||ud.data().onboarded!==true)throw problem('Your profile is no longer available.',403);
    const c=cd.exists?cd.data():{days:[],updates:[],points:0,totalUpdates:0},previous=(c.updates||[]).find(u=>u.key===key);
-   if(previous){if(previous.text!==text||previous.link!==link)throw problem('This request was already used for a different update.',409);return {...previous,days:c.days,contributionPoints:c.points,totalUpdates:c.totalUpdates,shipLogs:contributionHistory(c,ud.data()),today:day,habit:habitSnapshot(c,at,sd.data()?.prefs),replayed:true};}
+   if(previous){if(previous.text!==text||previous.link!==link)throw problem('This request was already used for a different update.',409);const safe=contributionHistory({updates:[previous]},ud.data())[0];return {...safe,days:c.days,contributionPoints:c.points,totalUpdates:c.totalUpdates,shipLogs:contributionHistory(c,ud.data()),today:day,replayed:true};}
    if(c.lastDay===day)throw problem('Your contribution is already recorded today; your next square opens at midnight UTC.',409);
    if((c.updates||[]).some(u=>normalizeUpdate(u.text)===normalizeUpdate(text)))throw problem('This update is already recorded; share a new result or next step.',409);
-   const entry={id:id(),key,text,link,createdAt,day,pointsAwarded:CONTRIBUTION_POINTS,insight:contributionInsight(text)},cutoff=contributionDay(at-(CONTRIBUTION_HISTORY_DAYS-1)*DAY);
+   const entry={id:id(),key,text,link,createdAt,day,pointsAwarded:CONTRIBUTION_POINTS},cutoff=contributionDay(at-(CONTRIBUTION_HISTORY_DAYS-1)*DAY);
    const days=[...new Set([...(c.days||[]).filter(d=>typeof d==='string'&&d>=cutoff&&d<=day),day])].sort().slice(-CONTRIBUTION_HISTORY_DAYS);
    const updates=[entry,...(c.updates||[])].slice(0,20),points=(Number(c.points)||0)+CONTRIBUTION_POINTS,totalUpdates=(Number(c.totalUpdates)||0)+1;
-   // New text/insights stay private in the server-owned collection, never in
-   // public profile fields. Neither activity nor posting grants verification.
+   // Update text stays private in the server-owned collection, never in public
+   // profile fields. Neither activity nor posting grants verification.
    const shipLogs=contributionHistory({updates},ud.data());
-   const habit=habitState(c),rest=habit.rests.find(r=>r.day===day);if(rest?.kind==='token'){if(habit.tokens<3)habit.tokens++;else habit.credits+=20;}habit.rests=habit.rests.filter(r=>r.day!==day);
    const state=stateOf(sd.data(),at);state.momentumDays=[...new Set([...state.momentumDays,localTime(at,state.prefs.timezone).day])].slice(-90);state.updatedAt=at;state.buildReminderCount=0;
-   tx.set(cr,{version:1,days,updates,points,totalUpdates,lastDay:day,habit,publicMomentum:c.publicMomentum===true,updatedAt:at});
+   tx.set(cr,{version:1,days,updates,points,totalUpdates,lastDay:day,publicMomentum:c.publicMomentum===true,updatedAt:at},{merge:true});
    tx.set(ref(uid),state);
-   return {...entry,days,contributionPoints:points,totalUpdates,shipLogs,today:day,habit:habitSnapshot({days,totalUpdates,habit,publicMomentum:c.publicMomentum},at,state.prefs),replayed:false};
+   return {...entry,days,contributionPoints:points,totalUpdates,shipLogs,today:day,replayed:false};
   });
  }
  async function handle(uid,op,input={}){
@@ -185,7 +185,7 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
   if(op==='followupDelete'){await change(uid,s=>{s.followups=s.followups.filter(f=>f.id!==input.id);});return {ok:true};}
   if(op==='followupStatus'){await change(uid,s=>{const f=s.followups.find(f=>f.id===input.id);if(!f)throw problem('Follow-up not found.',404);if(input.status==='snooze'){f.dueAt=now()+DAY;f.notifiedAt=0;}else if(['done','dismissed'].includes(input.status)){if(f.status==='open'&&input.status==='done')s.momentumDays=[...new Set([...s.momentumDays,localTime(now(),s.prefs.timezone).day])].slice(-90);f.status=input.status;f.closedAt=f.closedAt||now();}else throw problem('Choose a valid follow-up action.');});return {ok:true};}
   if(op==='followupDraft'){const s=await state(uid),f=s.followups.find(f=>f.id===input.id);if(!f)throw problem('Follow-up not found.',404);await connectable(uid,f.targetUid);return {text:`Hi ${f.targetName}, following up on ${f.title}. Would you be open to agreeing on a useful next step?`,sent:false};}
-  if(op==='coach')throw problem('The extra Coach has been removed. Main Linky chat is unchanged.',410);
+  if(op==='coach')throw problem('Only team matching and role recommendations remain on LINKUP.',410);
   if(op==='leads'){
    const s=await state(uid);return {leads:relevantLeads(s,EXTERNAL_LEADS,now()),note:'External public sources, not LINKUP members. Source access does not establish current availability or acceptance of pitches.'};
   }

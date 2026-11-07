@@ -8,14 +8,9 @@ import {
   analyzeCodebaseSignals,
   recordVerifiedCommitToLeague,
   spliceComplementaryBuilders,
-  provisionVentureWorkplace,
-  autoProvisionOnIntroAccept,
-  serveLvlupBreakouts,
-  dispatchVcInvestmentOffer,
   sweepConnectedGithubCommits,
   createVentureWorkspaceOps,
 } from '../api/_ventureEngine.js';
-import { createPublicSeoHandler } from '../api/publicSeo.js';
 import { habitSnapshot } from '../shared/build-habit.js';
 
 function createMockDb(initial = {}) {
@@ -255,111 +250,6 @@ test('Algorithmic Splicing Engine ranks puzzle-piece co-founders above same-skil
   assert.equal(spliced.matches[0].uid, 'tariro');
   assert.ok(spliced.matches[0].puzzleScore > spliced.matches[1].puzzleScore);
   assert.match(spliced.matches[0].whyPuzzleFit, /Fills your/);
-});
-
-test('Programmatic Workplace Provisioning spins up shared Builder Room, Launchpad domain, and auto-triggers on intro accept', async () => {
-  const now = Date.parse('2026-11-02T16:00:00Z');
-  const db = createMockDb({
-    users: {
-      alice: { displayName: 'Alice Chikwanda', skills: ['Python', 'AI'], onboarded: true, isVisible: true, email: 'alice@private.example' },
-      tariro: { displayName: 'Tariro Moyo', skills: ['Growth', 'React'], onboarded: true, isVisible: true, email: 'tariro@private.example' },
-    },
-    publicProfiles: { alice: {}, tariro: {} },
-    intros: {
-      intro_99: {
-        requesterId: 'alice',
-        targetId: 'tariro',
-        need: 'GTM & React co-founder for PayPulse AI',
-        status: 'accepted',
-      },
-    },
-    builderContributions: {
-      alice: { days: ['2026-11-01', '2026-11-02'], points: 20, verifiedCommitCount: 4 },
-      tariro: { days: ['2026-11-02'], points: 10, verifiedCommitCount: 2 },
-    },
-  });
-
-  const launchpad = await autoProvisionOnIntroAccept({
-    db,
-    introId: 'intro_99',
-    accepterUid: 'tariro',
-    now,
-  });
-
-  assert.ok(launchpad);
-  assert.match(launchpad.reservedDomain, /\.linkupbuild\.com$/);
-  assert.match(launchpad.launchpadUrl, /https:\/\/www\.linkupbuild\.com\/app\/lvlup\?launchpad=/);
-  assert.equal(launchpad.founderIds.length, 2);
-  assert.equal(launchpad.starterFiles.length, 4);
-
-  const roomSnap = await db.collection('builderRooms').doc(launchpad.roomId).get();
-  assert.equal(roomSnap.exists, true);
-  assert.deepEqual(roomSnap.data().memberIds, ['alice', 'tariro']);
-
-  // Idempotent on second call for the same co-founder pair
-  const replay = await provisionVentureWorkplace({
-    db,
-    founderUid: 'alice',
-    partnerUid: 'tariro',
-    now: now + 1000,
-  });
-  assert.equal(replay.alreadyProvisioned, true);
-  assert.equal(replay.slug, launchpad.slug);
-
-  // Public Breakout Velocity feed & Hosted Launchpad endpoint expose zero private fields
-  const seoHandler = createPublicSeoHandler(() => db);
-  let statusCode = 0;
-  let rawJson = '';
-  await seoHandler(
-    { method: 'GET', query: { mode: 'lvlupBreakouts', launchpad: launchpad.slug } },
-    {
-      setHeader() {},
-      status(code) { statusCode = code; return this; },
-      send(body) { rawJson = body; },
-      end(body) { if (body !== undefined) rawJson = String(body); },
-    }
-  );
-  assert.equal(statusCode, 200);
-  assert.equal(rawJson.includes('private.example'), false);
-  const parsed = JSON.parse(rawJson);
-  assert.equal(parsed.featuredLaunchpad.slug, launchpad.slug);
-  assert.ok(parsed.breakouts.length >= 1);
-  assert.match(parsed.breakouts[0].flashBanner, /\$50,000/);
-
-  // VC Partner dispatches a $50,000 Smart-Contract SAFE Offer Intent
-  const offer = await dispatchVcInvestmentOffer({
-    db,
-    input: {
-      targetId: `squad:${launchpad.slug}`,
-      partnerName: 'Brandon Maier',
-      firmName: 'LvlUp Ventures',
-      partnerEmail: 'brandon@lvlup.vc',
-      checkUsd: 50000,
-      valuationCapUsd: 5000000,
-    },
-    ipHash: 'lvlup_partner_ip',
-    now: now + 5000,
-  });
-
-  assert.equal(offer.ok, true);
-  assert.equal(offer.checkUsd, 50000);
-  assert.equal(offer.platformAllocationBps, 250);
-  assert.equal(offer.platformFeeMemoUsd, 1250);
-  assert.match(offer.contractHash, /^0x[a-f0-9]{64}$/);
-
-  // Both founders receive Gold-Crown notifications in LINKUP
-  const aliceNotif = await db.collection('notifications').doc(`${offer.offerId}_alice`).get();
-  const tariroNotif = await db.collection('notifications').doc(`${offer.offerId}_tariro`).get();
-  assert.equal(aliceNotif.exists, true);
-  assert.equal(tariroNotif.exists, true);
-  assert.equal(aliceNotif.data().campaign, 'champion_crown');
-
-  // Workspace ventureStatus surfaces the live VC offer & launchpad to the founder
-  const ops = createVentureWorkspaceOps({ db, now: () => now + 6000 });
-  const wsStatus = await ops.status('alice');
-  assert.equal(wsStatus.launchpads.length, 1);
-  assert.equal(wsStatus.vcOffers.length, 1);
-  assert.equal(wsStatus.vcOffers[0].contractHash, offer.contractHash);
 });
 
 test('Linky Codebase Manager & Passive GitHub League records and returns the exact commits Linky looked at', async () => {

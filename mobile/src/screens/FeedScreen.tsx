@@ -786,8 +786,7 @@ export default function FeedScreen({ navigation }: any) {
   );
 }
 
-// The house promo that fills an unsold ad slot: it keeps the cadence identical
-// for free members and points them at the paywall/Linky rather than a paid ad.
+// The house promo that fills an unsold ad slot and routes to campaign management.
 function FeedHouseCard({ isDark, navigation }: { isDark: boolean; navigation: any }) {
   return (
     <TouchableOpacity
@@ -802,7 +801,7 @@ function FeedHouseCard({ isDark, navigation }: { isDark: boolean; navigation: an
       </View>
       <Text style={[styles.houseTitle, { color: textColor(isDark) }]}>Promote your product to the LINKUP community</Text>
       <Text style={[styles.houseBody, { color: textColor(isDark, 'secondary') }]}>
-        Run a sponsored card across the Feed, Discover, Search and Linky's picks. List your ad under LinkUp Campaigns.
+        Run sponsored cards across eligible LINKUP placements. Manage your ads in Campaigns.
       </Text>
     </TouchableOpacity>
   );

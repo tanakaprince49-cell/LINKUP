@@ -58,7 +58,7 @@ test('mount boundary and internal URL prefixing are exact', () => {
 test('real React Navigation config parses and serializes root and /app deep links', () => {
   for (const base of ['', '/app']) {
     const l = linking(`${base}/landing`);
-    for (const route of ['/landing', '/login', '/profile/member-123', '/chat/a_b', '/linky/settings', '/messages']) {
+    for (const route of ['/landing', '/login', '/profile/member-123', '/chat/a_b', '/linky', '/messages']) {
       const state = l.getStateFromPath(base + route, l.config);
       assert.ok(state, `state for ${base + route}`);
       assert.equal(l.getPathFromState(state, l.config), base + route);

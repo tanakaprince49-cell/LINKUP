@@ -67,7 +67,6 @@ export const CAMPAIGN_PLACEMENT_OPTIONS: { id: string; label: string; desc: stri
   { id: 'ideas', label: 'Idea Deck', desc: 'Sponsored card inside the idea swipe flow', available: true },
   { id: 'search', label: 'Search boost', desc: 'Paused while search lives on the web — not available to buy right now', available: false },
   { id: 'hub', label: 'Hub strip', desc: 'Banner on the discovery home screen', available: true },
-  { id: 'linky', label: 'Linky picks', desc: 'Linky may recommend you — always disclosed as sponsored', available: true },
   { id: 'discover', label: 'Discover boost', desc: 'Sponsored card shows every 4th swipe in the people deck', available: true },
   { id: 'news', label: 'Blogs feed', desc: 'Sponsored card inside the community Blogs feed', available: true },
   { id: 'feed', label: 'Startups feed', desc: 'Sponsored card inside the Startups feed', available: true },
@@ -718,11 +717,8 @@ export const toSponsoredItem = (campaign: Campaign): SponsoredIdeaDeckItem => {
 };
 
 /**
- * Our own promo, drawn when paid inventory is empty.
- *
- * Linky is the face of it. "Go PLUS" sold a feature list; this sells the
- * character - a first-person line from the assistant free members cannot
- * talk to yet. Tapping it opens the paywall (see the `house` flag).
+ * Our own promo, drawn when paid inventory is empty. It advertises LINKUP's
+ * team-matching plan without inventing an assistant persona or promising fit.
  */
 export const buildHouseIdeaCard = (): SponsoredIdeaDeckItem => ({
   id: `sponsored_${HOUSE_PLUS_CAMPAIGN_ID}`,
@@ -731,16 +727,16 @@ export const buildHouseIdeaCard = (): SponsoredIdeaDeckItem => ({
   house: true,
   website: '',
   logo: '',
-  title: 'Linky found people for you',
-  description: "I've read every builder here. Unlock me and I'll introduce you to the ones who fit.",
-  tagline: "I've read every builder here. Unlock me and I'll introduce you to the ones who fit.",
+  title: 'Build your team on LINKUP',
+  description: 'Find complementary teammates for your project and get role recommendations for your existing team.',
+  tagline: 'Match around your idea with LINKUP member-profile evidence.',
   stage: 'PLUS',
   lookingFor: [],
-  tags: ['LINKY', 'PLUS'],
+  tags: ['TEAM MATCHING', 'PLUS'],
   ownerId: 'linkup',
-  ownerName: 'Linky AI',
+  ownerName: 'LINKUP',
   ownerPic: '',
-  ownerOccupation: 'Your AI networking assistant',
+  ownerOccupation: 'Team matching',
   ownerCity: '',
   ownerCountry: '',
   ownerVerified: true,
@@ -910,7 +906,7 @@ export const fetchAnyActiveCampaigns = async (max: number = 1, viewerUid: string
 
 /**
  * One-shot fetch of active campaigns serving a given placement (search, hub,
- * linky, news, play). Rotates per viewer so a single-slot surface shows a
+ * news, play). Rotates per viewer so a single-slot surface shows a
  * different campaign on each load rather than the first document forever.
  */
 export const fetchActiveCampaignsForPlacement = async (

@@ -9,9 +9,7 @@ import {normalizeShipLogs} from '../lib/dailyLoop';
 import MomentumShareCard from '../components/MomentumShareCard';
 import {shareMomentumCard} from '../lib/momentumShare';
 import {builderCall,coachRequestKey} from '../lib/builder';
-import BuildHabitCard from '../components/BuildHabitCard';
 import ScreenHeader from '../components/ScreenHeader';
-import VerifiedBadge from '../components/VerifiedBadge';
 
 export default function ShipLogScreen({navigation}:any){
  const {user,profile}=useAuth(),{theme}=useTheme(),dark=theme==='dark',focused=useIsFocused();
@@ -40,8 +38,7 @@ export default function ShipLogScreen({navigation}:any){
   <FlatList ref={list} data={logs} keyExtractor={item=>item.id} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content} refreshing={loading} onRefresh={()=>void load()}
    ListHeaderComponent={<View style={{gap:16}}>
     {receipt&&<View accessibilityRole="alert" style={[styles.insight,{backgroundColor:dark?'#292B31':'#FFF8B8',borderColor:dark?'#AA9900':'#D8CB69'}]}>
-     <View style={styles.row}><Text style={[styles.insightTitle,{color:ink}]}>Linky</Text><VerifiedBadge size={16}/><Text style={[styles.reward,{color:ink}]}>+{receipt.pointsAwarded} contribution pts{receipt.replayed?' · already recorded':''}</Text></View>
-     <Text style={[styles.insightText,{color:ink}]}>{receipt.insight}</Text>{[1,3,7,14,30,50,100,365].includes(receipt.habit?.totalUpdates)&&<Text style={{color:ink,fontWeight:'900'}}>Milestone unlocked · {receipt.habit.totalUpdates} recorded build {receipt.habit.totalUpdates===1?'day':'days'}</Text>}<Text style={{color:muted,fontSize:11}}>Instant topic-based coaching · no chat credit used · not a code audit</Text>
+     <View style={styles.row}><Text style={[styles.insightTitle,{color:ink}]}>Progress recorded</Text><Text style={[styles.reward,{color:ink}]}>+{receipt.pointsAwarded} contribution pts{receipt.replayed?' · already recorded':''}</Text></View>
      <View style={{flexDirection:'row',flexWrap:'wrap',gap:10,alignItems:'center',marginTop:6}}>
       <TouchableOpacity accessibilityRole="button" onPress={()=>{if(user?.uid)void shareMomentumCard(user.uid).catch((e:any)=>setError(e?.message||'Enable public Momentum below to share your card.'));}} style={{backgroundColor:'#0A0B0D',paddingHorizontal:14,paddingVertical:9,borderRadius:12}}><Text style={{color:'#FBE618',fontWeight:'800',fontSize:13}}>Share my streak card</Text></TouchableOpacity>
       <Text style={{color:muted,fontSize:12,lineHeight:18}}>Keep Public Momentum enabled if you want to be considered for LINKUP’s weekly Founder Spotlight. It recognizes consistent recorded activity; your private update text stays private.</Text>
@@ -49,18 +46,17 @@ export default function ShipLogScreen({navigation}:any){
     </View>}
     <View style={[styles.composer,panel]}>
      <Text style={[styles.label,{color:ink}]}>What moved forward?</Text>
-     <Text style={{fontSize:13,lineHeight:20,color:muted}}>A result, a customer insight or a build milestone. Do not include credentials or private customer data. New update text and Linky feedback stay private and follow your profile’s visibility.</Text>
+     <Text style={{fontSize:13,lineHeight:20,color:muted}}>A result, a customer insight or a build milestone. Do not include credentials or private customer data. Your update text stays private.</Text>
      <TextInput accessibilityLabel="Build update" value={text} onChangeText={setText} editable={!saving&&!doneToday} placeholder={doneToday?'Your update is recorded for today.':'Tightened Firestore rules and added tests for blocked reads'} placeholderTextColor={muted} maxLength={180} multiline style={[styles.input,{color:ink,borderColor:panel.borderColor}]}/>
      <TextInput accessibilityLabel="Optional update link" value={link} onChangeText={setLink} editable={!saving&&!doneToday} placeholder="Optional HTTPS link" placeholderTextColor={muted} maxLength={2048} autoCapitalize="none" autoCorrect={false} keyboardType="url" style={[styles.link,{color:ink,borderColor:panel.borderColor}]}/>
      {error?<View accessibilityRole="alert"><Text style={{color:dark?'#FDA4AF':'#A51E35',lineHeight:20}}>{error}</Text><TouchableOpacity accessibilityRole="button" onPress={()=>void load()}><Text style={{color:ink,fontWeight:'800',marginTop:8}}>Refresh progress</Text></TouchableOpacity></View>:null}
      <TouchableOpacity accessibilityRole="button" accessibilityLabel={doneToday?'Today’s square is lit':'Publish update · earn 10 contribution points'} onPress={()=>void submit()} disabled={saving||loading||doneToday} style={[styles.button,{opacity:saving||loading||doneToday?0.6:1}]}>{saving?<ActivityIndicator color="#0A0B0D"/>:<Text style={styles.buttonText}>{doneToday?'Today’s square is lit':'Publish update · +10 contribution points'}</Text>}</TouchableOpacity>
      <Text style={{fontSize:11,lineHeight:17,color:muted}}>One rewarded update per UTC day. Retries never double-count. No missed-day penalties or automatic skill badges.</Text>
     </View>
-    <BuildHabitCard navigation={navigation} isDark={dark} refreshKey={`${summary?.today||''}:${summary?.points||0}`}/>
     <MomentumShareCard isDark={dark} refreshKey={`${summary?.today||''}:${summary?.points||0}`}/>
     <Text style={[styles.historyTitle,{color:ink}]}>Your build history</Text>
    </View>}
-   renderItem={({item})=><View style={[styles.log,panel]}><Text style={{fontSize:15,lineHeight:23,color:ink,fontWeight:'600'}}>{item.text}</Text><Text style={{fontSize:11,color:muted,marginTop:8}}>{item.createdAt.slice(0,10)} · {item.pointsAwarded?`${item.pointsAwarded} contribution pts`:'Earlier self-reported update'}</Text>{item.insight&&<Text style={{fontSize:13,color:muted,lineHeight:21,marginTop:10}}>Linky: {item.insight}</Text>}{typeof item.link==='string'&&item.link.startsWith('https://')&&<TouchableOpacity accessibilityRole="link" onPress={()=>void Linking.openURL(item.link)}><Text style={{color:ink,fontWeight:'700',marginTop:8,textDecorationLine:'underline'}}>Open update link ↗</Text></TouchableOpacity>}</View>}
+   renderItem={({item})=><View style={[styles.log,panel]}><Text style={{fontSize:15,lineHeight:23,color:ink,fontWeight:'600'}}>{item.text}</Text><Text style={{fontSize:11,color:muted,marginTop:8}}>{item.createdAt.slice(0,10)} · {item.pointsAwarded?`${item.pointsAwarded} contribution pts`:'Earlier self-reported update'}</Text>{typeof item.link==='string'&&item.link.startsWith('https://')&&<TouchableOpacity accessibilityRole="link" onPress={()=>void Linking.openURL(item.link)}><Text style={{color:ink,fontWeight:'700',marginTop:8,textDecorationLine:'underline'}}>Open update link ↗</Text></TouchableOpacity>}</View>}
    ListEmptyComponent={!loading?<Text style={{color:muted,textAlign:'center',padding:20}}>Your first useful update starts your build history. There is no streak to catch up on.</Text>:null}/>
  </SafeAreaView>;
 }

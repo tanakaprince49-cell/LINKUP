@@ -24,7 +24,6 @@ import DiscoveryDashboardScreen from './src/screens/DiscoveryDashboardScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import EmailAuthScreen from './src/screens/EmailAuthScreen';
 import LandingScreen from './src/screens/LandingScreen';
-import LvlupDemoScreen from './src/screens/LvlupDemoScreen';
 
 const LinkyHomeScreen = lazyScreen(() => import('./src/screens/LinkyHomeScreen'));
 const IdeaDeckScreen = lazyScreen(() => import('./src/screens/IdeaDeckScreen'));
@@ -44,9 +43,6 @@ const NetworkQuizScreen = lazyScreen(() => import('./src/screens/NetworkQuizScre
 const BuilderWorkspaceScreen = lazyScreen(() => import('./src/screens/BuilderWorkspaceScreen'));
 const ShipLogScreen = lazyScreen(() => import('./src/screens/ShipLogScreen'));
 const GroupChatScreen = lazyScreen(() => import('./src/screens/GroupChatScreen'));
-const LinkyProfileScreen = lazyScreen(() => import('./src/screens/LinkyProfileScreen'));
-const LinkySettingsScreen = lazyScreen(() => import('./src/screens/LinkySettingsScreen'));
-const LinkyAuditScreen = lazyScreen(() => import('./src/screens/LinkyAuditScreen'));
 const NewsScreen = lazyScreen(() => import('./src/screens/NewsScreen'));
 const BlogsScreen = lazyScreen(() => import('./src/screens/BlogsScreen'));
 const CampaignsScreen = lazyScreen(() => import('./src/screens/CampaignsScreen'));
@@ -142,7 +138,6 @@ const linking: any = {
     path: WEB_BASE_PATH.slice(1),
     screens: {
       Landing: 'landing',
-      LvlupDemo: 'lvlup',
       EmailAuth: 'login',
       EmailVerification: 'verify-email',
       Onboarding: 'onboarding',
@@ -164,8 +159,6 @@ const linking: any = {
       Matches: 'connections',
       Chat: 'chat/:matchId',
       ArchivedChats: 'messages/archived',
-      LinkySettings: 'linky/settings',
-      LinkyAudit: 'linky/audit',
       IdeaDeck: 'ideas',
       Viewers: 'viewers',
       ActiveOpportunity: 'opportunity/:userId',
@@ -630,7 +623,7 @@ function AppContent() {
     const location = (globalThis as any)?.location;
     const history = (globalThis as any)?.history;
     const pathname = webRoutePath(String(location?.pathname || '')).replace(/\/+$/, '') || '/';
-    const publicPaths = new Set(['', '/', '/landing', '/login', '/lvlup']);
+    const publicPaths = new Set(['', '/', '/landing', '/login']);
     const isPublicSharedPath = pathname.startsWith('/profile/') || pathname.startsWith('/opportunity/');
 
     if (history?.replaceState && !publicPaths.has(pathname) && !isPublicSharedPath) {
@@ -734,7 +727,6 @@ function AppContent() {
           <>
             <Stack.Screen name="Landing" component={LandingScreen} />
             <Stack.Screen name="EmailAuth" component={EmailAuthScreen} />
-          <Stack.Screen name="LvlupDemo" component={LvlupDemoScreen} />
             {isPublicSharedWebPath ? (
               <>
                 <Stack.Screen
@@ -782,13 +774,9 @@ function AppContent() {
             <Stack.Screen name="PitchPerfect" component={PitchPerfectScreen} />
             <Stack.Screen name="CreatePost" component={CreatePostScreen} />
             <Stack.Screen name="NetworkQuiz" component={NetworkQuizScreen} />
-            <Stack.Screen name="LinkyProfile" component={LinkyProfileScreen} options={{ animation: Platform.OS === 'android' ? 'fade' : 'slide_from_right' }} />
-            <Stack.Screen name="LinkySettings" component={LinkySettingsScreen} />
-            <Stack.Screen name="LinkyAudit" component={LinkyAuditScreen} />
             <Stack.Screen name="BuilderWorkspace" component={BuilderWorkspaceScreen} />
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
             <Stack.Screen name="GroupChat" component={GroupChatScreen} />
-          <Stack.Screen name="LvlupDemo" component={LvlupDemoScreen} />
           </>
         ) : null}
       </Stack.Navigator>
@@ -816,10 +804,7 @@ function AppContent() {
  */
 const SCREEN_REGISTRY: Array<[string, any]> = [
   ['ProfileScreen', ProfileScreen],
-  ['LinkyProfileScreen', LinkyProfileScreen],
   ['LinkyHomeScreen', LinkyHomeScreen],
-  ['LinkySettingsScreen', LinkySettingsScreen],
-  ['LinkyAuditScreen', LinkyAuditScreen],
   ['CampaignsScreen', CampaignsScreen],
   ['ChatScreen', ChatScreen],
   ['ViewersScreen', ViewersScreen],
@@ -828,7 +813,6 @@ const SCREEN_REGISTRY: Array<[string, any]> = [
   ['NewsScreen', NewsScreen],
   ['BlogsScreen', BlogsScreen],
   ['RecommendedMatchesScreen', RecommendedMatchesScreen],
-  ['LvlupDemoScreen', LvlupDemoScreen],
 ];
 SCREEN_REGISTRY.forEach(([name, component]) => {
   if (typeof component !== 'function' && !(component && typeof component === 'object')) {

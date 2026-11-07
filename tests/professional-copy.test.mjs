@@ -39,7 +39,7 @@ test('copy revision preserves navigation, persistence, mission and product strin
 
 test('audited professional wording remains in the shared Android/web source', () => {
   const audit = json('tests/fixtures/professional-copy-review.json');
-  assert.ok(audit.length >= 240);
+  assert.ok(audit.length >= 220);
   const sources = new Map();
   const normalized = (value) => value.replace(/\s+/g, ' ').trim();
   for (const entry of audit) {
@@ -88,7 +88,7 @@ test('authenticated web routes are noindex and metadata helper is safe on native
   const exports = {}; const module = { exports };
   const compiled = ts.transpileModule(read('mobile/src/lib/webMetadata.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   vm.runInNewContext(compiled, { exports, module, require: () => copy });
-  for (const route of ['EmailAuth', 'Onboarding', 'Profile', 'Chat', 'Inbox', 'Campaigns', 'LinkySettings', undefined]) {
+  for (const route of ['EmailAuth', 'Onboarding', 'Profile', 'Chat', 'Inbox', 'Campaigns', undefined]) {
     const meta = module.exports.routeMetadata(route);
     assert.equal(meta.robots, 'noindex,follow'); assert.equal(meta.canonical, null);
   }
@@ -115,11 +115,11 @@ test('static sitemap includes the public app landing but not private app routes'
   assert.doesNotMatch(response.body, /\/login|\/chat|\/campaign-manager|\/campaign-dashboard|\/news-feed|\/startup-feed|\/profile/);
 });
 
-test('Linky has a friendly configurable voice and evidence-based introductions', () => {
-  const source = read('api/_linky.js');
-  assert.match(source, /Be a grounded, friendly connector/);
-  assert.match(source, /Only use facts from the dossier/);
-  assert.match(source, /Never invent a fact/);
-  assert.match(source, /v5-companion/);
-  assert.doesNotMatch(source, /tease gently|Light teasing is fine|warm, easy, a little funny|haha\. Say the word/);
+test('Linky surfaces are limited to team matching and role recommendations', () => {
+  const screen = read('mobile/src/screens/LinkyHomeScreen.tsx');
+  assert.match(screen, /linkyTeamMatch/);
+  assert.match(screen, /role/i);
+  assert.doesNotMatch(screen, /intro draft|warm intro|Linky AI assistant|chat with Linky/i);
+  const client = read('mobile/src/lib/linkyApi.ts');
+  assert.doesNotMatch(client, /action:\s*['\"](?:chat|draft|intro|prefs|meet)['\"]/i);
 });

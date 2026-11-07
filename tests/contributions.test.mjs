@@ -3,15 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {calendarWeeks,contributionDay,contributionInsight,containsCredential,CONTRIBUTION_POINTS} from '../shared/contributions.js';
+import {calendarWeeks,contributionDay,containsCredential,CONTRIBUTION_POINTS} from '../shared/contributions.js';
 const now=Date.parse('2026-10-23T12:00:00Z');
-test('instant coaching is two sentences, grounded in the topic and never invents ability, rank or savings',()=>{
- for(const text of ['Added Firebase rules tests','Interviewed five customers','Fixed an API bug','Launched our waitlist','Recorded our first paid sale','Updated signup design','Had a team meeting','Finished an important small milestone']){
-  const insight=contributionInsight(text);assert.equal(insight.split(/[.!?]+/).filter(s=>s.trim()).length,2);
-  assert.match(insight,/10 contribution points/);assert.doesNotMatch(insight,/top \d|\d+%|Technical Founder score|hundreds|guarantee|verified/i);
- }
- assert.equal(CONTRIBUTION_POINTS,10);assert.match(contributionInsight('Tightened Firestore security rules'),/allowed and denied/);assert.match(contributionInsight('Interviewed five customers'),/actually said/);
-});
+test('contribution points are limited to recorded activity, not coaching or expertise claims',()=>{assert.equal(CONTRIBUTION_POINTS,10);});
 test('credentials are rejected before an update can be committed',()=>{
  for(const text of ['github_pat_privatevalue','-----BEGIN PRIVATE KEY-----','api_key = really_private_key_value'])assert.equal(containsCredential(text),true);
  assert.equal(containsCredential('Added Firestore rule tests without sharing any keys'),false);
@@ -31,7 +25,7 @@ test('calendar handles leap day and year rollover without duplicating or inventi
 test('profile and progress log use the authoritative publishing adapter, not client badges',()=>{
  const root=new URL('../',import.meta.url),read=p=>fs.readFileSync(new URL(p,root),'utf8');
  const profile=read('mobile/src/screens/ProfileScreen.tsx'),ship=read('mobile/src/screens/ShipLogScreen.tsx');
- assert.doesNotMatch(profile,/ContributionCalendar/);assert.doesNotMatch(ship,/ContributionCalendar/);assert.match(ship,/builderCall\('shipUpdate',pending.current\)/);assert.match(ship,/no chat credit used/);
+ assert.doesNotMatch(profile,/ContributionCalendar/);assert.doesNotMatch(ship,/ContributionCalendar/);assert.match(ship,/builderCall\('shipUpdate',pending.current\)/);assert.doesNotMatch(ship,/receipt\.insight|Linky:|no chat credit used/);
  assert.doesNotMatch(ship,/isVerified:|verificationProgram:|top 5%/);
  const loop=read('mobile/src/lib/dailyLoop.ts').split('export async function persistShipAndRep')[1].split('export async function syncDecayingRep')[0];assert.doesNotMatch(loop,/patch\.isVerified|SHIPPED|verifiedBy|setDoc\(/);
 });

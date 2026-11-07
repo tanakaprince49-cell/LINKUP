@@ -16,7 +16,6 @@ import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import { shareLinkupInvite } from '../lib/activation';
 import { notifyUser } from '../lib/notify';
 import ProCrownBadge from '../components/ProCrownBadge';
-import { SponsoredSlot } from '../components/SponsoredCard';
 import { isSponsoredHiddenForViewer } from '../lib/campaigns';
 
 const isPermissionDenied = (error: any) => String(error?.code || '').includes('permission-denied');
@@ -319,17 +318,6 @@ export default function MessagesScreen({ navigation, route }: any) {
           removeClippedSubviews
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          ListFooterComponent={
-            matches.length > 0 ? (
-              <View style={{ marginTop: 20, marginBottom: 12 }}>
-                <SponsoredSlot
-                  placement="linky"
-                  viewerUid={user?.uid}
-                  enabled={!isSponsoredHiddenForViewer(profile, { email: user?.email, isAdmin: (profile as any)?.isAdmin })}
-                />
-              </View>
-            ) : null
-          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <MessageSquare size={48} color="#222" />
@@ -337,10 +325,10 @@ export default function MessagesScreen({ navigation, route }: any) {
               {!archivedOnly ? (
                 <>
                   <Text style={{ fontSize: 12, fontWeight: '700', color: '#777', textAlign: 'center', lineHeight: 18 }}>
-                    Conversations become available after a connection is approved. Use Linky, search for relevant professionals, or invite your existing contacts.
+                    Conversations become available after a connection is approved. Match with complementary teammates for a project, or invite people you already know.
                   </Text>
-                  <TouchableOpacity onPress={() => navigation.navigate('LinkyHome')} style={{ backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 16 }}>
-                    <Text style={{ fontSize: 11, fontWeight: '900', color: '#000', letterSpacing: 1 }}>OPEN LINKY</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Main', { screen: 'LinkyHome' })} style={{ backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 16 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '900', color: '#000', letterSpacing: 1 }}>FIND TEAMMATES</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => void shareLinkupInvite()}>
                     <Text style={{ fontSize: 11, fontWeight: '900', color: COLORS.primaryStrong, letterSpacing: 1 }}>INVITE BUILDERS</Text>

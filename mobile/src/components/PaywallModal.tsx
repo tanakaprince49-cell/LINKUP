@@ -43,10 +43,10 @@ type PaywallModalProps = {
 const LOGO = require('../../assets/logo-square.png');
 
 const PRO_PERKS = [
-  'Unlimited Linky messages & Meets',
+  'More LINKUP team-match requests',
   "Profile viewer insights — review available names and professional profiles",
   'Advanced search, AI ranking & saved search alerts',
-  'AI-assisted introductions & Linky networking tools',
+  'AI-assisted role recommendations with evidence-based team matching',
   'Turbo Connect visibility boost in Discover & search',
   'Verified blue check + PLUS crown',
   'Unlimited Startup Analyzer, idea deck & weekly picks',
@@ -470,7 +470,7 @@ export default function PaywallModal({
 
             <Text style={[styles.title, { color: textColor(isDark) }]}>Expand your professional networking tools</Text>
             <Text style={[styles.copy, { color: textColor(isDark, 'secondary') }]}>
-              {description || 'Free members receive 5 Linky messages per day and limited professional discovery every 12 hours. LINKUP PLUS unlocks unlimited Linky messages and discovery, smarter AI recommendations, and premium tools to help you find the right co-founder, developer, designer, or investor faster.'}
+              {description || 'Free members have limited team matching. LINKUP PLUS provides higher matching limits and broader discovery to help you find complementary teammates for your project.'}
             </Text>
             <View style={[styles.featurePill, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}> 
               <Text style={[styles.feature, { color: textColor(isDark) }]}>{feature}</Text>

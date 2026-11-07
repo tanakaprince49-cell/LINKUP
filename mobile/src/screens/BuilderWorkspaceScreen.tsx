@@ -8,11 +8,8 @@ import {useAuth} from '../contexts/AuthContext';
 import {useTheme} from '../contexts/ThemeContext';
 import {COLORS,appBackground,textColor} from '../theme/theme';
 import {GroupsPanel} from './GroupChatScreen';
-import BuildHabitCard from '../components/BuildHabitCard';
-import VentureEnginePanel from '../components/VentureEnginePanel';
 import ScreenHeader from '../components/ScreenHeader';
 import VerifiedBadge from '../components/VerifiedBadge';
-import LinkyRichText from '../components/LinkyRichText';
 import {builderCall,builderSection,BUILDER_SECTIONS,BuilderSection} from '../lib/builder';
 import {ICON_VARIANTS,ICON_VARIANT_IMAGES,getLatestResolvedAppearance,setSavedIconMode} from '../lib/dynamicAppearance';
 import {registerForPushNotificationsAsync,registerForWebNotificationsAsync} from '../lib/notifications';
@@ -28,7 +25,7 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
  const [context,setContext]=useState<any>(initialContext),[prefs,setPrefs]=useState<any>({});
  const [goal,setGoal]=useState(''),[people,setPeople]=useState<any[]>([]),[connections,setConnections]=useState<any[]>([]),[leads,setLeads]=useState<any[]>([]),[asks,setAsks]=useState<any[]>([]);
  const [weekly,setWeekly]=useState<any>(null),[askCursor,setAskCursor]=useState<string|null>(null),[myAsks,setMyAsks]=useState(false);
- const [leadFilter,setLeadFilter]=useState('all'),[leadBriefRecord,setLeadBriefRecord]=useState<any>(null);
+ const [leadFilter,setLeadFilter]=useState('all');
  const [editingFollowup,setEditingFollowup]=useState(''),[reason,setReason]=useState('');
  const [target,setTarget]=useState(''),[followTitle,setFollowTitle]=useState(''),[note,setNote]=useState(''),[days,setDays]=useState('3'),[draft,setDraft]=useState('');
  const [askTitle,setAskTitle]=useState(''),[askDetails,setAskDetails]=useState(''),[question,setQuestion]=useState(''),[askUrl,setAskUrl]=useState(''),[askKind,setAskKind]=useState('help'),[compensation,setCompensation]=useState('voluntary'),[minutes,setMinutes]=useState('15');
@@ -65,14 +62,12 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
  if(!home)return <SafeAreaView edges={isTabWorkspace?[]:undefined} style={[styles.root,appBackground(dark)]}>{!isTabWorkspace?<ScreenHeader title="Your builder workspace" onBack={()=>navigation.goBack()} isDark={dark}/>:null}<View style={{padding:24,gap:16}}>{error?text(error):<ActivityIndicator color={COLORS.primaryStrong}/>} {error?button('Try again',()=>void refresh(true)):null}</View></SafeAreaView>;
  const b=home.brief,s=home.state;
  return <SafeAreaView edges={isTabWorkspace?[]:undefined} style={[styles.root,appBackground(dark)]}>
-  {!isTabWorkspace?<ScreenHeader title="Build with Linky" subtitle="A useful next step. Then another." onBack={()=>navigation.goBack()} isDark={dark} right={<VerifiedBadge size={20}/>}/>:null}
+  {!isTabWorkspace?<ScreenHeader title="Builder workspace" subtitle="Your private plans and project resources." onBack={()=>navigation.goBack()} isDark={dark} right={<VerifiedBadge size={20}/>}/>:null}
   <View style={{paddingHorizontal:18,paddingBottom:8}}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>{BUILDER_SECTIONS.map(tab=><TouchableOpacity key={tab} accessibilityRole="button" accessibilityState={{selected:section===tab}} onPress={()=>choose(tab)} style={[styles.tab,section===tab&&styles.activeTab]}><Text style={{color:section===tab?'#0A0B0D':'#575B60',fontWeight:'800'}}>{tab}</Text></TouchableOpacity>)}</ScrollView></View>
   <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async()=>{setRefreshing(true);await refresh();await panel(section);setRefreshing(false);}}/>}>
    {error?<View accessibilityRole="alert" style={styles.error}><Text style={{color:'#9f1239'}}>{error}</Text></View>:null}{busy?<ActivityIndicator color={COLORS.primaryStrong}/>:null}
    {section==='Today'&&<>
-    <BuildHabitCard navigation={navigation} isDark={dark} compact refreshKey={String(home.state.updatedAt)}/>
     <View style={styles.hero}><View style={styles.row}><Text style={styles.eyebrow}>YOUR NEXT MOVE</Text></View><Text style={styles.heroTitle}>{b.next.label}</Text>{text(s.context.project?`Working on ${s.context.project}`:'You do not need an active network to make progress today.')}{button('Take the next step',()=>choose(builderSection(b.next.section)))}</View>
-    <VentureEnginePanel navigation={navigation} isDark={dark} mode="full" onRefreshWorkspace={()=>void refresh()}/>
     {!s.context.project&&card('Start with what matters to you',<>{text('Choose a goal, add a little context, then get a useful first action. You can skip networking and start with your own project.')}{button('Set up my building context',()=>choose('Plan'))}</>)}
     {b.returningAfterBreak&&card('Welcome back — no catching up required',<>{text('Still building the same thing? Keep your plan, adjust it or start fresh. Your old activity is not a debt.')}{button('Continue my current goal',()=>choose('Plan'),true)}{button('Adjust my plan',()=>choose('Plan'))}{button('Refresh my availability',()=>choose('People'),true)}{button('Reset private context',()=>confirmed('Reset','Clear private goals, follow-ups and reviews? Shared rooms and feedback remain shared.',()=>void act('forget')),true)}</>)}
     {card('Your real progress',<>{text(`${b.completed} goals completed this week · ${b.due} follow-ups due · ${b.roomUpdates} rooms updated · ${b.invitations} invitations`)}{text(`${b.momentumDays} contribution days in the last seven days. This is activity, not proof of expertise or investment quality.`)}{button('Make this week count',()=>choose('Plan'),true)}</>)}
@@ -89,11 +84,10 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
     {card('Build together',<>{text('Create a private group chat and invite approved connections. They choose whether to join.')}{button('Open my groups',()=>choose('Groups'),true)}</>)}
    </>}
    {section==='People'&&<>
-    <VentureEnginePanel navigation={navigation} isDark={dark} mode="spliceOnly" onRefreshWorkspace={()=>void refresh()}/>
     {card('Available for a useful conversation?',<><Field label="What are you available to discuss?" value={availability} onChange={setAvailability} max={180}/>{text(s.availability.enabled&&s.availability.until>Date.now()?`Your availability expires ${day(s.availability.until)}.`:'Not currently marked available.')}{button('Available for the next 7 days',()=>void act('availability',{enabled:true,purpose:availability}))}{button('Pause availability',()=>void act('availability',{enabled:false}),true)}</>)}
     {card('Daily 5 — relevance before quantity',<>{text('Suggestions are drawn from up to 160 discovery candidates and require an overlap with your saved needs or skills. We will not fill five slots with weak matches. Availability is self-reported and expires.')}{button('Refresh recommendations',()=>void panel('People'),true)}{!people.length&&text('No evidence-backed matches in the current candidate pool. Refine your needs or explore external sources.')}</>)}
     {people.map(p=>card(p.name,<View key={p.uid}>{text(p.why)}{text(p.available?`Available: ${p.availability}`:'Availability not confirmed')}{button('View actual profile',()=>navigation.navigate('Profile',{userId:p.uid}))}{choices(['relevant','not_relevant','contacted'],'',status=>void act('recommendationFeedback',{uid:p.uid,status},()=>setPeople(people.filter(x=>x.uid!==p.uid))))}</View>))}
-    {card('After a good introduction',<>{text('Agree on a topic, exchange a project brief and choose a next step. Then save a private follow-up or create a shared room. Linky does not book meetings without both people agreeing.')}{button('Plan a follow-up',()=>choose('Follow-ups'),true)}{button('Explore external leads',()=>choose('Leads'),true)}</>)}
+    {card('After connecting with a builder',<>{text('Agree on a topic, exchange a project brief and choose a next step. You can keep a private follow-up or create a shared room.')}{button('Plan a follow-up',()=>choose('Follow-ups'),true)}{button('Explore reviewed external opportunities',()=>choose('Leads'),true)}</>)}
    </>}
    {section==='Follow-ups'&&<>
     {card('Make a connection lead somewhere',<>{connectionPicker()}<Field label="Next agreed action" value={followTitle} onChange={setFollowTitle} max={180}/><Field label="Why we connected / what we agreed" value={reason} onChange={setReason} max={500}/><Field label="Private relationship note (never sent)" value={note} onChange={setNote} max={2000} multiline/><Field label="Remind me in how many days? (0–90)" value={days} onChange={setDays} max={3}/>{button(editingFollowup?'Save follow-up changes':'Save private follow-up',()=>void act(editingFollowup?'followupEdit':'followup',{id:editingFollowup,targetUid:target,title:followTitle,note,reason,dueAt:dateDue()},()=>{setFollowTitle('');setNote('');setReason('');setEditingFollowup('');}))}{editingFollowup&&button('Cancel editing',()=>{setEditingFollowup('');setFollowTitle('');setNote('');setReason('');},true)}{text('Enable reminders in Settings to receive in-app or push alerts. Nothing is sent to your connection automatically.')}</>)}
@@ -111,44 +105,12 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
     </>)}</>}
    </>}
    {section==='Leads'&&<>
-    {card('Useful people exist beyond LINKUP',<>{text('Find a useful route, understand the requirements, then prepare your next move. Start with reviewed public sources. These are external organizations or directories, not registered members. A source does not establish willingness to receive outreach. No private contact details are collected.')}{text('Linky’s existing external search remains permission-based. Ask before searching LinkedIn. Drafts are never sent automatically.')}{button('Ask Linky about external leads',()=>navigation.navigate('Main',{screen:'LinkyHome'}),true)}</>)}
+    {card('Reviewed external opportunities',<>{text('Explore official funding, credits, learning and co-founder sources. These are external organizations or directories, not registered LINKUP members. A listing does not establish eligibility or willingness to receive outreach.')}{text('Verify current requirements on each official source. LINKUP does not contact anyone for you.')}</>)}
     {<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>{[['all','All sources'],['funding','Funding'],['credits','Cloud credits'],['cofounder','Co-founders'],['learning','Learning'],['saved','Saved']].map(([id,label])=>button(label,()=>setLeadFilter(id),leadFilter!==id))}</ScrollView>}
     {leads.filter(l=>leadFilter==='all'||(leadFilter==='saved'?l.saved:l.category===leadFilter)).map(l=>card(l.name,<View key={l.id}>{text(`External · ${l.kind} · ${l.region}`)}{text(l.summary)}{text(l.relevance)}{l.eligibility&&text('Check your fit: '+l.eligibility)}{l.cost&&text(l.cost)}{l.deadlineLabel&&text(Date.now()<Date.parse(l.deadlineAt)?l.deadlineLabel:'The reviewed on-time deadline has passed. Check the official page for current options.')}
-    {button('Prepare my next step',()=>void act('leadBrief',{id:l.id},r=>setLeadBriefRecord({uid:user?.uid,id:l.id,text:r.text})),true)}{leadBriefRecord?.uid===user?.uid&&leadBriefRecord?.id===l.id&&<View style={{gap:10,padding:14,backgroundColor:dark?'#242A23':'#F4F3E7',borderRadius:15}}><LinkyRichText text={leadBriefRecord.text} isDark={dark}/>{button('Copy preparation brief',()=>void Clipboard.setStringAsync(leadBriefRecord.text))}{button('Work through this with Linky',()=>navigation.navigate('Main',{screen:'LinkyHome',params:{workPrompt:'Help me prepare for '+l.name+'. My project: '+(context.project||'[describe it]')+'. Goal: '+(context.goal||'[add goal]')+'. Official source: '+l.sourceUrl}}),true)}</View>}
     {text(`Source checked ${l.checkedAt.slice(0,10)} · ${l.attribution}`)}{button('Open official source',()=>void Linking.openURL(l.sourceUrl),true)}{button('Explore official route',()=>void Linking.openURL(l.url))}{button(l.saved?'Remove saved lead':'Save this lead',()=>void act('leadSave',{id:l.id,saved:!l.saved},()=>void panel('Leads')),true)}</View>))}
    </>}
-   {section==='Settings'&&<>
-    {card('Helpful reminders, on your terms',<>{text('Up to four short daily messages, each about a different true thing: a due follow-up, your own rank and points, the empty fields on your profile, today’s recorded activity, or a real gap since your last build day. Never more than four, never the same idea twice in a day, at least two and a half hours apart, and never inside your quiet hours. Emails remain disabled until a verified provider is configured.')}{text('Linky welcome-back invitations start after three days away, rotate eight headlines and arrive at most once every three days. They never invent new matches, messages or activity.')}{text('Build nudges stop after an update, protected rest or weekly target and pause after three unanswered reminders.')}<View style={[styles.row,{justifyContent:'space-between'}]}><Text style={{color:textColor(dark),flex:1}}>Daily progress messages</Text><Switch accessibilityLabel="Daily progress messages" value={prefs.retention!==false} onValueChange={v=>setPrefs({...prefs,retention:v})}/></View>{Object.entries({welcomeBack:'Linky welcome-back invitations',dailyBuild:'Cheeky daily build reminders',reminders:'Due follow-up reminders',digest:'Sunday progress summary',friday:'Friday sourced opportunity drop',inApp:'In-app reminders',push:'Native push / foreground browser alerts',allowInvites:'Accept invitations from approved connections'}).map(([key,label])=><View key={key} style={[styles.row,{justifyContent:'space-between'}]}><Text style={{color:textColor(dark),flex:1}}>{label}</Text><Switch accessibilityLabel={label} value={!!prefs[key]} onValueChange={v=>setPrefs({...prefs,[key]:v})}/></View>)}
-      <Field label="Daily build reminder hour (0–23)" value={String(prefs.buildHour??18)} onChange={(v:string)=>setPrefs({...prefs,buildHour:Number(v)})} max={2}/><Field label="IANA timezone" value={prefs.timezone||'UTC'} onChange={(v:string)=>setPrefs({...prefs,timezone:v})} max={80}/>{button('Use my device timezone',()=>setPrefs({...prefs,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'}),true)}
-      <Field label="Quiet hours start (0–23)" value={String(prefs.quietStart??20)} onChange={(v:string)=>setPrefs({...prefs,quietStart:Number(v)})} max={2}/><Field label="Quiet hours end (0–23)" value={String(prefs.quietEnd??8)} onChange={(v:string)=>setPrefs({...prefs,quietEnd:Number(v)})} max={2}/>{button('Save preferences',()=>void savePrefs())}{text(Platform.OS==='web'?'Background web push is not configured. Browser alerts require permission, in-app reminders enabled and an open LINKUP tab.':'Push needs a supported native build, permission and a registered device. Delivery is not guaranteed.')}</>)}
-    {card('Dynamic Linky icon & occasion variants',<>
-      {text('Dynamic Linky appearance updates your launcher icon on mobile and tab favicon + badge on web when you miss a day, your streak is on the line, unread signals arrive, or you hit a celebration milestone — and reverts to normal immediately when you jump back in.')}
-      <View style={styles.row}>
-        {([
-          ['auto','Auto (Smart occasions)'],
-          ['classic','Classic locked'],
-        ] as const).map(([modeId,label])=>{
-          const selected=(prefs.iconMode||'auto')===modeId;
-          return <TouchableOpacity key={modeId} accessibilityRole="button" accessibilityState={{selected}} onPress={()=>{const next={...prefs,iconMode:modeId};setPrefs(next);void setSavedIconMode(modeId);void builderCall('prefs',next).catch(()=>{});}} style={[styles.chip,selected&&styles.chipSelected]}><Text style={{fontWeight:'700',color:'#0A0B0D'}}>{label}</Text></TouchableOpacity>;
-        })}
-      </View>
-      {text(`Active right now: ${getLatestResolvedAppearance().meta.label} (${getLatestResolvedAppearance().state}) — tap any bundled occasion icon below to pin it anytime, or choose Auto above.`)}
-      <View style={{gap:10}}>
-        {ICON_VARIANTS.map(v=>{
-          const pinned=(prefs.iconMode||'auto')===v.id;
-          return <TouchableOpacity key={v.id} accessibilityRole="button" accessibilityState={{selected:pinned}} onPress={()=>{const next={...prefs,iconMode:v.id};setPrefs(next);void setSavedIconMode(v.id);void builderCall('prefs',next).catch(()=>{});}} style={{flexDirection:'row',alignItems:'center',gap:12,padding:10,borderRadius:16,borderWidth:pinned?2:1,borderColor:pinned?'#B7A400':(dark?'#383A42':'#DDDAD1'),backgroundColor:pinned?(dark?'#2B2814':'#FFFBEB'):(dark?'#1F222B':'#F8F7F2')}}>
-            <Image source={ICON_VARIANT_IMAGES[v.id]} style={{width:52,height:52,borderRadius:13,backgroundColor:v.themeColor}}/>
-            <View style={{flex:1,gap:2}}>
-              <Text style={{fontWeight:'800',fontSize:14,color:textColor(dark)}}>{v.label}{pinned?' · Pinned':''}</Text>
-              <Text style={{fontSize:11,fontWeight:'700',color:'#B78103'}}>{v.occasion}</Text>
-              <Text style={{fontSize:12,lineHeight:17,color:textColor(dark,'secondary')}}>{v.triggerRule||v.subtitle}</Text>
-            </View>
-          </TouchableOpacity>;
-        })}
-      </View>
-    </>)}
-    {card('Your private context belongs to you',<>{text('Context, relationship notes and saved coaching reviews are private. Shared room messages and feedback remain visible to the people you shared them with. Clearing this workspace does not refill AI credits. Progress, rest protection and community-credit ledgers remain separate; resetting context cannot mint rewards.')}{button('Copy my private workspace export',()=>void act('export',{},r=>void Clipboard.setStringAsync(JSON.stringify({workspace:r.state,progress:r.contributions,habit:r.habit},null,2))),true)}{button('Clear private context, goals and reviews',()=>confirmed('Clear private workspace','Clear private context, goals, notes and reviews? Shared room content and public feedback are not deleted by this action.',()=>void act('forget')),true)}</>)}
-   </>}
+   {section==='Settings'&&card('Your private workspace data',<>{text('Export or clear your private project context and notes. Shared group messages and public feedback remain visible to the people you shared them with.')}{button('Copy private workspace export',()=>void act('export',{},r=>void Clipboard.setStringAsync(JSON.stringify({workspace:r.state,progress:r.contributions},null,2))),true)}{button('Clear private project context',()=>confirmed('Clear private context','Clear your private project context and notes? Shared group content and public feedback are not deleted.',()=>void act('forget')),true)}</>)}
    <View style={{height:24}}/>
   </ScrollView>
  </SafeAreaView>;

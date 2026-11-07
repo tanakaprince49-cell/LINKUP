@@ -27,6 +27,7 @@ import { findLeads, outreachDraft, safeLinkedinProfile } from './_serpapi.js';
 import { proofPoints, proofFromSnippet, badgeLine } from './_proof.js';
 import { sendExpoPush as sendSharedPush } from './_expoPush.js';
 import { sendHighSignalEmail } from './_emailNotify.js';
+import { fallbackTeamRoles } from '../shared/team-roles.js';
 
 export const LIMITS = {
   // All member messages count, including greetings, drafts and follow-up replies.
@@ -3604,6 +3605,144 @@ export async function findSquads(uid, q, ctx, { user, state, existingCards = [],
 }
 
 /**
+ * The sole Linky AI job: form complementary teams and assign evidence-backed
+ * roles. AI may infer missing role slots from the idea and the owner's public
+ * profile; the LinkUp scorer selects/ranks members from public profile evidence.
+ * Existing-team mode assigns roles only to the submitted, visible team members.
+ */
+export async function teamMatch(uid, { mode = 'find', idea = '', ownRole = '', roles = [], memberUids = [], teamSize = 3 } = {}) {
+  const project = text(idea, 600);
+  if (project.length < 12) throw new Error('Describe the project in at least 12 characters.');
+  const safeMode = mode === 'assign' ? 'assign' : 'find';
+  const user = await loadUser(uid);
+  if (!user) throw new Error('Your LINKUP profile could not be loaded.');
+  const state = await loadState(uid);
+  const now = Date.now();
+  const plus = await isPlusUser(uid, user);
+  const quota = await reserveMessage(db(), uid, { plus, now, legacyState: state });
+  try {
+  const me = mergedFacts(user, state) || {};
+  const context = await buildMatchContext(uid);
+  const ownerRole = text(ownRole, 100) || text(me.role, 100) || 'Project lead';
+  const q = parseAsk(project);
+  q.need = project;
+  q.wantsSquad = true;
+  q.offer = '';
+  const requestedRoles = (Array.isArray(roles) ? roles : String(roles || '').split(/[,;\n]/))
+    .map((role) => text(role, 80)).filter(Boolean).slice(0, 3);
+  const selectedIds = [...new Set((Array.isArray(memberUids) ? memberUids : []).map((id) => text(id, 128)).filter((id) => isValidId(id) && id !== uid))].slice(0, 3);
+  if (safeMode === 'assign' && (selectedIds.length < 2 || selectedIds.length > 3)) {
+    throw new Error('Choose two or three public LINKUP profiles for the existing team.');
+  }
+  const targetCount = safeMode === 'assign' ? selectedIds.length : (requestedRoles.length ? Math.max(2, Math.min(3, requestedRoles.length)) : (Number(teamSize) === 2 ? 2 : 3));
+  const fallbackRoles = fallbackTeamRoles(project, ownerRole, targetCount, requestedRoles);
+  let rolePlan = { ownerRole, roles: requestedRoles.length === targetCount ? requestedRoles : fallbackRoles.slice(0, targetCount) };
+  let usedAiRoles = false;
+  if (requestedRoles.length !== targetCount) {
+    const prompt = [
+      'You are Linky, a team composition and role recommendation assistant. Return only JSON.',
+      `Project: ${JSON.stringify(project)}. Team owner role: ${JSON.stringify(ownerRole)}. Owner skills: ${JSON.stringify(list(me.skills, 12, 40))}. Owner goals: ${JSON.stringify(text(me.goals || me.bio, 350))}.`,
+      `Recommend exactly ${targetCount} distinct roles for teammates that complement the owner and are necessary for this project. Do not duplicate the owner's role or listed skills.`,
+      'Use concise real job-role names; do not invent qualifications or people. Return JSON: {"ownerRole":"...","roles":["...","..."]}',
+    ].join('\n');
+    try {
+      const answer = await aiText(prompt, { temperature: 0.2, maxOutputTokens: 180, responseMimeType: 'application/json', timeoutMs: 6000 });
+      const parsed = readJson(answer?.text) || {};
+      const inferred = list(parsed.roles, 3, 80).filter(Boolean).slice(0, targetCount);
+      if (inferred.length === targetCount) {
+        rolePlan = { ownerRole: text(parsed.ownerRole, 100) || ownerRole, roles: inferred };
+        usedAiRoles = true;
+      }
+    } catch (err) {
+      await noteAiFault('team_roles', err).catch(() => {});
+    }
+  }
+  if (rolePlan.roles.length !== targetCount) {
+    return {
+      mode: safeMode, idea: project, ownerRole, roles: [], teams: [],
+      message: 'Add the complementary teammate roles you need, separated by commas, so the matching algorithm can score each role.',
+      checked: 0, usedAi: false, messageQuota: quota, upgradeRequired: quota.upgradeRequired,
+    };
+  }
+  const slots = rolePlan.roles.map((label) => ({ label, ask: parseAsk(label), self: false }));
+  if (safeMode === 'find') {
+    const found = await findSquads(uid, q, context, { user, state, existingCards: await loadCards(uid), slots });
+    const teams = (found.squads || []).map((team) => ({
+      id: team.id,
+      score: team.score,
+      members: team.members.map((member) => ({
+        uid: member.facts.uid,
+        name: member.facts.name,
+        image: member.facts.pic,
+        title: member.facts.role,
+        company: member.facts.company,
+        city: [member.facts.city, member.facts.country].filter(Boolean).join(', '),
+        verified: member.facts.verified === true,
+        recommendedRole: member.slot,
+        why: member.why,
+        evidence: member.evidence || [],
+        unknowns: member.unknowns || [],
+        score: member.score,
+      })),
+    }));
+    return {
+      mode: safeMode, idea: project, ownerRole: rolePlan.ownerRole,
+      ownerName: me.name || profileFacts(user)?.name || '',
+      roles: rolePlan.roles, teams, checked: found.checked || 0,
+      usedAi: usedAiRoles,
+      message: teams.length ? '' : 'No complete team meets the role-evidence threshold in the current public member pool. Try adjusting the idea or role requirements.',
+      messageQuota: quota, upgradeRequired: quota.upgradeRequired,
+    };
+  }
+  const selected = context.candidates.filter((candidate) => selectedIds.includes(candidate.uid));
+  if (selected.length !== selectedIds.length) throw new Error('One or more selected profiles are private, unavailable, or no longer in public discovery.');
+  const members = selected.map((candidate) => candidateFacts(candidate, context.states[candidate.uid] || {}));
+  const briefByRole = rolePlan.roles.map((role) => ({
+    role,
+    brief: searchBrief(`${role} for ${project}`),
+  }));
+  const assignments = [];
+  const visit = (index, used, picked, total) => {
+    if (index === briefByRole.length) {
+      assignments.push({ picked: [...picked], total });
+      return;
+    }
+    const { role, brief } = briefByRole[index];
+    for (const member of members) {
+      if (used.has(member.uid)) continue;
+      const assessment = assessCandidate(brief, member);
+      if (!assessment.eligible) continue;
+      const next = [...picked, { member, role, assessment }];
+      if (next.some((item, i) => i < next.length - 1 && overlap(asSet(item.member.skills), asSet(member.skills)).length > 1)) continue;
+      const nextUsed = new Set(used); nextUsed.add(member.uid);
+      visit(index + 1, nextUsed, next, total + assessment.score);
+    }
+  };
+  visit(0, new Set(), [], 0);
+  assignments.sort((a, b) => b.total - a.total);
+  const best = assignments[0];
+  const team = best ? best.picked.map(({ member, role, assessment }) => ({
+    uid: member.uid, name: member.name, image: member.pic, title: member.role,
+    company: member.company, city: [member.city, member.country].filter(Boolean).join(', '), verified: member.verified === true,
+    recommendedRole: role, why: evidenceReason(member.name, assessment),
+    evidence: assessment.evidence, unknowns: assessment.unknowns, score: assessment.score,
+  })) : [];
+  return {
+    mode: safeMode, idea: project, ownerRole: rolePlan.ownerRole,
+    ownerName: me.name || profileFacts(user)?.name || '', roles: rolePlan.roles,
+    teams: team.length ? [{ id: `assigned-${Date.now().toString(36)}`, score: Math.round(best.total / team.length), members: team }] : [],
+    checked: selected.length,
+    usedAi: usedAiRoles,
+    message: team.length ? '' : 'The selected members do not have enough public profile evidence to assign every role confidently. Try a different role set.',
+    messageQuota: quota, upgradeRequired: quota.upgradeRequired,
+  };
+  } catch (error) {
+    await refundMessage(db(), uid, quota).catch((refundError) => console.error('[linky] team match refund failed', refundError));
+    throw error;
+  }
+}
+
+/**
  * The squad version of Meet: one approval, one message per person, each still a
  * double opt-in intro. Nobody is added to a group chat they did not agree to.
  */
@@ -3715,32 +3854,15 @@ export async function runCron() {
   const pendingSnap = await db().collection('intros').where('status', '==', 'pending').get();
   const writes = db().batch();
   let expiredIntros = 0;
-  pendingSnap.docs.forEach((d) => {
-    const i = d.data();
-    if (toMillis(i.expiresAt) && toMillis(i.expiresAt) < now) { writes.set(d.ref, { status: 'expired', respondedAt: nowTs() }, { merge: true }); expiredIntros += 1; }
+  pendingSnap.docs.forEach((doc) => {
+    const item = doc.data();
+    if (toMillis(item.expiresAt) && toMillis(item.expiresAt) < now) {
+      writes.set(doc.ref, { status: 'expired', respondedAt: nowTs() }, { merge: true });
+      expiredIntros += 1;
+    }
   });
   if (expiredIntros) await writes.commit();
-  const telegram = await ensureTelegramWebhook(APP_URL).catch((e) => ({ error: String(e?.message || e) }));
-  // an accepted intro that never got a brief (no key, slow model, deploy in the
-  // middle) gets one here: same call, same cache, one page per pair ever
-  const loops = await sendDueFollowups({ now, max: 20 }).catch((err) => ({ error: String(err?.message || err) }));
-  let madeBriefs = 0;
-  try {
-    const accepted = await db().collection('intros').where('status', '==', 'accepted').limit(40).get();
-    for (const d of accepted.docs) {
-      if (madeBriefs >= 2) break;
-      const i = d.data();
-      const matchId = i.matchId || '';
-      if (!matchId) continue;
-      // intros accepted before the loop existed still get the follow-up
-      if (!toMillis(i.followupDue) && i.status === 'accepted') {
-        await db().collection('intros').doc(d.id).set({ followupDue: getAdmin().firestore.Timestamp.fromMillis(Date.now() + LOOP_DELAY_MS), followupStatus: 'queued' }, { merge: true }).catch(() => {});
-      }
-      const made = await ensureBrief({ matchId, requesterId: i.requesterId, targetId: i.targetId, need: i.need, why: i.why, timeoutMs: 12000 }).catch(() => null);
-      if (made) madeBriefs += 1;
-    }
-  } catch (err) {
-    console.warn('[linky] brief backfill skipped', err?.message || err);
-  }
-  return { pendingIntros: pendingSnap.size - expiredIntros, expiredIntros, telegram, followups: loops, briefsMade: madeBriefs };
+  // Keep legacy pending records tidy, but no longer send Linky follow-ups,
+  // generate briefs, or register the retired chat-bot webhook.
+  return { pendingIntros: pendingSnap.size - expiredIntros, expiredIntros, followups: 0, briefsMade: 0 };
 }

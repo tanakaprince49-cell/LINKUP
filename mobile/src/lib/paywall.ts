@@ -9,7 +9,7 @@ export const PRO_FEATURES = {
   startupAnalyzer: 'AI Startup Analyzer',
   warmIntro: 'AI Warm Intro',
   verifiedBadge: 'Verified Blue Check',
-  linkyAssistant: 'Linky AI Assistant',
+  linkyAssistant: 'Team matching',
   turboConnect: 'Turbo Connect',
 } as const;
 

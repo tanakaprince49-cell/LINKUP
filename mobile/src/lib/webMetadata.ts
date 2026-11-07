@@ -3,18 +3,18 @@ import { webAppPath } from './webPaths';
 
 const titles: Record<string, string> = {
   EmailAuth: 'Sign in', Onboarding: 'Professional profile setup',
-  Dashboard: 'Discover professionals', LinkyHome: 'Linky AI networking assistant',
+  Dashboard: 'Discover professionals', LinkyHome: 'Team matching and role recommendations',
   Feed: 'Startup directory', Messages: 'Messages', Inbox: 'Messages',
   Chat: 'Conversation', News: 'Community blogs', Profile: 'Professional profile',
   Alerts: 'Notifications', MyConnections: 'Professional connections',
   ActiveOpportunities: 'Collaboration opportunities', ActiveOpportunity: 'Project opportunity',
   RecommendedMatches: 'Recommended professionals', IdeaDeck: 'Startup ideas',
-  LinkySettings: 'Introduction preferences', Campaigns: 'Product campaigns',
+  Campaigns: 'Product campaigns',
   CreateCampaign: 'Create a campaign', CreatePost: 'Publish a startup',
   BuilderWorkspace: 'Private builder workspace', Workspace: 'Private builder workspace',
   ShipLog: 'Progress log',
   GamificationHub: 'Professional development',
-  Viewers: 'Profile insights', FounderFlip: 'Founder Flip', PitchPerfect: 'Pitch Perfect', NetworkQuiz: 'Business knowledge quiz', LvlupDemo: 'LvlUp Ventures deal flow demo',
+  Viewers: 'Profile insights', FounderFlip: 'Founder Flip', PitchPerfect: 'Pitch Perfect', NetworkQuiz: 'Business knowledge quiz',
 };
 
 let lastCanonicalRouteTitle = '';

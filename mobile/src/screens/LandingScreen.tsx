@@ -95,7 +95,7 @@ export default function LandingScreen({ navigation }: any) {
           ) : null}
 
           <Text style={[styles.sub, {color:textColor(isDark,'secondary')}]}>
-            Build with Linky: record progress, earn a chance at the weekly Founder Spotlight, and bring your people into a private group chat.
+            Find complementary teammates for your project or get role recommendations for your existing team.
           </Text>
           <TouchableOpacity
             style={[styles.emailBtn, { borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)' }]}

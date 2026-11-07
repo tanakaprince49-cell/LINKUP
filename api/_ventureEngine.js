@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { DAY, id, clean, problem, validId, safeLink, stateOf, localTime } from './_builderCore.js';
-import { CONTRIBUTION_POINTS, CONTRIBUTION_HISTORY_DAYS, contributionDay, contributionInsight } from '../shared/contributions.js';
+import { CONTRIBUTION_POINTS, CONTRIBUTION_HISTORY_DAYS, contributionDay } from '../shared/contributions.js';
 import { habitSnapshot, habitState } from '../shared/build-habit.js';
 import { publicEligible, projectProfile, profileUrl } from './_publicSeo.js';
 import { sendExpoPush } from './_expoPush.js';
@@ -595,7 +595,6 @@ export async function recordVerifiedCommitToLeague({
         day: eligibleDay,
         source: 'github_webhook',
         pointsAwarded: CONTRIBUTION_POINTS,
-        insight: contributionInsight(text),
       };
       const cutoff = contributionDay(now - (CONTRIBUTION_HISTORY_DAYS - 1) * DAY);
       const days = [...new Set([...(c.days || []).filter((d) => typeof d === 'string' && d >= cutoff && d <= eligibleDay), eligibleDay])]

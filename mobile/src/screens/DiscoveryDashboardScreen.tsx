@@ -20,7 +20,6 @@ import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { IS_LOW_END_ANDROID, MOBILE_HORIZONTAL_CARD_LIMIT, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
 import { ikAvatar } from '../lib/ikImage';
-import LinkyCardsSection from '../components/LinkyCardsSection';
 
 const dashboardCacheKey = (uid: string) => `linkup:dashboard:v3:${uid}`;
 const DASHBOARD_CACHE_LIMIT = IS_LOW_END_ANDROID ? 24 : 60;
@@ -531,8 +530,6 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               )}
             </View>
           </View>
-
-          <LinkyCardsSection />
 
           <View style={{ marginTop: 12 }}>
             <TouchableOpacity style={styles.sectionHeader} onPress={() => navigation.navigate('ActiveOpportunities')} activeOpacity={0.8}>

@@ -257,14 +257,14 @@ await handler({ method: 'POST', query: {}, headers: {}, body: { action: 'ask', m
 assert(res.code === 401, 'app action without idToken -> 401');
 res = mkRes();
 await handler({ method: 'POST', query: { channel: 'telegram' }, headers: {}, body: { message: { chat: { id: 1 }, text: 'hi' } } }, res);
-assert(res.code === 503, 'telegram webhook without bot token -> 503');
+assert(res.code === 200 && res.body?.retired === true, 'retired Telegram webhook acknowledges without executing bot commands');
 res = mkRes();
 await handler({ method: 'GET', query: { channel: 'whatsapp', 'hub.mode': 'subscribe', 'hub.verify_token': 'nope', 'hub.challenge': '42' }, headers: {} }, res);
-assert(res.code === 403, 'whatsapp verify with wrong token -> 403');
+assert(res.code === 200 && res.body?.retired === true, 'retired WhatsApp endpoint does not verify or process webhooks');
 process.env.WHATSAPP_VERIFY_TOKEN = 'secret1';
 res = mkRes();
 await handler({ method: 'GET', query: { channel: 'whatsapp', 'hub.mode': 'subscribe', 'hub.verify_token': 'secret1', 'hub.challenge': '42' }, headers: {} }, res);
-assert(res.code === 200 && res.body === '42', 'whatsapp verify handshake echoes challenge');
+assert(res.code === 200 && res.body?.retired === true, 'retired WhatsApp endpoint remains a harmless acknowledgement');
 // ---- forget
 const f = await L.forget('alice');
 assert(f.ok && !(await db.collection('linkyState').doc('alice').get()).exists && !(await db.collection('botUsers').doc('telegram_12345').get()).exists, 'forget wipes state, cards, bot link');

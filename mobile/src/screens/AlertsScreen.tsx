@@ -34,6 +34,9 @@ const formatTimeAgo = (timestamp: any) => {
   return `${Math.floor(diffInDays / 7)}w ago`;
 };
 
+const retiredLinkyNotice = (type: string) => ['intro_request','intro_accepted','intro_declined','daily_brief'].includes(type);
+const notificationDisplayText = (item: NotificationRow) => retiredLinkyNotice(item.type) ? 'Historical LINKUP notice from a retired feature.' : item.content;
+
 const timestampToMillis = (timestamp: AppNotification['timestamp']) => {
   if (!timestamp) return 0;
   if (typeof (timestamp as any)?.toDate === 'function') {
@@ -195,10 +198,6 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           navigation.navigate('ActiveOpportunity', { userId: notification.fromId });
           return;
         }
-        if (notification.type === 'intro_request' || notification.type === 'daily_brief' || notification.type === 'intro_declined') {
-          navigation.navigate('Main', { screen: 'LinkyHome' });
-          return;
-        }
         if (notification.type === 'plus_expiring') {
           // Renewal reminder: land on the tab that owns the buy button.
           navigation.navigate(String(notification.content || '').startsWith('Campaigns') ? 'Campaigns' : 'Profile', {});
@@ -240,9 +239,9 @@ const NotificationItem = ({ notification, navigation }: { notification: Notifica
           <Text style={[styles.timeText, { color: textColor(isDark, 'muted') }]}>{formatTimeAgo(notification.timestamp)}</Text>
         </View>
         <Text style={[styles.contentText, { color: textColor(isDark, 'secondary') }]} numberOfLines={3}>
-          {notification.content}
+          {notificationDisplayText(notification)}
         </Text>
-        {notification.note ? (
+        {notification.note && !retiredLinkyNotice(notification.type) ? (
           <View style={[styles.noteBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(251,230,24,0.16)' }]}>
             <Text style={[styles.noteText, { color: textColor(isDark) }]}>“{notification.note}”</Text>
           </View>

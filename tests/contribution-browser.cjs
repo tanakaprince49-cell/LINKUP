@@ -4,11 +4,10 @@ const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),http
 const tools=process.env.BUILDER_BROWSER_TOOLS||path.resolve('node_modules');
 const {build}=require(path.join(tools,'esbuild')),{chromium}=require(path.join(tools,'playwright'));
 const mobile=path.resolve(__dirname,'../mobile'),scratch=fs.mkdtempSync(path.join(os.tmpdir(),'linkup-contribution-'));
-const source=`import React from 'react';import {createRoot} from 'react-dom/client';import Screen from '${mobile}/src/screens/ShipLogScreen.tsx';import {contributionInsight} from '${path.resolve(__dirname,'../shared/contributions.js')}';
-import {habitSnapshot} from '${path.resolve(__dirname,'../shared/build-habit.js')}';
+const source=`import React from 'react';import {createRoot} from 'react-dom/client';import Screen from '${mobile}/src/screens/ShipLogScreen.tsx';
 window.calls=[];const day=new Date().toISOString().slice(0,10),state={days:[],points:0,totalUpdates:0,today:day,updates:[],shipLogs:[]};
-window.builderCall=async(op,input={})=>{window.calls.push({op,input});if(op==='habit')return habitSnapshot(state,Date.now());if(op==='contributions'){if(input.targetUid==='blocked')throw Error('This contribution calendar is not available.');return structuredClone(state);}
-if(op==='shipUpdate'){if(state.updates.length)return {...state.updates[0],days:state.days,contributionPoints:10,totalUpdates:1,shipLogs:state.shipLogs,replayed:true};const entry={...input,id:'recorded-update',day,createdAt:new Date().toISOString(),pointsAwarded:10,insight:contributionInsight(input.text)};Object.assign(state,{days:[day],points:10,totalUpdates:1,updates:[entry],shipLogs:[entry]});return {...entry,days:[day],contributionPoints:10,totalUpdates:1,shipLogs:[entry],replayed:false};}throw Error('Unexpected test action: '+op);};
+window.builderCall=async(op,input={})=>{window.calls.push({op,input});if(op==='contributions'){if(input.targetUid==='blocked')throw Error('This contribution calendar is not available.');return structuredClone(state);}
+if(op==='shipUpdate'){if(state.updates.length)return {...state.updates[0],days:state.days,contributionPoints:10,totalUpdates:1,shipLogs:state.shipLogs,replayed:true};const entry={...input,id:'recorded-update',day,createdAt:new Date().toISOString(),pointsAwarded:10};Object.assign(state,{days:[day],points:10,totalUpdates:1,updates:[entry],shipLogs:[entry]});return {...entry,days:[day],contributionPoints:10,totalUpdates:1,shipLogs:[entry],replayed:false};}throw Error('Unexpected test action: '+op);};
 const root=createRoot(document.getElementById('root'));root.render(<Screen navigation={{goBack(){},navigate(name,params){window.navigationResult={name,params};}}}/>);`;
 (async()=>{let browser,server;try{
  await build({stdin:{contents:source,resolveDir:mobile,loader:'tsx'},bundle:true,platform:'browser',format:'iife',outfile:path.join(scratch,'app.js'),jsx:'automatic',nodePaths:[path.join(mobile,'node_modules')],define:{'process.env.NODE_ENV':'"production"',__DEV__:'false'},resolveExtensions:['.web.tsx','.tsx','.web.ts','.ts','.web.jsx','.jsx','.web.js','.js','.json'],alias:{'react-native':'react-native-web'},plugins:[{name:'offline-adapters',setup(b){
@@ -22,13 +21,13 @@ const root=createRoot(document.getElementById('root'));root.render(<Screen navig
   page.on('pageerror',e=>{errors.push(e.message);console.error('UI runtime error: '+e.message);});await context.route('**/*',r=>{if(new URL(r.request().url()).hostname==='127.0.0.1')return r.continue();external.push(r.request().url());return r.abort();});
   await page.goto('http://127.0.0.1:'+server.address().port);const publish=page.getByRole('button',{name:'Publish update · earn 10 contribution points',exact:true});await publish.waitFor();await page.waitForFunction(()=>!document.querySelector('[role="progressbar"]'));
     await page.getByLabel('Build update',{exact:true}).fill('Tightened Firestore rules and added tests for blocked reads');await page.getByLabel('Optional update link',{exact:true}).fill('https://example.com/changelog');await publish.click();
-  await page.getByText('+10 contribution pts',{exact:true}).waitFor();assert.ok((await page.getByText('10',{exact:true}).count())>=1,'points total is shown');assert.equal(await page.getByText('Linky',{exact:true}).count(),1);
+  await page.getByText('+10 contribution pts',{exact:true}).waitFor();assert.ok((await page.getByText('10',{exact:true}).count())>=1,'points total is shown');assert.equal(await page.getByText('Progress recorded',{exact:true}).count(),1);assert.equal(await page.getByText('Linky',{exact:true}).count(),0);
   assert.equal(await page.getByRole('button',{name:'Today’s square is lit',exact:true}).isDisabled(),true);assert.equal(await page.getByLabel('Build update',{exact:true}).isEditable(),false);
   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.op==='shipUpdate').length),1);
   await page.getByRole('button',{name:'Today’s square is lit',exact:true}).isDisabled();
   assert.equal(await page.getByRole('button',{name:'Take it to the Builder League →',exact:true}).count(),0,'standings page is removed from the app');await page.getByText(/weekly Founder Spotlight/).waitFor();
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Horizontal overflow');assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
   if(process.env.BUILDER_SCREENSHOT_DIR){fs.mkdirSync(process.env.BUILDER_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.BUILDER_SCREENSHOT_DIR,'contribution-'+width+'.png'),fullPage:true});}
-  console.log('PASS '+width+'px: publish → two-sentence Linky insight → +10 points → duplicate prevention, competitive league route, reduced motion, no external requests');await context.close();
+  console.log('PASS '+width+'px: publish → private progress receipt → +10 points → duplicate prevention, competitive league route, reduced motion, no external requests');await context.close();
  }
 }finally{await browser?.close();if(server)await new Promise(r=>server.close(r));fs.rmSync(scratch,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1;});

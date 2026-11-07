@@ -1,16 +1,13 @@
-import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,verifyWebhookAuth,recordVerifiedCommitToLeague,autoProvisionOnIntroAccept,dispatchVcInvestmentOffer,sweepConnectedGithubCommits,runWeeklyFounderSpotlight} from './_builderRuntime.js';
-// Linky endpoint: app actions, housekeeping cron, Telegram + WhatsApp webhooks.
+import {builderService,builderCron,getVapidKeys,saveWebPushSubscription,verifyEmailUnsubscribe,unsubscribeUserEmail,emailStatus,sendLinkyDirectEmail,ensureMissingBuilderStates,runWeeklyFounderSpotlight} from './_builderRuntime.js';
+// LINKUP API: the active Linky app action is project-team matching and role
+// recommendations. Legacy conversational and messaging-channel actions return
+// 410/no-op responses; see LINKY_SETUP.md for the current scope.
 // One function on purpose (Vercel Hobby caps a deployment at 12).
 //
-//   POST /api/linky            {action, ...}  Bearer <Firebase idToken>
-//   POST /api/linky?action=cron               x-linky-cron: <token>   (GitHub Actions, hourly housekeeping)
-//   POST /api/telegram  -> rewrite -> /api/linky?channel=telegram      (Telegram setWebhook URL)
-//   GET|POST /api/whatsapp -> rewrite -> /api/linky?channel=whatsapp   (Meta Cloud API webhook)
+//   POST /api/linky {action: 'teamMatch', ...} Bearer <Firebase idToken>
+//   POST /api/linky?action=cron               x-linky-cron: <token> (housekeeping)
 //
-// Env (Vercel): FIREBASE_SERVICE_ACCOUNT (already set), GEMINI_API_KEY (already set),
-//   TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET (optional),
-//   WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, WHATSAPP_APP_SECRET (optional),
-//   LINKY_CRON_SECRET (optional; otherwise derived from the service-account key so no new secret is needed).
+// Env (Vercel): FIREBASE_SERVICE_ACCOUNT, GEMINI_API_KEY, LINKY_CRON_SECRET.
 import crypto from 'node:crypto';
 import { getDb, verifyRequestUser } from './_firebaseAdmin.js';
 import { aiProbe, aiStatus, handleOptions, readJsonBody, sendError, setCors } from './_gemini.js';
@@ -18,7 +15,7 @@ import {
   APP_URL, LIMITS, OFFERS, LOOP_CHOICES, answerLoop, approveLead, approveMeet, approveSquad, ask, audit, botUserFor, cancelMeet, cancelSquad,
   clearChat, consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
   meet, meetSquad, orderedCards, patchState, pickPerson, pointers, pullProfiles, reactionFor, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
-  setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret, pushNotify, reportClientError } from './_linky.js';
+  setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret, pushNotify, reportClientError, teamMatch } from './_linky.js';
 import { badgeLine } from './_proof.js';
 
 
@@ -890,15 +887,22 @@ async function sendWhatsAppButtons(waId, body, buttons) {
 // ---------------------------------------------------------------- app actions
 async function handleApp(req, res) {
   const user = await verifyRequestUser(req);
-  if (!user) { sendError(res, 401, 'Sign in to talk to Linky.'); return; }
+  if (!user) { sendError(res, 401, 'Sign in to use LINKUP team matching.'); return; }
   const body = readJsonBody(req);
   const action = String(body.action || req.query?.action || '').trim();
   const uid = user.uid;
+  const retiredLinkyActions = new Set(['home','ask','facts','hideFact','removeAsk','clearChat','pointers','meet','approveMeet','cancelMeet','draftLead','approveLead','markLead','pickPerson','card','loop','meetSquad','approveSquad','cancelSquad','respond','prefs','audit','forget','linkCode','unlinkChannel','limits']);
+  if (retiredLinkyActions.has(action)) { sendError(res, 410, 'Linky now only matches project teams and recommends roles.'); return; }
   try {
     let out;
     switch (action) {
-      case 'builder': out = await builderService().handle(uid,String(body.op || 'home'),body.input || {}); break;
+      case 'builder': {
+        const op = String(body.op || 'home');
+        if (['ventureStatus','ventureConnectGithub','ventureSyncGithub','ventureSplice','ventureProvision','habit','habitPrefs','habitRest','habitToken','prefs'].includes(op)) { sendError(res, 410, 'That Linky feature has been retired.'); return; }
+        out = await builderService().handle(uid, op, body.input || {}); break;
+      }
       case 'pushNotify': out = await pushNotify(uid, { toUid: String(body.toUid || ''), type: String(body.type || ''), text: String(body.text || ''), matchId: String(body.matchId || '') }); break;
+      case 'teamMatch': out = await teamMatch(uid, { mode: body.mode, idea: body.idea, ownRole: body.ownRole, roles: body.roles, memberUids: body.memberUids, teamSize: body.teamSize }); break;
       case 'home': out = await home(uid); break;
       case 'ask': out = await ask(uid, body.message, { source: 'app' }); break;
       case 'facts': out = await setFacts(uid, { notes: body.notes, skills: body.skills, lookingFor: body.lookingFor, hidden: body.hidden }); break;
@@ -935,14 +939,6 @@ async function handleApp(req, res) {
       case 'respond': {
         const decision = ['accept', 'decline', 'later'].includes(body.decision) ? body.decision : 'later';
         out = await respond(uid, String(body.introId || ''), decision);
-        if (decision === 'accept' && out?.status === 'accepted' && typeof autoProvisionOnIntroAccept === 'function') {
-          const launchpad = await autoProvisionOnIntroAccept({
-            db: getDb(),
-            introId: String(body.introId || ''),
-            accepterUid: uid,
-          });
-          if (launchpad) out = { ...out, launchpad };
-        }
         break;
       }
       case 'prefs': out = await setPrefs(uid, {openTo:body.openTo,inboundCap:body.inboundCap,companionTone:body.companionTone}); break;
@@ -965,7 +961,7 @@ async function handleApp(req, res) {
     setCors(res);
     res.status(200).json(out);
   } catch (err) {
-    const message = memberError(err, 'Linky hit a snag - say that again and I will have another go.');
+    const message = memberError(err, 'Team matching hit a snag. Please try again.');
     if (err?.code === 'capacity') {
       res.status(503).json({ error: err.message, code: 'capacity', retryAt: err.retryAt, messageQuota: err.messageQuota });
       return;
@@ -983,70 +979,10 @@ async function handleApp(req, res) {
 export default async function handler(req, res) {
   if (handleOptions(req, res)) return;
   const channel = String(req.query?.channel || '');
-  if (channel === 'telegram') { if (req.method !== 'POST') { res.status(405).end(); return; } await handleTelegram(req, res); return; }
-  if (channel === 'whatsapp') { await handleWhatsApp(req, res); return; }
+  if (channel === 'telegram' || channel === 'whatsapp') { res.status(200).json({ ok: true, retired: true }); return; }
 
-  if (String(req.query?.action || '') === 'githubWebhook') {
-    if (req.method !== 'POST') { sendError(res, 405, 'Use POST.'); return; }
-    const uid = String(req.query?.uid || '').trim();
-    const sig = String(req.query?.sig || '').trim();
-    const ghSig = String(req.headers['x-hub-signature-256'] || '').trim();
-    const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
-    if (!verifyWebhookAuth({ uid, sig, rawBody, githubSignature256: ghSig })) {
-      sendError(res, 401, 'Invalid GitHub webhook signature.');
-      return;
-    }
-    const ghEvent = String(req.headers['x-github-event'] || 'push').toLowerCase();
-    if (ghEvent === 'ping') {
-      setCors(res);
-      res.status(200).json({ ok: true, event: 'ping', status: 'passive_verification_ready' });
-      return;
-    }
-    try {
-      const payload = readJsonBody(req) || {};
-      const commits = Array.isArray(payload.commits) ? payload.commits : [];
-      const head = payload.head_commit || commits.at(-1) || {};
-      const repoName = String(payload.repository?.full_name || payload.repository?.name || 'github-repo').slice(0, 100);
-      const commitSha = String(head.id || payload.after || '').slice(0, 40);
-      const commitMessage = String(head.message || '').slice(0, 180);
-      const commitAuthor = String(head.author?.username || head.author?.name || payload.pusher?.name || '').slice(0, 60);
-      const commitUrl = String(head.url || '').slice(0, 300);
-      const commitTimestamp = String(head.timestamp || new Date().toISOString());
-      const out = await recordVerifiedCommitToLeague({
-        db: getDb(),
-        uid,
-        repoName,
-        commitSha,
-        commitMessage,
-        commitAuthor,
-        commitUrl,
-        commitsList: commits.slice(-15),
-        commitTimestamp,
-        commitCount: Math.max(1, commits.length || 1),
-        source: 'passive_webhook',
-      });
-      setCors(res);
-      res.status(200).json(out);
-    } catch (err) {
-      sendError(res, err?.status || 400, String(err?.message || 'GitHub webhook processing failed.'));
-    }
-    return;
-  }
-
-  if (String(req.query?.action || '') === 'fastTrackDeal') {
-    if (req.method !== 'POST') { sendError(res, 405, 'Use POST.'); return; }
-    try {
-      const body = readJsonBody(req) || {};
-      const ipRaw = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'anon').split(',')[0].trim();
-      const ipHash = crypto.createHash('sha256').update(`vc-ip:${ipRaw}`).digest('hex').slice(0, 32);
-      const out = await dispatchVcInvestmentOffer({ db: getDb(), input: body, ipHash });
-      setCors(res);
-      res.status(200).json(out);
-    } catch (err) {
-      sendError(res, err?.status || 400, String(err?.message || 'Could not dispatch VC offer.'));
-    }
-    return;
-  }
+  if (String(req.query?.action || '') === 'githubWebhook') { res.status(410).json({ error: 'Linky codebase tracking has been retired.' }); return; }
+  if (String(req.query?.action || '') === 'fastTrackDeal') { res.status(410).json({ error: 'This Linky feature has been retired.' }); return; }
 
   if (String(req.query?.action || '') === 'unsubscribeEmail') {
     const uid = String(req.query?.uid || '').trim();
@@ -1096,46 +1032,9 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (String(req.query?.action || '') === 'testEmail') {
-    if (req.method !== 'POST') { sendError(res, 405, 'Use POST.'); return; }
-    if (!(await cronAuthorized(req))) { sendError(res, 401, 'Bad cron token.'); return; }
-    const body = readJsonBody(req) || {};
-    const out = await sendLinkyDirectEmail(getDb(), {
-      to: body.to,
-      mood: body.mood || 'default',
-      subject: body.subject || 'LINKUP · What’s the one thing you’re shipping today? ⚡',
-      headline: body.headline || 'Hey Tanaka — Linky is plugged in and ready for today’s build!',
-      body: body.body || 'Fresh founders, engineers, and collaborators are online on LINKUP right now. Plug in for two minutes, search directly from the homescreen, or post one quick Ship Log update.',
-      ctaLabel: body.ctaLabel || 'Open LINKUP',
-      ctaUrl: body.ctaUrl || '/ship',
-    });
-    setCors(res);
-    res.status(out.sent ? 200 : 502).json(out);
-    return;
-  }
+  if (String(req.query?.action || '') === 'testEmail') { res.status(410).json({ error: 'Linky messaging has been retired.' }); return; }
 
-  if (String(req.query?.action || '') === 'githubAutoSync') {
-    if (req.method !== 'GET' && req.method !== 'POST') { sendError(res, 405, 'Use GET or POST.'); return; }
-    if (!(await cronAuthorized(req))) { sendError(res, 401, 'Bad cron token.'); return; }
-    try {
-      const body = req.method === 'POST' ? readJsonBody(req) || {} : {};
-      const out = typeof sweepConnectedGithubCommits === 'function'
-        ? await sweepConnectedGithubCommits({
-            db: getDb(),
-            githubToken: String(body.githubToken || process.env.GITHUB_TOKEN || ''),
-            maxProfiles: Number(body.maxProfiles) || 40,
-            discoverFromProfiles: body.discoverFromProfiles !== false,
-            write: body.write !== false,
-          })
-        : { ok: false };
-      setCors(res);
-      res.status(200).json(out);
-    } catch (err) {
-      sendError(res, 500, 'GitHub auto-sync failed.', String(err?.message || err));
-    }
-    return;
-  }
-
+  if (String(req.query?.action || '') === 'githubAutoSync') { res.status(410).json({ error: 'Linky codebase tracking has been retired.' }); return; }
   if(String(req.query?.action || '') === 'builderCron') {
     if(req.method !== 'POST') { sendError(res,405,'Use POST.'); return; }
     if(!(await cronAuthorized(req))) { sendError(res,401,'Bad cron token.'); return; }
@@ -1147,15 +1046,12 @@ export default async function handler(req, res) {
   if (wantsCron) {
     if (!(await cronAuthorized(req))) { sendError(res, 401, 'Bad cron token.'); return; }
     try {
-      const [out, githubAutoSync, weeklyFounderSpotlight] = await Promise.all([
+      const [out, weeklyFounderSpotlight] = await Promise.all([
         runCron(),
-        typeof sweepConnectedGithubCommits === 'function'
-          ? sweepConnectedGithubCommits({ db: getDb(), maxProfiles: 35, discoverFromProfiles: true }).catch(() => null)
-          : Promise.resolve(null),
         runWeeklyFounderSpotlight(getDb()).catch(() => null),
       ]);
       setCors(res);
-      res.status(200).json({ ...out, githubAutoSync, weeklyFounderSpotlight });
+      res.status(200).json({ ...out, weeklyFounderSpotlight });
     } catch (err) {
       sendError(res, 500, 'Cron failed.', String(err?.message || err));
     }

@@ -135,13 +135,13 @@ export async function setupNativeNotificationRuntimeAsync() {
 }
 
 function notificationTitle(data: any) {
-  if (data?.campaign === 'linky_reengagement' && data?.title) return `Linky · ${String(data.title).slice(0, 80)}`;
+  if (data?.campaign === 'linky_reengagement') return 'LINKUP';
   if (typeof data?.title === 'string' && data.title.trim()) return data.title.trim().slice(0, 80);
   return 'LINKUP';
 }
 
 function notificationBody(data: any) {
-  if (data?.campaign === 'linky_reengagement' && data?.body) return String(data.body).trim();
+  if (data?.campaign === 'linky_reengagement') return 'An older LINKUP progress reminder.';
   const content = String(data?.content || '').trim();
   if (data?.type === 'message') return `${data.fromName || 'Someone'} ${content || 'sent you a message.'}`;
   if (data?.type === 'match') return content || 'You have a new match.';
@@ -157,9 +157,10 @@ function notificationBody(data: any) {
   if (data?.type === 'campaign_approved') return content || 'Your campaign has been approved!';
   if (data?.type === 'campaign_rejected') return content || 'Your campaign was not approved.';
   if (data?.type === 'plus_expiring') return content || 'Your LINKUP PLUS term is ending soon.';
-  if (data?.type === 'intro_request') return content || 'Linky has an intro for you.';
-  if (data?.type === 'intro_accepted') return content || 'Your intro was accepted.';
-  if (data?.type === 'daily_brief') return content || 'Linky found someone worth your time.';
+  if (data?.type === 'intro_request') return 'A previous team introduction request (historical).';
+  if (data?.type === 'intro_accepted') return 'A previous team introduction was accepted (historical).';
+  if (data?.type === 'intro_declined') return 'A previous team introduction was declined (historical).';
+  if (data?.type === 'daily_brief') return 'A previous LINKUP team-matching update (historical).';
   if (data?.type === 'league') return content || 'You have a LINKUP Builder recognition.';
   if (data?.type === 'founder_spotlight') return content || 'You have been selected for this week’s LINKUP Founder Spotlight.';
   return content || 'Open LINKUP for the latest update.';
