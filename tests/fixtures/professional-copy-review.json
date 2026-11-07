@@ -284,8 +284,8 @@
     "line": 513,
     "before": "The room is still small.",
     "after": "Grow your professional network.",
-    "current": "Grow your professional network.",
-    "voiceRevision": "2026-11-life-or-death-v1"
+    "current": "We've been looking.",
+    "voiceRevision": "2026-11-home-hero"
   },
   {
     "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",

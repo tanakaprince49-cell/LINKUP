@@ -40,8 +40,7 @@ test('the copy makes one person, one chair and one shot the whole story', () => 
 
 test('the personalised lines cannot be sent to the wrong person', () => {
   // Every generative string takes the derived facts — a name, a build, a seat.
-  assert.match(voice, /opener: \(facts: BuildFacts, when = new Date\(\)\)/);
-  assert.match(voice, /stakes: \(facts: BuildFacts\)/);
+  assert.match(voice, /greeting: \(facts: BuildFacts, when = new Date\(\)\): string =>/);
   assert.match(voice, /greeting: \(facts: BuildFacts\)/);
   assert.match(voice, /placeholder: \(facts: BuildFacts\)/);
   assert.match(voice, /introLines: \(facts: BuildFacts\)/);
@@ -107,11 +106,24 @@ test('onboarding now asks the things the algorithm actually needs, and keeps the
 
 test('the discover page is written for exactly one member', () => {
   assert.match(discovery, /const facts = useMemo\(\(\) => buildFacts\(me as any\), \[me\]\)/);
-  assert.match(discovery, /\{DISCOVERY_VOICE\.opener\(facts\)\}/);
-  assert.match(discovery, /\{DISCOVERY_VOICE\.stakes\(facts\)\}/);
-  // The promise the product keeps: the weekly person sits under the headline.
-  assert.match(discovery, /\{DISCOVERY_VOICE\.headline\}/);
-  assert.match(voice, /headline: 'Grow your professional network\.'/);
+  // The home hero: greeting by name, the scout's report, the bold promise, the
+  // hand-off to this week's person.
+  // The hero itself lives in its own component so it can be rendered alone.
+  const hero = read('mobile/src/components/HomeHero.tsx');
+  assert.match(discovery, /<HomeHero profile=\{me as any\} hasMatch=\{!!weeklyMatch\} isDark=\{isDark\} \/>/);
+  assert.match(hero, /\{hero\.greeting\(facts\)\}/);
+  assert.match(hero, /\{hero\.leadLine1\}/);
+  assert.match(hero, /\{hero\.leadLine2\}/);
+  assert.match(hero, /\{hero\.leadHighlight\.replace\('-', '\\u2011'\)\}/);
+  assert.match(hero, /\{hero\.body\}/);
+  assert.match(hero, /\{hero\.promise\}/);
+  assert.match(hero, /\{hero\.cta\}/);
+  // The bold line is bold: 900 weight, its own testID.
+  assert.match(hero, /promise: \{ marginTop: 4, fontSize: 16\.5, fontWeight: '900'/);
+  assert.match(hero, /testID="home-hero-promise"/);
+  // The old opening copy is gone from the page.
+  assert.doesNotMatch(discovery, /Good \$\{daypart/);
+  assert.doesNotMatch(discovery, /Grow your professional network\./);
   // The card speaks about this pair, not about "profiles".
   assert.match(discovery, /DISCOVERY_VOICE\.cardLabel\(partnerFirst\)/);
   assert.match(discovery, /DISCOVERY_VOICE\.interestCta\(partnerFirst\)/);
@@ -256,17 +268,28 @@ test('Linky opens the thread already holding the brief', () => {
   assert.match(V.LINKY_VOICE.placeholder(facts), /Linkup/);
 });
 
-test('the discover opener and stakes name the member and their chair', () => {
+test('the home hero says their name, then the A-PLAYERS report', () => {
   const facts = V.buildFacts(PRINCE);
-  const opener = V.DISCOVERY_VOICE.opener(facts, new Date('2026-11-07T18:00:00Z'));
-  assert.match(opener, /Prince/);
-  assert.match(opener, /This week the algorithm chose exactly one person for you — and chose you for them\./);
+  const hero = V.DISCOVERY_VOICE.hero;
 
-  const stakes = V.DISCOVERY_VOICE.stakes(facts);
-  assert.match(stakes, /Linkup still has one empty chair: Engineering\./);
-  assert.match(V.DISCOVERY_VOICE.stakes(V.buildFacts(null)), /One person, chosen for you, who is choosing you back\./);
+  // Greeting: by name, by the actual time of day.
+  assert.equal(hero.greeting(facts, new Date('2026-11-07T14:00:00')), 'Good afternoon, Prince.');
+  assert.equal(hero.greeting(facts, new Date('2026-11-07T09:00:00')), 'Good morning, Prince.');
+  assert.equal(hero.greeting(facts, new Date('2026-11-07T20:00:00')), 'Good evening, Prince.');
+  // With no name, it still greets like a person — never "Hello, user".
+  assert.equal(hero.greeting(V.buildFacts(null), new Date('2026-11-07T14:00:00')), 'Good afternoon.');
+
+  assert.equal(hero.lead, "We've been looking. And we found some A-PLAYERS.");
+  assert.equal(hero.leadLine1, "We've been looking.");
+  assert.equal(hero.leadLine2, 'And we found some');
+  assert.equal(hero.leadHighlight, 'A-PLAYERS');
+  // The rendered sentence is exactly what was asked for, on two lines.
+  assert.equal(`${hero.leadLine1} ${hero.leadLine2} ${hero.leadHighlight}`, "We've been looking. And we found some A-PLAYERS");
+  assert.equal(hero.lead, "We've been looking. And we found some A-PLAYERS.");
+  assert.equal(hero.body, 'People building ambitious things, making bold moves, and bringing serious talent to the table.');
+  assert.equal(hero.promise, 'Your next introduction could be the one that changes everything.');
+  assert.equal(hero.cta, 'Ready to meet your people?');
 
   assert.match(V.DISCOVERY_VOICE.interestCta('Tendai'), /introduce me to Tendai/);
   assert.match(V.DISCOVERY_VOICE.emailed('Tendai'), /both inboxes/);
-  assert.equal(V.DISCOVERY_VOICE.headline, 'Grow your professional network.');
 });

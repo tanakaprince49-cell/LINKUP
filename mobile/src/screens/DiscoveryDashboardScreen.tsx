@@ -8,6 +8,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { buildFacts, DISCOVERY_VOICE } from '../lib/brandVoice';
 import WeeklyMatchThinking from '../components/WeeklyMatchThinking';
+import HomeHero from '../components/HomeHero';
 import { UserProfile } from '../types';
 import { COLORS, getBrandFlavor, textColor } from '../theme/theme';
 import {
@@ -19,7 +20,7 @@ import {
   type WeeklyCofounderMatch,
 } from '../lib/matchmaking';
 import { displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
-import { Briefcase, MapPin, Target, Rocket, Zap, UserCheck, Globe, CheckCircle2, MessageSquare, Mail } from 'lucide-react-native';
+import { Briefcase, MapPin, Target, Rocket, Zap, UserCheck, Globe, CheckCircle2, MessageSquare, Mail, ArrowDown } from 'lucide-react-native';
 import { Campaign, isSponsoredHiddenForViewer, pickSponsoredCampaign, recordCampaignClick, SPONSORED_SLOT_ROTATE_MS } from '../lib/campaigns';
 import { shareLinkupInvite } from '../lib/activation';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
@@ -666,17 +667,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
           <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
             <View style={[styles.heroCard, { backgroundColor: isDark ? COLORS.darkCard : '#FFF' }]}>
-              <View style={styles.heroTop}>
-                <Text style={[styles.heroOpener, { color: textColor(isDark) }]}>
-                  {DISCOVERY_VOICE.opener(facts)}
-                </Text>
-                <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>
-                  {DISCOVERY_VOICE.headline}
-                </Text>
-                <Text style={[styles.heroSub, { color: textColor(isDark, 'muted') }]}>
-                  {DISCOVERY_VOICE.stakes(facts)}
-                </Text>
-              </View>
+              <HomeHero profile={me as any} hasMatch={!!weeklyMatch} isDark={isDark} />
 
               {hubSponsor && (
                 <TouchableOpacity
@@ -753,27 +744,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  heroTop: {
-    gap: 6,
-  },
-  heroOpener: {
-    fontSize: 13.5,
-    fontWeight: '900',
-    letterSpacing: 0.1,
-    lineHeight: 20,
-    marginBottom: 2,
-  },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-    lineHeight: 28,
-  },
-  heroSub: {
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 18,
-  },
+  // The one line set in bold — the sentence the whole page exists to say.
   sponsorStrip: {
     marginTop: 14,
     flexDirection: 'row',

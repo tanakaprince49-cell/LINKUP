@@ -160,18 +160,28 @@ const PROFILES = [
   },
 ];
 
-test('Opportunity Radar is removed and DiscoveryDashboardScreen shows one weekly potential co-founder below Grow your professional network', () => {
+test('Opportunity Radar is removed and DiscoveryDashboardScreen shows one weekly potential co-founder below the home hero', () => {
   const dashboardSrc = fs.readFileSync(
     path.join(root, 'mobile', 'src', 'screens', 'DiscoveryDashboardScreen.tsx'),
     'utf8'
   );
   const appSrc = fs.readFileSync(path.join(root, 'mobile', 'App.tsx'), 'utf8');
 
-  // The headline is a product promise, so it lives in the shared voice module
+  // The home hero is a product promise, so it lives in the shared voice module
   // and the weekly person is rendered directly beneath it.
   const voiceSrc = fs.readFileSync(path.join(root, 'mobile', 'src', 'lib', 'brandVoice.ts'), 'utf8');
-  assert.match(voiceSrc, /headline: 'Grow your professional network\.'/);
-  assert.match(dashboardSrc, /DISCOVERY_VOICE\.headline\}/);
+  assert.match(voiceSrc, /lead: "We've been looking\. And we found some A-PLAYERS\."/);
+  // The hero (greeting → A-PLAYERS → bold promise → "Ready to meet your
+  // people?") is its own component, rendered directly above the weekly card.
+  const heroSrc = fs.readFileSync(path.join(root, 'mobile', 'src', 'components', 'HomeHero.tsx'), 'utf8');
+  assert.match(heroSrc, /\{hero\.leadLine1\}/);
+  assert.match(heroSrc, /\{hero\.promise\}/);
+  assert.match(heroSrc, /\{hero\.cta\}/);
+  assert.match(dashboardSrc, /<HomeHero profile=\{me as any\} hasMatch=\{!!weeklyMatch\}/);
+  assert.ok(
+    dashboardSrc.indexOf('<HomeHero') < dashboardSrc.indexOf('<WeeklyCofounderCard'),
+    'the hero sits above the weekly person',
+  );
   assert.doesNotMatch(dashboardSrc, /Opportunity Radar/);
   assert.doesNotMatch(dashboardSrc, /Project Matches/);
   assert.doesNotMatch(dashboardSrc, /title="Active Opportunities"/);

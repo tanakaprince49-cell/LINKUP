@@ -306,25 +306,26 @@ export const RELOCATE_CHOICES = [
 ] as const;
 
 /* ------------------------------------------------------------------ *
- * DISCOVER — the weekly card. The headline below is a promise the
- * product has to keep: one person, chosen, mutual.
+ * DISCOVER — the weekly card. The hero below is the first thing a
+ * member reads on the home page, and it is written to sound like a
+ * scout who found them, not a dashboard that greeted them.
  * ------------------------------------------------------------------ */
 
 export const DISCOVERY_VOICE = {
-  headline: 'Grow your professional network.',
-  /** Sits directly under the headline; the weekly person lands beneath it. */
-  opener: (facts: BuildFacts, when = new Date()): string => {
-    const hello = facts.hasName ? `Good ${daypart(when)}, ${facts.firstName}.` : `Good ${daypart(when)}.`;
-    return `${hello} This week the algorithm chose exactly one person for you — and chose you for them.`;
-  },
-  stakes: (facts: BuildFacts): string => {
-    if (facts.projectName && facts.seat) {
-      return `${facts.projectName} still has one empty chair: ${facts.seat}. Read this one properly — the next twelve months are in it.`;
-    }
-    if (facts.projectName) {
-      return `${facts.projectName} is still one pair of hands short. This is this week's shortlist of one.`;
-    }
-    return 'One person, chosen for you, who is choosing you back. Read it properly — the next twelve months are in it.';
+  hero: {
+    /** By name, by the actual time of day. Never "Hello, user". */
+    greeting: (facts: BuildFacts, when = new Date()): string =>
+      facts.hasName ? `Good ${daypart(when)}, ${facts.firstName}.` : `Good ${daypart(when)}.`,
+    /** The whole sentence, exactly as asked for — used by email and tests. */
+    lead: "We've been looking. And we found some A-PLAYERS.",
+    /** Set on two lines so "A-PLAYERS" never breaks across a hyphen. */
+    leadLine1: "We've been looking.",
+    leadLine2: 'And we found some',
+    leadHighlight: 'A-PLAYERS',
+    body: 'People building ambitious things, making bold moves, and bringing serious talent to the table.',
+    /** The line that is set in bold — the one the whole page is selling. */
+    promise: 'Your next introduction could be the one that changes everything.',
+    cta: 'Ready to meet your people?',
   },
   cardLabel: (partnerFirst: string) => `WHY ${partnerFirst.toUpperCase()} AND YOU ARE THE SAME STORY`,
   youBring: 'YOU BRING',
