@@ -4,11 +4,13 @@ import {
   Animated,
   Easing,
   Image,
+  Modal,
   StyleSheet,
   Text,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 /**
@@ -26,7 +28,12 @@ import Svg, { Circle, Path } from 'react-native-svg';
  * Silent by design: no audio is played on launch.
  *
  * Rules this screen keeps:
- *  - never blocks the app longer than ~2.6s, and a tap skips it instantly;
+ *  - it is VISIBLE for a full 3s: the clock only starts once the overlay has
+ *    actually painted, and the OS splash is dismissed from here so the two can
+ *    never hide each other;
+ *  - it renders in a transparent Modal, which is a real top-level surface on
+ *    both platforms — no parent clipping, no z-index fights with the app;
+ *  - a tap skips it instantly;
  *  - reduced-motion users get a short calm fade (no loops, no sway);
  *  - transform/opacity work stays on the native driver;
  *  - it shows once per session, never on navigation or theme changes.
@@ -39,12 +46,23 @@ const CAT_HEIGHT = Math.round(CAT_WIDTH / CAT_ASPECT);
 const STAGE = 208;
 const WORDMARK = 'LINKUP';
 const BEAT_AT = 900;
+/** How long the opening stays on screen, measured from its first painted frame. */
+const HOLD_MS = 3000;
+/** Reduced motion: still seen and deliberate, just quiet and short. */
+const HOLD_REDUCED_MS = 1200;
 
 let shownThisSession = false;
 
 export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void }) {
+  // A JS-session flag that is only ever set by a COMPLETED opening, so a mount
+  // that is thrown away before it finishes never swallows the showing.
   const [gone, setGone] = useState(() => shownThisSession);
   const [reduceMotion, setReduceMotion] = useState(false);
+  // Armed = the overlay has painted at least once. The 3s clock, and the
+  // dismissal of the OS splash, both wait for this: a launch screen that is
+  // covered by the native splash is not an opening screen, it is a rumour.
+  const [armed, setArmed] = useState(false);
+  const armedRef = useRef(false);
 
   const intro = useRef(new Animated.Value(0)).current;
   const orbit = useRef(new Animated.Value(0)).current;
@@ -58,6 +76,10 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
   const finish = useCallback((skipped = false) => {
     if (finished.current) return;
     finished.current = true;
+    // Only a *completed* opening counts as shown this session: a mount that is
+    // torn down before its 3s (strict-mode double mounts, fast refresh) does not
+    // burn the one showing the user is owed.
+    shownThisSession = true;
     Animated.timing(exit, {
       toValue: 0,
       duration: skipped ? 120 : 340,
@@ -70,8 +92,6 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
   }, [exit, onFinish]);
 
   useEffect(() => {
-    if (shownThisSession) return;
-    shownThisSession = true;
     let cancelled = false;
     void AccessibilityInfo.isReduceMotionEnabled?.()
       .then((reduced) => { if (!cancelled && reduced) setReduceMotion(true); })
@@ -79,9 +99,19 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
     return () => { cancelled = true; };
   }, []);
 
+  const onReady = useCallback(() => {
+    if (armedRef.current) return;
+    armedRef.current = true;
+    // The OS splash and this overlay are the same yellow. Hand the screen over
+    // the moment this one has painted, so the 3s the member actually sees is
+    // the animation, not the splash holding the frame.
+    void SplashScreen.hideAsync().catch(() => {});
+    setArmed(true);
+  }, []);
+
   useEffect(() => {
     if (gone) return;
-    const hold = reduceMotion ? 820 : 2600;
+    const hold = reduceMotion ? HOLD_REDUCED_MS : HOLD_MS;
     const timers: ReturnType<typeof setTimeout>[] = [];
     const loops: Animated.CompositeAnimation[] = [];
 
@@ -124,12 +154,19 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
       ]).start();
     }, BEAT_AT));
 
-    timers.push(setTimeout(() => finish(), hold));
     return () => {
       timers.forEach(clearTimeout);
       loops.forEach((loop) => loop.stop());
     };
-  }, [gone, reduceMotion, finish, intro, progress, pulse, orbit, float, beat]);
+  }, [gone, reduceMotion, intro, progress, pulse, orbit, float, beat]);
+
+  // The 3s hold starts only after the overlay is on glass.
+  useEffect(() => {
+    if (!armed || gone) return undefined;
+    const hold = reduceMotion ? HOLD_REDUCED_MS : HOLD_MS;
+    const timer = setTimeout(() => finish(), hold);
+    return () => clearTimeout(timer);
+  }, [armed, gone, reduceMotion, finish]);
 
   if (gone) return null;
 
@@ -152,8 +189,19 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
   const catRise = intro.interpolate({ inputRange: [0, 0.45], outputRange: [26, 0], extrapolate: 'clamp' });
 
   return (
+    <Modal
+      visible={!gone}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      navigationBarTranslucent
+      supportedOrientations={['portrait', 'landscape']}
+      onRequestClose={() => finish(true)}
+    >
     <Animated.View
       style={[styles.root, { opacity: exit }]}
+      onLayout={onReady}
+      testID="linkup-launch-screen"
       accessibilityViewIsModal
       accessibilityLabel="LINKUP is starting. The LINKUP cat is plugging you in while the app loads."
     >
@@ -225,6 +273,7 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
             >
               <Image
                 source={CAT}
+                testID="linkup-launch-cat"
                 style={styles.cat}
                 resizeMode="contain"
                 fadeDuration={0}
@@ -302,6 +351,7 @@ export default function LinkupLaunchScreen({ onFinish }: { onFinish?: () => void
         </View>
       </TouchableWithoutFeedback>
     </Animated.View>
+    </Modal>
   );
 }
 
@@ -311,21 +361,16 @@ export const LAUNCH_SCREEN_COPY = {
   /** The real brand mark, rendered in 3D. */
   cat: 'launch-cat.png',
   beatAt: BEAT_AT,
+  holdMs: HOLD_MS,
   silent: true,
 };
 
 const styles = StyleSheet.create({
   root: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
+    flex: 1,
     // Brand yellow, edge to edge: identical to the logo plate and to the native
     // splash, so cold start flows out of the splash with no colour step.
     backgroundColor: '#FBE618',
-    zIndex: 9999,
-    elevation: 9999,
   },
   fill: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   // Depth on a flat colour comes from ink vignettes and one white lift behind

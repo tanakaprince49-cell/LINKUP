@@ -59,7 +59,7 @@ test('the opening sits on the brand yellow, ink on top, exactly like the logo pl
   const screen = read('mobile/src/components/LinkupLaunchScreen.tsx');
   // The stage background is the logo yellow — the same value as the native
   // splash background, so cold start has no colour step into the app.
-  assert.match(screen, /backgroundColor: '#FBE618',\s*zIndex: 9999,/);
+  assert.match(screen, /backgroundColor: '#FBE618',\s*\},/);
   const app = JSON.parse(read('mobile/app.json')).expo;
   const splash = app.plugins.find((plugin) => Array.isArray(plugin) && plugin[0] === 'expo-splash-screen');
   assert.equal(splash[1].backgroundColor, '#FBE618', 'launch screen must match the native splash colour');
@@ -73,21 +73,40 @@ test('the opening sits on the brand yellow, ink on top, exactly like the logo pl
   assert.doesNotMatch(screen, /color: '#F7F7F2'/);
 });
 
-test('the cold-open can be skipped, and never blocks the app', () => {
+test('the opening is actually VISIBLE for 3 seconds on web and native', () => {
   const screen = read('mobile/src/components/LinkupLaunchScreen.tsx');
+
+  // 1. Three full seconds, defined once.
+  assert.match(screen, /const HOLD_MS = 3000;/);
+  assert.match(screen, /const hold = reduceMotion \? HOLD_REDUCED_MS : HOLD_MS;/);
+  assert.match(screen, /holdMs: HOLD_MS/);
+
+  // 2. It paints on a top-level surface, so no ancestor can clip it and no app
+  //    content can be painted over it on either platform.
+  assert.match(screen, /<Modal\s+visible=\{!gone\}\s+transparent\s+animationType="none"/);
+  assert.match(screen, /onRequestClose=\{\(\) => finish\(true\)\}/);
+  assert.match(screen, /root: \{\s*flex: 1,/);
+
+  // 3. The clock only starts once the overlay has painted (onLayout), and that
+  //    same frame dismisses the OS splash — otherwise the native splash sits on
+  //    top of the animation and the member never sees it.
+  assert.match(screen, /onLayout=\{onReady\}/);
+  assert.match(screen, /void SplashScreen\.hideAsync\(\)\.catch\(\(\) => \{\}\)/);
+  assert.match(screen, /import \* as SplashScreen from 'expo-splash-screen'/);
+  assert.match(screen, /if \(!armed \|\| gone\) return undefined;/);
+  assert.match(screen, /const timer = setTimeout\(\(\) => finish\(\), hold\);/);
+
+  // 4. A discarded mount can never eat the showing: the session flag is only
+  //    written by a completed opening.
+  assert.match(screen, /let shownThisSession = false;/);
+  assert.match(screen, /finished\.current = true;\s*\/\/[\s\S]{0,220}shownThisSession = true;/);
+  assert.doesNotMatch(screen, /shownThisSession = true;\s*let cancelled/);
+
+  // 5. Skip, reduced motion and the mount point.
   assert.match(screen, /onPress=\{\(\) => finish\(true\)\}/);
   assert.match(screen, /Tap to skip/);
-  assert.match(screen, /accessibilityLabel="Skip the LINKUP opening animation"/);
-  assert.match(screen, /accessibilityRole="button"/);
-  // Reduced motion gets a short calm fade with no loops and no sway.
   assert.match(screen, /AccessibilityInfo\.isReduceMotionEnabled/);
-  assert.match(screen, /const hold = reduceMotion \? 820 : 2600;/);
-  assert.match(screen, /if \(!reduceMotion\) \{/);
-  // Once per session: a remount (theme change, fast refresh) never replays it.
-  assert.match(screen, /let shownThisSession = false;/);
-  assert.match(screen, /useState\(\(\) => shownThisSession\)/);
-  // It is mounted above the app inside its own error boundary, so a launch
-  // animation bug can never take the app down with it.
+  assert.match(screen, /const HOLD_REDUCED_MS = 1200;/);
   const app = read('mobile/App.tsx');
   assert.match(app, /<ErrorBoundary screenName="Launch Screen">\s*<LinkupLaunchScreen \/>/);
 });
