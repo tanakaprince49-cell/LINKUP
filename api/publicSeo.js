@@ -162,7 +162,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         if(urls.length>50000)throw new Error('Sitemap index capacity exceeded');
         return send(200,xmlIndex(urls),'application/xml; charset=utf-8',SEO_SITEMAP_CACHE);
       }
-      if (mode === 'static') return send(200,xmlUrls([`${APP}/landing`,`${APP}/builders`,`${APP}/blogs`,`${APP}/campaigns`,`${APP}/startups`,`${APP}/news`,`${APP}/builder-league`,`${APP}/builder-league/month`,`${APP}/builder-league/all`,`${APP}/momentum`]),'application/xml; charset=utf-8',SEO_SITEMAP_CACHE);
+      if (mode === 'static') return send(200,xmlUrls([`${APP}/landing`,`${APP}/builders`,`${APP}/blogs`,`${APP}/sponsored`,`${APP}/startups`,`${APP}/news`,`${APP}/builder-league`,`${APP}/builder-league/month`,`${APP}/builder-league/all`,`${APP}/momentum`]),'application/xml; charset=utf-8',SEO_SITEMAP_CACHE);
       if (mode === 'profiles') {
         const raw = single(req.query?.page);
         if (!/^(0|[1-9]\d{0,4})$/.test(raw)) return failure(400,'Invalid sitemap');

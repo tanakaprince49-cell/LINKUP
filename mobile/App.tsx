@@ -659,6 +659,29 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, [user?.uid, isOnboarded]);
 
+  // /campaigns (and /app/campaign-manager) is the advertiser's campaign
+  // manager: publish ads, buy the plan, watch views and clicks. Signed-out
+  // visitors are moved to the landing page, so remember the destination and
+  // open the manager as soon as they are signed in and onboarded.
+  const pendingCampaignManagerRef = React.useRef(
+    Platform.OS === 'web'
+      ? ['/campaigns', '/campaign-manager'].includes(
+          webRoutePath(String((globalThis as any)?.location?.pathname || '')).replace(/\/+$/, '')
+        )
+      : false
+  );
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || !user?.uid || !isOnboarded) return;
+    if (!pendingCampaignManagerRef.current) return;
+    pendingCampaignManagerRef.current = false;
+    const timer = setTimeout(() => {
+      if (navigationRef.isReady()) {
+        (navigationRef as any).navigate('Campaigns');
+      }
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [user?.uid, isOnboarded]);
+
   // Onboarding's "Finish now" sets this flag so brand-new users land directly
   // on their own profile to keep editing, instead of the dashboard.
   React.useEffect(() => {

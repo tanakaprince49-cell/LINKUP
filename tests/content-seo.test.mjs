@@ -109,7 +109,8 @@ test('content sitemaps have real images and modification dates and automatic bou
  const index=await request(db,{mode:'sitemap'});assert.ok(index.body.includes('sitemap-startups-1.xml'));assert.ok(index.body.includes('sitemap-campaigns-0.xml'));
  const last=await request(db,{mode:'startup-sitemap',page:'1'});assert.equal((last.body.match(/<url>/g)||[]).length,2);assert.match(last.body,/<image:loc>https:\/\/cdn.example\/startup.png/);assert.match(last.body,/<lastmod>2026-10-01/);
  assert.equal((await request(db,{mode:'startup-sitemap',page:'2'})).code,404);
- const statics=await request(db,{mode:'static'});for(const section of ['campaigns','startups','news'])assert.ok(statics.body.includes(APP+'/'+section));
+ const statics=await request(db,{mode:'static'});for(const section of ['sponsored','startups','news'])assert.ok(statics.body.includes(APP+'/'+section));
+ assert.doesNotMatch(statics.body,new RegExp(APP+'/campaigns<'),{message:'/campaigns is the signed-in campaign manager, not an indexable directory'});
 });
 test('invalid IDs, cursors and shard numbers are rejected and HEAD/method semantics remain correct',async()=>{
  for(const id of ['../private','',['product']])assert.equal((await request(database(),{mode:'campaign',id})).code,404);
@@ -150,8 +151,13 @@ test('failed or missing news provider credentials cannot produce sample headline
 test('all public routes precede the SPA fallback in root and stripped-app deployment configurations',()=>{
  for(const file of ['vercel.json','mobile/vercel.json']) {
   const cfg=JSON.parse(fs.readFileSync(new URL('../'+file,import.meta.url)));
-  for(const base of ['','/app'])for(const path of ['campaigns','campaigns/:id','startups','startups/:id','news','sitemap-campaigns-:page.xml','sitemap-startups-:page.xml']) {
+  for(const base of ['','/app'])for(const path of ['sponsored','campaigns/:id','startups','startups/:id','news','sitemap-campaigns-:page.xml','sitemap-startups-:page.xml']) {
    const index=cfg.rewrites.findIndex(r=>r.source===base+'/'+path);assert.ok(index>=0);assert.ok(index<cfg.rewrites.findIndex(r=>r.source==='/(.*)'));assert.match(cfg.rewrites[index].destination,/^\/api\/publicSeo\?mode=/);
+  }
+  // /campaigns is the campaign manager, never a server-rendered directory.
+  for(const base of ['','/app']) {
+   assert.equal(cfg.rewrites.some(r=>r.source===base+'/campaigns'),false);
+   const redirect=cfg.redirects.find(r=>r.source===base+'/campaigns');assert.ok(redirect);assert.equal(redirect.destination,'/app/campaign-manager');assert.equal(redirect.permanent,false);
   }
  }
 });

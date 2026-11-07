@@ -118,7 +118,7 @@ test('static sitemap includes the public app landing but not private app routes'
   const response = { setHeader() {}, status(code) { this.code = code; }, send(body) { this.body = body; } };
   await createPublicSeoHandler(() => { throw new Error('static sitemap should not read member data'); })({ query: { mode: 'static' }, method: 'GET' }, response);
   assert.equal(response.code, 200); assert.ok(response.body.includes(copy.landingUrl));
-  for (const section of ['campaigns','startups','news']) assert.ok(response.body.includes('https://www.linkupbuild.com/app/'+section));
+  for (const section of ['sponsored','startups','news']) assert.ok(response.body.includes('https://www.linkupbuild.com/app/'+section));
   assert.doesNotMatch(response.body, /\/login|\/chat|\/campaign-manager|\/campaign-dashboard|\/news-feed|\/startup-feed|\/profile/);
 });
 

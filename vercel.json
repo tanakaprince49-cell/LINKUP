@@ -64,6 +64,28 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/campaigns",
+      "destination": "/app/campaign-manager",
+      "permanent": false
+    },
+    {
+      "source": "/campaigns/",
+      "destination": "/app/campaign-manager",
+      "permanent": false
+    },
+    {
+      "source": "/app/campaigns",
+      "destination": "/app/campaign-manager",
+      "permanent": false
+    },
+    {
+      "source": "/app/campaigns/",
+      "destination": "/app/campaign-manager",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/app/builder-league",
@@ -146,7 +168,11 @@
       "destination": "/api/publicSeo?mode=momentum-sitemap"
     },
     {
-      "source": "/app/campaigns",
+      "source": "/app/sponsored",
+      "destination": "/api/publicSeo?mode=campaigns"
+    },
+    {
+      "source": "/sponsored",
       "destination": "/api/publicSeo?mode=campaigns"
     },
     {
@@ -192,10 +218,6 @@
     {
       "source": "/app/sitemap-startups-:page.xml",
       "destination": "/api/publicSeo?mode=startup-sitemap&page=:page"
-    },
-    {
-      "source": "/campaigns",
-      "destination": "/api/publicSeo?mode=campaigns"
     },
     {
       "source": "/campaigns/:id",

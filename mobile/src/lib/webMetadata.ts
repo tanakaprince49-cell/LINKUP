@@ -9,7 +9,7 @@ const titles: Record<string, string> = {
   Alerts: 'Notifications', MyConnections: 'Professional connections',
   ActiveOpportunities: 'Collaboration opportunities', ActiveOpportunity: 'Project opportunity',
   RecommendedMatches: 'Recommended professionals', IdeaDeck: 'Startup ideas',
-  Campaigns: 'Product campaigns',
+  Campaigns: 'Campaign manager',
   CreateCampaign: 'Create a campaign', CreatePost: 'Publish a startup',
   BuilderWorkspace: 'Private builder workspace', Workspace: 'Private builder workspace',
   ShipLog: 'Progress log',
