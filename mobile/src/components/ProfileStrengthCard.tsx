@@ -32,16 +32,7 @@ export default function ProfileStrengthCard({ profile, isDark = false, onFix }: 
   const trackBg = isDark ? 'rgba(255,255,255,0.10)' : '#EDEDE7';
 
   return (
-    <View
-      testID="profile-strength"
-      style={[
-        styles.card,
-        {
-          backgroundColor: isDark ? '#12151E' : '#FFFFFF',
-          borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(17,24,39,0.10)',
-        },
-      ]}
-    >
+    <View testID="profile-strength" style={styles.card}>
       <View style={styles.head}>
         <View style={styles.headLeft}>
           <Gauge size={13} color={isDark ? GOLD : GOLD_DEEP} />
@@ -74,7 +65,7 @@ export default function ProfileStrengthCard({ profile, isDark = false, onFix }: 
 }
 
 const styles = StyleSheet.create({
-  card: { marginTop: 18, borderRadius: 18, borderWidth: 1, padding: 16 },
+  card: { marginTop: 26, paddingHorizontal: 18 },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   headLeft: { flexDirection: 'row', alignItems: 'center', gap: 7, flexShrink: 1 },
   label: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },

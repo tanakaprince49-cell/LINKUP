@@ -82,16 +82,7 @@ export default function WeeklyDossier({
   const gold = isDark;
 
   return (
-    <View
-      testID={testID}
-      style={[
-        styles.box,
-        {
-          backgroundColor: isDark ? 'rgba(251,230,24,0.07)' : '#FCFBF3',
-          borderColor: isDark ? 'rgba(251,230,24,0.25)' : '#E7E1BF',
-        },
-      ]}
-    >
+    <View testID={testID} style={styles.box}>
       <View style={styles.head}>
         <Rocket size={14} color={gold ? GOLD : '#111827'} />
         <Text style={[styles.kicker, { color: textColor(isDark, 'muted') }]}>
@@ -154,7 +145,8 @@ export default function WeeklyDossier({
 }
 
 const styles = StyleSheet.create({
-  box: { marginTop: 16, borderRadius: 18, borderWidth: 1, padding: 16 },
+  // No panel, no border: the dossier reads as part of the page, edge to edge.
+  box: { marginTop: 22 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   kicker: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   headline: { marginTop: 10, fontSize: 19, fontWeight: '900', letterSpacing: -0.4, lineHeight: 24 },

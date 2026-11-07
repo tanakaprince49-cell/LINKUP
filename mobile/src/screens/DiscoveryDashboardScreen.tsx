@@ -372,15 +372,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     const firstSprint = String(dossier?.firstSprint || match.tinyTask || '').trim();
 
     return (
-      <View
-        style={[
-          styles.cofounderCard,
-          {
-            backgroundColor: isDark ? '#12151E' : '#FFFFFF',
-            borderColor: isDark ? 'rgba(251,230,24,0.38)' : 'rgba(17,24,39,0.14)',
-          },
-        ]}
-      >
+      <View style={styles.cofounderCard}>
         {/* Top Exclusive 1-of-1 Weekly Header */}
         <View style={styles.exclusiveBanner}>
           <View style={[styles.exclusivePill, { backgroundColor: HOME_GOLD, borderColor: HOME_LINE }]}>
@@ -416,10 +408,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               compatibilityReason: match.reason || '',
             })
           }
-          style={[
-            styles.profileHeroBox,
-            { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F8FAFC' },
-          ]}
+          style={styles.profileHeroBox}
         >
           <WeeklyPortrait
             uid={item.uid}
@@ -594,7 +583,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         <ActivityIndicator color={HOME_INK} style={{ marginTop: 40 }} />
       ) : (
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
-          <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+          <View style={{ paddingTop: 0 }}>
             <View style={[styles.heroCard, { backgroundColor: isDark ? COLORS.darkCard : '#FFF' }]}>
               <HomeHero profile={me as any} hasMatch={!!weeklyMatch} isDark={isDark} />
 
@@ -675,43 +664,27 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollArea: { flex: 1 },
+  // The page IS the phone. No shell around it, no gutter to eat the width.
   heroCard: {
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 4,
   },
   // The one line set in bold — the sentence the whole page exists to say.
   sponsorStrip: {
-    marginTop: 14,
+    marginTop: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.10)',
+    paddingHorizontal: 0,
+    paddingVertical: 12,
   },
   sponsorStripPill: { borderRadius: 999, backgroundColor: '#111217', paddingHorizontal: 9, paddingVertical: 5 },
   sponsorStripPillText: { color: '#FFF', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
   sponsorStripTitle: { fontSize: 12, fontWeight: '900' },
   sponsorStripSub: { marginTop: 2, fontSize: 10, fontWeight: '800' },
   sponsorStripLogo: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.04)' },
-  cofounderCard: {
-    marginTop: 18,
-    borderRadius: 20,
-    padding: 18,
-    borderWidth: 1.5,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-  },
+  cofounderCard: { marginTop: 22 },
   exclusiveBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -756,9 +729,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   profileHeroBox: {
-    marginTop: 14,
-    borderRadius: 16,
-    padding: 14,
+    marginTop: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
@@ -882,10 +853,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  bioSection: {
-    marginTop: 14,
-    paddingHorizontal: 4,
-  },
+  bioSection: { marginTop: 16 },
   bioLabel: {
     fontSize: 9,
     fontWeight: '900',
@@ -1025,13 +993,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   emailFooterRow: {
-    marginTop: 12,
+    marginTop: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(148,163,184,0.15)',
   },
   emailFooterText: {
     flex: 1,
@@ -1039,11 +1004,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 14,
   },
-  emptyCard: {
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 16,
-  },
+  emptyCard: { marginTop: 16 },
   emptyTitle: {
     fontSize: 12,
     fontWeight: '900',
