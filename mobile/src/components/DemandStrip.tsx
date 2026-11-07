@@ -35,13 +35,7 @@ export default function DemandStrip({ me, people, isDark = false, onOpenLinky }:
       accessibilityRole="button"
       activeOpacity={0.88}
       onPress={onOpenLinky}
-      style={[
-        styles.card,
-        {
-          backgroundColor: isDark ? 'rgba(251,230,24,0.09)' : '#FCFBF3',
-          borderColor: isDark ? 'rgba(251,230,24,0.30)' : '#E7E1BF',
-        },
-      ]}
+      style={styles.card}
     >
       <View style={styles.head}>
         <Eye size={13} color={isDark ? GOLD : '#6E5B00'} />
@@ -69,7 +63,7 @@ export default function DemandStrip({ me, people, isDark = false, onOpenLinky }:
 }
 
 const styles = StyleSheet.create({
-  card: { marginTop: 18, borderRadius: 18, borderWidth: 1, padding: 16 },
+  card: { marginTop: 24, paddingHorizontal: 18, paddingBottom: 4 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   label: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   number: { marginTop: 10, fontSize: 16, fontWeight: '900', letterSpacing: -0.3, lineHeight: 22 },
