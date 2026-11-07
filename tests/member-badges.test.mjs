@@ -70,19 +70,19 @@ test('profile CEO label stays immediately after the existing high-signal notice,
  const gold=s.indexOf('GOLD member CEO',text);
  assert.ok(text>0&&gold>text&&gold-text<1200);
 });
-test('Linky screen is only a two-mode team matcher and preserves evidence badges',()=>{
+test('Linky screen is a chat with Linky that searches the member database, and it preserves evidence badges',()=>{
  const app=read('mobile/App.tsx'),screen=read('mobile/src/screens/LinkyHomeScreen.tsx');
  assert.match(app,/<Tab.Screen name="LinkyHome"[^\n]+headerShown: false[^\n]+display: 'none'/);
- assert.match(screen,/Find teammates/);assert.match(screen,/Assign roles to a team/);
- assert.match(screen,/What are you building/);assert.match(screen,/Recommend roles/);
- assert.match(screen,/LINKUP’s matching algorithm/);assert.match(screen,/AI helps identify role gaps/);
+ assert.match(screen,/Find teammates/);assert.match(screen,/Assign roles to this team/);
+ assert.match(screen,/What are you building/);assert.match(screen,/Message Linky/);
+ assert.match(screen,/linkyTeamChat/);assert.match(screen,/LINKUP database/);
  assert.match(screen,/MemberBadges userId=\{member.uid\} verified=\{member.verified\}/);
- assert.doesNotMatch(screen,/linkyAsk|Linky conversation|SponsoredSlot|intro_request/);
+ assert.doesNotMatch(screen,/linkyAsk|SponsoredSlot|intro_request/);
 });
 
 
-test('team matcher does not badge Linky as a verified member or assistant',()=>{
+test('the chat screen does not badge Linky as a verified member or assistant',()=>{
  const s=read('mobile/src/screens/LinkyHomeScreen.tsx');
- assert.match(s,/>Linky · Team matcher<\/Text>/);
+ assert.match(s,/>Linky · Team chat<\/Text>/);
  assert.doesNotMatch(s,/Verified Linky AI|VerifiedBadge/);
 });

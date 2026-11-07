@@ -550,6 +550,15 @@
   ],
   "mobile/src/screens/LinkyHomeScreen.tsx": [
     [
+      "getItem"
+    ],
+    [
+      "setItem"
+    ],
+    [
+      "removeItem"
+    ],
+    [
       "navigate",
       "Profile"
     ],

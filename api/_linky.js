@@ -3610,7 +3610,7 @@ export async function findSquads(uid, q, ctx, { user, state, existingCards = [],
  * profile; the LinkUp scorer selects/ranks members from public profile evidence.
  * Existing-team mode assigns roles only to the submitted, visible team members.
  */
-export async function teamMatch(uid, { mode = 'find', idea = '', ownRole = '', roles = [], memberUids = [], teamSize = 3 } = {}) {
+export async function teamMatch(uid, { mode = 'find', idea = '', ownRole = '', roles = [], memberUids = [], teamSize = 3, quota: reservedQuota = null } = {}) {
   const project = text(idea, 600);
   if (project.length < 12) throw new Error('Describe the project in at least 12 characters.');
   const safeMode = mode === 'assign' ? 'assign' : 'find';
@@ -3619,7 +3619,9 @@ export async function teamMatch(uid, { mode = 'find', idea = '', ownRole = '', r
   const state = await loadState(uid);
   const now = Date.now();
   const plus = await isPlusUser(uid, user);
-  const quota = await reserveMessage(db(), uid, { plus, now, legacyState: state });
+  // A chat turn already spent its one message from the same shared ledger, so
+  // the search it triggers must not bill the member twice for one reply.
+  const quota = reservedQuota || await reserveMessage(db(), uid, { plus, now, legacyState: state });
   try {
   const me = mergedFacts(user, state) || {};
   const context = await buildMatchContext(uid);
@@ -3737,7 +3739,205 @@ export async function teamMatch(uid, { mode = 'find', idea = '', ownRole = '', r
     messageQuota: quota, upgradeRequired: quota.upgradeRequired,
   };
   } catch (error) {
-    await refundMessage(db(), uid, quota).catch((refundError) => console.error('[linky] team match refund failed', refundError));
+    if (!reservedQuota) {
+      await refundMessage(db(), uid, quota).catch((refundError) => console.error('[linky] team match refund failed', refundError));
+    }
+    throw error;
+  }
+}
+
+// ---------------------------------------------------------------- team chat
+// The Linky surface is a conversation, not a form. The member types like they
+// are texting a friend who happens to have the whole LINKUP member database
+// open on a second screen. Every turn is one message from the shared ledger;
+// a search it triggers never bills a second one.
+const CHAT_TURNS = Math.min(40, Math.max(8, Number(LIMITS.threadTurns) || 24));
+const CHAT_LOOKBACK = 8;
+
+const chatTurns = (history) => (Array.isArray(history) ? history : [])
+  .map((turn) => ({ role: turn?.role === 'user' ? 'user' : 'linky', text: text(turn?.text, 700) }))
+  .filter((turn) => turn.role === 'user' || turn.text)
+  .slice(-CHAT_LOOKBACK);
+
+// When the AI is unavailable the conversation still has to work. These are the
+// words a person uses when they want the database searched, not small talk.
+const SEARCH_INTENT = /\b(find|search|scan|match|who(?:'s| is| can| could| should)|need|needs|looking for|look for|co-?founder|cofounder|teammate|team-?mate|team|hire|recruit|join|missing|gap|designer|engineer|developer|marketer|marketing|growth|ops|operations|sales|advisor|cto|ceo|research)\b/i;
+const SMALL_TALK = /^(hi|hey|hello|yo|sup|thanks|thank you|ok|okay|cool|nice|great|lol|yes|no|yep|nope)\b/i;
+
+const chatOpener = (name) => `Hey${name ? ` ${name}` : ''} — Linky here. Tell me what you are building and I will run it against every public LINKUP profile we have until the missing pieces of your team turn up.`;
+
+function chatFallbackPlan(say, me) {
+  const wants = say.length >= 12 && SEARCH_INTENT.test(say) && !SMALL_TALK.test(say);
+  if (wants) {
+    return {
+      action: 'search', idea: say, roles: [], reply: '',
+    };
+  }
+  return {
+    action: 'chat',
+    idea: '',
+    roles: [],
+    reply: 'I can search the whole LINKUP member database for the people who complete your team — just tell me what you are building and which seat is still empty.',
+  };
+}
+
+async function chatPlan({ say, thread, me, ownerRole }) {
+  if (!aiReady()) return { ...chatFallbackPlan(say, me), usedAi: false };
+  const dossier = {
+    name: text(me?.name, 40),
+    role: text(me?.role, 60) || ownerRole,
+    city: text(me?.city, 40),
+    country: text(me?.country, 40),
+    skills: list(me?.skills, 8, 30),
+    lookingFor: list(me?.lookingFor, 4, 40),
+  };
+  const prompt = [
+    'You are Linky, the team-building companion inside LINKUP. You are chatting in the app with one member.',
+    'Voice: warm, playful, quick, a little cheeky, faintly jealous in a fun way — you want this member to win and you do not want them building it with the wrong people. Make them feel like the main character. Max 2 sentences and under 45 words. No markdown, no emoji, no links, no "as an AI".',
+    'Your one superpower: you can search the live LINKUP member database for complementary teammates. You never invent people or claim someone is available.',
+    `Member: ${JSON.stringify(dossier)}.`,
+    thread.length ? `Conversation so far: ${JSON.stringify(thread.slice(-CHAT_LOOKBACK))}` : 'This is the first thing they have said.',
+    `Their new message: ${JSON.stringify(say)}.`,
+    'Decide whether they want you to search the database for teammates now (asking for people, a co-founder, a role filled, a team searched) or whether they are just talking / answering your question about their project.',
+    'If they want a search, write "idea" as one or two plain sentences describing the project and the seats that need filling, built from everything they have told you.',
+    'If they want a search, "roles" is 2 or 3 real job roles that complement them. Never repeat their own role or their existing skills.',
+    'Return STRICT JSON only: {"reply":"...","action":"search"|"chat","idea":"...","roles":["...","..."]}',
+  ].join('\n');
+  try {
+    const { text: raw } = await aiText(prompt, { temperature: 0.7, maxOutputTokens: 320, responseMimeType: 'application/json', timeoutMs: 8000 });
+    const parsed = readJson(raw) || {};
+    const action = parsed.action === 'search' ? 'search' : 'chat';
+    const reply = text(parsed.reply, 400);
+    return {
+      action,
+      idea: text(parsed.idea, 500),
+      roles: list(parsed.roles, 3, 60),
+      reply: reply && !/quota|api key|billing|unable to|i cannot/i.test(reply) ? reply : '',
+      usedAi: action === 'search' ? !!text(parsed.idea, 500) : !!reply,
+    };
+  } catch (err) {
+    await noteAiFault('team_chat', err).catch(() => {});
+    return { ...chatFallbackPlan(say, me), usedAi: false };
+  }
+}
+
+function chatSearchReply({ teams, checked, idea }) {
+  const count = checked ? `${checked} public LINKUP profile${checked === 1 ? '' : 's'}` : 'the public LINKUP pool';
+  if (!teams.length) {
+    return `I went through ${count} and nobody clears the evidence bar for that brief yet — I am not going to hand you a name that only looks good on paper. Sharpen the project or the role and I will run it again.`;
+  }
+  const first = teams[0];
+  const names = first.members.map((member) => text(member.name, 40)).filter(Boolean);
+  const who = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] || 'someone');
+  return `Searched ${count} for ${text(idea, 90)}. My pick: ${who}${first.score ? ` — ${first.score}% fit` : ''}. Not a hunch: every name is backed by evidence on their profile.`;
+}
+
+export async function linkyChat(uid, {
+  message = '',
+  history = [],
+  search = false,
+  mode = 'find',
+  idea = '',
+  ownRole = '',
+  roles = [],
+  memberUids = [],
+  teamSize = 3,
+  clear = false,
+} = {}) {
+  const state = await loadState(uid);
+  if (clear === true || clear === 'true') {
+    await patchState(uid, { chatThread: [], chatClearedAt: Date.now() });
+    return { action: 'chat', reply: '', cleared: true, thread: [], suggestions: [], teams: [], roles: [] };
+  }
+  const user = await loadUser(uid);
+  if (!user) throw new Error('Finish your LINKUP profile first.');
+  const say = text(message, 800);
+  const manual = search === true || search === 'true' || search === 1 || search === '1';
+  if (!say && !manual) throw new Error('Type a message for Linky first.');
+  const safeMode = mode === 'assign' ? 'assign' : 'find';
+  const safeTeamSize = Number(teamSize) === 2 ? 2 : 3;
+  const prior = chatTurns(history);
+  const thread = prior.length ? prior : chatTurns(state.chatThread);
+  const now = Date.now();
+  const plus = await isPlusUser(uid, user);
+  const quota = await reserveMessage(db(), uid, { plus, now, legacyState: state });
+  try {
+    const me = mergedFacts(user, state) || {};
+    const ownerRole = text(ownRole, 100) || text(me.role, 100) || 'Project lead';
+    const plan = manual && !say
+      ? { action: 'search', idea: text(idea, 500), roles: list(roles, 3, 60), reply: '', usedAi: false }
+      : await chatPlan({ say, thread, me, ownerRole });
+    const wantsSearch = manual || plan.action === 'search';
+    const projectIdea = text(idea, 600) || plan.idea || (manual ? '' : say);
+    let match = null;
+    let reply = plan.reply;
+    let asked = false;
+    if (wantsSearch) {
+      if (projectIdea.length >= 12) {
+        const wantedRoles = (list(roles, 3, 60).length ? list(roles, 3, 60) : plan.roles).slice(0, 3);
+        match = await teamMatch(uid, {
+          mode: safeMode,
+          idea: projectIdea,
+          ownRole: ownerRole,
+          roles: wantedRoles,
+          memberUids,
+          teamSize: safeTeamSize,
+          quota,
+        });
+        reply = reply || chatSearchReply({ teams: match.teams || [], checked: match.checked || 0, idea: projectIdea });
+      } else {
+        asked = true;
+        reply = reply || 'I can search everyone on LINKUP for this — but I need the actual build. What are you making, and which seat is still empty?';
+      }
+    }
+    if (!reply) reply = chatFallbackPlan(say, me).reply;
+    const teams = (match?.teams || []).map((team) => ({
+      id: team.id,
+      score: team.score,
+      members: team.members.map((member) => ({
+        uid: member.uid,
+        name: member.name,
+        image: member.image,
+        title: member.title,
+        company: member.company,
+        city: member.city,
+        verified: member.verified === true,
+        recommendedRole: member.recommendedRole,
+        why: member.why,
+        evidence: member.evidence || [],
+        unknowns: member.unknowns || [],
+        score: member.score,
+      })),
+    }));
+    const rolesOut = match?.roles?.length ? match.roles : list(roles, 3, 60);
+    const suggestions = teams.length
+      ? ['Who is the strongest?', 'Find another option', 'What should I ask them first?']
+      : wantsSearch
+        ? ['Find teammates', 'Try different roles', 'What are you building?']
+        : ['Find teammates', 'Who is technical on LINKUP?', 'What are you building?'];
+    const nextThread = [...thread, { role: 'user', text: say || 'Search the database for my team.' }, { role: 'linky', text: reply }]
+      .slice(-CHAT_TURNS)
+      .map((turn) => ({ role: turn.role, text: text(turn.text, 700), at: now }));
+    await patchState(uid, { chatThread: nextThread, chatAt: now }).catch(() => {});
+    return {
+      action: wantsSearch && !asked ? 'search' : 'chat',
+      reply,
+      idea: projectIdea,
+      ownerRole: match?.ownerRole || ownerRole,
+      ownerName: match?.ownerName || text(me.name, 40),
+      roles: rolesOut,
+      teams,
+      checked: match?.checked || 0,
+      noMatchReason: match?.message || '',
+      usedAi: plan.usedAi === true,
+      askedForBrief: asked,
+      suggestions,
+      thread: nextThread,
+      messageQuota: quota,
+      upgradeRequired: quota.upgradeRequired,
+    };
+  } catch (error) {
+    await refundMessage(db(), uid, quota).catch((refundError) => console.error('[linky] chat refund failed', refundError));
     throw error;
   }
 }

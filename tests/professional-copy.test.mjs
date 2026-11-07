@@ -115,11 +115,15 @@ test('static sitemap includes the public app landing but not private app routes'
   assert.doesNotMatch(response.body, /\/login|\/chat|\/campaign-manager|\/campaign-dashboard|\/news-feed|\/startup-feed|\/profile/);
 });
 
-test('Linky surfaces are limited to team matching and role recommendations', () => {
+test('Linky is one chat that searches the LINKUP member database for a team', () => {
   const screen = read('mobile/src/screens/LinkyHomeScreen.tsx');
-  assert.match(screen, /linkyTeamMatch/);
+  assert.match(screen, /linkyTeamChat/);
+  assert.match(screen, /Find teammates/);
+  assert.match(screen, /What are you building/);
+  assert.match(screen, /LINKUP database/);
   assert.match(screen, /role/i);
-  assert.doesNotMatch(screen, /intro draft|warm intro|Linky AI assistant|chat with Linky/i);
+  assert.doesNotMatch(screen, /intro draft|warm intro|Linky AI assistant|SponsoredSlot|intro_request/);
   const client = read('mobile/src/lib/linkyApi.ts');
-  assert.doesNotMatch(client, /action:\s*['\"](?:chat|draft|intro|prefs|meet)['\"]/i);
+  assert.match(client, /export const linkyTeamChat/);
+  assert.doesNotMatch(client, /action:\s*['\"](?:draft|intro|prefs|meet)['\"]/i);
 });

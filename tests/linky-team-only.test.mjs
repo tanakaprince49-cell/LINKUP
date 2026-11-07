@@ -20,7 +20,11 @@ test('role suggestions have a deterministic non-AI fallback and avoid duplicatin
 
 test('the authenticated API keeps teamMatch live and retires former Linky assistant actions',async()=>{
   let seen;
-  const linky={teamMatch:async(uid,input)=>{seen={uid,input};return {mode:input.mode,teams:[],roles:[]};}};
+  let chatted;
+  const linky={
+    teamMatch:async(uid,input)=>{seen={uid,input};return {mode:input.mode,teams:[],roles:[]};},
+    linkyChat:async(uid,input)=>{chatted={uid,input};return {action:'chat',reply:'hey',teams:[],roles:[],suggestions:[]};},
+  };
   const module={exports:{}};
   const mocks={
     './_builderRuntime.js':{},'node:crypto':await import('node:crypto'), './_linky.js':linky,
@@ -32,8 +36,13 @@ test('the authenticated API keeps teamMatch live and retires former Linky assist
   const response={status(code){this.code=code;return this;},json(body){this.body=body;}};
   await module.exports.default({method:'POST',query:{},body:{action:'teamMatch',mode:'find',idea:'A payments service for local shops'},headers:{}},response);
   assert.equal(response.code,200);assert.equal(response.body.mode,'find');assert.equal(seen.uid,'member-1');
+  const chatResponse={status(code){this.code=code;return this;},json(body){this.body=body;}};
+  await module.exports.default({method:'POST',query:{},body:{action:'chat',message:'I need a Flutter developer for my payments app'},headers:{}},chatResponse);
+  assert.equal(chatResponse.code,200);assert.equal(chatResponse.body.action,'chat');
+  assert.equal(chatted.uid,'member-1');assert.equal(chatted.input.message,'I need a Flutter developer for my payments app');
   assert.match(read('api/linky.js'),/retiredLinkyActions\.has\(action\)/);
   assert.match(read('api/linky.js'),/case 'teamMatch': out = await teamMatch/);
+  assert.match(read('api/linky.js'),/case 'chat': out = await linkyChat/);
 });
 
 test('retired Linky automations are absent from cron and no bot rewrites remain',()=>{

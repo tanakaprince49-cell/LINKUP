@@ -220,13 +220,14 @@ test('home publishes the daily allowance and retired monthly aliases without rea
   assert.equal(home.limits.asksPerMonth, null); assert.equal(home.limits.asksUsedThisMonth, null);
 });
 
-test('Linky client exposes only project-team matching with structured upgrade handling', () => {
+test('Linky client exposes one team chat with structured upgrade handling', () => {
   const screen = read('mobile/src/screens/LinkyHomeScreen.tsx');
   const client = read('mobile/src/lib/linkyApi.ts');
-  assert.match(screen, /linkyTeamMatch/); assert.match(screen, /err\.status === 402/);
-  assert.match(screen, /Find teammates/); assert.match(screen, /Assign roles to a team/);
-  assert.match(screen, /LINKUP’s matching algorithm/); assert.match(screen, /AI helps identify role gaps/);
-  assert.match(client, /linkyTeamMatch/);
+  assert.match(screen, /linkyTeamChat/); assert.match(screen, /err\.status === 402/);
+  assert.match(screen, /Find teammates/); assert.match(screen, /Assign roles to this team/);
+  assert.match(screen, /Message Linky/); assert.match(screen, /LINKUP database/);
+  assert.match(client, /linkyTeamChat/); assert.match(client, /linkyTeamMatch/);
+  assert.match(client, /linkyCall<LinkyChatResult>\('chat'/);
   assert.doesNotMatch(client, /export const linky(?:Home|Ask|Meet|Respond|Prefs|Audit|Facts|Pointers|DraftLead|Forget|LinkCode)/);
   assert.doesNotMatch(client, /action:\s*string/);
   assert.match(read('firestore.rules'), /match \/linkyUsage\/\{userId\}\s*\{\s*allow read, write: if false;/);

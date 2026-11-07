@@ -15,7 +15,8 @@ import {
   APP_URL, LIMITS, OFFERS, LOOP_CHOICES, answerLoop, approveLead, approveMeet, approveSquad, ask, audit, botUserFor, cancelMeet, cancelSquad,
   clearChat, consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
   meet, meetSquad, orderedCards, patchState, pickPerson, pointers, pullProfiles, reactionFor, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
-  setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret, pushNotify, reportClientError, teamMatch } from './_linky.js';
+  setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret, pushNotify, reportClientError, teamMatch,
+  linkyChat } from './_linky.js';
 import { badgeLine } from './_proof.js';
 
 
@@ -903,6 +904,18 @@ async function handleApp(req, res) {
       }
       case 'pushNotify': out = await pushNotify(uid, { toUid: String(body.toUid || ''), type: String(body.type || ''), text: String(body.text || ''), matchId: String(body.matchId || '') }); break;
       case 'teamMatch': out = await teamMatch(uid, { mode: body.mode, idea: body.idea, ownRole: body.ownRole, roles: body.roles, memberUids: body.memberUids, teamSize: body.teamSize }); break;
+      case 'chat': out = await linkyChat(uid, {
+        message: body.message,
+        history: body.history,
+        search: body.search,
+        mode: body.mode,
+        idea: body.idea,
+        ownRole: body.ownRole,
+        roles: body.roles,
+        memberUids: body.memberUids,
+        teamSize: body.teamSize,
+        clear: body.clear,
+      }); break;
       case 'home': out = await home(uid); break;
       case 'ask': out = await ask(uid, body.message, { source: 'app' }); break;
       case 'facts': out = await setFacts(uid, { notes: body.notes, skills: body.skills, lookingFor: body.lookingFor, hidden: body.hidden }); break;

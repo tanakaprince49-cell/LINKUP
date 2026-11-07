@@ -55,7 +55,27 @@ export type TeamMatchResult = {
   upgradeRequired?: boolean;
 };
 
-export type LinkyAction = 'teamMatch' | 'pushNotify' | 'clientError' | 'webPushKey' | 'webPushSubscribe' | 'builder';
+export type LinkyChatTurn = { role: 'user' | 'linky'; text: string; at?: number };
+export type LinkyChatResult = {
+  action: 'search' | 'chat';
+  reply: string;
+  idea: string;
+  ownerRole: string;
+  ownerName?: string;
+  roles: string[];
+  teams: TeamMatchTeam[];
+  checked: number;
+  noMatchReason: string;
+  suggestions: string[];
+  thread: LinkyChatTurn[];
+  cleared?: boolean;
+  askedForBrief?: boolean;
+  usedAi?: boolean;
+  messageQuota?: TeamMatchQuota;
+  upgradeRequired?: boolean;
+};
+
+export type LinkyAction = 'teamMatch' | 'chat' | 'pushNotify' | 'clientError' | 'webPushKey' | 'webPushSubscribe' | 'builder';
 
 const endpoint = () => Platform.OS === 'web'
   ? webAppPath('/api/linky')
@@ -76,6 +96,24 @@ export async function linkyCall<T = any>(action: LinkyAction, payload: Record<st
   }
   return data as T;
 }
+
+/**
+ * The Linky surface is one conversation. Every call is one message: Linky
+ * replies, and when the message is asking for people Linky searches the live
+ * public member database in the same turn and returns the evidence-backed team.
+ */
+export const linkyTeamChat = (input: {
+  message?: string;
+  history?: LinkyChatTurn[];
+  search?: boolean;
+  mode?: 'find' | 'assign';
+  idea?: string;
+  ownRole?: string;
+  roles?: string[];
+  memberUids?: string[];
+  teamSize?: 2 | 3;
+  clear?: boolean;
+}) => linkyCall<LinkyChatResult>('chat', input as unknown as Record<string, unknown>);
 
 export const linkyTeamMatch = (input: {
   mode?: 'find' | 'assign';

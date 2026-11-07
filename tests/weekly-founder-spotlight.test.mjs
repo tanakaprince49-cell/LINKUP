@@ -132,5 +132,5 @@ test('hourly authenticated cron runs the weekly selector independently of the re
   const source = fs.readFileSync(new URL('../api/linky.js', import.meta.url), 'utf8');
   assert.match(source, /import\s*\{[^}]*runWeeklyFounderSpotlight[^}]*\}\s*from/);
   assert.match(source, /runWeeklyFounderSpotlight\(getDb\(\)\)\.catch\(\(\)\s*=>\s*null\)/);
-  assert.match(source, /weeklyFounderSpotlight\s*\}\);/);
+  assert.match(source, /weeklyFounderSpotlight[,]?[^}]*\}\);/);
 });

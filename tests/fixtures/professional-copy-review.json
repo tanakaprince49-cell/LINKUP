@@ -62,7 +62,7 @@
   {
     "file": "mobile/src/screens/CampaignDetailScreen.tsx",
     "line": 133,
-    "before": "In human review \u2014 goes live within 24 hours.",
+    "before": "In human review — goes live within 24 hours.",
     "after": "Submitted for review. Publication follows approval."
   },
   {
@@ -74,7 +74,7 @@
   {
     "file": "mobile/src/screens/CampaignDetailScreen.tsx",
     "line": 137,
-    "before": "Paused \u2014 not showing anywhere right now.",
+    "before": "Paused — not showing anywhere right now.",
     "after": "Paused. This campaign is not currently displayed."
   },
   {
@@ -92,7 +92,7 @@
   {
     "file": "mobile/src/screens/CampaignsScreen.tsx",
     "line": 86,
-    "before": "Priority human review \u2014 live within 24 hours",
+    "before": "Priority human review — live within 24 hours",
     "after": "Priority campaign review before publication"
   },
   {
@@ -170,7 +170,7 @@
   {
     "file": "mobile/src/screens/ChatScreen.tsx",
     "line": 1203,
-    "before": "Send a connection request first. Nobody can message until it\u2019s approved.",
+    "before": "Send a connection request first. Nobody can message until it’s approved.",
     "after": "Send a connection request to begin. Messaging becomes available after approval."
   },
   {
@@ -188,13 +188,13 @@
   {
     "file": "mobile/src/screens/CreateCampaignScreen.tsx",
     "line": 187,
-    "before": "Our team reviews every campaign by hand \u2014 yours goes live within 24 hours.",
+    "before": "Our team reviews every campaign by hand — yours goes live within 24 hours.",
     "after": "Your campaign has been submitted for review. It can be published after approval."
   },
   {
     "file": "mobile/src/screens/CreateCampaignScreen.tsx",
     "line": 251,
-    "before": "One line that sells it \u2014 e.g. Invoices paid 2\u00d7 faster",
+    "before": "One line that sells it — e.g. Invoices paid 2× faster",
     "after": "Product value proposition, for example: simplify invoice collection"
   },
   {
@@ -236,13 +236,13 @@
   {
     "file": "mobile/src/screens/CreatePostScreen.tsx",
     "line": 346,
-    "before": "Required \u2014 this logo appears beside your startup name in the feed.",
+    "before": "Required — this logo appears beside your startup name in the feed.",
     "after": "Required. Your logo identifies your startup in the community feed."
   },
   {
     "file": "mobile/src/screens/CreatePostScreen.tsx",
     "line": 350,
-    "before": "One line that sells it \u2014 e.g. Invoices paid 2\u00d7 faster",
+    "before": "One line that sells it — e.g. Invoices paid 2× faster",
     "after": "Product value proposition, for example: simplify invoice collection"
   },
   {
@@ -314,7 +314,7 @@
   {
     "file": "mobile/src/screens/EmailVerificationScreen.tsx",
     "line": 51,
-    "before": "Can\u2019t find it? Look in spam or junk.",
+    "before": "Can’t find it? Look in spam or junk.",
     "after": "Check your spam or junk folder if the verification email has not arrived."
   },
   {
@@ -326,7 +326,7 @@
   {
     "file": "mobile/src/screens/FeedScreen.tsx",
     "line": 446,
-    "before": "On LINKUP \u2014 find cofounders and people who actually ship.",
+    "before": "On LINKUP — find cofounders and people who actually ship.",
     "after": "Discover cofounders and startup collaborators on LINKUP."
   },
   {
@@ -362,7 +362,7 @@
   {
     "file": "mobile/src/screens/FounderFlipScreen.tsx",
     "line": 256,
-    "before": "\ud83c\udf89 You matched all pairs!",
+    "before": "🎉 You matched all pairs!",
     "after": "All pairs completed"
   },
   {
@@ -380,8 +380,8 @@
   {
     "file": "mobile/src/screens/GamificationHubScreen.tsx",
     "line": 129,
-    "before": "\u00b7 decays if you go quiet \u00b7 ship 3 days to verify",
-    "after": "\u00b7 activity-based reputation \u00b7 log progress on 3 days to earn a badge"
+    "before": "· decays if you go quiet · ship 3 days to verify",
+    "after": "· activity-based reputation · log progress on 3 days to earn a badge"
   },
   {
     "file": "mobile/src/screens/GamificationHubScreen.tsx",
@@ -476,7 +476,7 @@
   {
     "file": "mobile/src/screens/LandingScreen.tsx",
     "line": 65,
-    "before": "Swipe, search, and message people who are actually building \u2014 not posting hustle.",
+    "before": "Swipe, search, and message people who are actually building — not posting hustle.",
     "after": "Find a cofounder, discover startup collaborators, and build professional connections around shared skills and goals."
   },
   {
@@ -488,110 +488,8 @@
   {
     "file": "mobile/src/screens/LandingScreen.tsx",
     "line": 111,
-    "before": "Explore public builder profiles \u2192",
-    "after": "Explore public professional profiles \u2192"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Linky \u00b7 Team matcher",
-    "after": "Linky \u00b7 Team matcher"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "One job: build a complementary team and recommend roles.",
-    "after": "One job: build a complementary team and recommend roles."
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Describe the ambitious project and your contribution. AI helps identify role gaps; LINKUP\u2019s matching algorithm checks public profile evidence, role fit, and team complementarity.",
-    "after": "Describe the ambitious project and your contribution. AI helps identify role gaps; LINKUP\u2019s matching algorithm checks public profile evidence, role fit, and team complementarity."
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Find teammates",
-    "after": "Find teammates"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Assign roles to a team",
-    "after": "Assign roles to a team"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "What are you building?",
-    "after": "What are you building?"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Describe the problem, who it helps, and what the team needs to build\u2026",
-    "after": "Describe the problem, who it helps, and what the team needs to build\u2026"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Your contribution or role",
-    "after": "Your contribution or role"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Founder, product lead, engineer\u2026",
-    "after": "Founder, product lead, engineer\u2026"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Roles to fill",
-    "after": "Roles to fill"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "(optional; AI can suggest)",
-    "after": "(optional; AI can suggest)"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "e.g. hardware engineer, clinical researcher",
-    "after": "e.g. hardware engineer, clinical researcher"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Teammates to find",
-    "after": "Teammates to find"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Existing teammates\u2019 LINKUP profile IDs or links",
-    "after": "Existing teammates\u2019 LINKUP profile IDs or links"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Paste 2 or 3 profile IDs or /p/ links, separated by commas",
-    "after": "Paste 2 or 3 profile IDs or /p/ links, separated by commas"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Find my team",
-    "after": "Find my team"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Recommend roles",
-    "after": "Recommend roles"
+    "before": "Explore public builder profiles →",
+    "after": "Explore public professional profiles →"
   },
   {
     "file": "mobile/src/screens/MatchScreen.tsx",
@@ -813,12 +711,12 @@
     "file": "mobile/src/screens/OnboardingScreen.tsx",
     "line": 1508,
     "before": "Select the professional role most relevant to your collaboration goals.",
-    "after": "Pick all that apply \u2014 your first pick sets your main path. None of these? Choose Other and type your own."
+    "after": "Pick all that apply — your first pick sets your main path. None of these? Choose Other and type your own."
   },
   {
     "file": "mobile/src/screens/OnboardingScreen.tsx",
     "line": 1527,
-    "before": "Required. LINKUP is a face-to-face network \u2014 every surface, from the deck to the league, is a face.",
+    "before": "Required. LINKUP is a face-to-face network — every surface, from the deck to the league, is a face.",
     "after": "Required. A profile photo helps other members recognize you across professional discovery and conversations."
   },
   {
@@ -842,7 +740,7 @@
   {
     "file": "mobile/src/screens/OnboardingScreen.tsx",
     "line": 1779,
-    "before": "Skip extra \u2014 do this later",
+    "before": "Skip extra — do this later",
     "after": "Complete additional details later"
   },
   {
@@ -890,7 +788,7 @@
   {
     "file": "mobile/src/screens/ProfileScreen.tsx",
     "line": 2131,
-    "before": "Handles or full links both work. Icons show on your profile \u2014 tap to open.",
+    "before": "Handles or full links both work. Icons show on your profile — tap to open.",
     "after": "Add a username or full profile URL. These links appear on your public professional profile."
   },
   {
@@ -999,7 +897,7 @@
     "file": "mobile/src/screens/RecommendedMatchesScreen.tsx",
     "line": 354,
     "before": "Ranked by shared skills, industries, goals, work style, and compatibility so you can find useful people faster.",
-    "after": "Every card names one thing you share and one thing you don't \u2014 and offers a first move that takes 20 minutes. You will never see a percentage here."
+    "after": "Every card names one thing you share and one thing you don't — and offers a first move that takes 20 minutes. You will never see a percentage here."
   },
   {
     "file": "mobile/src/screens/ShipLogScreen.tsx",
@@ -1029,7 +927,7 @@
     "file": "mobile/src/screens/ShipLogScreen.tsx",
     "line": 81,
     "before": "Log ship",
-    "after": "Publish update \u00b7 +10 contribution points"
+    "after": "Publish update · +10 contribution points"
   },
   {
     "file": "mobile/src/screens/ShipLogScreen.tsx",
@@ -1082,7 +980,7 @@
   {
     "file": "mobile/src/components/OfflineScreen.tsx",
     "line": 14,
-    "before": "LINKUP is here. The internet is\u2026 emotionally unavailable.",
+    "before": "LINKUP is here. The internet is… emotionally unavailable.",
     "after": "LINKUP is temporarily offline. Your account remains available when you reconnect."
   },
   {
@@ -1106,8 +1004,8 @@
   {
     "file": "mobile/src/components/PaywallModal.tsx",
     "line": 46,
-    "before": "Who Viewed You \u2014 names & profiles of everyone checking you out",
-    "after": "Profile viewer insights \u2014 review available names and professional profiles"
+    "before": "Who Viewed You — names & profiles of everyone checking you out",
+    "after": "Profile viewer insights — review available names and professional profiles"
   },
   {
     "file": "mobile/src/components/PaywallModal.tsx",
@@ -1130,13 +1028,13 @@
   {
     "file": "mobile/src/lib/dailyLoop.ts",
     "line": 68,
-    "before": "Today\u2019s idea swipe",
+    "before": "Today’s idea swipe",
     "after": "Review a startup opportunity"
   },
   {
     "file": "mobile/src/lib/dailyLoop.ts",
     "line": 69,
-    "before": "One idea. Yes or no. Say who you\u2019d need.",
+    "before": "One idea. Yes or no. Say who you’d need.",
     "after": "Review a startup concept and identify the expertise required to develop it."
   },
   {
@@ -1216,8 +1114,8 @@
   {
     "file": "mobile/src/lib/gamification.ts",
     "line": 181,
-    "before": "\ud83d\udcca Weekly Match Report\\n${weeklyStats.swipes} swipes \u00b7 ${weeklyStats.likes} likes \u00b7 ${weeklyStats.connections} connections \u00b7 ${weeklyStats.messages} messages \u00b7 ${weeklyStats.pointsEarned} Spark Points earned",
-    "after": "Weekly Networking Report\\n${weeklyStats.swipes} profiles reviewed \u00b7 ${weeklyStats.likes} expressions of interest \u00b7 ${weeklyStats.connections} connections \u00b7 ${weeklyStats.messages} messages \u00b7 ${weeklyStats.pointsEarned} Spark Points earned",
+    "before": "📊 Weekly Match Report\\n${weeklyStats.swipes} swipes · ${weeklyStats.likes} likes · ${weeklyStats.connections} connections · ${weeklyStats.messages} messages · ${weeklyStats.pointsEarned} Spark Points earned",
+    "after": "Weekly Networking Report\\n${weeklyStats.swipes} profiles reviewed · ${weeklyStats.likes} expressions of interest · ${weeklyStats.connections} connections · ${weeklyStats.messages} messages · ${weeklyStats.pointsEarned} Spark Points earned",
     "kind": "fragment"
   },
   {
@@ -1232,27 +1130,6 @@
     "line": 2868,
     "before": "\"No Vibe\"",
     "after": "\"Introduction unavailable\"",
-    "kind": "fragment"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Role plan for your team",
-    "after": "Role plan for your team",
-    "kind": "fragment"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Suggested team",
-    "after": "Suggested team",
-    "kind": "fragment"
-  },
-  {
-    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
-    "line": 0,
-    "before": "Use this team \u00b7 assign roles",
-    "after": "Use this team \u00b7 assign roles",
     "kind": "fragment"
   },
   {
@@ -1317,5 +1194,165 @@
     "line": 30,
     "before": "Public league & Google momentum",
     "after": "Public Momentum & weekly Founder Spotlight"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Linky · Team chat",
+    "after": "Linky · Team chat"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "LINKUP database · chat, search, and build your team",
+    "after": "LINKUP database · chat, search, and build your team"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Find teammates",
+    "after": "Find teammates"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "What are you building?",
+    "after": "What are you building?"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Assign roles to this team",
+    "after": "Assign roles to this team"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "What are you building, and who is missing?",
+    "after": "What are you building, and who is missing?"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Message Linky",
+    "after": "Message Linky"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Squad found",
+    "after": "Squad found"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Clear this conversation",
+    "after": "Clear this conversation"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "View profile",
+    "after": "View profile"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Recommendations use public member-profile evidence. A match is a suggestion, not a claim about availability or guaranteed fit — you decide who to contact.",
+    "after": "Recommendations use public member-profile evidence. A match is a suggestion, not a claim about availability or guaranteed fit — you decide who to contact.",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Search the whole LINKUP database for my team.",
+    "after": "Search the whole LINKUP database for my team."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Searching the LINKUP database…",
+    "after": "Searching the LINKUP database…"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "I need a designer",
+    "after": "I need a designer"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Who can build my product?",
+    "after": "Who can build my product?"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Searching roles: ",
+    "after": "Searching roles: ",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "That search hit a snag. Say it again and I will rerun it.",
+    "after": "That search hit a snag. Say it again and I will rerun it."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Linky team chat",
+    "after": "Linky team chat"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "PLUS · unlimited messages and searches",
+    "after": "PLUS · unlimited messages and searches"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Put these three on the team and give each one a role.",
+    "after": "Put these three on the team and give each one a role."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Send to Linky",
+    "after": "Send to Linky"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "Back to LINKUP",
+    "after": "Back to LINKUP"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "That is today’s free messages used up — my ledger is strict about it. LINKUP PLUS keeps me talking and searching all day.",
+    "after": "That is today’s free messages used up — my ledger is strict about it. LINKUP PLUS keeps me talking and searching all day."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "One message = one search. Every name comes from a real public profile.",
+    "after": "One message = one search. Every name comes from a real public profile."
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "I have every public LINKUP profile open in front of me.",
+    "after": "I have every public LINKUP profile open in front of me.",
+    "kind": "fragment"
+  },
+  {
+    "file": "mobile/src/screens/LinkyHomeScreen.tsx",
+    "line": 0,
+    "before": "LINKUP database · ",
+    "after": "LINKUP database · ",
+    "kind": "fragment"
   }
 ]

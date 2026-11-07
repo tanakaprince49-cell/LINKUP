@@ -1,0 +1,185 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import crypto from 'node:crypto';
+import ts from '../mobile/node_modules/typescript/lib/typescript.js';
+import * as workbench from '../api/_linkyWorkbench.js';
+import * as quality from '../api/_linkyQuality.js';
+import * as companion from '../api/_linkyCompanion.js';
+import * as usage from '../api/_linkyUsage.js';
+import { publicEligible } from '../api/_publicSeo.js';
+import { safeLinkedinProfile } from '../api/_serpapi.js';
+
+const read = (file) => fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
+
+class Database {
+  rows = new Map();
+  queue = Promise.resolve();
+  snapshot(path) { return { id: path.split('/').at(-1), exists: this.rows.has(path), data: () => structuredClone(this.rows.get(path)) }; }
+  write(path, data, merge) { this.rows.set(path, structuredClone(merge ? { ...this.rows.get(path), ...data } : data)); }
+  async getAll(...refs) { return refs.map((r) => this.snapshot(r.path)); }
+  collection(name) {
+    const db = this;
+    const filters = [];
+    const q = {
+      where(k, op, v) { filters.push([k, op, v]); return q; },
+      limit() { return q; },
+      orderBy() { return q; },
+      async get() {
+        const docs = [...db.rows.keys()]
+          .filter((k) => k.startsWith(name + '/') && k.split('/').length === 2)
+          .map((k) => db.snapshot(k))
+          .filter((d) => filters.every(([k, op, v]) => (op === '==' ? d.data()[k] === v : true)));
+        return { docs, size: docs.length };
+      },
+      doc(id) {
+        const path = `${name}/${id}`;
+        return { path, get: async () => db.snapshot(path), set: async (d, o) => db.write(path, d, o?.merge), delete: async () => db.rows.delete(path) };
+      },
+    };
+    return q;
+  }
+  runTransaction(fn) {
+    const result = this.queue.then(async () => {
+      const writes = [];
+      const out = await fn({ get: async (ref) => this.snapshot(ref.path), set: (ref, d, o) => writes.push([ref.path, d, o?.merge]) });
+      writes.forEach((args) => this.write(...args));
+      return out;
+    });
+    this.queue = result.catch(() => {});
+    return result;
+  }
+}
+
+const person = (uid, extra = {}) => ({
+  uid, displayName: uid, occupation: 'Developer', skills: ['Flutter'], city: 'Harare', country: 'Zimbabwe', onboarded: true, ...extra,
+});
+const seed = (db, profiles) => { for (const p of profiles) { db.rows.set('users/' + p.uid, p); db.rows.set('publicProfiles/' + p.uid, p); } };
+const member = person('member', { displayName: 'Tanaka', skills: ['Sales'], occupation: 'Founder' });
+
+function core(db, { ai = true, plan = null } = {}) {
+  const module = { exports: {} };
+  const mocks = {
+    './_linkyWorkbench.js': workbench, 'node:crypto': crypto, './_linkyQuality.js': quality, './_linkyCompanion.js': companion,
+    './_publicSeo.js': { publicEligible }, './_linkyUsage.js': usage,
+    '../shared/team-roles.js': { fallbackTeamRoles: () => ['Flutter developer', 'Product designer'] },
+    './_firebaseAdmin.js': { getDb: () => db, getAdmin: () => ({ firestore: { FieldValue: { serverTimestamp: () => Date.now(), delete: () => null }, Timestamp: { fromMillis: (ms) => ms } } }) },
+    './_gemini.js': {
+      aiReady: () => ai,
+      aiStatus: () => ({ gemini: {}, zen: {} }),
+      aiText: async () => ({ text: JSON.stringify(plan || { reply: 'Say less — I am on it.', action: 'chat', idea: '', roles: [] }) }),
+      geminiText: async () => JSON.stringify(plan || {}),
+    },
+    './_serpapi.js': { safeLinkedinProfile, findLeads: async () => ({ leads: [], searches: 0, note: 'not-configured' }) },
+    './_expoPush.js': { sendExpoPush: async () => ({ sent: 0 }) },
+    './_emailNotify.js': { sendHighSignalEmail: async () => ({ sent: false }) },
+    './_proof.js': { proofPoints: () => [], badgeLine: () => '' },
+  };
+  const code = ts.transpileModule(read('api/_linky.js'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+  vm.runInNewContext(code, { module, exports: module.exports, require: (name) => { assert.ok(name in mocks, name); return mocks[name]; }, console, process: { env: {} }, Date, Set, Map, URL, Buffer, setTimeout, clearTimeout });
+  return module.exports;
+}
+
+const squadDb = () => {
+  const db = new Database();
+  seed(db, [member, person('Alice', { skills: ['Flutter', 'Python'] }), person('Dee', { occupation: 'Product Designer', skills: ['Figma'] })]);
+  return db;
+};
+const searchPlan = {
+  reply: 'Two seats, two humans, zero guessing.',
+  action: 'search',
+  idea: 'A payments app for market traders that needs a Flutter developer and a product designer.',
+  roles: ['Flutter developer', 'Product designer'],
+};
+
+test('Linky is a chat surface: one message, one reply, and the live member database searched inside the same turn', async () => {
+  const db = squadDb();
+  const api = core(db, { plan: searchPlan });
+  const out = await api.linkyChat('member', { message: 'I am building a payments app for market traders — who can build it with me?' });
+  assert.equal(out.action, 'search');
+  assert.equal(out.reply, 'Two seats, two humans, zero guessing.');
+  assert.ok(out.checked >= 2, 'the search reports how many public profiles it checked');
+  assert.equal(out.teams.length, 1);
+  assert.equal([...out.teams[0].members.map((m) => m.name)].sort().join(','), 'Alice,Dee');
+  assert.ok(out.teams[0].members.every((m) => m.recommendedRole && m.why));
+  assert.equal([...out.roles].join('|'), 'Flutter developer|Product designer');
+  assert.ok(out.suggestions.length > 0);
+  // The search a chat turn triggers shares that turn's message: one charge, never two.
+  assert.equal(db.rows.get('linkyUsage/member').daily.count, 1);
+  // The thread is kept server-side so the conversation survives a reinstall.
+  const thread = db.rows.get('linkyState/member').chatThread;
+  assert.equal(thread.length, 2);
+  assert.equal(thread[0].role, 'user');
+  assert.equal(thread[1].role, 'linky');
+});
+
+test('small talk costs one message, never searches the database, and still answers in Linky’s voice', async () => {
+  const db = squadDb();
+  const api = core(db, { plan: { reply: 'Main character energy. I like it.', action: 'chat', idea: '', roles: [] } });
+  const out = await api.linkyChat('member', { message: 'hey linky' });
+  assert.equal(out.action, 'chat');
+  assert.equal(out.teams.length, 0);
+  assert.equal(out.checked, 0);
+  assert.equal(out.reply, 'Main character energy. I like it.');
+  assert.equal(db.rows.get('linkyUsage/member').daily.count, 1);
+});
+
+test('with the AI unavailable the chat still searches on a real brief and asks for a brief when there is none', async () => {
+  const db = squadDb();
+  const api = core(db, { ai: false });
+  const found = await api.linkyChat('member', { message: 'I need a Flutter developer and a product designer for my payments app' });
+  assert.equal(found.action, 'search');
+  assert.match(found.reply, /Searched|nobody clears the evidence bar/);
+  assert.ok(found.teams.length <= 1);
+  const unclear = await api.linkyChat('member', { message: 'yo' });
+  assert.equal(unclear.action, 'chat');
+  assert.match(unclear.reply, /search the whole LINKUP member database/i);
+  assert.equal(unclear.teams.length, 0);
+});
+
+test('a chat turn with no project brief asks a question instead of inventing a team', async () => {
+  const db = squadDb();
+  const api = core(db, { plan: { reply: '', action: 'search', idea: 'short', roles: [] } });
+  const out = await api.linkyChat('member', { message: 'find me someone' });
+  assert.equal(out.askedForBrief, true);
+  assert.equal(out.action, 'chat');
+  assert.equal(out.teams.length, 0);
+  assert.match(out.reply, /what are you making/i);
+});
+
+test('clearing the conversation wipes the stored thread and spends no message', async () => {
+  const db = squadDb();
+  const api = core(db, { plan: searchPlan });
+  await api.linkyChat('member', { message: 'I am building a payments app for market traders — who can build it with me?' });
+  assert.equal(db.rows.get('linkyState/member').chatThread.length, 2);
+  const cleared = await api.linkyChat('member', { clear: true });
+  assert.equal(cleared.cleared, true);
+  assert.equal(db.rows.get('linkyState/member').chatThread.length, 0);
+  assert.equal(db.rows.get('linkyUsage/member').daily.count, 1);
+});
+
+test('an exhausted daily allowance stops the chat before any search and points at the upgrade', async () => {
+  const db = squadDb();
+  const api = core(db, { plan: searchPlan });
+  db.rows.set('linkyUsage/member', { daily: { key: usage.dayKey(Date.now()), count: 5 } });
+  await assert.rejects(() => api.linkyChat('member', { message: 'find me a Flutter developer' }), (err) => {
+    assert.equal(err.code, 'ask_limit');
+    assert.ok(err.messageQuota.upgradeRequired);
+    return true;
+  });
+  assert.equal(db.rows.get('linkyUsage/member').daily.count, 5);
+});
+
+test('the client sends chat through the authenticated API and never renders a retired Linky surface', () => {
+  const api = read('api/linky.js');
+  assert.match(api, /case 'chat': out = await linkyChat/);
+  assert.match(api, /linkyChat\(uid, \{/);
+  const client = read('mobile/src/lib/linkyApi.ts');
+  assert.match(client, /export const linkyTeamChat = /);
+  assert.match(client, /linkyCall<LinkyChatResult>\('chat'/);
+  const screen = read('mobile/src/screens/LinkyHomeScreen.tsx');
+  assert.match(screen, /linkyTeamChat\(/);
+  assert.match(screen, /database search|LINKUP database/i);
+  assert.doesNotMatch(screen, /intro draft|warm intro|SponsoredSlot|intro_request/);
+});
