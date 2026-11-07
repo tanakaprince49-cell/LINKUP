@@ -77,6 +77,8 @@ import LinkupAlertProvider from './src/components/LinkupAlertProvider';
 import { blurActiveElementOnWeb } from './src/lib/webFocus';
 import { hasLinkupPro } from './src/lib/paywall';
 import ProCrownBadge from './src/components/ProCrownBadge';
+import LinkyCatTabIcon from './src/components/LinkyCatTabIcon';
+import LinkupLaunchScreen from './src/components/LinkupLaunchScreen';
 import VerifiedBadge from './src/components/VerifiedBadge';
 import { useOnlineStatus } from './src/lib/network';
 import OfflineScreen from './src/components/OfflineScreen';
@@ -338,6 +340,14 @@ function TabNavigator({ navigation }: any) {
         // v7 API: tab scenes paint the app theme behind everything (no black frames).
         sceneStyle: { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightBg },
         tabBarIcon: ({ focused }) => {
+          // Linky is a character, not a feature: the tab wears the cat.
+          if (route.name === 'LinkyHome') {
+            return (
+              <View style={styles.tabIconContainer}>
+                <LinkyCatTabIcon focused={focused} size={22} />
+              </View>
+            );
+          }
           const iconMap: Record<string, { active: string; inactive: string }> = {
             Dashboard: { active: 'Compass', inactive: 'Compass' },
             LinkyHome: { active: 'Handshake', inactive: 'Handshake' },
@@ -887,6 +897,11 @@ export default function App() {
                 <GamificationProvider>
                   <ErrorBoundary screenName="App Content">
                     <AppContent />
+                  </ErrorBoundary>
+                  {/* Cold-open: the 3D cat + chime run over the first frame of
+                      every session, then get out of the way (tap = skip). */}
+                  <ErrorBoundary screenName="Launch Screen">
+                    <LinkupLaunchScreen />
                   </ErrorBoundary>
                 </GamificationProvider>
               </AuthProvider>
