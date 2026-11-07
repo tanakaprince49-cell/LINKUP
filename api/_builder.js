@@ -9,7 +9,7 @@ import {loadActivityLeague} from './_leagueSeo.js';
 import {publicEligible} from './_publicSeo.js';
 import {readMessageQuota} from './_linkyUsage.js';
 import {sendHighSignalEmail,sendComebackEmail,emailStatus} from './_emailNotify.js';
-import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,containsCredential,normalizeUpdate} from '../shared/contributions.js';
+import {CONTRIBUTION_POINTS,CONTRIBUTION_HISTORY_DAYS,contributionDay,contributionInsight,containsCredential,normalizeUpdate} from '../shared/contributions.js';
 import {createVentureWorkspaceOps} from './_ventureEngine.js';
 import {createBlogsService} from './_blogs.js';
 import {EXTERNAL_LEADS} from '../shared/builder-leads.js';
@@ -121,19 +121,22 @@ export function createBuilderService({db,now=Date.now,plus=async()=>false,push=a
    const [cd,ud,sd]=await Promise.all([tx.get(cr),tx.get(ur),tx.get(ref(uid))]);
    if(!ud.exists||ud.data().deleted||ud.data().banned||ud.data().onboarded!==true)throw problem('Your profile is no longer available.',403);
    const c=cd.exists?cd.data():{days:[],updates:[],points:0,totalUpdates:0},previous=(c.updates||[]).find(u=>u.key===key);
-   if(previous){if(previous.text!==text||previous.link!==link)throw problem('This request was already used for a different update.',409);const safe=contributionHistory({updates:[previous]},ud.data())[0];return {...safe,days:c.days,contributionPoints:c.points,totalUpdates:c.totalUpdates,shipLogs:contributionHistory(c,ud.data()),today:day,replayed:true};}
+   if(previous){if(previous.text!==text||previous.link!==link)throw problem('This request was already used for a different update.',409);const safe=contributionHistory({updates:[previous]},ud.data())[0];return {...safe,insight:previous.insight,days:c.days,contributionPoints:c.points,totalUpdates:c.totalUpdates,shipLogs:contributionHistory(c,ud.data()),today:day,habit:habitSnapshot(c,at,sd.data()?.prefs),replayed:true};}
    if(c.lastDay===day)throw problem('Your contribution is already recorded today; your next square opens at midnight UTC.',409);
    if((c.updates||[]).some(u=>normalizeUpdate(u.text)===normalizeUpdate(text)))throw problem('This update is already recorded; share a new result or next step.',409);
-   const entry={id:id(),key,text,link,createdAt,day,pointsAwarded:CONTRIBUTION_POINTS},cutoff=contributionDay(at-(CONTRIBUTION_HISTORY_DAYS-1)*DAY);
+   const entry={id:id(),key,text,link,createdAt,day,pointsAwarded:CONTRIBUTION_POINTS,insight:contributionInsight(text)},cutoff=contributionDay(at-(CONTRIBUTION_HISTORY_DAYS-1)*DAY);
    const days=[...new Set([...(c.days||[]).filter(d=>typeof d==='string'&&d>=cutoff&&d<=day),day])].sort().slice(-CONTRIBUTION_HISTORY_DAYS);
    const updates=[entry,...(c.updates||[])].slice(0,20),points=(Number(c.points)||0)+CONTRIBUTION_POINTS,totalUpdates=(Number(c.totalUpdates)||0)+1;
    // Update text stays private in the server-owned collection, never in public
    // profile fields. Neither activity nor posting grants verification.
    const shipLogs=contributionHistory({updates},ud.data());
+   // Shipping on a day that was being protected as rest replaces the rest and
+   // refunds the token it cost — a build must never be punished for arriving.
+   const habit=habitState(c),rest=habit.rests.find(r=>r.day===day);if(rest?.kind==='token'){if(habit.tokens<3)habit.tokens++;else habit.credits+=20;}habit.rests=habit.rests.filter(r=>r.day!==day);
    const state=stateOf(sd.data(),at);state.momentumDays=[...new Set([...state.momentumDays,localTime(at,state.prefs.timezone).day])].slice(-90);state.updatedAt=at;state.buildReminderCount=0;
-   tx.set(cr,{version:1,days,updates,points,totalUpdates,lastDay:day,publicMomentum:c.publicMomentum===true,updatedAt:at},{merge:true});
+   tx.set(cr,{version:1,days,updates,points,totalUpdates,lastDay:day,habit,publicMomentum:c.publicMomentum===true,updatedAt:at},{merge:true});
    tx.set(ref(uid),state);
-   return {...entry,days,contributionPoints:points,totalUpdates,shipLogs,today:day,replayed:false};
+   return {...entry,days,contributionPoints:points,totalUpdates,shipLogs,today:day,habit:habitSnapshot({days,totalUpdates,habit,publicMomentum:c.publicMomentum},at,state.prefs),replayed:false};
   });
  }
  async function handle(uid,op,input={}){
