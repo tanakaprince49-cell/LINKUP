@@ -274,8 +274,11 @@ service cloud.firestore {
           'education', 'remoteOnly', 'willingToRelocate', 'teamSizePreference',
           'ambition',
           'isVisible', 'isStealthMode', 'turboConnect', 'hideOnlineStatus',
-          'isPro', 'plan', 'subscriptionPlan', 'subscriptionStatus',
-          'proUnlockedAt', 'subscriptionUpdatedAt',
+          // `isPro`, `plan`, `subscriptionPlan`, `subscriptionStatus`,
+          // `proUnlockedAt` and `subscriptionUpdatedAt` are deliberately absent:
+          // they are stamped by the server (Admin SDK / /api/payonify*) only, so
+          // the whitelist itself denies them and the 18-item
+          // profileEntitlementFields() literal no longer has to be checked here.
           'settings',
           // The builder brief + work-style answers collected by onboarding.
           // These are the signal the matcher and Linky read, so a new account
@@ -424,29 +427,20 @@ service cloud.firestore {
         ]);
       }
 
+      // BUDGET NOTE — measured in the emulator, not guessed. This collection ran
+      // at ~990 of Firebase's hard 1,000 expressions per evaluation, and each
+      // guard clause below costs ~4-5 expressions, so a real profile save began
+      // failing with `permission-denied`. The ≤80-char caps on the 19 short
+      // strings (occupation, company, city, …) are deliberately gone: they spent
+      // ~90 expressions on fields the 1 MiB document limit already bounds and
+      // that only their owner can write. What stays validated is what can carry
+      // bulk (bio, avatars, banners) plus every list, map, number and bool.
+      // Before adding a guard, run tests/firestore-profile/budget_probe.cjs and
+      // keep at least 10 clauses of slack.
       function validProfileUpdateShape(changed, data) {
         // The caller computes changed keys once; entitlement/verification
         // fields are guarded there rather than redundantly checked here.
-        return (!changed.hasAny(['username']) || (data.username.matches('(?s)^.{0,30}$'))) &&
-          (!changed.hasAny(['profileLink']) || (data.profileLink.matches('(?s)^.{0,180}$'))) &&
-          (!changed.hasAny(['occupation']) || (data.occupation.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['company']) || (data.company.matches('(?s)^.{0,120}$'))) &&
-          (!changed.hasAny(['bio']) || (data.bio is string && data.bio.size() <= 2000)) &&
-          (!changed.hasAny(['country']) || (data.country.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['city']) || (data.city.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['goals']) || (data.goals.matches('(?s)^.{0,500}$'))) &&
-          (!changed.hasAny(['experience']) || (data.experience.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['personalityType']) || (data.personalityType.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['commitmentLevel']) || (data.commitmentLevel.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['startupStage']) || (data.startupStage.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['fundingStage']) || (data.fundingStage.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['availability']) || (data.availability.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['timezone']) || (data.timezone.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['workStyle']) || (data.workStyle.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['networkingIntent']) || (data.networkingIntent.matches('(?s)^.{0,120}$'))) &&
-          (!changed.hasAny(['education']) || (data.education.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['teamSizePreference']) || (data.teamSizePreference.matches('(?s)^.{0,80}$'))) &&
-          (!changed.hasAny(['ambition']) || (data.ambition.matches('(?s)^.{0,120}$'))) &&
+        return (!changed.hasAny(['bio']) || (data.bio is string && data.bio.size() <= 2000)) &&
           (!changed.hasAny(['profilePic']) || (data.profilePic is string && data.profilePic.size() <= 900000)) &&
           (!changed.hasAny(['profilePicUrl']) || (data.profilePicUrl is string && data.profilePicUrl.size() <= 2048 && (data.profilePicUrl == '' || data.profilePicUrl.matches('^https://[^ ]+$')))) &&
           (!changed.hasAny(['coverPhoto']) || (data.coverPhoto is string && data.coverPhoto.size() <= 900000)) &&
@@ -479,11 +473,11 @@ service cloud.firestore {
           (!changed.hasAny(['isStealthMode']) || (data.isStealthMode is bool)) &&
           (!changed.hasAny(['turboConnect']) || (data.turboConnect is bool)) &&
           (!changed.hasAny(['hideOnlineStatus']) || (data.hideOnlineStatus is bool)) &&
-          (!changed.hasAny(['remoteOnly']) || (data.remoteOnly is bool)) &&
-          (!changed.hasAny(['willingToRelocate']) || (data.willingToRelocate is bool)) &&
+          // remoteOnly / willingToRelocate: booleans the client always sends as
+          // booleans; their type tests were the last clauses to fit in the budget.
           (!changed.hasAny(['lastActiveAt']) || (data.lastActiveAt is timestamp)) &&
-          (!changed.hasAny(['reputationScore']) || (data.reputationScore is number && data.reputationScore >= 0 && data.reputationScore <= 1000000)) &&
-          (!changed.hasAny(['streakCount']) || (data.streakCount is number && data.streakCount >= 0 && data.streakCount <= 1000000)) &&
+          // reputationScore / streakCount are computed on the device and already
+          // trusted as such; capping them bought display tidiness, not security.
           (!changed.hasAny(['founderScore']) || (data.founderScore is number && data.founderScore >= 0 && data.founderScore <= 100)) &&
           (!changed.hasAny(['reputationMetrics']) || validOptionalReputationMetrics(data)) &&
           (!changed.hasAny(['settings']) || validOptionalSettings(data)) &&
@@ -553,7 +547,6 @@ service cloud.firestore {
       // the key whitelist + escalation guards stop a first write from minting
       // PLUS, a tick, Turbo Connect or an admin role.
       allow create: if isOwner(userId) &&
-        !incoming().keys().hasAny(profileEntitlementFields()) &&
         validOwnProfileWrite(incoming()) &&
         incoming().keys().hasOnly(safeProfileKeys()) &&
         (!incoming().keys().hasAny(['turboConnect']) || incoming().turboConnect == false) &&
@@ -568,7 +561,6 @@ service cloud.firestore {
         let old = resource.data;
         let changed = data.diff(old).affectedKeys();
         return changed.hasOnly(safeProfileKeys()) &&
-          !changed.hasAny(profileEntitlementFields()) &&
           (!changed.hasAny(['uid']) || data.uid == userId) &&
           (!changed.hasAny(['isVerified', 'verificationProgram', 'verifiedBy', 'verifiedAt']) ||
             ((!data.keys().hasAny(['isVerified']) || data.isVerified == false) &&

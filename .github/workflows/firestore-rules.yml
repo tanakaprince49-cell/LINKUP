@@ -56,6 +56,13 @@ jobs:
       - name: Verify profile saves and security in the Firestore Emulator
         run: npm run test:firestore
 
+      # Firebase denies a write once one evaluation passes 1,000 expressions, and
+      # the client cannot tell that apart from a normal denial: the profile just
+      # stops saving. This probe replays the payloads the app really writes and
+      # fails the build below 10 clauses of headroom, before the deploy step.
+      - name: Measure the rules expression budget
+        run: npx --yes firebase-tools@13 emulators:exec --config firebase.emulator.json --project demo-linkup --only firestore "node tests/firestore-profile/budget_probe.cjs"
+
       - name: Write the service account key
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
