@@ -7,16 +7,19 @@ const rules = fs.readFileSync(new URL('../firestore.rules', import.meta.url), 'u
 
 const member = (uid, name, city, country, image='') => ({uid,name,city,country,image,occupation:'Founder',company:'LINKUP project',skills:['Product','Engineering'],verified:true,url:`/app/p/${uid}`});
 
-test('Search renders only the Earth, space, and profile picture markers without location labels or search chrome', () => {
+test('Search renders only the Earth, space, and profile picture markers with hover tooltip for name, city, country', () => {
   const people=[member('user_1','Ada Moyo','Harare','Zimbabwe','https://ik.imagekit.io/demo/ada.jpg'),member('user_2','Bola Ade','London','United Kingdom')];
   const html=renderSearchPage({members:people,nextCursor:'next-id'});
   assert.match(html,/https:\/\/www\.linkupbuild\.com\/app\/assets\/earth-blue-marble\.jpg/);
   assert.match(html,/#earthScene\{position:fixed;inset:0/);
   assert.match(html,/new THREE\.SphereGeometry\(radius,88,64\)/);
   assert.match(html,/id="markerLayer"/);
+  assert.match(html,/id="globeTip"/);
+  assert.match(html,/hoverText\(member\)\{return \[member\.name,member\.city,member\.country\]\.filter\(Boolean\)\.join\(', '\)\}/);
   assert.match(html,/https:\/\/ik\.imagekit\.io\/demo\/ada\.jpg/);
   assert.match(html,/LINKUP_EARTH=/);
-  assert.doesNotMatch(html,/Harare|Zimbabwe|London|United Kingdom|markerLabel|markerCount|Public profiles|Search public profiles|profileFilter|profileRail|profileCard|topbar|<input|<header|<section/i);
+  assert.match(html,/"name":"Ada Moyo","city":"Harare","country":"Zimbabwe"/);
+  assert.doesNotMatch(html,/markerLabel|markerCount|Public profiles|Search public profiles|profileFilter|profileRail|profileCard|topbar|<input|<header|<section/i);
   assert.doesNotMatch(html,/cdn\.jsdelivr\.net\/npm\/three-globe[^'" ]*earth-blue-marble/);
   const scripts=[...html.matchAll(/<script(?: [^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean);
   assert.equal(scripts.length,2);for(const script of scripts)assert.doesNotThrow(()=>new Function(script),'inline profile/globe script parses');
@@ -24,22 +27,22 @@ test('Search renders only the Earth, space, and profile picture markers without 
   assert.ok(fs.statSync(texture).size>500_000,'bundled Blue Marble texture exists at production app asset path');
 });
 
-test('placeMembersOnEarth assigns coordinates to all members without exposing city or country strings',()=>{
+test('placeMembersOnEarth assigns coordinates to all members and preserves name, city, country for hover',()=>{
   const placed=placeMembersOnEarth([member('a','A','Harare','Zimbabwe','https://ik.imagekit.io/demo/a.jpg'),member('b','B','Harare','Zimbabwe'),member('c','C','','')]);
   assert.equal(placed.length,3);
   for(const item of placed){
     assert.equal(typeof item.lat,'number');
     assert.equal(typeof item.lng,'number');
-    assert.equal(item.city,undefined);
-    assert.equal(item.country,undefined);
   }
+  assert.equal(placed[0].city,'Harare');
+  assert.equal(placed[0].country,'Zimbabwe');
   assert.notDeepEqual([placed[0].lat,placed[0].lng],[placed[1].lat,placed[1].lng]);
   const result=groupMembersByLocation([member('a','A','Harare','Zimbabwe'),member('b','B','Harare','Zimbabwe'),member('c','C','','')]);
   assert.equal(result.groups.length,1);assert.equal(result.groups[0].members.length,2);
   assert.deepEqual(result.unlocated,[2]);
 });
 
-test('Search reads and live-checks one bounded profile page, then returns a cursor and short edge cache without location text',async()=>{
+test('Search walks bounded pages and loads all eligible public profiles onto the map',async()=>{
   assert.match(rules,/match \/publicProfiles\/\{userId\}[\s\S]*?allow list: if isSignedIn\(\) && request\.query\.limit != null && request\.query\.limit <= 100;/);
   assert.match(rules,/match \/users\/\{userId\}[\s\S]*?allow list: if isSignedIn\(\) && request\.query\.limit != null && request\.query\.limit <= 100;/);
   const users={};
@@ -55,10 +58,13 @@ test('Search reads and live-checks one bounded profile page, then returns a curs
   const handler=createPublicSeoHandler(()=>database);
   const htmlRes=response();
   await handler({method:'GET',query:{mode:'search'}},htmlRes);
-  assert.equal(htmlRes.code,200);assert.match(htmlRes.body,/Alice Public/);assert.doesNotMatch(htmlRes.body,/Hidden Person/);
-  assert.match(htmlRes.body,/Person 39/);assert.doesNotMatch(htmlRes.body,/Person 40/);
-  assert.doesNotMatch(htmlRes.body,/Harare|Zimbabwe|Public profiles/i);
-  assert.equal(calls.limit,41);assert.equal(calls.getAll,1);
+  assert.equal(htmlRes.code,200);
+  assert.match(htmlRes.body,/Alice Public/);
+  assert.doesNotMatch(htmlRes.body,/Hidden Person/);
+  assert.match(htmlRes.body,/Person 39/);
+  assert.match(htmlRes.body,/Person 44/);
+  assert.equal(calls.limit,41);
+  assert.equal(calls.getAll,2);
   assert.equal(htmlRes.headers['cache-control'],'private, no-store');
   assert.equal(htmlRes.headers['vercel-cdn-cache-control'],'public, s-maxage=30');
   assert.match(htmlRes.headers['content-security-policy'],/img-src https:/);
@@ -66,7 +72,7 @@ test('Search reads and live-checks one bounded profile page, then returns a curs
   const dataRes=response();
   await handler({method:'GET',query:{mode:'search-data',after:'profile_039'}},dataRes);
   assert.equal(dataRes.code,200);const body=JSON.parse(dataRes.body);
-  assert.equal(body.members.length,5);assert.equal(body.nextCursor,null);assert.equal(calls.after[0],'profile_039');
-  assert.equal(body.members[0].city,undefined);assert.equal(body.members[0].country,undefined);
+  assert.equal(body.members.length,5);assert.equal(body.nextCursor,null);
+  assert.equal(body.members[0].city,'Harare');assert.equal(body.members[0].country,'Zimbabwe');
   assert.equal(dataRes.headers['vercel-cdn-cache-control'],'public, s-maxage=30');
 });

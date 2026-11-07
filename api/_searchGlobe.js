@@ -1,5 +1,5 @@
 // Full-screen Earth and space scene with circular profile picture markers.
-// Never displays or serializes where a member is from, search inputs, or profile rails.
+// Hovering over a profile picture shows name, city, country.
 import { SITE, APP, profileUrl, escapeHtml } from './_publicSeo.js';
 import { resolveLocation } from './_cityCoords.js';
 
@@ -76,7 +76,9 @@ export function placeMembersOnEarth(members = []) {
     }
     return {
       uid: member.uid,
-      name: member.name,
+      name: String(member.name || '').trim(),
+      city: String(member.city || '').trim(),
+      country: String(member.country || '').trim(),
       image: member.image || '',
       url: member.url || profileUrl(member.uid),
       lat: Number(lat.toFixed(4)),
@@ -89,7 +91,7 @@ const safeScriptJson = value => JSON.stringify(value).replace(/[<>&]/g, ch => ({
 
 export function renderSearchPage({ members = [], nextCursor = null } = {}) {
   const canonical = `${SITE}/search`;
-  const placed = placeMembersOnEarth((Array.isArray(members) ? members : []).slice(0, 40));
+  const placed = placeMembersOnEarth(Array.isArray(members) ? members : []);
   const data = safeScriptJson({ members: placed, nextCursor });
   return `<!doctype html>
 <html lang="en"><head>
@@ -98,11 +100,12 @@ export function renderSearchPage({ members = [], nextCursor = null } = {}) {
 <meta name="robots" content="noindex,follow">
 <link rel="canonical" href="${e(canonical)}">
 <meta name="theme-color" content="#03070d"><style>
-*{box-sizing:border-box}html,body{position:fixed;inset:0;width:100%;height:100%;margin:0;overflow:hidden;background:#03070d}#earthScene{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;overflow:hidden;background:radial-gradient(ellipse at 50% 52%,#10263b 0%,#07111c 45%,#03070d 83%)}#globe{position:absolute;inset:0;width:100%;height:100%;touch-action:none}#globe canvas{display:block;width:100%;height:100%;outline:none}#markerLayer{position:absolute;inset:0;pointer-events:none;z-index:2}.mapMarker{position:absolute;left:0;top:0;width:38px;height:38px;padding:0;border:2px solid rgba(255,255,255,.82);border-radius:50%;background:#10263b;box-shadow:0 4px 14px rgba(0,0,0,.5);transform:translate(-50%,-50%);overflow:hidden;pointer-events:auto;cursor:pointer;text-decoration:none;display:grid;place-items:center}.mapMarker:hover,.mapMarker:focus-visible{z-index:4;transform:translate(-50%,-50%) scale(1.14);border-color:#fbe618;outline:none}.mapMarker img,.mapAvatar{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}.mapAvatar{display:grid;place-items:center;background:#1d3a50;color:#fbe618;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:900}.hidden{display:none!important}@media(max-width:600px){.mapMarker{width:32px;height:32px}}
+*{box-sizing:border-box}html,body{position:fixed;inset:0;width:100%;height:100%;margin:0;overflow:hidden;background:#03070d;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}#earthScene{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;overflow:hidden;background:radial-gradient(ellipse at 50% 52%,#10263b 0%,#07111c 45%,#03070d 83%)}#globe{position:absolute;inset:0;width:100%;height:100%;touch-action:none}#globe canvas{display:block;width:100%;height:100%;outline:none}#markerLayer{position:absolute;inset:0;pointer-events:none;z-index:2}.mapMarker{position:absolute;left:0;top:0;width:38px;height:38px;padding:0;border:2px solid rgba(255,255,255,.82);border-radius:50%;background:#10263b;box-shadow:0 4px 14px rgba(0,0,0,.5);transform:translate(-50%,-50%);overflow:hidden;pointer-events:auto;cursor:pointer;text-decoration:none;display:grid;place-items:center}.mapMarker:hover,.mapMarker:focus-visible{z-index:4;transform:translate(-50%,-50%) scale(1.16);border-color:#fbe618;outline:none}.mapMarker img,.mapAvatar{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}.mapAvatar{display:grid;place-items:center;background:#1d3a50;color:#fbe618;font-size:12px;font-weight:900}#globeTip{position:fixed;z-index:6;left:0;top:0;transform:translate(-50%,calc(-100% - 12px));padding:7px 11px;border-radius:10px;border:1px solid rgba(255,255,255,.22);background:rgba(4,11,20,.94);color:#f4f7fb;font-size:12px;line-height:1.35;white-space:nowrap;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.45)}#globeTip strong{display:block;font-size:12.5px;color:#fbe618}#globeTip span{display:block;color:#d6e3f3;font-size:11.5px}.hidden{display:none!important}@media(max-width:600px){.mapMarker{width:32px;height:32px}}
 </style></head><body>
 <main id="earthScene" aria-label="Earth in space">
   <div id="globe" role="img" aria-label="Rotating Earth in space"></div>
   <div id="markerLayer"></div>
+  <div id="globeTip" class="hidden" role="tooltip"></div>
 </main>
 <script>window.LINKUP_EARTH=${data};</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" crossorigin="anonymous"></script>
@@ -110,8 +113,11 @@ export function renderSearchPage({ members = [], nextCursor = null } = {}) {
 <script>
 (function(){
 'use strict';
-var dataset=window.LINKUP_EARTH||{},members=dataset.members||[],nextCursor=dataset.nextCursor||'',host=document.getElementById('globe'),layer=document.getElementById('markerLayer'),markers=[],appendMembers=function(){};
+var dataset=window.LINKUP_EARTH||{},members=dataset.members||[],nextCursor=dataset.nextCursor||'',host=document.getElementById('globe'),layer=document.getElementById('markerLayer'),tip=document.getElementById('globeTip'),markers=[],seenUids={},appendMembers=function(){};
 function initials(name){return String(name||'?').trim().split(/\\s+/).slice(0,2).map(function(x){return x[0]||''}).join('').toUpperCase()||'?'}
+function hoverText(member){return [member.name,member.city,member.country].filter(Boolean).join(', ')}
+function showTip(el,member){if(!tip)return;var where=[member.city,member.country].filter(Boolean).join(', ');tip.textContent='';var nameEl=document.createElement('strong');nameEl.textContent=member.name||'Member';tip.appendChild(nameEl);if(where){var locEl=document.createElement('span');locEl.textContent=where;tip.appendChild(locEl)}var r=el.getBoundingClientRect();tip.style.left=(r.left+r.width/2)+'px';tip.style.top=Math.max(36,r.top)+'px';tip.classList.remove('hidden')}
+function hideTip(){if(tip)tip.classList.add('hidden')}
 if(typeof THREE==='undefined'||!host)return;
 try{
 var radius=1.65,scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(38,1,.1,120);camera.position.set(0,.32,5);
@@ -123,9 +129,9 @@ var earth=new THREE.Mesh(new THREE.SphereGeometry(radius,88,64),new THREE.MeshPh
 new THREE.TextureLoader().setCrossOrigin('anonymous').load('${APP}/assets/earth-blue-marble.jpg',function(tex){tex.colorSpace=THREE.SRGBColorSpace;earth.material.map=tex;earth.material.needsUpdate=true},undefined,function(){});
 var atmosphere=new THREE.Mesh(new THREE.SphereGeometry(radius*1.035,64,48),new THREE.MeshBasicMaterial({color:0x35bdf0,transparent:true,opacity:.075,side:THREE.BackSide,depthWrite:false}));globeGroup.add(atmosphere);
 var starsPos=new Float32Array(1200*3);for(var i=0;i<1200;i++){var r=24+Math.random()*28,t=Math.random()*Math.PI*2,p=Math.acos(2*Math.random()-1);starsPos[i*3]=r*Math.sin(p)*Math.cos(t);starsPos[i*3+1]=r*Math.cos(p);starsPos[i*3+2]=r*Math.sin(p)*Math.sin(t)}var starGeo=new THREE.BufferGeometry();starGeo.setAttribute('position',new THREE.BufferAttribute(starsPos,3));scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({color:0xcfe0ff,size:.055,transparent:true,opacity:.72})));
-appendMembers=function(rows){(rows||[]).forEach(function(member){if(typeof member.lat!=='number'||typeof member.lng!=='number')return;var link=document.createElement('a');link.className='mapMarker';link.href=member.url||('/app/p/'+encodeURIComponent(member.uid||''));link.setAttribute('aria-label',member.name||'Profile');if(member.image){var img=document.createElement('img');img.src=member.image;img.alt='';img.loading='lazy';img.referrerPolicy='no-referrer';img.addEventListener('error',function(){var fb=document.createElement('span');fb.className='mapAvatar';fb.textContent=initials(member.name);img.replaceWith(fb)});link.appendChild(img)}else{var fb=document.createElement('span');fb.className='mapAvatar';fb.textContent=initials(member.name);link.appendChild(fb)}layer.appendChild(link);var lat=Number(member.lat)*Math.PI/180,lon=Number(member.lng)*Math.PI/180,anchor=new THREE.Object3D();anchor.position.set(-radius*Math.cos(lat)*Math.sin(lon),radius*Math.sin(lat),radius*Math.cos(lat)*Math.cos(lon));globeGroup.add(anchor);markers.push({el:link,anchor:anchor})})};
+appendMembers=function(rows){(rows||[]).forEach(function(member){if(typeof member.lat!=='number'||typeof member.lng!=='number')return;if(member.uid&&seenUids[member.uid])return;if(member.uid)seenUids[member.uid]=1;var link=document.createElement('a'),label=hoverText(member)||'Profile';link.className='mapMarker';link.href=member.url||('/app/p/'+encodeURIComponent(member.uid||''));link.title=label;link.setAttribute('aria-label',label);link.addEventListener('pointerenter',function(){showTip(link,member)});link.addEventListener('pointerleave',hideTip);link.addEventListener('focus',function(){showTip(link,member)});link.addEventListener('blur',hideTip);if(member.image){var img=document.createElement('img');img.src=member.image;img.alt='';img.loading='lazy';img.referrerPolicy='no-referrer';img.addEventListener('error',function(){var fb=document.createElement('span');fb.className='mapAvatar';fb.textContent=initials(member.name);img.replaceWith(fb)});link.appendChild(img)}else{var fb=document.createElement('span');fb.className='mapAvatar';fb.textContent=initials(member.name);link.appendChild(fb)}layer.appendChild(link);var lat=Number(member.lat)*Math.PI/180,lon=Number(member.lng)*Math.PI/180,anchor=new THREE.Object3D();anchor.position.set(-radius*Math.cos(lat)*Math.sin(lon),radius*Math.sin(lat),radius*Math.cos(lat)*Math.cos(lon));globeGroup.add(anchor);markers.push({el:link,anchor:anchor})})};
 appendMembers(members);
-(async function loadRemaining(){var cursor=nextCursor,pages=0;while(cursor&&pages<5){pages++;try{var path=window.location.pathname.indexOf('/app/')===0?'/app/api/publicSeo':'/api/publicSeo',response=await fetch(path+'?mode=search-data&after='+encodeURIComponent(cursor),{headers:{Accept:'application/json'}});if(!response.ok)break;var page=await response.json();appendMembers(Array.isArray(page.members)?page.members:[]);cursor=page.nextCursor||''}catch(_){break}}})();
+(async function loadRemaining(){var cursor=nextCursor;while(cursor){try{var endpoints=['/app/api/publicSeo','/api/publicSeo'],page=null;for(var ei=0;ei<endpoints.length;ei++){var res=await fetch(endpoints[ei]+'?mode=search-data&after='+encodeURIComponent(cursor),{headers:{Accept:'application/json'}});if(res.ok&&(res.headers.get('content-type')||'').indexOf('json')!==-1){page=await res.json();break}}if(!page)break;appendMembers(Array.isArray(page.members)?page.members:[]);cursor=page.nextCursor||''}catch(_){break}}})();
 function resize(){var w=Math.max(1,host.clientWidth),h=Math.max(1,host.clientHeight);camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false)}var observer=new ResizeObserver(resize);observer.observe(host);resize();
 function positionMarkers(){globeGroup.updateMatrixWorld();var rect=renderer.domElement.getBoundingClientRect();markers.forEach(function(m){var world=m.anchor.getWorldPosition(new THREE.Vector3()),normal=world.clone().normalize(),toCamera=camera.position.clone().sub(world).normalize(),front=normal.dot(toCamera)>.03;if(!front){m.el.classList.add('hidden');return}var projected=world.clone().project(camera),inside=projected.z<1&&Math.abs(projected.x)<1.1&&Math.abs(projected.y)<1.1;if(!inside){m.el.classList.add('hidden');return}m.el.classList.remove('hidden');m.el.style.left=((projected.x+1)*.5*rect.width)+'px';m.el.style.top=((-projected.y+1)*.5*rect.height)+'px'})}
 function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);positionMarkers()}animate();

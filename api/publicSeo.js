@@ -106,26 +106,35 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         return send(200,renderDirectory(profiles,cursor,next));
       }
       if (mode === 'search' || mode === 'search-data') {
-        // Page the directory instead of reading 600 public index rows and then
-        // re-reading 600 source users for every page view. Each bounded page is
-        // live-checked, and Vercel shares identical pages for only 30 seconds.
+        // Walk bounded pages (<= 100 docs per query) so every opted-in public
+        // profile is live-checked and loaded onto the Earth map.
         const after = single(req.query?.after);
         if (after && !validId(after)) return failure(400, 'Invalid Search page');
         const db = database();
-        let snap;
-        try {
-          let q = db.collection('publicProfiles').orderBy('__name__');
-          if (after) q = q.startAfter(after);
-          snap = await q.select().limit(SEARCH_PAGE_SIZE + 1).get();
-        } catch { return failure(503, 'Search is temporarily unavailable'); }
-        const pageDocs = snap.docs.slice(0, SEARCH_PAGE_SIZE);
-        const ids = pageDocs.map(d => d.id);
-        const docs = ids.length ? await db.getAll(...ids.map(id => db.collection('users').doc(id)), {fieldMask: PUBLIC_FIELDS}) : [];
-        const members = docs
-          .filter(d => d.exists && publicEligible(d.data(), d.id))
-          .map(d => projectSearchMember(d.id, d.data(), selectProfileImage, safeUrl))
-          .filter(Boolean);
-        const nextCursor = snap.docs.length > SEARCH_PAGE_SIZE ? pageDocs.at(-1)?.id || null : null;
+        const members = [];
+        let cursor = after;
+        let nextCursor = null;
+        const maxPages = mode === 'search-data' ? 1 : 15;
+        for (let pageIndex = 0; pageIndex < maxPages; pageIndex++) {
+          let snap;
+          try {
+            let q = db.collection('publicProfiles').orderBy('__name__');
+            if (cursor) q = q.startAfter(cursor);
+            snap = await q.select().limit(SEARCH_PAGE_SIZE + 1).get();
+          } catch { return failure(503, 'Search is temporarily unavailable'); }
+          const pageDocs = snap.docs.slice(0, SEARCH_PAGE_SIZE);
+          const ids = pageDocs.map(d => d.id);
+          const docs = ids.length ? await db.getAll(...ids.map(id => db.collection('users').doc(id)), {fieldMask: PUBLIC_FIELDS}) : [];
+          for (const d of docs) {
+            if (d.exists && publicEligible(d.data(), d.id)) {
+              const projected = projectSearchMember(d.id, d.data(), selectProfileImage, safeUrl);
+              if (projected) members.push(projected);
+            }
+          }
+          nextCursor = snap.docs.length > SEARCH_PAGE_SIZE ? pageDocs.at(-1)?.id || null : null;
+          if (!nextCursor) break;
+          cursor = nextCursor;
+        }
         const placedMembers = placeMembersOnEarth(members);
         res.setHeader('X-Robots-Tag', 'noindex');
         if (mode === 'search-data') {
