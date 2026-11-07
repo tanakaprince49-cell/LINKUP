@@ -31,7 +31,18 @@ const probe = async <T,>(label: string, fn: () => Promise<T>): Promise<{ ok: boo
   }
 };
 
+/**
+ * The Connection Doctor is a developer tool: its whole output is console text
+ * nobody but us reads. It used to run on EVERY cold start and cost ~24 reads a
+ * boot (publicProfiles x20, users x3, one stream) - on a Spark project that is
+ * 24 reads of a 50k/day quota spent printing logs to a console no member can
+ * see. It now runs only when explicitly switched on.
+ */
+export const bootDiagnosticsEnabled = () =>
+  String(process.env.EXPO_PUBLIC_DIAGNOSTICS || '').toLowerCase() === 'true';
+
 export const runBootDiagnostics = (uid: string | undefined) => {
+  if (!bootDiagnosticsEnabled()) return;
   // Fire-and-forget: never blocks the app, only logs.
   void (async () => {
     console.log(`${TAG} ================= CONNECTION DOCTOR =================`);
