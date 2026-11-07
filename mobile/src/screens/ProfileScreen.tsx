@@ -22,6 +22,8 @@ import {
   InteractionManager
 } from 'react-native';
 import { notifyUser } from '../lib/notify';
+import { ACCOUNT_VOICE } from '../lib/brandVoice';
+import { exportAccountData } from '../lib/dataExport';
 import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
@@ -402,6 +404,10 @@ export default function ProfileScreen({ navigation, route }: any) {
   const [isEditing, setIsEditing] = useState(false);
   const [editFocus, setEditFocus] = useState<'all' | 'bio' | 'skills' | 'project' | 'idea' | 'photos'>('all');
   const [isSaving, setIsSaving] = useState(false);
+  // Leaving is a two-door room: take your data with you, or walk out without it.
+  const [leaveSheet, setLeaveSheet] = useState(false);
+  const [exportState, setExportState] = useState<'idle' | 'busy' | 'done'>('idle');
+  const [exportNote, setExportNote] = useState('');
   const avatarUploadPending = useRef(false);
   const bannerUploadPending = useRef(false);
   const [connectionGate, setConnectionGate] = useState<ConnectionGate | null>(null);
@@ -1771,25 +1777,38 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
   };
 
-  const handleDeleteAccount = () => {
-    const confirmed = webConfirm('Permanently delete your LINKUP account and profile? This cannot be undone.');
-    if (confirmed !== null) {
-      if (confirmed) performDeleteAccount();
-      return;
+  // The optional export. Nothing here is required to leave, and nothing here
+  // slows a member down: the download is one tap and the delete button never
+  // waits on it.
+  const runDataExport = async () => {
+    if (!user?.uid || exportState === 'busy') return;
+    setExportState('busy');
+    setExportNote('');
+    try {
+      const result = await exportAccountData({ uid: user.uid, email: user.email, profile: myProfile as any });
+      setExportState('done');
+      setExportNote(
+        result.mode === 'download'
+          ? `${ACCOUNT_VOICE.exported} (${result.fileName})`
+          : result.mode === 'share'
+            ? `${ACCOUNT_VOICE.exported} Saved through your share sheet.`
+            : `${ACCOUNT_VOICE.exported} Copied to your clipboard.`
+      );
+    } catch (e: any) {
+      setExportState('idle');
+      setExportNote(e?.message ? `${ACCOUNT_VOICE.exportFailed} (${e.message})` : ACCOUNT_VOICE.exportFailed);
     }
+  };
 
-    notifyUser(
-      "DELETE ACCOUNT", 
-      "Permanently delete your LINKUP account and associated profile data? This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "DELETE EVERYTHING", 
-          style: "destructive", 
-          onPress: performDeleteAccount
-        }
-      ]
-    );
+  const handleDeleteAccount = () => {
+    setExportNote('');
+    setExportState('idle');
+    setLeaveSheet(true);
+  };
+
+  const confirmDeleteWithoutExport = () => {
+    setLeaveSheet(false);
+    performDeleteAccount();
   };
 
   const runAccountAction = async (actionName: string, action: () => Promise<unknown>) => {
@@ -3597,6 +3616,21 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            disabled={!!accountActionBusy}
+            style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]}
+            onPress={() => void runDataExport()}
+          >
+            <View style={styles.prefLabelContainer}>
+              <SafeIcon name="Download" size={18} color={textColor(isDark)} />
+              <View style={styles.prefCopy}>
+                <Text style={[styles.prefLabel, { color: textColor(isDark) }]}>{ACCOUNT_VOICE.exportButton}</Text>
+                <Text style={styles.prefHelp}>{ACCOUNT_VOICE.exportBody}</Text>
+                {exportNote ? <Text style={styles.prefHelp}>{exportNote}</Text> : null}
+              </View>
+            </View>
+          </TouchableOpacity>
+
           <TouchableOpacity style={[styles.prefRow, liquidGlass(isDark, false), { marginTop: 12 }]} onPress={handleDeleteAccount}>
             <View style={styles.prefLabelContainer}>
                 <SafeIcon name="Trash2" size={18} color="#FF4444" />
@@ -3621,6 +3655,37 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+      <Modal transparent visible={leaveSheet} animationType="fade" onRequestClose={() => setLeaveSheet(false)}>
+        <View style={styles.leaveBackdrop}>
+          <View style={[styles.leaveSheet, { backgroundColor: isDark ? COLORS.darkCard : '#FFFFFF' }]}>
+            <Text style={[styles.leaveTitle, { color: textColor(isDark) }]}>{ACCOUNT_VOICE.deleteTitle}</Text>
+            <Text style={[styles.leaveBody, { color: textColor(isDark, 'secondary') }]}>{ACCOUNT_VOICE.deleteBody}</Text>
+
+            <TouchableOpacity
+              onPress={() => void runDataExport()}
+              disabled={exportState === 'busy'}
+              style={[styles.leaveExport, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder, opacity: exportState === 'busy' ? 0.6 : 1 }]}
+            >
+              {exportState === 'busy' ? (
+                <ActivityIndicator size="small" color={textColor(isDark)} />
+              ) : (
+                <SafeIcon name={exportState === 'done' ? 'CheckCircle2' : 'Download'} size={16} color={exportState === 'done' ? '#22C55E' : textColor(isDark)} />
+              )}
+              <Text style={[styles.leaveExportText, { color: textColor(isDark) }]}>{ACCOUNT_VOICE.exportButton}</Text>
+            </TouchableOpacity>
+            <Text style={[styles.leaveHint, { color: textColor(isDark, 'muted') }]}>{ACCOUNT_VOICE.exportBody}</Text>
+            {exportNote ? <Text style={[styles.leaveHint, { color: exportState === 'done' ? '#16A34A' : '#B91C1C' }]}>{exportNote}</Text> : null}
+
+            <TouchableOpacity onPress={confirmDeleteWithoutExport} style={styles.leaveDelete}>
+              <Text style={styles.leaveDeleteText}>{ACCOUNT_VOICE.deleteConfirm}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setLeaveSheet(false)} style={styles.leaveCancel}>
+              <Text style={[styles.leaveCancelText, { color: textColor(isDark, 'muted') }]}>{ACCOUNT_VOICE.cancel}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal transparent visible={!!fullPhotoUri} animationType="fade" onRequestClose={closeFullPhoto}>
         <Pressable style={styles.photoModalBackdrop} onPress={closeFullPhoto}>
           <TouchableOpacity style={styles.photoModalClose} onPress={closeFullPhoto}>
@@ -3641,6 +3706,17 @@ export default function ProfileScreen({ navigation, route }: any) {
 }
 
 const styles = StyleSheet.create({
+  leaveBackdrop: { flex: 1, backgroundColor: 'rgba(6,8,12,0.62)', alignItems: 'center', justifyContent: 'center', padding: 22 },
+  leaveSheet: { width: '100%', maxWidth: 460, borderRadius: 22, padding: 22, gap: 10 },
+  leaveTitle: { fontSize: 21, fontWeight: '900', letterSpacing: -0.3 },
+  leaveBody: { fontSize: 13.5, lineHeight: 20, fontWeight: '600' },
+  leaveExport: { marginTop: 8, minHeight: 50, borderRadius: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  leaveExportText: { fontSize: 14.5, fontWeight: '800' },
+  leaveHint: { fontSize: 11.5, lineHeight: 17, fontWeight: '600' },
+  leaveDelete: { marginTop: 10, minHeight: 50, borderRadius: 14, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center' },
+  leaveDeleteText: { fontSize: 15, fontWeight: '900', color: '#FFFFFF' },
+  leaveCancel: { alignItems: 'center', paddingVertical: 10 },
+  leaveCancelText: { fontSize: 13.5, fontWeight: '800' },
   container: {
     flex: 1,
   },

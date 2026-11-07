@@ -1,5 +1,5 @@
 import MemberBadges from '../components/MemberBadges';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { buildFacts, DISCOVERY_VOICE } from '../lib/brandVoice';
+import WeeklyMatchThinking from '../components/WeeklyMatchThinking';
 import { UserProfile } from '../types';
 import { COLORS, getBrandFlavor, textColor } from '../theme/theme';
 import {
@@ -105,6 +106,13 @@ const writeCachedDashboardPeople = async (uid: string, people: UserProfile[]) =>
   } catch {
     // Cache only makes the dashboard feel instant.
   }
+};
+
+/** One key per member per week: the wait is a weekly event, not a nag. */
+const weeklyMatchKey = (uid: string | undefined, match: { weekKey?: string; partner?: { uid?: string } } | null): string => {
+  if (!match) return '';
+  const week = match.weekKey || match.partner?.uid || 'week';
+  return `linkup:weekly-thinking:v1:${uid || 'anon'}:${week}`;
 };
 
 function DiscoveryDashboardScreen({ navigation }: any) {
@@ -219,6 +227,26 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     }
     return localWeeklyMatch;
   }, [serverWeeklyMatch, localWeeklyMatch, people]);
+
+  // THE WEEKLY WAIT. Once per week, per member: four seconds of the cat
+  // thinking before the one person appears. The wait is the product promise
+  // being kept slowly enough to feel like something was decided.
+  const [weeklyReveal, setWeeklyReveal] = useState<'idle' | 'thinking' | 'revealed'>('idle');
+  const weeklyRevealKey = weeklyMatchKey(me?.uid, weeklyMatch);
+  useEffect(() => {
+    if (!weeklyRevealKey) return undefined;
+    let active = true;
+    AsyncStorage.getItem(weeklyRevealKey)
+      .then((value) => { if (active) setWeeklyReveal(value === '1' ? 'revealed' : 'thinking'); })
+      // If storage is unavailable we still show the card rather than trapping
+      // the member behind a screen that will never finish.
+      .catch(() => { if (active) setWeeklyReveal('revealed'); });
+    return () => { active = false; };
+  }, [weeklyRevealKey]);
+  const finishWeeklyThinking = useCallback(() => {
+    setWeeklyReveal('revealed');
+    if (weeklyRevealKey) void AsyncStorage.setItem(weeklyRevealKey, '1').catch(() => {});
+  }, [weeklyRevealKey]);
 
   const partnerUid = weeklyMatch?.partner?.uid || '';
 
@@ -679,7 +707,16 @@ function DiscoveryDashboardScreen({ navigation }: any) {
               )}
 
               {weeklyMatch ? (
-                <WeeklyCofounderCard match={weeklyMatch} />
+                <>
+                  <WeeklyMatchThinking
+                    profile={me as any}
+                    visible={weeklyReveal === 'thinking'}
+                    onDone={finishWeeklyThinking}
+                  />
+                  {/* Nothing of the person is painted until the wait has
+                      resolved, so there is no flash of them underneath it. */}
+                  {weeklyReveal === 'idle' ? null : <WeeklyCofounderCard match={weeklyMatch} />}
+                </>
               ) : (
                 <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F9FAFB' }]}>
                   <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>{DISCOVERY_VOICE.emptyTitle}</Text>

@@ -1,7 +1,6 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
-import {ActivityIndicator,Alert,Platform,RefreshControl,ScrollView,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
+import {ActivityIndicator,RefreshControl,ScrollView,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import * as Clipboard from 'expo-clipboard';
 import {useAuth} from '../contexts/AuthContext';
 import {useTheme} from '../contexts/ThemeContext';
 import {COLORS,appBackground,textColor} from '../theme/theme';
@@ -23,18 +22,16 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
  const run=async(label:string,action:()=>Promise<any>)=>{if(busy)return;setBusy(label);setError('');try{const result=await action();await refresh();return result;}catch(e:any){setError(e.message||'That action could not finish.');}finally{setBusy('');}};
  const act=(op:string,input:Record<string,unknown>={},after?:(r:any)=>void)=>run(op,async()=>{const r=await builderCall(op,input);after?.(r);return r;});
  const button=(label:string,onPress:()=>void,secondary=false)=> <TouchableOpacity accessibilityRole="button" accessibilityLabel={label} disabled={!!busy} onPress={onPress} style={[styles.button,secondary&&styles.secondary,!!busy&&{opacity:.55}]}><Text style={[styles.buttonText,secondary&&{color:'#0A0B0D'}]}>{label}</Text></TouchableOpacity>;
- const card=(title:string,children:React.ReactNode)=> <View key={React.isValidElement(children)&&children.key!=null?children.key:undefined} style={[styles.card,{backgroundColor:dark?'#171A21':'#fff',borderColor:dark?'#383A42':'#DDDAD1'}]}><Text style={[styles.cardTitle,{color:textColor(dark)}]}>{title}</Text>{children}</View>;
  const text=(value:string)=> <Text style={[styles.body,{color:textColor(dark,'secondary')}]}>{value}</Text>;
- const confirmed=(title:string,message:string,onConfirm:()=>void)=>{if(Platform.OS==='web'){if((globalThis as any).confirm?.(message))onConfirm();}else Alert.alert(title,message,[{text:'Cancel',style:'cancel'},{text:'Continue',style:'destructive',onPress:onConfirm}]);};
  const isTabWorkspace=route?.name==='Workspace';
  if(!home)return <SafeAreaView edges={isTabWorkspace?[]:undefined} style={[styles.root,appBackground(dark)]}>{!isTabWorkspace?<ScreenHeader title="Your builder workspace" onBack={()=>navigation.goBack()} isDark={dark}/>:null}<View style={{padding:24,gap:16}}>{error?text(error):<ActivityIndicator color={COLORS.primaryStrong}/>} {error?button('Try again',()=>void refresh(true)):null}</View></SafeAreaView>;
  return <SafeAreaView edges={isTabWorkspace?[]:undefined} style={[styles.root,appBackground(dark)]}>
-  {!isTabWorkspace?<ScreenHeader title="Builder workspace" subtitle="Your groups and workspace settings." onBack={()=>navigation.goBack()} isDark={dark} right={<VerifiedBadge size={20}/>}/>:null}
-  <View style={{paddingHorizontal:18,paddingBottom:8}}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>{BUILDER_SECTIONS.map(tab=><TouchableOpacity key={tab} accessibilityRole="button" accessibilityState={{selected:section===tab}} onPress={()=>choose(tab)} style={[styles.tab,section===tab&&styles.activeTab]}><Text style={{color:section===tab?'#0A0B0D':'#575B60',fontWeight:'800'}}>{tab}</Text></TouchableOpacity>)}</ScrollView></View>
+  {!isTabWorkspace?<ScreenHeader title="Builder workspace" subtitle="Your groups." onBack={()=>navigation.goBack()} isDark={dark} right={<VerifiedBadge size={20}/>}/>:null}
+  {/* One section means no tab strip: the workspace IS Groups. */}
+  {BUILDER_SECTIONS.length>1?<View style={{paddingHorizontal:18,paddingBottom:8}}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>{BUILDER_SECTIONS.map(tab=><TouchableOpacity key={tab} accessibilityRole="button" accessibilityState={{selected:section===tab}} onPress={()=>choose(tab)} style={[styles.tab,section===tab&&styles.activeTab]}><Text style={{color:section===tab?'#0A0B0D':'#575B60',fontWeight:'800'}}>{tab}</Text></TouchableOpacity>)}</ScrollView></View>:null}
   <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async()=>{setRefreshing(true);await refresh();setRefreshing(false);}}/>}>
    {error?<View accessibilityRole="alert" style={styles.error}><Text style={{color:'#9f1239'}}>{error}</Text></View>:null}{busy?<ActivityIndicator color={COLORS.primaryStrong}/>:null}
    {section==='Groups'&&<GroupsPanel navigation={navigation} isDark={dark}/>}
-   {section==='Settings'&&card('Your private workspace data',<>{text('Export or clear your private project context and notes. Shared group messages and public feedback remain visible to the people you shared them with.')}{button('Copy private workspace export',()=>void act('export',{},r=>void Clipboard.setStringAsync(JSON.stringify({workspace:r.state,progress:r.contributions},null,2))),true)}{button('Clear private project context',()=>confirmed('Clear private context','Clear your private project context and notes? Shared group content and public feedback are not deleted.',()=>void act('forget')),true)}</>)}
    <View style={{height:24}}/>
   </ScrollView>
  </SafeAreaView>;

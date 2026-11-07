@@ -264,6 +264,13 @@
       "setItem"
     ],
     [
+      "getItem"
+    ],
+    [
+      "setItem",
+      "1"
+    ],
+    [
       "navigate",
       "Chat"
     ],

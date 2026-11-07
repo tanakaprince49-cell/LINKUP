@@ -48,7 +48,7 @@ export default function BuildHabitCard({navigation,isDark=false,compact=false,re
     {label(h.nextMilestone?`Next milestone: ${h.nextMilestone} recorded build days. This is activity, not a skill or investment rating.`:'A year of recorded build days. Activity, not a skill rating.')}
     <View style={[styles.row,{justifyContent:'space-between'}]}><Text style={{color:ink,fontWeight:'800',flex:1}}>Cheeky build reminders</Text><Switch accessibilityLabel="Cheeky build reminders" value={h.reminders.enabled} disabled={busy} onValueChange={v=>void act('habitPrefs',{dailyBuild:v})}/></View>
     {label(`Preferred time ${String(h.reminders.hour).padStart(2,'0')}:00 ${h.reminders.timezone}; quiet hours and delivery permissions win; delivery may be delayed or unavailable. Stops after today’s update, a protected rest, or your weekly target. Automatically pauses after three unanswered nudges.`)}
-    {button('Reminder time, quiet hours and delivery',()=>navigation.navigate('BuilderWorkspace',{section:'Settings'}))}
+    {label('Reminder time, quiet hours and delivery follow your device notification settings. This card never overrides them.')}
     </>}
    </>}
    {busy&&<ActivityIndicator color={ink}/>}

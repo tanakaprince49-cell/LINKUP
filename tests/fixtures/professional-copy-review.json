@@ -805,7 +805,9 @@
     "file": "mobile/src/screens/ProfileScreen.tsx",
     "line": 1625,
     "before": "This is permanent. Your founder profile and all network data will be wiped from existence. Proceed?",
-    "after": "Permanently delete your LINKUP account and associated profile data? This action cannot be undone."
+    "after": "Permanently delete your LINKUP account and associated profile data? This action cannot be undone.",
+    "current": "Deleting removes your profile, your build and every thread that came with it.",
+    "voiceRevision": "2026-11-leaving-with-your-data"
   },
   {
     "file": "mobile/src/screens/ProfileScreen.tsx",

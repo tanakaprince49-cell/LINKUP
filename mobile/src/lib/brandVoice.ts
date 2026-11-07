@@ -343,6 +343,56 @@ export const DISCOVERY_VOICE = {
 } as const;
 
 /* ------------------------------------------------------------------ *
+ * THE WEEKLY REVEAL — four seconds of the cat thinking before the one
+ * person of the week appears. This is deliberately slow: the wait is
+ * the point. It has to feel like something is being decided about you.
+ * ------------------------------------------------------------------ */
+
+export const WEEKLY_REVEAL_VOICE = {
+  /** The wait, in four beats, each one tightening the screw. */
+  thinkingLines: (facts: BuildFacts): string[] => [
+    'The cat is thinking.',
+    facts.projectName ? `Reading every profile that could build ${facts.projectName}.` : 'Reading every public profile in the database.',
+    facts.seat ? `Weighing who could actually hold the ${facts.seat} seat.` : 'Weighing who could actually hold the empty seat.',
+    'One person. Chosen for you. About to appear.',
+  ],
+  /** Stamped under the cat while it thinks. */
+  status: (facts: BuildFacts): string[] => [
+    'scanning',
+    'weighing fit',
+    'checking they are looking for you too',
+    facts.hasName ? `deciding, ${facts.firstName}` : 'deciding',
+  ],
+  /** The moment it lands. */
+  revealLabel: (partnerFirst: string) => `This is this week's person — ${partnerFirst}.`,
+  skip: 'Tap to see them now',
+  /** Screen readers and the reduced-motion path still get the whole story. */
+  reducedMotionNote: (facts: BuildFacts): string =>
+    facts.projectName
+      ? `Choosing one person for ${facts.projectName} this week.`
+      : 'Choosing one person for you this week.',
+} as const;
+
+/* ------------------------------------------------------------------ *
+ * LEAVING — deleting an account is the one place we never hold a
+ * grudge. Take your data with you; the door works both ways.
+ * ------------------------------------------------------------------ */
+
+export const ACCOUNT_VOICE = {
+  exportTitle: 'Take your data with you',
+  exportBody:
+    'This is yours. Everything LINKUP knows about you — your profile, your build, your brief, your private workspace notes — in one file you can open, keep or delete yourself.',
+  exportButton: 'Download my data (optional)',
+  deleteTitle: 'Delete my account',
+  deleteBody:
+    'Deleting removes your profile, your build and every thread that came with it. Nothing is recoverable afterwards, and the algorithm forgets you the same day.',
+  deleteConfirm: 'Delete everything',
+  cancel: 'Stay',
+  exported: 'Your data is downloaded. Delete whenever you are ready — or do not.',
+  exportFailed: 'The download could not finish. You can still delete, or try the export again.',
+} as const;
+
+/* ------------------------------------------------------------------ *
  * LINKY — the cat that shows up when you open the page, says your
  * name, and tells you the truth about your build before you speak.
  * ------------------------------------------------------------------ */
