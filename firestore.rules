@@ -77,45 +77,13 @@ service cloud.firestore {
         );
       }
 
-      function isValidUser(data) {
-        return data.uid == userId &&
-          data.displayName is string &&
-          data.displayName.size() > 0 &&
-          data.displayName != 'New Builder' &&
-          data.displayName.size() <= 100;
-      }
-
       function validOptionalString(data, field, maxSize) {
         return !data.keys().hasAny([field]) ||
           (data[field] is string && data[field].size() <= maxSize);
       }
 
-      function validOptionalList(data, field, maxSize) {
-        return !data.keys().hasAny([field]) ||
-          (data[field] is list && data[field].size() <= maxSize);
-      }
-
-      function validOptionalMap(data, field, maxSize) {
-        return !data.keys().hasAny([field]) ||
-          (data[field] is map && data[field].keys().size() <= maxSize);
-      }
-
-      function validOptionalBool(data, field) {
-        return !data.keys().hasAny([field]) || data[field] is bool;
-      }
-
       function validOptionalTimestamp(data, field) {
         return !data.keys().hasAny([field]) || data[field] is timestamp;
-      }
-
-      function validOptionalScore(data, field) {
-        return !data.keys().hasAny([field]) ||
-          ((data[field] is int || data[field] is float) && data[field] >= 0 && data[field] <= 100);
-      }
-
-      function validOptionalPoints(data, field) {
-        return !data.keys().hasAny([field]) ||
-          ((data[field] is int || data[field] is float) && data[field] >= 0 && data[field] <= 1000000);
       }
 
       function boundedMetric(value) {
@@ -143,110 +111,6 @@ service cloud.firestore {
           settings.get('darkMode', false) is bool;
       }
 
-      function validProfileShape(data) {
-        return validOptionalString(data, 'username', 30) &&
-          validOptionalString(data, 'profileLink', 180) &&
-          validOptionalString(data, 'occupation', 80) &&
-          validOptionalString(data, 'company', 120) &&
-          validOptionalString(data, 'bio', 2000) &&
-          validOptionalString(data, 'country', 80) &&
-          validOptionalString(data, 'city', 80) &&
-          validOptionalString(data, 'goals', 500) &&
-          validOptionalString(data, 'experience', 80) &&
-          validOptionalString(data, 'personalityType', 80) &&
-          validOptionalString(data, 'commitmentLevel', 80) &&
-          validOptionalString(data, 'startupStage', 80) &&
-          validOptionalString(data, 'fundingStage', 80) &&
-          validOptionalString(data, 'availability', 80) &&
-          validOptionalString(data, 'timezone', 80) &&
-          validOptionalString(data, 'workStyle', 80) &&
-          validOptionalString(data, 'networkingIntent', 120) &&
-          validOptionalString(data, 'education', 80) &&
-          validOptionalString(data, 'teamSizePreference', 80) &&
-          validOptionalString(data, 'ambition', 120) &&
-          validOptionalString(data, 'profilePic', 900000) &&
-          validOptionalString(data, 'profilePicUrl', 2048) &&
-          validOptionalString(data, 'coverPhoto', 900000) &&
-          validOptionalString(data, 'vibeMedia', 900000) &&
-          validOptionalList(data, 'photos', 3) &&
-          validOptionalList(data, 'roles', 20) &&
-          validOptionalList(data, 'skills', 50) &&
-          validOptionalList(data, 'interests', 50) &&
-          validOptionalList(data, 'industries', 40) &&
-          validOptionalList(data, 'lookingFor', 30) &&
-          validOptionalList(data, 'languages', 20) &&
-          validOptionalList(data, 'badges', 50) &&
-          validOptionalList(data, 'projects', 20) &&
-          validOptionalList(data, 'startupIdeas', 20) &&
-          validOptionalList(data, 'circles', 20) &&
-          validOptionalMap(data, 'personalityAnswers', 30) &&
-          validOptionalMap(data, 'roleAnswers', 30) &&
-          // The Work Style Card (docs/LINKUP_ALGORITHM_DESIGN.md §19.1):
-          // eight forced choices, opt-in, answers only, no free text.
-          validOptionalMap(data, 'workStyleCard', 12) &&
-          validOptionalMap(data, 'resume', 10) &&
-          validOptionalMap(data, 'socialLinks', 10) &&
-          validOptionalBool(data, 'isVisible') &&
-          validOptionalBool(data, 'isStealthMode') &&
-          validOptionalBool(data, 'turboConnect') &&
-          validOptionalBool(data, 'hideOnlineStatus') &&
-          validOptionalBool(data, 'remoteOnly') &&
-          validOptionalBool(data, 'willingToRelocate') &&
-          validOptionalBool(data, 'hasExit') &&
-          validOptionalBool(data, 'isPro') &&
-          validOptionalString(data, 'plan', 40) &&
-          validOptionalString(data, 'subscriptionPlan', 40) &&
-          validOptionalString(data, 'subscriptionStatus', 40) &&
-          validOptionalBool(data, 'isVerified') &&
-          validOptionalString(data, 'verificationProgram', 80) &&
-          validOptionalString(data, 'verifiedBy', 128) &&
-          validOptionalTimestamp(data, 'verifiedAt') &&
-          validOptionalTimestamp(data, 'proUnlockedAt') &&
-          validOptionalTimestamp(data, 'subscriptionUpdatedAt') &&
-          validOptionalTimestamp(data, 'lastActiveAt') &&
-          validOptionalPoints(data, 'reputationScore') &&
-          validOptionalScore(data, 'founderScore') &&
-          validOptionalPoints(data, 'streakCount') &&
-          validOptionalReputationMetrics(data) &&
-          validOptionalSettings(data) &&
-          (!data.keys().hasAny(['age']) ||
-            (data.age is int && (data.age == 0 || (data.age >= 13 && data.age <= 120))));
-      }
-
-      function verificationCreateDefaultsOnly() {
-        return (!incoming().keys().hasAny(['isVerified']) || incoming().isVerified == false) &&
-          (!incoming().keys().hasAny(['verificationProgram']) || incoming().verificationProgram == '') &&
-          (!incoming().keys().hasAny(['verifiedBy']) || incoming().verifiedBy == '') &&
-          !incoming().keys().hasAny(['verifiedAt']);
-      }
-
-      function safeProfileCreateKeys() {
-        return incoming().keys().hasOnly([
-          'uid', 'displayName', 'username', 'profileLink',
-          'occupation', 'roles', 'company', 'bio',
-          'age', 'country', 'city',
-          'skills', 'interests', 'goals', 'industries',
-          'experience', 'personalityType', 'personalityAnswers', 'roleAnswers',
-          'workStyleCard',
-          'commitmentLevel', 'startupStage', 'fundingStage',
-          'availability', 'timezone', 'languages', 'workStyle',
-          'lookingFor', 'networkingIntent',
-          'profilePic', 'profilePicUrl', 'photos', 'coverPhoto', 'vibeMedia',
-          'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'badges',
-          'socialLinks', 'education', 'remoteOnly', 'willingToRelocate',
-          'teamSizePreference', 'ambition',
-          'isVisible', 'isStealthMode', 'turboConnect', 'hideOnlineStatus',
-          'isPro', 'plan', 'subscriptionPlan', 'subscriptionStatus',
-          'proUnlockedAt', 'subscriptionUpdatedAt',
-          'settings',
-          'isVerified', 'verificationProgram', 'verifiedBy',
-          'onboarded', 'createdAt',
-          'lastActiveAt',
-          'reputationScore', 'streakCount', 'founderScore', 'reputationMetrics',
-          'circles', 'aiMatchInsights'
-        ]);
-      }
-
       function validOwnProfileWrite(data) {
         return (!data.keys().hasAny(['uid']) || data.uid == userId) &&
           (!data.keys().hasAny(['displayName']) ||
@@ -269,7 +133,7 @@ service cloud.firestore {
           'availability', 'timezone', 'languages', 'workStyle',
           'lookingFor', 'networkingIntent',
           'profilePic', 'profilePicUrl', 'photos', 'coverPhoto', 'vibeMedia',
-          'projects', 'portfolioLinks', 'startupIdeas', 'resume', 'badges',
+          'projects', 'startupIdeas', 'resume', 'badges',
           'socialLinks',
           'education', 'remoteOnly', 'willingToRelocate', 'teamSizePreference',
           'ambition',
@@ -308,80 +172,6 @@ service cloud.firestore {
           'subscriptionPurchaseToken', 'linkupPlus', 'role', 'isAdmin',
           'banned', 'deleted'
         ];
-      }
-
-      function safeProfileUpdateKeys() {
-        return incoming().diff(existing()).affectedKeys().hasOnly(safeProfileKeys());
-      }
-
-      function verificationFieldsSafe() {
-        return (!incoming().keys().hasAny(['isVerified']) || incoming().isVerified == false) &&
-          (!incoming().keys().hasAny(['verificationProgram']) || incoming().verificationProgram == '') &&
-          (!incoming().keys().hasAny(['verifiedBy']) || incoming().verifiedBy == '') &&
-          !incoming().keys().hasAny(['verifiedAt']);
-      }
-
-      function validProUnlockData(data) {
-        return data.uid == userId &&
-          data.displayName is string &&
-          data.displayName.size() > 0 &&
-          data.displayName != 'New Builder' &&
-          data.displayName.size() <= 100 &&
-          data.isPro == true &&
-          data.plan in ['pro', 'plus'] &&
-          data.subscriptionPlan in ['pro', 'plus'] &&
-          data.subscriptionStatus == 'active' &&
-          validOptionalString(data, 'profileLink', 180) &&
-          (!data.keys().hasAny(['isVerified']) || data.isVerified == true) &&
-          (!data.keys().hasAny(['verificationProgram']) || data.verificationProgram in ['LINKUP Pro', 'LINKUP PLUS']) &&
-          (!data.keys().hasAny(['verifiedBy']) || data.verifiedBy in ['LINKUP Pro', 'LINKUP PLUS']) &&
-          validOptionalTimestamp(data, 'verifiedAt') &&
-          (!data.keys().hasAny(['turboConnect']) || data.turboConnect == true) &&
-          validOptionalSettings(data) &&
-          (!data.keys().hasAny(['settings']) ||
-            (!data.settings.keys().hasAny(['turboConnect']) || data.settings.turboConnect == true)) &&
-          validOptionalTimestamp(data, 'proUnlockedAt') &&
-          validOptionalTimestamp(data, 'subscriptionUpdatedAt');
-      }
-
-      function safeProUnlockCreateKeys() {
-        return incoming().keys().hasOnly([
-          'uid',
-          'displayName',
-          'profileLink',
-          'isPro',
-          'plan',
-          'subscriptionPlan',
-          'subscriptionStatus',
-          'isVerified',
-          'verificationProgram',
-          'verifiedBy',
-          'verifiedAt',
-          'turboConnect',
-          'settings',
-          'proUnlockedAt',
-          'subscriptionUpdatedAt'
-        ]);
-      }
-
-      function safeProUnlockUpdateKeys() {
-        return incoming().diff(existing()).affectedKeys().hasOnly([
-          'uid',
-          'displayName',
-          'profileLink',
-          'isPro',
-          'plan',
-          'subscriptionPlan',
-          'subscriptionStatus',
-          'isVerified',
-          'verificationProgram',
-          'verifiedBy',
-          'verifiedAt',
-          'turboConnect',
-          'settings',
-          'proUnlockedAt',
-          'subscriptionUpdatedAt'
-        ]);
       }
 
       function validProCancelData(data) {
@@ -491,46 +281,12 @@ service cloud.firestore {
           incoming().diff(existing()).affectedKeys().hasOnly(['pushTokens']);
       }
 
-      // A client may never ESCALATE its own paid/verification/admin fields.
-      // (Demotion — e.g. cancel — is handled by validProCancelData below.)
-      function paidEscalationSafe() {
-        return !incoming().diff(existing()).affectedKeys().hasAny(profileEntitlementFields());
-      }
-
       // The server is the authority on PLUS, so an existing isPro: true is
       // trustworthy for gating Turbo Connect (a PLUS-only perk).
       function existingPlus() {
         return existing().get('isPro', false) == true ||
           existing().get('plan', '').toLowerCase() in ['pro', 'plus'] ||
           existing().get('subscriptionPlan', '').toLowerCase() in ['pro', 'plus'];
-      }
-
-      // Turbo Connect is a PLUS perk: clients may only ever set it to false,
-      // unless the account is already PLUS (then toggling is legitimate).
-      function turboConnectSafe() {
-        return (!incoming().diff(existing()).affectedKeys().hasAny(['turboConnect']) ||
-            incoming().turboConnect == false ||
-            (incoming().turboConnect == true && existingPlus())) &&
-          (!incoming().diff(existing()).affectedKeys().hasAny(['settings']) ||
-            !incoming().settings.keys().hasAny(['turboConnect']) ||
-            incoming().settings.turboConnect == false ||
-            (incoming().settings.turboConnect == true && existingPlus()));
-      }
-
-      // The only client-writable "verified" stamp is the SHIPPED gamification
-      // badge (3 ship days). Everything else (PLUS tick) is server-only.
-      function shipBadgeVerification() {
-        return incoming().keys().hasAll(['isVerified', 'verificationProgram', 'verifiedBy']) &&
-          incoming().isVerified == true &&
-          incoming().verificationProgram == 'SHIPPED' &&
-          incoming().verifiedBy == 'SHIP LOG' &&
-          (!incoming().keys().hasAny(['verifiedAt']) || incoming().verifiedAt is timestamp);
-      }
-
-      function verificationSafe() {
-        return !incoming().diff(existing()).affectedKeys().hasAny(['isVerified', 'verificationProgram', 'verifiedBy', 'verifiedAt']) ||
-          verificationFieldsSafe() ||
-          shipBadgeVerification();
       }
 
       allow get: if isOwner(userId) || isPublicProfile(existing()) || hasDirectMatchWithSignedInUser() || (
@@ -782,25 +538,6 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------
-    // Swipes / likes
-    // ------------------------------------------------------------
-    match /swipes/{swipeId} {
-      function userIsInSwipe(data) {
-        return data.fromId == request.auth.uid || data.toId == request.auth.uid;
-      }
-
-      allow get, list: if isSignedIn() && userIsInSwipe(existing());
-      allow create: if isSignedIn() &&
-        incoming().keys().hasOnly(['fromId', 'toId', 'type', 'timestamp']) &&
-        incoming().fromId == request.auth.uid &&
-        isValidId(incoming().toId) &&
-        incoming().toId != request.auth.uid &&
-        incoming().type in ['like', 'skip'] &&
-        incoming().timestamp == request.time;
-      allow update, delete: if false;
-    }
-
-    // ------------------------------------------------------------
     // Idea swipes / "Tinder for Ideas"
     // ------------------------------------------------------------
     match /ideaSwipes/{swipeId} {
@@ -895,15 +632,6 @@ service cloud.firestore {
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedAt', 'updatedAt']);
       allow delete: if false;
-    }
-
-    // ------------------------------------------------------------
-    // AI match cache (Cloud Functions/Admin SDK writes only)
-    // ------------------------------------------------------------
-    match /aiMatches/{pairId} {
-      allow get: if isSignedIn() &&
-        (existing().u1 == request.auth.uid || existing().u2 == request.auth.uid);
-      allow list, create, update, delete: if false;
     }
 
     // ------------------------------------------------------------
@@ -1478,16 +1206,12 @@ service cloud.firestore {
         }
       }
     }
-
     // ------------------------------------------------------------
-    // Linky (intents, intro cards, double opt-in intros, budgets, bots).
+    // Linky (intro cards, double opt-in intros, budgets, bots).
     // Written ONLY by api/linky.js with the Admin SDK. Members read their
     // own rows through the API, never directly - so nothing here is open.
     // Explicit so nobody "helpfully" adds client access later.
     // ------------------------------------------------------------
-    match /intents/{intentId} {
-      allow read, write: if false;
-    }
     match /introSuggestions/{userId} {
       allow read, write: if false;
     }
@@ -1541,13 +1265,5 @@ service cloud.firestore {
     match /builderEvents/{id} { allow read, write: if false; }
     match /builderRates/{id} { allow read, write: if false; }
     match /builderScheduler/{id} { allow read, write: if false; }
-
-    // Legacy per-user profile aux store (Linky score etc.)
-    // ------------------------------------------------------------
-    match /profiles/{userId} {
-      allow get, list: if isSignedIn();
-      allow create, update: if isOwner(userId);
-      allow delete: if false;
-    }
   }
 }

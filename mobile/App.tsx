@@ -470,7 +470,9 @@ function AppContent() {
 
   // Connection Doctor: one cold-start diagnostic run, logged to the Metro
   // terminal under [LINKUP-DIAG] — tells us exactly which Firestore lane is
-  // dead on any device/network. Never blocks render.
+  // dead on any device/network. Never blocks render, and never runs for members:
+  // it is gated on EXPO_PUBLIC_DIAGNOSTICS (see lib/bootDiagnostics.ts) because
+  // it costs ~24 Firestore reads a boot for console output nobody sees.
   const bootDiagRanRef = React.useRef(false);
   React.useEffect(() => {
     if (loading || bootDiagRanRef.current) return;
