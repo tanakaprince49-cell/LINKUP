@@ -167,7 +167,11 @@ test('Opportunity Radar is removed and DiscoveryDashboardScreen shows one weekly
   );
   const appSrc = fs.readFileSync(path.join(root, 'mobile', 'App.tsx'), 'utf8');
 
-  assert.match(dashboardSrc, /Grow your professional network\./);
+  // The headline is a product promise, so it lives in the shared voice module
+  // and the weekly person is rendered directly beneath it.
+  const voiceSrc = fs.readFileSync(path.join(root, 'mobile', 'src', 'lib', 'brandVoice.ts'), 'utf8');
+  assert.match(voiceSrc, /headline: 'Grow your professional network\.'/);
+  assert.match(dashboardSrc, /DISCOVERY_VOICE\.headline\}/);
   assert.doesNotMatch(dashboardSrc, /Opportunity Radar/);
   assert.doesNotMatch(dashboardSrc, /Project Matches/);
   assert.doesNotMatch(dashboardSrc, /title="Active Opportunities"/);

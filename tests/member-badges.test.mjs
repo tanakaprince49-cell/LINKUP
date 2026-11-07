@@ -73,9 +73,10 @@ test('profile CEO label stays immediately after the existing high-signal notice,
 test('Linky screen is a chat with Linky that searches the member database, and it preserves evidence badges',()=>{
  const app=read('mobile/App.tsx'),screen=read('mobile/src/screens/LinkyHomeScreen.tsx');
  assert.match(app,/<Tab.Screen name="LinkyHome"[^\n]+headerShown: false[^\n]+display: 'none'/);
- assert.match(screen,/Find teammates/);assert.match(screen,/Assign roles to this team/);
- assert.match(screen,/What are you building/);assert.match(screen,/Message Linky/);
- assert.match(screen,/linkyTeamChat/);assert.match(screen,/LINKUP database/);
+ assert.match(screen,/Find my teammates/);assert.match(screen,/Assign roles to this team/);
+ assert.match(screen,/LINKY_VOICE\.placeholder/);assert.match(screen,/Message Linky/);
+ assert.match(screen,/linkyTeamChat/);assert.match(screen,/LINKY_VOICE\.disclaimer/);
+ assert.match(fs.readFileSync(new URL('../mobile/src/lib/brandVoice.ts', import.meta.url),'utf8'),/LINKUP database/);
  assert.match(screen,/MemberBadges userId=\{member.uid\} verified=\{member.verified\}/);
  assert.doesNotMatch(screen,/linkyAsk|SponsoredSlot|intro_request/);
 });

@@ -224,8 +224,8 @@ test('Linky client exposes one team chat with structured upgrade handling', () =
   const screen = read('mobile/src/screens/LinkyHomeScreen.tsx');
   const client = read('mobile/src/lib/linkyApi.ts');
   assert.match(screen, /linkyTeamChat/); assert.match(screen, /err\.status === 402/);
-  assert.match(screen, /Find teammates/); assert.match(screen, /Assign roles to this team/);
-  assert.match(screen, /Message Linky/); assert.match(screen, /LINKUP database/);
+  assert.match(screen, /Find my teammates/); assert.match(screen, /Assign roles to this team/);
+  assert.match(screen, /Message Linky/); assert.match(screen, /LINKY_VOICE/);
   assert.match(client, /linkyTeamChat/); assert.match(client, /linkyTeamMatch/);
   assert.match(client, /linkyCall<LinkyChatResult>\('chat'/);
   assert.doesNotMatch(client, /export const linky(?:Home|Ask|Meet|Respond|Prefs|Audit|Facts|Pointers|DraftLead|Forget|LinkCode)/);

@@ -145,7 +145,10 @@ const probeBody = () => {
       await page.waitForTimeout(shot.at);
       await page.screenshot({ path: path.join(shots, `${shot.name}.png`) });
     }
-    await page.waitForTimeout(1600);
+    // Wait for the overlay to actually leave, then let the sampler record it.
+    await page.waitForFunction(() => (window.__trace || []).some((sample) => !sample.present), { timeout: 8000 })
+      .catch(() => {});
+    await page.waitForTimeout(400);
 
     const trace = await timeline();
     const seen = trace.filter((sample) => sample.present).map((sample) => sample.t);

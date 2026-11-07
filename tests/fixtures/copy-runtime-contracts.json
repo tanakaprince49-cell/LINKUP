@@ -286,6 +286,10 @@
     [
       "navigate",
       "Profile"
+    ],
+    [
+      "navigate",
+      "Profile"
     ]
   ],
   "mobile/src/screens/EmailAuthScreen.tsx": [],
@@ -1170,6 +1174,51 @@
       "property",
       "id",
       "Data Pipelines"
+    ],
+    [
+      "property",
+      "id",
+      "Engineering"
+    ],
+    [
+      "property",
+      "id",
+      "Design"
+    ],
+    [
+      "property",
+      "id",
+      "Growth"
+    ],
+    [
+      "property",
+      "id",
+      "Sales"
+    ],
+    [
+      "property",
+      "id",
+      "Operations"
+    ],
+    [
+      "property",
+      "id",
+      "Product"
+    ],
+    [
+      "property",
+      "id",
+      "Data"
+    ],
+    [
+      "property",
+      "id",
+      "Finance"
+    ],
+    [
+      "property",
+      "id",
+      "Experience"
     ],
     [
       "property",
@@ -2234,6 +2283,11 @@
     [
       "replace",
       ""
+    ],
+    [
+      "property",
+      "id",
+      "onboarding-build"
     ],
     [
       "doc",

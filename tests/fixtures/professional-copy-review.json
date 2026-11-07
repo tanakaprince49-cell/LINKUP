@@ -267,25 +267,33 @@
     "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
     "line": 486,
     "before": "Nobody here yet",
-    "after": "No professionals to display"
+    "after": "No professionals to display",
+    "current": "This week the algorithm has nobody for you yet.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
     "line": 487,
     "before": "This list is empty because the network is still small. Invite 3 builders or search whoever is already on LINKUP.",
-    "after": "No relevant profiles are available in this view yet. Explore public builders at linkupbuild.com or invite professionals from your network."
+    "after": "No relevant profiles are available in this view yet. Explore public builders at linkupbuild.com or invite professionals from your network.",
+    "current": "That is not a compliment. It means it does not have enough of you to hunt with.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
     "line": 513,
     "before": "The room is still small.",
-    "after": "Grow your professional network."
+    "after": "Grow your professional network.",
+    "current": "Grow your professional network.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/DiscoveryDashboardScreen.tsx",
     "line": 622,
     "before": "No strong opportunity yet. Add more skills/interests to sharpen alerts.",
-    "after": "No relevant opportunities yet. Update your skills and interests to improve recommendations."
+    "after": "No relevant opportunities yet. Update your skills and interests to improve recommendations.",
+    "current": "Or bring the one person you already rate →",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/EmailAuthScreen.tsx",
@@ -459,37 +467,49 @@
     "file": "mobile/src/screens/LandingScreen.tsx",
     "line": 57,
     "before": "Find cofounders and builders",
-    "after": "Cofounder matching and professional networking"
+    "after": "Cofounder matching and professional networking",
+    "current": "ONE PERSON AWAY",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LandingScreen.tsx",
     "line": 62,
     "before": "Meet the person",
-    "after": "Find the right partner"
+    "after": "Find the right partner",
+    "current": "You are one person away from the version of this that works.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LandingScreen.tsx",
     "line": 62,
     "before": "who can ship it with you.",
-    "after": "to build your business."
+    "after": "to build your business.",
+    "current": "You are one person away from the version of this that works.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LandingScreen.tsx",
     "line": 65,
     "before": "Swipe, search, and message people who are actually building — not posting hustle.",
-    "after": "Find a cofounder, discover startup collaborators, and build professional connections around shared skills and goals."
+    "after": "Find a cofounder, discover startup collaborators, and build professional connections around shared skills and goals.",
+    "current": "Someone else is already looking for you.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LandingScreen.tsx",
     "line": 102,
     "before": "Use email instead",
-    "after": "Continue with email"
+    "after": "Continue with email",
+    "current": "Continue with email",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LandingScreen.tsx",
     "line": 111,
     "before": "Explore public builder profiles →",
-    "after": "Explore public professional profiles →"
+    "after": "Explore public professional profiles →",
+    "current": "See the people already building →",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/MatchScreen.tsx",
@@ -699,25 +719,33 @@
     "file": "mobile/src/screens/OnboardingScreen.tsx",
     "line": 1403,
     "before": "What should people call you?",
-    "after": "What is your professional name?"
+    "after": "What is your professional name?",
+    "current": "First — the name they will remember.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/OnboardingScreen.tsx",
     "line": 1458,
     "before": "Country and city. Matches care about your scene and timezone.",
-    "after": "Add your country and city to support local collaboration and time-zone compatibility."
+    "after": "Add your country and city to support local collaboration and time-zone compatibility.",
+    "current": "Your co-founder may be across the street or four time zones away.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/OnboardingScreen.tsx",
     "line": 1508,
     "before": "Select the professional role most relevant to your collaboration goals.",
-    "after": "Pick all that apply — your first pick sets your main path. None of these? Choose Other and type your own."
+    "after": "Pick all that apply — your first pick sets your main path. None of these? Choose Other and type your own.",
+    "current": "Pick everything that is true about you. Your first pick leads: it decides where Linky starts hunting.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/OnboardingScreen.tsx",
     "line": 1527,
     "before": "Required. LINKUP is a face-to-face network — every surface, from the deck to the league, is a face.",
-    "after": "Required. A profile photo helps other members recognize you across professional discovery and conversations."
+    "after": "Required. A profile photo helps other members recognize you across professional discovery and conversations.",
+    "current": "The person about to trust you with their next five years needs to see you first.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/OnboardingScreen.tsx",
@@ -1205,13 +1233,17 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 0,
     "before": "LINKUP database · chat, search, and build your team",
-    "after": "LINKUP database · chat, search, and build your team"
+    "after": "LINKUP database · chat, search, and build your team",
+    "current": "The cat with your whole build in its head",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 0,
     "before": "Find teammates",
-    "after": "Find teammates"
+    "after": "Find teammates",
+    "current": "Find my teammates",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
@@ -1229,7 +1261,9 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 0,
     "before": "What are you building, and who is missing?",
-    "after": "What are you building, and who is missing?"
+    "after": "What are you building, and who is missing?",
+    "current": "What are you building, and who is missing?",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
@@ -1260,7 +1294,9 @@
     "line": 0,
     "before": "Recommendations use public member-profile evidence. A match is a suggestion, not a claim about availability or guaranteed fit — you decide who to contact.",
     "after": "Recommendations use public member-profile evidence. A match is a suggestion, not a claim about availability or guaranteed fit — you decide who to contact.",
-    "kind": "fragment"
+    "kind": "fragment",
+    "current": "A match is my best suggestion — a human decision, not a guarantee.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
@@ -1272,7 +1308,9 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 0,
     "before": "Searching the LINKUP database…",
-    "after": "Searching the LINKUP database…"
+    "after": "Searching the LINKUP database…",
+    "current": "Going through every public LINKUP profile. Give me a second…",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
@@ -1333,26 +1371,34 @@
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 0,
     "before": "That is today’s free messages used up — my ledger is strict about it. LINKUP PLUS keeps me talking and searching all day.",
-    "after": "That is today’s free messages used up — my ledger is strict about it. LINKUP PLUS keeps me talking and searching all day."
+    "after": "That is today’s free messages used up — my ledger is strict about it. LINKUP PLUS keeps me talking and searching all day.",
+    "current": "I am still holding your brief on",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 0,
     "before": "One message = one search. Every name comes from a real public profile.",
-    "after": "One message = one search. Every name comes from a real public profile."
+    "after": "One message = one search. Every name comes from a real public profile.",
+    "current": "One message is one search across the whole LINKUP database.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 0,
     "before": "I have every public LINKUP profile open in front of me.",
     "after": "I have every public LINKUP profile open in front of me.",
-    "kind": "fragment"
+    "kind": "fragment",
+    "current": "I have every public LINKUP profile open in front of me.",
+    "voiceRevision": "2026-11-life-or-death-v1"
   },
   {
     "file": "mobile/src/screens/LinkyHomeScreen.tsx",
     "line": 0,
     "before": "LINKUP database · ",
     "after": "LINKUP database · ",
-    "kind": "fragment"
+    "kind": "fragment",
+    "current": "public builders searched · still holding your brief",
+    "voiceRevision": "2026-11-life-or-death-v1"
   }
 ]

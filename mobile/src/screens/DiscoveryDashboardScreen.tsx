@@ -6,6 +6,7 @@ import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { buildFacts, DISCOVERY_VOICE } from '../lib/brandVoice';
 import { UserProfile } from '../types';
 import { COLORS, getBrandFlavor, textColor } from '../theme/theme';
 import {
@@ -203,6 +204,11 @@ function DiscoveryDashboardScreen({ navigation }: any) {
       cancelled = true;
     };
   }, [isFocused, user?.uid, people.length]);
+
+  // Everything the page says about "you" comes from here: their name, their
+  // build, and the chair that is still empty. No member should ever read a
+  // sentence on this page that would make sense to somebody else.
+  const facts = useMemo(() => buildFacts(me as any), [me]);
 
   const weeklyMatch: WeeklyCofounderMatch | null = useMemo(() => {
     if (serverWeeklyMatch?.partner?.uid) {
@@ -430,7 +436,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         {/* Bio / What They Are Building */}
         {!!(item.bio || (item as any).goals || details.summary) && (
           <View style={styles.bioSection}>
-            <Text style={[styles.bioLabel, { color: textColor(isDark, 'muted') }]}>WHAT {partnerFirst.toUpperCase()} IS BUILDING &amp; FOCUSED ON</Text>
+            <Text style={[styles.bioLabel, { color: textColor(isDark, 'muted') }]}>{DISCOVERY_VOICE.cardLabel(partnerFirst)}</Text>
             <Text style={[styles.bioText, { color: textColor(isDark, 'secondary') }]} numberOfLines={4}>
               {item.bio || (item as any).goals || details.summary}
             </Text>
@@ -450,7 +456,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           <View style={styles.synergyHeader}>
             <Rocket size={14} color={isDark ? '#FBE618' : '#111827'} />
             <Text style={[styles.synergyTitle, { color: textColor(isDark) }]} numberOfLines={1}>
-              {match.aiHeadline || 'WHY LINKUP AI & ALGORITHM PAIRED YOU TWO'}
+              {match.aiHeadline || `WHY ${partnerFirst.toUpperCase()} IS THIS WEEK'S ONLY INTRODUCTION`}
             </Text>
           </View>
 
@@ -470,13 +476,13 @@ function DiscoveryDashboardScreen({ navigation }: any) {
 
           <View style={styles.exchangeGrid}>
             <View style={[styles.exchangeCol, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF' }]}>
-              <Text style={[styles.exchangeLabel, { color: textColor(isDark, 'muted') }]}>YOU BRING</Text>
+              <Text style={[styles.exchangeLabel, { color: textColor(isDark, 'muted') }]}>{DISCOVERY_VOICE.youBring}</Text>
               <Text style={[styles.exchangeValue, { color: textColor(isDark) }]} numberOfLines={2}>
                 {myOffers.join(' · ')}
               </Text>
             </View>
             <View style={[styles.exchangeCol, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF' }]}>
-              <Text style={[styles.exchangeLabel, { color: textColor(isDark, 'muted') }]}>{partnerFirst.toUpperCase()} BRINGS</Text>
+              <Text style={[styles.exchangeLabel, { color: textColor(isDark, 'muted') }]}>{DISCOVERY_VOICE.theyBring(partnerFirst)}</Text>
               <Text style={[styles.exchangeValue, { color: textColor(isDark) }]} numberOfLines={2}>
                 {partnerOffers.join(' · ')}
               </Text>
@@ -487,7 +493,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             <View style={styles.sprintRow}>
               <Target size={12} color={isDark ? '#4ADE80' : '#15803D'} />
               <Text style={[styles.sprintText, { color: textColor(isDark, 'secondary') }]} numberOfLines={2}>
-                First 20-min co-founder sprint: {match.tinyTask}
+                {DISCOVERY_VOICE.sprint(match.tinyTask)}
               </Text>
             </View>
           )}
@@ -561,7 +567,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             >
               <Zap size={15} color="#000" />
               <Text style={styles.primaryActionBtnText}>
-                {interestBusy ? 'Unlocking Intro...' : `I'm Interested Too — Meet ${partnerFirst}`}
+                {interestBusy ? 'Opening the door…' : DISCOVERY_VOICE.mutualCta(partnerFirst)}
               </Text>
             </TouchableOpacity>
           ) : viewerInterested ? (
@@ -575,7 +581,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             >
               <CheckCircle2 size={15} color={textColor(isDark)} />
               <Text style={[styles.primaryActionBtnText, { color: textColor(isDark) }]}>
-                Interested · Waiting for {partnerFirst}
+                {DISCOVERY_VOICE.waiting(partnerFirst)}
               </Text>
             </View>
           ) : (
@@ -587,7 +593,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             >
               <UserCheck size={15} color="#000" />
               <Text style={styles.primaryActionBtnText}>
-                {interestBusy ? 'Sending Interest...' : `Interested in Meeting ${partnerFirst}`}
+                {interestBusy ? 'Saying yes…' : DISCOVERY_VOICE.interestCta(partnerFirst)}
               </Text>
             </TouchableOpacity>
           )}
@@ -609,7 +615,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
             ]}
             activeOpacity={0.85}
           >
-            <Text style={[styles.secondaryActionBtnText, { color: textColor(isDark) }]}>View Full Profile</Text>
+            <Text style={[styles.secondaryActionBtnText, { color: textColor(isDark) }]}>{DISCOVERY_VOICE.fullProfile}</Text>
           </TouchableOpacity>
         </View>
 
@@ -617,7 +623,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         <View style={styles.emailFooterRow}>
           <Mail size={12} color={textColor(isDark, 'muted')} />
           <Text style={[styles.emailFooterText, { color: textColor(isDark, 'muted') }]}>
-            LINKUP AI &amp; Algorithm also emailed both you and {partnerFirst} introducing both profiles for this week.
+            {DISCOVERY_VOICE.emailed(partnerFirst)}
           </Text>
         </View>
       </View>
@@ -633,11 +639,14 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
             <View style={[styles.heroCard, { backgroundColor: isDark ? COLORS.darkCard : '#FFF' }]}>
               <View style={styles.heroTop}>
+                <Text style={[styles.heroOpener, { color: textColor(isDark) }]}>
+                  {DISCOVERY_VOICE.opener(facts)}
+                </Text>
                 <Text style={[styles.heroTitle, { color: textColor(isDark) }]}>
-                  Grow your professional network.
+                  {DISCOVERY_VOICE.headline}
                 </Text>
                 <Text style={[styles.heroSub, { color: textColor(isDark, 'muted') }]}>
-                  One curated potential co-founder per week — mutually paired 1-to-1 by the LINKUP AI and matching algorithm.
+                  {DISCOVERY_VOICE.stakes(facts)}
                 </Text>
               </View>
 
@@ -673,15 +682,17 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                 <WeeklyCofounderCard match={weeklyMatch} />
               ) : (
                 <View style={[styles.emptyCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F9FAFB' }]}>
-                  <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>No professionals to display</Text>
+                  <Text style={[styles.emptyTitle, { color: textColor(isDark) }]}>{DISCOVERY_VOICE.emptyTitle}</Text>
                   <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>
-                    No relevant profiles are available in this view yet. Explore public builders at linkupbuild.com or invite professionals from your network.
+                    {DISCOVERY_VOICE.emptyBody}
                   </Text>
-                  <Text style={[styles.emptySub, { color: textColor(isDark, 'muted') }]}>
-                    No relevant opportunities yet. Update your skills and interests to improve recommendations.
-                  </Text>
-                  <TouchableOpacity onPress={() => void shareLinkupInvite()} style={styles.emptyBtn}>
-                    <Text style={styles.emptyBtnText}>Invite Builders</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.emptyBtn}>
+                    <Text style={styles.emptyBtnText}>{DISCOVERY_VOICE.emptyCta}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => void shareLinkupInvite()} style={{ marginTop: 12 }}>
+                    <Text style={[styles.emptySub, { color: textColor(isDark, 'muted'), textAlign: 'center', fontWeight: '800' }]}>
+                      Or bring the one person you already rate →
+                    </Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -707,6 +718,13 @@ const styles = StyleSheet.create({
   },
   heroTop: {
     gap: 6,
+  },
+  heroOpener: {
+    fontSize: 13.5,
+    fontWeight: '900',
+    letterSpacing: 0.1,
+    lineHeight: 20,
+    marginBottom: 2,
   },
   heroTitle: {
     fontSize: 22,

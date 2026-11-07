@@ -27,6 +27,8 @@ import {
 } from '../lib/linkyApi';
 import PaywallModal from '../components/PaywallModal';
 import MemberBadges from '../components/MemberBadges';
+import LinkyCatIntro from '../components/LinkyCatIntro';
+import { buildFacts, LINKY_VOICE } from '../lib/brandVoice';
 
 /**
  * LINKY · TEAM CHAT
@@ -53,15 +55,12 @@ type ChatMessage = {
   failed?: boolean;
 };
 
-const STARTER_CHIPS = ['Find teammates', 'What are you building?', 'I need a designer', 'Who can build my product?'];
+const STARTER_CHIPS = ['Find my teammates', 'What are you building?', 'I need a designer', 'Who can build my product?'];
 const MAX_MESSAGES = 60;
 const MAX_INPUT = 800;
 
 const messageId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 const storageKey = (uid?: string) => `linkup:linky-chat:v1:${uid || 'anon'}`;
-
-const greeting = (firstName?: string) =>
-  `Hey${firstName ? ` ${firstName}` : ''} — Linky here. I have every public LINKUP profile open in front of me. Tell me what you are building and which seat is still empty, and I will go find the humans who finish it.`;
 
 const initialsOf = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
@@ -72,6 +71,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const dark = theme === 'dark';
   const { profile } = useAuth();
   const uid = profile?.uid || '';
+
+  const [introOpen, setIntroOpen] = useState(true);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -100,6 +101,19 @@ export default function LinkyHomeScreen({ navigation }: any) {
     return raw ? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase() : '';
   }, [profile?.displayName]);
 
+  // What Linky already knows before the member types a single character: their
+  // name, their build, and the chair they cannot fill. Onboarding captured all
+  // of it, so the thread never opens with "so, what are you working on?".
+  const facts = useMemo(() => buildFacts(profile as any), [profile]);
+
+  // The chips are the member's own brief read back to them.
+  useEffect(() => {
+    setChips((current) => {
+      const generic = !current.length || current === STARTER_CHIPS || current.every((chip) => STARTER_CHIPS.includes(chip));
+      return generic ? LINKY_VOICE.chips(facts) : current;
+    });
+  }, [facts]);
+
   // The thread survives app restarts; the server keeps the same cap so a
   // reinstall never resurrects a conversation the member cleared.
   useEffect(() => {
@@ -116,11 +130,11 @@ export default function LinkyHomeScreen({ navigation }: any) {
           restored = [];
         }
       }
-      setMessages(restored.length ? restored.slice(-MAX_MESSAGES) : [{ id: messageId(), role: 'linky', text: greeting(firstName), at: Date.now() }]);
+      setMessages(restored.length ? restored.slice(-MAX_MESSAGES) : [{ id: messageId(), role: 'linky', text: LINKY_VOICE.greeting(facts), at: Date.now() }]);
       hydrated.current = true;
     })();
     return () => { active = false; };
-  }, [uid, firstName]);
+  }, [uid, facts]);
 
   useEffect(() => {
     if (!hydrated.current) return;
@@ -162,7 +176,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
       if (out.messageQuota) setQuota(out.messageQuota);
       if (out.idea) setLastIdea(out.idea);
       if (typeof out.checked === 'number' && out.checked > 0) setCheckedCount(out.checked);
-      setChips(out.suggestions?.length ? out.suggestions.slice(0, 4) : STARTER_CHIPS);
+      setChips(out.suggestions?.length ? out.suggestions.slice(0, 4) : LINKY_VOICE.chips(facts));
       setMessages((prev) => [...prev, {
         id: messageId(),
         role: 'linky',
@@ -180,7 +194,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
         setMessages((prev) => [...prev, {
           id: messageId(),
           role: 'linky',
-          text: 'That is today’s free messages used up — my ledger is strict about it. LINKUP PLUS keeps me talking and searching all day.',
+          text: `That is today’s free messages used up — my ledger is strict about it. I am still holding your brief on ${facts.projectName || 'your build'}; LINKUP PLUS keeps me searching all day.`,
           at: Date.now(),
           failed: true,
         }]);
@@ -201,22 +215,29 @@ export default function LinkyHomeScreen({ navigation }: any) {
 
   const onChip = useCallback((chip: string) => {
     if (busy) return;
-    if (/^find teammates$/i.test(chip)) {
-      void send('Find me the teammates my project is missing.', { search: true, idea: lastIdea });
+    if (/^(find teammates|find my teammates)$/i.test(chip)) {
+      // The brief is already in Linky's hands — profile build, empty seat,
+      // stakes — so this is one tap to the hunt, not another questionnaire.
+      void send(
+        `Go. Find the teammates ${facts.projectName || 'my build'} is still missing${
+          facts.seat ? ` — the ${facts.seat} seat` : ''
+        }.`,
+        { search: true, idea: lastIdea || facts.oneLiner },
+      );
       return;
     }
     void send(chip);
-  }, [busy, lastIdea, send]);
+  }, [busy, facts, lastIdea, send]);
 
   const clearChat = useCallback(async () => {
     if (busy) return;
-    setMessages([{ id: messageId(), role: 'linky', text: greeting(firstName), at: Date.now() }]);
-    setChips(STARTER_CHIPS);
+    setMessages([{ id: messageId(), role: 'linky', text: LINKY_VOICE.greeting(facts), at: Date.now() }]);
+    setChips(LINKY_VOICE.chips(facts));
     setLastIdea('');
     setCheckedCount(0);
     await AsyncStorage.removeItem(storageKey(uid)).catch(() => {});
     void linkyTeamChat({ clear: true }).catch(() => {});
-  }, [busy, firstName, uid]);
+  }, [busy, facts, uid]);
 
   const memberRow = (member: TeamMatchMember, index: number) => (
     <View key={`${member.uid}-${index}`} style={[styles.member, { borderColor: palette.border, backgroundColor: palette.surface }]}>
@@ -293,7 +314,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
     ? quota.unlimited
       ? 'PLUS · unlimited messages and searches'
       : `${quota.remaining ?? 0} free message${quota.remaining === 1 ? '' : 's'} left today · resets at midnight UTC`
-    : 'One message = one search. Every name comes from a real public profile.';
+    : LINKY_VOICE.quotaFallback;
 
   return (
     <View style={[styles.root, appBackground(dark), { paddingTop: insets.top }]}>
@@ -307,7 +328,11 @@ export default function LinkyHomeScreen({ navigation }: any) {
             <View style={styles.liveDot} />
           </View>
           <Text style={[styles.subtitle, { color: palette.muted }]} numberOfLines={1}>
-            {checkedCount > 0 ? `LINKUP database · ${checkedCount} public builders searched` : 'LINKUP database · chat, search, and build your team'}
+            {checkedCount > 0
+              ? `${checkedCount} public builders searched · still holding your brief`
+              : facts.projectName
+                ? `${facts.projectName} · ${facts.seat} still missing`
+                : 'The cat with your whole build in its head'}
           </Text>
         </View>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear this conversation" onPress={() => void clearChat()} style={styles.headerButton}>
@@ -329,20 +354,20 @@ export default function LinkyHomeScreen({ navigation }: any) {
               <View style={styles.linkyAvatar}><MessageCircle size={15} color={COLORS.inkButtonText} /></View>
               <View style={[styles.linkyBubble, { backgroundColor: palette.linkyBubble, borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 9 }]}>
                 <ActivityIndicator size="small" color={palette.secondary} />
-                <Text style={[styles.linkyText, { color: palette.secondary }]}>Searching the LINKUP database…</Text>
+                <Text style={[styles.linkyText, { color: palette.secondary }]}>{LINKY_VOICE.working}</Text>
               </View>
             </View>
           )}
           <Text style={[styles.disclaimer, { color: palette.muted }]}>
-            Recommendations use public member-profile evidence. A match is a suggestion, not a claim about availability or guaranteed fit — you decide who to contact.
+            {LINKY_VOICE.disclaimer}
           </Text>
         </ScrollView>
 
         <View style={[styles.composerWrap, { borderTopColor: palette.border, backgroundColor: dark ? '#0D1519' : '#FBFAF5', paddingBottom: Math.max(insets.bottom, 10) }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} keyboardShouldPersistTaps="handled">
-            <TouchableOpacity accessibilityRole="button" onPress={() => onChip('Find teammates')} disabled={busy} style={[styles.searchChip, busy && { opacity: 0.5 }]}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => onChip('Find my teammates')} disabled={busy} style={[styles.searchChip, busy && { opacity: 0.5 }]}>
               <Search size={13} color={COLORS.inkButtonText} />
-              <Text style={styles.searchChipText}>Find teammates</Text>
+              <Text style={styles.searchChipText}>{facts.seat ? `Find my ${facts.seat}` : 'Find my teammates'}</Text>
             </TouchableOpacity>
             {chips.map((chip) => (
               <TouchableOpacity key={chip} accessibilityRole="button" onPress={() => onChip(chip)} disabled={busy} style={[styles.chip, { backgroundColor: palette.chip, borderColor: palette.border, opacity: busy ? 0.5 : 1 }]}>
@@ -355,7 +380,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
               accessibilityLabel="Message Linky"
               value={draft}
               onChangeText={setDraft}
-              placeholder="What are you building, and who is missing?"
+              placeholder={LINKY_VOICE.placeholder(facts)}
               placeholderTextColor={palette.muted}
               maxLength={MAX_INPUT}
               multiline
@@ -377,6 +402,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
           <Text style={[styles.quotaLine, { color: palette.muted }]} numberOfLines={2}>{quotaLine}</Text>
         </View>
       </KeyboardAvoidingView>
+
+      <LinkyCatIntro profile={profile as any} visible={introOpen} onDone={() => setIntroOpen(false)} />
 
       <PaywallModal
         visible={!!paywall}

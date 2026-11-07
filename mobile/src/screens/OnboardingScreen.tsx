@@ -25,6 +25,20 @@ import { LINKUP_ROLE_OPTIONS, roleInfoFor } from '../lib/roles';
 import { seedConciergeWelcome } from '../lib/activation';
 import { builderCall } from '../lib/builder';
 import { linkyCall } from '../lib/linkyApi';
+import {
+  BUILD_QUESTIONS,
+  CONFLICT_CHOICES,
+  DECISION_CHOICES,
+  EQUITY_CHOICES,
+  HOURS_CHOICES,
+  ONBOARDING_VOICE,
+  PACE_CHOICES,
+  RELOCATE_CHOICES,
+  RISK_CHOICES,
+  STAKES_CHOICES,
+  TRACTION_CHOICES,
+  URGENCY_CHOICES,
+} from '../lib/brandVoice';
 
 // One-time "finish your profile" notice at the end of onboarding. The flag is
 // set the moment the notice is answered either way, so it never nags twice.
@@ -206,6 +220,20 @@ const aiDataSkillChoices: Choice[] = [
   { id: 'Prompt Engineering', label: 'Prompting' },
   { id: 'Python', label: 'Python' },
   { id: 'Data Pipelines', label: 'Pipelines' },
+];
+
+/** The seat they cannot fill themselves. This is the single most useful
+ *  signal the algorithm gets: it is the shape it goes hunting for. */
+const missingSeatChoices: Choice[] = [
+  { id: 'Engineering', label: 'Someone who can build the product', desc: 'Code, infrastructure, shipping.' },
+  { id: 'Design', label: 'Someone who can make it feel inevitable', desc: 'Product design, brand, taste.' },
+  { id: 'Growth', label: 'Someone who can make people care', desc: 'Marketing, content, distribution.' },
+  { id: 'Sales', label: 'Someone who can close', desc: 'Outbound, deals, revenue.' },
+  { id: 'Operations', label: 'Someone who can run the machine', desc: 'Ops, process, delivery.' },
+  { id: 'Product', label: 'Someone who can decide what matters', desc: 'Roadmap, scoping, product judgement.' },
+  { id: 'Data', label: 'Someone who can make it intelligent', desc: 'ML, data, models, analysis.' },
+  { id: 'Finance', label: 'Someone who can make the money work', desc: 'Fundraising, finance, unit economics.' },
+  { id: 'Experience', label: 'Someone who has already done this', desc: 'Been there, made the mistakes, still standing.' },
 ];
 
 const experienceChoices: Choice[] = [
@@ -925,6 +953,23 @@ export default function OnboardingScreen({ navigation }: any) {
   const [startupStage, setStartupStage] = useState('');
   const [fundingStage, setFundingStage] = useState('');
   const [availability, setAvailability] = useState('');
+  // The build, the empty chair, the stakes and the working style. None of it is
+  // decoration: every field below is read by the LINKUP algorithm and by Linky
+  // before either of them is allowed to name a human being.
+  const [buildName, setBuildName] = useState('');
+  const [buildOneLiner, setBuildOneLiner] = useState('');
+  const [buildTraction, setBuildTraction] = useState('');
+  const [missingSeat, setMissingSeat] = useState('');
+  const [seatWhy, setSeatWhy] = useState('');
+  const [stakes, setStakes] = useState('');
+  const [urgency, setUrgency] = useState('');
+  const [workPace, setWorkPace] = useState('');
+  const [conflictStyle, setConflictStyle] = useState('');
+  const [decisionStyle, setDecisionStyle] = useState('');
+  const [riskAppetite, setRiskAppetite] = useState('');
+  const [equityView, setEquityView] = useState('');
+  const [weeklyHours, setWeeklyHours] = useState('');
+  const [relocateView, setRelocateView] = useState('');
   const [personalityAnswers, setPersonalityAnswers] = useState<Record<string, string>>({});
   const [roleAnswers, setRoleAnswers] = useState<Record<string, string | string[]>>({});
 
@@ -988,6 +1033,20 @@ export default function OnboardingScreen({ navigation }: any) {
         if (typeof d.startupStage === 'string') setStartupStage(d.startupStage);
         if (typeof d.fundingStage === 'string') setFundingStage(d.fundingStage);
         if (typeof d.availability === 'string') setAvailability(d.availability);
+        if (typeof d.buildName === 'string') setBuildName(d.buildName);
+        if (typeof d.buildOneLiner === 'string') setBuildOneLiner(d.buildOneLiner);
+        if (typeof d.buildTraction === 'string') setBuildTraction(d.buildTraction);
+        if (typeof d.missingSeat === 'string') setMissingSeat(d.missingSeat);
+        if (typeof d.seatWhy === 'string') setSeatWhy(d.seatWhy);
+        if (typeof d.stakes === 'string') setStakes(d.stakes);
+        if (typeof d.urgency === 'string') setUrgency(d.urgency);
+        if (typeof d.workPace === 'string') setWorkPace(d.workPace);
+        if (typeof d.conflictStyle === 'string') setConflictStyle(d.conflictStyle);
+        if (typeof d.decisionStyle === 'string') setDecisionStyle(d.decisionStyle);
+        if (typeof d.riskAppetite === 'string') setRiskAppetite(d.riskAppetite);
+        if (typeof d.equityView === 'string') setEquityView(d.equityView);
+        if (typeof d.weeklyHours === 'string') setWeeklyHours(d.weeklyHours);
+        if (typeof d.relocateView === 'string') setRelocateView(d.relocateView);
         if (d.personalityAnswers && typeof d.personalityAnswers === 'object') setPersonalityAnswers(d.personalityAnswers);
         if (d.roleAnswers && typeof d.roleAnswers === 'object') setRoleAnswers(d.roleAnswers);
       })
@@ -1025,6 +1084,20 @@ export default function OnboardingScreen({ navigation }: any) {
         startupStage,
         fundingStage,
         availability,
+        buildName,
+        buildOneLiner,
+        buildTraction,
+        missingSeat,
+        seatWhy,
+        stakes,
+        urgency,
+        workPace,
+        conflictStyle,
+        decisionStyle,
+        riskAppetite,
+        equityView,
+        weeklyHours,
+        relocateView,
         personalityAnswers,
         roleAnswers,
       };
@@ -1036,6 +1109,8 @@ export default function OnboardingScreen({ navigation }: any) {
     profilePicUri, customSkillsText, role, rolePicks, customRole, lookingFor,
     customLookingFor, industries, skills, experience, workStyle, commitmentLevel,
     startupStage, fundingStage, availability, personalityAnswers, roleAnswers,
+    buildName, buildOneLiner, buildTraction, missingSeat, seatWhy, stakes, urgency,
+    workPace, conflictStyle, decisionStyle, riskAppetite, equityView, weeklyHours, relocateView,
   ]);
 
   useEffect(() => {
@@ -1056,6 +1131,18 @@ export default function OnboardingScreen({ navigation }: any) {
     setAvailability('');
     setPersonalityAnswers({});
     setRoleAnswers({});
+    setMissingSeat('');
+    setSeatWhy('');
+    setStakes('');
+    setUrgency('');
+    setWorkPace('');
+    setConflictStyle('');
+    setDecisionStyle('');
+    setRiskAppetite('');
+    setEquityView('');
+    setWeeklyHours('');
+    setRelocateView('');
+    setBuildTraction('');
   }, [role]);
 
   // Intentionally do NOT auto-prefill the name. Users must type their real name.
@@ -1512,8 +1599,8 @@ export default function OnboardingScreen({ navigation }: any) {
     () => [
       {
         key: 'name',
-        title: "What is your professional name?",
-        subtitle: 'Use your real name. You can change it later.',
+        title: ONBOARDING_VOICE.stepOneTitle,
+        subtitle: ONBOARDING_VOICE.stepOneSub,
         body: (
           <View>
             <TextInput
@@ -1537,8 +1624,8 @@ export default function OnboardingScreen({ navigation }: any) {
       },
       {
         key: 'age',
-        title: 'How old are you?',
-        subtitle: 'So matches land in the right range. You must be 16 or older.',
+        title: ONBOARDING_VOICE.ageTitle,
+        subtitle: ONBOARDING_VOICE.ageSub,
         body: (
           <View>
             <TextInput
@@ -1566,8 +1653,8 @@ export default function OnboardingScreen({ navigation }: any) {
       },
       {
         key: 'homebase',
-        title: 'Where are you based?',
-        subtitle: "Add your country and city to support local collaboration and time-zone compatibility.",
+        title: ONBOARDING_VOICE.placeTitle,
+        subtitle: ONBOARDING_VOICE.placeSub,
         body: (
           <View style={{ gap: 10 }}>
             <TextInput
@@ -1606,8 +1693,8 @@ export default function OnboardingScreen({ navigation }: any) {
       },
       {
         key: 'identity',
-        title: 'What best describes you?',
-        subtitle: 'Pick all that apply — your first pick sets your main path. None of these? Choose Other and type your own.',
+        title: ONBOARDING_VOICE.identityTitle,
+        subtitle: ONBOARDING_VOICE.identitySub,
         body: (
           <View>
             <ChoiceGrid
@@ -1655,59 +1742,226 @@ export default function OnboardingScreen({ navigation }: any) {
               />
             )}
             <Text style={{ marginTop: 10, fontSize: 12, fontWeight: '700', color: textColor(isDark, 'muted') }}>
-              First pick is your headline role — everything else sharpens your matches.
+              Your first pick is the headline. Everything else sharpens the hunt.
             </Text>
           </View>
         ),
         canNext: finalRoles.length > 0,
       },
+      // ---- THE BUILD -------------------------------------------------
+      // Linky reads this before the member types a single word, and the
+      // algorithm hunts with it. A named project beats a clever algorithm.
       {
-        key: 'goals',
-        title: 'Who are you looking for?',
-        subtitle: 'Pick at least one. None of these? Choose Other and type your own.',
+        key: 'build',
+        title: BUILD_QUESTIONS.build.title,
+        subtitle: BUILD_QUESTIONS.build.sub,
         body: (
-          <View>
+          <View style={{ gap: 12 }}>
+            <TextInput
+              value={buildName}
+              onChangeText={(text) => setBuildName(text.slice(0, 60))}
+              placeholder={BUILD_QUESTIONS.build.namePlaceholder}
+              placeholderTextColor={textColor(isDark, 'muted')}
+              autoCapitalize="words"
+              returnKeyType="next"
+              style={[
+                styles.textInput,
+                {
+                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
+                  color: textColor(isDark),
+                },
+              ]}
+            />
+            <TextInput
+              value={buildOneLiner}
+              onChangeText={(text) => setBuildOneLiner(text.slice(0, 180))}
+              placeholder={BUILD_QUESTIONS.build.oneLinerPlaceholder}
+              placeholderTextColor={textColor(isDark, 'muted')}
+              multiline
+              style={[
+                styles.textInput,
+                {
+                  minHeight: 84,
+                  textAlignVertical: 'top',
+                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
+                  color: textColor(isDark),
+                },
+              ]}
+            />
+            <Text style={{ marginTop: 4, fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>
+              {BUILD_QUESTIONS.build.tractionLegend}
+            </Text>
             <ChoiceGrid
-              value={lookingFor}
-              onChange={(v) => {
-                const picks = v as string[];
-                if (!picks.includes(OTHER_CHOICE_ID)) setCustomLookingFor('');
-                setLookingFor(picks);
-              }}
-              choices={[...lookingForChoices, { id: OTHER_CHOICE_ID, label: 'Other — type your own' }]}
-              multi
+              value={buildTraction}
+              onChange={(v) => setBuildTraction(String(v))}
+              choices={[...TRACTION_CHOICES]}
               isDark={isDark}
             />
-            {lookingFor.includes(OTHER_CHOICE_ID) && (
-              <TextInput
-                value={customLookingFor}
-                onChangeText={setCustomLookingFor}
-                placeholder="Type your own (e.g. Gym buddy, Language partner)"
-                placeholderTextColor={textColor(isDark, 'muted')}
-                autoCapitalize="words"
-                maxLength={40}
-                returnKeyType="done"
-                style={[
-                  styles.textInput,
-                  {
-                    marginTop: 12,
-                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
-                    color: textColor(isDark),
-                  },
-                ]}
-              />
-            )}
-            <Text style={{ marginTop: 10, fontSize: 12, fontWeight: '700', color: textColor(isDark, 'muted') }}>
-              First pick leads your matches — everything else widens the net.
+          </View>
+        ),
+        canNext: buildName.trim().length >= 2 && buildOneLiner.trim().length >= 8 && !!buildTraction,
+      },
+
+      // ---- THE EMPTY CHAIR -------------------------------------------
+      {
+        key: 'seat',
+        title: BUILD_QUESTIONS.seat.title,
+        subtitle: BUILD_QUESTIONS.seat.sub,
+        body: (
+          <View style={{ gap: 12 }}>
+            <ChoiceGrid
+              value={missingSeat}
+              onChange={(v) => setMissingSeat(String(v))}
+              choices={missingSeatChoices}
+              isDark={isDark}
+            />
+            <TextInput
+              value={seatWhy}
+              onChangeText={(text) => setSeatWhy(text.slice(0, 140))}
+              placeholder={BUILD_QUESTIONS.seat.whyPlaceholder}
+              placeholderTextColor={textColor(isDark, 'muted')}
+              style={[
+                styles.textInput,
+                {
+                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
+                  color: textColor(isDark),
+                },
+              ]}
+            />
+          </View>
+        ),
+        canNext: !!missingSeat,
+      },
+
+      // ---- THE STAKES -------------------------------------------------
+      // Urgency is a matching signal: it decides who gets introduced first.
+      {
+        key: 'stakes',
+        title: BUILD_QUESTIONS.stakes.title,
+        subtitle: BUILD_QUESTIONS.stakes.sub,
+        body: (
+          <View style={{ gap: 12 }}>
+            <ChoiceGrid value={stakes} onChange={(v) => setStakes(String(v))} choices={[...STAKES_CHOICES]} isDark={isDark} />
+            <Text style={{ marginTop: 6, fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>
+              How soon does this have to change?
+            </Text>
+            <ChoiceGrid value={urgency} onChange={(v) => setUrgency(String(v))} choices={[...URGENCY_CHOICES]} isDark={isDark} />
+          </View>
+        ),
+        canNext: !!stakes && !!urgency,
+      },
+
+      // The role question bank: skills, role-specific answers, industries,
+      // experience, work style and personality. This is the data the
+      // algorithm actually scores against, so it is wired into the flow.
+      ...roleSteps,
+
+      // ---- HOW TO BE BUILT WITH --------------------------------------
+      {
+        key: 'fit',
+        title: BUILD_QUESTIONS.fit.title,
+        subtitle: BUILD_QUESTIONS.fit.sub,
+        body: (
+          <View style={{ gap: 14 }}>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>How fast do you move?</Text>
+              <ChoiceGrid value={workPace} onChange={(v) => setWorkPace(String(v))} choices={[...PACE_CHOICES]} isDark={isDark} />
+            </View>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>When it goes wrong, how do you say it?</Text>
+              <ChoiceGrid value={conflictStyle} onChange={(v) => setConflictStyle(String(v))} choices={[...CONFLICT_CHOICES]} isDark={isDark} />
+            </View>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>How should decisions get made?</Text>
+              <ChoiceGrid value={decisionStyle} onChange={(v) => setDecisionStyle(String(v))} choices={[...DECISION_CHOICES]} isDark={isDark} />
+            </View>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>How much are you willing to lose?</Text>
+              <ChoiceGrid value={riskAppetite} onChange={(v) => setRiskAppetite(String(v))} choices={[...RISK_CHOICES]} isDark={isDark} />
+            </View>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>How are you paying the person you are looking for?</Text>
+              <ChoiceGrid value={equityView} onChange={(v) => setEquityView(String(v))} choices={[...EQUITY_CHOICES]} isDark={isDark} />
+            </View>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>Honestly — how many hours a week?</Text>
+              <ChoiceGrid value={weeklyHours} onChange={(v) => setWeeklyHours(String(v))} choices={[...HOURS_CHOICES]} isDark={isDark} />
+            </View>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>Would you move for the right person?</Text>
+              <ChoiceGrid value={relocateView} onChange={(v) => setRelocateView(String(v))} choices={[...RELOCATE_CHOICES]} isDark={isDark} />
+            </View>
+          </View>
+        ),
+        canNext:
+          !!workPace && !!conflictStyle && !!decisionStyle && !!riskAppetite &&
+          !!equityView && !!weeklyHours && !!relocateView,
+      },
+
+      // ---- THE MIRROR -------------------------------------------------
+      // Read their own brief back before they walk in. If it is wrong they fix
+      // it here — not three bad introductions later.
+      {
+        key: 'mirror',
+        title: BUILD_QUESTIONS.mirror.title,
+        subtitle: BUILD_QUESTIONS.mirror.sub,
+        body: (
+          <View style={{ gap: 10 }}>
+            {[
+              {
+                label: 'THE BUILD',
+                value: `${buildName.trim() || 'Unnamed build'}${buildOneLiner.trim() ? ` — ${buildOneLiner.trim()}` : ''}`,
+              },
+              {
+                label: 'THE EMPTY CHAIR',
+                value: `${missingSeat || 'Not named yet'}${seatWhy.trim() ? ` — ${seatWhy.trim()}` : ''}`,
+              },
+              {
+                label: 'WHAT IT COSTS TO STAY STUCK',
+                value: STAKES_CHOICES.find((choice) => choice.id === stakes)?.label || 'Not answered yet',
+              },
+              {
+                label: 'HOW SOON',
+                value: URGENCY_CHOICES.find((choice) => choice.id === urgency)?.label || 'Not answered yet',
+              },
+              {
+                label: 'HOW YOU WORK',
+                value: [
+                  PACE_CHOICES.find((choice) => choice.id === workPace)?.label,
+                  CONFLICT_CHOICES.find((choice) => choice.id === conflictStyle)?.label,
+                  HOURS_CHOICES.find((choice) => choice.id === weeklyHours)?.label,
+                ].filter(Boolean).join(' · '),
+              },
+            ].map((row) => (
+              <View
+                key={row.label}
+                style={{
+                  borderWidth: 1,
+                  borderRadius: 14,
+                  padding: 14,
+                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)',
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(251,230,24,0.14)',
+                }}
+              >
+                <Text style={{ fontSize: 10.5, fontWeight: '900', letterSpacing: 1.1, color: textColor(isDark, 'muted') }}>
+                  {row.label}
+                </Text>
+                <Text style={{ marginTop: 5, fontSize: 14.5, fontWeight: '800', lineHeight: 20, color: textColor(isDark) }}>
+                  {row.value}
+                </Text>
+              </View>
+            ))}
+            <Text style={{ marginTop: 6, fontSize: 12.5, fontWeight: '700', lineHeight: 18, color: textColor(isDark, 'muted') }}>
+              This is the brief that gets emailed to the one person the algorithm pairs you with. Make it true.
             </Text>
           </View>
         ),
-        canNext: finalLookingFor.length > 0,
+        canNext: true,
       },
       {
         key: 'photos',
-        title: 'Add a face photo',
-        subtitle: "Required. A profile photo helps other members recognize you across professional discovery and conversations.",
+        title: ONBOARDING_VOICE.photoTitle,
+        subtitle: ONBOARDING_VOICE.photoSub,
         body: (
           <View style={{ alignItems: 'center' }}>
             <PhotoSlot
@@ -1727,9 +1981,7 @@ export default function OnboardingScreen({ navigation }: any) {
                 color: profilePicUri ? '#16A34A' : textColor(isDark, 'muted'),
               }}
             >
-              {profilePicUri
-                ? 'Photo added. You can change it any time from your profile.'
-                : 'Tap the circle above to choose one. You cannot continue without it.'}
+              {profilePicUri ? ONBOARDING_VOICE.photoAdded : ONBOARDING_VOICE.photoMissing}
             </Text>
           </View>
         ),
@@ -1781,7 +2033,12 @@ export default function OnboardingScreen({ navigation }: any) {
             },
           ]),
     ],
-    [displayName, lookingFor, lookingForChoices, customLookingFor, finalLookingFor, profilePicUri, role, rolePicks, customRole, finalRoles, isDark, ageText, country, city, profileNoticeSeen, saving]
+    [
+      displayName, lookingFor, lookingForChoices, customLookingFor, finalLookingFor, profilePicUri,
+      role, rolePicks, customRole, finalRoles, isDark, ageText, country, city, profileNoticeSeen, saving,
+      roleSteps, buildName, buildOneLiner, buildTraction, missingSeat, seatWhy, stakes, urgency,
+      workPace, conflictStyle, decisionStyle, riskAppetite, equityView, weeklyHours, relocateView,
+    ]
   );
 
   const current = steps[step];
@@ -1837,6 +2094,57 @@ export default function OnboardingScreen({ navigation }: any) {
         personalityType,
         personalityAnswers,
         roleAnswers,
+        // The brief. Read by the LINKUP algorithm, by the weekly 1-to-1 pairing,
+        // and by Linky before it is allowed to name a single human being.
+        buildingName: buildName.trim(),
+        buildingOneLiner: buildOneLiner.trim(),
+        buildingTraction: buildTraction,
+        missingSeat,
+        seatWhy: seatWhy.trim(),
+        stakes,
+        urgency,
+        workPace,
+        conflictStyle,
+        decisionStyle,
+        riskAppetite,
+        equityView,
+        weeklyHours,
+        relocateView,
+        remoteOnly: relocateView === 'remote',
+        willingToRelocate: relocateView === 'relocate' || relocateView === 'together',
+        matchingSignals: [
+          buildName.trim(),
+          buildOneLiner.trim(),
+          buildTraction,
+          missingSeat,
+          seatWhy.trim(),
+          stakes,
+          urgency,
+          workPace,
+          conflictStyle,
+          decisionStyle,
+          riskAppetite,
+          equityView,
+          weeklyHours,
+          relocateView,
+        ].filter(Boolean),
+        ...(buildName.trim()
+          ? {
+              projects: [
+                {
+                  id: 'onboarding-build',
+                  title: buildName.trim(),
+                  description: buildOneLiner.trim(),
+                  status:
+                    buildTraction === 'revenue' || buildTraction === 'scaling'
+                      ? 'live'
+                      : buildTraction === 'beta'
+                        ? 'mvp'
+                        : 'idea',
+                },
+              ],
+            }
+          : {}),
         networkingIntent,
         circles,
         profilePic: profilePicUri,
@@ -1951,7 +2259,7 @@ export default function OnboardingScreen({ navigation }: any) {
               onPress={finish}
               style={[styles.btn, styles.primaryBtn, { flex: 1, opacity: !current.canNext || saving ? 0.5 : 1 }]}
             >
-              {saving ? <ActivityIndicator color="#111" /> : <Text style={[styles.btnText, { color: '#111' }]}>Enter LINKUP</Text>}
+              {saving ? <ActivityIndicator color="#111" /> : <Text style={[styles.btnText, { color: '#111' }]}>{ONBOARDING_VOICE.finalCta}</Text>}
             </TouchableOpacity>
           )}
         </View>

@@ -85,6 +85,24 @@ export interface UserProfile {
   willingToRelocate?: boolean;
   teamSizePreference?: string; // e.g. "Solo Founder"
   circles?: string[];
+  // The brief captured at onboarding: what they are building, the seat they
+  // cannot fill, what it costs to stay stuck, and how they want to be built
+  // with. AI and the matching algorithm read these before anything else.
+  buildingName?: string;
+  buildingOneLiner?: string;
+  buildingTraction?: string;
+  missingSeat?: string;
+  seatWhy?: string;
+  stakes?: string;
+  urgency?: string;
+  workPace?: string;
+  conflictStyle?: string;
+  decisionStyle?: string;
+  riskAppetite?: string;
+  equityView?: string;
+  weeklyHours?: string;
+  relocateView?: string;
+  matchingSignals?: string[];
   personalityAnswers?: Record<string, string>;
   roleAnswers?: Record<string, string | string[]>;
   shipLogs?: { id: string; text: string; link?: string; createdAt: string }[];

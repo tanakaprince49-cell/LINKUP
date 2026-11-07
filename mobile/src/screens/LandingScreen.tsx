@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext';
 import BrandMark from '../components/BrandMark';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, textColor } from '../theme/theme';
+import { LANDING_VOICE } from '../lib/brandVoice';
 
 export default function LandingScreen({ navigation }: any) {
   const { signInWithGoogle, authError, clearAuthError } = useAuth();
@@ -54,16 +55,24 @@ export default function LandingScreen({ navigation }: any) {
               <Text style={styles.wordRightText}>UP</Text>
             </View>
           </View>
-          <Text style={[styles.tag, { color: textColor(isDark, 'muted') }]}>Cofounder matching and professional networking</Text>
+          <Text style={[styles.tag, { color: textColor(isDark, 'muted') }]}>{LANDING_VOICE.eyebrow}</Text>
         </View>
 
         <View style={styles.copy}>
           <Text style={[styles.headline, compact && styles.headlineCompact, { color: textColor(isDark) }]}>
-            Find the right partner{'\n'}to build your business.
+            {LANDING_VOICE.headline}
           </Text>
           <Text style={[styles.sub, { color: textColor(isDark, 'secondary') }]}>
-            Find a cofounder, discover startup collaborators, and build professional connections around shared skills and goals.
+            {LANDING_VOICE.sub}
           </Text>
+          <View style={styles.proofBlock}>
+            {LANDING_VOICE.proof.map((line) => (
+              <View key={line} style={styles.proofRow}>
+                <View style={styles.proofDot} />
+                <Text style={[styles.proofText, { color: textColor(isDark, 'secondary') }]}>{line}</Text>
+              </View>
+            ))}
+          </View>
         </View>
 
         <View style={styles.actions}>
@@ -80,7 +89,7 @@ export default function LandingScreen({ navigation }: any) {
                 <View style={styles.googleMark}>
                   <Text style={styles.googleG}>G</Text>
                 </View>
-                <Text style={styles.googleText}>Continue with Google</Text>
+                <Text style={styles.googleText}>{LANDING_VOICE.primaryCta}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -95,14 +104,14 @@ export default function LandingScreen({ navigation }: any) {
           ) : null}
 
           <Text style={[styles.sub, {color:textColor(isDark,'secondary')}]}>
-            Find complementary teammates for your project or get role recommendations for your existing team.
+            {LANDING_VOICE.handoff}
           </Text>
           <TouchableOpacity
             style={[styles.emailBtn, { borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(11,18,32,0.12)' }]}
             onPress={() => navigation.navigate('EmailAuth')}
             activeOpacity={0.85}
           >
-            <Text style={[styles.emailText, { color: textColor(isDark) }]}>Continue with email</Text>
+            <Text style={[styles.emailText, { color: textColor(isDark) }]}>{LANDING_VOICE.secondaryCta}</Text>
           </TouchableOpacity>
 
           <Text
@@ -111,7 +120,7 @@ export default function LandingScreen({ navigation }: any) {
             style={[styles.legal, styles.link, { color: textColor(isDark, 'muted') }]}
             onPress={Platform.OS === 'web' ? undefined : () => openLink('https://www.linkupbuild.com/app/builders')}
           >
-            Explore public professional profiles →
+            {LANDING_VOICE.explore}
           </Text>
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 16 }}>
@@ -172,6 +181,10 @@ const styles = StyleSheet.create({
   headline: { fontSize: 32, fontWeight: '900', letterSpacing: -0.8, lineHeight: 38 },
   headlineCompact: { fontSize: 26, lineHeight: 32 },
   sub: { fontSize: 15, fontWeight: '600', lineHeight: 22 },
+  proofBlock: { marginTop: 6, gap: 7 },
+  proofRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  proofDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginTop: 7 },
+  proofText: { flex: 1, fontSize: 13, fontWeight: '700', lineHeight: 19 },
   actions: { gap: 12, marginTop: 28 },
   googleBtn: {
     minHeight: 56,

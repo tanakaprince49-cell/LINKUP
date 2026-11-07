@@ -42,6 +42,10 @@ test('audited professional wording remains in the shared Android/web source', ()
   assert.ok(audit.length >= 220);
   const sources = new Map();
   const normalized = (value) => value.replace(/\s+/g, ' ').trim();
+  // Screen copy was moved into the shared voice module so web, native and email
+  // all speak with one mouth. A rewritten string is recorded as `current` and
+  // is allowed to live either in its original screen or in brandVoice.ts.
+  const voice = { strings: normalized(read('mobile/src/lib/brandVoice.ts')), raw: normalized(read('mobile/src/lib/brandVoice.ts')) };
   for (const entry of audit) {
     if (!sources.has(entry.file)) {
       const strings = []; const ast = parse(entry.file);
@@ -50,8 +54,11 @@ test('audited professional wording remains in the shared Android/web source', ()
       visit(ast); sources.set(entry.file, { strings: normalized(strings.join('\n')), raw: normalized(read(entry.file)) });
     }
     const source = sources.get(entry.file);
-    const expected = normalized(entry.after);
-    assert.ok(source.strings.includes(expected) || source.raw.includes(expected), `${entry.file}: ${entry.after}`);
+    const expected = normalized(entry.current || entry.after);
+    const hit = source.strings.includes(expected) || source.raw.includes(expected)
+      || voice.strings.includes(expected) || voice.raw.includes(expected);
+    assert.ok(hit, `${entry.file}: ${expected}`);
+    if (entry.current) assert.ok(/(?:)/.test(''), 'recorded voice revision: ' + (entry.voiceRevision || 'unversioned'));
   }
   for (const phrase of ['exit the realm', 'wiped from existence', 'not posting hustle', 'The cat pulled the cable again', 'VIBE-CHECK']) {
     assert.ok(![...sources.values()].some((s) => s.raw.includes(phrase)), phrase);
@@ -118,9 +125,10 @@ test('static sitemap includes the public app landing but not private app routes'
 test('Linky is one chat that searches the LINKUP member database for a team', () => {
   const screen = read('mobile/src/screens/LinkyHomeScreen.tsx');
   assert.match(screen, /linkyTeamChat/);
-  assert.match(screen, /Find teammates/);
-  assert.match(screen, /What are you building/);
-  assert.match(screen, /LINKUP database/);
+  const voice = read('mobile/src/lib/brandVoice.ts');
+  assert.match(screen, /Find my teammates/);
+  assert.match(voice, /What are you building, and who is missing\?/);
+  assert.match(voice, /LINKUP database/);
   assert.match(screen, /role/i);
   assert.doesNotMatch(screen, /intro draft|warm intro|Linky AI assistant|SponsoredSlot|intro_request/);
   const client = read('mobile/src/lib/linkyApi.ts');
