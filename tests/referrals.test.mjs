@@ -7,6 +7,28 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const { createPublicSeoHandler } = await import('../api/publicSeo.js');
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+
+test('client /r/:code handoff URL is origin-absolute and stays under /app/api', () => {
+  // Regression: building the handoff from the current path dropped the /app
+  // prefix when the app was served from /r/<code>, sending visitors to a
+  // bare /api URL that serves the app shell and its "Wrong match" 404.
+  const src = fs.readFileSync(new URL('../mobile/src/lib/referral.ts', import.meta.url), 'utf8');
+  const match = src.match(/export function referralHandoffUrl[\s\S]*?\n}/);
+  assert.ok(match, 'referralHandoffUrl helper exists');
+  const ts = require('../mobile/node_modules/typescript/lib/typescript.js');
+  const js = ts.transpileModule(match[0].replace('export function', 'function'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  const referralHandoffUrl = new Function(`${js}; return referralHandoffUrl;`)();
+  assert.equal(
+    referralHandoffUrl('maya-k', 'https://www.linkupbuild.com'),
+    'https://www.linkupbuild.com/app/api/publicSeo?mode=ref&code=maya-k',
+  );
+  assert.match(src, /window\.location\.replace\(referralHandoffUrl\(linkMatch\[1\], window\.location\.origin\)\)/);
+});
 
 const translate = (current, patch) => {
   const next = { ...(current || {}) };

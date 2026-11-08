@@ -19,6 +19,15 @@ export const REFERRAL_CODE_PATTERN = /^[a-z0-9][a-z0-9-]{2,39}$/;
 const REFERRAL_STORAGE_KEY = 'linkup.referralCode';
 const FRESH_ACCOUNT_MS = 7 * 24 * 3600 * 1000;
 
+// Where a /r/:code hit hands off to be counted. Origin-absolute on purpose:
+// the app is served from /r/<code> itself here, outside the /app mount, so
+// path-derived prefixes (webAppPath) would silently drop the /app segment
+// and land the visitor on the app shell's 404. The counting endpoint lives
+// at /app/api on every host that serves this bundle.
+export function referralHandoffUrl(code: string, origin: string): string {
+  return `${String(origin || '').replace(/\/+$/, '')}/app/api/publicSeo?mode=ref&code=${encodeURIComponent(code)}`;
+}
+
 export function captureReferralFromUrl(): void {
   if (Platform.OS !== 'web') return;
   try {
@@ -28,7 +37,7 @@ export function captureReferralFromUrl(): void {
     // the server redirects first. Both paths end at the same counter.)
     const linkMatch = window.location.pathname.match(/^\/r\/([a-z0-9][a-z0-9-]{2,39})\/?$/);
     if (linkMatch) {
-      window.location.replace(`${webAppPath('/api/publicSeo')}?mode=ref&code=${linkMatch[1]}`);
+      window.location.replace(referralHandoffUrl(linkMatch[1], window.location.origin));
       return;
     }
     const code = (new URLSearchParams(window.location.search).get('ref') || '').trim().toLowerCase();
