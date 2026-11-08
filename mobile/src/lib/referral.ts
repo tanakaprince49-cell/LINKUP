@@ -22,6 +22,15 @@ const FRESH_ACCOUNT_MS = 7 * 24 * 3600 * 1000;
 export function captureReferralFromUrl(): void {
   if (Platform.OS !== 'web') return;
   try {
+    // Direct hit on a shared link (/r/:code): the SPA fallback serves the app
+    // here, so hand off to the counting endpoint, which 302s back into the
+    // app with ?ref= attached. (Where the /r rewrite is live this never runs —
+    // the server redirects first. Both paths end at the same counter.)
+    const linkMatch = window.location.pathname.match(/^\/r\/([a-z0-9][a-z0-9-]{2,39})\/?$/);
+    if (linkMatch) {
+      window.location.replace(`${webAppPath('/api/publicSeo')}?mode=ref&code=${linkMatch[1]}`);
+      return;
+    }
     const code = (new URLSearchParams(window.location.search).get('ref') || '').trim().toLowerCase();
     if (REFERRAL_CODE_PATTERN.test(code)) {
       AsyncStorage.setItem(REFERRAL_STORAGE_KEY, code).catch(() => {});
