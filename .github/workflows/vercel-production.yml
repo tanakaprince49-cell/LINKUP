@@ -88,7 +88,7 @@ jobs:
           npm --prefix mobile run typecheck
 
       - name: Promote to production
-        run: npx vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        run: npx vercel@latest deploy --prebuilt --prod --archive=tgz --token="$VERCEL_TOKEN"
 
       - name: Verify production routing, PWA and payment handler reachability
         env:
