@@ -39,6 +39,26 @@ test('Globe projection matches the Earth texture mapping and places are labelled
   assert.match(html,/"kind":"city","text":"Lagos"/);
 });
 
+test('Globe draws country borders from the bundled Natural Earth dataset',()=>{
+  const html=renderSearchPage({members:[member('u1','Ada Moyo','Harare','Zimbabwe')],nextCursor:null});
+  assert.match(html,/countries-50m\.json/);
+  assert.match(html,/THREE\.LineSegments/);
+  assert.match(html,/refreshBorders/);
+  const asset=JSON.parse(fs.readFileSync(new URL('../mobile/public/assets/countries-50m.json',import.meta.url),'utf8'));
+  assert.ok(asset.countries.length>=170,'country dataset bundled');
+  const decode=(rings)=>rings.map(r=>{const out=[];let x=0,y=0;for(let i=0;i<r.length;i+=2){x+=r[i];y+=r[i+1];out.push([x/100,y/100])}return out});
+  const zw=asset.countries.find(c=>c[0]==='Zimbabwe');
+  assert.ok(zw,'Zimbabwe present');
+  let minLng=1e9,maxLng=-1e9,minLat=1e9,maxLat=-1e9;
+  for(const ring of decode(zw[1]))for(const [lng,lat] of ring){minLng=Math.min(minLng,lng);maxLng=Math.max(maxLng,lng);minLat=Math.min(minLat,lat);maxLat=Math.max(maxLat,lat)}
+  // Real Zimbabwe: lng 25.2..33.1, lat -22.4..-15.6
+  assert.ok(minLng>24&&maxLng<34&&minLat>-23&&maxLat<-15,'Zimbabwe outline matches the real country');
+  for(const [,rings] of asset.countries)for(const ring of decode(rings))for(let i=1;i<ring.length;i++){
+    assert.ok(Math.abs(ring[i][0])<=180&&Math.abs(ring[i][1])<=90,'coords in range');
+    assert.ok(Math.abs(ring[i][0]-ring[i-1][0])<=180,'no antimeridian streaks');
+  }
+});
+
 test('locationLabels groups members under their real city and country anchors',()=>{
   const labels=locationLabels([member('a','A','Harare','Zimbabwe'),member('b','B','Harare','Zimbabwe'),member('c','C','Lagos','Nigeria'),member('d','D','','United States')]);
   const city=labels.find(l=>l.kind==='city'&&l.text==='Harare');
