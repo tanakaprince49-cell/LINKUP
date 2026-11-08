@@ -1,3 +1,4 @@
+import * as profileWriter from '../shared/profile-writer.js';
 import * as workbench from '../api/_linkyWorkbench.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

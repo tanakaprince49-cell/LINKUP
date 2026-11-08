@@ -16,6 +16,7 @@ import { ArrowLeft, Search, Send, Trash2, Users } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import LinkyProfileWriter from '../components/LinkyProfileWriter';
 import { appBackground, COLORS, RADIUS, textColor } from '../theme/theme';
 import {
   linkyTeamChat,
@@ -371,6 +372,10 @@ export default function LinkyHomeScreen({ navigation }: any) {
         <Text style={styles.primaryCtaText}>{facts.seat ? `Find my ${facts.seat}` : 'Find my teammates'}</Text>
       </TouchableOpacity>
       <Text style={[styles.openingClock, { color: palette.muted }]}>{LINKY_VOICE.clock}</Text>
+
+      {/* PLUS only: Linky writes the whole profile from what it already knows.
+          Free members get the offer, and the tap opens the wall. */}
+      <LinkyProfileWriter onUpgrade={() => setPaywall('Linky writes your whole profile')} />
 
       {!!chips.length && (
         <View style={styles.suggestionList}>

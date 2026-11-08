@@ -8,6 +8,7 @@ import ts from '../mobile/node_modules/typescript/lib/typescript.js';
 import * as quality from '../api/_linkyQuality.js';
 import * as companion from '../api/_linkyCompanion.js';
 import * as usage from '../api/_linkyUsage.js';
+import * as profileWriter from '../shared/profile-writer.js';
 import {publicEligible} from '../api/_publicSeo.js';
 import {scoreBatch, cleanLink, safeLinkedinProfile} from '../api/_serpapi.js';
 const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
