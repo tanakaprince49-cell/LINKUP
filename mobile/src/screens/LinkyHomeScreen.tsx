@@ -28,6 +28,7 @@ import {
 import PaywallModal from '../components/PaywallModal';
 import MemberBadges from '../components/MemberBadges';
 import LinkyCatIntro from '../components/LinkyCatIntro';
+import LinkyQuotaPill from '../components/LinkyQuotaPill';
 import { buildFacts, LINKY_VOICE } from '../lib/brandVoice';
 
 /**
@@ -456,6 +457,19 @@ export default function LinkyHomeScreen({ navigation }: any) {
               ))}
             </ScrollView>
           )}
+          {/* The allowance, before it is spent — and the paywall itself once it
+              is gone. Same line as the text field, so nobody has to hunt. */}
+          <LinkyQuotaPill
+            quota={quota}
+            dark={dark}
+            onUpgrade={() =>
+              setPaywall(
+                quota && !quota.unlimited
+                  ? `That is today's ${quota.limit ?? 4} free messages used up. LINKUP PLUS keeps Linky searching all day, with no counter.`
+                  : 'Upgrade to keep chatting with Linky and searching the LINKUP database.',
+              )
+            }
+          />
           <View style={[styles.composer, { borderColor: dark ? 'rgba(251,230,24,0.28)' : 'rgba(10,11,13,0.14)', backgroundColor: palette.surface }]}>
             <TextInput
               accessibilityLabel="Message Linky"
@@ -480,7 +494,11 @@ export default function LinkyHomeScreen({ navigation }: any) {
               {busy ? <ActivityIndicator size="small" color={INK} /> : <Send size={17} color={INK} />}
             </TouchableOpacity>
           </View>
-          <Text style={[styles.quotaLine, { color: palette.muted }]} numberOfLines={2}>{quotaLine}</Text>
+          {/* Fallback only: when the server has not sent a quota yet there is
+              nothing true to meter, so the voice module says it instead. */}
+          {!quota && (
+            <Text style={[styles.quotaLine, { color: palette.muted }]} numberOfLines={2}>{quotaLine}</Text>
+          )}
         </View>
       </KeyboardAvoidingView>
 

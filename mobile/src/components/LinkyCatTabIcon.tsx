@@ -1,44 +1,54 @@
 import React from 'react';
-import { Image, Platform, StyleSheet, View } from 'react-native';
-
-const CAT = require('../../assets/logo-cat.png');
+import { Platform, StyleSheet, View } from 'react-native';
+import LinkyCatIcon from './LinkyCatIcon';
 
 /**
  * The "Linky" tab is the cat.
  *
  * Linky is the only tab that is a character rather than a feature, so it is the
- * only tab that gets a face instead of a line icon: the LINKUP cat, sitting in
- * a gold-ringed tile. Focused, the ring lights up and the tile lifts — the cat
- * notices you looking at it.
+ * only tab that wears a mark instead of a line icon: the gold rounded tile from
+ * the founder's sketch, with the cat drawn inside it as a single ink line. The
+ * tile is the frame in that sketch — the glyph and the frame are one object, so
+ * it reads the same at 20px on a phone tab bar as it does at 96px anywhere else.
+ *
+ * Unfocused the cat is ink at 60% and the frame is not drawn; focused the frame
+ * closes to a full ink ring, the cat comes to full strength and the tile lifts
+ * a hair. Nothing here animates — a tab bar that moves is a tab bar you notice
+ * instead of the screen.
  */
 export default function LinkyCatTabIcon({
   focused = false,
-  size = 22,
+  size = 24,
 }: {
   focused?: boolean;
   size?: number;
 }) {
-  const radius = size * 0.3;
+  const radius = Math.round(size * 0.31);
+  // The cat sits inside the tile with a hair of breathing room, exactly like the
+  // sketch: frame, gap, cat — in that order.
+  const glyph = Math.round(size * (focused ? 0.86 : 0.8));
+
   return (
     <View
+      testID="linky-cat-tab-icon"
       style={[
         styles.tile,
         {
           width: size,
           height: size,
           borderRadius: radius,
-          borderColor: focused ? '#FBE618' : 'transparent',
+          borderColor: focused ? '#0A0B0D' : 'transparent',
           transform: [{ scale: focused ? 1.08 : 1 }],
         },
         focused && styles.tileFocused,
       ]}
     >
-      <Image
-        source={CAT}
-        style={{ width: '100%', height: '100%', borderRadius: radius - 1 }}
-        resizeMode="cover"
-        fadeDuration={Platform.OS === 'android' ? 0 : undefined}
-        accessibilityIgnoresInvertColors
+      <LinkyCatIcon
+        size={glyph}
+        color={focused ? '#0A0B0D' : 'rgba(10,11,13,0.62)'}
+        weight={focused ? 1.8 : 1.7}
+        eyes={size >= 20}
+        testID="linky-cat-glyph"
       />
     </View>
   );
@@ -48,6 +58,8 @@ const styles = StyleSheet.create({
   tile: {
     borderWidth: 1.5,
     overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#FBE618',
   },
   tileFocused: {

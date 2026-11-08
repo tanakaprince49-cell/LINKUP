@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Easing, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ArrowDown } from 'lucide-react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import { AppImage } from './AppImage';
+import { ikAvatar } from '../lib/ikImage';
+import { safeProfileImageUri } from '../lib/profilePerformance';
 import { buildFacts, WEEKLY_REVEAL_VOICE, type VoiceProfile } from '../lib/brandVoice';
 
 /**
@@ -39,6 +42,12 @@ const EXIT_MS = 320;
  */
 const REVEAL_TAP_AT_MS = 3000;
 const REVEAL_AUTO_MS = 12000;
+/**
+ * How long the revealed face holds the screen before the card underneath takes
+ * over. Long enough to register a person, short enough not to become a second
+ * gate between the member and their co-founder.
+ */
+const FACE_HOLD_MS = 760;
 /** Each beat lands a second after the last, so all four are readable. */
 const LINE_AT = [0, 900, 1900, 2900] as const;
 const RING_COUNT = 3;
@@ -50,9 +59,15 @@ type Props = {
   profile: VoiceProfile;
   visible: boolean;
   onDone: () => void;
+  /**
+   * The person the wait is about. Nothing of them is painted until the member
+   * taps (that is the whole point of the tap), but the moment they do, the face
+   * is the first thing that lands — not a name, not a score.
+   */
+  partner?: { name?: string; profilePic?: string };
 };
 
-export default function WeeklyMatchThinking({ profile, visible, onDone }: Props) {
+export default function WeeklyMatchThinking({ profile, visible, onDone, partner }: Props) {
   const facts = useMemo(() => buildFacts(profile), [profile]);
   const lines = useMemo(() => WEEKLY_REVEAL_VOICE.thinkingLines(facts), [facts]);
   const status = useMemo(() => WEEKLY_REVEAL_VOICE.status(facts), [facts]);
@@ -61,6 +76,8 @@ export default function WeeklyMatchThinking({ profile, visible, onDone }: Props)
   const [beat, setBeat] = useState(0);
   /** The thinking is done and the button is in their hand. */
   const [armed, setArmed] = useState(false);
+  /** The tap has landed and the founder's face is on screen. */
+  const [revealed, setRevealed] = useState(false);
   const pulse = useRef(new Animated.Value(0)).current;
   /** Two rings leave the button and die out, like a heartbeat you can see. */
   const rippleA = useRef(new Animated.Value(0)).current;
@@ -69,6 +86,8 @@ export default function WeeklyMatchThinking({ profile, visible, onDone }: Props)
   const sheen = useRef(new Animated.Value(0)).current;
   /** Tapping is not a cut — the button flares once, then the founder lands. */
   const burst = useRef(new Animated.Value(0)).current;
+  /** The face blooms out of that flare: 0.82 -> 1, a gold ring closing on it. */
+  const face = useRef(new Animated.Value(0)).current;
   const entrance = useRef(new Animated.Value(0)).current;
   const exit = useRef(new Animated.Value(0)).current;
   const think = useRef(new Animated.Value(0)).current;
@@ -102,6 +121,8 @@ export default function WeeklyMatchThinking({ profile, visible, onDone }: Props)
       rippleB.setValue(0);
       sheen.setValue(0);
       burst.setValue(0);
+      face.setValue(0);
+      setRevealed(false);
       lineAnims.forEach((anim) => anim.setValue(0));
     }
   }, [visible, lineAnims]);
@@ -199,10 +220,12 @@ export default function WeeklyMatchThinking({ profile, visible, onDone }: Props)
       finish();
       return;
     }
-    Animated.sequence([
-      Animated.timing(burst, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-    ]).start(finish);
-  }, [burst, finish]);
+    Animated.timing(burst, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => {
+      setRevealed(true);
+      Animated.timing(face, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+      setTimeout(finish, FACE_HOLD_MS);
+    });
+  }, [burst, face, finish]);
 
   if (!show) return null;
 
@@ -224,6 +247,25 @@ export default function WeeklyMatchThinking({ profile, visible, onDone }: Props)
         testID="weekly-thinking"
         style={[styles.root, { opacity: exit.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }]}
       >
+        {/* THE REVEAL ITSELF. The face arrives first and alone, in the member's
+            own tap, before any claim is made about them. */}
+        {revealed ? (
+          <Animated.View testID="weekly-reveal-face" style={[styles.faceStage, { opacity: face, transform: [{ scale: face.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] }) }] }]}>
+            <View style={styles.faceFrame}>
+              <AppImage
+                uri={ikAvatar(safeProfileImageUri(partner?.profilePic))}
+                style={styles.faceImage}
+                contentFit="cover"
+                accessibilityLabel={partner?.name ? `${partner.name}, your co-founder this week` : 'Your co-founder this week'}
+              />
+            </View>
+            {!!partner?.name && (
+              <Text style={styles.faceName} numberOfLines={1}>{partner.name}</Text>
+            )}
+            <Text style={styles.faceLabel}>YOUR CO-FOUNDER THIS WEEK</Text>
+          </Animated.View>
+        ) : null}
+
         <TouchableOpacity activeOpacity={1} style={styles.root} onPress={finish} accessibilityLabel={WEEKLY_REVEAL_VOICE.skip}>
           <View style={styles.stage}>
             {/* Three halo rings in a tilted 3D plane — the cat is inside a decision. */}
@@ -409,6 +451,19 @@ export default function WeeklyMatchThinking({ profile, visible, onDone }: Props)
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FBE618' },
+  faceStage: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', gap: 14, backgroundColor: '#FBE618' },
+  faceFrame: {
+    width: 168,
+    height: 168,
+    borderRadius: 84,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#0A0B0D',
+    backgroundColor: '#FFFFFF',
+  },
+  faceImage: { width: '100%', height: '100%' },
+  faceName: { fontSize: 26, fontWeight: '900', letterSpacing: -0.5, color: '#0A0B0D', paddingHorizontal: 24, textAlign: 'center' },
+  faceLabel: { fontSize: 9.5, fontWeight: '900', letterSpacing: 2, color: 'rgba(10,11,13,0.55)' },
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
   ring: { position: 'absolute', borderWidth: 1, borderColor: 'rgba(10,11,13,0.16)' },
   dot: {

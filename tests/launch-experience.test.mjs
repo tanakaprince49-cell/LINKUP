@@ -16,11 +16,27 @@ test('the Linky tab wears the cat instead of a line icon', () => {
   assert.match(app, /<LinkyCatTabIcon focused=\{focused\} size=\{22\} \/>/);
   assert.match(app, /import LinkyCatTabIcon from '\.\/src\/components\/LinkyCatTabIcon'/);
 
+  // The tab wears the founder's sketch: a cat drawn as one ink line inside the
+  // gold rounded tile. The 3D photo was unreadable at 22px, so it is a glyph now
+  // — the character still lives in the chat, the opening and the weekly reveal.
   const iconComponent = read('mobile/src/components/LinkyCatTabIcon.tsx');
-  assert.match(iconComponent, /require\('\.\.\/\.\.\/assets\/logo-cat\.png'\)/);
+  const glyph = read('mobile/src/components/LinkyCatIcon.tsx');
+  assert.doesNotMatch(iconComponent, /logo-cat\.png/, 'the tab is a line icon, not a photo');
+  assert.match(iconComponent, /import LinkyCatIcon from '\.\/LinkyCatIcon'/);
+  assert.match(iconComponent, /<LinkyCatIcon/);
   assert.match(iconComponent, /focused/);
-  // Focused, the cat is outlined in LINKUP gold.
+  // Focused, the frame closes to ink inside the gold tile.
   assert.match(iconComponent, /#FBE618/);
+  assert.match(iconComponent, /borderColor: focused \? '#0A0B0D' : 'transparent'/);
+  // The glyph is vector: one silhouette path, one tail path, eyes that survive
+  // being scaled to a tab.
+  assert.match(glyph, /viewBox="0 0 24 24"/);
+  assert.match(glyph, /<Path d="M7 19\.8C6\.2 16\.4/);
+  assert.match(glyph, /<Path d="M17\.9 18\.2C20 17/);
+  assert.match(glyph, /<Circle cx="10\.5" cy="11\.6" r="0\.62"/);
+  assert.match(glyph, /eyes/);
+  // The character (the 3D cat) is still the chat's face.
+  assert.match(read('mobile/src/screens/LinkyHomeScreen.tsx'), /logo-cat\.png/);
   // The tab label itself stays "Linky".
   assert.match(app, /LinkyHome: 'Linky'/);
 });

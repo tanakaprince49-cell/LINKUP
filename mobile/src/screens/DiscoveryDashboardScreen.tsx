@@ -649,6 +649,10 @@ function DiscoveryDashboardScreen({ navigation }: any) {
                     profile={me as any}
                     visible={weeklyReveal === 'thinking'}
                     onDone={finishWeeklyThinking}
+                    partner={{
+                      name: displayNameFor(weeklyMatch.partner),
+                      profilePic: (weeklyMatch.partner as any)?.profilePic,
+                    }}
                   />
                   {/* Nothing of the person is painted until the wait has
                       resolved, so there is no flash of them underneath it. */}
