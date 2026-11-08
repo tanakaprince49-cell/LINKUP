@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useKeyboardHeight } from '../lib/useKeyboardHeight';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Image,
@@ -49,6 +49,7 @@ export default function CreatePostScreen({ navigation }: any) {
   const limit = isPlus ? WEEKLY_POST_LIMITS.plus : WEEKLY_POST_LIMITS.free;
 
   const [startupName, setStartupName] = useState('');
+  const keyboardHeight = useKeyboardHeight();
   const [tagline, setTagline] = useState('');
   const [description, setDescription] = useState('');
   const [website, setWebsite] = useState('');
@@ -308,7 +309,7 @@ export default function CreatePostScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
       ) : (
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
           <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
             {/* Section 1 — the startup */}
             <View style={styles.sectionHeader}>
@@ -398,7 +399,7 @@ export default function CreatePostScreen({ navigation }: any) {
               )}
             </View>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </View>
       )}
 
       <PaywallModal

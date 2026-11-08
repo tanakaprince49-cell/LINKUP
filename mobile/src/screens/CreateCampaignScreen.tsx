@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
+import { useKeyboardHeight } from '../lib/useKeyboardHeight';
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
   Linking,
   Platform,
   ScrollView,
@@ -54,6 +54,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
   const isLiveEdit = !!editCampaign && (editCampaign.status === 'active' || editCampaign.status === 'paused');
 
   const [name, setName] = useState(editCampaign?.name || '');
+  const keyboardHeight = useKeyboardHeight();
   const [productName, setProductName] = useState(editCampaign?.creative?.productName || editCampaign?.creative?.title || '');
   const [tagline, setTagline] = useState(editCampaign?.creative?.tagline || editCampaign?.creative?.description || '');
   const [description, setDescription] = useState(editCampaign?.creative?.source === 'product' ? editCampaign?.creative?.description || '' : '');
@@ -221,7 +222,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
         <View style={styles.headerBtn} />
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* Section 1 — identity */}
           <View style={styles.sectionHeader}>
@@ -415,7 +416,7 @@ export default function CreateCampaignScreen({ navigation, route }: any) {
             )}
           </TouchableOpacity>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

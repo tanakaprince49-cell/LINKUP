@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useKeyboardHeight } from '../lib/useKeyboardHeight';
 import {
   View,
   Text,
@@ -6,7 +7,6 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from 'react-native';
@@ -22,6 +22,7 @@ export default function EmailAuthScreen({ navigation }: any) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [email, setEmail] = useState('');
+  const keyboardHeight = useKeyboardHeight();
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
@@ -61,7 +62,7 @@ export default function EmailAuthScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, appBackground(isDark)]}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
@@ -165,7 +166,7 @@ export default function EmailAuthScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

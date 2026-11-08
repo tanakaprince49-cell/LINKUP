@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
-  Keyboard,
   Platform,
   ScrollView,
   StyleSheet,
@@ -30,6 +29,7 @@ import MemberBadges from '../components/MemberBadges';
 import LinkyCatIntro from '../components/LinkyCatIntro';
 import LinkyQuotaPill from '../components/LinkyQuotaPill';
 import { buildFacts, LINKY_VOICE } from '../lib/brandVoice';
+import { useKeyboardHeight } from '../lib/useKeyboardHeight';
 
 /**
  * LINKY · TEAM CHAT
@@ -88,25 +88,12 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const [checkedCount, setCheckedCount] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const hydrated = useRef(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  // The composer must ride above the keyboard. KeyboardAvoidingView did
-  // nothing on Android here (its behavior was iOS-only, and the pinned
-  // composer stayed underneath the keys while typing), so track the
-  // keyboard height directly and give the composer that much bottom
-  // padding: the input and the quota pill above it rise with the keyboard
-  // and what you are typing is always visible. When the keyboard closes,
-  // the composer falls back to the safe-area inset.
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const show = Keyboard.addListener(showEvent, (e) => {
-      setKeyboardHeight(e.endCoordinates?.height || 0);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
-    });
-    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
-    return () => { show.remove(); hide.remove(); };
-  }, []);
+  // The composer rides above the keyboard: padded by the keyboard height,
+  // the input (and the quota pill above it) sits exactly on top of the keys,
+  // so what you are typing is never hidden. See useKeyboardHeight.
+  const keyboardHeight = useKeyboardHeight(() => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+  });
 
   const palette = useMemo(() => ({
     surface: dark ? '#17232C' : '#FFFFFF',
