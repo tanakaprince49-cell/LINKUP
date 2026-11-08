@@ -152,3 +152,17 @@ export const linkyTeamMatch = (input: {
   memberUids?: string[];
   teamSize?: 2 | 3;
 }) => linkyCall<TeamMatchResult>('teamMatch', input as unknown as Record<string, unknown>);
+
+
+/** PLUS only: Linky rewrites the whole profile from what LINKUP already knows. */
+export type WrittenProfile = {
+  status: 'ready' | 'needs_more';
+  source: 'ai' | 'local';
+  fields: Record<string, any>;
+  evidence: { field: string; from: string }[];
+  missing: string[];
+  headline: string;
+  message: string;
+};
+
+export const linkyWriteProfile = () => linkyCall<WrittenProfile>('writeProfile', {});

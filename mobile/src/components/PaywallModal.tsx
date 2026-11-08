@@ -2,7 +2,23 @@ import { blockAppReviews } from '../lib/appReview';
 import React from 'react';
 import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { finishTransaction, getAvailablePurchases, type Purchase, useIAP } from 'expo-iap';
-import { CheckCircle2, Crown, Lock, X } from 'lucide-react-native';
+import {
+  BadgeCheck,
+  CheckCircle2,
+  Crown,
+  Eye,
+  FileText,
+  Lock,
+  MessageSquare,
+  Rocket,
+  ShieldOff,
+  Users,
+  UserCheck,
+  Wand2,
+  X,
+  Zap,
+} from 'lucide-react-native';
+import { PLUS_BENEFIT_COUNT, PLUS_MORE_COUNT, plusBenefitGroups, type PlusBenefit } from '../lib/plusBenefits';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, liquidGlass, textColor } from '../theme/theme';
@@ -36,7 +52,7 @@ type PaywallInvite = {
   subline: string;
   /** The ONE benefit this exposure shows off. */
   feature: string;
-  /** "And 7 more things you don't have yet" — always tells them there is more. */
+  /** "And 8 more things you don't have yet" — always tells them there is more. */
   moreLine?: string;
   /** "Not now" — a real answer, so it gets a real button. */
   onSnooze?: () => void;
@@ -558,6 +574,9 @@ export default function PaywallModal({
             </View>
           </View>
 
+          {/* EVERYTHING, itemised. Each row says what PLUS does, what proves it,
+              and what staying free costs — so the member is not comparing a
+              promise to a price, they are comparing their own week to it. */}
           <View style={[styles.perksSection, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
             <View style={styles.perksHeader}>
               <Text style={[styles.perksTitle, { color: textColor(isDark) }]}>Everything you stop hitting</Text>
@@ -659,9 +678,14 @@ export default function PaywallModal({
               {isRestoring ? 'RESTORING...' : 'RESTORE PURCHASES'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} style={[styles.laterBtn, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]} activeOpacity={0.8}>
-            <Text style={[styles.laterText, { color: textColor(isDark, 'secondary') }]}>NOT NOW</Text>
-          </TouchableOpacity>
+          {/* One "no", not two. In invite mode the schedule's own button above
+              is the one that counts toward today's three, so the legacy button
+              stays out of the way. */}
+          {invite?.onSnooze ? null : (
+            <TouchableOpacity onPress={onClose} style={[styles.laterBtn, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]} activeOpacity={0.8}>
+              <Text style={[styles.laterText, { color: textColor(isDark, 'secondary') }]}>NOT NOW</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -802,6 +826,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
     textTransform: 'uppercase',
+    flexShrink: 1,
   },
   priceLabelSelected: {
   },
@@ -812,6 +837,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     fontSize: 9,
     fontWeight: '900',
+    flexShrink: 0,
   },
   priceRow: {
     marginTop: 9,
@@ -897,7 +923,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 2,
+  },
+  perksLead: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  perkGroup: {
+    gap: 12,
+    marginTop: 10,
+  },
+  perkGroupLabel: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    letterSpacing: 1.3,
+  },
+  perkIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  perkCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  perkProof: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
   },
   perksTitle: {
     fontSize: 16,
@@ -911,6 +969,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: 12,
     paddingVertical: 7,
+    flexShrink: 0,
   },
   todayStrip: {
     marginTop: 14,

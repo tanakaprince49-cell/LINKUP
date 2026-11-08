@@ -1038,8 +1038,8 @@
     "after": "Check your mobile data or Wi-Fi connection, then try again."
   },
   {
-    "file": "mobile/src/components/PaywallModal.tsx",
-    "line": 46,
+    "file": "shared/plus-benefits.js",
+    "line": 30,
     "before": "Who Viewed You — names & profiles of everyone checking you out",
     "after": "Profile viewer insights — review available names and professional profiles",
     "current": "See exactly who opened your profile",
@@ -1058,8 +1058,8 @@
     "after": "Your payment is being verified. Please wait briefly before trying again."
   },
   {
-    "file": "mobile/src/components/PaywallModal.tsx",
-    "line": 466,
+    "file": "shared/plus-benefits.js",
+    "line": 0,
     "before": "Build your startup faster",
     "after": "Expand your professional networking tools",
     "current": "this is everything LINKUP can do",

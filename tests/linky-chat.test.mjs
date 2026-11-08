@@ -8,6 +8,7 @@ import * as workbench from '../api/_linkyWorkbench.js';
 import * as quality from '../api/_linkyQuality.js';
 import * as companion from '../api/_linkyCompanion.js';
 import * as usage from '../api/_linkyUsage.js';
+import * as profileWriter from '../shared/profile-writer.js';
 import { publicEligible } from '../api/_publicSeo.js';
 import { safeLinkedinProfile } from '../api/_serpapi.js';
 
@@ -64,6 +65,8 @@ function core(db, { ai = true, plan = null } = {}) {
     './_linkyWorkbench.js': workbench, 'node:crypto': crypto, './_linkyQuality.js': quality, './_linkyCompanion.js': companion,
     './_publicSeo.js': { publicEligible }, './_linkyUsage.js': usage,
     '../shared/team-roles.js': { fallbackTeamRoles: () => ['Flutter developer', 'Product designer'] },
+    '../shared/profile-writer.js': profileWriter,
+    './_memberTier.js': { memberHasPlus: async () => false },
     './_firebaseAdmin.js': { getDb: () => db, getAdmin: () => ({ firestore: { FieldValue: { serverTimestamp: () => Date.now(), delete: () => null }, Timestamp: { fromMillis: (ms) => ms } } }) },
     './_gemini.js': {
       aiReady: () => ai,
@@ -135,8 +138,20 @@ test('with the AI unavailable the chat still searches on a real brief and asks f
   assert.ok(found.teams.length <= 1);
   const unclear = await api.linkyChat('member', { message: 'yo' });
   assert.equal(unclear.action, 'chat');
-  assert.match(unclear.reply, /search the whole LINKUP member database/i);
+  assert.match(unclear.reply, /search the whole member database/i);
   assert.equal(unclear.teams.length, 0);
+});
+
+test('with a profile on file Linky never asks what the member is building', async () => {
+  const db = squadDb();
+  // This member's onboarding already said what they are building and which seat
+  // is empty. "find me someone" must therefore search, not interrogate.
+  db.rows.set('users/member', { ...member, buildingName: 'Kuda Pay', buildingOneLiner: 'a payments app for market traders', missingSeat: 'Flutter developer' });
+  const api = core(db, { ai: false });
+  const out = await api.linkyChat('member', { search: true });
+  assert.equal(out.askedForBrief, false, 'a search with a known brief must not ask again');
+  assert.equal(out.action, 'search');
+  assert.doesNotMatch(out.reply, /what are you (making|building)/i);
 });
 
 test('a chat turn with no project brief asks a question instead of inventing a team', async () => {

@@ -1,3 +1,4 @@
+import * as profileWriter from '../shared/profile-writer.js';
 import * as workbench from '../api/_linkyWorkbench.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -47,6 +48,10 @@ function core(database) {
   const mocks = {
     './_linkyWorkbench.js':workbench,'node:crypto': crypto, './_linkyUsage.js': usage, './_linkyQuality.js': quality, './_linkyCompanion.js': companion, './_publicSeo.js': {publicEligible},
     '../shared/team-roles.js':{fallbackTeamRoles:()=>[]},
+    // The profile writer and the tier check are real modules, not stubs: this
+    // suite is about the ledger, and both are pure or fail closed.
+    '../shared/profile-writer.js': profileWriter,
+    './_memberTier.js': { memberHasPlus: async () => false },
     './_firebaseAdmin.js': { getDb: () => database, getAdmin: () => ({ firestore: { FieldValue: { delete: () => DELETE, serverTimestamp: () => Date.now() } } }) },
     './_gemini.js': { aiReady: () => false, geminiText: () => { aiCalls++; throw Error('unexpected AI call'); } },
     './_serpapi.js': {}, './_expoPush.js':{sendExpoPush:async()=>({sent:0})},'./_emailNotify.js':{sendHighSignalEmail:async()=>({sent:false})},'./_proof.js': {}, './_profileWriter.js': { writeMyProfile: async () => ({ ok: false, reason: 'not_used_here' }) },
