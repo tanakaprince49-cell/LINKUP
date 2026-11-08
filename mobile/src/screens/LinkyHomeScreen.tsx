@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
   StyleSheet,
@@ -88,6 +88,25 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const [checkedCount, setCheckedCount] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const hydrated = useRef(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // The composer must ride above the keyboard. KeyboardAvoidingView did
+  // nothing on Android here (its behavior was iOS-only, and the pinned
+  // composer stayed underneath the keys while typing), so track the
+  // keyboard height directly and give the composer that much bottom
+  // padding: the input and the quota pill above it rise with the keyboard
+  // and what you are typing is always visible. When the keyboard closes,
+  // the composer falls back to the safe-area inset.
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates?.height || 0);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+    });
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const palette = useMemo(() => ({
     surface: dark ? '#17232C' : '#FFFFFF',
@@ -419,7 +438,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={insets.top + 8}>
+      <View style={{ flex: 1 }}>
         <ScrollView
           ref={scrollRef}
           style={{ flex: 1 }}
@@ -446,7 +465,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
           )}
         </ScrollView>
 
-        <View style={[styles.composerWrap, { borderTopColor: palette.border, backgroundColor: dark ? '#0B0C0F' : '#FBFAF5', paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <View style={[styles.composerWrap, { borderTopColor: palette.border, backgroundColor: dark ? '#0B0C0F' : '#FBFAF5', paddingBottom: keyboardHeight > 0 ? keyboardHeight : Math.max(insets.bottom, 10) }]}>
           {hasSpoken && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow} keyboardShouldPersistTaps="handled">
               <TouchableOpacity accessibilityRole="button" onPress={() => onChip('Find my teammates')} disabled={busy} style={[styles.searchChip, busy && { opacity: 0.5 }]}>
@@ -503,7 +522,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
             <Text style={[styles.quotaLine, { color: palette.muted }]} numberOfLines={2}>{quotaLine}</Text>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       <LinkyCatIntro profile={profile as any} visible={introOpen} onDone={() => setIntroOpen(false)} />
 
