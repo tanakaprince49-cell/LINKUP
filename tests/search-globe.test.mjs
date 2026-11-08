@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { renderSearchPage, groupMembersByLocation, placeMembersOnEarth } from '../api/_searchGlobe.js';
+import { renderSearchPage, groupMembersByLocation, placeMembersOnEarth, locationLabels } from '../api/_searchGlobe.js';
 import { createPublicSeoHandler } from '../api/publicSeo.js';
 const rules = fs.readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
 
@@ -25,6 +25,31 @@ test('Search renders only the Earth, space, and profile picture markers with hov
   assert.equal(scripts.length,2);for(const script of scripts)assert.doesNotThrow(()=>new Function(script),'inline profile/globe script parses');
   const texture=new URL('../mobile/public/assets/earth-blue-marble.jpg',import.meta.url);
   assert.ok(fs.statSync(texture).size>500_000,'bundled Blue Marble texture exists at production app asset path');
+});
+
+test('Globe projection matches the Earth texture mapping and places are labelled',()=>{
+  const html=renderSearchPage({members:[member('u1','Ada Moyo','Harare','Zimbabwe'),member('u2','Tendai N','Harare','Zimbabwe'),member('u3','Bola Ade','Lagos','Nigeria')],nextCursor:null});
+  // three.js SphereGeometry UV convention: texture point (lat,lng) sits at
+  // (cos lat * cos lng, sin lat, -cos lat * sin lng). Any other anchor math
+  // mirrors pins into the oceans.
+  assert.match(html,/anchor\.position\.set\(radius\*Math\.cos\(lat\)\*Math\.cos\(lon\),radius\*Math\.sin\(lat\),-radius\*Math\.cos\(lat\)\*Math\.sin\(lon\)\)/);
+  assert.match(html,/\.mapLabel\{/);
+  assert.match(html,/"kind":"city","text":"Harare","lat":-17\.825,"lng":31\.033,"count":2/);
+  assert.match(html,/"kind":"country","text":"Zimbabwe"/);
+  assert.match(html,/"kind":"city","text":"Lagos"/);
+});
+
+test('locationLabels groups members under their real city and country anchors',()=>{
+  const labels=locationLabels([member('a','A','Harare','Zimbabwe'),member('b','B','Harare','Zimbabwe'),member('c','C','Lagos','Nigeria'),member('d','D','','United States')]);
+  const city=labels.find(l=>l.kind==='city'&&l.text==='Harare');
+  assert.equal(city.count,2);assert.equal(city.lat,-17.825);assert.equal(city.lng,31.033);
+  assert.equal(labels.find(l=>l.kind==='country'&&l.text==='Zimbabwe').count,2);
+  assert.equal(labels.find(l=>l.kind==='country'&&l.text==='Nigeria').count,1);
+  assert.equal(labels.find(l=>l.kind==='country'&&l.text==='United States').count,1);
+  assert.equal(labels.some(l=>l.kind==='city'&&l.text==='United States'),false);
+  const aliases=locationLabels([member('e','E','','USA'),member('f','F','','America'),member('g','G','','United States')]);
+  const us=aliases.filter(l=>l.kind==='country');
+  assert.equal(us.length,1);assert.equal(us[0].count,3);
 });
 
 test('placeMembersOnEarth pins located members at their city and never invents coordinates for unlocated members',()=>{
