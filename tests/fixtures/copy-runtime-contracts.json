@@ -2451,6 +2451,10 @@
     [
       "navigate",
       "Viewers"
+    ],
+    [
+      "navigate",
+      "ReferralAdmin"
     ]
   ],
   "mobile/src/screens/RecommendedMatchesScreen.tsx": [

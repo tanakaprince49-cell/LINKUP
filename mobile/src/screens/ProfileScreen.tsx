@@ -28,6 +28,7 @@ import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
+import { isAdminIdentity } from '../lib/admin';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, appBackground, liquidGlass, textColor } from '../theme/theme';
 import * as Icons from 'lucide-react-native';
@@ -3231,6 +3232,21 @@ export default function ProfileScreen({ navigation, route }: any) {
             </View>
             )}
           </View>
+        )}
+        {/* ADMIN - referral link manager (own profile, admins only) */}
+        {!isViewingOther && isAdminIdentity({ email: user?.email, isAdmin: (myProfile as any)?.isAdmin }) && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Admin</Text>
+          <TouchableOpacity
+            style={[styles.lazyPanelButton, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+            onPress={() => navigation.navigate('ReferralAdmin')}
+            activeOpacity={0.86}
+          >
+            <SafeIcon name="Link2" size={18} color={COLORS.primaryStrong} />
+            <Text style={[styles.lazyPanelText, { color: textColor(isDark) }]}>Referral links</Text>
+          </TouchableOpacity>
+          <Text style={styles.prefHelp}>Your private control room: one link per intern, clicks vs signups measured.</Text>
+        </View>
         )}
         {/* SETTINGS - only shown on own profile */}
         {!isViewingOther && (

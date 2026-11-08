@@ -7,7 +7,7 @@
 //   B) FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY
 //      (paste FIREBASE_PRIVATE_KEY with \n escapes; they are converted here)
 import admin from 'firebase-admin';
-import { MongoFirestore, mongoServerTimestamp } from './_mongoFirestore.js';
+import { MongoFieldValue, MongoFirestore, mongoServerTimestamp } from './_mongoFirestore.js';
 
 // DATA_BACKEND selects the data store for getDb()/serverTimestamp():
 //   unset / "firestore" — Cloud Firestore (the original store)
@@ -51,6 +51,14 @@ export function getDb() {
 export function serverTimestamp() {
   if (useMongo()) return mongoServerTimestamp();
   return getAdmin().firestore.FieldValue.serverTimestamp();
+}
+
+// Backend-agnostic atomic increment sentinel. The Mongo adapter understands
+// both shapes; in mongo mode hand it its own sentinel directly so callers
+// never depend on firebase-admin being initialised.
+export function fieldIncrement(n) {
+  if (useMongo()) return MongoFieldValue.increment(n);
+  return getAdmin().firestore.FieldValue.increment(n);
 }
 
 // Verify the Firebase ID token sent by the signed-in web client.

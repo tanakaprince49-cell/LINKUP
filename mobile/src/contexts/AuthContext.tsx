@@ -31,6 +31,7 @@ import { buildLocalProEntitlement, hasLinkupPro, hasPaidLinkupPro, readLocalProE
 import { compactProfileForCache } from '../lib/profilePerformance';
 import { isWebBilling, subscribeWebSubscription, withWebEntitlements } from '../lib/webSubscription';
 import { withAdminEntitlements } from '../lib/admin';
+import { stampReferralIfFreshAccount } from '../lib/referral';
 import { checkPayonifyPayment, takePendingReference } from '../lib/webCheckout';
 import type { WebSubscription } from '../lib/webSubscription';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
@@ -497,6 +498,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const userSnap = await getDoc(userDocRef);
+      // First-touch referral attribution: stamp the parked /r/:code onto
+      // fresh accounts exactly once (see lib/referral.ts).
+      await stampReferralIfFreshAccount(authUser, userSnap.exists() ? (userSnap.data() as any)?.referralCode : undefined);
       if (userSnap.exists()) {
         const rawProfile = userSnap.data() as any;
         const defaultsPatch = missingProfileDefaultsPatch(rawProfile);
@@ -637,6 +641,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (docSnap.exists()) {
             const rawProfile = docSnap.data() as any;
+            void stampReferralIfFreshAccount(authenticatedUser, rawProfile?.referralCode);
             const inferredOnboarded = Boolean(rawProfile.onboarded || hasCompletedProfileSignals(rawProfile) || storedOnboarded);
             const data = await withLocalProEntitlement(authenticatedUser.uid, {
               ...buildLocalUserProfile(authenticatedUser, inferredOnboarded),

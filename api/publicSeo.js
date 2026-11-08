@@ -4,7 +4,8 @@ import {serveBlogSeo,blogSitemapIndex} from './_blogSeo.js';
 import {getNewsFeed} from './_newsFeed.js';
 import {selectProfileImage} from './_publicProfileImage.js';
 import {renderSearchPage, projectSearchMember, placeMembersOnEarth, locationLabels} from './_searchGlobe.js';
-import { getDb } from './_firebaseAdmin.js';
+import { getDb, verifyRequestUser } from './_firebaseAdmin.js';
+import { handleReferralRedirect, handleReferralAdmin } from './_referrals.js';
 import { APP, SITE, PAGE_SIZE, SITEMAP_SIZE, safeUrl, validId, publicEligible, projectProfile, profileUrl, renderProfile, renderDirectory, documentHtml, xmlIndex, xmlUrls } from './_publicSeo.js';
 
 const SEARCH_PAGE_SIZE = 40;
@@ -40,7 +41,7 @@ const single = value => typeof value === 'string' ? value : '';
 // no-store (privacy changes must bite on the very next request).
 const BUILDER_COUNT_CACHE = {'Cache-Control':'public, max-age=60','Vercel-CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600','CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600'};
 const SEO_SITEMAP_CACHE = {'Cache-Control':'public, max-age=3600','Vercel-CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400','CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400'};
-export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai = null, now = Date.now) {
+export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai = null, now = Date.now, verifyUser = verifyRequestUser) {
   return async (req, res) => {
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
@@ -59,6 +60,26 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
       return res.send(req.method === 'HEAD' ? '' : body);
     };
     const mode = single(req.query?.mode);
+    // Referral links: /r/:code counts a click then lands in the app with the
+    // code attached; ref-admin is the admin-only POST API behind the
+    // in-app referral manager. Both bypass the GET/HEAD-only gate below.
+    if (mode === 'ref' && ['GET', 'HEAD'].includes(req.method)) {
+      try {
+        return await handleReferralRedirect({ db: database(), code: single(req.query?.code), appBase: APP, send, res });
+      } catch {
+        res.setHeader('Location', `${APP}/`);
+        return send(302, '');
+      }
+    }
+    if (mode === 'ref-admin') {
+      if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); return send(405, JSON.stringify({ error: 'Method not allowed' }), 'application/json; charset=utf-8'); }
+      res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+      try {
+        return await handleReferralAdmin({ db: database(), req, verifyUser, site: SITE, send });
+      } catch {
+        return send(503, JSON.stringify({ error: 'Referral service is temporarily unavailable.' }), 'application/json; charset=utf-8');
+      }
+    }
     if (mode === 'lvlup' || mode === 'lvlupBreakouts') {
       res.setHeader('X-Robots-Tag','noindex');
       return send(410, documentHtml({title:'Page retired | LINKUP',description:'This Linky page has been retired.',canonical:`${APP}/builders`,noindex:true,content:'<h1>Page retired</h1><p>Linky now focuses on matching project teams and recommending roles.</p><a href="https://www.linkupbuild.com/app">Return to LINKUP</a>'}));

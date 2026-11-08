@@ -232,6 +232,14 @@
       "destination": "/api/publicSeo?mode=search"
     },
     {
+      "source": "/r/:code",
+      "destination": "/api/publicSeo?mode=ref&code=:code"
+    },
+    {
+      "source": "/r/:code/",
+      "destination": "/api/publicSeo?mode=ref&code=:code"
+    },
+    {
       "source": "/startups",
       "destination": "/api/publicSeo?mode=startups"
     },

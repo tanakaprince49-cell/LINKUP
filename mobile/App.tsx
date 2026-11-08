@@ -1,6 +1,7 @@
 import 'react-native-gesture-handler';
 import { syncWebMetadata } from './src/lib/webMetadata';
 import { webBasePath, webAppPath, webRoutePath, scopedNavigationPath } from './src/lib/webPaths';
+import { captureReferralFromUrl } from './src/lib/referral';
 import React from 'react';
 import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text, Platform, InteractionManager } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef, DefaultTheme, DarkTheme, getPathFromState, getStateFromPath } from '@react-navigation/native';
@@ -33,6 +34,7 @@ const MessagesScreen = lazyScreen(() => import('./src/screens/MessagesScreen'));
 const ProfileScreen = lazyScreen(() => import('./src/screens/ProfileScreen'));
 const ChatScreen = lazyScreen(() => import('./src/screens/ChatScreen'));
 const ViewersScreen = lazyScreen(() => import('./src/screens/ViewersScreen'));
+const ReferralAdminScreen = lazyScreen(() => import('./src/screens/ReferralAdminScreen'));
 const ActiveOpportunityScreen = lazyScreen(() => import('./src/screens/ActiveOpportunityScreen'));
 const ActiveOpportunitiesScreen = lazyScreen(() => import('./src/screens/ActiveOpportunitiesScreen'));
 const RecommendedMatchesScreen = lazyScreen(() => import('./src/screens/RecommendedMatchesScreen'));
@@ -814,6 +816,7 @@ function AppContent() {
               </>
             ) : null}
             <Stack.Screen name="Viewers" component={ViewersScreen} />
+            <Stack.Screen name="ReferralAdmin" component={ReferralAdminScreen} />
             <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
             <Stack.Screen name="ActiveOpportunities" component={ActiveOpportunitiesScreen} />
             <Stack.Screen name="RecommendedMatches" component={RecommendedMatchesScreen} />
@@ -928,6 +931,9 @@ export default function App() {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
+
+  // Park any ?ref=<code> from a referral link so signup can attribute it.
+  React.useEffect(() => { captureReferralFromUrl(); }, []);
 
   return (
     <ErrorBoundary screenName="App">
