@@ -1038,12 +1038,12 @@
     "after": "Check your mobile data or Wi-Fi connection, then try again."
   },
   {
-    "file": "mobile/src/components/PaywallModal.tsx",
-    "line": 46,
+    "file": "shared/plus-benefits.js",
+    "line": 30,
     "before": "Who Viewed You — names & profiles of everyone checking you out",
     "after": "Profile viewer insights — review available names and professional profiles",
-    "current": "Profile viewer insights — see exactly who opened your profile, by name",
-    "voiceRevision": "plus-invite-v1: the perk list was rewritten to only claim what PLUS actually gates"
+    "current": "See exactly who opened your profile",
+    "voiceRevision": "plus-nine-v1: the nine benefits moved out of the modal into one shared list so the paywall, the invitation and the email cannot drift"
   },
   {
     "file": "mobile/src/components/PaywallModal.tsx",

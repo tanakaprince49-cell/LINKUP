@@ -5,6 +5,7 @@
 import crypto from 'node:crypto';
 import { getAuth } from 'firebase-admin/auth';
 import { memberHasPlus } from './_memberTier.js';
+import { PLUS_BENEFITS } from '../shared/plus-benefits.js';
 
 const APP_BASE = 'https://www.linkupbuild.com/app';
 const API_BASE = 'https://linkup-muqu.vercel.app';
@@ -485,20 +486,16 @@ export function buildMainCharacterJealousyNote(personal = null) {
  * Rules, learned the hard way with deliverability:
  *   - it renders BELOW the content and BELOW the main CTA, never above the match
  *   - plain tables and inline styles, no tracking pixels, no third-party images
- *   - one benefit only, then "and N more", because a wall of perks reads as spam
+ *   - one benefit only, then "and N more", because a wall of perks reads as spam —
+ *     both come from shared/plus-benefits.js so the email can never sell a
+ *     feature the paywall has stopped selling
  *   - the CTA lands on /app/?plus=1, which opens the paywall in-app on arrival
  */
-const PLUS_EMAIL_FEATURES = [
-  { id: 'noads', feature: 'No sponsored cards. Anywhere. Ever.', line: 'PLUS members never see a sponsored card — not on home, not on Linky, not in this email.' },
-  { id: 'viewers', feature: 'See exactly who opened your profile', line: 'Right now you get a number. PLUS gives you the names.' },
-  { id: 'recommendations', feature: 'Every weekly recommendation, not three', line: 'The algorithm finds more people for you than free is allowed to show.' },
-  { id: 'saved', feature: 'Save every profile worth coming back to', line: 'Five saves is not a shelf. PLUS makes it unlimited.' },
-  { id: 'posts', feature: 'Post as often as you ship', line: 'The builders who get matched are the ones who keep showing up.' },
-  { id: 'turbo', feature: 'Turbo Connect — stand at the front of Discover', line: 'Be found before the next person with the same skills is.' },
-  { id: 'badge', feature: 'The blue check and the PLUS crown', line: 'Being chosen starts with looking chosen.' },
-  { id: 'themes', feature: 'The PLUS app themes', line: 'Your app, your palette.' },
-];
-
+const PLUS_EMAIL_FEATURES = PLUS_BENEFITS.map((benefit) => ({
+  id: benefit.id,
+  feature: benefit.email.feature,
+  line: benefit.email.line,
+}));
 export const PLUS_EMAIL_MORE_COUNT = PLUS_EMAIL_FEATURES.length - 1;
 
 export const plusEmailUrl = () => `${APP_BASE}/?plus=1`;
