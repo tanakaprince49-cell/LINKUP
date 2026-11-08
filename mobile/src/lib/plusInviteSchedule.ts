@@ -33,40 +33,29 @@ export type InviteFeature = {
 };
 
 /**
- * What PLUS actually unlocks today. Every line is traceable to code that reads
- * hasLinkupPro(): campaigns.ts hides sponsored cards, ViewersScreen shows the
- * viewer list, RecommendedMatchesScreen and CreatePostScreen lift their limits,
- * ProfileScreen shows the tick + crown, DynamicAppearanceController unlocks
- * themes, and Turbo Connect is the discover boost.
+ * What PLUS actually unlocks today — the same nine the paywall lists, in
+ * shared/plus-benefits.js. Every line is traceable to code that reads
+ * hasLinkupPro() or to a server limit keyed on the paid tier: campaigns.ts hides
+ * sponsored cards, ViewersScreen shows the viewer list, RecommendedMatchesScreen
+ * lifts the weekly cap, CreatePostScreen lifts the posting cap, _linky.js lifts
+ * the message and Meet allowances, ChatScreen lifts the warm-intro cap,
+ * ProfileScreen gates Turbo Connect, and paying grants the tick + crown.
  *
- * Do not add a benefit before the feature exists. A paywall that promises a
- * feature you have not shipped is the fastest way to lose the member who pays.
+ * Do not add a benefit before the feature exists, and do not add one here
+ * without adding it to shared/plus-benefits.js — tests/plus-benefits.test.mjs
+ * fails if the two lists disagree. (The old "PLUS themes" line was pulled for
+ * exactly this reason: the App colour picker is free.)
  */
 export const INVITE_FEATURES: InviteFeature[] = [
   {
-    id: 'noads',
-    feature: 'No sponsored cards. Anywhere. Ever.',
-    line: "You're the one person on this app who should not be sold to, {first} — PLUS members never see a sponsored card, on any surface, or in any email.",
-  },
-  {
     id: 'viewers',
     feature: 'See exactly who opened your profile',
-    line: 'Three people looked at what you are building this week. Right now you can see the number. With PLUS you see the names.',
+    line: 'Builders looked at what you are building this week, {first}. Right now you can see the number. With PLUS you see the names.',
   },
   {
     id: 'recommendations',
     feature: 'Every recommendation, not three a week',
-    line: 'The algorithm finds more people for you than it is allowed to show you. Free stops at three. PLUS does not stop.',
-  },
-  {
-    id: 'saved',
-    feature: 'Save every profile you want to come back to',
-    line: 'Five saves is not enough for anyone actually building something, {first}. PLUS makes the shelf infinite.',
-  },
-  {
-    id: 'posts',
-    feature: 'Post as often as you ship',
-    line: 'You ship more than you post. Free caps it; PLUS does not. The builders who get matched are the ones who keep showing up.',
+    line: 'The algorithm finds more people for you than free is allowed to show you. Free stops at three. PLUS does not stop.',
   },
   {
     id: 'turbo',
@@ -74,14 +63,34 @@ export const INVITE_FEATURES: InviteFeature[] = [
     line: 'Somebody is looking for exactly what you are building. Turbo Connect is how they find you before they find the next person.',
   },
   {
+    id: 'linky',
+    feature: 'Unlimited Linky — no five-a-day cap',
+    line: 'Five messages a day is a short conversation with your own scout. PLUS takes the lid off and lets Linky keep looking.',
+  },
+  {
+    id: 'meets',
+    feature: 'Meet every builder Linky finds, not two a day',
+    line: 'Two Meet requests a day is a queue built on purpose. PLUS deletes the queue.',
+  },
+  {
+    id: 'posts',
+    feature: 'Post as often as you ship — 10 a week',
+    line: 'You ship more than you post. Free caps it at one a week; PLUS gives you ten.',
+  },
+  {
+    id: 'warmintro',
+    feature: 'An AI-written first message, every time',
+    line: 'The first message is the hardest one to send. Free gets one a month; PLUS writes every one.',
+  },
+  {
+    id: 'noads',
+    feature: 'No sponsored cards. Anywhere. Ever.',
+    line: "You're the one person on this app who should not be sold to, {first} — PLUS members never see a sponsored card, on any surface, or in any email.",
+  },
+  {
     id: 'badge',
     feature: 'The blue check and the PLUS crown',
     line: 'A verified tick and a crown beside your name, everywhere you appear — because being chosen starts with looking chosen.',
-  },
-  {
-    id: 'themes',
-    feature: 'The PLUS themes',
-    line: 'Your app, your palette. The themes live behind PLUS, along with everything else on this list.',
   },
 ];
 

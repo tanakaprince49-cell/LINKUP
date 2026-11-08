@@ -2,7 +2,22 @@ import { blockAppReviews } from '../lib/appReview';
 import React from 'react';
 import { Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { finishTransaction, getAvailablePurchases, type Purchase, useIAP } from 'expo-iap';
-import { CheckCircle2, Crown, Lock, X } from 'lucide-react-native';
+import {
+  BadgeCheck,
+  CheckCircle2,
+  Crown,
+  Eye,
+  Lock,
+  MessageSquare,
+  Rocket,
+  ShieldOff,
+  Users,
+  UserCheck,
+  Wand2,
+  X,
+  Zap,
+} from 'lucide-react-native';
+import { PLUS_BENEFIT_COUNT, PLUS_MORE_COUNT, plusBenefitGroups, type PlusBenefit } from '../lib/plusBenefits';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, liquidGlass, textColor } from '../theme/theme';
@@ -35,7 +50,7 @@ type PaywallInvite = {
   subline: string;
   /** The ONE benefit this exposure shows off. */
   feature: string;
-  /** "And 7 more things you don't have yet" — always tells them there is more. */
+  /** "And 8 more things you don't have yet" — always tells them there is more. */
   moreLine?: string;
   /** "Not now" — a real answer, so it gets a real button. */
   onSnooze?: () => void;
@@ -57,21 +72,27 @@ type PaywallModalProps = {
 const LOGO = require('../../assets/logo-square.png');
 
 /**
- * Every line here must be a thing PLUS actually gates today (grep hasLinkupPro).
- * The old list sold "unlimited idea deck" — the idea deck has been free forever
- * by decree (see IDEA_DECK_FREE_FOREVER in lib/paywall.ts) — and "advanced
- * search", which lives on the web and is not sold here. Charging for a promise
- * you do not gate is how a paywall loses the person who says yes.
+ * The benefit list is not written here any more. It lives in
+ * shared/plus-benefits.js, because the paywall, the three-a-day invitation and
+ * the email nudge all have to say the same nine things — and because every line
+ * must trace back to code that reads hasLinkupPro() or to a server limit keyed
+ * on the paid tier. Charging for a promise you do not gate is how a paywall
+ * loses the person who says yes.
  */
-const PRO_PERKS = [
-  'No sponsored cards anywhere — home, Linky, startups, blogs, notifications or email',
-  'Profile viewer insights — see exactly who opened your profile, by name',
-  'Every weekly recommendation, not three',
-  'Unlimited saved profiles and more posts per week',
-  'Turbo Connect — the Discover visibility boost',
-  'Verified blue check + the PLUS crown',
-  'The PLUS app themes',
-];
+const BENEFIT_GROUPS = plusBenefitGroups();
+
+/** One icon per lever. A list of nine needs texture, not nine ticks. */
+const BENEFIT_ICONS: Record<string, typeof Eye> = {
+  viewers: Eye,
+  recommendations: Users,
+  turbo: Zap,
+  linky: MessageSquare,
+  meets: UserCheck,
+  posts: Rocket,
+  warmintro: Wand2,
+  noads: ShieldOff,
+  badge: BadgeCheck,
+};
 
 const PRICING_PLANS = [
   {
@@ -549,13 +570,31 @@ export default function PaywallModal({
 
           <View style={[styles.perksSection, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
             <View style={styles.perksHeader}>
-              <Text style={[styles.perksTitle, { color: textColor(isDark) }]}>Everything included in LINKUP PLUS</Text>
-              <Text style={[styles.perksCount, { backgroundColor: COLORS.primary, color: COLORS.lightTextPrimary }]}>{PRO_PERKS.length} PLUS PERKS</Text>
+              <Text style={[styles.perksTitle, { color: textColor(isDark) }]} numberOfLines={2}>
+                Everything you get in LINKUP PLUS
+              </Text>
+              <Text style={[styles.perksCount, { backgroundColor: COLORS.primary, color: COLORS.lightTextPrimary }]}>{PLUS_BENEFIT_COUNT} LEVERS</Text>
             </View>
-            {PRO_PERKS.map((perk) => (
-              <View key={perk} style={styles.perkRow}>
-                <CheckCircle2 size={18} color={COLORS.primaryStrong} />
-                <Text style={[styles.perkText, { color: textColor(isDark, 'secondary') }]}>{perk}</Text>
+            <Text style={[styles.perksLead, { color: textColor(isDark, 'muted') }]}>
+              Every limit on this page lifts the second you pay — not next week, not after a review.
+            </Text>
+            {BENEFIT_GROUPS.map((group) => (
+              <View key={group.id} style={styles.perkGroup}>
+                <Text style={[styles.perkGroupLabel, { color: COLORS.primaryStrong }]}>{group.label}</Text>
+                {group.items.map((benefit: PlusBenefit) => {
+                  const Icon = BENEFIT_ICONS[benefit.id] || CheckCircle2;
+                  return (
+                    <View key={benefit.id} style={styles.perkRow}>
+                      <View style={[styles.perkIcon, { backgroundColor: isDark ? 'rgba(251,230,24,0.14)' : COLORS.primaryGlow }]}>
+                        <Icon size={15} color={COLORS.primaryStrong} />
+                      </View>
+                      <View style={styles.perkCopy}>
+                        <Text style={[styles.perkText, { color: textColor(isDark) }]}>{benefit.title}</Text>
+                        <Text style={[styles.perkProof, { color: textColor(isDark, 'muted') }]}>{benefit.proof}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             ))}
           </View>
@@ -626,9 +665,14 @@ export default function PaywallModal({
               {isRestoring ? 'RESTORING...' : 'RESTORE PURCHASES'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} style={[styles.laterBtn, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]} activeOpacity={0.8}>
-            <Text style={[styles.laterText, { color: textColor(isDark, 'secondary') }]}>NOT NOW</Text>
-          </TouchableOpacity>
+          {/* One "no", not two. In invite mode the schedule's own button above
+              is the one that counts toward today's three, so the legacy button
+              stays out of the way. */}
+          {invite?.onSnooze ? null : (
+            <TouchableOpacity onPress={onClose} style={[styles.laterBtn, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]} activeOpacity={0.8}>
+              <Text style={[styles.laterText, { color: textColor(isDark, 'secondary') }]}>NOT NOW</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -769,6 +813,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1,
     textTransform: 'uppercase',
+    flexShrink: 1,
   },
   priceLabelSelected: {
   },
@@ -779,6 +824,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     fontSize: 9,
     fontWeight: '900',
+    flexShrink: 0,
   },
   priceRow: {
     marginTop: 9,
@@ -864,7 +910,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 2,
+  },
+  perksLead: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  perkGroup: {
+    gap: 12,
+    marginTop: 10,
+  },
+  perkGroupLabel: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    letterSpacing: 1.3,
+  },
+  perkIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  perkCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  perkProof: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
   },
   perksTitle: {
     fontSize: 16,
@@ -878,18 +956,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: 12,
     paddingVertical: 7,
+    flexShrink: 0,
   },
   perkRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 11,
-    minHeight: 36,
   },
   perkText: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '700',
+    fontSize: 13.5,
+    lineHeight: 19,
+    fontWeight: '900',
+    letterSpacing: -0.1,
   },
   planBtn: {
     marginHorizontal: 16,
