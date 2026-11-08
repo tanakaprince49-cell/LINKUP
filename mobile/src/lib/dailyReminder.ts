@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { collection, getDocs, limit, query, where } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where } from './firestoreCompat';
 import { db } from './firebase';
 
 const FAKE_REMINDER_IDS = [

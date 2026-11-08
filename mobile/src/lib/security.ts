@@ -1,4 +1,4 @@
-import { collection, setDoc, query, where, getDocs, serverTimestamp, doc, getDoc, deleteDoc } from 'firebase/firestore';
+import { collection, setDoc, query, where, getDocs, serverTimestamp, doc, getDoc, deleteDoc } from './firestoreCompat';
 import { db } from './firebase';
 
 /**

@@ -12,7 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from '../lib/firestoreCompat';
 import {
   ChevronLeft,
   ExternalLink,

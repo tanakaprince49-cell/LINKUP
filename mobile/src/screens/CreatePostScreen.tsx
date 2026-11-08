@@ -28,7 +28,7 @@ import {
   query,
   where,
   getDocs,
-} from 'firebase/firestore';
+} from '../lib/firestoreCompat';
 import { uploadCampaignLogoToImageKit, uploadImageToImageKit } from '../lib/imagekitUpload';
 import { storedProfileImageUri } from '../lib/profilePerformance';
 import { hasLinkupPro, getCurrentWeekKey } from '../lib/paywall';

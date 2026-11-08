@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp } from '../lib/firestoreCompat';
 import { X } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';

@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc } from './firestoreCompat';
 import { db } from './firebase';
 import { buildAccountExport, exportFileName, type AccountExport } from './accountExport';
 

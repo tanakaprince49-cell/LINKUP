@@ -3,7 +3,7 @@ import MemberBadges from '../components/MemberBadges';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, getDoc, getDocsFromCache, limit } from 'firebase/firestore';
+import { FieldPath, collection, query, where, onSnapshot, doc, updateDoc, arrayUnion, getDoc, getDocsFromCache, limit } from '../lib/firestoreCompat';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';

@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, endAt, endBefore, getDocs, getDocsFromCache, limit, onSnapshot, orderBy, query, setDoc, startAfter, startAt } from 'firebase/firestore';
+import { collection, deleteDoc, doc, endAt, endBefore, getDocs, getDocsFromCache, limit, onSnapshot, orderBy, query, setDoc, startAfter, startAt } from './firestoreCompat';
 import { db } from './firebase';
 import { displayNameFor, isDiscoverableProfile } from './discovery';
 import { sanitizeSocialLinks } from './socialLinks';

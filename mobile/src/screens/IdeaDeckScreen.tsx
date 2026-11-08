@@ -21,7 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notifyUser } from '../lib/notify';
 import { useIsFocused } from '@react-navigation/native';
-import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, limit, query, serverTimestamp, setDoc, where } from '../lib/firestoreCompat';
 import { ChevronLeft, Globe, Heart, Infinity as InfinityIcon, Lightbulb, MessageSquare, Plus, RefreshCw, X, Zap } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { ensureDirectMatch } from '../lib/chat';

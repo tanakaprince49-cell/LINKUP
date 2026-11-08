@@ -1,4 +1,4 @@
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc } from './firestoreCompat';
 import { db } from './firebase';
 import { hasActiveOpportunityIntent, opportunityDetails } from './discovery';
 import { rotateFeed } from './feedRotation';

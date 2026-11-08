@@ -38,7 +38,7 @@ import {
   increment,
   where,
   getDocs
-} from 'firebase/firestore';
+} from '../lib/firestoreCompat';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { storedProfileImageUri } from '../lib/profilePerformance';

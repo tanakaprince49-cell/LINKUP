@@ -1,4 +1,4 @@
-import { FieldPath, collection, doc, getDoc, limit, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { FieldPath, collection, doc, getDoc, limit, onSnapshot, query, serverTimestamp, setDoc, where } from './firestoreCompat';
 import { db } from './firebase';
 import { buildConversationProfileSnapshot, loadConversationProfile } from './conversationProfiles';
 

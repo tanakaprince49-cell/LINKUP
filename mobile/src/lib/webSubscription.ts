@@ -13,7 +13,7 @@
 // Nothing here is writable from the app — firestore.rules sets
 // `allow write: if false` on webSubscriptions. Only api/ can grant.
 import { Platform } from 'react-native';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from './firestoreCompat';
 import { db } from './firebase';
 import { TIERS } from './pricing';
 

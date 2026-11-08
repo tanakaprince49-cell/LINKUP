@@ -5,7 +5,7 @@ import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Keyboard
 import * as ImagePicker from 'expo-image-picker';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocsFromCache, setDoc, arrayUnion, arrayRemove, increment, limitToLast } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, getDocsFromCache, setDoc, arrayUnion, arrayRemove, increment, limitToLast } from '../lib/firestoreCompat';
 import { db } from '../lib/firebase';
 import { linkyCall } from '../lib/linkyApi';
 import { useAuth } from '../contexts/AuthContext';

@@ -33,7 +33,8 @@
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
-    "firebase-admin": "^13.10.0"
+    "firebase-admin": "^13.10.0",
+    "mongodb": "^6.22.0"
   },
   "description": "LINKUP is an Expo React Native app for mobile and web. Production web deploys serve the Expo app from mobile/ via Vercel; the api/ directory holds the Vercel serverless functions (they use firebase-admin and the resvg PNG renderer).",
   "repository": {

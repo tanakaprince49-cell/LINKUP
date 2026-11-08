@@ -48,7 +48,7 @@ import {
   setDoc,
   updateDoc,
   where,
-} from 'firebase/firestore';
+} from '../lib/firestoreCompat';
 import { trackProfileClick, trackProfileSave, trackProfileView } from '../lib/analytics';
 import { resolveConnectionGate, startTalkOrRequest, subscribeToConnectionGate, type ConnectionGate } from '../lib/connectionRequests';
 import { useConnectionNote } from '../components/ConnectionNoteModal';

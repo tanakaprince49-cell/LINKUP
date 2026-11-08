@@ -1,4 +1,4 @@
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc } from './firestoreCompat';
 import { db } from './firebase';
 import { storedProfileImageUri } from './profilePerformance';
 import { UserProfile } from '../types';

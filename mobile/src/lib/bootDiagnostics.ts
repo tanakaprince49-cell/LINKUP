@@ -1,4 +1,4 @@
-import { collection, getDocs, limit, onSnapshot, query } from 'firebase/firestore';
+import { collection, getDocs, limit, onSnapshot, query } from './firestoreCompat';
 import { db } from './firebase';
 
 /**

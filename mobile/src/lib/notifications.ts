@@ -13,7 +13,7 @@ import {
   getDocs,
   writeBatch,
   limit,
-} from 'firebase/firestore';
+} from './firestoreCompat';
 import { db } from './firebase';
 import { MOBILE_NOTIFICATION_QUERY_LIMIT } from './profilePerformance';
 import { linkyCall } from './linkyApi';

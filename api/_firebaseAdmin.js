@@ -7,6 +7,14 @@
 //   B) FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY
 //      (paste FIREBASE_PRIVATE_KEY with \n escapes; they are converted here)
 import admin from 'firebase-admin';
+import { MongoFirestore, mongoServerTimestamp } from './_mongoFirestore.js';
+
+// DATA_BACKEND selects the data store for getDb()/serverTimestamp():
+//   unset / "firestore" — Cloud Firestore (the original store)
+//   "mongo"             — MongoDB Atlas via the Firestore-shaped adapter
+// Firebase Auth is unaffected: identity always stays on Firebase.
+const useMongo = () => String(process.env.DATA_BACKEND || '').trim().toLowerCase() === 'mongo';
+let mongoDbSingleton = null;
 
 function buildCredential() {
   const raw = String(process.env.FIREBASE_SERVICE_ACCOUNT || '').trim();
@@ -33,10 +41,15 @@ export function getAdmin() {
 }
 
 export function getDb() {
+  if (useMongo()) {
+    if (!mongoDbSingleton) mongoDbSingleton = new MongoFirestore();
+    return mongoDbSingleton;
+  }
   return getAdmin().firestore();
 }
 
 export function serverTimestamp() {
+  if (useMongo()) return mongoServerTimestamp();
   return getAdmin().firestore.FieldValue.serverTimestamp();
 }
 

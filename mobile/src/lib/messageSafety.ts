@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, serverTimestamp } from './firestoreCompat';
 import { db } from './firebase';
 
 export type SafetyFlag =

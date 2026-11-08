@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { finishTransaction, getAvailablePurchases, type Purchase, useIAP } from 'expo-iap';
-import { serverTimestamp } from 'firebase/firestore';
+import { serverTimestamp } from '../lib/firestoreCompat';
 import {
   BarChart3,
   Check,

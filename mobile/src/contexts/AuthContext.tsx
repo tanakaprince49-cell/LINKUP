@@ -23,7 +23,7 @@ import {
   signOut,
   verifyBeforeUpdateEmail,
 } from 'firebase/auth';
-import { deleteDoc, deleteField, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, deleteField, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from '../lib/firestoreCompat';
 import { auth, db } from '../lib/firebase';
 import { UserProfile } from '../types';
 import { publicProfileLink } from '../lib/profileLinks';

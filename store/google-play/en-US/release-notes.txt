@@ -1,4 +1,4 @@
-18.0.0
+18.1.0
 
 • Linky writes your profile for you (LINKUP PLUS) — you approve every word before it saves
 • Linky already knows what you're building, so it stops asking

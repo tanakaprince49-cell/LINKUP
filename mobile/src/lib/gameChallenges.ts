@@ -3,7 +3,7 @@ import { storedProfileImageUri } from './profilePerformance';
 import {
   doc, setDoc, getDoc, onSnapshot, collection, query, where,
   updateDoc, serverTimestamp,
-} from 'firebase/firestore';
+} from './firestoreCompat';
 
 export type GameType = 'founderflip' | 'pitchperfect' | 'networkquiz';
 

@@ -3,7 +3,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal, ActivityIndicator, FlatList, Image,
 } from 'react-native';
-import { collection, query, where, onSnapshot, FieldPath, limit as firestoreLimit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, FieldPath, limit as firestoreLimit } from '../lib/firestoreCompat';
 import { db } from '../lib/firebase';
 import { sendGameChallenge, GameType } from '../lib/gameChallenges';
 import { useAuth } from '../contexts/AuthContext';

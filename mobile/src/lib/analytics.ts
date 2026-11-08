@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDoc, increment, serverTimestamp, setDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, increment, serverTimestamp, setDoc } from './firestoreCompat';
 import { db } from './firebase';
 import { storedProfileImageUri } from './profilePerformance';
 

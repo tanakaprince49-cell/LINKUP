@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc } from './firestoreCompat';
 import { builderCall } from './builder';
 import { db } from './firebase';
 import { displayNameFor, earnedScore, hasActiveOpportunityIntent } from './discovery';

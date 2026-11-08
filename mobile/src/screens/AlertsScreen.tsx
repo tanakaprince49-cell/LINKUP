@@ -2,7 +2,7 @@ import MemberBadges from '../components/MemberBadges';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Linking, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, query, where, onSnapshot, doc, updateDoc, limit, writeBatch } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, limit, writeBatch } from '../lib/firestoreCompat';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { db } from '../lib/firebase';
 import { AppImage } from '../components/AppImage';

@@ -14,7 +14,7 @@ import {
   setDoc,
   updateDoc,
   where,
-} from 'firebase/firestore';
+} from './firestoreCompat';
 import { db } from './firebase';
 import { hasLinkupPro } from './paywall';
 import { isAdminEmail, isAdminIdentity, type AdminIdentity } from './admin';

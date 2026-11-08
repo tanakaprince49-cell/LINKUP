@@ -2,7 +2,7 @@ import MemberBadges from '../components/MemberBadges';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collection, doc, FieldPath, getDoc, limit, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, FieldPath, getDoc, limit, onSnapshot, query, where } from '../lib/firestoreCompat';
 import { Bookmark, ChevronLeft, Eye, Gauge, Lock, MessageSquare, MousePointerClick, UserPlus } from 'lucide-react-native';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';

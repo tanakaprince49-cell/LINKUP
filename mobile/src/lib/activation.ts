@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Share, Platform } from 'react-native';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp } from './firestoreCompat';
 import { db } from './firebase';
 import { displayNameFor } from './discovery';
 

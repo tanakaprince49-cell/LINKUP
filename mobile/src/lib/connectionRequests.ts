@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc } from './firestoreCompat';
 import { db } from './firebase';
 import { linkyCall } from './linkyApi';
 import { directMatchId, ensureDirectMatch } from './chat';
