@@ -8,7 +8,6 @@ import * as workbench from '../api/_linkyWorkbench.js';
 import * as quality from '../api/_linkyQuality.js';
 import * as companion from '../api/_linkyCompanion.js';
 import * as usage from '../api/_linkyUsage.js';
-import * as profileWriter from '../shared/profile-writer.js';
 import { publicEligible } from '../api/_publicSeo.js';
 import { safeLinkedinProfile } from '../api/_serpapi.js';
 
