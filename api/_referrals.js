@@ -40,11 +40,14 @@ const tsToMillis = (value) => {
   return null;
 };
 
-export function publicReferralLink(link, site) {
+export function publicReferralLink(link, appBase) {
   return {
     code: link.code,
     label: link.label || link.code,
-    url: `${site}/r/${link.code}`,
+    // Links must live under /app: that is the only prefix the public site
+    // routes to this deployment. A bare /r/<code> hits the marketing site's
+    // 404 before it can ever reach the counter.
+    url: `${appBase}/r/${link.code}`,
     clicks: Number(link.clicks) || 0,
     signups: Number(link.signups) || 0,
     active: link.active !== false,
@@ -75,12 +78,12 @@ async function countSignups(db, code) {
   }
 }
 
-export async function listReferralLinks(db, site) {
+export async function listReferralLinks(db, appBase) {
   const snap = await db.collection('referralLinks').get();
   const links = (snap.docs || []).map((d) => ({ code: d.id, ...(d.data() || {}) }));
   links.sort((a, b) => (tsToMillis(b.createdAt) || 0) - (tsToMillis(a.createdAt) || 0));
   return Promise.all(
-    links.map(async (link) => publicReferralLink({ ...link, signups: await countSignups(db, link.code) }, site)),
+    links.map(async (link) => publicReferralLink({ ...link, signups: await countSignups(db, link.code) }, appBase)),
   );
 }
 
@@ -108,7 +111,7 @@ export async function handleReferralRedirect({ db, code, appBase, send, res }) {
 }
 
 // POST publicSeo?mode=ref-admin  { action: 'list'|'create'|'rename'|'setActive'|'delete', ... }
-export async function handleReferralAdmin({ db, req, verifyUser = verifyRequestUser, site, send }) {
+export async function handleReferralAdmin({ db, req, verifyUser = verifyRequestUser, appBase, send }) {
   const json = (code, body) => send(code, JSON.stringify(body), 'application/json; charset=utf-8');
   const user = await verifyUser(req).catch(() => null);
   if (!user?.uid) return json(401, { error: 'Sign in required' });
@@ -124,7 +127,7 @@ export async function handleReferralAdmin({ db, req, verifyUser = verifyRequestU
 
   try {
     if (action === 'list') {
-      return json(200, { links: await listReferralLinks(db, site) });
+      return json(200, { links: await listReferralLinks(db, appBase) });
     }
     if (action === 'create') {
       const label = String(body.label || '').trim().slice(0, 60);
@@ -146,7 +149,7 @@ export async function handleReferralAdmin({ db, req, verifyUser = verifyRequestU
         lastClickAt: null,
       };
       await ref.set(doc);
-      return json(201, { link: publicReferralLink(doc, site) });
+      return json(201, { link: publicReferralLink(doc, appBase) });
     }
 
     const code = slugifyReferralCode(body.code || '');
@@ -160,12 +163,12 @@ export async function handleReferralAdmin({ db, req, verifyUser = verifyRequestU
       const label = String(body.label || '').trim().slice(0, 60);
       if (label.length < 2) return json(400, { error: 'Name is too short.' });
       await ref.update({ label, updatedAt: serverTimestamp() });
-      return json(200, { link: publicReferralLink({ ...current, label, signups: await countSignups(db, code) }, site) });
+      return json(200, { link: publicReferralLink({ ...current, label, signups: await countSignups(db, code) }, appBase) });
     }
     if (action === 'setActive') {
       const active = body.active === true;
       await ref.update({ active, updatedAt: serverTimestamp() });
-      return json(200, { link: publicReferralLink({ ...current, active, signups: await countSignups(db, code) }, site) });
+      return json(200, { link: publicReferralLink({ ...current, active, signups: await countSignups(db, code) }, appBase) });
     }
     if (action === 'delete') {
       await ref.delete();

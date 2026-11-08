@@ -151,7 +151,7 @@ test('ref-admin creates links (auto slug + custom code), rejects duplicates, cou
   assert.equal(created.code, 201);
   const link = JSON.parse(created.body).link;
   assert.equal(link.code, 'maya-k');
-  assert.equal(link.url, 'https://www.linkupbuild.com/r/maya-k');
+  assert.equal(link.url, 'https://www.linkupbuild.com/app/r/maya-k');
   assert.equal(link.clicks, 0);
 
   const custom = response();

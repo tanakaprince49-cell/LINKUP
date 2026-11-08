@@ -75,7 +75,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
       if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); return send(405, JSON.stringify({ error: 'Method not allowed' }), 'application/json; charset=utf-8'); }
       res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
       try {
-        return await handleReferralAdmin({ db: database(), req, verifyUser, site: SITE, send });
+        return await handleReferralAdmin({ db: database(), req, verifyUser, appBase: APP, send });
       } catch {
         return send(503, JSON.stringify({ error: 'Referral service is temporarily unavailable.' }), 'application/json; charset=utf-8');
       }

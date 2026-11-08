@@ -256,7 +256,7 @@ export default function ReferralAdminScreen({ navigation }: any) {
               <Text style={styles.createBtnText}>{creating ? 'Creating…' : 'Create link'}</Text>
             </TouchableOpacity>
             <Text style={[styles.hint, { color: colors.muted }]}>
-              The link looks like linkupbuild.com/r/maya-k. Leave the ending blank and we will make it from the name.
+              The link looks like linkupbuild.com/app/r/maya-k. Leave the ending blank and we will make it from the name.
             </Text>
           </View>
 
