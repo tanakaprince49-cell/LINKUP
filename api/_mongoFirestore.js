@@ -333,15 +333,26 @@ export class Query {
     this._limitToLast = state.limitToLast || false;
     this._cursor = state.cursor || null; // {values: [...], id}
     this._parentConstraints = state.parentConstraints || [];
+    this._projection = state.projection ?? undefined; // undefined = all fields
+    this._offset = state.offset ?? null;
   }
 
   _clone(patch) {
     return new Query(this._db, this._collection, {
       filters: this._filters, orders: this._orders, limit: this._limit,
       limitToLast: this._limitToLast, cursor: this._cursor,
-      parentConstraints: this._parentConstraints, ...patch,
+      parentConstraints: this._parentConstraints,
+      projection: this._projection, offset: this._offset, ...patch,
     });
   }
+
+  // Firestore select(): no fields = keys-only snapshots; otherwise a field
+  // projection. Either way the snapshot data() carries only those fields.
+  select(...fields) {
+    const flat = fields.flat().map((f) => String(f));
+    return this._clone({ projection: flat });
+  }
+  offset(n) { return this._clone({ offset: Math.max(0, Number(n) || 0) }); }
 
   where(field, op, value) {
     return this._clone({ filters: [...this._filters, { field, op, value }] });
@@ -421,7 +432,16 @@ export class Query {
       sort = Object.fromEntries(Object.entries(sort).map(([k, v]) => [k, -v]));
     }
     let cursor = mongo.collection(this._collection).find(finalFilter, { session });
+    if (this._projection !== undefined) {
+      if (!this._projection.length) cursor = cursor.project({ _id: 1 });
+      else {
+        const projection = { _id: 1 };
+        for (const f of this._projection) projection[f] = 1;
+        cursor = cursor.project(projection);
+      }
+    }
     cursor = cursor.sort(sort);
+    if (this._offset) cursor = cursor.skip(this._offset);
     if (this._limit != null) cursor = cursor.limit(this._limit);
     const raws = await cursor.toArray();
     if (this._limitToLast) raws.reverse();
@@ -668,6 +688,15 @@ export class MongoFirestore {
   }
 
   batch() { return new WriteBatch(this); }
+
+  // Firestore getAll(...refs[, {fieldMask}]): order-preserving batch read.
+  // fieldMask is accepted and ignored (full documents are cheap at our scale).
+  async getAll(...args) {
+    const refs = args.filter((a) => a instanceof DocumentRef);
+    const out = [];
+    for (const ref of refs) out.push(await ref.get());
+    return out;
+  }
 
   async runTransaction(fn, options = {}) {
     const client = await getMongoClient();
