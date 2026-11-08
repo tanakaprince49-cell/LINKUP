@@ -1,3 +1,10 @@
 18.0.0
 
-Linky now writes your profile for you (PLUS) — you approve every word before it saves. Linky already knows what you're building, so it stops asking. Every paid feature is now listed with the free number beside it, and a gold upgrade button sits at the top of home. Your weekly co-founder appears when you tap. Home fills your whole screen. Free Linky: 4 messages a day.
+• Linky writes your profile for you (LINKUP PLUS) — you approve every word before it saves
+• Linky already knows what you're building, so it stops asking
+• Linky's tab is now the cat
+• See how many free messages you have left (4 a day) right above the chat box
+• Your weekly co-founder's photo appears the moment you tap to reveal
+• Every paid feature listed with what free gets and what PLUS gets
+• A gold upgrade button at the top of home
+• Home now fills your whole screen
