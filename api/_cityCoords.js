@@ -62,7 +62,7 @@ const COUNTRY_ROWS = [
   ['Australia',-25.274,133.775],['New Zealand',-40.901,174.886],['Fiji',-16.578,179.414],
   ['Brazil',-14.235,-51.925],['Argentina',-38.416,-63.616],['Chile',-35.675,-71.543],['Peru',-9.19,-75.015],['Colombia',4.571,-74.297],['Venezuela',6.424,-66.59],['Uruguay',-32.523,-55.766],['Ecuador',-1.831,-78.183],
 ];
-const norm = value => String(value || '').trim().toLowerCase().replace(/[^a-z\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+const norm = value => String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z\s-]/g, ' ').replace(/\s+/g, ' ').trim();
 const CITIES = Object.create(null); for (const [name, lat, lng] of CITY_ROWS) CITIES[norm(name)] = [lat, lng, name];
 const COUNTRIES = Object.create(null); for (const [name, lat, lng] of COUNTRY_ROWS) COUNTRIES[norm(name)] = [lat, lng, name];
 const title = s => String(s).replace(/(^|[\s-])\S/g, m => m.toUpperCase());

@@ -27,19 +27,48 @@ test('Search renders only the Earth, space, and profile picture markers with hov
   assert.ok(fs.statSync(texture).size>500_000,'bundled Blue Marble texture exists at production app asset path');
 });
 
-test('placeMembersOnEarth assigns coordinates to all members and preserves name, city, country for hover',()=>{
+test('placeMembersOnEarth pins located members at their city and never invents coordinates for unlocated members',()=>{
   const placed=placeMembersOnEarth([member('a','A','Harare','Zimbabwe','https://ik.imagekit.io/demo/a.jpg'),member('b','B','Harare','Zimbabwe'),member('c','C','','')]);
   assert.equal(placed.length,3);
-  for(const item of placed){
-    assert.equal(typeof item.lat,'number');
-    assert.equal(typeof item.lng,'number');
-  }
+  assert.equal(typeof placed[0].lat,'number');
+  assert.equal(typeof placed[0].lng,'number');
   assert.equal(placed[0].city,'Harare');
   assert.equal(placed[0].country,'Zimbabwe');
+  // Harare anchor is -17.825,31.033: same-city members fan out only slightly around it.
+  for(const item of [placed[0],placed[1]]){
+    assert.ok(Math.abs(item.lat+17.825)<=1.6,'lat stays near Harare');
+    assert.ok(Math.abs(item.lng-31.033)<=1.8,'lng stays near Harare');
+  }
   assert.notDeepEqual([placed[0].lat,placed[0].lng],[placed[1].lat,placed[1].lng]);
+  // No location on file: no coordinates are invented for the third member.
+  assert.equal(placed[2].lat,undefined);
+  assert.equal(placed[2].lng,undefined);
+  // Placement is stable: rendering already-placed members never moves a pin.
+  assert.deepEqual(placeMembersOnEarth(placed),placed);
   const result=groupMembersByLocation([member('a','A','Harare','Zimbabwe'),member('b','B','Harare','Zimbabwe'),member('c','C','','')]);
   assert.equal(result.groups.length,1);assert.equal(result.groups[0].members.length,2);
   assert.deepEqual(result.unlocated,[2]);
+});
+
+test('placeMembersOnEarth keeps a large same-city cluster inside the city area',()=>{
+  const many=Array.from({length:13},(_,i)=>member('u'+i,'Person '+String(i).padStart(2,'0'),'Harare','Zimbabwe'));
+  const placed=placeMembersOnEarth(many);
+  assert.equal(placed.length,13);
+  for(const item of placed){
+    assert.ok(Math.abs(item.lat+17.825)<=1.6,'lat stays near Harare');
+    assert.ok(Math.abs(item.lng-31.033)<=1.8,'lng stays near Harare');
+  }
+  const pins=new Set(placed.map(m=>m.lat+','+m.lng));
+  assert.equal(pins.size,13);
+});
+
+test('Search page counts builders on the map and lists unlocated builders by name instead of scattering them',()=>{
+  const html=renderSearchPage({members:[member('u1','Mapped Person','Lagos','Nigeria'),member('u2','No Place Person','','')],nextCursor:null});
+  assert.match(html,/1 builder on the map/);
+  assert.match(html,/1 have not shared a location yet/);
+  assert.match(html,/Not on the map yet \(1\)/);
+  assert.match(html,/No Place Person/);
+  assert.doesNotMatch(html,/"name":"No Place Person"[^}]*"lat"/);
 });
 
 test('Search walks bounded pages and loads all eligible public profiles onto the map',async()=>{
