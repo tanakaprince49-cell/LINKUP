@@ -1038,14 +1038,6 @@
     "after": "Check your mobile data or Wi-Fi connection, then try again."
   },
   {
-    "file": "shared/plus-benefits.js",
-    "line": 30,
-    "before": "Who Viewed You — names & profiles of everyone checking you out",
-    "after": "Profile viewer insights — review available names and professional profiles",
-    "current": "See exactly who opened your profile",
-    "voiceRevision": "plus-perks-v2: the perk list moved to shared/plus-perks.js and now lists all ten paid features with the free number beside the PLUS number"
-  },
-  {
     "file": "mobile/src/components/PaywallModal.tsx",
     "line": 355,
     "before": "LINKUP PLUS is not ready in Google Play yet. Check the subscription product IDs and base-plan offers in Play Console.",
@@ -1056,14 +1048,6 @@
     "line": 398,
     "before": "Your latest payment is still being confirmed. Give it a moment and try again.",
     "after": "Your payment is being verified. Please wait briefly before trying again."
-  },
-  {
-    "file": "shared/plus-benefits.js",
-    "line": 0,
-    "before": "Build your startup faster",
-    "after": "Expand your professional networking tools",
-    "current": "this is everything LINKUP can do",
-    "voiceRevision": "plus-perks-v2: the paywall header is written per member by paywallCopy() in shared/plus-perks.js"
   },
   {
     "file": "mobile/src/lib/dailyLoop.ts",

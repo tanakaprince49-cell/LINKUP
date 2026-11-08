@@ -487,7 +487,7 @@ export function buildMainCharacterJealousyNote(personal = null) {
  *   - it renders BELOW the content and BELOW the main CTA, never above the match
  *   - plain tables and inline styles, no tracking pixels, no third-party images
  *   - one benefit only, then "and N more", because a wall of perks reads as spam —
- *     both come from shared/plus-benefits.js so the email can never sell a
+ *     both come from shared/plus-perks.js so the email can never sell a
  *     feature the paywall has stopped selling
  *   - the CTA lands on /app/?plus=1, which opens the paywall in-app on arrival
  */

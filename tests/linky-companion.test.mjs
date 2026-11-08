@@ -8,7 +8,6 @@ import ts from '../mobile/node_modules/typescript/lib/typescript.js';
 import * as quality from '../api/_linkyQuality.js';
 import * as companion from '../api/_linkyCompanion.js';
 import * as usage from '../api/_linkyUsage.js';
-import * as profileWriter from '../shared/profile-writer.js';
 import {publicEligible} from '../api/_publicSeo.js';
 import {scoreBatch, cleanLink, safeLinkedinProfile} from '../api/_serpapi.js';
 const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
@@ -31,7 +30,6 @@ function core(db,{ai=false,aiMode="search",externalSearch=null,prompts=null}={})
  const mocks={
   './_linkyWorkbench.js':workbench,'node:crypto':crypto,'./_linkyQuality.js':quality,'./_linkyCompanion.js':companion,'./_publicSeo.js':{publicEligible},'./_linkyUsage.js':usage,
   '../shared/team-roles.js':{fallbackTeamRoles:()=>[]},
-  '../shared/profile-writer.js': profileWriter,
   './_memberTier.js': { memberHasPlus: async () => false },
   './_firebaseAdmin.js':{getDb:()=>db,getAdmin:()=>({firestore:{FieldValue:{serverTimestamp:()=>Date.now(),delete:()=>null},Timestamp:{fromMillis:ms=>ms}}})},
   './_gemini.js':{aiReady:()=>ai,aiStatus:()=>({gemini:{},zen:{}}),aiText:async(prompt)=>{prompts?.push(prompt);return {text:JSON.stringify({mode:aiMode,picks:[{uid:'irrelevant',score:100}],reply:'I found ten perfect matches'})}},geminiText:async()=>'{"picks":[{"uid":"irrelevant","score":100}]}'},

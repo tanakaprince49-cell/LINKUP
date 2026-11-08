@@ -18,7 +18,6 @@ import {
   X,
   Zap,
 } from 'lucide-react-native';
-import { PLUS_BENEFIT_COUNT, PLUS_MORE_COUNT, plusBenefitGroups, type PlusBenefit } from '../lib/plusBenefits';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, liquidGlass, textColor } from '../theme/theme';

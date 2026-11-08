@@ -30,8 +30,6 @@ import ProfileStrengthCard from '../components/ProfileStrengthCard';
 import PaywallModal from '../components/PaywallModal';
 import { hasLinkupPro } from '../lib/paywall';
 import DemandStrip from '../components/DemandStrip';
-import PaywallModal from '../components/PaywallModal';
-import { hasLinkupPro } from '../lib/paywall';
 import { PLUS_PERK_COUNT } from '../../../shared/plus-perks';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
@@ -774,16 +772,6 @@ const styles = StyleSheet.create({
   sponsorStripLogo: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.04)' },
   // Full-bleed gold: the one thing on this page that is trying to sell something,
   // so it is the one thing that does not whisper.
-  upgradeBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: HOME_GOLD,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(10,11,13,0.12)',
-  },
   upgradeIcon: {
     width: 34,
     height: 34,
@@ -792,8 +780,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(10,11,13,0.10)',
   },
-  upgradeTitle: { fontSize: 15.5, fontWeight: '900', letterSpacing: -0.3, color: HOME_INK },
-  upgradeSub: { marginTop: 2, fontSize: 10.5, fontWeight: '800', color: 'rgba(10,11,13,0.72)' },
   cofounderCard: { marginTop: 22 },
   exclusiveBanner: {
     flexDirection: 'row',

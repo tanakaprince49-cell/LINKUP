@@ -28,7 +28,6 @@ import { proofPoints, proofFromSnippet, badgeLine } from './_proof.js';
 import { sendExpoPush as sendSharedPush } from './_expoPush.js';
 import { sendHighSignalEmail } from './_emailNotify.js';
 import { fallbackTeamRoles } from '../shared/team-roles.js';
-import { draftProfile, inventsFacts, isUsableDraft } from '../shared/profile-writer.js';
 import { memberHasPlus } from './_memberTier.js';
 
 export const LIMITS = {
@@ -3774,88 +3773,6 @@ export async function teamMatch(uid, { mode = 'find', idea = '', ownRole = '', r
     }
     throw error;
   }
-}
-
-// ------------------------------------------------- Linky writes the profile
-// PLUS ONLY. Linky takes everything the member has already told LINKUP and
-// writes the profile the matcher actually scores, then hands it back for a
-// one-tap save. Free members get the pitch, not the write.
-//
-// The model may only reword: `inventsFacts` throws away any draft that adds a
-// name, company, city or number that was not in the member's own answers, and
-// the deterministic draft is used instead. A profile is the one thing on LINKUP
-// that must never contain something the member did not say.
-export async function writeMyProfile(uid) {
-  const user = await loadUser(uid);
-  if (!user) {
-    const err = new Error('Finish your LINKUP profile first, then I can write it properly.');
-    err.code = 'no_profile';
-    throw err;
-  }
-  const plus = await isPlusMember(uid, user);
-  if (!plus) {
-    const err = new Error('Linky writing your profile is a LINKUP PLUS feature.');
-    err.code = 'plus_required';
-    throw err;
-  }
-
-  const draft = draftProfile(user);
-  if (!draft.written) {
-    const err = new Error('Tell me one thing first — what you are building, or which seat is empty — and I will write the rest.');
-    err.code = 'nothing_to_write';
-    throw err;
-  }
-
-  let polished = null;
-  if (aiReady() && draft.fields.bio) {
-    const prompt = [
-      'You are Linky, the connector at LINKUP, rewriting one member\'s profile so the matching algorithm reads it as a person rather than a form.',
-      'You may ONLY reword the facts given to you. You may not add a person, company, city, product, school, number, date or skill that is not in FACTS. No adjectives that cannot be proved. No hype, no emoji, no markdown, no hashtags.',
-      'Write in the member\'s own first person voice. Two short paragraphs at most. British spelling.',
-      'Return STRICT JSON only: {"bio":"...","headline":"one line, under 90 characters","occupation":"...","goals":"one sentence, intent-shaped"}',
-      `FACTS: ${JSON.stringify({ ...draft.facts, factsOnly: true }).slice(0, 2200)}`,
-      `THEIR CURRENT DRAFT BIO: ${draft.fields.bio}`,
-    ].join('\n');
-    try {
-      const { text: raw } = await aiText(prompt, { temperature: 0.6, maxOutputTokens: 420, responseMimeType: 'application/json', timeoutMs: 9000 });
-      const parsed = readJson(raw) || {};
-      const bio = text(parsed.bio, 900);
-      const goals = text(parsed.goals, 240);
-      const occupation = text(parsed.occupation, 100);
-      const headline = text(parsed.headline, 120);
-      const bioOk = bio && !inventsFacts(bio, draft.facts);
-      const goalsOk = !goals || !inventsFacts(goals, draft.facts);
-      if (bioOk && goalsOk) {
-        polished = {
-          ...draft,
-          fields: {
-            ...draft.fields,
-            bio,
-            ...(goals ? { goals } : {}),
-            ...(occupation ? { occupation } : {}),
-          },
-          headline: headline || draft.headline,
-          source: 'ai',
-        };
-      }
-    } catch (err) {
-      await noteAiFault('profile_write', err).catch(() => {});
-    }
-  }
-
-  const out = polished || draft;
-  const usable = isUsableDraft(out);
-  return {
-    status: usable ? 'ready' : 'needs_more',
-    source: out.source,
-    fields: out.fields,
-    evidence: out.evidence || [],
-    missing: out.missing || [],
-    headline: out.headline,
-    message: usable
-      ? 'I wrote it from what you have already told me. Read it, change anything, then save it.'
-      : 'I need one more thing from you before I can write this properly.',
-  };
 }
 
 // ---------------------------------------------------------------- team chat
