@@ -1058,10 +1058,12 @@
     "after": "Your payment is being verified. Please wait briefly before trying again."
   },
   {
-    "file": "mobile/src/components/PaywallModal.tsx",
-    "line": 466,
+    "file": "shared/plus-benefits.js",
+    "line": 0,
     "before": "Build your startup faster",
-    "after": "Expand your professional networking tools"
+    "after": "Expand your professional networking tools",
+    "current": "This is the version of LINKUP built for you",
+    "voiceRevision": "plus-canon-v2: the paywall title is now written from the member’s own profile (plusPitch), so the generic headline lives as the fallback"
   },
   {
     "file": "mobile/src/lib/dailyLoop.ts",

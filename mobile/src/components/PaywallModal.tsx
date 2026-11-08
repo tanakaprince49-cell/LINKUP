@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Crown,
   Eye,
+  FileText,
   Lock,
   MessageSquare,
   Rocket,
@@ -41,6 +42,7 @@ import {
 } from '../lib/trial';
 import { checkPayonifyPayment, startPayonifyCheckout, takePendingReference } from '../lib/webCheckout';
 import { notifyUser } from '../lib/notify';
+import { plusPitch } from '../../../shared/plus-benefits';
 
 const IS_WEB = Platform.OS === 'web';
 
@@ -91,6 +93,7 @@ const BENEFIT_ICONS: Record<string, typeof Eye> = {
   posts: Rocket,
   warmintro: Wand2,
   noads: ShieldOff,
+  profilewriter: FileText,
   badge: BadgeCheck,
 };
 
@@ -158,6 +161,10 @@ export default function PaywallModal({
   const processedPurchases = React.useRef(new Set<string>());
   const [selectedPlan, setSelectedPlan] = React.useState<PlusPlan['id']>('monthly');
   const isPro = hasLinkupPro(profile);
+  // Personalised from the member's own onboarding answers: their name, their
+  // build, the seat they said was empty. This is the difference between "a
+  // paywall" and "somebody noticed me".
+  const pitch = React.useMemo(() => plusPitch(profile as any), [profile]);
   const selectedPrice = PRICING_PLANS.find((plan) => plan.id === selectedPlan) || PRICING_PLANS[0];
   // No maxHeight needed — whole sheet scrolls
   const {
@@ -512,13 +519,19 @@ export default function PaywallModal({
             </View>
 
             <Text style={[styles.title, { color: textColor(isDark) }]}>
-              {invite ? invite.headline : 'Expand your professional networking tools'}
+              {invite ? invite.headline : pitch.headline}
             </Text>
             <Text style={[styles.copy, { color: textColor(isDark, 'secondary') }]}>
               {invite
                 ? invite.subline
-                : description || 'Free members have limited team matching. LINKUP PLUS provides higher matching limits and broader discovery to help you find complementary teammates for your project.'}
+                : (description || pitch.setup
+                  || 'You get every limit removed, the people who looked at you, and Linky writing your profile for you.')}
             </Text>
+            {!invite && !description && pitch.stake ? (
+              <Text style={[styles.pitchStake, { color: isDark ? COLORS.primary : COLORS.primaryStrong }]}>
+                {pitch.stake}
+              </Text>
+            ) : null}
             <View style={[styles.featurePill, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}> 
               <Text style={[styles.feature, { color: textColor(isDark) }]}>{invite ? invite.feature : feature}</Text>
             </View>
@@ -568,10 +581,13 @@ export default function PaywallModal({
             </View>
           </View>
 
+          {/* EVERYTHING, itemised. Each row says what PLUS does, what proves it,
+              and what staying free costs — so the member is not comparing a
+              promise to a price, they are comparing their own week to it. */}
           <View style={[styles.perksSection, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
             <View style={styles.perksHeader}>
               <Text style={[styles.perksTitle, { color: textColor(isDark) }]} numberOfLines={2}>
-                Everything you get in LINKUP PLUS
+                {pitch.name ? `${pitch.name}, everything you get the moment you pay` : 'Everything you get, the moment you pay'}
               </Text>
               <Text style={[styles.perksCount, { backgroundColor: COLORS.primary, color: COLORS.lightTextPrimary }]}>{PLUS_BENEFIT_COUNT} LEVERS</Text>
             </View>
@@ -958,6 +974,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     flexShrink: 0,
   },
+  pitchStake: { marginTop: 10, fontSize: 13, fontWeight: '900', lineHeight: 18, letterSpacing: -0.1 },
   perkRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

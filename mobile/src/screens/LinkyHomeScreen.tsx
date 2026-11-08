@@ -16,6 +16,7 @@ import { ArrowLeft, Search, Send, Trash2, Users } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import LinkyProfileWriter from '../components/LinkyProfileWriter';
 import { appBackground, COLORS, RADIUS, textColor } from '../theme/theme';
 import {
   linkyTeamChat,
@@ -55,7 +56,10 @@ type ChatMessage = {
   failed?: boolean;
 };
 
-const STARTER_CHIPS = ['Find my teammates', 'What are you building?', 'I need a designer', 'Who can build my product?'];
+// No "What are you building?" — Linky read the profile at onboarding. A chip
+// that asks a question the app already answers makes the product feel brand new
+// every time you open it.
+const STARTER_CHIPS = ['Find my teammates', 'Who is missing from my team?', 'I need a designer', 'Who can build my product?'];
 const MAX_MESSAGES = 60;
 const MAX_INPUT = 800;
 
@@ -367,6 +371,10 @@ export default function LinkyHomeScreen({ navigation }: any) {
         <Text style={styles.primaryCtaText}>{facts.seat ? `Find my ${facts.seat}` : 'Find my teammates'}</Text>
       </TouchableOpacity>
       <Text style={[styles.openingClock, { color: palette.muted }]}>{LINKY_VOICE.clock}</Text>
+
+      {/* PLUS only: Linky writes the whole profile from what it already knows.
+          Free members get the offer, and the tap opens the wall. */}
+      <LinkyProfileWriter onUpgrade={() => setPaywall('Linky writes your whole profile')} />
 
       {!!chips.length && (
         <View style={styles.suggestionList}>

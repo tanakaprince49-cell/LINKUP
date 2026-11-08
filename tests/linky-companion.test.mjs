@@ -8,6 +8,7 @@ import ts from '../mobile/node_modules/typescript/lib/typescript.js';
 import * as quality from '../api/_linkyQuality.js';
 import * as companion from '../api/_linkyCompanion.js';
 import * as usage from '../api/_linkyUsage.js';
+import * as profileWriter from '../shared/profile-writer.js';
 import {publicEligible} from '../api/_publicSeo.js';
 import {scoreBatch, cleanLink, safeLinkedinProfile} from '../api/_serpapi.js';
 const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
@@ -30,6 +31,8 @@ function core(db,{ai=false,aiMode="search",externalSearch=null,prompts=null}={})
  const mocks={
   './_linkyWorkbench.js':workbench,'node:crypto':crypto,'./_linkyQuality.js':quality,'./_linkyCompanion.js':companion,'./_publicSeo.js':{publicEligible},'./_linkyUsage.js':usage,
   '../shared/team-roles.js':{fallbackTeamRoles:()=>[]},
+  '../shared/profile-writer.js': profileWriter,
+  './_memberTier.js': { memberHasPlus: async () => false },
   './_firebaseAdmin.js':{getDb:()=>db,getAdmin:()=>({firestore:{FieldValue:{serverTimestamp:()=>Date.now(),delete:()=>null},Timestamp:{fromMillis:ms=>ms}}})},
   './_gemini.js':{aiReady:()=>ai,aiStatus:()=>({gemini:{},zen:{}}),aiText:async(prompt)=>{prompts?.push(prompt);return {text:JSON.stringify({mode:aiMode,picks:[{uid:'irrelevant',score:100}],reply:'I found ten perfect matches'})}},geminiText:async()=>'{"picks":[{"uid":"irrelevant","score":100}]}'},
   './_serpapi.js':{safeLinkedinProfile,findLeads:externalSearch || (async()=>({leads:[],searches:0,note:'not-configured'}))},'./_expoPush.js':{sendExpoPush:async()=>({sent:0})},'./_emailNotify.js':{sendHighSignalEmail:async()=>({sent:false})},'./_proof.js':{proofPoints:()=>[],badgeLine:()=>''}
@@ -380,8 +383,8 @@ test('pre-V16 main chat never injects removed Coach context, including old opted
 });
 
 test('Linky workbench gives a useful artifact and continuation without a member match or extra AI calls',async()=>{
- const db=new Database();seed(db,[member]);const lk=core(db);const first=await lk.ask('member','Help me price my new app',{userDoc:member});assert.equal(first.kind,'chat');assert.equal(first.cards.length,0);assert.match(first.reply,/pricing|price|hypotheses/i);assert.equal(first.messageQuota.remaining,4);const next=await lk.ask('member','Delivery costs me three dollars per customer',{userDoc:member});assert.equal(next.thread.at(-1).workTask,'pricing');assert.equal(next.messageQuota.remaining,3);
+ const db=new Database();seed(db,[member]);const lk=core(db);const first=await lk.ask('member','Help me price my new app',{userDoc:member});assert.equal(first.kind,'chat');assert.equal(first.cards.length,0);assert.match(first.reply,/pricing|price|hypotheses/i);assert.equal(first.messageQuota.remaining,3);const next=await lk.ask('member','Delivery costs me three dollars per customer',{userDoc:member});assert.equal(next.thread.at(-1).workTask,'pricing');assert.equal(next.messageQuota.remaining,2);
 });
 test('workbench credentials fail before model calls and refund the reserved message',async()=>{
- const db=new Database();seed(db,[member]);const prompts=[],lk=core(db,{ai:true,prompts});await assert.rejects(lk.ask('member','Help me code with api_key=abcdefghijklmnopqrstuv',{userDoc:member}),/Remove passwords/);assert.equal(prompts.length,0);const h=await lk.home('member',{userDoc:member});assert.equal(h.messageQuota.remaining,5);
+ const db=new Database();seed(db,[member]);const prompts=[],lk=core(db,{ai:true,prompts});await assert.rejects(lk.ask('member','Help me code with api_key=abcdefghijklmnopqrstuv',{userDoc:member}),/Remove passwords/);assert.equal(prompts.length,0);const h=await lk.home('member',{userDoc:member});assert.equal(h.messageQuota.remaining,4);
 });

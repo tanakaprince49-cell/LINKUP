@@ -4,9 +4,11 @@
 // per-member allowance has to fit inside one shared ceiling. These numbers are
 // derived, not guessed: see docs/qa/linky-allowance-plan.md for the arithmetic.
 //
-// The free allowance is DAILY-ONLY: 5 messages per UTC day, resetting at
+// The free allowance is DAILY-ONLY: 4 messages per UTC day, resetting at
 // midnight UTC. There is no monthly bucket anymore: the header shows
-// "5 free messages today" and the composer locks when they are used up.
+// "4 free messages today" and the composer locks — and offers PLUS — when they
+// are used up. Four is deliberate: it is enough to feel the product work and
+// not enough to run a real search campaign for free.
 // PLUS messages are unlimited and cannot be capped.
 //
 // Overrides (Vercel env, no redeploy of code needed):
@@ -16,9 +18,9 @@
 //   LINKY_MODEL_RPD               the provider's requests/day for the wired model
 //   LINKY_CALLS_PER_MESSAGE       average model calls per delivered message
 export const BUDGET_DEFAULTS = Object.freeze({
-  freePerDay: 5,
+  freePerDay: 4,
   plusPerDay: null,
-  freeDaily: 5,
+  freeDaily: 4,
   plusDaily: null,
   plusUnlimited: true,
   globalDailyMessages: 200,

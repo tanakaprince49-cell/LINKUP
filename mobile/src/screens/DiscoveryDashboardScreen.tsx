@@ -20,13 +20,15 @@ import {
   type WeeklyCofounderMatch,
 } from '../lib/matchmaking';
 import { displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
-import { Briefcase, MapPin, Target, Rocket, Zap, UserCheck, Globe, CheckCircle2, MessageSquare, Mail, ArrowDown } from 'lucide-react-native';
+import { Briefcase, MapPin, Target, Rocket, Zap, UserCheck, Globe, CheckCircle2, MessageSquare, Mail, ArrowDown, Crown, ChevronRight } from 'lucide-react-native';
 import { isSponsoredHiddenForViewer, recordCampaignClick } from '../lib/campaigns';
 import { useSponsoredSlot } from '../components/SponsoredCard';
 import { shareLinkupInvite } from '../lib/activation';
 import WeeklyPortrait from '../components/WeeklyPortrait';
 import WeeklyDossier from '../components/WeeklyDossier';
 import ProfileStrengthCard from '../components/ProfileStrengthCard';
+import PaywallModal from '../components/PaywallModal';
+import { hasLinkupPro } from '../lib/paywall';
 import DemandStrip from '../components/DemandStrip';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
@@ -123,6 +125,10 @@ const weeklyMatchKey = (uid: string | undefined, match: { weekKey?: string; part
 
 function DiscoveryDashboardScreen({ navigation }: any) {
   const { user, profile: me } = useAuth();
+  // The free member's front door to PLUS. One big button at the very top of the
+  // home page, and it opens the same paywall the three-a-day invitation uses.
+  const isPlus = hasLinkupPro(me);
+  const [plusWallOpen, setPlusWallOpen] = useState(false);
   const adsHiddenForViewer = isSponsoredHiddenForViewer(me, { email: user?.email, isAdmin: (me as any)?.isAdmin });
   const { theme } = useTheme();
   const isFocused = useIsFocused();
@@ -584,6 +590,29 @@ function DiscoveryDashboardScreen({ navigation }: any) {
       ) : (
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
           <View style={{ paddingTop: 0 }}>
+            {/* THE ASK, at the top of the page, before anything else. Free members
+                only — a paid member never sees a button offering what they own. */}
+            {!isPlus && (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Upgrade to LINKUP PLUS"
+                activeOpacity={0.9}
+                onPress={() => setPlusWallOpen(true)}
+                style={styles.upgradeBar}
+              >
+                <View style={styles.upgradeIcon}>
+                  <Crown size={18} color={HOME_INK} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.upgradeTitle}>Upgrade to LINKUP PLUS</Text>
+                  <Text style={styles.upgradeSub} numberOfLines={2}>
+                    Unlimited Linky · who viewed you · Linky writes your profile
+                  </Text>
+                </View>
+                <ChevronRight size={18} color={HOME_INK} />
+              </TouchableOpacity>
+            )}
+
             <View style={[styles.heroCard, { backgroundColor: isDark ? COLORS.darkCard : '#FFF' }]}>
               <HomeHero profile={me as any} hasMatch={!!weeklyMatch} isDark={isDark} />
 
@@ -657,6 +686,8 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           </View>
         </ScrollView>
       )}
+
+      <PaywallModal visible={plusWallOpen} onClose={() => setPlusWallOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -684,6 +715,28 @@ const styles = StyleSheet.create({
   sponsorStripTitle: { fontSize: 12, fontWeight: '900' },
   sponsorStripSub: { marginTop: 2, fontSize: 10, fontWeight: '800' },
   sponsorStripLogo: { width: 32, height: 32, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.04)' },
+  // Full-bleed gold: the one thing on this page that is trying to sell something,
+  // so it is the one thing that does not whisper.
+  upgradeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: HOME_GOLD,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(10,11,13,0.12)',
+  },
+  upgradeIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(10,11,13,0.10)',
+  },
+  upgradeTitle: { fontSize: 15.5, fontWeight: '900', letterSpacing: -0.3, color: HOME_INK },
+  upgradeSub: { marginTop: 2, fontSize: 10.5, fontWeight: '800', color: 'rgba(10,11,13,0.72)' },
   cofounderCard: { marginTop: 22 },
   exclusiveBanner: {
     flexDirection: 'row',

@@ -16,7 +16,7 @@ import {
   clearChat, consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
   meet, meetSquad, orderedCards, patchState, pickPerson, pointers, pullProfiles, reactionFor, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
   setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret, pushNotify, reportClientError, teamMatch,
-  linkyChat } from './_linky.js';
+  linkyChat, writeMyProfile } from './_linky.js';
 import { badgeLine } from './_proof.js';
 
 
@@ -903,6 +903,17 @@ async function handleApp(req, res) {
         out = await builderService().handle(uid, op, body.input || {}); break;
       }
       case 'pushNotify': out = await pushNotify(uid, { toUid: String(body.toUid || ''), type: String(body.type || ''), text: String(body.text || ''), matchId: String(body.matchId || '') }); break;
+      // PLUS-only: Linky rewrites the member's whole profile from what LINKUP
+      // already knows. Free members get 402 plus the paywall, never a draft.
+      case 'writeProfile': {
+        try {
+          out = await writeMyProfile(uid);
+        } catch (err) {
+          if (err?.code === 'plus_required') { res.status(402).json({ error: err.message, code: 'plus_required', upgradeRequired: true }); return; }
+          throw err;
+        }
+        break;
+      }
       case 'teamMatch': out = await teamMatch(uid, { mode: body.mode, idea: body.idea, ownRole: body.ownRole, roles: body.roles, memberUids: body.memberUids, teamSize: body.teamSize }); break;
       case 'chat': out = await linkyChat(uid, {
         message: body.message,

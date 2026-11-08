@@ -28,6 +28,8 @@ import { proofPoints, proofFromSnippet, badgeLine } from './_proof.js';
 import { sendExpoPush as sendSharedPush } from './_expoPush.js';
 import { sendHighSignalEmail } from './_emailNotify.js';
 import { fallbackTeamRoles } from '../shared/team-roles.js';
+import { draftProfile, inventsFacts, isUsableDraft } from '../shared/profile-writer.js';
+import { memberHasPlus } from './_memberTier.js';
 
 export const LIMITS = {
   // All member messages count, including greetings, drafts and follow-up replies.
@@ -222,8 +224,23 @@ export function profileFacts(p) {
     lookingFor: list(p.lookingFor, 6),
     goals: text(p.goals, 300),
     bio: text(p.bio, 400),
+    // What Linky already knows from onboarding. It must never ask again: a
+    // companion that forgets the member's own build is a form with a face.
+    building: text(p.buildingName || p.company || (Array.isArray(p.projects) ? p.projects[0]?.title : ''), 80),
+    oneLiner: text(p.buildingOneLiner || (Array.isArray(p.projects) ? p.projects[0]?.description : ''), 160),
+    seat: text(p.missingSeat || (Array.isArray(p.lookingFor) ? p.lookingFor[0] : ''), 80),
+    stage: text(p.startupStage, 40),
     remoteOnly: !!p.remoteOnly,
   };
+}
+
+/** Is this member a paying PLUS member? One answer, used by every gate here. */
+export async function isPlusMember(uid, user) {
+  try {
+    return await memberHasPlus(db(), uid, user || {}, Date.now());
+  } catch {
+    return false;
+  }
 }
 
 // What the member told Linky directly (editable on "What Linky knows about you").
@@ -287,6 +304,10 @@ function mergedFacts(p, state) {
     lookingFor: minusHidden(uniq([...base.lookingFor, ...told.lookingFor]).slice(0, 12), hid.lookingFor),
     role: scrubHidden(base.role, [...hid.skills, ...hid.industries]),
     company: hid.company ? '' : scrubHidden(base.company, hid.skills),
+    building: hid.company ? '' : base.building,
+    oneLiner: hid.bio ? '' : base.oneLiner,
+    seat: base.seat,
+    stage: base.stage,
     city: hid.city ? '' : base.city,
     bio: [hid.bio ? '' : base.bio, hid.notes ? '' : told.notes].filter(Boolean).map((x) => scrubHidden(x, hid.skills)).filter(Boolean).join(' ').slice(0, 1200),
     notes: hid.notes ? '' : told.notes,
@@ -1154,7 +1175,7 @@ const VOICE_KINDS = {
   check: "Address the actual thought first with a useful, evidence-based observation. Then ask whether to search for relevant professionals. Do not list profiles, imply a completed search, or start searching without agreement.",
   squad: "The member requested a complementary team. Present the supplied group together, identify each person and their documented contribution, and state the remaining expertise gap. Do not offer team discovery unless requested.",
   loop: "Ask a brief professional follow-up about the introduction after 48 hours. Offer the four supplied response choices clearly. Never assume the members met or describe an unconfirmed outcome.",
-  limit: "Explain the actual free daily allowance (5 messages a day, resets at midnight UTC) and reset, or unlimited PLUS access, from the dossier. Do not claim more messages are free or pressure a purchase.",
+  limit: "Explain the actual free daily allowance (4 messages a day, resets at midnight UTC) and reset, or unlimited PLUS access, from the dossier. Do not claim more messages are free or pressure a purchase.",
 };
 
 // Kinds that must be written fresh every time: caching a greeting for fourteen days
@@ -3746,6 +3767,88 @@ export async function teamMatch(uid, { mode = 'find', idea = '', ownRole = '', r
   }
 }
 
+// ------------------------------------------------- Linky writes the profile
+// PLUS ONLY. Linky takes everything the member has already told LINKUP and
+// writes the profile the matcher actually scores, then hands it back for a
+// one-tap save. Free members get the pitch, not the write.
+//
+// The model may only reword: `inventsFacts` throws away any draft that adds a
+// name, company, city or number that was not in the member's own answers, and
+// the deterministic draft is used instead. A profile is the one thing on LINKUP
+// that must never contain something the member did not say.
+export async function writeMyProfile(uid) {
+  const user = await loadUser(uid);
+  if (!user) {
+    const err = new Error('Finish your LINKUP profile first, then I can write it properly.');
+    err.code = 'no_profile';
+    throw err;
+  }
+  const plus = await isPlusMember(uid, user);
+  if (!plus) {
+    const err = new Error('Linky writing your profile is a LINKUP PLUS feature.');
+    err.code = 'plus_required';
+    throw err;
+  }
+
+  const draft = draftProfile(user);
+  if (!draft.written) {
+    const err = new Error('Tell me one thing first — what you are building, or which seat is empty — and I will write the rest.');
+    err.code = 'nothing_to_write';
+    throw err;
+  }
+
+  let polished = null;
+  if (aiReady() && draft.fields.bio) {
+    const prompt = [
+      'You are Linky, the connector at LINKUP, rewriting one member\'s profile so the matching algorithm reads it as a person rather than a form.',
+      'You may ONLY reword the facts given to you. You may not add a person, company, city, product, school, number, date or skill that is not in FACTS. No adjectives that cannot be proved. No hype, no emoji, no markdown, no hashtags.',
+      'Write in the member\'s own first person voice. Two short paragraphs at most. British spelling.',
+      'Return STRICT JSON only: {"bio":"...","headline":"one line, under 90 characters","occupation":"...","goals":"one sentence, intent-shaped"}',
+      `FACTS: ${JSON.stringify({ ...draft.facts, factsOnly: true }).slice(0, 2200)}`,
+      `THEIR CURRENT DRAFT BIO: ${draft.fields.bio}`,
+    ].join('\n');
+    try {
+      const { text: raw } = await aiText(prompt, { temperature: 0.6, maxOutputTokens: 420, responseMimeType: 'application/json', timeoutMs: 9000 });
+      const parsed = readJson(raw) || {};
+      const bio = text(parsed.bio, 900);
+      const goals = text(parsed.goals, 240);
+      const occupation = text(parsed.occupation, 100);
+      const headline = text(parsed.headline, 120);
+      const bioOk = bio && !inventsFacts(bio, draft.facts);
+      const goalsOk = !goals || !inventsFacts(goals, draft.facts);
+      if (bioOk && goalsOk) {
+        polished = {
+          ...draft,
+          fields: {
+            ...draft.fields,
+            bio,
+            ...(goals ? { goals } : {}),
+            ...(occupation ? { occupation } : {}),
+          },
+          headline: headline || draft.headline,
+          source: 'ai',
+        };
+      }
+    } catch (err) {
+      await noteAiFault('profile_write', err).catch(() => {});
+    }
+  }
+
+  const out = polished || draft;
+  const usable = isUsableDraft(out);
+  return {
+    status: usable ? 'ready' : 'needs_more',
+    source: out.source,
+    fields: out.fields,
+    evidence: out.evidence || [],
+    missing: out.missing || [],
+    headline: out.headline,
+    message: usable
+      ? 'I wrote it from what you have already told me. Read it, change anything, then save it.'
+      : 'I need one more thing from you before I can write this properly.',
+  };
+}
+
 // ---------------------------------------------------------------- team chat
 // The Linky surface is a conversation, not a form. The member types like they
 // are texting a friend who happens to have the whole LINKUP member database
@@ -3764,7 +3867,17 @@ const chatTurns = (history) => (Array.isArray(history) ? history : [])
 const SEARCH_INTENT = /\b(find|search|scan|match|who(?:'s| is| can| could| should)|need|needs|looking for|look for|co-?founder|cofounder|teammate|team-?mate|team|hire|recruit|join|missing|gap|designer|engineer|developer|marketer|marketing|growth|ops|operations|sales|advisor|cto|ceo|research)\b/i;
 const SMALL_TALK = /^(hi|hey|hello|yo|sup|thanks|thank you|ok|okay|cool|nice|great|lol|yes|no|yep|nope)\b/i;
 
-const chatOpener = (name) => `Hey${name ? ` ${name}` : ''} — Linky here. Tell me what you are building and I will run it against every public LINKUP profile we have until the missing pieces of your team turn up.`;
+// The opener must never ask what Linky already knows. It reads the member's own
+// build back to them so the first line proves the profile was read, not skipped.
+const chatOpener = (name, facts = {}) => {
+  const who = name ? ` ${name}` : '';
+  const build = text(facts.building || facts.company, 60);
+  const seat = text(facts.seat, 60);
+  if (build) {
+    return `Hey${who} — Linky here. I have got ${build}${seat ? ` and the ${seat.toLowerCase()} seat still open` : ''}. Say the word and I will run that against every public LINKUP profile we have.`;
+  }
+  return `Hey${who} — Linky here. I know your profile, so skip the introductions: tell me which seat is still empty and I will run it against every public LINKUP profile we have.`;
+};
 
 function chatFallbackPlan(say, me) {
   const wants = say.length >= 12 && SEARCH_INTENT.test(say) && !SMALL_TALK.test(say);
@@ -3777,7 +3890,7 @@ function chatFallbackPlan(say, me) {
     action: 'chat',
     idea: '',
     roles: [],
-    reply: 'I can search the whole LINKUP member database for the people who complete your team — just tell me what you are building and which seat is still empty.',
+    reply: `${text(me?.building, 60) ? `I already have ${text(me.building, 60)}` : 'I already have your profile'}${text(me?.seat, 60) ? ` and the ${text(me.seat, 60).toLowerCase()} seat you need` : ''} — say the word and I will search the whole member database for the people who complete it.`,
   };
 }
 
@@ -3786,6 +3899,10 @@ async function chatPlan({ say, thread, me, ownerRole }) {
   const dossier = {
     name: text(me?.name, 40),
     role: text(me?.role, 60) || ownerRole,
+    building: text(me?.building || me?.company, 80),
+    oneLiner: text(me?.oneLiner, 160),
+    seat: text(me?.seat, 80),
+    stage: text(me?.stage, 40),
     city: text(me?.city, 40),
     country: text(me?.country, 40),
     skills: list(me?.skills, 8, 30),
@@ -3795,7 +3912,7 @@ async function chatPlan({ say, thread, me, ownerRole }) {
     'You are Linky, the team-building companion inside LINKUP. You are chatting in the app with one member.',
     'Voice: warm, playful, quick, a little cheeky, faintly jealous in a fun way — you want this member to win and you do not want them building it with the wrong people. Make them feel like the main character. Max 2 sentences and under 45 words. No markdown, no emoji, no links, no "as an AI".',
     'Your one superpower: you can search the live LINKUP member database for complementary teammates. You never invent people or claim someone is available.',
-    `Member: ${JSON.stringify(dossier)}.`,
+    `Member: ${JSON.stringify(dossier)}. YOU ALREADY KNOW THIS MEMBER: their build, their seat and their skills are in that dossier. Never ask what they are building, who they are, what they do or what seat is empty — asking a member for something their own profile already answers is the fastest way to look like a form with a face. If a fact is genuinely missing, ask for that one fact only, in the same sentence as your answer.`,
     thread.length ? `Conversation so far: ${JSON.stringify(thread.slice(-CHAT_LOOKBACK))}` : 'This is the first thing they have said.',
     `Their new message: ${JSON.stringify(say)}.`,
     'Decide whether they want you to search the database for teammates now (asking for people, a co-founder, a role filled, a team searched) or whether they are just talking / answering your question about their project.',
@@ -3868,7 +3985,15 @@ export async function linkyChat(uid, {
       ? { action: 'search', idea: text(idea, 500), roles: list(roles, 3, 60), reply: '', usedAi: false }
       : await chatPlan({ say, thread, me, ownerRole });
     const wantsSearch = manual || plan.action === 'search';
-    const projectIdea = text(idea, 600) || plan.idea || (manual ? '' : say);
+    // The member's own profile IS a brief. When they say "find me someone" and
+    // we already know what they are building and which seat is empty, searching
+    // beats interrogating them about facts they gave us at onboarding.
+    const profileBrief = [
+      text(me.building, 80),
+      text(me.oneLiner, 120),
+      text(me.seat, 60) ? `missing a ${text(me.seat, 60).toLowerCase()}` : '',
+    ].filter(Boolean).join(' — ');
+    const projectIdea = text(idea, 600) || plan.idea || (manual ? '' : say) || profileBrief;
     let match = null;
     let reply = plan.reply;
     let asked = false;
@@ -3887,7 +4012,13 @@ export async function linkyChat(uid, {
         reply = reply || chatSearchReply({ teams: match.teams || [], checked: match.checked || 0, idea: projectIdea });
       } else {
         asked = true;
-        reply = reply || 'I can search everyone on LINKUP for this — but I need the actual build. What are you making, and which seat is still empty?';
+        // Ask for the ONE thing that is actually missing, never for what the
+        // profile already answers.
+        reply = reply || (text(me.building, 80) && !text(me.seat, 60)
+          ? `I have got ${text(me.building, 80)} from your profile — I only need the seat. Which role should I fill?`
+          : text(me.building, 80)
+            ? `I have your profile: ${text(me.building, 80)}. Say which role matters most and I will run it.`
+            : 'I can search everyone on LINKUP for this — but I need the actual build. What are you making, and which seat is still empty?');
       }
     }
     if (!reply) reply = chatFallbackPlan(say, me).reply;
@@ -3913,8 +4044,8 @@ export async function linkyChat(uid, {
     const suggestions = teams.length
       ? ['Who is the strongest?', 'Find another option', 'What should I ask them first?']
       : wantsSearch
-        ? ['Find teammates', 'Try different roles', 'What are you building?']
-        : ['Find teammates', 'Who is technical on LINKUP?', 'What are you building?'];
+        ? ['Find teammates', 'Try different roles', 'Who else is building this?']
+        : ['Find teammates', 'Who is technical on LINKUP?', 'Who else is building this?'];
     const nextThread = [...thread, { role: 'user', text: say || 'Search the database for my team.' }, { role: 'linky', text: reply }]
       .slice(-CHAT_TURNS)
       .map((turn) => ({ role: turn.role, text: text(turn.text, 700), at: now }));
