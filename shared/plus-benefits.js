@@ -69,14 +69,28 @@ export const PLUS_BENEFITS = Object.freeze([
     id: 'linky',
     group: 'do',
     title: 'Unlimited messages to Linky',
-    proof: 'Free gets 5 a day, across every channel. PLUS keeps talking until Linky finds the person.',
+    proof: 'Free gets 4 a day. PLUS keeps talking until Linky finds the person.',
     invite: {
-      feature: 'Unlimited Linky — no five-a-day cap',
-      line: 'Five messages a day is a short conversation with your own scout. PLUS takes the lid off and lets Linky keep looking.',
+      feature: 'Unlimited Linky — no four-a-day cap',
+      line: 'Four messages a day is a short conversation with your own scout. PLUS takes the lid off and lets Linky keep looking.',
     },
     email: {
-      feature: 'Unlimited Linky — no five-a-day cap',
-      line: 'Five messages a day is a short conversation. PLUS lets Linky keep looking.',
+      feature: 'Unlimited Linky — no four-a-day cap',
+      line: 'Four messages a day is a short conversation. PLUS lets Linky keep looking.',
+    },
+  },
+  {
+    id: 'profilewriter',
+    group: 'do',
+    title: 'Linky writes your whole profile for you',
+    proof: 'Linky rewrites your profile from what you have already told LINKUP — build, stage, seat, skills — and puts it on your profile the moment you tap. Free writes it themselves.',
+    invite: {
+      feature: 'Linky writes your whole profile for you',
+      line: 'You have told LINKUP what you are building and who is missing. Linky can turn that into the profile that gets you chosen — one tap, no blank boxes.',
+    },
+    email: {
+      feature: 'Linky writes your profile, then saves it',
+      line: 'Everything you have told LINKUP, written into a profile other builders can say yes to.',
     },
   },
   {
@@ -171,3 +185,33 @@ export function plusBenefitGroups() {
 }
 
 export const plusBenefitById = (id) => PLUS_BENEFITS.find((entry) => entry.id === id) || null;
+
+/**
+ * The paywall is not a brochure, it is a mirror. Everything here comes from the
+ * member's own onboarding answers, so the page cannot be read as somebody
+ * else's advert: change the profile and every sentence changes with it.
+ * An empty profile degrades to a clean sentence rather than "You are building ,".
+ */
+export function plusPitch(profile = {}) {
+  const first = String(profile?.displayName || '').trim().split(/\s+/)[0] || '';
+  const name = first ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : '';
+  const building = String(profile?.buildingName || profile?.company || '').trim();
+  const seat = String(profile?.missingSeat || '').trim()
+    || (Array.isArray(profile?.lookingFor) ? String(profile.lookingFor[0] || '').trim() : '');
+  const matches = Math.max(0, Math.floor(Number(profile?.totalMatches) || 0));
+
+  const headline = name
+    ? `${name}, this is the version of LINKUP built for you`
+    : 'This is the version of LINKUP built for you';
+
+  let setup = '';
+  if (building && seat) setup = `You are building ${building}, and the seat you said is empty is a ${seat.toLowerCase()}.`;
+  else if (building) setup = `You are building ${building}.`;
+  else if (seat) setup = `The seat you said is empty is a ${seat.toLowerCase()}.`;
+
+  const stake = seat
+    ? `Every week you stay on the free plan, the ${seat.toLowerCase()} you need is being introduced to somebody else.`
+    : 'Every week you stay on the free plan, the people who would say yes are being introduced to somebody else.';
+
+  return { name, headline, setup, stake, matches, personalised: Boolean(name || building || seat) };
+}

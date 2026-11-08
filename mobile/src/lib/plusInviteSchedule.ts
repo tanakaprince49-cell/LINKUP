@@ -33,7 +33,7 @@ export type InviteFeature = {
 };
 
 /**
- * What PLUS actually unlocks today — the same nine the paywall lists, in
+ * What PLUS actually unlocks today — the same ten the paywall lists, in
  * shared/plus-benefits.js. Every line is traceable to code that reads
  * hasLinkupPro() or to a server limit keyed on the paid tier: campaigns.ts hides
  * sponsored cards, ViewersScreen shows the viewer list, RecommendedMatchesScreen
@@ -64,8 +64,13 @@ export const INVITE_FEATURES: InviteFeature[] = [
   },
   {
     id: 'linky',
-    feature: 'Unlimited Linky — no five-a-day cap',
-    line: 'Five messages a day is a short conversation with your own scout. PLUS takes the lid off and lets Linky keep looking.',
+    feature: 'Unlimited Linky — no four-a-day cap',
+    line: 'Four messages a day is a short conversation with your own scout. PLUS takes the lid off and lets Linky keep looking.',
+  },
+  {
+    id: 'profilewriter',
+    feature: 'Linky writes your whole profile for you',
+    line: '{first}, Linky can turn what you told us about {building} into the profile that gets you chosen — one tap, and it saves itself.',
   },
   {
     id: 'meets',

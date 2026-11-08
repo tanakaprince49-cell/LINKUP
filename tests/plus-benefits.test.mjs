@@ -1,6 +1,6 @@
 // The paywall has to sell every lever PLUS actually pulls — and only those.
 //
-// Three surfaces say the same nine things: the paywall modal, the three-a-day
+// Three surfaces say the same ten things: the paywall modal, the three-a-day
 // invitation, and the block at the bottom of every email. They used to keep
 // three separate lists, which is how "the PLUS themes" survived on a paywall for
 // a theme picker that has no tier check. Now there is one list, and this file
@@ -28,9 +28,9 @@ const byId = (id) => {
   return found;
 };
 
-test('nine levers, grouped so a scroll has rhythm', () => {
-  assert.equal(PLUS_BENEFIT_COUNT, 9, 'PLUS has nine sellable levers today');
-  assert.equal(PLUS_MORE_COUNT, 8, '"and 8 more" — one is already on screen');
+test('ten levers, grouped so a scroll has rhythm', () => {
+  assert.equal(PLUS_BENEFIT_COUNT, 10, 'PLUS has ten sellable levers today');
+  assert.equal(PLUS_MORE_COUNT, 9, '"and 9 more" — one is already on screen');
   const groups = plusBenefitGroups();
   assert.equal(groups.length, 3);
   for (const group of groups) {
@@ -65,9 +65,9 @@ test('the numbers in the copy are the numbers in the code', () => {
   assert.match(byId('posts').title, /10 startups a week instead of 1/);
   assert.match(read('mobile/src/screens/CreatePostScreen.tsx'), /free: 1, plus: 10/);
 
-  // Linky: 5 messages a UTC day.
-  assert.match(byId('linky').proof, /5 a day/);
-  assert.match(read('shared/linky-budget.js'), /freePerDay: 5/);
+  // Linky: 4 messages a UTC day.
+  assert.match(byId('linky').proof, /4 a day/);
+  assert.match(read('shared/linky-budget.js'), /freePerDay: 4/);
 
   // Meet requests: 2 a day.
   assert.match(byId('meets').proof, /2 a day/);
@@ -107,26 +107,26 @@ test('the paywall renders the shared list, in groups, with the real count', () =
   assert.match(paywall, /\{benefit\.title\}/);
   assert.match(paywall, /\{benefit\.proof\}/);
   assert.ok(!/const PRO_PERKS/.test(paywall), 'no local copy of the list');
-  // Every benefit must have an icon, or the list renders nine identical ticks.
+  // Every benefit must have an icon, or the list renders ten identical ticks.
   const iconMap = paywall.slice(paywall.indexOf('const BENEFIT_ICONS'), paywall.indexOf('const PRICING_PLANS'));
   for (const benefit of PLUS_BENEFITS) {
     assert.match(iconMap, new RegExp(`${benefit.id}:`), `benefit ${benefit.id} has an icon`);
   }
 });
 
-test('the invitation carries the same nine, and still says there is more', () => {
+test('the invitation carries the same ten, and still says there is more', () => {
   const ids = [...schedule.matchAll(/^    id: '([a-z]+)',$/gm)].map((match) => match[1]);
   assert.deepEqual([...ids].sort(), PLUS_BENEFITS.map((entry) => entry.id).sort(), 'invite schedule and paywall agree');
   assert.match(schedule, /INVITE_FEATURES\.length - 1|moreCount/, 'the more-count is derived');
 });
 
-test('the email carries the same nine and counts eight more', async () => {
+test('the email carries the same ten and counts nine more', async () => {
   const emailIds = [...mailer.matchAll(/id: benefit\.id/g)];
   assert.ok(emailIds.length === 1, 'the email list is built from the shared one, not retyped');
   assert.match(mailer, /const PLUS_EMAIL_FEATURES = PLUS_BENEFITS\.map/);
   const mod = await import('../api/_emailNotify.js');
-  assert.equal(mod.PLUS_EMAIL_MORE_COUNT, 8, 'email says "and 8 more things"');
+  assert.equal(mod.PLUS_EMAIL_MORE_COUNT, 9, 'email says "and 9 more things"');
   const block = mod.buildPlusInviteBlock({ firstName: 'Tariro', building: 'LINKUP', featured: mod.plusFeatureForEmail('u1', '2026-11-07') });
-  assert.match(block.text, /And 8 more things you don't have yet/);
+  assert.match(block.text, /And 9 more things you don't have yet/);
   assert.match(block.text, /plus=1/, 'and every block links straight to the wall');
 });

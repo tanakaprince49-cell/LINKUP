@@ -21,3 +21,15 @@ export declare const PLUS_BENEFIT_COUNT: number;
 export declare const PLUS_MORE_COUNT: number;
 export declare function plusBenefitGroups(): Array<{ id: PlusBenefitGroupId; label: string; items: PlusBenefit[] }>;
 export declare function plusBenefitById(id: string): PlusBenefit | null;
+
+/** The paywall header, built from the member's own onboarding answers. */
+export type PlusPitch = {
+  name: string;
+  headline: string;
+  setup: string;
+  stake: string;
+  matches: number;
+  personalised: boolean;
+};
+
+export declare function plusPitch(profile?: Record<string, unknown>): PlusPitch;
