@@ -45,7 +45,11 @@ test('audited professional wording remains in the shared Android/web source', ()
   // Screen copy was moved into the shared voice module so web, native and email
   // all speak with one mouth. A rewritten string is recorded as `current` and
   // is allowed to live either in its original screen or in brandVoice.ts.
-  const voice = { strings: normalized(read('mobile/src/lib/brandVoice.ts')), raw: normalized(read('mobile/src/lib/brandVoice.ts')) };
+  // The paywall's words moved into a shared module so the app, the invite and the
+  // email cannot drift apart, so audited copy is allowed to live there too.
+  const voiceFiles = ['mobile/src/lib/brandVoice.ts', 'shared/plus-perks.js'];
+  const voiceText = normalized(voiceFiles.map((file) => read(file)).join('\n'));
+  const voice = { strings: voiceText, raw: voiceText };
   for (const entry of audit) {
     if (!sources.has(entry.file)) {
       const strings = []; const ast = parse(entry.file);

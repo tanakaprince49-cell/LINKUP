@@ -278,6 +278,24 @@ test('Server weekly co-founder flow locks symmetric 1:1 pair, emails both people
   assert.ok(kudaRes.match);
   assert.equal(kudaRes.match.partnerUid, 'tariro');
 
+  // The pair is a mirror, not a one-way introduction: each of them is looking at
+  // the other's real profile, with their own offers and the other's on the
+  // correct sides, and the same week and pair id.
+  assert.equal(kudaRes.match.pairId, tariroRes.match.pairId);
+  assert.equal(kudaRes.match.weekKey, tariroRes.match.weekKey);
+  assert.equal(kudaRes.match.partner.displayName, 'Tariro Moyo');
+  assert.equal(tariroRes.match.partner.displayName, 'Kuda Chipo');
+  assert.deepEqual(kudaRes.match.partnerOffers, tariroRes.match.myOffers);
+  assert.deepEqual(kudaRes.match.myOffers, tariroRes.match.partnerOffers);
+  assert.equal(kudaRes.match.symmetryVerified, true);
+  // ...and that flag is read off the stored pair, never stamped on: a pair
+  // written by an older deploy is missing half of it, so it must say so.
+  const serverSource = fs.readFileSync(new URL('../api/_weeklyCofounder.js', import.meta.url), 'utf8');
+  assert.ok(!/symmetryVerified:\s*true\s*,/.test(serverSource), 'symmetry is verified from the record, not hardcoded');
+  // Each reads a "why" written to them, not a copy of the other's.
+  assert.ok(kudaRes.match.aiIntro && tariroRes.match.aiIntro);
+  assert.notEqual(kudaRes.match.aiIntro, tariroRes.match.aiIntro);
+
   // 3. Both Tariro and Kuda received an email introducing BOTH profiles
   assert.equal(capturedEmails.length, 2);
   const emailToTariro = capturedEmails.find((e) => e.to.includes('tariro@example.com'));

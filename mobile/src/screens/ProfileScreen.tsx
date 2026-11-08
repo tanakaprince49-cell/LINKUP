@@ -84,6 +84,7 @@ import {
   PRO_FEATURES,
   revokePlayPlus,
 } from '../lib/paywall';
+import LinkyWritesProfile from '../components/LinkyWritesProfile';
 import { readActiveTrial, trialStatusLabel, type TrialRecord } from '../lib/trial';
 import { MAX_FIRESTORE_IMAGE_CHARS } from '../lib/imageUploadLimits';
 import { MOBILE_LIST_IMAGE_LIMIT, compactProfileForList, safeProfileImageUri } from '../lib/profilePerformance';
@@ -2419,6 +2420,17 @@ export default function ProfileScreen({ navigation, route }: any) {
               {renderMultiChoiceGroup('INDUSTRIES', 'industries', INDUSTRY_SUGGESTIONS)}
               </>) : null}
               {isEditing ? (<>
+              {/* PLUS: Linky writes the bio, headline and signals from the facts
+                  the member already gave it — and they approve every word. */}
+              <LinkyWritesProfile
+                isPlus={hasLinkupPro(myProfile)}
+                onUpgrade={() => openPaywall('Linky writes your profile')}
+                building={String((myProfile as any)?.buildingName || (myProfile as any)?.company || '')}
+                seat={String((myProfile as any)?.missingSeat || '')}
+                onSaved={() => {
+                  void refreshProfile?.();
+                }}
+              />
               <View style={[styles.statusEditorCard, liquidGlass(isDark), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
                 <Text style={styles.projectEditLabel}>Matching Details</Text>
                 <TextInput

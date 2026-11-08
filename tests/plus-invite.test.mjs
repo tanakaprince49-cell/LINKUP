@@ -10,8 +10,14 @@ import ts from '../mobile/node_modules/typescript/lib/typescript.js';
 
 const read = (path) => fs.readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 
-/** plusInviteSchedule.ts is deliberately import-free, so it can be run as-is. */
-const scheduleSource = read('mobile/src/lib/plusInviteSchedule.ts');
+/**
+ * plusInviteSchedule.ts imports exactly one thing — the shared perk list — so the
+ * module is loaded by pointing that import at the real file on disk. No copy of
+ * the perks is kept here: if shared/plus-perks.js changes, these tests see it.
+ */
+const perksPath = new URL('../shared/plus-perks.js', import.meta.url).href;
+const scheduleSource = read('mobile/src/lib/plusInviteSchedule.ts')
+  .replace("'../../../shared/plus-perks'", `'${perksPath}'`);
 const compiled = ts.transpileModule(scheduleSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
 }).outputText;

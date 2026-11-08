@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ArrowDown } from 'lucide-react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { buildFacts, WEEKLY_REVEAL_VOICE, type VoiceProfile } from '../lib/brandVoice';
 
 /**
@@ -25,13 +27,23 @@ const CAT = require('../../assets/launch-cat.png');
 const CAT_ASPECT = 820 / 538;
 const CAT_WIDTH = 250;
 
-/** Total time on screen before the reveal, from the first painted frame. */
+/** The thinking itself: four beats, then the decision is made. */
 const THINKING_MS = 4000;
 const THINKING_REDUCED_MS = 1600;
 const EXIT_MS = 320;
+/**
+ * After the thinking lands, the member holds the moment in their hand: a gold
+ * button that pulses until they tap it. Nobody is trapped — if they do not tap,
+ * the founder is revealed anyway after this long — but the reveal belongs to them,
+ * which is the whole point of doing it once a week.
+ */
+const REVEAL_TAP_AT_MS = 3000;
+const REVEAL_AUTO_MS = 12000;
 /** Each beat lands a second after the last, so all four are readable. */
 const LINE_AT = [0, 900, 1900, 2900] as const;
 const RING_COUNT = 3;
+/** Width of the light band that crosses the reveal button. */
+const SHEEN_WIDTH = 54;
 const DOTS = 9;
 
 type Props = {
@@ -47,6 +59,16 @@ export default function WeeklyMatchThinking({ profile, visible, onDone }: Props)
 
   const [show, setShow] = useState(visible);
   const [beat, setBeat] = useState(0);
+  /** The thinking is done and the button is in their hand. */
+  const [armed, setArmed] = useState(false);
+  const pulse = useRef(new Animated.Value(0)).current;
+  /** Two rings leave the button and die out, like a heartbeat you can see. */
+  const rippleA = useRef(new Animated.Value(0)).current;
+  const rippleB = useRef(new Animated.Value(0)).current;
+  /** A band of light crosses the ink pill, left to right, every couple of seconds. */
+  const sheen = useRef(new Animated.Value(0)).current;
+  /** Tapping is not a cut — the button flares once, then the founder lands. */
+  const burst = useRef(new Animated.Value(0)).current;
   const entrance = useRef(new Animated.Value(0)).current;
   const exit = useRef(new Animated.Value(0)).current;
   const think = useRef(new Animated.Value(0)).current;
@@ -74,6 +96,12 @@ export default function WeeklyMatchThinking({ profile, visible, onDone }: Props)
       finished.current = false;
       setShow(true);
       setBeat(0);
+      setArmed(false);
+      pulse.setValue(0);
+      rippleA.setValue(0);
+      rippleB.setValue(0);
+      sheen.setValue(0);
+      burst.setValue(0);
       lineAnims.forEach((anim) => anim.setValue(0));
     }
   }, [visible, lineAnims]);
@@ -122,9 +150,59 @@ export default function WeeklyMatchThinking({ profile, visible, onDone }: Props)
       }, at));
     });
 
-    timers.push(setTimeout(finish, THINKING_MS));
+    // The thinking lands, then the moment is handed to the member.
+    timers.push(setTimeout(() => setArmed(true), REVEAL_TAP_AT_MS));
+    timers.push(setTimeout(finish, REVEAL_AUTO_MS));
     return () => timers.forEach(clearTimeout);
   }, [show, lines.length, entrance, think, spin, lineAnims, finish]);
+
+  // The button is alive while it waits to be tapped. Three things run together,
+  // all on the native driver so a mid-range Android phone keeps 60fps:
+  //  - it breathes (scale 1 -> 1.045, 620ms each way);
+  //  - two ink rings leave it and fade out, offset from each other, so the eye
+  //    is pulled to the pill before it reads the words;
+  //  - a band of light crosses the ink every two seconds, so the pill reads as
+  //    a live surface rather than a painted one.
+  // Reduced motion gets none of it: the button is simply there, and it still
+  // reveals on tap.
+  useEffect(() => {
+    if (!armed || reduceMotion.current) return;
+    const loops = [
+      Animated.loop(Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 620, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 620, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])),
+      Animated.loop(Animated.timing(rippleA, { toValue: 1, duration: 1900, easing: Easing.out(Easing.quad), useNativeDriver: true })),
+      Animated.loop(Animated.sequence([
+        Animated.delay(950),
+        Animated.timing(rippleB, { toValue: 1, duration: 1900, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(rippleB, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ])),
+      Animated.loop(Animated.sequence([
+        Animated.timing(sheen, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.delay(900),
+        Animated.timing(sheen, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ])),
+    ];
+    loops.forEach((loop) => loop.start());
+    return () => loops.forEach((loop) => loop.stop());
+  }, [armed, pulse, rippleA, rippleB, sheen]);
+
+  /**
+   * The tap. A 220ms flare goes out from under the thumb and the screen leaves
+   * on the tail of it, so the founder arrives out of the member's own action
+   * instead of replacing it.
+   */
+  const reveal = useCallback(() => {
+    if (finished.current) return;
+    if (reduceMotion.current) {
+      finish();
+      return;
+    }
+    Animated.sequence([
+      Animated.timing(burst, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start(finish);
+  }, [burst, finish]);
 
   if (!show) return null;
 
@@ -232,9 +310,97 @@ export default function WeeklyMatchThinking({ profile, visible, onDone }: Props)
             <Text testID="weekly-thinking-status" style={styles.status}>
               {String(status[Math.min(beat, status.length - 1)]).toUpperCase()}
             </Text>
+
+            {/* TAP TO REVEAL. The one decision the member gets to make with their
+                own thumb: the founder appears when they say so, not when a timer
+                says so. The glow ring under it pulses; the button lifts a pixel
+                on the beat so it reads as alive without being a carnival. */}
+            {armed ? (
+              <Animated.View
+                style={[
+                  styles.revealWrap,
+                  {
+                    opacity: entrance,
+                    transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.045] }) }],
+                  },
+                ]}
+              >
+                <Animated.View
+                  style={[
+                    styles.revealGlow,
+                    {
+                      opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.14, 0.36] }),
+                      transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.16] }) }],
+                    },
+                  ]}
+                />
+                {/* Two rings, half a beat apart, walking outwards and dying. */}
+                {[rippleA, rippleB].map((ring, index) => (
+                  <Animated.View
+                    key={`halo-${index}`}
+                    pointerEvents="none"
+                    style={[
+                      styles.revealHalo,
+                      {
+                        opacity: ring.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 0.34, 0] }),
+                        transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [1, 1.85] }) }],
+                      },
+                    ]}
+                  />
+                ))}
+                {/* The flare the thumb sets off. */}
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.revealBurst,
+                    {
+                      opacity: burst.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] }),
+                      transform: [{ scale: burst.interpolate({ inputRange: [0, 1], outputRange: [1, 1.5] }) }],
+                    },
+                  ]}
+                />
+                <TouchableOpacity
+                  testID="weekly-reveal-tap"
+                  accessibilityRole="button"
+                  accessibilityLabel="Tap to reveal your founder"
+                  activeOpacity={0.9}
+                  onPress={reveal}
+                  style={styles.revealBtn}
+                >
+                  {/* A soft band of light, not a grey slab: the gradient means
+                      both edges of the glint fall off instead of ending. */}
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.revealSheen,
+                      { transform: [{ translateX: sheen.interpolate({ inputRange: [0, 1], outputRange: [-120, 190] }) }] },
+                    ]}
+                  >
+                    <Svg width={SHEEN_WIDTH} height={60}>
+                      <Defs>
+                        <LinearGradient id="revealSheen" x1="0" y1="0" x2="1" y2="0">
+                          <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
+                          <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity="0.22" />
+                          <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+                        </LinearGradient>
+                      </Defs>
+                      <Rect x={0} y={0} width={SHEEN_WIDTH} height={60} fill="url(#revealSheen)" />
+                    </Svg>
+                  </Animated.View>
+                  <Text style={styles.revealText}>TAP TO REVEAL YOUR FOUNDER</Text>
+                  <Animated.View
+                    style={{
+                      transform: [{ translateY: pulse.interpolate({ inputRange: [0, 1], outputRange: [0, 3] }) }],
+                    }}
+                  >
+                    <ArrowDown size={17} color="#FBE618" />
+                  </Animated.View>
+                </TouchableOpacity>
+              </Animated.View>
+            ) : null}
           </View>
 
-          <Text style={styles.skip}>{WEEKLY_REVEAL_VOICE.skip}</Text>
+          <Text style={styles.skip}>{armed ? 'or wait — they appear on their own' : WEEKLY_REVEAL_VOICE.skip}</Text>
         </TouchableOpacity>
       </Animated.View>
     </Modal>
@@ -267,6 +433,60 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 2.2,
     color: 'rgba(10,11,13,0.55)',
+  },
+  revealWrap: {
+    marginTop: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  revealGlow: {
+    position: 'absolute',
+    width: 268,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#0A0B0D',
+  },
+  // Ink rings on gold: they read outwards from the pill without adding a colour.
+  revealHalo: {
+    position: 'absolute',
+    width: 268,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 1.5,
+    borderColor: 'rgba(10,11,13,0.55)',
+  },
+  revealBurst: {
+    position: 'absolute',
+    width: 268,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#0A0B0D',
+  },
+  // Ink on gold: the only dark button in a full-gold screen, so the eye lands here.
+  revealBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    paddingHorizontal: 22,
+    paddingVertical: 15,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: '#0A0B0D',
+  },
+  // The glint itself has no fill — the SVG inside it is the gradient — so it
+  // reads as light crossing the pill rather than a pale rectangle sliding over it.
+  revealSheen: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: SHEEN_WIDTH,
+  },
+  revealText: {
+    color: '#FBE618',
+    fontSize: 12.5,
+    fontWeight: '900',
+    letterSpacing: 1.1,
   },
   skip: {
     textAlign: 'center',

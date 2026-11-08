@@ -5,6 +5,7 @@
 import crypto from 'node:crypto';
 import { getAuth } from 'firebase-admin/auth';
 import { memberHasPlus } from './_memberTier.js';
+import { PLUS_PERKS } from '../shared/plus-perks.js';
 
 const APP_BASE = 'https://www.linkupbuild.com/app';
 const API_BASE = 'https://linkup-muqu.vercel.app';
@@ -488,16 +489,13 @@ export function buildMainCharacterJealousyNote(personal = null) {
  *   - one benefit only, then "and N more", because a wall of perks reads as spam
  *   - the CTA lands on /app/?plus=1, which opens the paywall in-app on arrival
  */
-const PLUS_EMAIL_FEATURES = [
-  { id: 'noads', feature: 'No sponsored cards. Anywhere. Ever.', line: 'PLUS members never see a sponsored card — not on home, not on Linky, not in this email.' },
-  { id: 'viewers', feature: 'See exactly who opened your profile', line: 'Right now you get a number. PLUS gives you the names.' },
-  { id: 'recommendations', feature: 'Every weekly recommendation, not three', line: 'The algorithm finds more people for you than free is allowed to show.' },
-  { id: 'saved', feature: 'Save every profile worth coming back to', line: 'Five saves is not a shelf. PLUS makes it unlimited.' },
-  { id: 'posts', feature: 'Post as often as you ship', line: 'The builders who get matched are the ones who keep showing up.' },
-  { id: 'turbo', feature: 'Turbo Connect — stand at the front of Discover', line: 'Be found before the next person with the same skills is.' },
-  { id: 'badge', feature: 'The blue check and the PLUS crown', line: 'Being chosen starts with looking chosen.' },
-  { id: 'themes', feature: 'The PLUS app themes', line: 'Your app, your palette.' },
-];
+// The email sells the same list the paywall sells (shared/plus-perks.js), so a
+// member can never read one claim in their inbox and another in the app.
+const PLUS_EMAIL_FEATURES = PLUS_PERKS.map((perk) => ({
+  id: perk.id,
+  feature: perk.title,
+  line: perk.line,
+}));
 
 export const PLUS_EMAIL_MORE_COUNT = PLUS_EMAIL_FEATURES.length - 1;
 

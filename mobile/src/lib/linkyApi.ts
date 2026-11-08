@@ -75,11 +75,40 @@ export type LinkyChatResult = {
   upgradeRequired?: boolean;
 };
 
-export type LinkyAction = 'teamMatch' | 'chat' | 'pushNotify' | 'clientError' | 'webPushKey' | 'webPushSubscribe' | 'builder';
+export type LinkyAction = 'teamMatch' | 'chat' | 'writeProfile' | 'pushNotify' | 'clientError' | 'webPushKey' | 'webPushSubscribe' | 'builder';
 
 const endpoint = () => Platform.OS === 'web'
   ? webAppPath('/api/linky')
   : `${linkupWebBaseUrl()}/api/linky`;
+
+export type LinkyProfileDraft = {
+  headline: string;
+  bio: string;
+  skills: string[];
+  lookingFor: string[];
+};
+
+export type LinkyProfileWriteResult = {
+  ok: boolean;
+  reason: string;
+  saved?: boolean;
+  draft?: LinkyProfileDraft | null;
+  source?: string;
+};
+
+/**
+ * LINKUP PLUS: Linky writes the member's profile.
+ *
+ * Called twice, deliberately. Once with no draft to generate, then again with the
+ * draft the member actually approved — so what gets saved is the words they read
+ * on screen, not a second generation they never saw. A 402 here means they are
+ * not PLUS, and the caller should open the paywall instead of a generic error.
+ */
+export const writeMyProfileWithLinky = (options: { save?: boolean; draft?: LinkyProfileDraft | null } = {}) =>
+  linkyCall<LinkyProfileWriteResult>('writeProfile', {
+    save: options.save === true,
+    ...(options.draft ? { draft: options.draft } : {}),
+  });
 
 export async function linkyCall<T = any>(action: LinkyAction, payload: Record<string, unknown> = {}): Promise<T> {
   const user = auth.currentUser;

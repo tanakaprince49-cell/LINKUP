@@ -16,8 +16,9 @@ import {
   clearChat, consumeLinkCode, createLinkCode, draftLead, dropLeadDraft, forget, hideFact, home, leadKey, loadCards, loadState, loadUser, markLead,
   meet, meetSquad, orderedCards, patchState, pickPerson, pointers, pullProfiles, reactionFor, removeAsk, respond, runCron, sendTelegram, sendWhatsApp,
   setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret, pushNotify, reportClientError, teamMatch,
-  linkyChat } from './_linky.js';
+  linkyChat, isPlusUser } from './_linky.js';
 import { badgeLine } from './_proof.js';
+import { writeMyProfile } from './_profileWriter.js';
 
 
 // ---------------------------------------------------------------- cron auth
@@ -904,6 +905,19 @@ async function handleApp(req, res) {
       }
       case 'pushNotify': out = await pushNotify(uid, { toUid: String(body.toUid || ''), type: String(body.type || ''), text: String(body.text || ''), matchId: String(body.matchId || '') }); break;
       case 'teamMatch': out = await teamMatch(uid, { mode: body.mode, idea: body.idea, ownRole: body.ownRole, roles: body.roles, memberUids: body.memberUids, teamSize: body.teamSize }); break;
+      case 'writeProfile': {
+        // LINKY PLUS ONLY. The gate lives here, on the server, not in the button.
+        const me = await loadUser(uid);
+        if (!me) { sendError(res, 400, 'Finish your LINKUP profile first.'); return; }
+        if (!(await isPlusUser(uid, me))) {
+          sendError(res, 402, 'Linky writes your profile on LINKUP PLUS. Upgrade and Linky writes it for you.');
+          return;
+        }
+        out = await writeMyProfile({ uid, profile: me, save: body.save === true || body.save === 'true', approved: body.draft || null, db: db() });
+        if (!out.ok && out.reason === 'nothing_to_write_from') { sendError(res, 400, 'Tell LINKUP what you are building first — Linky will not invent it.'); return; }
+        if (!out.ok) { sendError(res, 503, 'Linky could not write that just now. Try again in a minute.'); return; }
+        break;
+      }
       case 'chat': out = await linkyChat(uid, {
         message: body.message,
         history: body.history,

@@ -349,6 +349,7 @@ function formatViewerPayload(matchDoc, viewerUid, partnerProfile, gate, window) 
   const myOffers = isA ? matchDoc.aOffers : matchDoc.bOffers;
   const partnerOffers = isA ? matchDoc.bOffers : matchDoc.aOffers;
   const aiIntro = isA ? (matchDoc.aiWhyForA || matchDoc.aiWhyMutual) : (matchDoc.aiWhyForB || matchDoc.aiWhyMutual);
+  const partnerUid = isA ? matchDoc.uidB : matchDoc.uidA;
 
   return {
     pairId: matchDoc.pairId,
@@ -357,7 +358,7 @@ function formatViewerPayload(matchDoc, viewerUid, partnerProfile, gate, window) 
     weekEnd: matchDoc.weekEnd || window.end,
     daysRemaining: window.daysRemaining,
     viewerUid,
-    partnerUid: isA ? matchDoc.uidB : matchDoc.uidA,
+    partnerUid,
     partner: sanitizePublicPartnerProfile(partnerProfile),
     score: Number(matchDoc.score || 80),
     display: Number(matchDoc.display || 0.8),
@@ -381,7 +382,22 @@ function formatViewerPayload(matchDoc, viewerUid, partnerProfile, gate, window) 
     aiHeadline: matchDoc.aiHeadline || '',
     aiIntro: aiIntro || '',
     dossier: dossierForViewer(matchDoc, isA, aiIntro),
-    symmetryVerified: true,
+    /**
+     * Both sides of a pair must read the same pair. Rather than assert it, read
+     * it off the record: both profiles stored, both offer ledgers stored, both
+     * cards written, and this viewer's side resolving to a real partner. If any
+     * of that is missing the payload says so instead of pretending.
+     */
+    symmetryVerified: Boolean(
+      matchDoc.profileA
+      && matchDoc.profileB
+      && Array.isArray(matchDoc.aOffers)
+      && Array.isArray(matchDoc.bOffers)
+      && matchDoc.cardForA
+      && matchDoc.cardForB
+      && partnerUid
+      && String(partnerUid) !== String(viewerUid)
+    ),
     emailSent: !!(matchDoc.emailsSent?.[viewerUid]),
     bothEmailsSent: !!(matchDoc.emailsSent?.[matchDoc.uidA] && matchDoc.emailsSent?.[matchDoc.uidB]),
     viewerInterested: gate.viewerInterested,

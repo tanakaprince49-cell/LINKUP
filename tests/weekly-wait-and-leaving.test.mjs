@@ -19,8 +19,13 @@ test('the weekly wait lasts about four seconds and says so in four beats', () =>
   assert.match(waiting, /const THINKING_MS = 4000;/);
   assert.match(waiting, /const THINKING_REDUCED_MS = 1600;/);
   assert.match(waiting, /const LINE_AT = \[0, 900, 1900, 2900\] as const;/);
-  // The clock is the full 4s from the first painted frame, not from mount.
-  assert.match(waiting, /timers\.push\(setTimeout\(finish, THINKING_MS\)\)/);
+  // The thinking lands, then the member holds the reveal: tapping is the point,
+  // and the auto-reveal is only there so nobody can get stuck.
+  assert.match(waiting, /const REVEAL_TAP_AT_MS = 3000;/);
+  assert.match(waiting, /const REVEAL_AUTO_MS = 12000;/);
+  assert.match(waiting, /timers\.push\(setTimeout\(\(\) => setArmed\(true\), REVEAL_TAP_AT_MS\)\)/);
+  assert.match(waiting, /timers\.push\(setTimeout\(finish, REVEAL_AUTO_MS\)\)/);
+  assert.ok(!/setTimeout\(finish, THINKING_MS\)/.test(waiting), 'the wait no longer snatches the reveal back on a 4s timer');
 
   const beats = voice.slice(voice.indexOf('thinkingLines:'), voice.indexOf('status: (facts: BuildFacts)'));
   assert.match(beats, /'The cat is thinking\.'/);
@@ -31,6 +36,37 @@ test('the weekly wait lasts about four seconds and says so in four beats', () =>
   assert.match(voice, /'scanning'/);
   assert.match(voice, /'weighing fit'/);
   assert.match(voice, /'checking they are looking for you too'/);
+});
+
+test('the founder is revealed by a tap, on an animated gold button', () => {
+  // The button exists, is labelled, is animated, and reveals on press.
+  assert.match(waiting, /testID="weekly-reveal-tap"/);
+  assert.match(waiting, /accessibilityLabel="Tap to reveal your founder"/);
+  assert.match(waiting, /\{armed \? \(/);
+  assert.match(waiting, /Animated\.loop\(Animated\.sequence\(\[/);
+  assert.match(waiting, /pulse\.interpolate\(\{ inputRange: \[0, 1\], outputRange: \[1, 1\.045\] \}\)/);
+  assert.match(waiting, /revealGlow/);
+  // Alive, not painted: halos walk out of the pill, light crosses it, and the
+  // tap sets off a flare before the founder lands.
+  assert.match(waiting, /styles\.revealHalo/);
+  assert.match(waiting, /styles\.revealSheen/);
+  // The glint is a gradient, so its edges fall off instead of ending in a slab.
+  assert.match(waiting, /<LinearGradient id="revealSheen"/);
+  assert.match(waiting, /stopOpacity="0\.22"/);
+  assert.match(waiting, /styles\.revealBurst/);
+  assert.match(waiting, /\[rippleA, rippleB\]\.map\(/);
+  assert.match(waiting, /onPress=\{reveal\}/);
+  assert.match(waiting, /Animated\.timing\(burst, \{ toValue: 1, duration: 220/);
+  // Every loop runs on the native driver, and motion-sensitive members get none of it.
+  assert.match(waiting, /if \(!armed \|\| reduceMotion\.current\) return;/);
+  const loopBlock = waiting.slice(waiting.indexOf('if (!armed || reduceMotion.current) return;'));
+  const driverUses = loopBlock.slice(0, loopBlock.indexOf('}, [armed, pulse')).match(/useNativeDriver: true/g) || [];
+  assert.ok(driverUses.length >= 5, 'all reveal loops animate on the native driver');
+  assert.ok(!/useNativeDriver: false/.test(loopBlock.slice(0, loopBlock.indexOf('}, [armed, pulse'))));
+  assert.match(waiting, /onPress=\{finish\}/);
+  assert.match(waiting, /TAP TO REVEAL YOUR FOUNDER/);
+  // Reduced motion still reaches the button — it just gets there faster.
+  assert.match(waiting, /setTimeout\(finish, THINKING_REDUCED_MS\)/);
 });
 
 test('the wait shows the thinking 3D cat and cannot be trapped in', () => {

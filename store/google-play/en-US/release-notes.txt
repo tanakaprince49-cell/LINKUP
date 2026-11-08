@@ -1,1 +1,3 @@
-Your build calendar now shows every recorded date, week and month. Linky gives PLUS members unlimited messages; free members get 5 messages a day. Get up to four short, different, factual daily updates about your activity, with one switch to turn them off. The activity competition shows real profile pictures, and anyone can download the Builder League top-three card with a crown on number one.
+18.0.0
+
+Linky now writes your profile for you (PLUS) — you approve every word before it saves. Linky already knows what you're building, so it stops asking. Every paid feature is now listed with the free number beside it, and a gold upgrade button sits at the top of home. Your weekly co-founder appears when you tap. Home fills your whole screen. Free Linky: 4 messages a day.

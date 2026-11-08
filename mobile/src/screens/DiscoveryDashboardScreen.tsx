@@ -20,7 +20,7 @@ import {
   type WeeklyCofounderMatch,
 } from '../lib/matchmaking';
 import { displayNameFor, earnedScore, handleFor, isDiscoverableProfile, opportunityDetails } from '../lib/discovery';
-import { Briefcase, MapPin, Target, Rocket, Zap, UserCheck, Globe, CheckCircle2, MessageSquare, Mail, ArrowDown } from 'lucide-react-native';
+import { Briefcase, MapPin, Target, Rocket, Zap, UserCheck, Globe, CheckCircle2, MessageSquare, Mail, ArrowDown, Crown, ChevronRight } from 'lucide-react-native';
 import { isSponsoredHiddenForViewer, recordCampaignClick } from '../lib/campaigns';
 import { useSponsoredSlot } from '../components/SponsoredCard';
 import { shareLinkupInvite } from '../lib/activation';
@@ -28,6 +28,9 @@ import WeeklyPortrait from '../components/WeeklyPortrait';
 import WeeklyDossier from '../components/WeeklyDossier';
 import ProfileStrengthCard from '../components/ProfileStrengthCard';
 import DemandStrip from '../components/DemandStrip';
+import PaywallModal from '../components/PaywallModal';
+import { hasLinkupPro } from '../lib/paywall';
+import { PLUS_PERK_COUNT } from '../../../shared/plus-perks';
 import { subscribeToDiscoveryProfiles } from '../lib/discoveryProfiles';
 import { IS_LOW_END_ANDROID, MOBILE_LIST_IMAGE_LIMIT, safeProfileImageUri } from '../lib/profilePerformance';
 import { AppImage } from '../components/AppImage';
@@ -218,6 +221,9 @@ function DiscoveryDashboardScreen({ navigation }: any) {
   // thinking before the one person appears. The wait is the product promise
   // being kept slowly enough to feel like something was decided.
   const [weeklyReveal, setWeeklyReveal] = useState<'idle' | 'thinking' | 'revealed'>('idle');
+  // The one ask on this page that is not buried: a gold bar above the greeting.
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const isPlusMember = hasLinkupPro(me);
   const weeklyRevealKey = weeklyMatchKey(me?.uid, weeklyMatch);
   useEffect(() => {
     if (!weeklyRevealKey) return undefined;
@@ -585,6 +591,28 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
           <View style={{ paddingTop: 0 }}>
             <View style={[styles.heroCard, { backgroundColor: isDark ? COLORS.darkCard : '#FFF' }]}>
+              {/* THE ASK, ABOVE EVERYTHING. One gold bar, the number of things
+                  they are not getting yet, and the price. Free members only. */}
+              {!isPlusMember ? (
+                <TouchableOpacity
+                  testID="home-upgrade-cta"
+                  accessibilityRole="button"
+                  accessibilityLabel="Upgrade to LINKUP PLUS"
+                  activeOpacity={0.9}
+                  onPress={() => setUpgradeOpen(true)}
+                  style={[styles.upgradeBar, { backgroundColor: COLORS.primary, borderColor: HOME_LINE }]}
+                >
+                  <View style={styles.upgradeCrown}>
+                    <Crown size={16} color="#0A0B0D" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.upgradeTitle}>UPGRADE TO LINKUP PLUS</Text>
+                    <Text style={styles.upgradeSub}>{PLUS_PERK_COUNT} things you are not getting yet · from $19.99/mo</Text>
+                  </View>
+                  <ChevronRight size={18} color="#0A0B0D" />
+                </TouchableOpacity>
+              ) : null}
+
               <HomeHero profile={me as any} hasMatch={!!weeklyMatch} isDark={isDark} />
 
               {hubSponsor && (
@@ -657,6 +685,12 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           </View>
         </ScrollView>
       )}
+
+      <PaywallModal
+        visible={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        feature="LINKUP PLUS"
+      />
     </SafeAreaView>
   );
 }
@@ -670,6 +704,27 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 4,
   },
+  // The ask: gold, full width, one number and one price.
+  upgradeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  upgradeCrown: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(10,11,13,0.09)',
+  },
+  upgradeTitle: { fontSize: 12.5, fontWeight: '900', color: '#0A0B0D', letterSpacing: 0.3 },
+  upgradeSub: { marginTop: 2, fontSize: 10.5, fontWeight: '800', color: 'rgba(10,11,13,0.62)' },
   // The one line set in bold — the sentence the whole page exists to say.
   sponsorStrip: {
     marginTop: 16,

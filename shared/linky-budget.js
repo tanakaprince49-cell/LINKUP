@@ -4,21 +4,21 @@
 // per-member allowance has to fit inside one shared ceiling. These numbers are
 // derived, not guessed: see docs/qa/linky-allowance-plan.md for the arithmetic.
 //
-// The free allowance is DAILY-ONLY: 5 messages per UTC day, resetting at
-// midnight UTC. There is no monthly bucket anymore: the header shows
-// "5 free messages today" and the composer locks when they are used up.
+// The free allowance is DAILY-ONLY: 4 messages per UTC day, resetting at
+// midnight UTC. There is no monthly bucket: the header shows "4 free messages
+// today", the fifth message opens the paywall, and PLUS has no cap at all.
 // PLUS messages are unlimited and cannot be capped.
 //
 // Overrides (Vercel env, no redeploy of code needed):
-//   LINKY_FREE_DAILY              free members, messages per UTC day (default 5)
+//   LINKY_FREE_DAILY              free members, messages per UTC day (default 4)
 //   LINKY_GLOBAL_DAILY_MESSAGES   shared free-plan ceiling (0 = disabled)
 //   LINKY_PLUS_DAILY is retired: PLUS messages are unlimited and cannot be capped.
 //   LINKY_MODEL_RPD               the provider's requests/day for the wired model
 //   LINKY_CALLS_PER_MESSAGE       average model calls per delivered message
 export const BUDGET_DEFAULTS = Object.freeze({
-  freePerDay: 5,
+  freePerDay: 4,
   plusPerDay: null,
-  freeDaily: 5,
+  freeDaily: 4,
   plusDaily: null,
   plusUnlimited: true,
   globalDailyMessages: 200,

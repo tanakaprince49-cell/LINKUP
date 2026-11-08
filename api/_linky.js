@@ -209,12 +209,19 @@ export function profileFacts(p) {
   if (!p) return null;
   const pic = [p.profilePicUrl, p.photoURL, p.avatarUrl, p.profilePic, ...(Array.isArray(p.photos) ? p.photos : [])]
     .map(hosted).find(Boolean) || '';
+  const project = Array.isArray(p.projects) && p.projects[0] && typeof p.projects[0] === 'object' ? p.projects[0] : {};
+  // Everything Linky should already know before the member types a word. If a
+  // field is here, Linky must never ask for it again (see LINKY_KNOWS_PROFILE).
   return {
     uid: String(p.uid || ''),
     name: displayNameOf(p),
     pic,
     role: text(p.occupation, 100),
     company: text(p.company, 120),
+    building: text(p.buildingName || p.startupName || project.title || project.name || p.company, 120),
+    buildingOneLiner: text(p.buildingOneLiner || p.tagline || project.oneLiner || project.description, 220),
+    seat: text(p.missingSeat || (Array.isArray(p.lookingFor) ? p.lookingFor[0] : ''), 120),
+    stage: text(p.startupStage || p.fundingStage || project.status, 60),
     city: text(p.city, 80),
     country: text(p.country, 80),
     skills: list(p.skills, 12),
@@ -225,6 +232,17 @@ export function profileFacts(p) {
     remoteOnly: !!p.remoteOnly,
   };
 }
+
+/**
+ * The rule that makes Linky feel like it already knows you.
+ *
+ * Every prompt that talks to the member carries this: whatever is in their
+ * profile is already known — name, what they are building, the seat that is
+ * empty, their skills, where they are — so asking "what are you building?" is a
+ * form, not a conversation. Only a field that is genuinely empty may be asked
+ * about, and only one of them, in the member's own words.
+ */
+export const LINKY_KNOWS_PROFILE = 'You already have this member\'s profile in the dossier below — their name, what they are building, the seat they need filled, their skills, their stage and where they are. Treat every filled field as known: NEVER ask what they are building, what they do, what they need, or where they are if it is already in the dossier. Only ask about a field that is genuinely empty, one question, in their words, and never re-ask something they have already answered in this thread.';
 
 // What the member told Linky directly (editable on "What Linky knows about you").
 export function toldFacts(state) {
@@ -3786,13 +3804,19 @@ async function chatPlan({ say, thread, me, ownerRole }) {
   const dossier = {
     name: text(me?.name, 40),
     role: text(me?.role, 60) || ownerRole,
+    building: text(me?.building, 60),
+    oneLiner: text(me?.buildingOneLiner, 120),
+    seat: text(me?.seat, 60),
+    stage: text(me?.stage, 40),
     city: text(me?.city, 40),
     country: text(me?.country, 40),
     skills: list(me?.skills, 8, 30),
     lookingFor: list(me?.lookingFor, 4, 40),
+    bio: text(me?.bio, 200),
   };
   const prompt = [
     'You are Linky, the team-building companion inside LINKUP. You are chatting in the app with one member.',
+    LINKY_KNOWS_PROFILE,
     'Voice: warm, playful, quick, a little cheeky, faintly jealous in a fun way — you want this member to win and you do not want them building it with the wrong people. Make them feel like the main character. Max 2 sentences and under 45 words. No markdown, no emoji, no links, no "as an AI".',
     'Your one superpower: you can search the live LINKUP member database for complementary teammates. You never invent people or claim someone is available.',
     `Member: ${JSON.stringify(dossier)}.`,

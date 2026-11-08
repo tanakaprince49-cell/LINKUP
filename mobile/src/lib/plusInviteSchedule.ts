@@ -1,7 +1,7 @@
 /**
  * PLUS invitations: when they fire, which benefit leads, and what they say.
  *
- * Pure on purpose — no imports, no AsyncStorage, no React. Same inputs, same
+ * Pure on purpose — one import, no AsyncStorage, no React. Same inputs, same
  * answers, which is the only way the "three times a day, at no fixed time" rule
  * can be tested instead of hoped for.
  *
@@ -12,6 +12,7 @@
  *   4. each exposure leads with ONE benefit and says there are more
  *   5. the same benefit does not lead twice in one day
  */
+import { PLUS_PERKS } from '../../../shared/plus-perks';
 
 export const INVITES_PER_DAY = 3;
 export const MIN_INVITE_GAP_MS = 90 * 60 * 1000;
@@ -33,57 +34,23 @@ export type InviteFeature = {
 };
 
 /**
- * What PLUS actually unlocks today. Every line is traceable to code that reads
- * hasLinkupPro(): campaigns.ts hides sponsored cards, ViewersScreen shows the
- * viewer list, RecommendedMatchesScreen and CreatePostScreen lift their limits,
- * ProfileScreen shows the tick + crown, DynamicAppearanceController unlocks
- * themes, and Turbo Connect is the discover boost.
+ * What PLUS unlocks, taken from the one shared list so the invite can never
+ * advertise something the paywall does not sell (or the reverse).
  *
- * Do not add a benefit before the feature exists. A paywall that promises a
- * feature you have not shipped is the fastest way to lose the member who pays.
+ * The two lines this replaced were untrue and are deliberately gone: "save every
+ * profile" (nothing caps saves) and "the PLUS themes" (the app colour picker has
+ * no tier check). shared/plus-perks.js is the source of truth; if a perk is added
+ * there, it appears here automatically — and if it is not gated in code, it does
+ * not belong in either place.
  */
-export const INVITE_FEATURES: InviteFeature[] = [
-  {
-    id: 'noads',
-    feature: 'No sponsored cards. Anywhere. Ever.',
-    line: "You're the one person on this app who should not be sold to, {first} — PLUS members never see a sponsored card, on any surface, or in any email.",
-  },
-  {
-    id: 'viewers',
-    feature: 'See exactly who opened your profile',
-    line: 'Three people looked at what you are building this week. Right now you can see the number. With PLUS you see the names.',
-  },
-  {
-    id: 'recommendations',
-    feature: 'Every recommendation, not three a week',
-    line: 'The algorithm finds more people for you than it is allowed to show you. Free stops at three. PLUS does not stop.',
-  },
-  {
-    id: 'saved',
-    feature: 'Save every profile you want to come back to',
-    line: 'Five saves is not enough for anyone actually building something, {first}. PLUS makes the shelf infinite.',
-  },
-  {
-    id: 'posts',
-    feature: 'Post as often as you ship',
-    line: 'You ship more than you post. Free caps it; PLUS does not. The builders who get matched are the ones who keep showing up.',
-  },
-  {
-    id: 'turbo',
-    feature: 'Turbo Connect — stand at the front of Discover',
-    line: 'Somebody is looking for exactly what you are building. Turbo Connect is how they find you before they find the next person.',
-  },
-  {
-    id: 'badge',
-    feature: 'The blue check and the PLUS crown',
-    line: 'A verified tick and a crown beside your name, everywhere you appear — because being chosen starts with looking chosen.',
-  },
-  {
-    id: 'themes',
-    feature: 'The PLUS themes',
-    line: 'Your app, your palette. The themes live behind PLUS, along with everything else on this list.',
-  },
-];
+export const INVITE_FEATURES: InviteFeature[] = PLUS_PERKS.map((perk) => ({
+  id: perk.id,
+  feature: perk.title,
+  line: perk.line,
+}));
+
+/** How many things a member does not have yet when one is being shown. */
+export const INVITE_MORE_COUNT = Math.max(0, PLUS_PERKS.length - 1);
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -266,7 +233,7 @@ export const evaluateInvite = ({
   const order = inviteFeatureOrder(uid, day);
   const usedIds = new Set(today.map((entry) => (order[entry.slot % order.length] || order[0]).id));
   const feature = order.find((entry) => !usedIds.has(entry.id)) || order[slot % order.length];
-  const copy = inviteCopy({}, feature, INVITE_FEATURES.length - 1);
+  const copy = inviteCopy({}, feature, INVITE_MORE_COUNT);
 
   return { due: true, slot, feature, headline: copy.headline, subline: copy.subline, moreLine: copy.moreLine, personalised: false };
 };
@@ -277,6 +244,6 @@ export const evaluateInviteForProfile = (
 ): InviteDecision => {
   const decision = evaluateInvite(input);
   if (!decision.due) return decision;
-  const copy = inviteCopy(input.profile || {}, decision.feature, INVITE_FEATURES.length - 1);
+  const copy = inviteCopy(input.profile || {}, decision.feature, INVITE_MORE_COUNT);
   return { ...decision, ...copy };
 };

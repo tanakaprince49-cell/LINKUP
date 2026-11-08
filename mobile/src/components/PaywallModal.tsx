@@ -26,6 +26,7 @@ import {
 } from '../lib/trial';
 import { checkPayonifyPayment, startPayonifyCheckout, takePendingReference } from '../lib/webCheckout';
 import { notifyUser } from '../lib/notify';
+import { PLUS_PERKS, paywallCopy } from '../../../shared/plus-perks';
 
 const IS_WEB = Platform.OS === 'web';
 
@@ -57,21 +58,19 @@ type PaywallModalProps = {
 const LOGO = require('../../assets/logo-square.png');
 
 /**
- * Every line here must be a thing PLUS actually gates today (grep hasLinkupPro).
- * The old list sold "unlimited idea deck" — the idea deck has been free forever
- * by decree (see IDEA_DECK_FREE_FOREVER in lib/paywall.ts) — and "advanced
- * search", which lives on the web and is not sold here. Charging for a promise
- * you do not gate is how a paywall loses the person who says yes.
+ * THE WHOLE LIST, IN ONE PLACE.
+ *
+ * Every line here is a thing PLUS actually gates today, and each one carries the
+ * free number beside the PLUS number — 4 messages a day → no limit, 3
+ * recommendations a week → the whole pool — because a specific loss moves a
+ * member and an adjective does not. The list itself lives in
+ * shared/plus-perks.js so the paywall, the invite, the email and the release
+ * notes can never tell three different stories.
+ *
+ * Two lines were removed for being untrue: "unlimited saved profiles" (nothing
+ * caps saves) and "the PLUS app themes" (the app colour picker has no tier
+ * check). Do not add them back without a gate to point at.
  */
-const PRO_PERKS = [
-  'No sponsored cards anywhere — home, Linky, startups, blogs, notifications or email',
-  'Profile viewer insights — see exactly who opened your profile, by name',
-  'Every weekly recommendation, not three',
-  'Unlimited saved profiles and more posts per week',
-  'Turbo Connect — the Discover visibility boost',
-  'Verified blue check + the PLUS crown',
-  'The PLUS app themes',
-];
 
 const PRICING_PLANS = [
   {
@@ -137,6 +136,13 @@ export default function PaywallModal({
   const processedPurchases = React.useRef(new Set<string>());
   const [selectedPlan, setSelectedPlan] = React.useState<PlusPlan['id']>('monthly');
   const isPro = hasLinkupPro(profile);
+  // Written for one member: their name, their project, the seat they said is
+  // empty — then exactly what the free plan is costing them this week.
+  const personal = React.useMemo(() => {
+    const copy = paywallCopy(profile as any);
+    const raw = String((profile as any)?.displayName || '').trim().split(/\s+/)[0] || '';
+    return { ...copy, firstName: raw };
+  }, [profile]);
   const selectedPrice = PRICING_PLANS.find((plan) => plan.id === selectedPlan) || PRICING_PLANS[0];
   // No maxHeight needed — whole sheet scrolls
   const {
@@ -491,13 +497,18 @@ export default function PaywallModal({
             </View>
 
             <Text style={[styles.title, { color: textColor(isDark) }]}>
-              {invite ? invite.headline : 'Expand your professional networking tools'}
+              {invite ? invite.headline : personal.headline}
             </Text>
             <Text style={[styles.copy, { color: textColor(isDark, 'secondary') }]}>
-              {invite
-                ? invite.subline
-                : description || 'Free members have limited team matching. LINKUP PLUS provides higher matching limits and broader discovery to help you find complementary teammates for your project.'}
+              {invite ? invite.subline : [description, personal.subline].filter(Boolean).join(' ')}
             </Text>
+            {/* Loss aversion, in numbers, about THIS member's plan today. */}
+            <View style={[styles.todayStrip, { backgroundColor: isDark ? 'rgba(251,230,24,0.10)' : COLORS.primaryGlow, borderColor: isDark ? 'rgba(251,230,24,0.35)' : COLORS.primary }]}>
+              <Text style={[styles.todayLabel, { color: COLORS.primaryStrong }]}>WHAT YOU HIT TODAY</Text>
+              <Text style={[styles.todayBody, { color: textColor(isDark) }]}>
+                {personal.personalised ? `${personal.firstName || 'You'}: ` : ''}4 Linky messages a day · 2 Meet requests a day · 3 recommendations a week · 1 startup post a week · your 3 free weekly introductions · and no names on your profile viewers.
+              </Text>
+            </View>
             <View style={[styles.featurePill, { backgroundColor: isDark ? COLORS.darkBg : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}> 
               <Text style={[styles.feature, { color: textColor(isDark) }]}>{invite ? invite.feature : feature}</Text>
             </View>
@@ -549,15 +560,37 @@ export default function PaywallModal({
 
           <View style={[styles.perksSection, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
             <View style={styles.perksHeader}>
-              <Text style={[styles.perksTitle, { color: textColor(isDark) }]}>Everything included in LINKUP PLUS</Text>
-              <Text style={[styles.perksCount, { backgroundColor: COLORS.primary, color: COLORS.lightTextPrimary }]}>{PRO_PERKS.length} PLUS PERKS</Text>
+              <Text style={[styles.perksTitle, { color: textColor(isDark) }]}>Everything you stop hitting</Text>
+              <Text style={[styles.perksCount, { backgroundColor: COLORS.primary, color: COLORS.lightTextPrimary }]}>{PLUS_PERKS.length} THINGS</Text>
             </View>
-            {PRO_PERKS.map((perk) => (
-              <View key={perk} style={styles.perkRow}>
-                <CheckCircle2 size={18} color={COLORS.primaryStrong} />
-                <Text style={[styles.perkText, { color: textColor(isDark, 'secondary') }]}>{perk}</Text>
+            <Text style={[styles.perksIntro, { color: textColor(isDark, 'muted') }]}>
+              Free on the left. What you get the moment you upgrade on the right.
+            </Text>
+            {PLUS_PERKS.map((perk, index) => (
+              <View
+                key={perk.id}
+                testID={`plus-perk-${perk.id}`}
+                style={[styles.perkBlock, index > 0 && { borderTopColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(17,24,39,0.07)' }]}
+              >
+                <View style={styles.perkHeadRow}>
+                  <CheckCircle2 size={16} color={COLORS.primaryStrong} />
+                  <Text style={[styles.perkTitle, { color: textColor(isDark) }]}>{perk.title}</Text>
+                </View>
+                <View style={styles.perkCompare}>
+                  <Text style={[styles.perkFree, { color: textColor(isDark, 'muted'), borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
+                    {perk.free}
+                  </Text>
+                  <Text style={[styles.perkArrow, { color: textColor(isDark, 'muted') }]}>→</Text>
+                  <Text style={[styles.perkPlus, { color: COLORS.primaryStrong, backgroundColor: isDark ? 'rgba(251,230,24,0.14)' : COLORS.primaryGlow }]}>
+                    {perk.plus}
+                  </Text>
+                </View>
+                <Text style={[styles.perkLine, { color: textColor(isDark, 'secondary') }]}>{perk.line}</Text>
               </View>
             ))}
+            <Text style={[styles.perksFootnote, { color: textColor(isDark, 'muted') }]}>
+              Free stays generous: the idea deck is unlimited forever, your weekly 1-of-1 introduction is not a PLUS feature, and nothing here changes that.
+            </Text>
           </View>
 
           <TouchableOpacity
@@ -879,16 +912,90 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  perkRow: {
+  todayStrip: {
+    marginTop: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    gap: 5,
+  },
+  todayLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  todayBody: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  perksIntro: {
+    fontSize: 11.5,
+    lineHeight: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  // One block per perk: the claim, then free → PLUS, then why it matters.
+  perkBlock: {
+    paddingTop: 12,
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'transparent',
+  },
+  perkHeadRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 11,
-    minHeight: 36,
+    gap: 9,
   },
-  perkText: {
+  perkTitle: {
     flex: 1,
     fontSize: 14,
-    lineHeight: 21,
+    lineHeight: 20,
+    fontWeight: '900',
+    letterSpacing: -0.2,
+  },
+  perkCompare: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginTop: 7,
+    marginLeft: 25,
+  },
+  perkFree: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+    borderWidth: 1,
+    overflow: 'hidden',
+    textDecorationLine: 'line-through',
+  },
+  perkArrow: {
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  perkPlus: {
+    fontSize: 10.5,
+    fontWeight: '900',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+    overflow: 'hidden',
+  },
+  perkLine: {
+    marginTop: 6,
+    marginLeft: 25,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  perksFootnote: {
+    marginTop: 14,
+    fontSize: 10.5,
+    lineHeight: 15,
     fontWeight: '700',
   },
   planBtn: {
