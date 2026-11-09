@@ -453,6 +453,23 @@ export const LINKY_VOICE = {
     chips.push('Find teammates', 'Who is the one person I am missing?');
     return chips.slice(0, 4);
   },
+  /**
+   * While a search runs, Linky thinks out loud: complete, specific thoughts
+   * about THIS member's brief — what they are building, the seat they need,
+   * and how the list is being cut. Never one spinner word on repeat.
+   */
+  thinkingLines: (facts: BuildFacts): string[] => [
+    facts.projectName
+      ? `Reading your brief — ${facts.projectName}${facts.oneLiner ? `, ${facts.oneLiner}` : ''}.`
+      : 'Reading your brief — what you are building and who is still missing.',
+    facts.seat
+      ? `Searching every public LINKUP profile for your ${facts.seat}.`
+      : 'Searching every public LINKUP profile for your missing ingredient.',
+    'Checking the real evidence — skills, builds, and who is already looking for someone like you.',
+    'Cutting everyone who only sounds right on paper.',
+    'Keeping the people whose strengths complete yours instead of copying them.',
+    'Ranking the strongest fits — names in a moment.',
+  ],
   working: 'Going through every public LINKUP profile. Give me a second…',
   clock: 'Three minutes started the moment you opened this page.',
   disclaimer:

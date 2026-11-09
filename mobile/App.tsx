@@ -2,6 +2,7 @@ import 'react-native-gesture-handler';
 import { syncWebMetadata } from './src/lib/webMetadata';
 import { webBasePath, webAppPath, webRoutePath, scopedNavigationPath } from './src/lib/webPaths';
 import { captureReferralFromUrl } from './src/lib/referral';
+import { groupInviteCodeFromUrl, parkGroupInviteCode, readPendingGroupInviteCode, clearPendingGroupInviteCode } from './src/lib/groupInvite';
 import React from 'react';
 import { View, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Dimensions, Text, Platform, InteractionManager } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef, DefaultTheme, DarkTheme, getPathFromState, getStateFromPath } from '@react-navigation/native';
@@ -662,6 +663,51 @@ function AppContent() {
       history.replaceState(null, '', webAppPath('/landing'));
     }
   }, [user?.uid]);
+
+  // Group invite links (/app/g/<code> on web, linkup://g/<code> natively):
+  // park the code wherever it arrives, then join once signed in + onboarded.
+  const pendingGroupInviteRef = React.useRef(
+    Platform.OS === 'web' ? groupInviteCodeFromUrl(String((globalThis as any)?.location?.pathname || '')) : ''
+  );
+  React.useEffect(() => {
+    if (pendingGroupInviteRef.current) void parkGroupInviteCode(pendingGroupInviteRef.current);
+    const handle = (url?: string | null) => {
+      const code = groupInviteCodeFromUrl(url);
+      if (code) {
+        pendingGroupInviteRef.current = code;
+        void parkGroupInviteCode(code);
+      }
+    };
+    void ExpoLinking.getInitialURL().then(handle).catch(() => {});
+    const sub = ExpoLinking.addEventListener('url', ({ url }) => handle(url));
+    return () => { sub?.remove?.(); };
+  }, []);
+  React.useEffect(() => {
+    if (!user?.uid || !isOnboarded) return;
+    let cancelled = false;
+    (async () => {
+      const code = pendingGroupInviteRef.current || (await readPendingGroupInviteCode().catch(() => ''));
+      if (!code || cancelled) return;
+      try {
+        const { builderCall } = await import('./src/lib/builder');
+        const r: any = await builderCall('groupJoinLink', { code });
+        pendingGroupInviteRef.current = '';
+        await clearPendingGroupInviteCode().catch(() => {});
+        if (!cancelled && r?.groupId) {
+          setTimeout(() => {
+            if (navigationRef.isReady()) (navigationRef as any).navigate('GroupChat', { groupId: r.groupId });
+          }, 450);
+        }
+      } catch (e: any) {
+        // Dead links are dropped; anything else stays parked for next launch.
+        if (/not valid/.test(String(e?.message || ''))) {
+          pendingGroupInviteRef.current = '';
+          await clearPendingGroupInviteCode().catch(() => {});
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.uid, isOnboarded]);
 
   // Shared LINKUP profile links (/profile/<uid>) must survive the login jump:
   // remember who the visitor came to see, then drop them on that profile once

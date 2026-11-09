@@ -27,6 +27,7 @@ import {
 import PaywallModal from '../components/PaywallModal';
 import MemberBadges from '../components/MemberBadges';
 import LinkyCatIntro from '../components/LinkyCatIntro';
+import LinkyRichText from '../components/LinkyRichText';
 import LinkyQuotaPill from '../components/LinkyQuotaPill';
 import { buildFacts, LINKY_VOICE } from '../lib/brandVoice';
 import { useKeyboardHeight } from '../lib/useKeyboardHeight';
@@ -113,6 +114,35 @@ export default function LinkyHomeScreen({ navigation }: any) {
   // name, their build, and the chair they cannot fill. Onboarding captured all
   // of it, so the thread never opens with "so, what are you working on?".
   const facts = useMemo(() => buildFacts(profile as any), [profile]);
+
+  // While Linky works, it thinks out loud — each line a complete thought
+  // about this member's brief, reworded every couple of seconds in both the
+  // header and the thinking bubble. Never one word on repeat.
+  const thinkingLines = useMemo(() => LINKY_VOICE.thinkingLines(facts), [facts]);
+  const [thinkingStep, setThinkingStep] = useState(0);
+  useEffect(() => {
+    if (!busy) { setThinkingStep(0); return; }
+    const timer = setInterval(() => setThinkingStep((step) => Math.min(step + 1, thinkingLines.length - 1)), 2100);
+    return () => clearInterval(timer);
+  }, [busy, thinkingLines.length]);
+  const thinkingLine = thinkingLines[Math.min(thinkingStep, Math.max(thinkingLines.length - 1, 0))] || LINKY_VOICE.working;
+
+  // Everything Linky works from, listed where the member can see it: their
+  // build, what they are looking for, what they bring, stage and base.
+  const briefRows = useMemo(() => {
+    const p: any = profile || {};
+    const rows: { label: string; value: string }[] = [];
+    const skills = (Array.isArray(p.skills) ? p.skills : []).filter(Boolean).slice(0, 4).join(' · ');
+    const wants = (Array.isArray(p.lookingFor) ? p.lookingFor : []).filter(Boolean).slice(0, 3).join(' · ');
+    const place = [facts.city, String(p.country || '').trim()].filter(Boolean).join(', ');
+    if (facts.projectName) rows.push({ label: 'Building', value: facts.oneLiner ? `${facts.projectName} — ${facts.oneLiner}` : facts.projectName });
+    if (facts.seat) rows.push({ label: 'Looking for', value: wants && wants.toLowerCase() !== facts.seat.toLowerCase() ? `${facts.seat} · ${wants}` : facts.seat });
+    else if (wants) rows.push({ label: 'Looking for', value: wants });
+    if (skills) rows.push({ label: 'You bring', value: skills });
+    if (facts.stage) rows.push({ label: 'Stage', value: facts.stage });
+    if (place) rows.push({ label: 'Based in', value: place });
+    return rows;
+  }, [profile, facts]);
 
   // The chips are the member's own brief read back to them.
   useEffect(() => {
@@ -301,7 +331,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
       {catAvatar(30)}
       <View style={styles.linkyColumn}>
         <View style={[styles.linkyBubble, { backgroundColor: palette.surface }, message.failed && styles.failedBubble]}>
-          <Text style={[styles.linkyText, { color: palette.text }]}>{message.text}</Text>
+          <LinkyRichText text={message.text} isDark={dark} style={[styles.linkyText, { color: palette.text }]} />
           {!!message.roles?.length && (
             <Text style={[styles.searchMeta, { color: palette.muted }]}>Searching roles: {message.roles.join(' · ')}</Text>
           )}
@@ -366,6 +396,21 @@ export default function LinkyHomeScreen({ navigation }: any) {
         </View>
       </View>
 
+      {!!briefRows.length && (
+        <View style={[styles.briefCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+          <Text style={styles.briefLabel}>What Linky knows about you</Text>
+          {briefRows.map((row) => (
+            <View key={row.label} style={styles.briefRow}>
+              <Text style={[styles.briefRowLabel, { color: palette.muted }]}>{row.label}</Text>
+              <Text style={[styles.briefRowValue, { color: palette.text }]}>{row.value}</Text>
+            </View>
+          ))}
+          <Text style={[styles.briefFootnote, { color: palette.muted }]}>
+            I search from this brief. Update your profile and I work from the new version instantly.
+          </Text>
+        </View>
+      )}
+
       <TouchableOpacity
         accessibilityRole="button"
         onPress={() => onChip('Find my teammates')}
@@ -411,7 +456,9 @@ export default function LinkyHomeScreen({ navigation }: any) {
             <View style={styles.statusRow}>
               <View style={styles.liveDot} />
               <Text style={[styles.subtitle, { color: palette.muted }]} numberOfLines={1}>
-                {checkedCount > 0
+                {busy
+                  ? thinkingLine
+                  : checkedCount > 0
                   ? `${checkedCount} builders searched · brief still loaded`
                   : facts.projectName
                     ? `${facts.projectName} · ${facts.seat || 'one seat'} still missing`
@@ -443,7 +490,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
               {catAvatar(30)}
               <View style={[styles.linkyBubble, { backgroundColor: palette.surface, flexDirection: 'row', alignItems: 'center', gap: 9, maxWidth: '88%' }]}>
                 <ActivityIndicator size="small" color={YELLOW_DEEP} />
-                <Text style={[styles.linkyText, { color: palette.secondary, flex: 1 }]}>{LINKY_VOICE.working}</Text>
+                <Text style={[styles.linkyText, { color: palette.secondary, flex: 1 }]}>{thinkingLine}</Text>
               </View>
             </View>
           )}
@@ -565,6 +612,11 @@ const styles = StyleSheet.create({
   briefTile: { flex: 1, borderWidth: 1, borderRadius: 16, padding: 12, gap: 3 },
   briefLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase', color: YELLOW_DEEP },
   briefValue: { fontSize: 14, fontWeight: '800', lineHeight: 19 },
+  briefCard: { borderWidth: 1, borderRadius: 16, padding: 12, gap: 7, marginTop: 6 },
+  briefRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  briefRowLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase', width: 82, paddingTop: 2 },
+  briefRowValue: { fontSize: 12.5, lineHeight: 17, fontWeight: '700', flex: 1 },
+  briefFootnote: { fontSize: 10.5, lineHeight: 15, fontWeight: '600', marginTop: 1 },
   primaryCta: {
     marginTop: 6,
     minHeight: 50,

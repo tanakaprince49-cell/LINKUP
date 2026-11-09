@@ -4,6 +4,7 @@ import {isGoldMember} from '../shared/member-badges.js';
 import {containsCredential} from '../shared/contributions.js';
 const cursor=value=>{if(typeof value!=='string'||!/^[A-Za-z0-9_-]{1,300}$/.test(value))throw problem('Invalid message or invitation cursor.');return value;};
 const own=value=>{if(!validId(value))throw problem('Invalid group identifier.');return value;};
+const inviteCodeOf=()=>id().replace(/-/g,'').slice(0,12);
 export function createGroupService({db,now,blocked,connectable,notify,plus=async()=>false}){
  async function assertActor(tx,uid){const u=await tx.get(db.collection('users').doc(uid));if(!u.exists||u.data().deleted||u.data().banned||u.data().onboarded!==true)throw problem('Your profile is unavailable.',403);}
  async function checkBlocks(tx,uid,members){const [a,b]=await Promise.all([tx.get(db.collection('blocks').where('blockedById','==',uid)),tx.get(db.collection('blocks').where('blockedUserId','==',uid))]);const denied=new Set([...a.docs.map(d=>d.data().blockedUserId),...b.docs.map(d=>d.data().blockedById)]);if(members.some(other=>other!==uid&&denied.has(other)))throw problem('A blocked member is present.',403);}
@@ -20,7 +21,7 @@ export function createGroupService({db,now,blocked,connectable,notify,plus=async
   const users=await db.getAll(...g.memberIds.map(u=>db.collection('users').doc(u)),{fieldMask:['displayName','fullName','name','profilePicUrl','photoURL','isVerified','deleted','banned','isPro','plan','subscriptionPlan','subscriptionStatus','entitlements']});
   const members=await Promise.all(users.map(async u=>{const p=u.data()||{},unavailable=!u.exists||p.deleted||p.banned||g.unavailable.includes(u.id);return {uid:u.id,name:unavailable?'Unavailable member':clean(p.displayName||p.fullName||p.name,100),avatar:unavailable?'':safePhoto(p.profilePic||p.profilePicUrl||p.photoURL),verified:!unavailable&&(isGoldMember(u.id)||p.isVerified===true||await plus(u.id,p)),admin:groupIsAdmin(g,u.id),unavailable};}));
   const badges=await badgesFor(g);
-  return {id:g.id,title:g.title,description:g.description||'',photo:safePhoto(g.photo),rules:g.rules||'',ownerId:g.ownerId,adminIds:g.adminIds||[],creatorId:g.creatorId||'',...badges,archived:!!g.archived,announcementsOnly:!!g.announcementsOnly,discoverable:g.discoverable!==false,pinnedMessage:g.pinnedMessage||null,preferences:g.preferences?.[uid]||{},bannedIds:groupIsAdmin(g,uid)?g.bannedIds||[]:[],memberCount:g.memberIds.length,blocked:!!g.unavailable.length,legacy:g.kind!=='group',members,createdAt:g.createdAt,updatedAt:g.updatedAt};
+  return {id:g.id,title:g.title,description:g.description||'',photo:safePhoto(g.photo),rules:g.rules||'',inviteCode:g.inviteCode||'',ownerId:g.ownerId,adminIds:g.adminIds||[],creatorId:g.creatorId||'',...badges,archived:!!g.archived,announcementsOnly:!!g.announcementsOnly,discoverable:g.discoverable!==false,pinnedMessage:g.pinnedMessage||null,preferences:g.preferences?.[uid]||{},bannedIds:groupIsAdmin(g,uid)?g.bannedIds||[]:[],memberCount:g.memberIds.length,blocked:!!g.unavailable.length,legacy:g.kind!=='group',members,createdAt:g.createdAt,updatedAt:g.updatedAt};
  }
  async function messages(uid,input){
   const g=await access(uid,input.groupId);const collection=ref(g.id).collection('messages');let q;
@@ -49,7 +50,7 @@ export function createGroupService({db,now,blocked,connectable,notify,plus=async
   if(op==='groupCreate'){
    const creator=await db.collection('users').doc(uid).get(),creatorPlus=await plus(uid,creator.data());
    const title=requireText(input.title,80,3),description=clean(input.description,240),gid=id();if(containsCredential(title)||containsCredential(description))throw problem('Remove credentials before sharing.');
-   await db.runTransaction(async tx=>{await assertActor(tx,uid);const stateRef=db.collection('builderStates').doc(uid),[s,existing]=await Promise.all([tx.get(stateRef),tx.get(db.collection('builderRooms').where('ownerId','==',uid))]);if(existing.docs.filter(d=>!d.data().archived).length>=12)throw problem('Archive an existing group first.');tx.set(stateRef,{...stateOf(s.data(),now()),updatedAt:now()});tx.set(ref(gid),{title,description,kind:'group',creatorId:uid,creatorPlus,ownerId:uid,adminIds:[uid],bannedIds:[],rules:'',photo:'',announcementsOnly:false,discoverable:true,preferences:{},memberIds:[uid],readAt:{},createdAt:now(),updatedAt:now(),archived:false});});return {groupId:gid};
+   await db.runTransaction(async tx=>{await assertActor(tx,uid);const stateRef=db.collection('builderStates').doc(uid),[s,existing]=await Promise.all([tx.get(stateRef),tx.get(db.collection('builderRooms').where('ownerId','==',uid))]);if(existing.docs.filter(d=>!d.data().archived).length>=12)throw problem('Archive an existing group first.');tx.set(stateRef,{...stateOf(s.data(),now()),updatedAt:now()});tx.set(ref(gid),{title,description,kind:'group',creatorId:uid,creatorPlus,ownerId:uid,adminIds:[uid],bannedIds:[],rules:'',photo:'',announcementsOnly:false,discoverable:true,inviteCode:inviteCodeOf(),preferences:{},memberIds:[uid],readAt:{},createdAt:now(),updatedAt:now(),archived:false});});return {groupId:gid};
   }
   if(op==='groupDiscover'){
    // Anyone with a live onboarded profile can browse. The listing exposes
@@ -169,6 +170,40 @@ export function createGroupService({db,now,blocked,connectable,notify,plus=async
    for(let page=0;page<3;page++){if(await purgeGroup(db,rr))break;}return {deleted:true};
   }
   if(op==='groupExport'){const g=await access(uid,input.groupId);return {exportScope:'Latest 50 messages plus retained legacy project notes. Use nextBefore for earlier history.',group:await metadata(uid,g),legacy:{goal:g.goal||'',milestone:g.milestone||'',tasks:g.tasks||[],logs:g.logs||[],links:g.links||[],messages:g.messages||[]},...(await messages(uid,{groupId:g.id}))};}
+  if(op==='groupInviteLink'){
+   // The shareable invite link. Any member can read the current code (older
+   // groups get one minted on first ask); only an admin may reset it, which
+   // instantly kills every copy of the old link.
+   const g=await access(uid,input.groupId,{manage:true});
+   const reset=input.reset===true;
+   if(reset&&!groupIsAdmin(g,uid))throw problem('Only a group admin can reset the invite link.',403);
+   if(g.inviteCode&&!reset)return {inviteCode:g.inviteCode};
+   const code=inviteCodeOf(),rr=ref(g.id);
+   await db.runTransaction(async tx=>{await assertActor(tx,uid);const d=await tx.get(rr),fresh=d.data();if(!d.exists||!fresh.memberIds?.includes(uid))throw problem('Group access was removed.',403);if(reset&&!groupIsAdmin(fresh,uid))throw problem('Only a group admin can reset the invite link.',403);tx.update(rr,{inviteCode:code,updatedAt:now()});});
+   return {inviteCode:code};
+  }
+  if(op==='groupJoinLink'){
+   // Join through a shared invite link: link possession IS the invitation,
+   // so this works for unlisted groups too — every other safety rail from
+   // accepting a named invitation still applies (actor, bans, blocks, caps).
+   const code=typeof input.code==='string'?input.code.trim().toLowerCase():'';
+   if(!/^[a-f0-9]{12}$/.test(code))throw problem('That invite link is not valid.');
+   const snap=await db.collection('builderRooms').where('inviteCode','==',code).limit(1).get();
+   if(!snap.docs.length)throw problem('That invite link is not valid anymore.',404);
+   const found=snap.docs[0],rr=ref(found.id);
+   const joined=await db.runTransaction(async tx=>{await assertActor(tx,uid);const d=await tx.get(rr),g=d.data();
+    if(!d.exists)throw problem('Group not found.',404);
+    if(g.archived||g.deleting)throw problem('This group is not available.',409);
+    if(g.kind&&g.kind!=='group')throw problem('This group is not available.',403);
+    if((g.bannedIds||[]).includes(uid))throw problem('You are banned from this group.',403);
+    if((g.memberIds||[]).includes(uid))return false;
+    await checkBlocks(tx,uid,g.memberIds||[]);
+    if((g.memberIds||[]).length>=32)throw problem('This group is full.');
+    const bs=await tx.get(db.collection('builderStates').doc(uid));if(!bs.exists)tx.set(db.collection('builderStates').doc(uid),stateOf({},now()));
+    tx.update(rr,{memberIds:[...new Set([...(g.memberIds||[]),uid])],['readAt.'+uid]:now(),updatedAt:now()});
+    return true;});
+   return {ok:true,joined,groupId:found.id,title:clean(found.data()?.title,80)};
+  }
   throw problem('Unknown group operation.');
  }
  return {handle};
