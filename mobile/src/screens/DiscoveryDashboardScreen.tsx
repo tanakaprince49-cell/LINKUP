@@ -494,12 +494,12 @@ function DiscoveryDashboardScreen({ navigation }: any) {
           )}
           <Text style={[styles.mutualStatusText, { color: textColor(isDark) }]}>
             {isMutualMatch
-              ? `Both you and ${partnerFirst} are interested! Your direct co-founder room is unlocked.`
+              ? `You and ${partnerFirst} are connected! Your direct co-founder room is open.`
               : partnerInterested
-                ? `${partnerFirst} is already interested in meeting you as a co-founder! Tap below to meet.`
+                ? `${partnerFirst} asked to meet you as this week's co-founder match. Accept below and your room opens instantly.`
                 : viewerInterested
-                  ? `You're marked as interested. When ${partnerFirst} taps Interested on your profile, you two meet!`
-                  : `Mutual 1:1 Rule: If both you and ${partnerFirst} tap Interested this week, you unlock a direct intro to meet.`}
+                  ? `Introduction requested. ${partnerFirst} only has to accept — the moment they do, your room opens and you will be told.`
+                  : `One tap requests your introduction. ${partnerFirst} just accepts — no waiting for two separate yeses.`}
           </Text>
         </View>
 

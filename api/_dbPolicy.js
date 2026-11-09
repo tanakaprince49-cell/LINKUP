@@ -93,6 +93,7 @@ export function canReadDoc(collection, data, uid) {
     case 'savedProfiles': return !!uid && (data.ownerId === uid || data.profileId === uid);
     case 'ideaSwipes': return !!uid && (data.swiperId === uid || data.ideaOwnerId === uid);
     case 'gameChallenges': return !!uid && (data.senderId === uid || data.recipientId === uid);
+    case 'cofounderOutcomes': return !!uid && (data.viewerUid === uid || data.partnerUid === uid);
     case 'profileViews': case 'profileClicks':
       return !!uid && (data.profileId === uid || data.viewerId === uid);
     case 'reports': return !!uid && data.reporterId === uid;
@@ -176,6 +177,14 @@ export function canWrite({ collection, action, uid, docId, patch, resulting, exi
       if (action === 'create') return resulting.senderId === uid;
       if (action === 'delete') return false;
       return !!existing && (existing.senderId === uid || existing.recipientId === uid);
+    }
+    case 'cofounderOutcomes': {
+      // A member records the outcome of their own meeting, about one partner.
+      // Nobody can write someone else's verdict, and verdicts are not deleted.
+      if (action === 'delete') return false;
+      if (!resulting || resulting.viewerUid !== uid) return false;
+      if (docId !== `${uid}_${resulting.partnerUid}`) return false;
+      return patchKeys.every((k) => ['viewerUid', 'partnerUid', 'viewerName', 'partnerName', 'outcome', 'reason', 'reasonText', 'weekKey', 'pairId', 'createdAt', 'updatedAt'].includes(k));
     }
     case 'profileViews': case 'profileClicks': {
       if (action === 'create') return resulting.viewerId === uid;

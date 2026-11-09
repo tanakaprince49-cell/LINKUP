@@ -100,7 +100,10 @@ test('Linky is a chat surface: one message, one reply, and the live member datab
   const api = core(db, { plan: searchPlan });
   const out = await api.linkyChat('member', { message: 'I am building a payments app for market traders — who can build it with me?' });
   assert.equal(out.action, 'search');
-  assert.equal(out.reply, 'Two seats, two humans, zero guessing.');
+  // The plan's sentence named nobody, so the deterministic line replaces it:
+  // Linky never says it found someone without saying who.
+  assert.match(out.reply, /Alice/);
+  assert.match(out.reply, /Dee/);
   assert.ok(out.checked >= 2, 'the search reports how many public profiles it checked');
   assert.equal(out.teams.length, 1);
   assert.equal([...out.teams[0].members.map((m) => m.name)].sort().join(','), 'Alice,Dee');
@@ -196,4 +199,17 @@ test('the client sends chat through the authenticated API and never renders a re
   assert.match(screen, /linkyTeamChat\(/);
   assert.match(screen, /database search|LINKUP database/i);
   assert.doesNotMatch(screen, /intro draft|warm intro|SponsoredSlot|intro_request/);
+});
+
+test('asking who is strongest after a search pulls the actual profiles back up', async () => {
+  const db = squadDb();
+  const api = core(db, { plan: searchPlan });
+  const first = await api.linkyChat('member', { message: 'I am building a payments app for market traders — who can build it with me?' });
+  assert.equal(first.teams.length, 1);
+  // A fresh turn whose AI sentence names nobody must still show the people.
+  const api2 = core(db, { plan: { reply: 'Great question.', action: 'chat', idea: '', roles: [] } });
+  const out = await api2.linkyChat('member', { message: 'Who is the strongest?' });
+  assert.equal(out.teams.length, 1, 'the follow-up re-attaches the found profiles');
+  assert.deepEqual([...out.teams[0].members.map((m) => m.name)].sort(), ['Alice', 'Dee']);
+  assert.match(out.reply, /Alice|Dee/, 'the reply names the strongest instead of gesturing at them');
 });

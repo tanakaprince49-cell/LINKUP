@@ -4050,24 +4050,52 @@ export async function linkyChat(uid, {
         score: member.score,
       })),
     }));
+    // A found person is always named, and the profile always travels with
+    // the claim. If the AI's sentence does not name anyone Linky "found",
+    // the deterministic line replaces it — Linky never gets to say it found
+    // someone without saying who, and the cards below prove it.
+    let outTeams = teams;
+    let finalReply = reply;
+    const namesOf = (rows) => rows.flatMap((team) => (team.members || []).map((member) => text(member.name, 40))).filter(Boolean);
+    const mentionsSomeone = (sentence, names) => {
+      const low = String(sentence || '').toLowerCase();
+      return names.some((name) => name && low.includes(name.toLowerCase()));
+    };
+    if (teams.length) {
+      if (!mentionsSomeone(finalReply, namesOf(teams))) {
+        finalReply = chatSearchReply({ teams, checked: match?.checked || 0, idea: projectIdea });
+      }
+    } else if (!wantsSearch && Array.isArray(state.chatTeams) && state.chatTeams.length
+      && now - Number(state.chatTeamsAt || 0) < 24 * 3600 * 1000
+      && /\b(who|which|strongest|best|show|name|first|second|third|them|they|person)\b/i.test(say)) {
+      // "Who is the strongest?" after a search: pull the actual profiles back
+      // up instead of talking about people who are not on screen.
+      outTeams = state.chatTeams;
+      if (!mentionsSomeone(finalReply, namesOf(outTeams))) {
+        const top = outTeams.flatMap((team) => team.members || []).sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+        if (top) {
+          finalReply = `From that search, your strongest is ${text(top.name, 40)}${top.recommendedRole ? ` — ${text(top.recommendedRole, 50)}` : ''}${top.city ? `, ${text(top.city, 40)}` : ''}. ${text(top.why, 160)} Their full profile is right below — tap through and meet them.`;
+        }
+      }
+    }
     const rolesOut = match?.roles?.length ? match.roles : list(roles, 3, 60);
-    const suggestions = teams.length
+    const suggestions = outTeams.length
       ? ['Who is the strongest?', 'Find another option', 'What should I ask them first?']
       : wantsSearch
         ? ['Find teammates', 'Try different roles', 'Who else is building this?']
         : ['Find teammates', 'Who is technical on LINKUP?', 'Who else is building this?'];
-    const nextThread = [...thread, { role: 'user', text: say || 'Search the database for my team.' }, { role: 'linky', text: reply }]
+    const nextThread = [...thread, { role: 'user', text: say || 'Search the database for my team.' }, { role: 'linky', text: finalReply }]
       .slice(-CHAT_TURNS)
       .map((turn) => ({ role: turn.role, text: text(turn.text, 700), at: now }));
-    await patchState(uid, { chatThread: nextThread, chatAt: now }).catch(() => {});
+    await patchState(uid, { chatThread: nextThread, chatAt: now, ...(teams.length ? { chatTeams: teams, chatTeamsAt: now } : {}) }).catch(() => {});
     return {
       action: wantsSearch && !asked ? 'search' : 'chat',
-      reply,
+      reply: finalReply,
       idea: projectIdea,
       ownerRole: match?.ownerRole || ownerRole,
       ownerName: match?.ownerName || text(me.name, 40),
       roles: rolesOut,
-      teams,
+      teams: outTeams,
       checked: match?.checked || 0,
       noMatchReason: match?.message || '',
       usedAi: plan.usedAi === true,

@@ -93,3 +93,9 @@ test('the brief still travels to Firestore and to the matcher', () => {
   }
   assert.match(source, /setDoc\(doc\(db, 'users', user\.uid\), onboardingProfile, \{ merge: true \}\)/);
 });
+
+test('the build screen asks about registering the startup, and the answer is saved', () => {
+  assert.match(source, /Do you want to register your startup on LINKUP\?/);
+  assert.match(source, /wantsStartupRegistration: registerStartup/);
+  assert.match(source, /registeredStartup: registerStartup/);
+});

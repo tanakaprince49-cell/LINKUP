@@ -346,7 +346,7 @@ export const DISCOVERY_VOICE = {
   sprint: (task: string) => `Your first twenty minutes together: ${task}`,
   interestCta: (partnerFirst: string) => `Yes — introduce me to ${partnerFirst}`,
   waiting: (partnerFirst: string) => `Introduction requested · waiting on ${partnerFirst}`,
-  mutualCta: (partnerFirst: string) => `You both said yes — meet ${partnerFirst}`,
+  mutualCta: (partnerFirst: string) => `Accept & meet ${partnerFirst}`,
   emailed: (partnerFirst: string) =>
     `It is in both inboxes. You and ${partnerFirst} have the same email, the same week, the same sentence: this might be it.`,
   emptyTitle: 'This week the algorithm has nobody for you yet.',

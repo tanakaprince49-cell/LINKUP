@@ -29,3 +29,15 @@ test('the screen only applies all local fields and exits editing after the await
  assert.match(save,/err instanceof ProfileSectionSaveError/);
  assert.doesNotMatch(save,/Optional profile sections were not saved|app needs the latest rules deployed/);
 });
+
+test('an accepted connection gets meeting-outcome buttons below the profile', () => {
+  const read = (f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+  const profile = read('mobile/src/screens/ProfileScreen.tsx');
+  assert.match(profile, /connectionGate\?\.status === 'approved'/);
+  assert.match(profile, /I have had a meeting with/);
+  assert.match(profile, /become your co-founder\?/);
+  assert.match(profile, /recordCofounderOutcome/);
+  assert.match(profile, /DECLINE_REASONS/);
+  const outcomeLib = read('mobile/src/lib/cofounderOutcome.ts');
+  assert.match(outcomeLib, /cofounderOutcomes/);
+});

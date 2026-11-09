@@ -2345,6 +2345,10 @@ export function assignWeeklyCofounderPairs(profiles = [], options = {}) {
   }
   const corpus = options.corpus || buildCorpusFromFacets(Array.from(facetsMap.values()));
 
+  // Pairs a member already met and declined (meeting-outcome feedback) are
+  // never re-paired: the matcher learns from real outcomes, not just profiles.
+  const excludedPairIds = new Set((options.excludedPairIds || []).map(String));
+
   // Score all unordered pairs {u_i, u_j} with i < j
   const candidateEdges = [];
   for (let i = 0; i < canonicalProfiles.length; i += 1) {
@@ -2353,6 +2357,7 @@ export function assignWeeklyCofounderPairs(profiles = [], options = {}) {
       const pB = canonicalProfiles[j];
       const evaluated = scoreMutualCofounderPair(pA, pB, { now, corpus, facetsMap });
       if (!evaluated.eligible) continue;
+      if (excludedPairIds.has(evaluated.pairId)) continue;
 
       const repeatPenalty = previousPairIds.has(evaluated.pairId) ? 0.18 : 0;
       const weeklyTieBreak = fnv1aUnit(`${weekKey}:${evaluated.pairId}`) * 0.004;

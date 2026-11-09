@@ -286,6 +286,22 @@ async function loadEligiblePool(db, { limit = 160 } = {}) {
   return Array.from(profilesByUid.values()).filter((profile) => weeklyCofounderGate(profile).eligible);
 }
 
+/** Pair ids a member already met and declined — real-world "not my co-founder" feedback. */
+async function loadDeclinedPairIds(db) {
+  try {
+    const snap = await db.collection('cofounderOutcomes').where('outcome', '==', 'declined').limit(500).get();
+    const ids = new Set();
+    for (const doc of snap?.docs || []) {
+      const data = doc.data() || {};
+      const pid = cofounderPairId(data.viewerUid, data.partnerUid);
+      if (pid) ids.add(pid);
+    }
+    return [...ids];
+  } catch {
+    return [];
+  }
+}
+
 async function resolveMutualGateState(db, viewerUid, partnerUid, matchData = {}) {
   const interests = matchData?.interests || {};
   let viewerInterested = !!interests[viewerUid]?.interested;
@@ -637,7 +653,8 @@ export async function getOrAssignWeeklyCofounder(db, uid, options = {}) {
   }
 
   const unpairedPool = allProfiles.filter((p) => !alreadyPairedUids.has(String(p.uid)));
-  const assignment = assignWeeklyCofounderPairs(unpairedPool, { now, weekKey });
+  const excludedPairIds = await loadDeclinedPairIds(db);
+  const assignment = assignWeeklyCofounderPairs(unpairedPool, { now, weekKey, excludedPairIds });
   const myEdge = assignment.pairs.find((edge) => String(edge.uidA) === String(uid) || String(edge.uidB) === String(uid));
 
   if (!myEdge) {
@@ -788,7 +805,8 @@ export async function runWeeklyCofounderCron(db, now = Date.now(), options = {})
     if (!snap?.exists) unpaired.push(profile);
   }
 
-  const assignment = assignWeeklyCofounderPairs(unpaired, { now, weekKey });
+  const excludedPairIds = await loadDeclinedPairIds(db);
+  const assignment = assignWeeklyCofounderPairs(unpaired, { now, weekKey, excludedPairIds });
   const committedPairs = [];
   for (const edge of assignment.pairs) {
     const committed = await commitWeeklyPairAndNotify(db, edge, { ...window, key: weekKey }, { ...options, now });

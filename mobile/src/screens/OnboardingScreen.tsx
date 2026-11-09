@@ -938,6 +938,7 @@ export default function OnboardingScreen({ navigation }: any) {
   // decoration: every field below is read by the LINKUP algorithm and by Linky
   // before either of them is allowed to name a human being.
   const [buildName, setBuildName] = useState('');
+  const [registerStartup, setRegisterStartup] = useState(false);
   const [buildOneLiner, setBuildOneLiner] = useState('');
   const [buildTraction, setBuildTraction] = useState('');
   const [missingSeat, setMissingSeat] = useState('');
@@ -1015,6 +1016,7 @@ export default function OnboardingScreen({ navigation }: any) {
         if (typeof d.fundingStage === 'string') setFundingStage(d.fundingStage);
         if (typeof d.availability === 'string') setAvailability(d.availability);
         if (typeof d.buildName === 'string') setBuildName(d.buildName);
+        if (typeof d.registerStartup === 'boolean') setRegisterStartup(d.registerStartup);
         if (typeof d.buildOneLiner === 'string') setBuildOneLiner(d.buildOneLiner);
         if (typeof d.buildTraction === 'string') setBuildTraction(d.buildTraction);
         if (typeof d.missingSeat === 'string') setMissingSeat(d.missingSeat);
@@ -1066,6 +1068,7 @@ export default function OnboardingScreen({ navigation }: any) {
         fundingStage,
         availability,
         buildName,
+        registerStartup,
         buildOneLiner,
         buildTraction,
         missingSeat,
@@ -1090,7 +1093,7 @@ export default function OnboardingScreen({ navigation }: any) {
     profilePicUri, customSkillsText, role, rolePicks, customRole, lookingFor,
     customLookingFor, industries, skills, experience, workStyle, commitmentLevel,
     startupStage, fundingStage, availability, personalityAnswers, roleAnswers,
-    buildName, buildOneLiner, buildTraction, missingSeat, seatWhy, stakes, urgency,
+    buildName, registerStartup, buildOneLiner, buildTraction, missingSeat, seatWhy, stakes, urgency,
     workPace, conflictStyle, decisionStyle, riskAppetite, equityView, weeklyHours, relocateView,
   ]);
 
@@ -1807,12 +1810,27 @@ export default function OnboardingScreen({ navigation }: any) {
               choices={[...TRACTION_CHOICES]}
               isDark={isDark}
             />
+            <Text style={{ marginTop: 4, fontSize: 12.5, fontWeight: '900', color: textColor(isDark) }}>
+              Do you want to register your startup on LINKUP?
+            </Text>
+            <Text style={{ fontSize: 12.5, lineHeight: 18, color: textColor(isDark, 'muted') }}>
+              Registering sets {buildName.trim() || 'your startup'} up as a company on LINKUP from what you have entered here, so the right co-founder can find the startup itself — not just you.
+            </Text>
+            <ChoiceGrid
+              value={registerStartup ? 'yes' : 'no'}
+              onChange={(v) => setRegisterStartup(String(v) === 'yes')}
+              choices={[
+                { id: 'yes', label: 'Yes — register my startup' },
+                { id: 'no', label: 'Not yet — just me for now' },
+              ]}
+              isDark={isDark}
+            />
           </View>
         ),
         canNext: buildName.trim().length >= 2 && buildOneLiner.trim().length >= 8 && !!buildTraction,
       },
 
-      // ---- THE EMPTY CHAIR -------------------------------------------
+      // ---- THE MISSING INGREDIENT ------------------------------------
       {
         key: 'seat',
         title: BUILD_QUESTIONS.seat.title,
@@ -1993,7 +2011,7 @@ export default function OnboardingScreen({ navigation }: any) {
     [
       displayName, lookingFor, lookingForChoices, customLookingFor, finalLookingFor, profilePicUri,
       role, rolePicks, customRole, finalRoles, isDark, ageText, country, city, saving,
-      roleSteps, buildName, buildOneLiner, buildTraction, missingSeat, seatWhy, stakes, urgency,
+      roleSteps, buildName, registerStartup, buildOneLiner, buildTraction, missingSeat, seatWhy, stakes, urgency,
       workPace, conflictStyle, decisionStyle, riskAppetite, equityView, weeklyHours, relocateView,
     ]
   );
@@ -2067,6 +2085,7 @@ export default function OnboardingScreen({ navigation }: any) {
         // The brief. Read by the LINKUP algorithm, by the weekly 1-to-1 pairing,
         // and by Linky before it is allowed to name a single human being.
         buildingName: buildName.trim(),
+        wantsStartupRegistration: registerStartup,
         buildingOneLiner: buildOneLiner.trim(),
         buildingTraction: buildTraction,
         missingSeat,
@@ -2104,6 +2123,7 @@ export default function OnboardingScreen({ navigation }: any) {
                 {
                   id: 'onboarding-build',
                   title: buildName.trim(),
+                  registeredStartup: registerStartup,
                   description: buildOneLiner.trim(),
                   status:
                     buildTraction === 'revenue' || buildTraction === 'scaling'

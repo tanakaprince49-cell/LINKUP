@@ -37,7 +37,7 @@ const haystack = sources.map(([, text]) => text).join('\n');
 const USED = [
   'users', 'publicProfiles', 'userPrivate', 'presence', 'reports', 'blocks',
   'ideaSwipes', 'connectionRequests', 'matches', 'notifications', 'savedProfiles',
-  'gameChallenges', 'profileViews', 'profileClicks', 'config', 'campaignAccounts',
+  'gameChallenges', 'cofounderOutcomes', 'profileViews', 'profileClicks', 'config', 'campaignAccounts',
   'webTransactions', 'webSubscriptions', 'campaigns', 'leagueChampions', 'posts',
   'introSuggestions', 'intros', 'linkyUsage', 'linkyState', 'botUsers', 'botLinks',
   'linkyOutreach', 'introDrafts', 'outreachIntents', 'builderContributions',

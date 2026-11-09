@@ -893,6 +893,27 @@ service cloud.firestore {
     // ------------------------------------------------------------
     // Game challenges
     // ------------------------------------------------------------
+    // Meeting outcomes: a member records, about one partner, whether they
+    // will become co-founders. Only the viewer writes their own verdict.
+    match /cofounderOutcomes/{outcomeId} {
+      function userIsInOutcome(data) {
+        return isSignedIn() && (data.viewerUid == request.auth.uid || data.partnerUid == request.auth.uid);
+      }
+
+      allow get: if isSignedIn() && userIsInOutcome(existing());
+      allow list: if isSignedIn() && (
+        existing().viewerUid == request.auth.uid || existing().partnerUid == request.auth.uid
+      );
+      allow create, update: if isSignedIn() &&
+        incoming().viewerUid == request.auth.uid &&
+        outcomeId == request.auth.uid + '_' + incoming().partnerUid &&
+        incoming().keys().hasOnly([
+          'viewerUid', 'partnerUid', 'viewerName', 'partnerName', 'outcome',
+          'reason', 'reasonText', 'weekKey', 'pairId', 'createdAt', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
     match /gameChallenges/{challengeDocId} {
       function userIsInChallenge(data) {
         return isSignedIn() && (data.senderId == request.auth.uid || data.recipientId == request.auth.uid);

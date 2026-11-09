@@ -606,3 +606,11 @@ test('weekly pairing requires complementary crafts, not the same stack twice', (
   const allOffers = [...pair.aOffers, ...pair.bOffers].join(' ').toLowerCase();
   assert.doesNotMatch(allOffers, /student|software engineer|founder/, 'offers must be strengths, never occupations');
 });
+
+test('a pair a member met and declined is never offered again', () => {
+  const pairId = M.cofounderPairId('founder', 'engineer');
+  const open = M.assignWeeklyCofounderPairs([founder, engineer], { now: NOW });
+  assert.equal(open.pairs.length, 1);
+  const closed = M.assignWeeklyCofounderPairs([founder, engineer], { now: NOW, excludedPairIds: [pairId] });
+  assert.equal(closed.pairs.length, 0, 'meeting-outcome feedback must remove the pair');
+});

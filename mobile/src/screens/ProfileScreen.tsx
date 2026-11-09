@@ -52,6 +52,7 @@ import {
 } from '../lib/firestoreCompat';
 import { trackProfileClick, trackProfileSave, trackProfileView } from '../lib/analytics';
 import { resolveConnectionGate, startTalkOrRequest, subscribeToConnectionGate, type ConnectionGate } from '../lib/connectionRequests';
+import { DECLINE_REASONS, recordCofounderOutcome, subscribeCofounderOutcome, type CofounderOutcome } from '../lib/cofounderOutcome';
 import { useConnectionNote } from '../components/ConnectionNoteModal';
 import { buildConversationProfileSnapshot } from '../lib/conversationProfiles';
 import { syncOwnPublicProfileIndex } from '../lib/discoveryProfiles';
@@ -466,6 +467,51 @@ export default function ProfileScreen({ navigation, route }: any) {
     }
     return subscribeToConnectionGate(myProfile.uid, targetUserId, setConnectionGate);
   }, [isViewingOther, myProfile?.uid, targetUserId]);
+
+  // Meeting outcome: once a connection is accepted, the pair can record what
+  // the meeting actually decided. Declines carry a reason and feed matching.
+  const [myOutcome, setMyOutcome] = useState<CofounderOutcome | null>(null);
+  const [meetingStep, setMeetingStep] = useState<'ask' | 'decline' | null>(null);
+  const [declineReason, setDeclineReason] = useState('');
+  const [declineText, setDeclineText] = useState('');
+  const [outcomeSaving, setOutcomeSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isViewingOther || !myProfile?.uid || !targetUserId || connectionGate?.status !== 'approved') {
+      setMyOutcome(null);
+      return undefined;
+    }
+    return subscribeCofounderOutcome(myProfile.uid, targetUserId, setMyOutcome);
+  }, [isViewingOther, myProfile?.uid, targetUserId, connectionGate?.status]);
+
+  const saveMeetingOutcome = async (outcome: 'accepted' | 'declined' | 'not_met', reason = '', reasonText = '') => {
+    if (!myProfile?.uid || !targetUserId || !profile || outcomeSaving) return;
+    setOutcomeSaving(true);
+    try {
+      await recordCofounderOutcome({
+        viewerUid: myProfile.uid,
+        partnerUid: targetUserId,
+        viewerName: displayNameFor(myProfile),
+        partnerName: displayNameFor(profile),
+        outcome,
+        reason,
+        reasonText,
+      });
+      setMeetingStep(null);
+      if (outcome === 'accepted') {
+        notifyUser('That is the one', `${displayNameFor(profile).split(' ')[0]} is marked as your future co-founder. Now go build it.`);
+      } else if (outcome === 'declined') {
+        notifyUser('Got it — thank you', 'Honest answers make your next introduction better. This stays between you and the matcher.');
+      } else {
+        notifyUser('No rush', 'When you have met, come back and tell us how it went.');
+      }
+    } catch (e) {
+      console.error('meeting outcome error:', e);
+      notifyUser('Could not save', 'Your answer was not saved. Try again in a moment.');
+    } finally {
+      setOutcomeSaving(false);
+    }
+  };
   const profile = isViewingOther ? viewedProfile : myProfile;
   const openPaywall = (feature: string) => setPaywallFeature(feature);
 
@@ -2847,6 +2893,60 @@ export default function ProfileScreen({ navigation, route }: any) {
                   )}
                 </View>
               )}
+
+              {isViewingOther && profile && user?.uid && connectionGate?.status === 'approved' ? (
+                <View style={{ marginTop: 14, borderWidth: 1, borderColor: COLORS.lightBorderActive, borderRadius: 16, padding: 14, backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard }}>
+                  {myOutcome?.outcome === 'accepted' ? (
+                    <>
+                      <Text style={{ fontWeight: '900', color: textColor(isDark) }}>
+                        {displayNameFor(profile).split(' ')[0]} is your future co-founder
+                      </Text>
+                      <Text style={{ marginTop: 4, color: textColor(isDark, 'muted'), lineHeight: 19 }}>
+                        You met and you said yes. This is the whole point of LINKUP — now go build.
+                      </Text>
+                      <TouchableOpacity onPress={() => setMeetingStep('ask')} style={{ marginTop: 8 }}>
+                        <Text style={{ color: COLORS.primaryStrong, fontWeight: '800' }}>Change my answer</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : myOutcome?.outcome === 'declined' ? (
+                    <>
+                      <Text style={{ fontWeight: '900', color: textColor(isDark) }}>
+                        Not your co-founder{myOutcome.reason ? ` — ${myOutcome.reason}` : ''}
+                      </Text>
+                      <Text style={{ marginTop: 4, color: textColor(isDark, 'muted'), lineHeight: 19 }}>
+                        Recorded. Knowing why a meeting did not land is how your next match gets better.
+                      </Text>
+                      <TouchableOpacity onPress={() => setMeetingStep('ask')} style={{ marginTop: 8 }}>
+                        <Text style={{ color: COLORS.primaryStrong, fontWeight: '800' }}>Change my answer</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={{ fontWeight: '900', color: textColor(isDark) }}>Met {displayNameFor(profile).split(' ')[0]} yet?</Text>
+                      <Text style={{ marginTop: 4, color: textColor(isDark, 'muted'), lineHeight: 19 }}>
+                        You are connected. Once you have actually met, tell us how it went — it makes your next introduction smarter.
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                        <TouchableOpacity
+                          style={[styles.actionButton, { flex: 1, backgroundColor: COLORS.primary, borderWidth: 1, borderColor: COLORS.lightBorderActive }]}
+                          onPress={() => { setDeclineReason(''); setDeclineText(''); setMeetingStep('ask'); }}
+                        >
+                          <Text style={{ color: '#000', fontWeight: '800', textAlign: 'center' }}>
+                            I have had a meeting with {displayNameFor(profile).split(' ')[0]}!
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.actionButton, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderWidth: 1, borderColor: COLORS.lightBorderActive }]}
+                          onPress={() => void saveMeetingOutcome('not_met')}
+                          disabled={outcomeSaving}
+                        >
+                          <Text style={{ color: textColor(isDark), fontWeight: '800' }}>Not yet</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </View>
+              ) : null}
             </>
           )}
         </View>
@@ -3681,6 +3781,80 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+      <Modal transparent visible={meetingStep !== null} animationType="fade" onRequestClose={() => setMeetingStep(null)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }} onPress={() => setMeetingStep(null)}>
+          <Pressable style={{ backgroundColor: isDark ? COLORS.darkCard : '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 22, gap: 12 }} onPress={() => {}}>
+            {meetingStep === 'ask' ? (
+              <>
+                <Text style={{ fontSize: 20, fontWeight: '900', color: textColor(isDark) }}>
+                  Will {profile ? displayNameFor(profile).split(' ')[0] : 'they'} become your co-founder?
+                </Text>
+                <Text style={{ color: textColor(isDark, 'muted'), lineHeight: 20 }}>
+                  Answer honestly. This is how LINKUP learns who to introduce you to next — nobody else sees your answer.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: COLORS.primary, borderWidth: 1, borderColor: COLORS.lightBorderActive }]}
+                  onPress={() => void saveMeetingOutcome('accepted')}
+                  disabled={outcomeSaving}
+                >
+                  <Text style={{ color: '#000', fontWeight: '900', textAlign: 'center' }}>Accept — yes, we are building together</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: isDark ? COLORS.darkCard : COLORS.lightCard, borderWidth: 1, borderColor: COLORS.lightBorderActive }]}
+                  onPress={() => setMeetingStep('decline')}
+                  disabled={outcomeSaving}
+                >
+                  <Text style={{ color: textColor(isDark), fontWeight: '800', textAlign: 'center' }}>Decline — not my co-founder</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={{ fontSize: 20, fontWeight: '900', color: textColor(isDark) }}>Why not?</Text>
+                <Text style={{ color: textColor(isDark, 'muted'), lineHeight: 20 }}>
+                  Pick the closest reason. It stays private and only improves your future matches.
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {DECLINE_REASONS.map((reason) => (
+                    <TouchableOpacity
+                      key={reason}
+                      onPress={() => setDeclineReason(reason)}
+                      style={{
+                        borderWidth: 1,
+                        borderRadius: 999,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderColor: declineReason === reason ? COLORS.primaryStrong : COLORS.lightBorderActive,
+                        backgroundColor: declineReason === reason ? COLORS.primary : (isDark ? COLORS.darkCard : COLORS.lightCard),
+                      }}
+                    >
+                      <Text style={{ fontWeight: '700', color: declineReason === reason ? '#000' : textColor(isDark) }}>{reason}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TextInput
+                  value={declineText}
+                  onChangeText={(value) => setDeclineText(value.slice(0, 400))}
+                  placeholder="Anything else we should learn? (optional)"
+                  placeholderTextColor={textColor(isDark, 'muted')}
+                  multiline
+                  style={{ borderWidth: 1, borderColor: COLORS.lightBorderActive, borderRadius: 12, padding: 12, minHeight: 64, color: textColor(isDark), textAlignVertical: 'top' }}
+                />
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: COLORS.primary, borderWidth: 1, borderColor: COLORS.lightBorderActive, opacity: declineReason && !outcomeSaving ? 1 : 0.5 }]}
+                  onPress={() => void saveMeetingOutcome('declined', declineReason, declineText.trim())}
+                  disabled={!declineReason || outcomeSaving}
+                >
+                  <Text style={{ color: '#000', fontWeight: '900', textAlign: 'center' }}>{outcomeSaving ? 'Saving…' : 'Save my answer'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity onPress={() => setMeetingStep(null)} style={{ alignItems: 'center', paddingVertical: 4 }}>
+              <Text style={{ color: textColor(isDark, 'muted'), fontWeight: '700' }}>Not now</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Modal transparent visible={leaveSheet} animationType="fade" onRequestClose={() => setLeaveSheet(false)}>
         <View style={styles.leaveBackdrop}>
           <View style={[styles.leaveSheet, { backgroundColor: isDark ? COLORS.darkCard : '#FFFFFF' }]}>
