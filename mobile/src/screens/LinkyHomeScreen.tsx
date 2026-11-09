@@ -224,7 +224,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const onChip = useCallback((chip: string) => {
     if (busy) return;
     if (/^(find teammates|find my teammates)$/i.test(chip)) {
-      // The brief is already in Linky's hands — profile build, empty seat,
+      // The brief is already in Linky's hands — profile build, missing ingredient,
       // stakes — so this is one tap to the hunt, not another questionnaire.
       void send(
         `Go. Find the teammates ${facts.projectName || 'my build'} is still missing${
@@ -359,7 +359,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
           </Text>
         </View>
         <View style={[styles.briefTile, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-          <Text style={styles.briefLabel}>The empty seat</Text>
+          <Text style={styles.briefLabel}>The missing ingredient</Text>
           <Text style={[styles.briefValue, { color: palette.text }]} numberOfLines={2}>
             {facts.seat || 'Name the chair I should fill'}
           </Text>

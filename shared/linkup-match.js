@@ -386,6 +386,55 @@ const classifySkills = (rawSkills) => {
 };
 
 /**
+ * Status labels are not strengths. "Student", "Founder", "Hiring" describe
+ * what someone *is*, never what they *bring* — letting one through is how a
+ * weekly pairing card ends up saying "brings: Student".
+ */
+export const STATUS_SKILL_TOKENS = new Set([
+  'student', 'founder', 'co founder', 'cofounder', 'employee', 'employer',
+  'intern', 'internship', 'unemployed', 'graduate', 'recent graduate',
+  'job seeker', 'jobseeker', 'job hunting', 'hiring', 'freelancer', 'freelance',
+  'self employed', 'consultant', 'contractor',
+]);
+
+/** The strengths a person declared for themselves — skills only, status-free. */
+export function profileStrengths(profile = {}) {
+  const { functionSkills, skillDomains } = classifySkills(asArray(profile?.skills));
+  return unique([...functionSkills, ...skillDomains]).filter(
+    (value) => value && !STATUS_SKILL_TOKENS.has(value)
+  );
+}
+
+export function hasDeclaredStrengths(profile = {}, min = 1) {
+  return profileStrengths(profile).length >= min;
+}
+
+const POSITIVE_INTENT_RE = /\b(network\w*|mentor\w*|invest\w*|collaborat\w*|teammate|advis\w*)\b/i;
+const HIRED_INTENT_RE = /\b(hiring|hire me|freelanc\w*|job seek\w*|looking for a job|employment|gig work)\b/i;
+
+/**
+ * The weekly co-founder gate. Co-founder intent is not required (networking
+ * and mentorship members may still meet their person here), but two things
+ * are: at least one declared strength, and an intent that is not *only*
+ * hiring/freelance. Thin legacy profiles fail this and are never paired.
+ */
+export function weeklyCofounderGate(profile = {}) {
+  if (!hasDeclaredStrengths(profile, 1)) {
+    return { eligible: false, reason: 'no_declared_strengths' };
+  }
+  const intentText = [
+    ...asArray(profile?.lookingFor),
+    profile?.networkingIntent || '',
+    profile?.goals || '',
+  ].join(' ');
+  const hiredOnly = HIRED_INTENT_RE.test(intentText)
+    && !COFOUNDER_INTENT_RE.test(intentText)
+    && !POSITIVE_INTENT_RE.test(intentText);
+  if (hiredOnly) return { eligible: false, reason: 'hiring_only_intent' };
+  return { eligible: true, reason: '' };
+}
+
+/**
  * Turn a LINKUP `UserProfile` into the facet bundle the scorer consumes.
  * Cached by the caller; pure here.
  */
@@ -429,7 +478,14 @@ export function deriveFacets(profile = {}, { now = Date.now() } = {}) {
       .filter((value) => ROLE_LABELS.includes(value)),
   ]);
 
-  const offers = unique([...functionSkills, ...domains, ...(profile.occupation ? [normalizeText(profile.occupation)] : [])]).filter(Boolean);
+  const skillOnly = classifySkills(skills);
+  const strengths = unique([...skillOnly.functionSkills, ...skillOnly.skillDomains]).filter(
+    (value) => value && !STATUS_SKILL_TOKENS.has(value)
+  );
+  // What this person demonstrably brings = the strengths they declared.
+  // Occupation is a status label, never a strength — it is not offered here,
+  // so no pairing surface can render it as one again.
+  const offers = strengths.slice(0, 8);
 
   const archetype = archetypeOf(profile, [...functionSkills, ...skills]);
 
@@ -456,6 +512,7 @@ export function deriveFacets(profile = {}, { now = Date.now() } = {}) {
     functionSkills,
     domains,
     offers,
+    strengths,
     needs,
 
     voltageTokens,
@@ -2118,6 +2175,15 @@ export function scoreMutualCofounderPair(profileA, profileB, context = {}) {
   const gateBA = eligibility(second, first, { now });
   if (!gateBA.eligible) return { eligible: false, reason: gateBA.reason };
 
+  // Weekly co-founder quality gate: both people must have declared real
+  // strengths, and neither may be here only to hire or pick up freelance
+  // work. This is what kept a skills-less "Hiring / Student" profile out of
+  // a co-founder pairing — the matcher cannot invent a strength for them.
+  const weeklyGateFirst = weeklyCofounderGate(first);
+  if (!weeklyGateFirst.eligible) return { eligible: false, reason: weeklyGateFirst.reason };
+  const weeklyGateSecond = weeklyCofounderGate(second);
+  if (!weeklyGateSecond.eligible) return { eligible: false, reason: weeklyGateSecond.reason };
+
   const corpus = context.corpus || EMPTY_CORPUS;
   const facetsFirst = context.facetsMap?.get(first.uid) || first.__facets || deriveFacets(first, { now });
   const facetsSecond = context.facetsMap?.get(second.uid) || second.__facets || deriveFacets(second, { now });
@@ -2148,6 +2214,18 @@ export function scoreMutualCofounderPair(profileA, profileB, context = {}) {
   ].filter((atom) => atom.kind === 'shared' || atom.kind === 'complement');
   if (evidenceAtoms.length === 0) {
     return { eligible: false, reason: 'no_evidence' };
+  }
+
+  // Complementarity is the point of a co-founder: when both people declared
+  // function skills, each must bring at least one craft the other lacks.
+  // An identical (or strict subset) stack can still be a fine conversation
+  // elsewhere in LINKUP, but it is not this week's co-founder pairing.
+  if (facetsFirst.functionSkills.length && facetsSecond.functionSkills.length) {
+    const firstUnique = facetsFirst.functionSkills.filter((skill) => !facetsSecond.functionSkills.includes(skill));
+    const secondUnique = facetsSecond.functionSkills.filter((skill) => !facetsFirst.functionSkills.includes(skill));
+    if (!firstUnique.length || !secondUnique.length) {
+      return { eligible: false, reason: 'overlapping_skillset' };
+    }
   }
 
   const mutualFit = round3(harmonic(scoreAB.fit, scoreBA.fit));
@@ -2189,14 +2267,15 @@ export function scoreMutualCofounderPair(profileA, profileB, context = {}) {
   const cardForFirst = composeCard(scoreAB);
   const cardForSecond = composeCard(scoreBA);
 
-  const firstOffers = (facetsFirst.functionSkills.length
-    ? facetsFirst.functionSkills
-    : [facetsFirst.archetype || first.occupation || 'Product & Execution']
-  ).slice(0, 3);
-  const secondOffers = (facetsSecond.functionSkills.length
-    ? facetsSecond.functionSkills
-    : [facetsSecond.archetype || second.occupation || 'Product & Execution']
-  ).slice(0, 3);
+  const offersOf = (facets) =>
+    (facets.strengths?.length
+      ? facets.strengths
+      : facets.functionSkills.length
+        ? facets.functionSkills
+        : [facets.archetype || 'Builder']
+    ).slice(0, 3);
+  const firstOffers = offersOf(facetsFirst);
+  const secondOffers = offersOf(facetsSecond);
   const sharedDomains = facetsFirst.domains
     .filter((domain) => facetsSecond.domains.includes(domain))
     .slice(0, 3);

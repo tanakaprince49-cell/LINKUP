@@ -89,7 +89,7 @@ const SEAT_WORDS: Record<string, string> = {
   'language partner': 'language partner',
 };
 
-/** The empty chair, in human words. Never "N/A" — always something to hunt. */
+/** The missing ingredient, in human words. Never "N/A" — always something to hunt. */
 export function seatOf(profile: VoiceProfile, fallback = 'the person who finishes this'): string {
   const explicit = clean((profile as any)?.missingSeat);
   if (explicit) return explicit;
@@ -196,7 +196,7 @@ export const ONBOARDING_VOICE = {
   identityTitle: 'Which room do you walk into?',
   identitySub: 'Pick everything that is true about you. Your first pick leads: it decides where Linky starts hunting.',
   goalsTitle: 'Who is missing at your table?',
-  goalsSub: 'Name the empty chair. Everything after this exists to find the person who fills it.',
+  goalsSub: 'Name the missing ingredient for success. Everything after this exists to find the person who brings it.',
   photoTitle: 'Show them your face.',
   photoSub: 'The person about to trust you with their next five years needs to see you first. A photo is required — this is not vanity, it is trust.',
   photoAdded: 'That is you. They will know exactly who they are talking to.',
@@ -351,7 +351,7 @@ export const DISCOVERY_VOICE = {
     `It is in both inboxes. You and ${partnerFirst} have the same email, the same week, the same sentence: this might be it.`,
   emptyTitle: 'This week the algorithm has nobody for you yet.',
   emptyBody:
-    'That is not a compliment. It means it does not have enough of you to hunt with. Give it your build, the empty seat, and the stakes — then come back and watch what it drags in.',
+    'That is not a compliment. It means it does not have enough of you to hunt with. Give it your build, the missing ingredient, and the stakes — then come back and watch what it drags in.',
   emptyCta: 'Sharpen my profile',
   fullProfile: 'Read their whole story',
 } as const;
@@ -367,7 +367,7 @@ export const WEEKLY_REVEAL_VOICE = {
   thinkingLines: (facts: BuildFacts): string[] => [
     'The cat is thinking.',
     facts.projectName ? `Reading every profile that could build ${facts.projectName}.` : 'Reading every public profile in the database.',
-    facts.seat ? `Weighing who could actually hold the ${facts.seat} seat.` : 'Weighing who could actually hold the empty seat.',
+    facts.seat ? `Weighing who could actually hold the ${facts.seat} seat.` : 'Weighing who could be your missing ingredient.',
     'One person. Chosen for you. About to appear.',
   ],
   /** Stamped under the cat while it thinks. */
@@ -442,7 +442,7 @@ export const LINKY_VOICE = {
         facts.oneLiner ? `: ${facts.oneLiner}` : ''
       }. Tell me which seat is still empty and I will find the humans who fill it — three minutes, tops.`;
     }
-    return `It is me — Linky. Your profile says you have a build and an empty chair. Tell me what you are making and who is missing, and I will go through every public LINKUP profile until I find them. Three minutes, no more.`;
+    return `It is me — Linky. Your profile says you have a build and one ingredient missing for success. Tell me what you are making and who is missing, and I will go through every public LINKUP profile until I find them. Three minutes, no more.`;
   },
   placeholder: (facts: BuildFacts): string =>
     facts.projectName ? `Tell me what changed about ${facts.projectName}…` : 'What are you building, and who is missing?',

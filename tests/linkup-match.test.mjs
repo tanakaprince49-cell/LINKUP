@@ -560,3 +560,49 @@ test('malformed model output is a no-op, never a crash', () => {
   assert.equal(M.parseModelAnswer('not json at all', [{ uid: 'a', ledger: [] }]), null);
   assert.deepEqual(M.applyBandedOrder([], []), []);
 });
+
+
+test('strengths come from declared skills only — occupation and status labels never count', () => {
+  // The "brings: Student" bug: a Student occupation with no skills brings nothing.
+  assert.deepEqual(M.profileStrengths({ occupation: 'Student', skills: [] }), []);
+  assert.deepEqual(M.profileStrengths({ skills: ['Student', 'Founder', 'Hiring'] }), []);
+  const strengths = M.profileStrengths({ occupation: 'Student', skills: ['React Native', 'Node.js', 'Fintech'] });
+  assert.ok(strengths.includes('react native'));
+  assert.ok(!strengths.includes('student'));
+  // Facets carry the same strengths, and offers never fall back to occupation.
+  const facets = M.deriveFacets({ uid: 'x1', occupation: 'Student', skills: [] });
+  assert.deepEqual(facets.strengths, []);
+  assert.deepEqual(facets.offers, []);
+});
+
+test('weekly co-founder gate keeps out thin and hiring-only profiles', () => {
+  const jhoLike = { uid: 'j1', occupation: 'Student', skills: [], lookingFor: ['Hiring'], networkingIntent: 'Hiring', onboarded: true, isVisible: true };
+  assert.equal(M.weeklyCofounderGate(jhoLike).reason, 'no_declared_strengths');
+  const hiringOnly = { uid: 'j2', skills: ['React'], lookingFor: ['Hiring'], goals: 'Hiring engineers' };
+  assert.equal(M.weeklyCofounderGate(hiringOnly).reason, 'hiring_only_intent');
+  const seeker = { uid: 'j3', skills: ['React'], lookingFor: ['Technical Co-Founder'] };
+  assert.equal(M.weeklyCofounderGate(seeker).eligible, true);
+});
+
+test('weekly pairing rejects a skills-less legacy profile even when everything else lines up', () => {
+  const thin = {
+    uid: 'thin', displayName: 'Thin Profile', occupation: 'Student', skills: [],
+    lookingFor: ['Hiring'], goals: 'Hiring', bio: '', city: 'harare', country: 'zimbabwe',
+    onboarded: true, isVisible: true, lastActiveAt: iso(1), createdAt: iso(200),
+  };
+  const result = M.scoreMutualCofounderPair(founder, thin, ctx());
+  assert.equal(result.eligible, false);
+  assert.equal(result.reason, 'no_declared_strengths');
+});
+
+test('weekly pairing requires complementary crafts, not the same stack twice', () => {
+  const clone = { ...engineer, uid: 'engineer-2', displayName: 'Second Engineer' };
+  const same = M.scoreMutualCofounderPair(engineer, clone, ctx());
+  assert.equal(same.eligible, false);
+  assert.equal(same.reason, 'overlapping_skillset');
+
+  const pair = M.scoreMutualCofounderPair(founder, engineer, ctx());
+  assert.equal(pair.eligible, true, JSON.stringify(pair));
+  const allOffers = [...pair.aOffers, ...pair.bOffers].join(' ').toLowerCase();
+  assert.doesNotMatch(allOffers, /student|software engineer|founder/, 'offers must be strengths, never occupations');
+});

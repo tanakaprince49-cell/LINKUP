@@ -1436,6 +1436,13 @@ export default function ProfileScreen({ navigation, route }: any) {
     try {
       const nextDisplayName = safeDisplayNameForSave(editData.displayName, profile?.displayName || user?.displayName || user?.email?.split('@')[0]);
       const skillsArray = cleanProfileList(editData.skills, 50);
+      if (skillsArray.length < 1) {
+        // Strengths are the matching input — a profile cannot be saved
+        // without at least one, and existing ones cannot be cleared away.
+        notifyUser('Add at least one strength', 'Your strengths are what Linky matches you on. Add at least one before saving.');
+        setIsSaving(false);
+        return;
+      }
       const interestsArray = cleanProfileList(editData.interests, 50);
       const industriesArray = cleanProfileList(editData.industries, 20);
       const lookingForArray = cleanProfileList(editData.lookingFor, 20);

@@ -140,29 +140,35 @@ test('the pitch is written from the member’s own brief', () => {
   assert.equal(bare.personalised, false);
 });
 
-test('email carries the same pitch, once, for free members only', async () => {
+test('email never pitches PLUS — it nudges profile completion instead', async () => {
   const mailer = await import('../api/_emailNotify.js');
-  const block = mailer.buildPlusInviteBlock({ firstName: 'Tana', building: 'LINKUP' });
-  assert.match(block.text, /Tana, are you ready to move beyond\?/i);
-  assert.match(block.text, /And \d+ more things you don't have yet/);
-  assert.match(block.text, /plus=1/);
-  assert.match(block.html, /LINKUP PLUS/);
+
+  // Gaps are read from the profile itself: thin profiles have asks, complete
+  // profiles get silence (no block at all).
+  const thin = mailer.profileCompletionGaps({ skills: ['React', 'Student'], bio: '', city: '', lookingFor: [], profilePic: '', goals: '' });
+  assert.ok(thin.includes('at least 3 strengths you bring'), thin.join(','));
+  assert.ok(thin.includes('a short bio'));
+  const complete = mailer.profileCompletionGaps({
+    skills: ['React', 'Node.js', 'Sales'], bio: 'Building.', city: 'Harare',
+    lookingFor: ['Cofounder'], profilePic: 'https://x/p.jpg', goals: 'Ship it',
+  });
+  assert.deepEqual(complete, []);
+
+  const block = mailer.buildProfileCompletionBlock({ firstName: 'Tana', missing: ['a short bio', 'your city'] });
+  assert.match(block.text, /TANA, SHARPEN YOUR NEXT MATCH/);
+  assert.match(block.text, /a short bio/);
+  assert.match(block.html, /COMPLETE YOUR PROFILE/);
+  assert.doesNotMatch(block.text + block.html, /PLUS|move beyond/, 'the completion block must not sell anything');
   assert.ok(!/<img/i.test(block.html), 'the block must not add third-party images');
 
-  // Stable per member per day, so a retry does not rotate the benefit mid-thread.
-  assert.equal(mailer.plusFeatureForEmail('u1', '2026-11-07').id, mailer.plusFeatureForEmail('u1', '2026-11-07').id);
-  assert.notEqual(
-    new Set([1, 2, 3, 4, 5].map((n) => mailer.plusFeatureForEmail(`u${n}`, '2026-11-07').id)).size,
-    1
-  );
-
   const source = read('api/_emailNotify.js');
-  assert.match(source, /memberHasPlus\(db, uid, userData/, 'the sender must check the entitlement');
-  assert.match(source, /if \(!isPlus\) \{\s*plusInvite = buildPlusInviteBlock/, 'PLUS members must never be sold PLUS');
-  // Order matters: the pitch sits below the main CTA, above the footer rule.
+  assert.doesNotMatch(source, /buildPlusInviteBlock/, 'email must not pitch PLUS');
+  assert.match(source, /plusInvite = buildProfileCompletionBlock/, 'incomplete profiles get the completion nudge');
+  assert.match(source, /if \(missing\.length\)/, 'complete profiles get no block');
+  // Order matters: the nudge sits below the main CTA, above the footer rule.
   const template = source.slice(source.indexOf('const htmlBody = `<!doctype html>'));
   const cta = template.indexOf('${esc(cleanCta)} &rarr;');
   const pitch = template.indexOf('plusInvite?.html');
   const footer = template.indexOf('Unsubscribe in one click');
-  assert.ok(cta > 0 && pitch > cta && footer > pitch, 'the PLUS block must sit below the CTA and above the footer');
+  assert.ok(cta > 0 && pitch > cta && footer > pitch, 'the completion block must sit below the CTA and above the footer');
 });

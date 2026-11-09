@@ -354,10 +354,10 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     const companyLabel = (item as any).company || (item as any)?.projects?.[0]?.title || '';
     const myOffers = Array.isArray(match.myOffers) && match.myOffers.length
       ? match.myOffers
-      : (Array.isArray(me?.skills) && me!.skills.length ? me!.skills.slice(0, 3) : ['Product Execution']);
+      : (Array.isArray(me?.skills) && me!.skills.length ? me!.skills.slice(0, 3) : []);
     const partnerOffers = Array.isArray(match.partnerOffers) && match.partnerOffers.length
       ? match.partnerOffers
-      : (Array.isArray(item.skills) && item.skills.length ? item.skills.slice(0, 3) : ['Technical & Growth Execution']);
+      : (Array.isArray(item.skills) && item.skills.length ? item.skills.slice(0, 3) : []);
     const tags = [
       ...(Array.isArray(item.skills) ? item.skills.slice(0, 4) : []),
       ...(Array.isArray((item as any).lookingFor) ? (item as any).lookingFor.slice(0, 2) : []),

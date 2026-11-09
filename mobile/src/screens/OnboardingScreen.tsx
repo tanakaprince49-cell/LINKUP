@@ -934,7 +934,7 @@ export default function OnboardingScreen({ navigation }: any) {
   const [startupStage, setStartupStage] = useState('');
   const [fundingStage, setFundingStage] = useState('');
   const [availability, setAvailability] = useState('');
-  // The build, the empty chair, the stakes and the working style. None of it is
+  // The build, the missing ingredient, the stakes and the working style. None of it is
   // decoration: every field below is read by the LINKUP algorithm and by Linky
   // before either of them is allowed to name a human being.
   const [buildName, setBuildName] = useState('');
@@ -1317,7 +1317,7 @@ export default function OnboardingScreen({ navigation }: any) {
               <SkillsInput value={customSkillsText} onChangeText={setCustomSkillsText} isDark={isDark} />
             </View>
           ),
-          canNext: finalSkills.length > 0,
+          canNext: finalSkills.length >= 3,
         },
         {
           key: 'experience',
@@ -1360,14 +1360,14 @@ export default function OnboardingScreen({ navigation }: any) {
       {
         key: 'skills',
         title: 'Skills',
-        subtitle: 'What can you contribute? Select or type at least one.',
+        subtitle: 'What can you contribute? Select or type at least three — these are the strengths Linky matches you on.',
         body: (
           <View>
             <ChoiceGrid value={skills} onChange={(v) => setSkills(v as string[])} choices={skillChoices} multi isDark={isDark} />
             <SkillsInput value={customSkillsText} onChangeText={setCustomSkillsText} isDark={isDark} />
           </View>
         ),
-        canNext: finalSkills.length > 0,
+        canNext: finalSkills.length >= 3,
       },
       {
         key: 'stage',
@@ -1469,7 +1469,7 @@ export default function OnboardingScreen({ navigation }: any) {
           <SkillsInput value={customSkillsText} onChangeText={setCustomSkillsText} isDark={isDark} selectedSkills={finalSkills} />
         </View>
       ),
-      canNext: finalSkills.length > 0,
+      canNext: finalSkills.length >= 3,
     });
 
     switch (role) {
@@ -2014,6 +2014,19 @@ export default function OnboardingScreen({ navigation }: any) {
       notifyUser('Photo required', 'Add a profile photo to finish setting up your account.');
       const photoStep = steps.findIndex((entry) => entry.key === 'name');
       if (photoStep >= 0) setStep(photoStep);
+      return;
+    }
+    // Strengths are required, not decoration: they are what the matcher pairs
+    // on and what a partner reads under "brings". Every completion path —
+    // Finish, the footer shortcut, all of it — funnels through here, so
+    // nobody can finish onboarding strength-less. That legacy hole is what
+    // produced weekly pairings like "brings: Student".
+    if (finalSkills.length < 3) {
+      notifyUser('Add your strengths', 'Pick or type at least 3 strengths you bring. Your weekly co-founder match is only as accurate as what you declare here.');
+      const bankStep = steps.findIndex((entry) => entry.key === 'profile-bank');
+      const skillsStep = steps.findIndex((entry) => entry.key === 'skills');
+      const target = bankStep >= 0 ? bankStep : skillsStep;
+      if (target >= 0) setStep(target);
       return;
     }
     setSaving(true);

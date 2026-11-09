@@ -4,8 +4,6 @@
 // header, and full-width uncropped expressive Linky mood illustrations.
 import crypto from 'node:crypto';
 import { getAuth } from 'firebase-admin/auth';
-import { memberHasPlus } from './_memberTier.js';
-import { PLUS_PERKS } from '../shared/plus-perks.js';
 
 const APP_BASE = 'https://www.linkupbuild.com/app';
 const API_BASE = 'https://linkup-muqu.vercel.app';
@@ -479,86 +477,64 @@ export function buildMainCharacterJealousyNote(personal = null) {
   return `Hey ${name}${cityBit} — Linky is officially jealous of whatever other tab is getting your attention today! You're the main character here on LINKUP, the whole builder world revolves around you, and nothing hits the same until you're back in the spotlight.`;
 }
 
-/**
- * PLUS in email: the same three-a-day pitch, once per email, for members who
- * have not upgraded.
- *
- * Rules, learned the hard way with deliverability:
- *   - it renders BELOW the content and BELOW the main CTA, never above the match
- *   - plain tables and inline styles, no tracking pixels, no third-party images
- *   - one benefit only, then "and N more", because a wall of perks reads as spam —
- *     both come from shared/plus-perks.js so the email can never sell a
- *     feature the paywall has stopped selling
- *   - the CTA lands on /app/?plus=1, which opens the paywall in-app on arrival
- */
-// The email sells the same list the paywall sells (shared/plus-perks.js), so a
-// member can never read one claim in their inbox and another in the app.
-const PLUS_EMAIL_FEATURES = PLUS_PERKS.map((perk) => ({
-  id: perk.id,
-  feature: perk.title,
-  line: perk.line,
-}));
+// PLUS is never pitched in email — monetisation lives inside the app.
+// Email's only ask is a complete profile (buildProfileCompletionBlock).
 
-export const PLUS_EMAIL_MORE_COUNT = PLUS_EMAIL_FEATURES.length - 1;
+const STATUS_SKILL_WORD_RE = /^(student|founder|co[\s-]?founder|employee|employer|intern|unemployed|graduate|job[\s-]?seeker|freelancer?|hiring)$/i;
 
-export const plusEmailUrl = () => `${APP_BASE}/?plus=1`;
-
-const plusHash = (text) => {
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-};
-
-/** Which benefit leads in this member's email — stable per member per day. */
-export function plusFeatureForEmail(uid, dayKey) {
-  if (!PLUS_EMAIL_FEATURES.length) return null;
-  return PLUS_EMAIL_FEATURES[plusHash(`${uid}:${dayKey}:email`) % PLUS_EMAIL_FEATURES.length];
+/** What is still missing from a profile, in plain words, for the email nudge. */
+export function profileCompletionGaps(profile = {}) {
+  const gaps = [];
+  const strengths = (Array.isArray(profile?.skills) ? profile.skills : [])
+    .map((value) => String(value || '').trim())
+    .filter((value) => value && !STATUS_SKILL_WORD_RE.test(value));
+  if (strengths.length < 3) gaps.push('at least 3 strengths you bring');
+  if (!String(profile?.bio || '').trim()) gaps.push('a short bio');
+  if (!String(profile?.city || '').trim() && !String(profile?.country || '').trim()) gaps.push('your city');
+  if (!(Array.isArray(profile?.lookingFor) && profile.lookingFor.length)) gaps.push('who you want to meet');
+  if (!String(profile?.profilePic || profile?.photoURL || '').trim()) gaps.push('a profile photo');
+  if (!String(profile?.goals || '').trim()) gaps.push('what you are building toward');
+  return gaps;
 }
 
-export function buildPlusInviteBlock({ firstName = '', building = '', featured = null, moreCount = PLUS_EMAIL_MORE_COUNT, plusUrl = plusEmailUrl() } = {}) {
+/**
+ * The only "ask" an email ever makes: finish your profile. PLUS is sold
+ * inside the app only — email's job is matching accuracy, and a complete
+ * profile is what makes the weekly co-founder match accurate.
+ */
+export function buildProfileCompletionBlock({ firstName = '', missing = [], profileUrl = `${APP_BASE}/` } = {}) {
   const name = String(firstName || '').trim();
-  const head = name ? `${name}, are you ready to move beyond?` : 'Are you ready to move beyond?';
-  const context = String(building || '').trim() ? `You're building ${String(building).trim()}. ` : '';
-  const line = featured?.line || 'PLUS removes every limit between you and the right introduction.';
-  const feature = featured?.feature || 'Everything LINKUP can do for you';
-  const more = moreCount > 0 ? `And ${moreCount} more things you don't have yet — all in one plan.` : '';
-
+  const head = name ? `${name}, sharpen your next match` : 'Sharpen your next match';
+  const list = (Array.isArray(missing) ? missing : []).slice(0, 4);
+  const line = 'Your weekly co-founder match is only as accurate as your profile. Still missing:';
   const text = [
     '',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     head.toUpperCase(),
-    `${context}${line}`,
-    `• ${feature}`,
-    more,
-    `See what PLUS gives you: ${plusUrl}`,
+    line,
+    ...list.map((item) => `• ${item}`),
+    `Complete your profile: ${profileUrl}`,
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-  ].filter((row) => row !== '').join('\n');
-
+  ].join('\n');
   const html = `
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0A0B0D;border-radius:16px;margin:20px 0 6px 0;">
         <tr>
           <td style="padding:16px 18px;">
             <div style="font-size:10px;font-weight:900;letter-spacing:0.9px;text-transform:uppercase;color:#FBE618;margin:0 0 8px 0;">
-              LINKUP PLUS
+              COMPLETE YOUR PROFILE
             </div>
             <div style="font-size:17px;font-weight:900;color:#FFFFFF;line-height:1.35;margin:0 0 8px 0;">
               ${esc(head)}
             </div>
             <div style="font-size:13px;font-weight:700;color:#D7DAE0;line-height:1.55;margin:0 0 10px 0;">
-              ${esc(context)}${esc(line)}
+              ${esc(line)}
             </div>
-            <div style="font-size:13px;font-weight:900;color:#FBE618;line-height:1.5;margin:0 0 6px 0;">
-              &#10003; ${esc(feature)}
-            </div>
-            ${more ? `<div style="font-size:12px;font-weight:700;color:#9AA1AC;line-height:1.5;margin:0 0 12px 0;">${esc(more)}</div>` : ''}
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            ${list.map((item) => `<div style="font-size:13px;font-weight:900;color:#FBE618;line-height:1.5;margin:0 0 4px 0;">&#10003; ${esc(item)}</div>`).join('')}
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;">
               <tr>
                 <td align="center" bgcolor="#FBE618" style="border-radius:12px;">
-                  <a href="${esc(plusUrl)}" style="display:inline-block;background:#FBE618;color:#0A0B0D;font-weight:900;font-size:14px;text-decoration:none;padding:11px 18px;border-radius:12px;">
-                    See what PLUS gives you &rarr;
+                  <a href="${esc(profileUrl)}" style="display:inline-block;background:#FBE618;color:#0A0B0D;font-weight:900;font-size:14px;text-decoration:none;padding:11px 18px;border-radius:12px;">
+                    Complete your profile &rarr;
                   </a>
                 </td>
               </tr>
@@ -566,8 +542,7 @@ export function buildPlusInviteBlock({ firstName = '', building = '', featured =
           </td>
         </tr>
       </table>`;
-
-  return { text, html, head, feature, more };
+  return { text, html, head, missing: list };
 }
 
 export function buildLinkyEmailBodies({
@@ -1056,18 +1031,20 @@ export async function sendHighSignalEmail(db, uid, {
 
   const fullUrl = ctaUrl.startsWith('http') ? ctaUrl : `${APP_BASE}${ctaUrl.startsWith('/') ? ctaUrl : '/' + ctaUrl}`;
 
-  // A member who pays should never be sold PLUS in their own email. Everyone
-  // else gets one block, below the content, once per email.
+  // Emails never sell PLUS — that pitch lives inside the app only. What an
+  // email asks for instead is a complete profile, because completeness is
+  // what makes the weekly co-founder match accurate. Complete profiles get
+  // no block at all.
   let plusInvite = null;
   try {
     const userSnap = await db.collection('users').doc(uid).get().catch(() => null);
     const userData = userSnap?.exists ? userSnap.data() || {} : {};
-    const isPlus = await memberHasPlus(db, uid, userData, nowMs);
-    if (!isPlus) {
-      plusInvite = buildPlusInviteBlock({
+    const missing = profileCompletionGaps(userData);
+    if (missing.length) {
+      plusInvite = buildProfileCompletionBlock({
         firstName: sanitizeEmailCopy(resolvedPersonal?.firstName || ''),
-        building: sanitizeEmailCopy(resolvedPersonal?.projectLabel || ''),
-        featured: plusFeatureForEmail(uid, new Date(nowMs).toISOString().slice(0, 10)),
+        missing,
+        profileUrl: `${APP_BASE}/profile/${encodeURIComponent(uid)}`,
       });
     }
   } catch {
@@ -1337,6 +1314,21 @@ export async function sendLinkyDirectEmail(db, rawInput = {}, { fetcher = fetch,
   }
 }
 
+const STATUS_OFFER_RE = /^(student|founder|co[\s-]?founder|employee|employer|intern|unemployed|graduate|job[\s-]?seeker|freelancer?|hiring)$/i;
+
+/**
+ * Strengths for the "brings" line: the pair's verified offers first, then the
+ * person's own declared skills — with status labels ("Student") filtered out
+ * either way. Empty means empty; the copy says so instead of inventing one.
+ */
+export function honestBrings(offers, profile = {}) {
+  const clean = (list) => (Array.isArray(list) ? list : [])
+    .map((value) => String(value || '').trim())
+    .filter((value) => value && !STATUS_OFFER_RE.test(value));
+  const fromOffers = clean(offers);
+  return fromOffers.length ? fromOffers : clean(profile?.skills);
+}
+
 export function buildWeeklyCofounderIntroCopy({
   weekKey = 'this week',
   recipientProfile = {},
@@ -1376,7 +1368,7 @@ export function buildWeeklyCofounderIntroCopy({
     recipientBrief?.projectLabel || recipientBrief?.goalLabel || recipientProfile?.bio || (recipientProfile?.skills || []).slice(0, 3).join(', ') || 'High-conviction startup building',
     110
   );
-  const meBrings = cleanSnippet((Array.isArray(myOffers) && myOffers.length ? myOffers : recipientProfile?.skills || ['Product Execution']).slice(0, 3).join(', '), 80);
+  const meBrings = cleanSnippet(honestBrings(myOffers, recipientProfile).slice(0, 3).join(', ') || 'Not listed yet', 80);
 
   const partnerRole = cleanSnippet(partnerBrief?.roleLabel || partnerProfile?.occupation || 'Builder & Founder', 60);
   const partnerCity = cleanSnippet(partnerBrief?.cityLabel || [partnerProfile?.city, partnerProfile?.country].filter(Boolean).join(', ') || 'Remote', 50);
@@ -1384,7 +1376,7 @@ export function buildWeeklyCofounderIntroCopy({
     partnerBrief?.projectLabel || partnerBrief?.goalLabel || partnerProfile?.bio || (partnerProfile?.skills || []).slice(0, 3).join(', ') || 'Building ambitious products',
     110
   );
-  const partnerBrings = cleanSnippet((Array.isArray(partnerOffers) && partnerOffers.length ? partnerOffers : partnerProfile?.skills || ['Technical & Growth Execution']).slice(0, 3).join(', '), 80);
+  const partnerBrings = cleanSnippet(honestBrings(partnerOffers, partnerProfile).slice(0, 3).join(', ') || 'Not listed yet', 80);
 
   const sharedLine = cleanSnippet(why?.shared || 'Shared startup ambition and builder velocity.', 140);
   const complementLine = cleanSnippet(why?.complement || `${meBrings} meets ${partnerBrings}.`, 140);

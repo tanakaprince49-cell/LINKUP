@@ -6,6 +6,7 @@ import {
   cofounderWeekWindow,
   eligibility,
   scoreMutualCofounderPair,
+  weeklyCofounderGate,
 } from '../shared/linkup-match.js';
 
 const cleanText = (value, max = 220) =>
@@ -90,11 +91,12 @@ export function buildEngineDossier(pair = {}) {
   const overlap = sharedDomains.length ? `You both work in ${sharedDomains.slice(0, 3).join(', ')}.` : '';
   const joins = (parts) => parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 
-  // Three contributions each, always: the offers the algorithm verified first,
-  // then the person's own skills, so a thin profile still reads as a whole person.
+  // Contributions each, honestly: the strengths the algorithm verified
+  // first, then the person's own declared skills. Nothing is invented to
+  // fill the list — a shorter list is the truth about a thinner profile.
   const bring = (offers, profile, forName) => {
     const seen = new Set();
-    const merged = [...offers, ...(Array.isArray(profile?.skills) ? profile.skills : []), 'Execution']
+    const merged = [...offers, ...(Array.isArray(profile?.skills) ? profile.skills : [])]
       .map((value) => cleanText(value, 60))
       .filter((value) => {
         const key = value.toLowerCase();
@@ -109,17 +111,17 @@ export function buildEngineDossier(pair = {}) {
   };
 
   return {
-    headline: `${(aOffers[0] || pair?.profileA?.occupation || 'Product')} × ${(bOffers[0] || pair?.profileB?.occupation || 'Growth')}`,
+    headline: `${(aOffers[0] || 'Builder')} × ${(bOffers[0] || 'Builder')}`,
     whyChosenForA: joins([
       sharedA || overlap,
       complementA,
       placeB ? `${nameB} is building from ${placeB}.` : '',
-    ]) || `${nameB} brings ${(bOffers.length ? bOffers : ['complementary execution']).join(', ')} against your ${(aOffers.length ? aOffers : ['builder strengths']).join(', ')}.`,
+    ]) || `${nameB} brings ${(bOffers.length ? bOffers : ['a complementary craft']).join(', ')} against your ${(aOffers.length ? aOffers : ['declared strengths']).join(', ')}.`,
     whyChosenForB: joins([
       sharedB || overlap,
       complementB,
       placeA ? `${nameA} is building from ${placeA}.` : '',
-    ]) || `${nameA} brings ${(aOffers.length ? aOffers : ['complementary execution']).join(', ')} against your ${(bOffers.length ? bOffers : ['builder strengths']).join(', ')}.`,
+    ]) || `${nameA} brings ${(aOffers.length ? aOffers : ['a complementary craft']).join(', ')} against your ${(bOffers.length ? bOffers : ['declared strengths']).join(', ')}.`,
     whatABrings: bring(aOffers, pair?.profileA, nameB),
     whatBBrings: bring(bOffers, pair?.profileB, nameA),
     sharedGround: [
@@ -277,7 +279,11 @@ async function loadEligiblePool(db, { limit = 160 } = {}) {
     }
   } catch {}
 
-  return Array.from(profilesByUid.values());
+  // The weekly pairing only ever sees people who declared strengths and are
+  // not here purely to hire or freelance. scoreMutualCofounderPair enforces
+  // the same gate per pair; filtering here keeps the pool (and the cron's
+  // candidate scoring) honest and smaller.
+  return Array.from(profilesByUid.values()).filter((profile) => weeklyCofounderGate(profile).eligible);
 }
 
 async function resolveMutualGateState(db, viewerUid, partnerUid, matchData = {}) {
