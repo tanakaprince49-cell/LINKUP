@@ -625,7 +625,9 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
 
         <TouchableOpacity style={styles.actionBtn} onPress={handleDislike}>
           <SafeIcon name="ThumbsDown" size={18} color={disliked ? '#EF4444' : '#666'} fill={disliked ? '#EF4444' : 'transparent'} />
-          <Text style={[styles.actionVal, { color: disliked ? '#EF4444' : '#666' }]}>{dislikesCount}</Text>
+          {/* No dislike count beside the button: the signal is recorded, but
+              showing a startup "12 people disliked this" is discouraging and
+              serves nobody. The button still fills red when you have tapped it. */}
         </TouchableOpacity>
         
         <TouchableOpacity 
