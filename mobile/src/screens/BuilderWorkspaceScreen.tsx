@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
-import {ActivityIndicator,RefreshControl,ScrollView,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
+import {ActivityIndicator,Image,RefreshControl,ScrollView,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useAuth} from '../contexts/AuthContext';
 import {useTheme} from '../contexts/ThemeContext';
@@ -8,6 +8,7 @@ import {GroupsPanel} from './GroupChatScreen';
 import ScreenHeader from '../components/ScreenHeader';
 import VerifiedBadge from '../components/VerifiedBadge';
 import {builderCall,builderSection,BUILDER_SECTIONS,BuilderSection} from '../lib/builder';
+import {ICON_VARIANTS,ICON_VARIANT_IMAGES,getLatestResolvedAppearance,loadSavedIconMode} from '../lib/dynamicAppearance';
 
 export default function BuilderWorkspaceScreen({navigation,route}:any){
  const {user}=useAuth(),{theme}=useTheme(),dark=theme==='dark';
@@ -19,6 +20,10 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
  useEffect(()=>{setHome(null);void refresh(true);},[refresh,user?.uid]);
  useEffect(()=>{if(route?.params?.section)setSection(builderSection(route.params.section));},[route?.params?.section]);
  const choose=(s:BuilderSection)=>{setSection(s);setError('');};
+ const [iconMode,setIconModeState]=useState('auto');
+ useEffect(()=>{let alive=true;loadSavedIconMode().then((m)=>{if(alive)setIconModeState(m);}).catch(()=>{});return()=>{alive=false;};},[]);
+ const pickIcon=(id:string)=>{setIconModeState(id);void act('prefs',{iconMode:id});};
+ const iconOptions=[{id:'auto',label:'Auto'},{id:'classic',label:'Classic'},...ICON_VARIANTS.map((v)=>({id:v.id,label:v.label}))];
  const run=async(label:string,action:()=>Promise<any>)=>{if(busy)return;setBusy(label);setError('');try{const result=await action();await refresh();return result;}catch(e:any){setError(e.message||'That action could not finish.');}finally{setBusy('');}};
  const act=(op:string,input:Record<string,unknown>={},after?:(r:any)=>void)=>run(op,async()=>{const r=await builderCall(op,input);after?.(r);return r;});
  const button=(label:string,onPress:()=>void,secondary=false)=> <TouchableOpacity accessibilityRole="button" accessibilityLabel={label} disabled={!!busy} onPress={onPress} style={[styles.button,secondary&&styles.secondary,!!busy&&{opacity:.55}]}><Text style={[styles.buttonText,secondary&&{color:'#0A0B0D'}]}>{label}</Text></TouchableOpacity>;
@@ -32,6 +37,14 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
   <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async()=>{setRefreshing(true);await refresh();setRefreshing(false);}}/>}>
    {error?<View accessibilityRole="alert" style={styles.error}><Text style={{color:'#9f1239'}}>{error}</Text></View>:null}{busy?<ActivityIndicator color={COLORS.primaryStrong}/>:null}
    {section==='Groups'&&<GroupsPanel navigation={navigation} isDark={dark}/>}
+   <View style={[styles.card,{borderColor:dark?'#2A2E35':'#E8E6DE',backgroundColor:dark?'#14161A':'#FFFFFF'}]}>
+    <Text style={[styles.cardTitle,{color:textColor(dark)}]}>App logo</Text>
+    <Text style={[styles.body,{color:textColor(dark,'secondary')}]}>Your launcher logo changes with your activity — away a day, on a streak, shipped something. Pin the one you love, or let LINKUP keep choosing. Right now it is showing: {getLatestResolvedAppearance().meta.label}.</Text>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:12,paddingVertical:4}}>
+     {iconOptions.map((opt)=>{const selected=iconMode===opt.id;const img=ICON_VARIANT_IMAGES[opt.id]||ICON_VARIANT_IMAGES.default;return <TouchableOpacity key={opt.id} accessibilityRole="button" accessibilityLabel={`App logo: ${opt.label}`} accessibilityState={{selected}} disabled={!!busy} onPress={()=>pickIcon(opt.id)} style={{width:76,alignItems:'center',gap:6,opacity:busy?0.55:1}}><Image source={img} style={{width:60,height:60,borderRadius:16,borderWidth:selected?3:1,borderColor:selected?'#FBE618':'#E8E6DE'}}/><Text numberOfLines={2} style={{fontSize:10.5,fontWeight:selected?'900':'600',textAlign:'center',color:textColor(dark)}}>{opt.label}</Text></TouchableOpacity>;})}
+    </ScrollView>
+    <Text style={[styles.body,{color:textColor(dark,'secondary')}]}>{iconMode==='auto'?'Auto: LINKUP picks your logo from your activity. It settles back the moment you return.':iconMode==='classic'?'Classic: the original logo, always. Nothing changes it.':'Pinned: this logo stays until you change it here.'}</Text>
+   </View>
    <View style={{height:24}}/>
   </ScrollView>
  </SafeAreaView>;

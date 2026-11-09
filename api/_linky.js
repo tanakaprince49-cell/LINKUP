@@ -3553,11 +3553,49 @@ async function squadSlotsFromModel(me, q, uid) {
  * triangles that are actually complementary: no two members of a squad may
  * share more than one core skill, and every slot needs its own winner.
  */
+/**
+ * Members grouped by what they are good at (`skill:` / `role:`), what they
+ * want (`wants:`) and their world (`domain:`) — built once per search so a
+ * role slot scores its relevant groups instead of re-reading every profile
+ * for every slot. Groups are an index, not a verdict: a slot whose groups
+ * are too small to judge falls back to the whole eligible pool.
+ */
+export function buildMemberGroups(factsList = []) {
+  const groups = new Map();
+  const add = (key, facts) => {
+    if (!key) return;
+    const existing = groups.get(key);
+    if (existing) existing.push(facts);
+    else groups.set(key, [facts]);
+  };
+  for (const facts of factsList || []) {
+    if (!facts?.uid) continue;
+    for (const skill of facts.skills || []) add(`skill:${nameKey(skill)}`, facts);
+    for (const word of nameTokens(facts.role || '')) if (word.length > 2) add(`role:${word}`, facts);
+    for (const want of facts.lookingFor || []) add(`wants:${nameKey(want)}`, facts);
+    for (const domain of facts.industries || []) add(`domain:${nameKey(domain)}`, facts);
+  }
+  return groups;
+}
+
 export async function findSquads(uid, q, ctx, { user, state, existingCards = [], exclude = [], slots = [] } = {}) {
   const owner = user || (await loadUser(uid));
   const myState = state || ctx.states[uid] || {};
   const me = mergedFacts(owner, myState) || {};
   const eligible = pickEligible({ uid, q, ctx, myState, existingCards, exclude });
+  const groups = buildMemberGroups(eligible);
+  const slotPool = (slot) => {
+    const keys = new Set();
+    for (const word of nameTokens(slot.label)) {
+      if (word.length > 2) { keys.add(`role:${word}`); keys.add(`skill:${nameKey(word)}`); keys.add(`wants:${nameKey(word)}`); }
+    }
+    for (const req of searchBrief(slot.label).required || []) {
+      for (const term of req.terms || []) { keys.add(`skill:${nameKey(term)}`); keys.add(`role:${nameKey(term)}`); }
+    }
+    const picked = new Map();
+    for (const key of keys) for (const facts of groups.get(key) || []) picked.set(facts.uid, facts);
+    return picked.size >= 2 ? [...picked.values()] : eligible;
+  };
   const rawByUid = new Map(ctx.candidates.map((x) => [x.uid, x]));
   const badgesFor = (facts) => proofPoints(facts, rawByUid.get(facts.uid) || {}, { skipBio: !!(ctx.states[facts.uid] || {}).facts?.hidden?.bio });
   const globalBrief=searchBrief(q.need);
@@ -3568,7 +3606,7 @@ export async function findSquads(uid, q, ctx, { user, state, existingCards = [],
     const brief=searchBrief(slotNeed);
     brief.unverifiedConstraints=[...new Set([...brief.unverifiedConstraints,...globalBrief.unverifiedConstraints])];
     const ranked = [];
-    for (const facts of eligible) {
+    for (const facts of slotPool(slot)) {
       const assessment = assessCandidate(brief,facts);
       if(!assessment.eligible) continue;
       const score = assessment.score, hits = assessment.evidence.map(e=>e.requirement);
@@ -3631,6 +3669,51 @@ export async function findSquads(uid, q, ctx, { user, state, existingCards = [],
     })),
   }));
   return { squads: out, filled: filled.length, slots: perSlot.map((s) => ({ label: s.label, found: s.ranked.length })), checked, usedAi:false };
+}
+
+/**
+ * "Just pull anyone", made honest. When no complete squad clears the full
+ * evidence bar, the member still gets real people: the closest available
+ * profile per role, ranked by whatever evidence exists, with everything
+ * unconfirmed said out loud in `unknowns` and the team flagged `partial`.
+ * Nobody is invented and nobody is dressed up as a proven fit.
+ */
+function closestAvailableTeam(uid, q, ctx, { state, existingCards = [], slots = [] } = {}) {
+  const eligible = pickEligible({ uid, q, ctx, myState: state || ctx.states[uid] || {}, existingCards });
+  if (!eligible.length || !slots.length) return [];
+  const used = new Set();
+  const members = [];
+  for (const slot of slots) {
+    const brief = searchBrief(slot.label);
+    const ranked = eligible
+      .filter((facts) => !used.has(facts.uid))
+      .map((facts) => ({ facts, assessment: assessCandidate(brief, facts) }))
+      .sort((a, b) =>
+        (Number(b.assessment.eligible) - Number(a.assessment.eligible))
+        || (b.assessment.evidence.length - a.assessment.evidence.length)
+        || (b.assessment.score - a.assessment.score)
+        || ((b.facts.skills || []).length - (a.facts.skills || []).length)
+        || a.facts.uid.localeCompare(b.facts.uid));
+    const top = ranked[0];
+    if (!top) continue;
+    used.add(top.facts.uid);
+    const assessment = top.assessment;
+    members.push({
+      facts: top.facts,
+      slot: slot.label,
+      slotNeed: slot.label,
+      score: assessment.eligible ? assessment.score : Math.max(8, assessment.evidence.length * 12),
+      why: assessment.evidence.length
+        ? evidenceReason(top.facts.name, assessment)
+        : `${top.facts.name} is a real public LINKUP profile — the closest available for ${slot.label} right now, though their profile does not confirm the fit yet. Read it before you commit.`,
+      evidence: assessment.evidence || [],
+      unknowns: [...(assessment.unknowns || []), ...(assessment.missing || []).map((item) => `Not confirmed: ${item}`)],
+      badges: [],
+    });
+  }
+  if (!members.length) return [];
+  const score = Math.round(members.reduce((sum, member) => sum + member.score, 0) / members.length);
+  return [{ id: `closest${Date.now().toString(36)}`, score, partial: true, members }];
 }
 
 /**
@@ -3697,10 +3780,15 @@ export async function teamMatch(uid, { mode = 'find', idea = '', ownRole = '', r
   }
   const slots = rolePlan.roles.map((label) => ({ label, ask: parseAsk(label), self: false }));
   if (safeMode === 'find') {
-    const found = await findSquads(uid, q, context, { user, state, existingCards: await loadCards(uid), slots });
-    const teams = (found.squads || []).map((team) => ({
+    const cardsNow = await loadCards(uid);
+    const found = await findSquads(uid, q, context, { user, state, existingCards: cardsNow, slots });
+    const squads = (found.squads && found.squads.length)
+      ? found.squads
+      : closestAvailableTeam(uid, q, context, { state, existingCards: cardsNow, slots });
+    const teams = (squads || []).map((team) => ({
       id: team.id,
       score: team.score,
+      partial: team.partial === true,
       members: team.members.map((member) => ({
         uid: member.facts.uid,
         name: member.facts.name,
@@ -3721,7 +3809,11 @@ export async function teamMatch(uid, { mode = 'find', idea = '', ownRole = '', r
       ownerName: me.name || profileFacts(user)?.name || '',
       roles: rolePlan.roles, teams, checked: found.checked || 0,
       usedAi: usedAiRoles,
-      message: teams.length ? '' : 'No complete team meets the role-evidence threshold in the current public member pool. Try adjusting the idea or role requirements.',
+      message: teams.length
+        ? (teams.some((team) => team.partial)
+          ? 'No complete team clears the full evidence bar yet — these are the closest real profiles in the pool right now, honestly labelled.'
+          : '')
+        : 'No complete team meets the role-evidence threshold in the current public member pool. Try adjusting the idea or role requirements.',
       messageQuota: quota, upgradeRequired: quota.upgradeRequired,
     };
   }
@@ -3954,9 +4046,109 @@ function chatSearchReply({ teams, checked, idea }) {
     return `I went through ${count} and nobody clears the evidence bar for that brief yet — I am not going to hand you a name that only looks good on paper. Sharpen the project or the role and I will run it again.`;
   }
   const first = teams[0];
+  if (first.partial) {
+    const names = first.members.map((member) => text(member.name, 40)).filter(Boolean);
+    const who = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] || 'someone');
+    return `I went through ${count} and nobody clears the full evidence bar for that brief yet — so instead of handing you nobody, I pulled the closest real profiles: ${who}. The evidence is thin, so read their profiles before you commit — but they are real people, and they are here.`;
+  }
   const names = first.members.map((member) => text(member.name, 40)).filter(Boolean);
   const who = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] || 'someone');
   return `Searched ${count} for ${text(idea, 90)}. My pick: ${who}${first.score ? ` — ${first.score}% fit` : ''}. Not a hunch: every name is backed by evidence on their profile.`;
+}
+
+const NAME_ASK_STOP = new Set([
+  'profile', 'profiles', 'cofounder', 'co-founder', 'developer', 'designer', 'engineer', 'founder',
+  'someone', 'anyone', 'people', 'person', 'member', 'members', 'team', 'teammate', 'teammates',
+  'partner', 'investor', 'mentor', 'the', 'a', 'an', 'my', 'me', 'on', 'in', 'for', 'to', 'of',
+  'linkup', 'app', 'please', 'strongest', 'best', 'first', 'second', 'third', 'better', 'which',
+  'who', 'what', 'building', 'based', 'looking', 'working', 'available', 'here', 'database', 'one',
+  'build', 'with', 's', 'find', 'show', 'get', 'is',
+]);
+
+/**
+ * "find Karen's profile" is a request for a HUMAN, not a role search — and
+ * the chat planner used to answer it from imagination (including claiming a
+ * database search that never ran). Extract the name deterministically; role
+ * and skill searches ("find a flutter developer") never look like this once
+ * stop-words and the known-brief guard have had their say.
+ */
+export function profileNameAsk(say = '') {
+  const s = String(say || '').trim();
+  if (!s || /\b(building|based|working|living|located)\b/i.test(s)) return '';
+  const hasProfileWord = /\bprofile\b/i.test(s);
+  const possessive = /[A-Za-z][A-Za-z'’-]*['’]s\b/.test(s);
+  let raw = '';
+  const direct = s.match(/\b(?:find|show|pull|get|fetch|who\s+is|where\s+is|search\s+for|look\s+up)\s+(?:me\s+)?(?:the\s+)?([A-Za-z][A-Za-z'’-]+(?:\s+[A-Za-z][A-Za-z'’-]+){0,2})/i);
+  if (direct) raw = direct[1];
+  if (!raw) {
+    const onHere = s.match(/([A-Za-z][A-Za-z'’-]+(?:\s+[A-Za-z][A-Za-z'’-]+)?)\s+on\s+(?:here|linkup)\b/i);
+    if (onHere) raw = onHere[1];
+  }
+  if (!raw) return '';
+  if (!hasProfileWord && !possessive && s.split(/\s+/).length > 6) return '';
+  if (searchBrief(s).known && !hasProfileWord && !possessive) return '';
+  const words = raw
+    .replace(/['’]s\b/g, '')
+    .split(/\s+/)
+    .map((word) => word.replace(/[^A-Za-z'’-]/g, ''))
+    .filter((word) => word && !NAME_ASK_STOP.has(word.toLowerCase()));
+  if (!words.length || words.length > 3) return '';
+  return words.join(' ');
+}
+
+/** Pull one named person's real public profile as a one-team answer. */
+async function findPersonTeam(uid, query, { user, state } = {}) {
+  const ctx = await buildMatchContext(uid);
+  const checked = (ctx.candidates || []).length;
+  const toMember = (facts, why, score) => ({
+    uid: facts.uid,
+    name: facts.name,
+    image: facts.pic,
+    title: facts.role,
+    company: facts.company,
+    city: [facts.city, facts.country].filter(Boolean).join(', '),
+    verified: facts.verified === true,
+    recommendedRole: facts.role || 'LINKUP member',
+    why,
+    evidence: [],
+    unknowns: ['Current availability and interest are not confirmed.'],
+    score: Math.round(Number(score) || 0),
+  });
+  const selfFacts = candidateFacts({ ...(user || {}), uid }, state || {});
+  if (scoreNameMatch(query, selfFacts.name) >= 40) {
+    return {
+      checked,
+      teams: [{ id: `person-${uid}`, score: 100, personLookup: true, members: [toMember(selfFacts, 'That is you — your own public LINKUP profile, exactly as everyone else sees it.', 100)] }],
+      reply: `${selfFacts.name} — that is you. This is your own public profile, exactly as the rest of LINKUP sees it. Anything missing here is missing for everyone.`,
+    };
+  }
+  const found = findByName(
+    { need: query, nameQuery: query, nameAttempts: [query], offer: '' },
+    ctx,
+    { meUid: uid, myState: state || {}, existingCards: [] }
+  );
+  if (!found?.match) {
+    return {
+      checked,
+      notFound: true,
+      teams: [],
+      reply: `I searched every public LINKUP profile for "${query}" — nobody is registered under that name yet. Give me a role or a skill instead and I will pull real people for you.`,
+    };
+  }
+  const people = (found.all && found.all.length ? found.all : [found.match]).slice(0, 3);
+  const members = people.map((entry) => toMember(
+    entry.facts,
+    entry.blocked
+      ? `On LINKUP — though right now: ${entry.blocked}.`
+      : `You asked for ${query} by name. This is their public LINKUP profile — tap through to see what they are building.`,
+    entry.score
+  ));
+  const top = people[0].facts;
+  const place = [top.city, top.country].filter(Boolean).join(', ');
+  const reply = people.length > 1
+    ? `Found ${people.length} close names — closest is ${top.name}${top.role ? `, ${top.role}` : ''}${place ? ` in ${place}` : ''}. All of them are below with their profiles; I am not guessing which one you mean.`
+    : `${top.name}${top.role ? ` — ${top.role}` : ''}${place ? `, ${place}` : ''}. Here is their actual LINKUP profile — tap through and see what they are building.`;
+  return { checked, teams: [{ id: `person-${top.uid}`, score: Math.round(people[0].score || 0), personLookup: true, members }], reply };
 }
 
 export async function linkyChat(uid, {
@@ -3991,9 +4183,23 @@ export async function linkyChat(uid, {
   try {
     const me = mergedFacts(user, state) || {};
     const ownerRole = text(ownRole, 100) || text(me.role, 100) || 'Project lead';
-    const plan = manual && !say
-      ? { action: 'search', idea: text(idea, 500), roles: list(roles, 3, 60), reply: '', usedAi: false }
-      : await chatPlan({ say, thread, me, ownerRole });
+    // A name ask never reaches the AI planner: the profile is pulled from the
+    // real member index, so the answer can never invent a person — or claim
+    // a search that never happened.
+    const askedName = manual ? '' : profileNameAsk(say);
+    const plan = askedName
+      ? { action: 'chat', idea: '', roles: [], reply: '', usedAi: false }
+      : manual && !say
+        ? { action: 'search', idea: text(idea, 500), roles: list(roles, 3, 60), reply: '', usedAi: false }
+        : await chatPlan({ say, thread, me, ownerRole });
+    let personResult = null;
+    if (askedName) {
+      try {
+        personResult = await findPersonTeam(uid, askedName, { user, state });
+      } catch {
+        personResult = null;
+      }
+    }
     const wantsSearch = manual || plan.action === 'search';
     // The member's own profile IS a brief. When they say "find me someone" and
     // we already know what they are building and which seat is empty, searching
@@ -4035,6 +4241,8 @@ export async function linkyChat(uid, {
     const teams = (match?.teams || []).map((team) => ({
       id: team.id,
       score: team.score,
+      partial: team.partial === true,
+      personLookup: team.personLookup === true,
       members: team.members.map((member) => ({
         uid: member.uid,
         name: member.name,
@@ -4061,11 +4269,15 @@ export async function linkyChat(uid, {
       const low = String(sentence || '').toLowerCase();
       return names.some((name) => name && low.includes(name.toLowerCase()));
     };
-    if (teams.length) {
+    if (personResult) {
+      outTeams = personResult.teams;
+      finalReply = personResult.reply;
+    }
+    if (teams.length && !personResult) {
       if (!mentionsSomeone(finalReply, namesOf(teams))) {
         finalReply = chatSearchReply({ teams, checked: match?.checked || 0, idea: projectIdea });
       }
-    } else if (!wantsSearch && Array.isArray(state.chatTeams) && state.chatTeams.length
+    } else if (!personResult && !wantsSearch && Array.isArray(state.chatTeams) && state.chatTeams.length
       && now - Number(state.chatTeamsAt || 0) < 24 * 3600 * 1000
       && /\b(who|which|strongest|best|show|name|first|second|third|them|they|person)\b/i.test(say)) {
       // "Who is the strongest?" after a search: pull the actual profiles back
@@ -4087,7 +4299,7 @@ export async function linkyChat(uid, {
     const nextThread = [...thread, { role: 'user', text: say || 'Search the database for my team.' }, { role: 'linky', text: finalReply }]
       .slice(-CHAT_TURNS)
       .map((turn) => ({ role: turn.role, text: text(turn.text, 700), at: now }));
-    await patchState(uid, { chatThread: nextThread, chatAt: now, ...(teams.length ? { chatTeams: teams, chatTeamsAt: now } : {}) }).catch(() => {});
+    await patchState(uid, { chatThread: nextThread, chatAt: now, ...(outTeams.length ? { chatTeams: outTeams, chatTeamsAt: now } : {}) }).catch(() => {});
     return {
       action: wantsSearch && !asked ? 'search' : 'chat',
       reply: finalReply,
@@ -4096,7 +4308,7 @@ export async function linkyChat(uid, {
       ownerName: match?.ownerName || text(me.name, 40),
       roles: rolesOut,
       teams: outTeams,
-      checked: match?.checked || 0,
+      checked: personResult?.checked || match?.checked || 0,
       noMatchReason: match?.message || '',
       usedAi: plan.usedAi === true,
       askedForBrief: asked,

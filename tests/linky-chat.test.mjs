@@ -213,3 +213,54 @@ test('asking who is strongest after a search pulls the actual profiles back up',
   assert.deepEqual([...out.teams[0].members.map((m) => m.name)].sort(), ['Alice', 'Dee']);
   assert.match(out.reply, /Alice|Dee/, 'the reply names the strongest instead of gesturing at them');
 });
+
+test('members are grouped by what they are good at and what they want', () => {
+  const db = squadDb();
+  const api = core(db, { plan: searchPlan });
+  const groups = api.buildMemberGroups([
+    { uid: 'a1', skills: ['Flutter', 'Python'], role: 'Developer', lookingFor: ['Cofounder'], industries: ['Fintech'] },
+    { uid: 'a2', skills: ['Figma'], role: 'Product Designer', lookingFor: ['Developer'], industries: ['Fintech'] },
+  ]);
+  assert.equal(groups.get('skill:flutter').map((f) => f.uid).join(','), 'a1');
+  assert.equal(groups.get('role:designer').map((f) => f.uid).join(','), 'a2');
+  assert.equal(groups.get('wants:cofounder').map((f) => f.uid).join(','), 'a1');
+  assert.equal(groups.get('domain:fintech').map((f) => f.uid).sort().join(','), 'a1,a2');
+});
+
+test('asking for a person by name pulls their actual profile, not a role search', async () => {
+  const db = new Database();
+  seed(db, [member, person('karen', { displayName: 'Karen', occupation: 'Growth Lead', skills: ['Growth', 'Sales'] })]);
+  const api = core(db, { plan: searchPlan });
+  const out = await api.linkyChat('member', { message: "ok find karen s profile on linkup" });
+  assert.equal(out.teams.length, 1);
+  assert.equal(out.teams[0].members[0].uid, 'karen');
+  assert.match(out.reply, /Karen/);
+  assert.ok(out.checked >= 1);
+  // Your own name pulls your own profile, labelled as you.
+  const self = await api.linkyChat('member', { message: "find tanaka s profile" });
+  assert.equal(self.teams[0].members[0].uid, 'member');
+  assert.match(self.reply, /that is you/i);
+  // A name that is not here gets an honest no, never an invented person.
+  const ghost = await api.linkyChat('member', { message: "find Zebediah's profile" });
+  assert.equal(ghost.teams.length, 0);
+  assert.match(ghost.reply, /nobody is registered under that name/i);
+});
+
+test('when nobody clears the bar, Linky pulls the closest real people and says so', async () => {
+  const db = squadDb();
+  const api = core(db, {
+    plan: {
+      reply: '',
+      action: 'search',
+      idea: 'A partnerships and growth push for a payments app for market traders',
+      roles: ['Head of Partnerships', 'Growth Lead', 'Business Development Manager'],
+    },
+  });
+  const out = await api.linkyChat('member', { message: 'Who can build LINKUP with me?' });
+  assert.equal(out.teams.length, 1, 'the member still gets real people');
+  assert.equal(out.teams[0].partial, true, 'the team is honestly labelled as closest-available');
+  const names = out.teams[0].members.map((m) => m.name).sort();
+  assert.equal(names.join(','), 'Alice,Dee');
+  assert.match(out.reply, /closest real profiles/);
+  assert.match(out.reply, /Alice/);
+});

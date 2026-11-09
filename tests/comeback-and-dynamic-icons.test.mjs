@@ -246,11 +246,12 @@ test('Part B: all 11 bundled occasion icon assets, web favicons, and Expo native
   assert.equal(sanitizePrefs({ iconMode: 'classic' }).iconMode, 'classic');
   assert.throws(() => sanitizePrefs({ iconMode: 'nonexistent_variant' }));
 
-  // Check app.json registers plugin and carries Version 18.1.0 / versionCode 48
-  // (18.1.0 = the MongoDB client build; bump this pin deliberately per release)
+  // Check app.json registers plugin and carries Version 18.2.0 / versionCode 49
+  // (18.1.0 = the MongoDB client build; 18.2.0 = icons fixed + workspace logo
+  // picker + Linky profile pulling; bump this pin deliberately per release)
   const appJson = JSON.parse(fs.readFileSync(path.join(root, 'mobile', 'app.json'), 'utf8')).expo;
-  assert.equal(appJson.version, '18.1.0');
-  assert.equal(appJson.android.versionCode, 48);
+  assert.equal(appJson.version, '18.2.0');
+  assert.equal(appJson.android.versionCode, 49);
   assert.ok(appJson.plugins.includes('./plugins/withDynamicLauncherIcon'));
 
   // Verify serverless function count stays strictly <= 12 on Vercel Hobby
@@ -524,3 +525,15 @@ test('Part D: emails are hyper-personalized to each recipient’s specific proje
   assert.match(captured[0].text, /main character/i);
 });
 
+test('the workspace lets the member pin their own app logo', () => {
+  const workspace = fs.readFileSync(new URL('../mobile/src/screens/BuilderWorkspaceScreen.tsx', import.meta.url), 'utf8');
+  assert.match(workspace, /App logo/);
+  assert.match(workspace, /ICON_VARIANT_IMAGES/);
+  // Choosing goes through the builder prefs op, which validates the mode
+  // server-side and applies it locally in the same call.
+  assert.match(workspace, /act\('prefs',\{iconMode:id\}\)/);
+  assert.match(workspace, /loadSavedIconMode/);
+  const appJson = JSON.parse(fs.readFileSync(new URL('../mobile/app.json', import.meta.url), 'utf8'));
+  assert.equal(appJson.expo.version, '18.2.0');
+  assert.equal(appJson.expo.android.versionCode, 49);
+});
