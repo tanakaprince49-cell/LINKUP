@@ -407,12 +407,16 @@ test('the writer lives on the profile side, not on the Linky surface', () => {
   assert.ok(!linky.includes('LinkyWritesProfile'), 'the writer card is back on the Linky surface');
   assert.ok(!linky.includes('writerCard'), 'a writer card remnant is still wired into Linky');
 
-  // It lives on the profile side instead: on the member's own profile view
-  // (not only inside edit mode) and in the editor, behind PLUS both times.
+  // It lives on the profile side instead: on the member's own profile view,
+  // directly after the PROFESSIONAL INTRODUCTION section (and in the editor),
+  // behind PLUS both times.
   const screen = read('mobile/src/screens/ProfileScreen.tsx');
   const mounts = screen.match(/<LinkyWritesProfile/g) || [];
   assert.ok(mounts.length >= 2, 'the writer should be mounted on the profile view and in the editor');
   assert.match(screen, /isPlus=\{hasLinkupPro\(myProfile\)\}/);
+  const intro = screen.indexOf('PROFESSIONAL INTRODUCTION');
+  const afterIntro = screen.lastIndexOf('<LinkyWritesProfile');
+  assert.ok(intro > 0 && afterIntro > intro, 'the profile-view writer must sit after PROFESSIONAL INTRODUCTION');
 });
 
 /* ------------------------ the ask on the home page ------------------------ */

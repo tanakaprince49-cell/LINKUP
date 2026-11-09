@@ -2974,22 +2974,6 @@ export default function ProfileScreen({ navigation, route }: any) {
 
         {!isEditing && (
           <>
-            {!isViewingOther ? (
-              <>
-              {/* PLUS: Linky writes the profile — on the profile side, where
-                  the member reads their own page. Linky reads first,
-                  recommends honestly, and only writes with permission. */}
-              <LinkyWritesProfile
-                isPlus={hasLinkupPro(myProfile)}
-                onUpgrade={() => openPaywall('Linky writes your profile')}
-                building={String((myProfile as any)?.buildingName || (myProfile as any)?.company || '')}
-                seat={String((myProfile as any)?.missingSeat || '')}
-                onSaved={() => {
-                  void refreshProfile?.();
-                }}
-              />
-              </>
-            ) : null}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>About</Text>
               <View style={[styles.profileStoryCard, liquidGlass(isDark, false), { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
@@ -3229,6 +3213,21 @@ export default function ProfileScreen({ navigation, route }: any) {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* PLUS: Linky writes the profile — on the profile side, directly
+            after the professional introduction. Linky reads first,
+            recommends honestly, and only writes with permission. */}
+        {!isViewingOther && !isEditing ? (
+          <LinkyWritesProfile
+            isPlus={hasLinkupPro(myProfile)}
+            onUpgrade={() => openPaywall('Linky writes your profile')}
+            building={String((myProfile as any)?.buildingName || (myProfile as any)?.company || '')}
+            seat={String((myProfile as any)?.missingSeat || '')}
+            onSaved={() => {
+              void refreshProfile?.();
+            }}
+          />
+        ) : null}
 
         {!isViewingOther && (
           <View style={styles.section}>
