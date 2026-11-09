@@ -41,6 +41,46 @@ const single = value => typeof value === 'string' ? value : '';
 // no-store (privacy changes must bite on the very next request).
 const BUILDER_COUNT_CACHE = {'Cache-Control':'public, max-age=60','Vercel-CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600','CDN-Cache-Control':'public, s-maxage=300, stale-while-revalidate=3600'};
 const SEO_SITEMAP_CACHE = {'Cache-Control':'public, max-age=3600','Vercel-CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400','CDN-Cache-Control':'public, s-maxage=3600, stale-while-revalidate=86400'};
+
+// FOUNDER IMAGE SEO. Eighteen portraits and posters of Tanaka Gaadzikwa
+// (founder & CEO of LINKUP) live on the marketing host under /images/tanaka/.
+// They are deliberately NOT rendered anywhere in the product UI — discovery
+// runs through this image sitemap instead: every file gets a descriptive
+// title and caption under one consistent entity name, attached to the two
+// pages that define that entity (his public LINKUP profile, which already
+// emits ProfilePage/Person structured data, and the site homepage).
+// Google indexes sitemap-listed images without any visible <img> tag; the
+// consistent name + captions + Person schema are the honest groundwork a
+// knowledge panel is later built from. Nothing here promises one.
+const FOUNDER_PROFILE_URL = `${APP}/p/FvxIfciyHMfQZbLwziZpseMNKxC3`;
+const TANAKA_IMAGES = [
+  ['01-wetindey-tech-a16z-feature.jpg', 'Tanaka Gaadzikwa — Wetindey TECH startup spotlight poster', 'Spotlight poster artwork featuring Tanaka Gaadzikwa, founder and CEO of LINKUP, from a Wetindey TECH startup feature graphic.'],
+  ['02-building-the-future-poster.jpg', 'Building the Future with Tanaka Gaadzikwa — poster', 'Poster titled "Building the Future with Tanaka Gaadzikwa" featuring the LINKUP founder and CEO from Harare, Zimbabwe.'],
+  ['03-tanaka-hoodie-looking-left.jpg', 'Tanaka Gaadzikwa — founder portrait in a dark hoodie', 'Portrait of Tanaka Gaadzikwa, founder and CEO of LINKUP, in a dark hoodie looking to the side.'],
+  ['04-tanaka-hoodie-front-portrait.jpg', 'Tanaka Prince Gaadzikwa — front-facing founder portrait', 'Front-facing portrait of Tanaka Prince Gaadzikwa, founder and CEO of LINKUP, Harare, Zimbabwe.'],
+  ['05-tanaka-hoodie-closeup.jpg', 'Tanaka Gaadzikwa — close-up portrait of the LINKUP founder', 'Close-up portrait of Tanaka Gaadzikwa, Zimbabwean tech founder and CEO of LINKUP, in a dark hoodie.'],
+  ['06-tanaka-beanie-closeup-takephotos.jpg', 'Tanaka Gaadzikwa — outdoor beanie portrait in Harare', 'Outdoor close-up portrait of Tanaka Gaadzikwa in a black knit beanie, Harare, Zimbabwe.'],
+  ['07-tanaka-fisheye-field-takephotos.jpg', 'Tanaka Gaadzikwa — wide-angle outdoor portrait in Zimbabwe', 'Circular wide-angle outdoor portrait of Tanaka Gaadzikwa in a black beanie and track jacket in Zimbabwe.'],
+  ['08-tanaka-fisheye-field-clean.jpg', 'Tanaka Gaadzikwa — clean wide-angle portrait outdoors', 'Clean circular wide-angle portrait of Tanaka Gaadzikwa, CEO of LINKUP, outdoors in Zimbabwe.'],
+  ['09-linkedin-2k-followers-thank-you.jpg', 'Tanaka Gaadzikwa celebrates 2,000 LinkedIn followers', 'Thank-you poster by Tanaka Gaadzikwa, founder and CEO of LINKUP, celebrating 2,000 LinkedIn followers.'],
+  ['10-tanaka-beanie-field-looking-right.jpg', 'Tanaka Gaadzikwa — outdoor portrait in a black beanie', 'Outdoor portrait of Tanaka Gaadzikwa, founder of LINKUP, wearing a black knit beanie in Zimbabwe.'],
+  ['11-tanaka-beanie-field-slight-smile.jpg', 'Tanaka Prince Gaadzikwa — smiling outdoor portrait', 'Smiling outdoor portrait of Tanaka Prince Gaadzikwa, founder and CEO of LINKUP, in a black beanie.'],
+  ['12-tanaka-beanie-field-neutral.jpg', 'Tanaka Gaadzikwa — neutral outdoor portrait in Zimbabwe', 'Outdoor portrait of Tanaka Gaadzikwa, LINKUP founder, in a black beanie with a neutral expression.'],
+  ['13-tanaka-beanie-field-smiling.jpg', 'Tanaka Gaadzikwa — smiling portrait outdoors in Harare', 'Smiling outdoor portrait of Tanaka Gaadzikwa, founder and CEO of LINKUP, Harare, Zimbabwe.'],
+  ['14-tanaka-beanie-jacket-cornfield.jpg', 'Tanaka Gaadzikwa — portrait in a cornfield, Zimbabwe', 'Portrait of Tanaka Gaadzikwa in a beanie and jacket standing in a Zimbabwe cornfield.'],
+  ['15-tanaka-beanie-closeup-cornfield.jpg', 'Tanaka Gaadzikwa — close-up portrait in a cornfield', 'Close-up portrait of Tanaka Gaadzikwa, CEO of LINKUP, in a cornfield in Zimbabwe.'],
+  ['16-tanaka-beanie-peace-sign-smile.jpg', 'Tanaka Gaadzikwa — smiling peace-sign portrait', 'Smiling portrait of Tanaka Gaadzikwa, founder of LINKUP, making a peace sign outdoors in Zimbabwe.'],
+  ['17-tanaka-beanie-moody-takephotos.jpg', 'Tanaka Gaadzikwa — moody outdoor portrait in Harare', 'Moody outdoor portrait of Tanaka Gaadzikwa, LINKUP founder and CEO, in Harare, Zimbabwe.'],
+  ['18-tanaka-beanie-closeup-bright.jpg', 'Tanaka Gaadzikwa — bright close-up beanie portrait', 'Bright close-up portrait of Tanaka Gaadzikwa in a black beanie, founder and CEO of LINKUP.'],
+];
+const xmlEsc = (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function tanakaImagesSitemap(now) {
+  const lastmod = new Date(now()).toISOString().slice(0, 10);
+  const images = TANAKA_IMAGES.map(([file, title, caption]) =>
+    `<image:image><image:loc>${SITE}/images/tanaka/${file}</image:loc><image:title>${xmlEsc(title)}</image:title><image:caption>${xmlEsc(caption)}</image:caption></image:image>`).join('');
+  const entry = (loc) => `<url><loc>${loc}</loc><lastmod>${lastmod}</lastmod>${images}</url>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">${entry(FOUNDER_PROFILE_URL)}${entry(`${SITE}/`)}</urlset>`;
+}
 export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai = null, now = Date.now, verifyUser = verifyRequestUser) {
   return async (req, res) => {
     res.setHeader('X-Content-Type-Options','nosniff');
@@ -91,7 +131,7 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
     };
     if (!['GET','HEAD'].includes(req.method)) { res.setHeader('Allow','GET, HEAD'); return failure(405,'Method not allowed'); }
     try {
-      if (mode === 'robots') return send(200,`User-agent: *\nAllow: /\n\nUser-agent: Googlebot-News\nAllow: /\n\nUser-agent: Googlebot-Image\nAllow: /\n\nSitemap: ${APP}/sitemap.xml\nSitemap: ${APP}/sitemap-google-news.xml\n`,'text/plain; charset=utf-8');
+      if (mode === 'robots') return send(200,`User-agent: *\nAllow: /\n\nUser-agent: Googlebot-News\nAllow: /\n\nUser-agent: Googlebot-Image\nAllow: /\n\nSitemap: ${APP}/sitemap.xml\nSitemap: ${APP}/sitemap-images.xml\nSitemap: ${APP}/sitemap-google-news.xml\n`,'text/plain; charset=utf-8');
       if (['league-json','builders-league-json','momentum-card','founder-spotlight-card'].includes(mode)) res.setHeader('X-Robots-Tag','noindex');
       if (await serveLeagueSeo(req,{database,send,failure,now})) return;
       if (await serveContentSeo(req,{database,send,failure,news})) return;
@@ -190,13 +230,18 @@ export function createPublicSeoHandler(database = getDb, news = getNewsFeed, ai 
         const count = (await readFirestore(() => db.collection('publicProfiles').count().get())).data().count;
         return send(200, JSON.stringify({ count, updatedAt: new Date().toISOString() }), 'application/json; charset=utf-8', BUILDER_COUNT_CACHE);
       }
+      if (mode === 'tanaka-images') {
+        // Founder portraits for Google Images — sitemap-only discovery, so
+        // nothing new renders anywhere on the site itself.
+        return send(200, tanakaImagesSitemap(now), 'application/xml; charset=utf-8', SEO_SITEMAP_CACHE);
+      }
       if (mode === 'sitemap') {
         const db = database();
         const count = (await readFirestore(() => db.collection('publicProfiles').count().get())).data().count;
         const pages = Math.max(1,Math.ceil(count / SITEMAP_SIZE));
         // Sitemap indexes may contain at most 50,000 child sitemaps.
         if (pages > 50000) throw new Error('Sitemap index capacity exceeded');
-        const urls=[`${APP}/sitemap-static.xml`,...Array.from({length:pages},(_,i) => `${APP}/sitemap-profiles-${i}.xml`),`${APP}/sitemap-momentum.xml`,...await contentSitemapIndex(db),...await blogSitemapIndex(db)];
+        const urls=[`${APP}/sitemap-static.xml`,...Array.from({length:pages},(_,i) => `${APP}/sitemap-profiles-${i}.xml`),`${APP}/sitemap-momentum.xml`,`${APP}/sitemap-images.xml`,...await contentSitemapIndex(db),...await blogSitemapIndex(db)];
         if(urls.length>50000)throw new Error('Sitemap index capacity exceeded');
         return send(200,xmlIndex(urls),'application/xml; charset=utf-8',SEO_SITEMAP_CACHE);
       }

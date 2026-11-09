@@ -332,6 +332,10 @@
       "destination": "/api/publicSeo?mode=static"
     },
     {
+      "source": "/app/sitemap-images.xml",
+      "destination": "/api/publicSeo?mode=tanaka-images"
+    },
+    {
       "source": "/app/sitemap-profiles-:page.xml",
       "destination": "/api/publicSeo?mode=profiles&page=:page"
     },
@@ -354,6 +358,10 @@
     {
       "source": "/sitemap-static.xml",
       "destination": "/api/publicSeo?mode=static"
+    },
+    {
+      "source": "/sitemap-images.xml",
+      "destination": "/api/publicSeo?mode=tanaka-images"
     },
     {
       "source": "/sitemap-profiles-:page.xml",

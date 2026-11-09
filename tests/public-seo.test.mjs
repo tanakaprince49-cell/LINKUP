@@ -76,6 +76,26 @@ test('sitemap index uses bounded XML shards and rejects abusive page parameters'
   for(const page of ['-1','1e3','100000','0.5','01',['0']]) assert.equal((await request(db,{mode:'profiles',page})).code,400);
   const robots=await request(db,{mode:'robots'});assert.ok(robots.body.includes(`Sitemap: ${APP}/sitemap.xml`));
 });
+test('founder portraits are discoverable by Google Images without rendering on the site',async() => {
+  const files=['01-wetindey-tech-a16z-feature.jpg','02-building-the-future-poster.jpg','03-tanaka-hoodie-looking-left.jpg','04-tanaka-hoodie-front-portrait.jpg','05-tanaka-hoodie-closeup.jpg','06-tanaka-beanie-closeup-takephotos.jpg','07-tanaka-fisheye-field-takephotos.jpg','08-tanaka-fisheye-field-clean.jpg','09-linkedin-2k-followers-thank-you.jpg','10-tanaka-beanie-field-looking-right.jpg','11-tanaka-beanie-field-slight-smile.jpg','12-tanaka-beanie-field-neutral.jpg','13-tanaka-beanie-field-smiling.jpg','14-tanaka-beanie-jacket-cornfield.jpg','15-tanaka-beanie-closeup-cornfield.jpg','16-tanaka-beanie-peace-sign-smile.jpg','17-tanaka-beanie-moody-takephotos.jpg','18-tanaka-beanie-closeup-bright.jpg'];
+  const res=await request(database(),{mode:'tanaka-images'});
+  assert.equal(res.code,200);assert.equal(res.headers['content-type'],'application/xml; charset=utf-8');
+  for(const file of files) assert.ok(res.body.includes(`https://www.linkupbuild.com/images/tanaka/${file}`),file);
+  // One consistent entity name, with real descriptive context per image.
+  assert.ok((res.body.match(/image:title>/g)||[]).length>=36);
+  assert.ok((res.body.match(/image:caption>/g)||[]).length>=36);
+  assert.match(res.body,/Tanaka Gaadzikwa/);
+  assert.match(res.body,/founder and CEO of LINKUP/);
+  // Attached to the pages that define the entity: his public profile (which
+  // emits Person structured data) and the homepage.
+  assert.ok(res.body.includes('https://www.linkupbuild.com/app/p/FvxIfciyHMfQZbLwziZpseMNKxC3'));
+  assert.ok(res.body.includes('<loc>https://www.linkupbuild.com/</loc>'));
+  // No private life facts are published for SEO: no birthdate, no age claims.
+  assert.ok(!/2010|born|years old/i.test(res.body));
+  // Discoverable through the standard chain crawlers already follow.
+  const index=await request(database(),{mode:'sitemap'});assert.ok(index.body.includes('sitemap-images.xml'));
+  const robots=await request(database(),{mode:'robots'});assert.ok(robots.body.includes('sitemap-images.xml'));
+});
 test('HEAD, method restrictions and transient database errors are honest HTTP responses',async() => {
   const head=await request(database(),{mode:'profile',uid:'alice'},'HEAD');assert.equal(head.code,200);assert.equal(head.body,'');
   const post=await request(database(),{mode:'profile',uid:'alice'},'POST');assert.equal(post.code,405);assert.equal(post.headers.allow,'GET, HEAD');
