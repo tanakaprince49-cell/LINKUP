@@ -674,7 +674,7 @@ export function buildLinkyEmailBodies({
         `   • Focus: ${c.meFocus}`,
         `   • What you bring: ${c.meBrings}`,
         '',
-        `2. YOUR 1-OF-1 POTENTIAL CO-FOUNDER (${c.bandLabel} · ${c.weekKey})`,
+        `2. YOUR CO-FOUNDER MATCH FOR THIS WEEK (${c.bandLabel} · ${c.weekKey})`,
         `   • Name: ${c.partnerFullName} (${c.partnerRole} · ${c.partnerCity})`,
         `   • Focus: ${c.partnerFocus}`,
         `   • What ${c.partnerFirst} brings: ${c.partnerBrings}`,
@@ -684,8 +684,8 @@ export function buildLinkyEmailBodies({
         `   • Co-Founder Complement: ${c.complementLine}`,
         `   • First 20-Minute Sprint: ${c.sprintLine}`,
         '',
-        `4. HOW YOUR EXCLUSIVE 1:1 PAIRING WORKS`,
-        `   • When ${c.partnerFirst} opens LINKUP this week, YOU are the single potential co-founder on their screen too.`,
+        `4. HOW YOUR WEEKLY 1:1 PAIRING WORKS`,
+        `   • When ${c.partnerFirst} opens LINKUP this week, YOU are their co-founder match on their screen too — this pairing goes both ways.`,
         `   • If both of you tap "Interested in Meeting", LINKUP unlocks your direct room so you can meet!`,
         '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       ].join('\n')
@@ -726,7 +726,7 @@ export function buildLinkyEmailBodies({
           <td style="padding:16px 18px;">
             <div style="margin:0 0 8px 0;">
               <span style="display:inline-block;background:#FBE618;color:#0A0B0D;font-size:10px;font-weight:900;letter-spacing:0.8px;text-transform:uppercase;padding:4px 9px;border-radius:999px;">
-                2 &middot; YOUR 1-OF-1 POTENTIAL CO-FOUNDER &middot; ${esc(c.bandLabel.toUpperCase())}
+                2 &middot; YOUR CO-FOUNDER MATCH THIS WEEK &middot; ${esc(c.bandLabel.toUpperCase())}
               </span>
             </div>
             <div style="font-size:18px;font-weight:900;color:#FFFFFF;line-height:1.3;">
@@ -1391,12 +1391,12 @@ export function buildWeeklyCofounderIntroCopy({
   const aiLine = cleanSnippet(aiIntro || `${sharedLine} ${complementLine}`, 200);
   const sprintLine = cleanSnippet(firstSprintTask || 'Spend 20 minutes scoping one concrete customer problem and a 48-hour prototype.', 140);
 
-  const headline = `${meName}, Linky is almost too jealous to share you — meet ${partnerFullName}, your 1-of-1 Potential Co-Founder for ${weekKey}!`;
-  const subject = `LINKUP · ${meName} × ${partnerFirst}: Your 1-of-1 Weekly Potential Co-Founder Match (Linky is jealous ⚡)`.slice(0, 118);
+  const headline = `${meName}, Linky is almost too jealous to share you — meet ${partnerFullName}, your co-founder match for this week!`;
+  const subject = `LINKUP · ${meName} × ${partnerFirst}: Your Weekly Co-Founder Match (Linky is jealous ⚡)`.slice(0, 118);
 
   const body = [
     `Okay ${meName}, be honest — which other app or tab has been stealing your attention? Because Linky is officially jealous, and we are even a little jealous of ${partnerFullName} for getting paired with our main character this week!`,
-    `Around here, the whole LINKUP universe revolves around you. Our matching algorithm and AI selected ${partnerFullName} as your ONLY potential co-founder for ${weekKey} (${bandLabel}). Here is your mutual introduction below:`,
+    `Around here, the whole LINKUP universe revolves around you. Our matching algorithm and AI have selected ${partnerFullName} as THE co-founder for you this week! Here is your mutual introduction below — check out why the two of you could make an unstoppable team on LINKUP:`,
   ].join('\n\n');
 
   const cofounderCard = {
@@ -1486,7 +1486,7 @@ export async function sendWeeklyCofounderIntroEmails(db, pairRecord = {}, option
       ctaUrl: copyForA.ctaUrl,
       mood: 'celebration',
       personal: briefA,
-      badgeLabel: `1-of-1 Weekly Co-Founder Intro · ${weekKey}`,
+      badgeLabel: `Weekly Co-Founder Match · ${weekKey}`,
     }, options),
     sendHighSignalEmail(db, uidB, {
       receiptKey: `weekly_cofounder_${weekKey}_${uidB}_${uidA}`,
@@ -1500,7 +1500,7 @@ export async function sendWeeklyCofounderIntroEmails(db, pairRecord = {}, option
       ctaUrl: copyForB.ctaUrl,
       mood: 'celebration',
       personal: briefB,
-      badgeLabel: `1-of-1 Weekly Co-Founder Intro · ${weekKey}`,
+      badgeLabel: `Weekly Co-Founder Match · ${weekKey}`,
     }, options),
   ]);
 

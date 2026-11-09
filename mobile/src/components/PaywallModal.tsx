@@ -607,7 +607,7 @@ export default function PaywallModal({
               </View>
             ))}
             <Text style={[styles.perksFootnote, { color: textColor(isDark, 'muted') }]}>
-              Free stays generous: the idea deck is unlimited forever, your weekly 1-of-1 introduction is not a PLUS feature, and nothing here changes that.
+              Free stays generous: the idea deck is unlimited forever, your weekly co-founder introduction is not a PLUS feature, and nothing here changes that.
             </Text>
           </View>
 

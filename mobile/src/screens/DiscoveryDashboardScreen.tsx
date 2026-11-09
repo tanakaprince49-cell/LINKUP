@@ -291,8 +291,8 @@ function DiscoveryDashboardScreen({ navigation }: any) {
     try {
       const partnerName = displayNameFor(item);
       const introNote = weeklyMatch?.opener
-        ? `${weeklyMatch.opener} (Matched as 1-of-1 Weekly Potential Co-Founders on LINKUP)`
-        : `Hey ${partnerName}, LINKUP’s algorithm & AI paired us as each other’s 1-of-1 potential co-founder this week — would love to meet!`;
+        ? `${weeklyMatch.opener} (Matched as this week's co-founder pair on LINKUP)`
+        : `Hey ${partnerName}, LINKUP’s algorithm & AI picked us as each other’s co-founder match this week — would love to meet!`;
 
       if (gate.status === 'pending_in' || partnerInterested) {
         const reqId = gate.requestId || connectionRequestId(item.uid, user.uid);
@@ -387,7 +387,7 @@ function DiscoveryDashboardScreen({ navigation }: any) {
         <View style={styles.exclusiveBanner}>
           <View style={[styles.exclusivePill, { backgroundColor: HOME_GOLD, borderColor: HOME_LINE }]}>
             <Zap size={12} color="#000" />
-            <Text style={styles.exclusivePillText}>1-OF-1 WEEKLY POTENTIAL CO-FOUNDER · {match.weekKey || 'THIS WEEK'}</Text>
+            <Text style={styles.exclusivePillText}>YOUR WEEKLY CO-FOUNDER MATCH · {match.weekKey || 'THIS WEEK'}</Text>
           </View>
           <TouchableOpacity
             onPress={() =>

@@ -175,7 +175,7 @@ export async function generateAiCofounderNarrative(pair, { aiText = geminiText }
   try {
     const prompt = [
       'You are the LINKUP Co-Founder Matching AI.',
-      'The deterministic LINKUP algorithm has already locked these two people as each other\'s ONLY introduction this week.',
+      'The deterministic LINKUP algorithm has already picked these two people as each other\'s one featured co-founder introduction this week.',
       'Your job is the dossier they read before deciding whether to reach out. It has to be deep, specific and earned — the reasoning a sharp founder would give a friend about why these two should talk this week.',
       'HARD RULES:',
       '- Ground every claim in the facts below. Never invent employers, degrees, funding, revenue, follower counts or achievements. If something is thin, describe the gap instead of filling it.',
@@ -737,7 +737,7 @@ export async function expressWeeklyCofounderInterest(db, uid, input = {}, option
       recipientId: partnerUid,
       status: 'pending',
       weeklyCofounderWeek: weekKey,
-      message: cleanText(input.message || 'Interested in meeting as this week’s 1-of-1 potential co-founder match on LINKUP.', 300),
+      message: cleanText(input.message || 'Interested in meeting as this week’s co-founder match on LINKUP.', 300),
       createdAt: now,
       updatedAt: now,
     }, { merge: true }).catch(() => {});

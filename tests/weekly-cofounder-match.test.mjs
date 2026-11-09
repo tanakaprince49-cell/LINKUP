@@ -185,7 +185,7 @@ test('Opportunity Radar is removed and DiscoveryDashboardScreen shows one weekly
   assert.doesNotMatch(dashboardSrc, /Opportunity Radar/);
   assert.doesNotMatch(dashboardSrc, /Project Matches/);
   assert.doesNotMatch(dashboardSrc, /title="Active Opportunities"/);
-  assert.match(dashboardSrc, /1-OF-1 WEEKLY POTENTIAL CO-FOUNDER/);
+  assert.match(dashboardSrc, /YOUR WEEKLY CO-FOUNDER MATCH/);
   assert.match(dashboardSrc, /WeeklyCofounderCard/);
   // The identity badge moved with the portrait, still identity-aware.
   assert.match('' + fs.readFileSync(path.join(root, 'mobile', 'src', 'components', 'WeeklyPortrait.tsx'), 'utf8'), /MemberBadges userId=\{uid\}/);
@@ -307,14 +307,14 @@ test('Server weekly co-founder flow locks symmetric 1:1 pair, emails both people
   assert.match(emailToTariro.html, /Tariro Moyo/);
   assert.match(emailToTariro.html, /Kuda Chipo/);
   assert.match(emailToTariro.html, /YOUR PROFILE/);
-  assert.match(emailToTariro.html, /YOUR 1-OF-1 POTENTIAL CO-FOUNDER/);
+  assert.match(emailToTariro.html, /YOUR CO-FOUNDER MATCH/);
   assert.match(emailToTariro.html, /jealous/i);
 
   assert.match(emailToKuda.subject, /Kuda × Tariro/);
   assert.match(emailToKuda.html, /Kuda Chipo/);
   assert.match(emailToKuda.html, /Tariro Moyo/);
   assert.match(emailToKuda.html, /YOUR PROFILE/);
-  assert.match(emailToKuda.html, /YOUR 1-OF-1 POTENTIAL CO-FOUNDER/);
+  assert.match(emailToKuda.html, /YOUR CO-FOUNDER MATCH/);
   assert.match(emailToKuda.html, /jealous/i);
 
   // 4. Tariro taps Interested -> pending until Kuda also taps Interested
