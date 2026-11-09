@@ -1,8 +1,10 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Crown, PenLine } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, textColor } from '../theme/theme';
+import { doc, setDoc } from '../lib/firestoreCompat';
+import { db } from '../lib/firebase';
 import {
   assessMyProfileWithLinky,
   LinkyApiError,
@@ -24,9 +26,15 @@ import {
  *  2. RECOMMEND. A profile that already reads well is told so, with the
  *     receipts — Linky does not fix what is not broken. A weak one hears its
  *     gaps named, one by one.
- *  3. PERMISSION. Nothing is drafted until the member says "write it for me".
+ *  3. ASK. Before drafting, Linky asks everything onboarding asked — role,
+ *     the build, the one-liner, the empty seat, skills, industries, stage,
+ *     funding, goals, city, experience, commitment, work style — each with
+ *     its reason, because a complete brief gets a sharper profile and
+ *     sharper matches. Answers save to the real profile. Skipping is
+ *     allowed; writing from a half-empty brief without asking is not.
+ *  4. PERMISSION. Nothing is drafted until the member says "write it for me".
  *     "Rewrite it anyway" is the only way past a good-profile verdict.
- *  4. APPROVE. Nothing is saved until the member taps save, and what is saved is exactly
+ *  5. APPROVE. Nothing is saved until the member taps save, and what is saved is exactly
  *     the words on screen (the draft goes back to the server, so there is no
  *     second, unseen generation).
  *
@@ -35,29 +43,38 @@ import {
  * field, rather than inventing a company or a city.
  */
 
-type Phase = 'idle' | 'checking' | 'verdict' | 'writing' | 'draft';
+type Phase = 'idle' | 'checking' | 'verdict' | 'questions' | 'writing' | 'draft';
 
 type Props = {
   isPlus: boolean;
   onUpgrade: () => void;
   onSaved: (draft: LinkyProfileDraft) => void;
+  /** The member's uid — Linky's questions save their answers to this profile. */
+  uid: string;
+  /** Fired after onboarding answers are saved, so the screen can refresh. */
+  onAnswersSaved?: () => void;
   /** What Linky already knows, for the pitch. */
   building?: string;
   seat?: string;
 };
 
-export default function LinkyWritesProfile({ isPlus, onUpgrade, onSaved, building = '', seat = '' }: Props) {
+export default function LinkyWritesProfile({ isPlus, onUpgrade, onSaved, uid, onAnswersSaved, building = '', seat = '' }: Props) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [phase, setPhase] = useState<Phase>('idle');
   const [assessment, setAssessment] = useState<LinkyProfileAssessment | null>(null);
   const [draft, setDraft] = useState<LinkyProfileDraft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [skipped, setSkipped] = useState(false);
+  const [savingAnswers, setSavingAnswers] = useState(false);
 
   const reset = useCallback(() => {
     setPhase('idle');
     setAssessment(null);
     setDraft(null);
+    setAnswers({});
+    setSkipped(false);
   }, []);
 
   const fail = useCallback((error: unknown) => {
@@ -120,6 +137,45 @@ export default function LinkyWritesProfile({ isPlus, onUpgrade, onSaved, buildin
       fail(error);
     }
   }, [isPlus, onUpgrade, fail, assessment]);
+
+  // Step 3: the answers are the member's own profile data — save them to the
+  // real profile (they sharpen matching too), then let Linky re-read.
+  const saveAnswers = useCallback(async () => {
+    if (!assessment) return;
+    const patch: Record<string, unknown> = {};
+    for (const q of assessment.questions) {
+      const raw = String(answers[q.id] || '').trim();
+      if (!raw) continue;
+      if (q.kind === 'list') {
+        const items = raw.split(',').map((s) => s.trim()).filter(Boolean);
+        if (items.length) for (const key of q.keys) patch[key] = items;
+      } else {
+        patch[q.keys[0]] = raw;
+      }
+    }
+    if (!Object.keys(patch).length) {
+      Alert.alert('Nothing to save yet', 'Answer at least one question — or skip and let Linky write from what it already has.');
+      return;
+    }
+    if (!uid) {
+      Alert.alert('Sign in again', 'Your session dropped — sign back in and Linky picks this up.');
+      return;
+    }
+    setSavingAnswers(true);
+    try {
+      await setDoc(doc(db, 'users', uid), patch, { merge: true });
+      onAnswersSaved?.();
+      setAnswers({});
+      setSkipped(false);
+      const result = await assessMyProfileWithLinky();
+      if (result?.assessment) setAssessment(result.assessment);
+      setPhase('verdict');
+    } catch (error) {
+      Alert.alert('Could not save your answers', error instanceof Error ? error.message : 'Try once more in a moment.');
+    } finally {
+      setSavingAnswers(false);
+    }
+  }, [assessment, answers, uid, onAnswersSaved]);
 
   const save = useCallback(async () => {
     if (!draft) return;
@@ -200,6 +256,9 @@ export default function LinkyWritesProfile({ isPlus, onUpgrade, onSaved, buildin
                 : 'Linky can write this from what it knows'}
           </Text>
           <Text style={[styles.body, { color: textColor(isDark, 'secondary') }]}>{assessment.recommendation}</Text>
+          <Text style={[styles.body, { color: textColor(isDark, 'secondary') }]}>
+            {`Your brief is ${assessment.completeness.percent}% complete — ${assessment.completeness.answered} of ${assessment.completeness.total} onboarding answers in. Complete briefs get sharper profiles, and the same answers sharpen who Linky matches you with.`}
+          </Text>
 
           {assessment.strengths.length ? (
             <View style={styles.listBlock}>
@@ -233,6 +292,29 @@ export default function LinkyWritesProfile({ isPlus, onUpgrade, onSaved, buildin
               <TouchableOpacity onPress={() => void generate(true)} activeOpacity={0.8} style={styles.ghostBtn}>
                 <Text style={[styles.ghostText, { color: textColor(isDark, 'secondary') }]}>Rewrite it anyway</Text>
               </TouchableOpacity>
+              {assessment.questions.length ? (
+                <TouchableOpacity onPress={() => setPhase('questions')} activeOpacity={0.8} style={styles.ghostBtn}>
+                  <Text style={[styles.ghostText, { color: textColor(isDark, 'secondary') }]}>Answer a few more questions first</Text>
+                </TouchableOpacity>
+              ) : null}
+            </>
+          ) : assessment.questions.length && !skipped ? (
+            <>
+              <Text style={[styles.body, { color: textColor(isDark, 'secondary') }]}>
+                Before Linky writes, it asks — everything onboarding asked, because it can only write what it knows. Two minutes here is the difference between a generic profile and one that sounds like you.
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                testID="linky-writes-profile-questions"
+                activeOpacity={0.88}
+                onPress={() => setPhase('questions')}
+                style={[styles.cta, { backgroundColor: COLORS.primary }]}
+              >
+                <Text style={styles.ctaText}>{`Answer ${assessment.questions.length} quick questions`}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setSkipped(true)} activeOpacity={0.8} style={styles.ghostBtn}>
+                <Text style={[styles.ghostText, { color: textColor(isDark, 'secondary') }]}>Skip — write from what Linky knows</Text>
+              </TouchableOpacity>
             </>
           ) : (
             <>
@@ -253,6 +335,50 @@ export default function LinkyWritesProfile({ isPlus, onUpgrade, onSaved, buildin
               </TouchableOpacity>
             </>
           )}
+        </>
+      ) : null}
+
+      {phase === 'questions' && assessment ? (
+        <>
+          <Text style={[styles.title, { color: textColor(isDark) }]}>Linky needs the full picture</Text>
+          <Text style={[styles.body, { color: textColor(isDark, 'secondary') }]}>
+            Onboarding asked these for a reason: Linky writes only from what it knows, and it will not invent the rest. Every answer lands on your real profile — complete it here and your profile gets sharper, your matches get sharper, and Linky's draft stops guessing.
+          </Text>
+          <Text style={[styles.draftLabel, { color: textColor(isDark, 'muted') }]}>
+            {`${assessment.completeness.answered} OF ${assessment.completeness.total} ANSWERED — ${assessment.questions.length} TO GO`}
+          </Text>
+          {assessment.questions.map((q) => (
+            <View key={q.id} style={styles.qBlock}>
+              <Text style={[styles.qPrompt, { color: textColor(isDark) }]}>{q.prompt}</Text>
+              <Text style={[styles.qWhy, { color: textColor(isDark, 'muted') }]}>{q.why}</Text>
+              <TextInput
+                accessibilityLabel={q.prompt}
+                value={answers[q.id] || ''}
+                onChangeText={(t: string) => setAnswers((prev) => ({ ...prev, [q.id]: t }))}
+                placeholder={q.kind === 'list' ? 'One, two, three…' : 'Your answer'}
+                placeholderTextColor={textColor(isDark, 'muted')}
+                style={[styles.qInput, { color: textColor(isDark), borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}
+              />
+            </View>
+          ))}
+          <TouchableOpacity
+            accessibilityRole="button"
+            testID="linky-writes-profile-save-answers"
+            activeOpacity={0.88}
+            onPress={() => void saveAnswers()}
+            disabled={savingAnswers}
+            style={[styles.cta, { backgroundColor: COLORS.primary }]}
+          >
+            {savingAnswers ? <ActivityIndicator size="small" color="#000" /> : null}
+            <Text style={styles.ctaText}>{savingAnswers ? 'Saving…' : 'Save my answers'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => { setSkipped(true); setPhase('verdict'); }}
+            activeOpacity={0.8}
+            style={styles.ghostBtn}
+          >
+            <Text style={[styles.ghostText, { color: textColor(isDark, 'secondary') }]}>Skip for now</Text>
+          </TouchableOpacity>
         </>
       ) : null}
 
@@ -311,6 +437,10 @@ const styles = StyleSheet.create({
   waiting: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 6 },
   listBlock: { gap: 4 },
   listLine: { fontSize: 12, fontWeight: '600', lineHeight: 17 },
+  qBlock: { gap: 3, marginTop: 4 },
+  qPrompt: { fontSize: 13, fontWeight: '800', lineHeight: 18 },
+  qWhy: { fontSize: 11, fontWeight: '600', lineHeight: 15 },
+  qInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9, fontSize: 13, fontWeight: '600', marginTop: 2 },
   cta: { marginTop: 4, height: 44, borderRadius: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   ctaText: { fontSize: 12.5, fontWeight: '900', color: '#0A0B0D', letterSpacing: 0.2 },
   draftBox: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },

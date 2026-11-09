@@ -88,12 +88,22 @@ export type LinkyProfileDraft = {
   lookingFor: string[];
 };
 
+export type LinkyProfileQuestion = {
+  id: string;
+  keys: string[];
+  kind: 'text' | 'list';
+  prompt: string;
+  why: string;
+};
+
 export type LinkyProfileAssessment = {
   verdict: 'strong' | 'patchy' | 'thin';
   score: number;
   strengths: string[];
   gaps: string[];
   recommendation: string;
+  completeness: { answered: number; total: number; percent: number };
+  questions: LinkyProfileQuestion[];
 };
 
 export type LinkyProfileWriteResult = {

@@ -14,6 +14,8 @@ import { BUDGET_DEFAULTS } from '../shared/linky-budget.js';
 import {
   assessProfileQuality,
   buildProfileWriterPrompt,
+  missingProfileQuestions,
+  profileCompleteness,
   profileWriterFacts,
   sanitizeProfileDraft,
   writeMyProfile,
@@ -364,6 +366,57 @@ test('a profile that already reads well is told so — never rewritten over', as
   assert.equal(allowed.ok, true);
   assert.ok(allowed.draft, 'an explicit insistence still gets a draft');
   assert.equal(calls, 1);
+});
+
+test('before writing, Linky asks everything onboarding asked — and says why', () => {
+  // An empty profile is asked the whole onboarding brief, each question
+  // carrying the reason answering pays.
+  const empty = missingProfileQuestions({});
+  const completeness = profileCompleteness({});
+  assert.equal(completeness.answered, 0);
+  assert.equal(completeness.percent, 0);
+  assert.equal(empty.length, completeness.total);
+  assert.ok(completeness.total >= 16, 'the question set covers the onboarding brief');
+  for (const id of ['role', 'building', 'oneLiner', 'seat', 'lookingFor', 'skills', 'industries', 'stage', 'funding', 'goals', 'city', 'country', 'experience', 'commitment', 'workStyle', 'bio']) {
+    assert.ok(empty.some((q) => q.id === id), `onboarding question ${id} is never asked`);
+  }
+  for (const q of empty) {
+    assert.ok(q.prompt.length > 5 && q.why.length > 10, `${q.id} asks without a question or a reason`);
+    assert.ok(q.keys.length >= 1, `${q.id} has nowhere to save the answer`);
+  }
+
+  // Two skills is not an answered skills question: onboarding demands three,
+  // because the matcher needs evidence.
+  const partial = missingProfileQuestions(MEMBER);
+  assert.ok(partial.some((q) => q.id === 'skills'), 'a two-skill member is not re-asked for skills');
+  assert.ok(!partial.some((q) => q.id === 'role'), 'an answered question is asked again');
+  assert.ok(!partial.some((q) => q.id === 'building'), 'an answered question is asked again');
+
+  // The assessment itself carries the questions, so every surface that can
+  // show a verdict can also ask.
+  const assessed = assessProfileQuality(MEMBER);
+  assert.equal(assessed.questions.length, partial.length);
+  assert.equal(assessed.completeness.total, completeness.total);
+});
+
+test('the app asks the questions before it asks permission to write', () => {
+  const component = read('mobile/src/components/LinkyWritesProfile.tsx');
+  // Everything onboarding asked, in one place, with the payoff stated.
+  assert.match(component, /Linky needs the full picture/);
+  assert.match(component, /quick questions/);
+  assert.match(component, /Save my answers/);
+  assert.match(component, /Skip for now/);
+  assert.match(component, /your matches get sharper/);
+  // The verdict carries the completeness score, so "complete for good
+  // results" is a number, not a slogan.
+  assert.match(component, /onboarding answers in/);
+  // Answers land on the member's real profile — they are profile data, not
+  // chat ephemera — and only then is permission to write requested.
+  assert.match(component, /setDoc\(doc\(db, 'users', uid\), patch, \{ merge: true \}\)/);
+  // In the verdict, the questions are offered before permission to write:
+  // the "answer first" branch renders ahead of the "may Linky write" branch.
+  assert.ok(component.indexOf('quick questions') < component.indexOf('May Linky write it for you?'),
+    'permission to write is offered before the questions are answered');
 });
 
 test('the writer endpoint is wired: assess action, real db handle, rewrite flag', () => {

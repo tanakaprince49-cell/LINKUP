@@ -20,6 +20,10 @@
 //      A strong profile is told it is strong and left alone; a weak one hears
 //      its gaps named, then Linky asks permission before drafting anything.
 //      "Rewrite it anyway" is the only override, and it is the member's call.
+//   6. Ask everything. Before drafting, Linky asks every onboarding question
+//      the member never answered (missingProfileQuestions) — each with its
+//      reason, because a complete brief earns a sharper profile and sharper
+//      matches. Skipping is allowed; guessing instead of asking is not.
 import { aiText } from './_gemini.js';
 
 /** Words the model must not smuggle in. A paywall promise is not a fact. */
@@ -50,6 +54,11 @@ export function profileWriterFacts(profile = {}) {
     lookingFor: list(p.lookingFor, 4),
     goals: clean(p.goals, 400),
     bio: clean(p.bio, 700),
+    industries: list(p.industries || p.interests, 8),
+    experience: clean(p.experience, 60),
+    fundingStage: clean(p.fundingStage, 40),
+    commitmentLevel: clean(p.commitmentLevel, 60),
+    workStyle: clean(p.workStyle, 60),
   };
 }
 
@@ -119,7 +128,53 @@ export function assessProfileQuality(profile = {}) {
       ? 'The bones are here. The wording is not doing them justice yet — Linky can tighten it without changing a single fact.'
       : 'There is not enough here for a stranger to trust yet. Linky can write it from what LINKUP already knows — and will not invent the rest.';
 
-  return { verdict, score, strengths, gaps, recommendation };
+  const completeness = profileCompleteness(profile);
+  return { verdict, score, strengths, gaps, recommendation, completeness, questions: missingProfileQuestions(profile) };
+}
+
+/**
+ * ASK EVERYTHING. Before Linky writes, it asks for everything onboarding
+ * asked — not just a bio. Every question below is a field onboarding
+ * collects and the writer/matcher reads; every one carries its reason, so
+ * the member hears why answering pays: a complete brief gets a sharper
+ * profile AND sharper matches. Linky asks, encourages, and lets the member
+ * skip — but it never writes from a half-empty brief without asking first.
+ */
+const QUESTION_DEFS = [
+  { id: 'role', keys: ['occupation'], kind: 'text', prompt: 'What do you do?', why: 'Your role is the first filter every co-founder applies.', done: (p, f) => !!f.role },
+  { id: 'building', keys: ['buildingName'], kind: 'text', prompt: 'What are you building?', why: 'People match with a build, not a vibe — Linky cannot write about a project it cannot name.', done: (p, f) => !!f.building },
+  { id: 'oneLiner', keys: ['buildingOneLiner'], kind: 'text', prompt: 'Describe it in one line — what does it do, and for whom?', why: 'Your one-liner becomes the spine of your bio.', done: (p, f) => !!f.oneLiner },
+  { id: 'seat', keys: ['missingSeat'], kind: 'text', prompt: 'Which seat is empty on your team?', why: 'Naming the empty seat is how the right person recognises themselves.', done: (p, f) => !!f.seat },
+  { id: 'lookingFor', keys: ['lookingFor'], kind: 'list', prompt: 'Who are you looking for? (roles, separated by commas)', why: 'These roles tell LINKUP who to put in front of you.', done: (p, f) => f.lookingFor.length > 0 },
+  { id: 'skills', keys: ['skills'], kind: 'list', prompt: 'What can you do? List at least three skills (separated by commas).', why: 'Skills are the proof the matcher matches on — no skills, no evidence, weak matches.', done: (p, f) => f.skills.length >= 3 },
+  { id: 'industries', keys: ['industries'], kind: 'list', prompt: 'Which industries are you in? (separated by commas)', why: 'Industry overlap is one of the strongest signals for a good pairing.', done: (p, f) => f.industries.length > 0 },
+  { id: 'stage', keys: ['startupStage'], kind: 'text', prompt: 'Where is your startup today — idea, MVP, live, revenue?', why: 'Stage tells people how far along they would be joining.', done: (p, f) => !!f.stage },
+  { id: 'funding', keys: ['fundingStage'], kind: 'text', prompt: 'What is your funding stage — bootstrapped, pre-seed, seed?', why: 'Funding stage sets expectations before anyone says hello.', done: (p, f) => !!f.fundingStage },
+  { id: 'goals', keys: ['goals'], kind: 'text', prompt: 'What is your main goal right now?', why: 'A stated goal keeps your profile pointed at one outcome.', done: (p, f) => !!f.goals },
+  { id: 'city', keys: ['city'], kind: 'text', prompt: 'Which city are you based in?', why: 'Builders nearby find you — and can actually meet you — first.', done: (p, f) => !!f.city },
+  { id: 'country', keys: ['country'], kind: 'text', prompt: 'Which country?', why: 'Country completes your place on the map people search.', done: (p, f) => !!f.country },
+  { id: 'experience', keys: ['experience'], kind: 'text', prompt: 'How would you describe your experience level?', why: 'Experience level stops mismatched seniority before it starts.', done: (p, f) => !!f.experience },
+  { id: 'commitment', keys: ['commitmentLevel'], kind: 'text', prompt: 'How committed are you — full-time, part-time, weekends?', why: 'Commitment mismatch kills more co-founder pairs than skill gaps do.', done: (p, f) => !!f.commitmentLevel },
+  { id: 'workStyle', keys: ['workStyle'], kind: 'text', prompt: 'How do you like to work — solo, in pairs, in a team?', why: 'Work style is half of whether a pairing survives month two.', done: (p, f) => !!f.workStyle },
+  { id: 'bio', keys: ['bio'], kind: 'text', prompt: 'Already have a bio? Paste it here.', why: 'Your own words in your own voice beat a cold start — Linky will tighten them, not replace them.', done: (p, f) => !!f.bio },
+];
+
+export const PROFILE_WRITER_QUESTION_COUNT = QUESTION_DEFS.length;
+
+/** The onboarding questions this member has not answered yet. */
+export function missingProfileQuestions(profile = {}) {
+  const p = profile && typeof profile === 'object' ? profile : {};
+  const facts = profileWriterFacts(p);
+  return QUESTION_DEFS
+    .filter((q) => { try { return !q.done(p, facts); } catch { return true; } })
+    .map(({ id, keys, kind, prompt, why }) => ({ id, keys, kind, prompt, why }));
+}
+
+/** How much of the onboarding brief is actually filled in. */
+export function profileCompleteness(profile = {}) {
+  const total = QUESTION_DEFS.length;
+  const answered = total - missingProfileQuestions(profile).length;
+  return { answered, total, percent: total ? Math.round((answered / total) * 100) : 0 };
 }
 
 /**

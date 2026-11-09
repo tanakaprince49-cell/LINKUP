@@ -2479,6 +2479,10 @@ export default function ProfileScreen({ navigation, route }: any) {
               <LinkyWritesProfile
                 isPlus={hasLinkupPro(myProfile)}
                 onUpgrade={() => openPaywall('Linky writes your profile')}
+                uid={String((myProfile as any)?.uid || user?.uid || '')}
+                onAnswersSaved={() => {
+                  void refreshProfile?.();
+                }}
                 building={String((myProfile as any)?.buildingName || (myProfile as any)?.company || '')}
                 seat={String((myProfile as any)?.missingSeat || '')}
                 onSaved={() => {
@@ -3221,6 +3225,10 @@ export default function ProfileScreen({ navigation, route }: any) {
           <LinkyWritesProfile
             isPlus={hasLinkupPro(myProfile)}
             onUpgrade={() => openPaywall('Linky writes your profile')}
+            uid={String((myProfile as any)?.uid || user?.uid || '')}
+            onAnswersSaved={() => {
+              void refreshProfile?.();
+            }}
             building={String((myProfile as any)?.buildingName || (myProfile as any)?.company || '')}
             seat={String((myProfile as any)?.missingSeat || '')}
             onSaved={() => {
