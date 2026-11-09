@@ -1,10 +1,10 @@
 // Server-only, transactional allowance shared by app, Telegram and WhatsApp.
 // Kept outside team-match results so retries or client-side resets cannot refill credits.
 //
-// The free allowance is DAILY-ONLY: LINKY_FREE_DAILY messages (default 5)
-// per UTC day, resetting at midnight UTC. There is no monthly bucket: the
-// header shows "5 free messages today" and the composer locks when the five
-// are used up. PLUS is unlimited.
+// The free allowance is DAILY-ONLY: LINKY_FREE_DAILY messages (default in
+// shared/linky-budget.js) per UTC day, resetting at midnight UTC. There is
+// no monthly bucket: the header shows today's remaining free messages and
+// the composer locks when they are used up. PLUS is unlimited.
 import { budgetConfig, BUDGET_DEFAULTS } from '../shared/linky-budget.js';
 
 export const MESSAGE_LIMITS = Object.freeze({ freePerDay: BUDGET_DEFAULTS.freePerDay, plusPerDay: BUDGET_DEFAULTS.plusPerDay });

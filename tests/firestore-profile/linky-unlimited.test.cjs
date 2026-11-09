@@ -50,7 +50,9 @@ test('real Firestore transactions keep PLUS unlimited while the free shared guar
     );
     const free = await usage.readMessageQuota(db, 'free', { plus: false, now });
     assert.equal(free.used, 0);
-    assert.equal(free.remaining, 5);
+    // The full free allowance survives a capacity rejection — whatever the
+    // configured daily limit is (shared/linky-budget.js owns the number).
+    assert.equal(free.remaining, usage.MESSAGE_LIMITS.freePerDay);
   } finally {
     process.env = previous;
   }
