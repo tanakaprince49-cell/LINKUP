@@ -18,7 +18,7 @@ import {
   setCardStatus, setFacts, setPrefs, unlinkBot, loopKeyboard, lastAiFault, profileFacts, telegramWebhookSecret, pushNotify, reportClientError, teamMatch,
   linkyChat, isPlusUser } from './_linky.js';
 import { badgeLine } from './_proof.js';
-import { writeMyProfile } from './_profileWriter.js';
+import { writeMyProfile, assessProfileQuality, profileWriterFacts } from './_profileWriter.js';
 
 
 // ---------------------------------------------------------------- cron auth
@@ -910,6 +910,22 @@ async function handleApp(req, res) {
       // PLUS-only: Linky rewrites the member's whole profile from what LINKUP
       // already knows. Free members get 402 plus the paywall, never a draft.
       case 'teamMatch': out = await teamMatch(uid, { mode: body.mode, idea: body.idea, ownRole: body.ownRole, roles: body.roles, memberUids: body.memberUids, teamSize: body.teamSize }); break;
+      // Linky reads the profile before it offers to write it. A PLUS member
+      // whose profile already reads well is told so, with the receipts; a weak
+      // one hears exactly what is missing before being asked for permission.
+      // Deterministic — no model call is spent on the verdict.
+      case 'assessProfile': {
+        // LINKY PLUS ONLY. The gate lives here, on the server, not in the button.
+        const me = await loadUser(uid);
+        if (!me) { sendError(res, 400, 'Finish your LINKUP profile first.'); return; }
+        if (!(await isPlusUser(uid, me))) {
+          sendError(res, 402, 'Linky writes your profile on LINKUP PLUS. Upgrade and Linky writes it for you.');
+          return;
+        }
+        const facts = profileWriterFacts(me);
+        out = { ok: true, assessment: assessProfileQuality(me), building: facts.building, seat: facts.seat };
+        break;
+      }
       case 'writeProfile': {
         // LINKY PLUS ONLY. The gate lives here, on the server, not in the button.
         const me = await loadUser(uid);
@@ -918,7 +934,7 @@ async function handleApp(req, res) {
           sendError(res, 402, 'Linky writes your profile on LINKUP PLUS. Upgrade and Linky writes it for you.');
           return;
         }
-        out = await writeMyProfile({ uid, profile: me, save: body.save === true || body.save === 'true', approved: body.draft || null, db: db() });
+        out = await writeMyProfile({ uid, profile: me, save: body.save === true || body.save === 'true', approved: body.draft || null, allowRewrite: body.allowRewrite === true || body.allowRewrite === 'true', db: getDb() });
         if (!out.ok && out.reason === 'nothing_to_write_from') { sendError(res, 400, 'Tell LINKUP what you are building first — Linky will not invent it.'); return; }
         if (!out.ok) { sendError(res, 503, 'Linky could not write that just now. Try again in a minute.'); return; }
         break;

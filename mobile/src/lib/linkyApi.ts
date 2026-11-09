@@ -75,7 +75,7 @@ export type LinkyChatResult = {
   upgradeRequired?: boolean;
 };
 
-export type LinkyAction = 'teamMatch' | 'chat' | 'writeProfile' | 'pushNotify' | 'clientError' | 'webPushKey' | 'webPushSubscribe' | 'builder';
+export type LinkyAction = 'teamMatch' | 'chat' | 'writeProfile' | 'assessProfile' | 'pushNotify' | 'clientError' | 'webPushKey' | 'webPushSubscribe' | 'builder';
 
 const endpoint = () => Platform.OS === 'web'
   ? webAppPath('/api/linky')
@@ -88,13 +88,40 @@ export type LinkyProfileDraft = {
   lookingFor: string[];
 };
 
+export type LinkyProfileAssessment = {
+  verdict: 'strong' | 'patchy' | 'thin';
+  score: number;
+  strengths: string[];
+  gaps: string[];
+  recommendation: string;
+};
+
 export type LinkyProfileWriteResult = {
   ok: boolean;
   reason: string;
   saved?: boolean;
   draft?: LinkyProfileDraft | null;
+  assessment?: LinkyProfileAssessment | null;
   source?: string;
 };
+
+export type LinkyProfileAssessResult = {
+  ok: boolean;
+  assessment: LinkyProfileAssessment;
+  building?: string;
+  seat?: string;
+};
+
+/**
+ * LINKUP PLUS: Linky reads the member's profile before writing a word of it.
+ *
+ * Cheap and deterministic on the server — no model call — so the member hears
+ * the honest verdict first: a strong profile is told it is strong, a weak one
+ * hears its gaps named. Only after that does anyone ask permission to write.
+ * A 402 here means they are not PLUS, and the caller should open the paywall.
+ */
+export const assessMyProfileWithLinky = () =>
+  linkyCall<LinkyProfileAssessResult>('assessProfile', {});
 
 /**
  * LINKUP PLUS: Linky writes the member's profile.
@@ -103,11 +130,15 @@ export type LinkyProfileWriteResult = {
  * draft the member actually approved — so what gets saved is the words they read
  * on screen, not a second generation they never saw. A 402 here means they are
  * not PLUS, and the caller should open the paywall instead of a generic error.
+ *
+ * `allowRewrite` is the member's explicit "rewrite it anyway" after Linky said
+ * the profile already reads well. Without it the server answers already_good.
  */
-export const writeMyProfileWithLinky = (options: { save?: boolean; draft?: LinkyProfileDraft | null } = {}) =>
+export const writeMyProfileWithLinky = (options: { save?: boolean; draft?: LinkyProfileDraft | null; allowRewrite?: boolean } = {}) =>
   linkyCall<LinkyProfileWriteResult>('writeProfile', {
     save: options.save === true,
     ...(options.draft ? { draft: options.draft } : {}),
+    ...(options.allowRewrite ? { allowRewrite: true } : {}),
   });
 
 export async function linkyCall<T = any>(action: LinkyAction, payload: Record<string, unknown> = {}): Promise<T> {

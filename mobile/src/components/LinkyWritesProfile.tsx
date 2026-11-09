@@ -3,29 +3,44 @@ import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } fr
 import { Crown, PenLine } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { COLORS, textColor } from '../theme/theme';
-import { LinkyApiError, writeMyProfileWithLinky, type LinkyProfileDraft } from '../lib/linkyApi';
+import {
+  assessMyProfileWithLinky,
+  LinkyApiError,
+  writeMyProfileWithLinky,
+  type LinkyProfileAssessment,
+  type LinkyProfileDraft,
+} from '../lib/linkyApi';
 
 /**
- * LET LINKY WRITE IT — a LINKUP PLUS feature, in the member's own edit screen.
+ * LET LINKY WRITE IT — a LINKUP PLUS feature, wherever the member meets Linky.
  *
  * The member already told LINKUP what they are building and which seat is empty.
  * What they cannot do is write about themselves well after a full day of
  * building, so Linky writes the bio, the headline, the skills line and the roles
  * they need — from their own facts only — and then waits.
  *
- * Rules:
- *  - nothing is saved until the member taps save, and what is saved is exactly
- *    the words on screen (the draft goes back to the server, so there is no
- *    second, unseen generation);
- *  - the server is the gate. A 402 opens the paywall, never a dead end;
- *  - if Linky has nothing to work from, it says so and asks for the one field,
- *    rather than inventing a company or a city.
+ * The conversation has an order, and the order is the feature:
+ *  1. READ. Linky grades the profile first (cheap, deterministic, server-side).
+ *  2. RECOMMEND. A profile that already reads well is told so, with the
+ *     receipts — Linky does not fix what is not broken. A weak one hears its
+ *     gaps named, one by one.
+ *  3. PERMISSION. Nothing is drafted until the member says "write it for me".
+ *     "Rewrite it anyway" is the only way past a good-profile verdict.
+ *  4. APPROVE. Nothing is saved until the member taps save, and what is saved is exactly
+ *     the words on screen (the draft goes back to the server, so there is no
+ *     second, unseen generation).
+ *
+ * The server is the gate at every step. A 402 opens the paywall, never a dead
+ * end; if Linky has nothing to work from, it says so and asks for the one
+ * field, rather than inventing a company or a city.
  */
+
+type Phase = 'idle' | 'checking' | 'verdict' | 'writing' | 'draft';
 
 type Props = {
   isPlus: boolean;
   onUpgrade: () => void;
-  onSaved: () => void;
+  onSaved: (draft: LinkyProfileDraft) => void;
   /** What Linky already knows, for the pitch. */
   building?: string;
   seat?: string;
@@ -34,32 +49,77 @@ type Props = {
 export default function LinkyWritesProfile({ isPlus, onUpgrade, onSaved, building = '', seat = '' }: Props) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const [busy, setBusy] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [assessment, setAssessment] = useState<LinkyProfileAssessment | null>(null);
   const [draft, setDraft] = useState<LinkyProfileDraft | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const generate = useCallback(async () => {
+  const reset = useCallback(() => {
+    setPhase('idle');
+    setAssessment(null);
+    setDraft(null);
+  }, []);
+
+  const fail = useCallback((error: unknown) => {
+    const status = error instanceof LinkyApiError ? error.status : 0;
+    if (status === 402) onUpgrade();
+    else if (status === 400) {
+      Alert.alert('One thing first', 'Tell LINKUP what you are building — Linky will not invent it.');
+    } else {
+      Alert.alert('Linky could not do that', error instanceof Error ? error.message : 'Try again in a minute.');
+    }
+  }, [onUpgrade]);
+
+  // Step 1+2: read and recommend. No writing has happened, and none will
+  // until the member gives permission on the next screen.
+  const check = useCallback(async () => {
     if (!isPlus) {
       onUpgrade();
       return;
     }
-    setBusy(true);
+    setPhase('checking');
     try {
-      const result = await writeMyProfileWithLinky({ save: false });
-      if (result?.draft) setDraft(result.draft);
-      else Alert.alert('Linky could not write it', 'Try again in a minute.');
-    } catch (error) {
-      const status = error instanceof LinkyApiError ? error.status : 0;
-      if (status === 402) onUpgrade();
-      else if (status === 400) {
-        Alert.alert('One thing first', 'Tell LINKUP what you are building — Linky will not invent it.');
+      const result = await assessMyProfileWithLinky();
+      if (result?.assessment) {
+        setAssessment(result.assessment);
+        setPhase('verdict');
       } else {
-        Alert.alert('Linky could not write it', error instanceof Error ? error.message : 'Try again in a minute.');
+        setPhase('idle');
+        Alert.alert('Linky could not read it', 'Try again in a minute.');
       }
-    } finally {
-      setBusy(false);
+    } catch (error) {
+      setPhase('idle');
+      fail(error);
     }
-  }, [isPlus, onUpgrade]);
+  }, [isPlus, onUpgrade, fail]);
+
+  // Step 3+4: permission has been given — draft, then let the member read.
+  const generate = useCallback(async (allowRewrite: boolean) => {
+    if (!isPlus) {
+      onUpgrade();
+      return;
+    }
+    setPhase('writing');
+    try {
+      const result = allowRewrite
+        ? await writeMyProfileWithLinky({ save: false, allowRewrite: true })
+        : await writeMyProfileWithLinky({ save: false });
+      if (result?.draft) {
+        setDraft(result.draft);
+        setPhase('draft');
+      } else if (result?.reason === 'already_good') {
+        // The server's verdict, not a failure: show it and stop.
+        if (result.assessment) setAssessment(result.assessment);
+        setPhase('verdict');
+      } else {
+        setPhase(assessment ? 'verdict' : 'idle');
+        Alert.alert('Linky could not write it', 'Try again in a minute.');
+      }
+    } catch (error) {
+      setPhase(assessment ? 'verdict' : 'idle');
+      fail(error);
+    }
+  }, [isPlus, onUpgrade, fail, assessment]);
 
   const save = useCallback(async () => {
     if (!draft) return;
@@ -67,8 +127,9 @@ export default function LinkyWritesProfile({ isPlus, onUpgrade, onSaved, buildin
     try {
       const result = await writeMyProfileWithLinky({ save: true, draft });
       if (result?.saved) {
-        setDraft(null);
-        onSaved();
+        const savedDraft = draft;
+        reset();
+        onSaved(savedDraft);
         Alert.alert('Saved', 'Your profile now reads the way Linky wrote it. Edit anything you like — it is yours.');
       } else {
         Alert.alert('Could not save', 'Try once more in a moment.');
@@ -78,10 +139,11 @@ export default function LinkyWritesProfile({ isPlus, onUpgrade, onSaved, buildin
     } finally {
       setSaving(false);
     }
-  }, [draft, onSaved]);
+  }, [draft, onSaved, reset]);
 
   const cardBg = isDark ? '#12151E' : '#FFFDF0';
   const border = isDark ? 'rgba(251,230,24,0.35)' : '#E7E1BF';
+  const strong = assessment?.verdict === 'strong';
 
   return (
     <View testID="linky-writes-profile" style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}>
@@ -92,31 +154,109 @@ export default function LinkyWritesProfile({ isPlus, onUpgrade, onSaved, buildin
         </Text>
       </View>
 
-      {!draft ? (
+      {phase === 'idle' ? (
         <>
           <Text style={[styles.title, { color: textColor(isDark) }]}>
             {isPlus ? 'Let Linky write it for you' : 'You write it at midnight. Linky could write it now.'}
           </Text>
           <Text style={[styles.body, { color: textColor(isDark, 'secondary') }]}>
             {building
-              ? `Linky already knows you are building ${building}${seat ? ` and that the seat you need filled is a ${seat.toLowerCase()}` : ''}. It will write your bio, your headline and the signals the matcher actually reads — and you approve every word before it is saved.`
-              : 'Linky already has what you told LINKUP about your project and the seat you need filled. It will write your bio, your headline and the signals the matcher reads — and you approve every word before it is saved.'}
+              ? `Linky already knows you are building ${building}${seat ? ` and that the seat you need filled is a ${seat.toLowerCase()}` : ''}. First it reads your profile and says honestly whether it even needs fixing. If it does, it asks your permission, writes from your own facts — and you approve every word before it is saved.`
+              : 'Linky already has what you told LINKUP about your project and the seat you need filled. First it reads your profile and says honestly whether it even needs fixing. If it does, it asks your permission — and you approve every word before anything is saved.'}
           </Text>
           <TouchableOpacity
             accessibilityRole="button"
             testID="linky-writes-profile-cta"
             activeOpacity={0.88}
-            onPress={() => void generate()}
-            disabled={busy}
+            onPress={() => void check()}
             style={[styles.cta, { backgroundColor: COLORS.primary }]}
           >
-            {busy ? <ActivityIndicator size="small" color="#000" /> : null}
-            <Text style={styles.ctaText}>
-              {busy ? 'Linky is writing…' : isPlus ? 'Write it with Linky' : 'Unlock with PLUS'}
-            </Text>
+            <Text style={styles.ctaText}>{isPlus ? 'Ask Linky to write it' : 'Unlock with PLUS'}</Text>
           </TouchableOpacity>
         </>
-      ) : (
+      ) : null}
+
+      {phase === 'checking' ? (
+        <View style={styles.waiting}>
+          <ActivityIndicator size="small" color={COLORS.primaryStrong} />
+          <Text style={[styles.body, { color: textColor(isDark, 'secondary') }]}>Linky is reading your profile…</Text>
+        </View>
+      ) : null}
+
+      {phase === 'writing' ? (
+        <View style={styles.waiting}>
+          <ActivityIndicator size="small" color={COLORS.primaryStrong} />
+          <Text style={[styles.body, { color: textColor(isDark, 'secondary') }]}>Linky is writing…</Text>
+        </View>
+      ) : null}
+
+      {phase === 'verdict' && assessment ? (
+        <>
+          <Text style={[styles.title, { color: textColor(isDark) }]}>
+            {strong
+              ? 'Your profile already reads well'
+              : assessment.verdict === 'patchy'
+                ? 'So close — Linky can tighten this'
+                : 'Linky can write this from what it knows'}
+          </Text>
+          <Text style={[styles.body, { color: textColor(isDark, 'secondary') }]}>{assessment.recommendation}</Text>
+
+          {assessment.strengths.length ? (
+            <View style={styles.listBlock}>
+              <Text style={[styles.draftLabel, { color: textColor(isDark, 'muted') }]}>WHAT IS WORKING</Text>
+              {assessment.strengths.map((line) => (
+                <Text key={line} style={[styles.listLine, { color: textColor(isDark, 'secondary') }]}>✓ {line}</Text>
+              ))}
+            </View>
+          ) : null}
+
+          {assessment.gaps.length ? (
+            <View style={styles.listBlock}>
+              <Text style={[styles.draftLabel, { color: textColor(isDark, 'muted') }]}>WHAT LINKY WOULD FIX</Text>
+              {assessment.gaps.map((line) => (
+                <Text key={line} style={[styles.listLine, { color: textColor(isDark, 'secondary') }]}>• {line}</Text>
+              ))}
+            </View>
+          ) : null}
+
+          {strong ? (
+            <>
+              <TouchableOpacity
+                accessibilityRole="button"
+                testID="linky-writes-profile-keep"
+                activeOpacity={0.88}
+                onPress={reset}
+                style={[styles.cta, { backgroundColor: COLORS.primary }]}
+              >
+                <Text style={styles.ctaText}>Keep my profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => void generate(true)} activeOpacity={0.8} style={styles.ghostBtn}>
+                <Text style={[styles.ghostText, { color: textColor(isDark, 'secondary') }]}>Rewrite it anyway</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.body, { color: textColor(isDark, 'secondary') }]}>
+                May Linky write it for you? It only uses what LINKUP already knows about you, and nothing is saved until you read and approve the draft.
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                testID="linky-writes-profile-permission"
+                activeOpacity={0.88}
+                onPress={() => void generate(false)}
+                style={[styles.cta, { backgroundColor: COLORS.primary }]}
+              >
+                <Text style={styles.ctaText}>Yes — write it for me</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={reset} activeOpacity={0.8} style={styles.ghostBtn}>
+                <Text style={[styles.ghostText, { color: textColor(isDark, 'secondary') }]}>Not now</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </>
+      ) : null}
+
+      {phase === 'draft' && draft ? (
         <>
           <Text style={[styles.title, { color: textColor(isDark) }]}>Read it before it goes live</Text>
           <View style={[styles.draftBox, { borderColor: isDark ? COLORS.darkBorder : COLORS.lightBorder }]}>
@@ -149,15 +289,15 @@ export default function LinkyWritesProfile({ isPlus, onUpgrade, onSaved, buildin
             <Text style={styles.ctaText}>{saving ? 'Saving…' : 'Save this to my profile'}</Text>
           </TouchableOpacity>
           <View style={styles.row}>
-            <TouchableOpacity onPress={() => void generate()} disabled={busy} activeOpacity={0.8} style={styles.ghostBtn}>
-              <Text style={[styles.ghostText, { color: textColor(isDark, 'secondary') }]}>{busy ? 'Writing…' : 'Write it again'}</Text>
+            <TouchableOpacity onPress={() => void generate(strong)} activeOpacity={0.8} style={styles.ghostBtn}>
+              <Text style={[styles.ghostText, { color: textColor(isDark, 'secondary') }]}>Write it again</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setDraft(null)} activeOpacity={0.8} style={styles.ghostBtn}>
+            <TouchableOpacity onPress={reset} activeOpacity={0.8} style={styles.ghostBtn}>
               <Text style={[styles.ghostText, { color: textColor(isDark, 'secondary') }]}>Discard</Text>
             </TouchableOpacity>
           </View>
         </>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -168,6 +308,9 @@ const styles = StyleSheet.create({
   label: { fontSize: 9, fontWeight: '900', letterSpacing: 0.9 },
   title: { fontSize: 17, fontWeight: '900', letterSpacing: -0.4, lineHeight: 22 },
   body: { fontSize: 12.5, fontWeight: '600', lineHeight: 18 },
+  waiting: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 6 },
+  listBlock: { gap: 4 },
+  listLine: { fontSize: 12, fontWeight: '600', lineHeight: 17 },
   cta: { marginTop: 4, height: 44, borderRadius: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   ctaText: { fontSize: 12.5, fontWeight: '900', color: '#0A0B0D', letterSpacing: 0.2 },
   draftBox: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },

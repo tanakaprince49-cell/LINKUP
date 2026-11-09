@@ -25,6 +25,8 @@ import {
   type TeamMatchTeam,
 } from '../lib/linkyApi';
 import PaywallModal from '../components/PaywallModal';
+import LinkyWritesProfile from '../components/LinkyWritesProfile';
+import { hasLinkupPro } from '../lib/paywall';
 import MemberBadges from '../components/MemberBadges';
 import LinkyCatIntro from '../components/LinkyCatIntro';
 import LinkyRichText from '../components/LinkyRichText';
@@ -74,7 +76,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const dark = theme === 'dark';
-  const { profile } = useAuth();
+  const { profile, updateLocalProfile } = useAuth();
   const uid = profile?.uid || '';
 
   const [introOpen, setIntroOpen] = useState(true);
@@ -361,6 +363,21 @@ export default function LinkyHomeScreen({ navigation }: any) {
   const hasSpoken = messages.some((message) => message.role === 'user');
   const openingLine = messages.find((message) => message.role === 'linky' && !message.failed)?.text || LINKY_VOICE.greeting(facts);
 
+  // LINKY WRITES YOUR PROFILE lives here, where members actually meet Linky —
+  // not just buried in the profile editor. PLUS-gated on the server; Linky
+  // reads the profile first, recommends honestly, and only writes with
+  // permission. Shown in the opening and again under the thread, because a
+  // member who has already spoken never sees the opening again.
+  const writerCard = (
+    <LinkyWritesProfile
+      isPlus={hasLinkupPro(profile)}
+      onUpgrade={() => setPaywall('Linky writes your profile on LINKUP PLUS. It reads what you are already building, says honestly whether your profile needs fixing, and only writes with your permission — nothing is saved until you approve the words.')}
+      onSaved={(savedDraft) => updateLocalProfile({ headline: savedDraft.headline, bio: savedDraft.bio, skills: savedDraft.skills, lookingFor: savedDraft.lookingFor })}
+      building={facts.projectName}
+      seat={facts.seat}
+    />
+  );
+
   /**
    * THE OPENING. A member who has not typed anything yet does not get an empty
    * grey box — they get the cat, their own name, their own build, the seat that
@@ -422,6 +439,8 @@ export default function LinkyHomeScreen({ navigation }: any) {
         <Text style={styles.primaryCtaText}>{facts.seat ? `Find my ${facts.seat}` : 'Find my teammates'}</Text>
       </TouchableOpacity>
       <Text style={[styles.openingClock, { color: palette.muted }]}>{LINKY_VOICE.clock}</Text>
+
+      {writerCard}
 
       {!!chips.length && (
         <View style={styles.suggestionList}>
@@ -494,6 +513,7 @@ export default function LinkyHomeScreen({ navigation }: any) {
               </View>
             </View>
           )}
+          {hasSpoken && writerCard}
           {hasSpoken && (
             <Text style={[styles.disclaimer, { color: palette.muted }]}>{LINKY_VOICE.disclaimer}</Text>
           )}

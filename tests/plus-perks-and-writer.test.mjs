@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import { PLUS_PERKS, PLUS_PERK_COUNT, plusPerkById, plusPerksNotShown, paywallCopy } from '../shared/plus-perks.js';
 import { BUDGET_DEFAULTS } from '../shared/linky-budget.js';
 import {
+  assessProfileQuality,
   buildProfileWriterPrompt,
   profileWriterFacts,
   sanitizeProfileDraft,
@@ -299,6 +300,116 @@ test('the writer is mounted in the profile editor and behind PLUS', () => {
   assert.match(screen, /<LinkyWritesProfile/);
   assert.match(screen, /isPlus=\{hasLinkupPro\(myProfile\)\}/);
   assert.match(screen, /onUpgrade=\{\(\) => openPaywall\('Linky writes your profile'\)\}/);
+});
+
+/* --------------------- read before you write --------------------- */
+
+const STRONG_MEMBER = {
+  ...MEMBER,
+  headline: 'Building LINKUP so founders find the person who fills the empty seat',
+  bio: 'I build payment rails for merchants across East Africa and I am now building LINKUP, where founders meet the person who fills the empty seat beside them. I am looking for a technical cofounder who has shipped real products.',
+  skills: ['TypeScript', 'Postgres', 'React Native', 'Payments'],
+  lookingFor: ['Technical cofounder', 'Designer'],
+};
+
+test('Linky grades the profile before it offers to write anything', () => {
+  const strong = assessProfileQuality(STRONG_MEMBER);
+  assert.equal(strong.verdict, 'strong');
+  assert.ok(strong.score >= 78, `a complete profile scored ${strong.score}`);
+  assert.equal(strong.gaps.length, 0, 'a complete profile has no gaps to fix');
+  assert.ok(strong.strengths.length >= 5, 'the verdict shows its receipts');
+  assert.match(strong.recommendation, /recommends keeping this profile/);
+
+  // Facts but no voice yet: the bones are here, the wording is not.
+  const patchy = assessProfileQuality(MEMBER);
+  assert.equal(patchy.verdict, 'patchy');
+  assert.ok(patchy.gaps.some((gap) => /headline/i.test(gap)), 'the missing headline is named');
+  assert.ok(patchy.gaps.some((gap) => /bio/i.test(gap)), 'the missing bio is named');
+
+  const thin = assessProfileQuality({});
+  assert.equal(thin.verdict, 'thin');
+  assert.equal(thin.score, 0);
+  assert.ok(thin.gaps.length >= 5, 'an empty profile hears every gap');
+});
+
+test('a profile that already reads well is told so — never rewritten over', async () => {
+  let calls = 0;
+  const text = async () => { calls += 1; return { text: '{}' }; };
+
+  const refused = await writeMyProfile({ uid: 'u1', profile: STRONG_MEMBER, text });
+  assert.equal(refused.ok, true);
+  assert.equal(refused.reason, 'already_good');
+  assert.equal(refused.draft, null);
+  assert.equal(refused.saved, false);
+  assert.equal(refused.assessment.verdict, 'strong');
+  assert.equal(calls, 0, 'a good profile costs no model call');
+
+  // Only the member's explicit "rewrite it anyway" overrides the verdict.
+  const allowed = await writeMyProfile({
+    uid: 'u1',
+    profile: STRONG_MEMBER,
+    allowRewrite: true,
+    text: async () => {
+      calls += 1;
+      return {
+        text: JSON.stringify({
+          headline: 'Building LINKUP for founders who need a technical partner',
+          bio: 'I ship payment rails, and now I am building LINKUP so founders meet the person who fills the empty seat. I am looking for a technical cofounder to build it with me.',
+          skills: ['TypeScript'],
+          lookingFor: ['Technical cofounder'],
+        }),
+      };
+    },
+  });
+  assert.equal(allowed.ok, true);
+  assert.ok(allowed.draft, 'an explicit insistence still gets a draft');
+  assert.equal(calls, 1);
+});
+
+test('the writer endpoint is wired: assess action, real db handle, rewrite flag', () => {
+  const linky = read('api/linky.js');
+  // The read-before-you-write action exists and carries the same PLUS gate.
+  assert.match(linky, /case 'assessProfile': \{/);
+  assert.match(linky, /assessProfileQuality\(me\)/);
+  // The endpoint used to call a db() that does not exist in this module,
+  // which made every writeProfile tap fail. It hands over getDb() now.
+  assert.ok(!linky.includes('db: db()'), 'the phantom db() call is back');
+  assert.match(linky, /db: getDb\(\)/);
+  // The member's "rewrite it anyway" reaches the writer.
+  assert.match(linky, /allowRewrite: body\.allowRewrite === true/);
+  // Both new actions sit behind the PLUS 402, not just the write.
+  const assessBlock = linky.slice(linky.indexOf("case 'assessProfile'"), linky.indexOf("case 'writeProfile'"));
+  assert.match(assessBlock, /sendError\(res, 402/);
+});
+
+test('the app asks Linky to read first, recommends, then asks permission', () => {
+  const component = read('mobile/src/components/LinkyWritesProfile.tsx');
+  // Read first: the verdict call goes out before any drafting.
+  assert.match(component, /assessMyProfileWithLinky\(\)/);
+  assert.match(component, /Linky is reading your profile/);
+  // Recommend: a good profile is told it is good, and keeping it is the
+  // primary action; rewriting needs an explicit insistence.
+  assert.match(component, /Your profile already reads well/);
+  assert.match(component, /Keep my profile/);
+  assert.match(component, /Rewrite it anyway/);
+  // Permission: nothing is drafted until the member says yes.
+  assert.match(component, /May Linky write it for you\?/);
+  assert.match(component, /Yes — write it for me/);
+  assert.match(component, /Not now/);
+  // And the verdict carries the receipts either way.
+  assert.match(component, /WHAT IS WORKING/);
+  assert.match(component, /WHAT LINKY WOULD FIX/);
+});
+
+test('the writer is mounted where members meet Linky, behind PLUS', () => {
+  const screen = read('mobile/src/screens/LinkyHomeScreen.tsx');
+  assert.match(screen, /import LinkyWritesProfile from '\.\.\/components\/LinkyWritesProfile'/);
+  assert.match(screen, /<LinkyWritesProfile/);
+  assert.match(screen, /isPlus=\{hasLinkupPro\(profile\)\}/);
+  // Shown in the opening and under the thread: a member who has already
+  // spoken never sees the opening again, and still gets the option.
+  assert.ok(screen.indexOf('{writerCard}') > screen.indexOf('const opening'), 'the card is missing from the opening');
+  assert.match(screen, /hasSpoken && writerCard/);
 });
 
 /* ------------------------ the ask on the home page ------------------------ */

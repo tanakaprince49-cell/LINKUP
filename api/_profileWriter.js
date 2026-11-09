@@ -16,6 +16,10 @@
 //   4. One save, explicit. `save: false` drafts; `save: true` writes only the
 //      four profile fields plus a marker, so a rewrite can never touch tier,
 //      matches, streak or settings.
+//   5. Read before you write. The profile is graded first (assessProfileQuality).
+//      A strong profile is told it is strong and left alone; a weak one hears
+//      its gaps named, then Linky asks permission before drafting anything.
+//      "Rewrite it anyway" is the only override, and it is the member's call.
 import { aiText } from './_gemini.js';
 
 /** Words the model must not smuggle in. A paywall promise is not a fact. */
@@ -47,6 +51,75 @@ export function profileWriterFacts(profile = {}) {
     goals: clean(p.goals, 400),
     bio: clean(p.bio, 700),
   };
+}
+
+/**
+ * READ BEFORE YOU WRITE. Before Linky rewrites anything, it grades what is
+ * already on the profile — the same four fields it would write (headline, bio,
+ * skills, lookingFor) plus the facts a stranger reads beside them (what they
+ * are building, their role, where they are, their stage). The verdict drives
+ * the whole conversation:
+ *
+ *   strong  the profile already does its job. Linky says so, recommends
+ *           keeping it, and will not draft a rewrite unless the member
+ *           explicitly insists ("rewrite it anyway" → allowRewrite).
+ *   patchy  the bones are there; the wording is not doing them justice.
+ *   thin    there is not enough here for a stranger to trust yet.
+ *
+ * Deterministic and pure on purpose: the verdict costs no model call, so
+ * Linky can always afford to look before it writes.
+ */
+export function assessProfileQuality(profile = {}) {
+  const p = profile && typeof profile === 'object' ? profile : {};
+  const facts = profileWriterFacts(p);
+  const headline = clean(p.headline, 90);
+  const strengths = [];
+  const gaps = [];
+  let score = 0;
+
+  // The one line a stranger reads before anything else. (16)
+  if (headline.length >= 30) { score += 16; strengths.push(`A headline is doing the first-impression work: “${headline}”`); }
+  else if (headline.length >= 12) { score += 10; gaps.push('The headline is short — it does not yet say what you are building and for whom.'); }
+  else if (headline) { score += 5; gaps.push('The headline is only a few words — a stranger still has to guess what you do.'); }
+  else gaps.push('No headline — the one line a stranger reads before anything else is blank.');
+
+  // The bio: can a stranger trust this person after ten seconds? (26)
+  if (facts.bio.length >= 160) { score += 26; strengths.push('The bio gives a stranger enough to start a real conversation.'); }
+  else if (facts.bio.length >= 80) { score += 20; gaps.push('The bio is close — it stops just before it says who this is all for.'); }
+  else if (facts.bio.length >= 40) { score += 12; gaps.push('The bio is a start, but it stops before it says who it is for.'); }
+  else if (facts.bio) { score += 6; gaps.push('The bio is only a sentence — too thin for a stranger to trust it.'); }
+  else gaps.push('No bio yet. A co-founder reads it before they read anything else.');
+
+  // Skills: the proof the matcher can actually match on. (16)
+  if (facts.skills.length >= 4) { score += 16; strengths.push(`${facts.skills.length} skills are listed, so the matcher has something real to match on.`); }
+  else if (facts.skills.length === 3) { score += 13; strengths.push('Three skills are listed.'); }
+  else if (facts.skills.length === 2) { score += 9; gaps.push('Only two skills are listed — the matcher needs more proof to work with.'); }
+  else if (facts.skills.length === 1) { score += 5; gaps.push('Only one skill is listed — the matcher needs more proof to work with.'); }
+  else gaps.push('No skills listed — the matcher cannot prove you fit any seat.');
+
+  // The empty seat: can a visitor tell which chair is open? (14)
+  if (facts.lookingFor.length >= 2) { score += 14; strengths.push(`The empty seats are named: ${facts.lookingFor.join(' and ')}.`); }
+  else if (facts.lookingFor.length === 1) { score += 12; strengths.push(`The empty seat is named: ${facts.lookingFor[0]}.`); }
+  else gaps.push('The empty seat is not named, so nobody knows which chair is open.');
+
+  // The facts around the four fields. (12 + 6 + 5 + 5)
+  if (facts.building) { score += 12; strengths.push(`${facts.building} is named, so nobody has to guess the project.`); }
+  else gaps.push('The project is not named — people match with builds, not vibes.');
+  if (facts.role) score += 6;
+  else gaps.push('Your role is not stated.');
+  if (facts.city || facts.country) { score += 5; strengths.push(`Based in ${facts.city || facts.country}${facts.city && facts.country ? `, ${facts.country}` : ''}.`); }
+  else gaps.push('No city — builders nearby cannot find you.');
+  if (facts.stage) score += 5;
+  else gaps.push('Your stage is not stated, so nobody knows how far along this is.');
+
+  const verdict = score >= 78 ? 'strong' : score >= 45 ? 'patchy' : 'thin';
+  const recommendation = verdict === 'strong'
+    ? 'Linky recommends keeping this profile. It already says what you are building, what you can do, and which seat is empty — a rewrite would trade your words for Linky’s.'
+    : verdict === 'patchy'
+      ? 'The bones are here. The wording is not doing them justice yet — Linky can tighten it without changing a single fact.'
+      : 'There is not enough here for a stranger to trust yet. Linky can write it from what LINKUP already knows — and will not invent the rest.';
+
+  return { verdict, score, strengths, gaps, recommendation };
 }
 
 /**
@@ -104,7 +177,7 @@ export function sanitizeProfileDraft(raw, profile = {}) {
  * member — tier, matches, streak, settings, verification — is untouched by
  * construction, not by carefulness.
  */
-export async function writeMyProfile({ uid, profile, save = false, approved = null, db = null, text = aiText, now = Date.now() } = {}) {
+export async function writeMyProfile({ uid, profile, save = false, approved = null, allowRewrite = false, db = null, text = aiText, now = Date.now() } = {}) {
   if (!uid) return { ok: false, reason: 'missing_uid' };
 
   // The member approved a draft Linky already wrote. Save exactly that — do not
@@ -129,6 +202,14 @@ export async function writeMyProfile({ uid, profile, save = false, approved = nu
   const facts = profileWriterFacts(profile);
   if (!facts.building && !facts.bio && !facts.goals && !facts.skills.length) {
     return { ok: false, reason: 'nothing_to_write_from' };
+  }
+
+  // A profile that already reads well is told so — not quietly rewritten over.
+  // Only the member's explicit "rewrite it anyway" (allowRewrite) overrides
+  // Linky's own verdict, and even then the draft still waits for approval.
+  const assessment = assessProfileQuality(profile);
+  if (assessment.verdict === 'strong' && !allowRewrite) {
+    return { ok: true, reason: 'already_good', draft: null, saved: false, assessment, source: 'linky' };
   }
 
   const prompt = buildProfileWriterPrompt(profile);
@@ -162,5 +243,5 @@ export async function writeMyProfile({ uid, profile, save = false, approved = nu
     }
   }
 
-  return { ok: true, reason: 'ok', draft: checked.draft, saved, source: 'linky' };
+  return { ok: true, reason: 'ok', draft: checked.draft, saved, assessment, source: 'linky' };
 }
