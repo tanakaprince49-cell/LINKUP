@@ -92,6 +92,22 @@ export async function loadSavedIconMode(): Promise<string> {
   return cachedMode;
 }
 
+/**
+ * Can this build actually switch the launcher icon right now? False inside
+ * Expo Go, web previews of native behaviour, and old installed shells whose
+ * JS is newer than their native code — where icon taps used to vanish
+ * silently. Web can always swap its tab icon, so it counts as available.
+ */
+export function launcherIconControlAvailable(): boolean {
+  if (Platform.OS === 'web') return true;
+  try {
+    const mod = (NativeModules as Record<string, any>)?.LinkupDynamicIcon;
+    return Boolean(mod && typeof mod.setAlternateIcon === 'function');
+  } catch {
+    return false;
+  }
+}
+
 export async function setSavedIconMode(nextMode: string): Promise<string> {
   const safe = isValidIconMode(nextMode) ? nextMode : 'auto';
   cachedMode = safe;

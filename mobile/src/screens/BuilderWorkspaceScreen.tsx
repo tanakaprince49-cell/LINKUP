@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
-import {ActivityIndicator,Image,RefreshControl,ScrollView,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
+import {ActivityIndicator,Image,Platform,RefreshControl,ScrollView,StyleSheet,Text,TouchableOpacity,View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useAuth} from '../contexts/AuthContext';
 import {useTheme} from '../contexts/ThemeContext';
@@ -8,7 +8,7 @@ import {GroupsPanel} from './GroupChatScreen';
 import ScreenHeader from '../components/ScreenHeader';
 import VerifiedBadge from '../components/VerifiedBadge';
 import {builderCall,builderSection,BUILDER_SECTIONS,BuilderSection} from '../lib/builder';
-import {ICON_VARIANTS,ICON_VARIANT_IMAGES,getLatestResolvedAppearance,loadSavedIconMode} from '../lib/dynamicAppearance';
+import {ICON_VARIANTS,ICON_VARIANT_IMAGES,getLatestResolvedAppearance,loadSavedIconMode,launcherIconControlAvailable,setSavedIconMode,subscribeDynamicAppearance} from '../lib/dynamicAppearance';
 
 export default function BuilderWorkspaceScreen({navigation,route}:any){
  const {user}=useAuth(),{theme}=useTheme(),dark=theme==='dark';
@@ -22,7 +22,14 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
  const choose=(s:BuilderSection)=>{setSection(s);setError('');};
  const [iconMode,setIconModeState]=useState('auto');
  useEffect(()=>{let alive=true;loadSavedIconMode().then((m)=>{if(alive)setIconModeState(m);}).catch(()=>{});return()=>{alive=false;};},[]);
- const pickIcon=(id:string)=>{setIconModeState(id);void act('prefs',{iconMode:id});};
+ const [,setAppearanceTick]=useState(0);
+ useEffect(()=>subscribeDynamicAppearance(()=>setAppearanceTick((t)=>t+1)),[]);
+ // A tap must land on this device NOW: save + emit locally first (the icon
+ // controller hears the emit and swaps the launcher icon), then persist to
+ // the server. Before this, the local apply waited on the server round-trip
+ // inside builderCall — and never happened at all on shells where that call
+ // failed, so taps looked dead.
+ const pickIcon=(id:string)=>{setIconModeState(id);void setSavedIconMode(id);void act('prefs',{iconMode:id});};
  const iconOptions=[{id:'auto',label:'Auto'},{id:'classic',label:'Classic'},...ICON_VARIANTS.map((v)=>({id:v.id,label:v.label}))];
  const run=async(label:string,action:()=>Promise<any>)=>{if(busy)return;setBusy(label);setError('');try{const result=await action();await refresh();return result;}catch(e:any){setError(e.message||'That action could not finish.');}finally{setBusy('');}};
  const act=(op:string,input:Record<string,unknown>={},after?:(r:any)=>void)=>run(op,async()=>{const r=await builderCall(op,input);after?.(r);return r;});
@@ -44,6 +51,7 @@ export default function BuilderWorkspaceScreen({navigation,route}:any){
      {iconOptions.map((opt)=>{const selected=iconMode===opt.id;const img=ICON_VARIANT_IMAGES[opt.id]||ICON_VARIANT_IMAGES.default;return <TouchableOpacity key={opt.id} accessibilityRole="button" accessibilityLabel={`App logo: ${opt.label}`} accessibilityState={{selected}} disabled={!!busy} onPress={()=>pickIcon(opt.id)} style={{width:76,alignItems:'center',gap:6,opacity:busy?0.55:1}}><Image source={img} style={{width:60,height:60,borderRadius:16,borderWidth:selected?3:1,borderColor:selected?'#FBE618':'#E8E6DE'}}/><Text numberOfLines={2} style={{fontSize:10.5,fontWeight:selected?'900':'600',textAlign:'center',color:textColor(dark)}}>{opt.label}</Text></TouchableOpacity>;})}
     </ScrollView>
     <Text style={[styles.body,{color:textColor(dark,'secondary')}]}>{iconMode==='auto'?'Auto: LINKUP picks your logo from your activity. It settles back the moment you return.':iconMode==='classic'?'Classic: the original logo, always. Nothing changes it.':'Pinned: this logo stays until you change it here.'}</Text>
+    {Platform.OS!=='web'&&!launcherIconControlAvailable()?<Text style={[styles.body,{color:textColor(dark,'secondary')}]}>This preview build can't switch the home-screen icon itself — your choice is saved and takes over in the installed LINKUP app.</Text>:null}
    </View>
    <View style={{height:24}}/>
   </ScrollView>

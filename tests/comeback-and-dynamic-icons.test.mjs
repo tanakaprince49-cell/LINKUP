@@ -532,6 +532,16 @@ test('the workspace lets the member pin their own app logo', () => {
   // Choosing goes through the builder prefs op, which validates the mode
   // server-side and applies it locally in the same call.
   assert.match(workspace, /act\('prefs',\{iconMode:id\}\)/);
+  // A tap must land locally at once — not after (or only if) the server
+  // round-trip inside builderCall succeeds — and the card must say what is
+  // showing right now, live.
+  assert.match(workspace, /void setSavedIconMode\(id\);void act\('prefs'/);
+  assert.match(workspace, /subscribeDynamicAppearance\(\(\)=>setAppearanceTick/);
+  // On a shell that cannot switch icons (Expo Go, stale native binary) the
+  // card says so instead of letting taps fail silently.
+  assert.match(workspace, /launcherIconControlAvailable\(\)/);
+  const appearance = fs.readFileSync(new URL('../mobile/src/lib/dynamicAppearance.ts', import.meta.url), 'utf8');
+  assert.match(appearance, /export function launcherIconControlAvailable/);
   assert.match(workspace, /loadSavedIconMode/);
   const appJson = JSON.parse(fs.readFileSync(new URL('../mobile/app.json', import.meta.url), 'utf8'));
   assert.equal(appJson.expo.version, '18.2.0');
