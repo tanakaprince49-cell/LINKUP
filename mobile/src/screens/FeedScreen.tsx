@@ -397,38 +397,6 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
     }
   };
 
-  // Dislike is a real signal, not an anti-like: the two are independent, so
-  // toggling one never silently clears the other.
-  const handleDislike = async () => {
-    if (!user) return;
-    const next = !disliked;
-    const prev = reaction;
-    setReaction({ liked, likes: likesCount, disliked: next, dislikes: Math.max(0, dislikesCount + (next ? 1 : -1)) });
-    const postRef = doc(db, 'posts', post.id);
-    try {
-      if (next) {
-        await updateDoc(postRef, { dislikesCount: increment(1), dislikedBy: arrayUnion(user.uid) });
-        if (post.authorId !== user.uid) {
-          await addDoc(collection(db, 'notifications'), {
-            userId: post.authorId,
-            fromId: user.uid,
-            fromName: profile?.displayName || 'Someone',
-            fromPic: storedProfileImageUri((profile as any)?.profilePicUrl || profile?.profilePic),
-            type: 'dislike',
-            content: 'disliked your startup.',
-            isRead: false,
-            timestamp: serverTimestamp()
-          }).catch(() => {});
-        }
-      } else {
-        await updateDoc(postRef, { dislikesCount: increment(-1), dislikedBy: arrayRemove(user.uid) });
-      }
-    } catch (error) {
-      setReaction(prev);
-      notifyUser('Could not dislike', permissionHint(error));
-    }
-  };
-
   const handleDelete = () => {
     Alert.alert("Delete Post", "Are you sure you want to delete this post?", [
       { text: "Cancel", style: "cancel" },
@@ -623,12 +591,6 @@ const PostCard = ({ post, navigation }: { post: Post, navigation: any }) => {
           <Text style={[styles.actionVal, { color: liked ? '#EF4444' : '#666' }]}>{likesCount}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionBtn} onPress={handleDislike}>
-          <SafeIcon name="ThumbsDown" size={18} color={disliked ? '#EF4444' : '#666'} fill={disliked ? '#EF4444' : 'transparent'} />
-          {/* No dislike count beside the button: the signal is recorded, but
-              showing a startup "12 people disliked this" is discouraging and
-              serves nobody. The button still fills red when you have tapped it. */}
-        </TouchableOpacity>
         
         <TouchableOpacity 
           style={styles.actionBtn} 

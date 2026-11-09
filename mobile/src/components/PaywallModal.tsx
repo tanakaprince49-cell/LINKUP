@@ -42,6 +42,7 @@ import {
 import { checkPayonifyPayment, startPayonifyCheckout, takePendingReference } from '../lib/webCheckout';
 import { notifyUser } from '../lib/notify';
 import { PLUS_PERKS, paywallCopy } from '../../../shared/plus-perks';
+import { PLUS_PRICES } from '../lib/pricing';
 
 const IS_WEB = Platform.OS === 'web';
 
@@ -87,17 +88,23 @@ const LOGO = require('../../assets/logo-square.png');
  * check). Do not add them back without a gate to point at.
  */
 
+/**
+ * Yearly saving as a percentage of twelve monthly payments. A percentage
+ * stays true in every currency and region Play converts the price into —
+ * the old hardcoded dollar-amount badge silently stopped matching the displayed
+ * prices anywhere the store price differed from the US list price.
+ */
+const YEARLY_SAVE_BADGE = `SAVE ${Math.round((1 - PLUS_PRICES.yearly / (PLUS_PRICES.monthly * 12)) * 100)}%`;
+
 const PRICING_PLANS = [
   {
     id: 'monthly',
     productId: LINKUP_PLUS_PRODUCT_ID,
     webPlanKey: 'plus_1m',
     label: 'Monthly',
-    originalPrice: '$25.00',
     price: LINKUP_PLUS_MONTHLY_PRICE,
     cadence: '/mo',
-    helper: 'Launch discount price',
-    badge: 'DISCOUNT',
+    helper: 'Billed monthly · cancel anytime',
   },
   {
     id: 'yearly',
@@ -107,7 +114,7 @@ const PRICING_PLANS = [
     price: LINKUP_PLUS_YEARLY_PRICE,
     cadence: '/yr',
     helper: 'Best value for founders and teams',
-    badge: 'SAVE $89.89',
+    badge: YEARLY_SAVE_BADGE,
   },
 ] as const;
 
@@ -558,9 +565,6 @@ export default function PaywallModal({
                       ) : null}
                     </View>
                     <View style={styles.priceRow}>
-                      {'originalPrice' in plan && plan.originalPrice ? (
-                        <Text style={[styles.originalPrice, { color: textColor(isDark, 'muted') }]}>{plan.originalPrice}</Text>
-                      ) : null}
                       <Text style={[styles.priceValue, selected && styles.priceValueSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark) }]}>{storePrice}</Text>
                       <Text style={[styles.priceCadence, selected && styles.priceCadenceSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.cadence}</Text>
                     </View>
@@ -843,17 +847,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     flexWrap: 'wrap',
-  },
-  originalPrice: {
-    fontSize: 12,
-    lineHeight: 20,
-    fontWeight: '900',
-    marginRight: 8,
-    marginBottom: 3,
-    textDecorationLine: 'line-through',
-  },
-  originalPriceSelected: {
-    opacity: 0.72,
   },
   priceValue: {
     fontSize: 24,
