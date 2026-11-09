@@ -12,7 +12,7 @@ import {
 } from '../lib/linkyApi';
 
 /**
- * LET LINKY WRITE IT — a LINKUP PLUS feature, wherever the member meets Linky.
+ * LET LINKY WRITE IT — a LINKUP PLUS feature, on the member's own profile.
  *
  * The member already told LINKUP what they are building and which seat is empty.
  * What they cannot do is write about themselves well after a full day of

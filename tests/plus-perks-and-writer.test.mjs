@@ -401,15 +401,18 @@ test('the app asks Linky to read first, recommends, then asks permission', () =>
   assert.match(component, /WHAT LINKY WOULD FIX/);
 });
 
-test('the writer is mounted where members meet Linky, behind PLUS', () => {
-  const screen = read('mobile/src/screens/LinkyHomeScreen.tsx');
-  assert.match(screen, /import LinkyWritesProfile from '\.\.\/components\/LinkyWritesProfile'/);
-  assert.match(screen, /<LinkyWritesProfile/);
-  assert.match(screen, /isPlus=\{hasLinkupPro\(profile\)\}/);
-  // Shown in the opening and under the thread: a member who has already
-  // spoken never sees the opening again, and still gets the option.
-  assert.ok(screen.indexOf('{writerCard}') > screen.indexOf('const opening'), 'the card is missing from the opening');
-  assert.match(screen, /hasSpoken && writerCard/);
+test('the writer lives on the profile side, not on the Linky surface', () => {
+  // The Linky surface must not carry the profile-writing card at all.
+  const linky = read('mobile/src/screens/LinkyHomeScreen.tsx');
+  assert.ok(!linky.includes('LinkyWritesProfile'), 'the writer card is back on the Linky surface');
+  assert.ok(!linky.includes('writerCard'), 'a writer card remnant is still wired into Linky');
+
+  // It lives on the profile side instead: on the member's own profile view
+  // (not only inside edit mode) and in the editor, behind PLUS both times.
+  const screen = read('mobile/src/screens/ProfileScreen.tsx');
+  const mounts = screen.match(/<LinkyWritesProfile/g) || [];
+  assert.ok(mounts.length >= 2, 'the writer should be mounted on the profile view and in the editor');
+  assert.match(screen, /isPlus=\{hasLinkupPro\(myProfile\)\}/);
 });
 
 /* ------------------------ the ask on the home page ------------------------ */
