@@ -542,6 +542,16 @@ test('the workspace lets the member pin their own app logo', () => {
   assert.match(workspace, /launcherIconControlAvailable\(\)/);
   const appearance = fs.readFileSync(new URL('../mobile/src/lib/dynamicAppearance.ts', import.meta.url), 'utf8');
   assert.match(appearance, /export function launcherIconControlAvailable/);
+  // Auto, Classic and the Plugged In variant must never wear the same face
+  // in the picker again: the two modes have their own preview art.
+  assert.match(appearance, /auto: require\('\.\.\/\.\.\/assets\/icon-preview-auto\.png'\)/);
+  assert.match(appearance, /classic: require\('\.\.\/\.\.\/assets\/icon-preview-classic\.png'\)/);
+  assert.ok(fs.existsSync(new URL('../mobile/assets/icon-preview-auto.png', import.meta.url)));
+  assert.ok(fs.existsSync(new URL('../mobile/assets/icon-preview-classic.png', import.meta.url)));
+  // The picker persists through the builder prefs op — the API front door
+  // must not 410 it (or habit/venture) with the retired-feature message.
+  const linkyApi = fs.readFileSync(new URL('../api/linky.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(linkyApi, /That Linky feature has been retired\./);
   assert.match(workspace, /loadSavedIconMode/);
   const appJson = JSON.parse(fs.readFileSync(new URL('../mobile/app.json', import.meta.url), 'utf8'));
   assert.equal(appJson.expo.version, '18.2.0');

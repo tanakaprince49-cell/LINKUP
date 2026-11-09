@@ -19,6 +19,12 @@ export const LAST_ACTION_STORAGE_KEY = '@linkup/lastUserActionAt';
 export const LAST_OPENED_STORAGE_KEY = '@linkup/lastOpenedAt';
 
 export const ICON_VARIANT_IMAGES: Record<string, any> = {
+  // Picker previews for the two MODES, not variants: Auto and Classic used
+  // to fall back to the default art, so Auto / Plugged In / Classic showed
+  // three identical tiles in a row. These two are symbolic previews — Auto
+  // is the cat mid-change, Classic is the founder's original sketch.
+  auto: require('../../assets/icon-preview-auto.png'),
+  classic: require('../../assets/icon-preview-classic.png'),
   default: require('../../assets/icon-padded.png'),
   angry_1d: require('../../assets/icon-angry-red.png'),
   sad_inactive: require('../../assets/icon-sad-inactive.png'),

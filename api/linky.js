@@ -900,7 +900,10 @@ async function handleApp(req, res) {
     switch (action) {
       case 'builder': {
         const op = String(body.op || 'home');
-        if (['ventureStatus','ventureConnectGithub','ventureSyncGithub','ventureSplice','ventureProvision','habit','habitPrefs','habitRest','habitToken','prefs'].includes(op)) { sendError(res, 410, 'That Linky feature has been retired.'); return; }
+        // Every op the builder service implements is live — prefs (incl. the
+        // app-logo picker), habit and the venture tools included. A stale
+        // retirement block here once 410'd them all, which surfaced in the
+        // app as a retired-feature error on ordinary taps.
         out = await builderService().handle(uid, op, body.input || {}); break;
       }
       case 'pushNotify': out = await pushNotify(uid, { toUid: String(body.toUid || ''), type: String(body.type || ''), text: String(body.text || ''), matchId: String(body.matchId || '') }); break;
