@@ -25,9 +25,10 @@ test('the Linky tab wears the cat instead of a line icon', () => {
   assert.match(iconComponent, /import LinkyCatIcon from '\.\/LinkyCatIcon'/);
   assert.match(iconComponent, /<LinkyCatIcon/);
   assert.match(iconComponent, /focused/);
-  // Focused, the frame closes to ink inside the gold tile.
-  assert.match(iconComponent, /#FBE618/);
-  assert.match(iconComponent, /borderColor: focused \? '#0A0B0D' : 'transparent'/);
+  // No gold tile: the cat is a plain grey outline like the other tabs, ink
+  // when focused.
+  assert.doesNotMatch(iconComponent, /#FBE618/, 'no yellow tile behind the tab cat');
+  assert.match(iconComponent, /'#9CA3AF'/);
   // The glyph is vector: one silhouette path, one tail path, eyes that survive
   // being scaled to a tab.
   assert.match(glyph, /viewBox="0 0 24 24"/);

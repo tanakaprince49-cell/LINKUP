@@ -18,15 +18,18 @@ const dashboard = read('mobile/src/screens/DiscoveryDashboardScreen.tsx');
 // ── 1. THE CAT ────────────────────────────────────────────────────────────────
 
 test('the Linky navigation icon is the cat line mark, not a photo', () => {
-  // The founder's sketch: a cat inside a rounded frame. Here the frame is the
-  // gold tile and the cat is one ink line, so it holds at 22px.
+  // The founder's sketch, simplified on request: just the cat, drawn as one
+  // grey outline line like every other tab icon — no tile behind it.
   assert.match(app, /<LinkyCatTabIcon focused=\{focused\} size=\{22\} \/>/);
   assert.doesNotMatch(tabIcon, /logo-cat\.png|require\(/, 'no raster in the tab icon');
   assert.match(tabIcon, /import LinkyCatIcon from '\.\/LinkyCatIcon'/);
 
-  // Frame: gold rounded tile, ink ring only when focused.
-  assert.match(tabIcon, /backgroundColor: '#FBE618'/);
-  assert.match(tabIcon, /borderColor: focused \? '#0A0B0D' : 'transparent'/);
+  // No frame at all: no yellow tile, no background, no border. Unfocused the
+  // cat wears the same greys as the other tab line icons; focused it is ink.
+  assert.doesNotMatch(tabIcon, /#FBE618|backgroundColor|borderColor/, 'the yellow tile is gone');
+  assert.match(tabIcon, /'#9CA3AF'/);
+  assert.match(tabIcon, /'#6B7280'/);
+  assert.match(tabIcon, /focused \? '#0A0B0D'/);
 
   // Glyph: vector, 24-unit grid, round caps so the line has no cut corners.
   assert.match(glyph, /viewBox="0 0 24 24"/);

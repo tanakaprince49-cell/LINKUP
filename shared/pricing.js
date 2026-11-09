@@ -25,6 +25,18 @@ export const PLUS_PRICES = {
 };
 
 /** LINKUP Campaigns — sponsored placements across the app. */
+
+/**
+ * Paywall anchors — the reference prices PLUS is shown against.
+ *
+ * monthly: the list price before the launch offer (19.99 is 20% off).
+ * yearly:  a year paid month-to-month (12 x 19.99 = 239.88), so the yearly
+ *          saving is a real comparison, not an invented number.
+ */
+export const PLUS_LIST_PRICES = {
+  monthly: 25,
+  yearly: PLUS_PRICES.monthly * 12,
+};
 export const CAMPAIGNS_PRICES = {
   monthly: 29.99,
   yearly: 249.99,

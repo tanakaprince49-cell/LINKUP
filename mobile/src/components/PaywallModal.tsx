@@ -42,7 +42,7 @@ import {
 import { checkPayonifyPayment, startPayonifyCheckout, takePendingReference } from '../lib/webCheckout';
 import { notifyUser } from '../lib/notify';
 import { PLUS_PERKS, paywallCopy } from '../../../shared/plus-perks';
-import { PLUS_PRICES } from '../lib/pricing';
+import { PLUS_PRICES, PLUS_LIST_PRICES } from '../lib/pricing';
 
 const IS_WEB = Platform.OS === 'web';
 
@@ -89,12 +89,31 @@ const LOGO = require('../../assets/logo-square.png');
  */
 
 /**
- * Yearly saving as a percentage of twelve monthly payments. A percentage
- * stays true in every currency and region Play converts the price into —
- * the old hardcoded dollar-amount badge silently stopped matching the displayed
- * prices anywhere the store price differed from the US list price.
+ * Savings as percentages of the list prices in shared/pricing.js. A
+ * percentage stays true in every currency and region Play converts the
+ * price into — a hardcoded dollar amount silently stops matching the
+ * displayed price anywhere the store price differs from the US list price.
  */
-const YEARLY_SAVE_BADGE = `SAVE ${Math.round((1 - PLUS_PRICES.yearly / (PLUS_PRICES.monthly * 12)) * 100)}%`;
+const MONTHLY_SAVE_BADGE = `SAVE ${Math.round((1 - PLUS_PRICES.monthly / PLUS_LIST_PRICES.monthly) * 100)}%`;
+const YEARLY_SAVE_BADGE = `SAVE ${Math.round((1 - PLUS_PRICES.yearly / PLUS_LIST_PRICES.yearly) * 100)}%`;
+
+/**
+ * Scale the number inside a store price label, keeping the currency text
+ * Play returned ("$19.99" -> "$25.00", "R349,00" -> "R436,47"). Play
+ * converts the list price and the offer price at the same rate, so the
+ * anchor stays the same offer in every region.
+ */
+const scalePriceLabel = (label: string, factor: number): string | null => {
+  const match = label.match(/\d[\d.,]*/);
+  if (!match || !Number.isFinite(factor) || factor <= 1) return null;
+  const token = match[0];
+  const commaDecimal = /,\d{1,2}$/.test(token);
+  const value = parseFloat(commaDecimal ? token.replace(/\./g, '').replace(',', '.') : token.replace(/,/g, ''));
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const decimals = commaDecimal ? token.split(',')[1].length : (token.split('.')[1] || '').length;
+  const scaled = (value * factor).toFixed(decimals).replace('.', commaDecimal ? ',' : '.');
+  return label.replace(token, scaled);
+};
 
 const PRICING_PLANS = [
   {
@@ -104,7 +123,9 @@ const PRICING_PLANS = [
     label: 'Monthly',
     price: LINKUP_PLUS_MONTHLY_PRICE,
     cadence: '/mo',
-    helper: 'Billed monthly · cancel anytime',
+    helper: 'Launch offer · billed monthly, cancel anytime',
+    badge: MONTHLY_SAVE_BADGE,
+    anchorRatio: PLUS_LIST_PRICES.monthly / PLUS_PRICES.monthly,
   },
   {
     id: 'yearly',
@@ -113,8 +134,9 @@ const PRICING_PLANS = [
     label: 'Yearly',
     price: LINKUP_PLUS_YEARLY_PRICE,
     cadence: '/yr',
-    helper: 'Best value for founders and teams',
+    helper: 'Best value — a year for the price of 7½ months',
     badge: YEARLY_SAVE_BADGE,
+    anchorRatio: PLUS_LIST_PRICES.yearly / PLUS_PRICES.yearly,
   },
 ] as const;
 
@@ -544,6 +566,7 @@ export default function PaywallModal({
               {PRICING_PLANS.map((plan) => {
                 const selected = selectedPlan === plan.id;
                 const storePrice = getPlanPrice(plan);
+                const anchorPrice = scalePriceLabel(storePrice, plan.anchorRatio);
                 return (
                   <TouchableOpacity
                     key={plan.id}
@@ -565,6 +588,9 @@ export default function PaywallModal({
                       ) : null}
                     </View>
                     <View style={styles.priceRow}>
+                      {anchorPrice ? (
+                        <Text style={[styles.originalPrice, { color: textColor(isDark, 'muted') }]}>{anchorPrice}</Text>
+                      ) : null}
                       <Text style={[styles.priceValue, selected && styles.priceValueSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark) }]}>{storePrice}</Text>
                       <Text style={[styles.priceCadence, selected && styles.priceCadenceSelected, { color: selected ? (isDark ? COLORS.darkTextPrimary : COLORS.lightTextPrimary) : textColor(isDark, 'secondary') }]}>{plan.cadence}</Text>
                     </View>
@@ -847,6 +873,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     flexWrap: 'wrap',
+  },
+  originalPrice: {
+    fontSize: 12,
+    lineHeight: 20,
+    fontWeight: '900',
+    marginRight: 8,
+    marginBottom: 3,
+    textDecorationLine: 'line-through',
   },
   priceValue: {
     fontSize: 24,

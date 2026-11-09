@@ -2578,6 +2578,26 @@
   ],
   "mobile/src/components/PaywallModal.tsx": [
     [
+      "replace",
+      ",",
+      "."
+    ],
+    [
+      "replace",
+      ""
+    ],
+    [
+      "replace",
+      ""
+    ],
+    [
+      "replace",
+      "."
+    ],
+    [
+      "replace"
+    ],
+    [
       "property",
       "id",
       "monthly"
