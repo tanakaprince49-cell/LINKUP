@@ -333,6 +333,33 @@ test('the central orchestrator deduplicates identical in-flight prompts and caps
   }
 });
 
+test('agent tasks run on the central budget model - no agent-specific model exists', async () => {
+  const realFetch = globalThis.fetch;
+  const savedKey = process.env.GEMINI_API_KEY;
+  const savedZen = process.env.ZEN_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  delete process.env.ZEN_API_KEY;
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    return { ok: true, status: 200, text: async () => JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ kind: 'unsupported', summary: 'Greeting', reply: 'Hi! I am Sarah, your scheduling assistant.' }) }] }, finishReason: 'STOP' }] }) };
+  };
+  try {
+    const { claimAgentSeat, createAgentTask } = await import('../api/_agents.js');
+    const db = fakeDb();
+    await claimAgentSeat(db, 'beta', { email: 'beta@example.com' });
+    // No injected text: the production default (central aiText) must answer.
+    const result = await createAgentTask(db, 'beta', { email: 'beta@example.com' }, { instruction: 'hi', agent: 'Sarah', tz: 'Africa/Harare' });
+    assert.equal(result.ok, true);
+    assert.equal(urls.length, 1);
+    assert.match(urls[0], /models\/gemini-3\.5-flash-lite:generateContent/, 'agents must draft on gemini-3.5-flash-lite');
+  } finally {
+    globalThis.fetch = realFetch;
+    if (savedKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = savedKey;
+    if (savedZen === undefined) delete process.env.ZEN_API_KEY; else process.env.ZEN_API_KEY = savedZen;
+  }
+});
+
 test('when every model is down, Sarah still drafts plainly-stated events from the member words', async () => {
   const { claimAgentSeat, createAgentTask } = await import('../api/_agents.js');
   const boom = async () => { throw new Error('gemini: This model is currently experiencing high demand.'); };
