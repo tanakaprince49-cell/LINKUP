@@ -360,9 +360,9 @@ export default function AiAgentChatScreen({ navigation, route }: any) {
           style={[inputStyle, styles.composerInput]}
         />
         <TouchableOpacity
-          style={[styles.sendBtn, { backgroundColor: usage.remaining > 0 && message.trim().length >= 3 ? YELLOW : '#BDBDBD' }]}
+          style={[styles.sendBtn, { backgroundColor: usage.remaining > 0 && message.trim().length >= 1 ? YELLOW : '#BDBDBD' }]}
           onPress={send}
-          disabled={usage.remaining <= 0 || busy === 'send' || message.trim().length < 3}
+          disabled={usage.remaining <= 0 || busy === 'send' || message.trim().length < 1}
           accessibilityLabel={`Send message to ${agent.name}`}
         >
           {busy === 'send' ? <ActivityIndicator color={INK} /> : <Send size={18} color={INK} />}

@@ -243,6 +243,17 @@ test('Sarah drafts calendar events and only approval creates them', async () => 
   assert.equal(wrongTool.task.status, 'unsupported');
 });
 
+test('a two-letter greeting can be sent — agents answer conversation too', async () => {
+  const { claimAgentSeat, createAgentTask } = await import('../api/_agents.js');
+  const db = fakeDb();
+  await claimAgentSeat(db, 'beta', { email: 'beta@example.com' });
+  const text = async () => ({ text: JSON.stringify({ kind: 'unsupported', summary: 'Greeting', reply: 'Hi! I am Sarah, your scheduling assistant. Ask me to set up an event and I will draft it for your approval.' }) });
+  const result = await createAgentTask(db, 'beta', { email: 'beta@example.com' }, { instruction: 'hi', agent: 'Sarah' }, { text });
+  assert.equal(result.ok, true);
+  assert.equal(result.task.status, 'unsupported');
+  assert.match(result.task.reply, /scheduling assistant/);
+});
+
 test('AI failures are diagnosed, never swallowed: junk replies and provider errors', async () => {
   const { claimAgentSeat, createAgentTask } = await import('../api/_agents.js');
   // A fenced, prose-wrapped, kind-less reply still becomes a draft.
@@ -253,21 +264,38 @@ test('AI failures are diagnosed, never swallowed: junk replies and provider erro
   assert.equal(okTask.ok, true);
   assert.equal(okTask.task.kind, 'email');
   assert.equal(okTask.task.status, 'awaiting_approval');
-  // Total garbage on both attempts: clean ai_unavailable WITH the diagnosis.
+  // Total garbage on both attempts, email side: template draft from the
+  // member's words, honestly labelled (the diagnosis rides in the summary).
   const db2 = fakeDb();
   await claimAgentSeat(db2, 'beta', { email: 'beta@example.com' });
   const junk = async () => ({ text: 'I cannot help with that today.' });
   const junked = await createAgentTask(db2, 'beta', { email: 'beta@example.com' }, { instruction: 'Email partner@example.com' }, { text: junk });
-  assert.equal(junked.ok, false);
-  assert.equal(junked.reason, 'ai_unavailable');
-  assert.match(junked.detail, /unparseable/);
-  // A throwing provider: the provider's own words ride along.
+  assert.equal(junked.ok, true);
+  assert.equal(junked.task.status, 'awaiting_approval');
+  assert.match(junked.task.summary, /unparseable AI reply/);
+  // Same garbage, calendar side: a clean ai_unavailable WITH the diagnosis.
+  const db2b = fakeDb();
+  await claimAgentSeat(db2b, 'beta', { email: 'beta@example.com' });
+  const junkedCal = await createAgentTask(db2b, 'beta', { email: 'beta@example.com' }, { instruction: 'Schedule lunch tomorrow', agent: 'Sarah' }, { text: junk });
+  assert.equal(junkedCal.ok, false);
+  assert.equal(junkedCal.reason, 'ai_unavailable');
+  assert.match(junkedCal.detail, /unparseable/);
+  // A throwing provider, calendar side: the provider's own words ride along.
   const db3 = fakeDb();
   await claimAgentSeat(db3, 'beta', { email: 'beta@example.com' });
   const boom = async () => { throw new Error('gemini: HTTP 429 quota'); };
-  const failed = await createAgentTask(db3, 'beta', { email: 'beta@example.com' }, { instruction: 'Email partner@example.com' }, { text: boom });
+  const failed = await createAgentTask(db3, 'beta', { email: 'beta@example.com' }, { instruction: 'Schedule lunch tomorrow at noon', agent: 'Sarah' }, { text: boom });
   assert.equal(failed.ok, false);
   assert.match(failed.detail, /429/);
+  // Same outage, email side: Alex still drafts, from the member's own words.
+  const db4 = fakeDb();
+  await claimAgentSeat(db4, 'beta', { email: 'beta@example.com' });
+  const rescued = await createAgentTask(db4, 'beta', { email: 'beta@example.com' }, { instruction: 'Email partner@example.com: following up on the term sheet, can we talk Friday?' }, { text: boom });
+  assert.equal(rescued.ok, true);
+  assert.equal(rescued.task.status, 'awaiting_approval');
+  assert.equal(rescued.task.draft.to, 'partner@example.com');
+  assert.match(rescued.task.draft.body, /term sheet/);
+  assert.match(rescued.task.summary, /unreachable/);
 });
 
 test('connect URLs ask for exactly one agent worth of scopes, nothing inherited', async () => {

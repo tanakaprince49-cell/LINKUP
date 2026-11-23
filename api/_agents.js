@@ -359,7 +359,7 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
   const agent = agentById(input?.agent);
   if (!agent.live) return { ok: false, reason: 'agent_not_live' };
   const instruction = clean(input?.instruction, 800);
-  if (instruction.length < 3) return { ok: false, reason: 'empty_task' };
+  if (instruction.length < 1) return { ok: false, reason: 'empty_task' };
   const tz = validTz(input?.tz);
 
   const usage = await usageFor(db, uid, now);
@@ -394,7 +394,7 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
     try {
       const result = await text(
         attempt === 0 ? prompt : `${prompt}\n\nIMPORTANT: reply with ONLY the JSON object. No markdown, no commentary.`,
-        { temperature: 0.3, maxOutputTokens: 900, responseMimeType: 'application/json', timeoutMs: 12000 },
+        { temperature: 0.3, maxOutputTokens: 900, responseMimeType: 'application/json', timeoutMs: attempt === 0 ? 25000 : 10000 },
       );
       const rawText = String(result?.text || '');
       spent += estTokens(prompt) + estTokens(rawText);
@@ -406,6 +406,27 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
       aiDetail = String(err?.message || err).replace(/\s+/g, ' ').slice(0, 110);
       break;
     }
+  }
+  if (!parsed && providerOf(agent) === 'gmail') {
+    // Deterministic safety net, the Linky way: if every model is down, Alex
+    // still drafts — from the member's exact words, with the recipient lifted
+    // out of the instruction. Nothing is invented, the draft says what it is,
+    // and approval is still required before Gmail hears a word of it.
+    const emailMatch = instruction.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    const to = emailMatch ? emailMatch[0] : '';
+    const stripped = instruction
+      .replace(/^.*?\b(?:email|mail|send(?: an? email)? to)\s+/i, '')
+      .replace(to, '')
+      .replace(/^\s*[:\-\u2014]+\s*/, '')
+      .trim();
+    parsed = {
+      kind: 'email',
+      to,
+      subject: clean((stripped || 'Following up').split(/[.!?\n]/)[0], 80) || 'Following up',
+      body: cleanBody(stripped || instruction, 4000),
+      summary: `The AI is unreachable right now (${String(aiDetail).slice(0, 60)}), so Alex drafted this from your exact words. Edit freely — nothing sends without your approval.`,
+    };
+    console.warn('[agents] template draft fallback:', aiDetail);
   }
   if (!parsed) {
     console.warn('[agents] task AI failed:', aiDetail);
