@@ -349,7 +349,7 @@ test('agent tasks run on the central budget model - no agent-specific model exis
     const db = fakeDb();
     await claimAgentSeat(db, 'beta', { email: 'beta@example.com' });
     // No injected text: the production default (central aiText) must answer.
-    const result = await createAgentTask(db, 'beta', { email: 'beta@example.com' }, { instruction: 'hi', agent: 'Sarah', tz: 'Africa/Harare' });
+    const result = await createAgentTask(db, 'beta', { email: 'beta@example.com' }, { instruction: 'schedule lunch tomorrow at noon', agent: 'Sarah', tz: 'Africa/Harare' });
     assert.equal(result.ok, true);
     assert.equal(urls.length, 1);
     assert.match(urls[0], /models\/gemini-3\.5-flash-lite:generateContent/, 'agents must draft on gemini-3.5-flash-lite');
@@ -358,6 +358,23 @@ test('agent tasks run on the central budget model - no agent-specific model exis
     if (savedKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = savedKey;
     if (savedZen === undefined) delete process.env.ZEN_API_KEY; else process.env.ZEN_API_KEY = savedZen;
   }
+});
+
+test('small talk costs zero AI calls: greetings answered in-persona even mid-outage', async () => {
+  const { claimAgentSeat, createAgentTask } = await import('../api/_agents.js');
+  let aiCalls = 0;
+  const boom = async () => { aiCalls += 1; throw new Error('gemini: This model is currently experiencing high demand.'); };
+  const db = fakeDb();
+  await claimAgentSeat(db, 'beta', { email: 'beta@example.com' });
+  const hi = await createAgentTask(db, 'beta', { email: 'beta@example.com' }, { instruction: 'hi', agent: 'Sarah' }, { text: boom });
+  assert.equal(hi.ok, true);
+  assert.equal(hi.task.tokensEst, 0);
+  assert.match(hi.task.reply, /Sarah, your scheduling assistant/);
+  assert.equal(hi.usage.remaining, hi.usage.limit, 'greetings must not consume the daily execution quota');
+  const skills = await createAgentTask(db, 'beta', { email: 'beta@example.com' }, { instruction: 'what can you do?', agent: 'alex' }, { text: boom });
+  assert.equal(skills.ok, true);
+  assert.match(skills.task.reply, /send real email/);
+  assert.equal(aiCalls, 0, 'small talk must never reach the model');
 });
 
 test('when every model is down, Sarah still drafts plainly-stated events from the member words', async () => {

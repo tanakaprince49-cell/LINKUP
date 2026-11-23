@@ -116,7 +116,7 @@ async function tasksFor(db, uid, max = 60) {
 
 async function usageFor(db, uid, now) {
   const mine = await tasksFor(db, uid, 200);
-  const usedToday = mine.filter((t) => (t.createdAt || 0) >= dayStartUtc(now)).length;
+  const usedToday = mine.filter((t) => (t.createdAt || 0) >= dayStartUtc(now) && !(t.status === 'unsupported' && !(Number(t.tokensEst) > 0))).length;
   return { limit: AGENT_DAILY_LIMIT, usedToday, remaining: Math.max(0, AGENT_DAILY_LIMIT - usedToday) };
 }
 
@@ -461,6 +461,33 @@ function templateEventDraft(instruction, tz, now) {
   };
 }
 
+// Small talk is not work. Greetings, thanks and "what can you do" get an
+// in-persona answer from plain code - no model call, no quota spent - so
+// conversation works even when every AI provider is down, and never burns
+// a token when the providers are up. Anything longer or more specific is
+// a real task and goes to the model (or the words-only drafters) as usual.
+function socialReply(agent, instruction) {
+  const textIn = String(instruction || '').trim();
+  if (textIn.length > 60) return '';
+  const cal = providerOf(agent) === 'calendar';
+  if (/^(hi+|hello|hey+|hey there|hiya|yo|greetings|good\s+(morning|afternoon|evening))\b[!. ]*$/i.test(textIn)) {
+    return cal
+      ? `Hi! I am ${agent.name}, your scheduling assistant. Tell me what belongs on your calendar \u2014 for example \u201CPut a 1-hour deep-work block Friday at 9am\u201D \u2014 and I will draft it for your approval. Nothing goes onto your calendar without your say-so.`
+      : `Hi! I am ${agent.name}, your email assistant. Tell me who to write and what to say \u2014 for example \u201CEmail sarah@example.com about the launch plan\u201D \u2014 and I will draft it for your approval. Nothing sends without your say-so.`;
+  }
+  if (/^(thanks|thank you|thx)\b[!. ]*$/i.test(textIn)) {
+    return cal
+      ? 'Any time. I am here whenever you need something on the calendar.'
+      : 'Any time. I am here whenever you need an email drafted.';
+  }
+  if (/\b(what can you do|who are you|how do you work|your (skills|abilities))\b/i.test(textIn) || /^help\b[!. ]*$/i.test(textIn)) {
+    return cal
+      ? 'I put real events on your Google Calendar. Tell me the event, the day and the time \u2014 \u201CSchedule 30 minutes with sarah@example.com tomorrow at 10am about the launch plan\u201D \u2014 and I draft it here. You check it, edit anything, and tap Approve; only then does it reach your calendar.'
+      : 'I send real email through your Gmail. Tell me the person and the point \u2014 \u201CEmail sarah@example.com: following up on the term sheet\u201D \u2014 and I draft it here. You check it, edit anything, and tap Approve; only then does it send.';
+  }
+  return '';
+}
+
 export async function createAgentTask(db, uid, profile, input, { text = aiText, now = Date.now() } = {}) {
   const seat = await seatOf(db, uid, profile);
   if (!seat.claimed) return { ok: false, reason: 'not_in_beta' };
@@ -471,6 +498,17 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
   const tz = validTz(input?.tz);
 
   const usage = await usageFor(db, uid, now);
+  const social = socialReply(agent, instruction);
+  if (social) {
+    const socialId = `task_${now.toString(36)}${crypto.randomBytes(3).toString('hex')}`;
+    const task = {
+      id: socialId, uid, agent: agent.id, agentName: agent.name, instruction,
+      createdAt: now, updatedAt: now, tokensEst: 0, kind: 'unsupported',
+      status: 'unsupported', draft: null, summary: '', reply: social, result: null, error: '',
+    };
+    await db.collection('agentTasks').doc(socialId).set(task);
+    return { ok: true, task, usage };
+  }
   if (usage.remaining <= 0) return { ok: false, reason: 'daily_limit', usage };
   const all = await listQuery(db.collection('agentTasks').limit(AGENT_BETA_CAP + 1));
   if (all.length >= AGENT_BETA_CAP) return { ok: false, reason: 'beta_cap_reached', usage };
@@ -516,7 +554,7 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
     } catch (err) {
       // A provider error already failed over Gemini→Zen inside aiText.
       // Repeating it only burns the 60s function budget — report it instead.
-      aiDetail = String(err?.message || err).replace(/\s+/g, ' ').slice(0, 240);
+      aiDetail = String(err?.message || err).replace(/\s+/g, ' ').slice(0, 300);
       break;
     }
   }
