@@ -105,20 +105,36 @@ export function clippedJson(value, max = MAX_PROFILE_CHARS) {
   return JSON.stringify(value ?? {}).slice(0, max);
 }
 
-// Capacity flakes (503/overload) get ONE retry after 1.5s — new-model tiers
-// shed load in bursts and the second attempt usually lands. Quota/4xx fail
-// straight through to Zen / deterministic fallbacks.
-export async function callGemini(prompt, options, apiKey) {
-  if (options.disableCapacityRetry === true) return callGeminiOnce(prompt, options, apiKey);
-  try {
-    return await callGeminiOnce(prompt, options, apiKey);
-  } catch (err) {
-    if (!/503|500|overloaded|high demand|capacity/i.test(String(err?.message || err))) throw err;
-    await new Promise(r => setTimeout(r, 1500));
-    return callGeminiOnce(prompt, options, apiKey);
+// Capacity is per-model: when one Gemini tier is shedding load (503, "high
+// demand", overload), a sibling tier usually answers. Walk a short model
+// chain — the same trick the Zen leg below has always used — instead of
+// retrying the drowning model. Quota and auth failures fail for every model
+// on the key, so those throw straight through to the Zen rescue, as before.
+const GEMINI_FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash'];
+let geminiHealthyModel = '';
+const geminiChain = (wanted) => {
+  const list = [cleanModel(wanted), cleanModel(DEFAULT_MODEL), geminiHealthyModel, ...GEMINI_FALLBACK_MODELS.map(cleanModel)].filter(Boolean);
+  return [...new Set(list)];
+};
+export async function callGemini(prompt, options = {}, apiKey) {
+  const chain = geminiChain(options.model);
+  const errors = [];
+  for (const model of options.disableCapacityRetry === true ? chain.slice(0, 1) : chain) {
+    try {
+      const out = await callGeminiOnce(prompt, options, apiKey, model);
+      geminiHealthyModel = model;
+      return out;
+    } catch (err) {
+      const message = String(err?.message || err);
+      errors.push(`${model}: ${message}`);
+      if (!/503|500|overloaded|high demand|capacity|not found|not supported|does not exist|invalid model|no such model/i.test(message)) {
+        throw new Error(message);
+      }
+    }
   }
+  throw new Error(errors[0] || 'Gemini failed');
 }
-async function callGeminiOnce(prompt, options, apiKey) {
+async function callGeminiOnce(prompt, options = {}, apiKey, model = DEFAULT_MODEL) {
 
   const generationConfig = {
     temperature: options.temperature ?? 0.25,
@@ -126,7 +142,7 @@ async function callGeminiOnce(prompt, options, apiKey) {
   };
   if (options.responseMimeType) generationConfig.responseMimeType = options.responseMimeType;
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_MODEL}:generateContent`, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     signal: AbortSignal.timeout(Number(options.timeoutMs || 12000)),
     method: 'POST',
     headers: {

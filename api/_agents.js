@@ -353,6 +353,113 @@ const validTz = (tz) => {
 };
 const validWhen = (value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(String(value || ''));
 
+// Sarah's deterministic safety net — the mirror of Alex's template draft.
+// When every AI model is unreachable she still drafts, but only from time
+// expressions stated plainly in the member's own words (a weekday, today /
+// tomorrow, an explicit date, plus a clock time). Nothing is guessed beyond
+// that: no day and no time means no draft, and the editable draft card plus
+// the approval tap remain the guardrail before Calendar hears a word.
+function templateEventDraft(instruction, tz, now) {
+  const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  const WEEKDAYS = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+  const pad = (n) => String(n).padStart(2, '0');
+  let parts = {};
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' });
+    for (const part of fmt.formatToParts(new Date(now))) parts[part.type] = part.value;
+  } catch { return null; }
+  const nowY = Number(parts.year); const nowM = Number(parts.month); const nowD = Number(parts.day);
+  const nowMinutes = Number(parts.hour) * 60 + Number(parts.minute);
+  const todayIdx = WEEKDAYS[String(parts.weekday || '').slice(0, 3).toLowerCase()];
+  if (!Number.isFinite(nowY) || todayIdx === undefined) return null;
+
+  // Clock time: "at 9am", "at 10:30", "14:00", noon, midnight. Default 09:00.
+  let hour = 9; let minute = 0; let timeFound = false;
+  const timeMatch = instruction.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i) || instruction.match(/\b(\d{1,2}):(\d{2})\s*(am|pm)?\b/i);
+  if (/\bnoon\b/i.test(instruction)) { hour = 12; minute = 0; timeFound = true; }
+  else if (/\bmidnight\b/i.test(instruction)) { hour = 0; minute = 0; timeFound = true; }
+  else if (timeMatch) {
+    hour = Number(timeMatch[1]); minute = Number(timeMatch[2] || 0);
+    const mer = String(timeMatch[3] || '').toLowerCase();
+    if (mer === 'pm' && hour < 12) hour += 12;
+    if (mer === 'am' && hour === 12) hour = 0;
+    timeFound = true;
+  }
+  if (hour > 23 || minute > 59) return null;
+  const startMinutes = hour * 60 + minute;
+
+  // Day: explicit date, today / tomorrow, a weekday, else the stated time's day.
+  let y = 0; let m = 0; let d = 0;
+  const iso = instruction.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
+  let monIdx; let dayNum;
+  const namedA = instruction.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?\b/i);
+  const namedB = namedA ? null : instruction.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i);
+  if (namedA) { monIdx = MONTHS[namedA[1].toLowerCase()]; dayNum = Number(namedA[2]); }
+  else if (namedB) { dayNum = Number(namedB[1]); monIdx = MONTHS[namedB[2].toLowerCase()]; }
+  if (iso) { y = Number(iso[1]); m = Number(iso[2]); d = Number(iso[3]); }
+  else if (monIdx !== undefined && dayNum) {
+    y = nowY; m = monIdx + 1; d = dayNum;
+    if (m < nowM || (m === nowM && (d < nowD || (d === nowD && startMinutes <= nowMinutes)))) y += 1;
+  } else {
+    let addDays = null;
+    if (/\btomorrow\b/i.test(instruction)) addDays = 1;
+    else if (/\btoday\b/i.test(instruction)) addDays = 0;
+    else {
+      const wd = instruction.match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)\b/i);
+      if (wd) {
+        addDays = (WEEKDAYS[wd[1].slice(0, 3).toLowerCase()] - todayIdx + 7) % 7;
+        if (addDays === 0 && startMinutes <= nowMinutes) addDays = 7;
+      } else if (timeFound) addDays = startMinutes > nowMinutes ? 0 : 1;
+      else return null;
+    }
+    const base = new Date(Date.UTC(nowY, nowM - 1, nowD + addDays));
+    y = base.getUTCFullYear(); m = base.getUTCMonth() + 1; d = base.getUTCDate();
+  }
+
+  // Duration: "1-hour", "30 minutes", "1 hour 30 minutes". Default 60.
+  let duration = 60;
+  const hMatch = instruction.match(/(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?)\b/i);
+  const mMatch = instruction.match(/(\d+)\s*(?:minutes?|mins?)\b/i);
+  if (hMatch || mMatch) duration = Math.round((hMatch ? parseFloat(hMatch[1]) * 60 : 0) + (mMatch ? Number(mMatch[1]) : 0)) || 60;
+  const endTotal = startMinutes + duration;
+  const endBase = new Date(Date.UTC(y, m - 1, d + Math.floor(endTotal / 1440)));
+  const endMinutes = endTotal % 1440;
+  const start = `${y}-${pad(m)}-${pad(d)}T${pad(hour)}:${pad(minute)}`;
+  const end = `${endBase.getUTCFullYear()}-${pad(endBase.getUTCMonth() + 1)}-${pad(endBase.getUTCDate())}T${pad(Math.floor(endMinutes / 60))}:${pad(endMinutes % 60)}`;
+
+  const attendees = (instruction.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || []).slice(0, 20);
+  let title = '';
+  const about = instruction.match(/\babout\s+(.+)$/i);
+  if (about) title = about[1];
+  else {
+    title = instruction
+      .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, ' ')
+      .replace(/^\s*(please\s+)?(schedule|book|put|add|create|set\s+up|make|arrange|block)\s+/i, ' ')
+      .replace(/\b\d+(?:\.\d+)?\s*-?\s*(?:hours?|hrs?|minutes?|mins?)\b/gi, ' ')
+      .replace(/\b\d{4}-\d{2}-\d{2}\b/g, ' ')
+      .replace(/\bon my calendar\b/gi, ' ')
+      .replace(/\b(today|tomorrow|noon|midnight)\b/gi, ' ')
+      .replace(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi, ' ')
+      .replace(/\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/^[\s:;,\-\u2014]+|[\s:;,\-\u2014]+$/g, '')
+      .trim();
+  }
+  title = title.replace(/^(a|an|the)\s+/i, '').trim();
+  if (!title) title = /deep[-\s]?work|focus/i.test(instruction) ? 'Deep-work block' : 'Calendar event';
+  title = title.charAt(0).toUpperCase() + title.slice(1);
+  const dayLabel = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(Date.UTC(y, m - 1, d)));
+  return {
+    kind: 'event',
+    title: clean(title, 200),
+    start,
+    end,
+    attendees,
+    description: '',
+    summary: `The AI is unreachable right now, so Sarah drafted this from your exact words: ${dayLabel} at ${pad(hour)}:${pad(minute)} (${tz}). Edit freely — nothing is added without your approval.`,
+  };
+}
+
 export async function createAgentTask(db, uid, profile, input, { text = aiText, now = Date.now() } = {}) {
   const seat = await seatOf(db, uid, profile);
   if (!seat.claimed) return { ok: false, reason: 'not_in_beta' };
@@ -403,7 +510,7 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
     } catch (err) {
       // A provider error already failed over Gemini→Zen inside aiText.
       // Repeating it only burns the 60s function budget — report it instead.
-      aiDetail = String(err?.message || err).replace(/\s+/g, ' ').slice(0, 110);
+      aiDetail = String(err?.message || err).replace(/\s+/g, ' ').slice(0, 240);
       break;
     }
   }
@@ -427,6 +534,13 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
       summary: `The AI is unreachable right now (${String(aiDetail).slice(0, 60)}), so Alex drafted this from your exact words. Edit freely — nothing sends without your approval.`,
     };
     console.warn('[agents] template draft fallback:', aiDetail);
+  }
+  if (!parsed && providerOf(agent) === 'calendar') {
+    const drafted = templateEventDraft(instruction, tz, now);
+    if (drafted) {
+      parsed = drafted;
+      console.warn('[agents] template event fallback:', aiDetail);
+    }
   }
   if (!parsed) {
     console.warn('[agents] task AI failed:', aiDetail);

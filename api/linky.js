@@ -971,7 +971,7 @@ async function handleApp(req, res) {
         if (!out.ok && out.reason === 'daily_limit') { sendError(res, 429, 'That is your 5 beta tasks for today. Alex resets at midnight UTC.'); return; }
         if (!out.ok && out.reason === 'beta_cap_reached') { sendError(res, 429, 'The beta has used its 700 task executions. Thank you for testing — this is exactly what we needed to learn.'); return; }
         if (!out.ok && out.reason === 'not_in_beta') { sendError(res, 403, 'Claim a beta seat first.'); return; }
-        if (!out.ok) { sendError(res, 503, `Agent task failed (${out.reason}${out.detail ? ` · ${String(out.detail).slice(0, 160)}` : ''})`); return; }
+        if (!out.ok) { sendError(res, 503, `Agent task failed (${out.reason}${out.detail ? ` · ${String(out.detail).slice(0, 260)}` : ''})`); return; }
         break;
       }
       case 'agentApprove': {

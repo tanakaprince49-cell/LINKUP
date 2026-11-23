@@ -254,6 +254,61 @@ test('a two-letter greeting can be sent — agents answer conversation too', asy
   assert.match(result.task.reply, /scheduling assistant/);
 });
 
+test('Gemini capacity failures walk the model chain instead of drowning with it', async () => {
+  const { callGemini } = await import('../api/_gemini.js');
+  const realFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes('gemini-2.5-flash-lite')) {
+      return { ok: false, status: 503, text: async () => JSON.stringify({ error: { message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary.' } }) };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ candidates: [{ content: { parts: [{ text: 'chain-ok' }] }, finishReason: 'STOP' }] }) };
+  };
+  try {
+    const out = await callGemini('hello', { model: 'gemini-2.5-flash-lite', timeoutMs: 1000 }, 'test-key');
+    assert.equal(out, 'chain-ok');
+    assert.equal(calls.length, 2);
+    assert.ok(!calls[1].includes('gemini-2.5-flash-lite'), 'second attempt must be a different model');
+    // Quota fails straight through, exactly one attempt, original words intact.
+    calls.length = 0;
+    globalThis.fetch = async (url) => {
+      calls.push(String(url));
+      return { ok: false, status: 429, text: async () => JSON.stringify({ error: { message: 'Quota exceeded for this key.' } }) };
+    };
+    await assert.rejects(() => callGemini('hello', { model: 'gemini-2.5-flash-lite' }, 'test-key'), /Quota exceeded/);
+    assert.equal(calls.length, 1);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('when every model is down, Sarah still drafts plainly-stated events from the member words', async () => {
+  const { claimAgentSeat, createAgentTask } = await import('../api/_agents.js');
+  const boom = async () => { throw new Error('gemini: This model is currently experiencing high demand.'); };
+  const db = fakeDb();
+  await claimAgentSeat(db, 'beta', { email: 'beta@example.com' });
+  const block = await createAgentTask(db, 'beta', { email: 'beta@example.com' }, { instruction: 'Put a 1-hour deep-work block on my calendar Friday at 9am', agent: 'Sarah', tz: 'Africa/Harare' }, { text: boom });
+  assert.equal(block.ok, true);
+  assert.equal(block.task.kind, 'event');
+  assert.equal(block.task.status, 'awaiting_approval');
+  assert.match(block.task.draft.start, /T09:00:00$/);
+  assert.match(block.task.draft.end, /T10:00:00$/);
+  assert.equal(new Date(`${block.task.draft.start.slice(0, 10)}T00:00:00Z`).getUTCDay(), 5, 'must land on a Friday');
+  assert.match(block.task.draft.title, /deep-work/i);
+  assert.match(block.task.summary, /exact words/);
+  assert.equal(block.task.draft.timeZone, 'Africa/Harare');
+
+  const db2 = fakeDb();
+  await claimAgentSeat(db2, 'beta', { email: 'beta@example.com' });
+  const invite = await createAgentTask(db2, 'beta', { email: 'beta@example.com' }, { instruction: 'Schedule 30 minutes with sarah@example.com tomorrow at 10am about the launch plan', agent: 'Sarah', tz: 'Africa/Harare' }, { text: boom });
+  assert.equal(invite.ok, true);
+  assert.match(invite.task.draft.start, /T10:00:00$/);
+  assert.match(invite.task.draft.end, /T10:30:00$/);
+  assert.deepEqual(invite.task.draft.attendees, ['sarah@example.com']);
+  assert.match(invite.task.draft.title, /launch plan/i);
+});
+
 test('AI failures are diagnosed, never swallowed: junk replies and provider errors', async () => {
   const { claimAgentSeat, createAgentTask } = await import('../api/_agents.js');
   // A fenced, prose-wrapped, kind-less reply still becomes a draft.
@@ -273,18 +328,27 @@ test('AI failures are diagnosed, never swallowed: junk replies and provider erro
   assert.equal(junked.ok, true);
   assert.equal(junked.task.status, 'awaiting_approval');
   assert.match(junked.task.summary, /unparseable AI reply/);
-  // Same garbage, calendar side: a clean ai_unavailable WITH the diagnosis.
+  // Same garbage, calendar side with a plainly-stated day: Sarah's safety net
+  // drafts from the member's words, defaulting to 09:00.
   const db2b = fakeDb();
   await claimAgentSeat(db2b, 'beta', { email: 'beta@example.com' });
   const junkedCal = await createAgentTask(db2b, 'beta', { email: 'beta@example.com' }, { instruction: 'Schedule lunch tomorrow', agent: 'Sarah' }, { text: junk });
-  assert.equal(junkedCal.ok, false);
-  assert.equal(junkedCal.reason, 'ai_unavailable');
-  assert.match(junkedCal.detail, /unparseable/);
+  assert.equal(junkedCal.ok, true);
+  assert.equal(junkedCal.task.status, 'awaiting_approval');
+  assert.match(junkedCal.task.draft.start, /T09:00:00$/);
+  // But with no day and no time stated anywhere, there is nothing honest to
+  // draft: a clean ai_unavailable WITH the diagnosis.
+  const db2c = fakeDb();
+  await claimAgentSeat(db2c, 'beta', { email: 'beta@example.com' });
+  const hopeless = await createAgentTask(db2c, 'beta', { email: 'beta@example.com' }, { instruction: 'Schedule lunch sometime soon', agent: 'Sarah' }, { text: junk });
+  assert.equal(hopeless.ok, false);
+  assert.equal(hopeless.reason, 'ai_unavailable');
+  assert.match(hopeless.detail, /unparseable/);
   // A throwing provider, calendar side: the provider's own words ride along.
   const db3 = fakeDb();
   await claimAgentSeat(db3, 'beta', { email: 'beta@example.com' });
   const boom = async () => { throw new Error('gemini: HTTP 429 quota'); };
-  const failed = await createAgentTask(db3, 'beta', { email: 'beta@example.com' }, { instruction: 'Schedule lunch tomorrow at noon', agent: 'Sarah' }, { text: boom });
+  const failed = await createAgentTask(db3, 'beta', { email: 'beta@example.com' }, { instruction: 'Schedule lunch sometime soon', agent: 'Sarah' }, { text: boom });
   assert.equal(failed.ok, false);
   assert.match(failed.detail, /429/);
   // Same outage, email side: Alex still drafts, from the member's own words.
