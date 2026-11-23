@@ -37,7 +37,7 @@ const INK = '#0A0B0D';
 
 function friendly(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : String(error || '');
-  return message && message.length < 140 ? message : fallback;
+  return message && message.length < 400 ? message : fallback;
 }
 
 type EditState = {

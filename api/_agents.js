@@ -401,7 +401,10 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
       parsed = extractJson(rawText);
       if (!parsed) aiDetail = `unparseable AI reply (${rawText.slice(0, 60).replace(/\s+/g, ' ')}…)`;
     } catch (err) {
+      // A provider error already failed over Gemini→Zen inside aiText.
+      // Repeating it only burns the 60s function budget — report it instead.
       aiDetail = String(err?.message || err).replace(/\s+/g, ' ').slice(0, 110);
+      break;
     }
   }
   if (!parsed) {
