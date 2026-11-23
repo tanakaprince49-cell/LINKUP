@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-export const GEMINI_MODEL = 'gemini-3.8-flash';
+export const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 export const OPENROUTER_MODEL = process.env.EXPO_PUBLIC_OPENROUTER_MODEL || 'deepseek/deepseek-chat';
 
 type GeminiRequestOptions = {

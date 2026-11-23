@@ -1,8 +1,16 @@
 // THE Gemini model for the whole product: one name, centrally configured.
-// Google closed the 2.5 flash tier to new API users and points callers at
-// gemini-3.8-flash; a stale GEMINI_MODEL env naming a dead 2.5 model fails
-// permanently - by design nothing here quietly substitutes another model.
-const DEFAULT_MODEL = String(process.env.GEMINI_MODEL || '').trim() || 'gemini-3.8-flash';
+// Current choice: gemini-3.5-flash-lite, the cheapest live tier. The 2.5
+// flash family is closed to new API users and saturated for everyone else,
+// while gemini-3.8-flash costs ~2.5x more and doubles in price on
+// 2027-01-01. GEMINI_MODEL may override this with any current model -
+// except a retired 2.5 name, which is rejected loudly (never silently) so
+// one stale env var cannot park the whole product on a dead model again.
+const RETIRED_GEMINI_MODELS = new Set(['gemini-2.5-flash', 'gemini-2.5-flash-lite']);
+const envGeminiModel = String(process.env.GEMINI_MODEL || '').trim();
+if (envGeminiModel && RETIRED_GEMINI_MODELS.has(envGeminiModel)) {
+  console.warn(`[ai] GEMINI_MODEL=${envGeminiModel} names a retired model - ignoring it. Delete that env var or set a current model.`);
+}
+const DEFAULT_MODEL = envGeminiModel && !RETIRED_GEMINI_MODELS.has(envGeminiModel) ? envGeminiModel : 'gemini-3.5-flash-lite';
 // Second brain. If Gemini is down, over quota or returns junk, the same prompt
 // goes to OpenCode Zen (OpenAI-compatible) instead of the user seeing a
 // fallback sentence. Same contract, different provider, no code change at the
