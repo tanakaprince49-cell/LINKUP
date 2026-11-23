@@ -19,6 +19,7 @@ import {
   linkyChat, isPlusUser } from './_linky.js';
 import { badgeLine } from './_proof.js';
 import { writeMyProfile, assessProfileQuality, profileWriterFacts } from './_profileWriter.js';
+import { agentHome, claimAgentSeat, createAgentTask, approveAgentTask, discardAgentTask, disconnectGmail, gmailConnectUrl, handleGmailCallback } from './_agents.js';
 
 
 // ---------------------------------------------------------------- cron auth
@@ -939,6 +940,50 @@ async function handleApp(req, res) {
         if (!out.ok) { sendError(res, 503, 'Linky could not write that just now. Try again in a minute.'); return; }
         break;
       }
+      // AI AGENTS (closed beta): Alex drafts, the member approves, Gmail
+      // sends. Seats, daily executions and the beta-wide cap are enforced in
+      // _agents.js; nothing here can spend past them.
+      case 'agentHome': {
+        const me = await loadUser(uid);
+        out = await agentHome(getDb(), uid, me || {});
+        break;
+      }
+      case 'agentClaim': {
+        const me = await loadUser(uid);
+        if (!me) { sendError(res, 400, 'Finish your LINKUP profile first.'); return; }
+        const claimed = await claimAgentSeat(getDb(), uid, me);
+        if (!claimed.ok) { sendError(res, 409, 'The 20-seat agent beta is full. You are on the list for the next wave.'); return; }
+        out = claimed;
+        break;
+      }
+      case 'agentConnect': {
+        const url = gmailConnectUrl(uid);
+        if (!url.configured) { sendError(res, 503, 'Gmail connection is not switched on yet. Alex can still draft — sending unlocks when it is.'); return; }
+        out = { ok: true, url: url.url };
+        break;
+      }
+      case 'agentDisconnect': out = await disconnectGmail(getDb(), uid); break;
+      case 'agentTask': {
+        const me = await loadUser(uid);
+        if (!me) { sendError(res, 400, 'Finish your LINKUP profile first.'); return; }
+        out = await createAgentTask(getDb(), uid, me, { instruction: body.instruction, agent: body.agent });
+        if (!out.ok && out.reason === 'daily_limit') { sendError(res, 429, 'That is your 5 beta tasks for today. Alex resets at midnight UTC.'); return; }
+        if (!out.ok && out.reason === 'beta_cap_reached') { sendError(res, 429, 'The beta has used its 700 task executions. Thank you for testing — this is exactly what we needed to learn.'); return; }
+        if (!out.ok && out.reason === 'not_in_beta') { sendError(res, 403, 'Claim a beta seat first.'); return; }
+        if (!out.ok) { sendError(res, 503, 'Alex could not take that task just now. Try again in a minute.'); return; }
+        break;
+      }
+      case 'agentApprove': {
+        out = await approveAgentTask(getDb(), uid, { taskId: body.taskId, draft: body.draft });
+        if (!out.ok && out.reason === 'gmail_not_connected') { sendError(res, 409, 'Connect Gmail first — Alex drafts freely, but sending needs your Gmail.'); return; }
+        if (!out.ok) { sendError(res, 400, out.reason === 'bad_recipient' ? 'That recipient does not look like an email address.' : 'Alex could not send that. Check the draft and try again.'); return; }
+        break;
+      }
+      case 'agentDiscard': {
+        out = await discardAgentTask(getDb(), uid, { taskId: body.taskId });
+        if (!out.ok) { sendError(res, 400, 'That task cannot be discarded.'); return; }
+        break;
+      }
       case 'chat': out = await linkyChat(uid, {
         message: body.message,
         history: body.history,
@@ -1031,6 +1076,20 @@ export default async function handler(req, res) {
 
   if (String(req.query?.action || '') === 'githubWebhook') { res.status(410).json({ error: 'Linky codebase tracking has been retired.' }); return; }
   if (String(req.query?.action || '') === 'fastTrackDeal') { res.status(410).json({ error: 'This Linky feature has been retired.' }); return; }
+
+  // Gmail OAuth returns here (GET, no bearer — the signed state carries the
+  // uid). Exchange happens in _agents.js; the member lands back in the app.
+  if (String(req.query?.action || '') === 'gmailCallback') {
+    try {
+      const result = await handleGmailCallback(getDb(), req.query || {});
+      res.setHeader('Location', result.redirect);
+      res.status(302).send('Redirecting…');
+    } catch {
+      res.setHeader('Location', 'https://www.linkupbuild.com/app/aiagents?gmail=error');
+      res.status(302).send('Redirecting…');
+    }
+    return;
+  }
 
   if (String(req.query?.action || '') === 'unsubscribeEmail') {
     const uid = String(req.query?.uid || '').trim();

@@ -75,7 +75,7 @@ export type LinkyChatResult = {
   upgradeRequired?: boolean;
 };
 
-export type LinkyAction = 'teamMatch' | 'chat' | 'writeProfile' | 'assessProfile' | 'pushNotify' | 'clientError' | 'webPushKey' | 'webPushSubscribe' | 'builder';
+export type LinkyAction = 'teamMatch' | 'chat' | 'writeProfile' | 'assessProfile' | 'agentHome' | 'agentClaim' | 'agentConnect' | 'agentDisconnect' | 'agentTask' | 'agentApprove' | 'agentDiscard' | 'pushNotify' | 'clientError' | 'webPushKey' | 'webPushSubscribe' | 'builder';
 
 const endpoint = () => Platform.OS === 'web'
   ? webAppPath('/api/linky')
@@ -207,3 +207,36 @@ export type WrittenProfile = {
 };
 
 export const linkyWriteProfile = () => linkyCall<WrittenProfile>('writeProfile', {});
+
+/* -- AI AGENTS (closed beta): Alex drafts, you approve, Gmail sends. ------- */
+export type AgentTask = {
+  id: string;
+  agent: string;
+  instruction: string;
+  status: 'awaiting_approval' | 'sent' | 'discarded' | 'unsupported' | string;
+  kind?: string;
+  summary?: string;
+  reply?: string;
+  draft?: { to: string; subject: string; body: string } | null;
+  tokensEst?: number;
+  createdAt?: number;
+  result?: { to?: string; messageId?: string; sentAt?: number } | null;
+  error?: string;
+};
+export type AgentHome = {
+  ok: boolean;
+  beta: { seatsTotal: number; seatsTaken: number; claimed: boolean; cap: number };
+  agents: { id: string; name: string; role: string; live: boolean; blurb?: string }[];
+  gmail: { configured: boolean; connected: boolean; email?: string };
+  usage: { limit: number; usedToday: number; remaining: number };
+  tasks: AgentTask[];
+};
+export const agentHome = () => linkyCall<AgentHome>('agentHome', {});
+export const agentClaim = () => linkyCall<{ ok: boolean }>('agentClaim', {});
+export const agentConnectGmail = () => linkyCall<{ ok: boolean; url: string }>('agentConnect', {});
+export const agentDisconnectGmail = () => linkyCall<{ ok: boolean }>('agentDisconnect', {});
+export const agentCreateTask = (instruction: string) =>
+  linkyCall<{ ok: boolean; task: AgentTask; usage: AgentHome['usage'] }>('agentTask', { instruction, agent: 'alex' });
+export const agentApproveTask = (taskId: string, draft: { to: string; subject: string; body: string }) =>
+  linkyCall<{ ok: boolean; status: string }>('agentApprove', { taskId, draft });
+export const agentDiscardTask = (taskId: string) => linkyCall<{ ok: boolean }>('agentDiscard', { taskId });

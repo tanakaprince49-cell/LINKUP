@@ -29,6 +29,7 @@ import EmailAuthScreen from './src/screens/EmailAuthScreen';
 import LandingScreen from './src/screens/LandingScreen';
 
 const LinkyHomeScreen = lazyScreen(() => import('./src/screens/LinkyHomeScreen'));
+const AiAgentsScreen = lazyScreen(() => import('./src/screens/AiAgentsScreen'));
 const IdeaDeckScreen = lazyScreen(() => import('./src/screens/IdeaDeckScreen'));
 const AlertsScreen = lazyScreen(() => import('./src/screens/AlertsScreen'));
 const MessagesScreen = lazyScreen(() => import('./src/screens/MessagesScreen'));
@@ -168,6 +169,7 @@ const linking: any = {
         ? { Campaigns: 'campaign-manager', CampaignDetail: 'campaign-manager/:campaignId' }
         : {}),
       Profile: 'profile/:userId',
+      AiAgents: 'aiagents',
       Messages: 'messages',
       Alerts: 'alerts',
       Matches: 'connections',
@@ -872,6 +874,7 @@ function AppContent() {
             <Stack.Screen name="NetworkQuiz" component={NetworkQuizScreen} />
             <Stack.Screen name="BuilderWorkspace" component={BuilderWorkspaceScreen} />
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
+            <Stack.Screen name="AiAgents" component={AiAgentsScreen} />
             <Stack.Screen name="GroupChat" component={GroupChatScreen} />
           </>
         ) : null}

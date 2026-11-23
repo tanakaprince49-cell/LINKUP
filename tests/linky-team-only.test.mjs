@@ -28,7 +28,7 @@ test('the authenticated API keeps teamMatch live and retires former Linky assist
   const module={exports:{}};
   const mocks={
     './_builderRuntime.js':{},'node:crypto':await import('node:crypto'), './_linky.js':linky,
-    './_proof.js':{},'./_profileWriter.js':{writeMyProfile:async()=>({ok:false,reason:'not_used_here'})}, './_firebaseAdmin.js':{getDb:()=>({}),verifyRequestUser:async()=>({uid:'member-1'})},
+    './_proof.js':{},'./_profileWriter.js':{writeMyProfile:async()=>({ok:false,reason:'not_used_here'})},'./_agents.js':{agentHome:async()=>({ok:true}),claimAgentSeat:async()=>({ok:true}),createAgentTask:async()=>({ok:false,reason:'not_used_here'}),approveAgentTask:async()=>({ok:false}),discardAgentTask:async()=>({ok:false}),disconnectGmail:async()=>({ok:true}),gmailConnectUrl:()=>({configured:false,url:''}),handleGmailCallback:async()=>({redirect:''})}, './_firebaseAdmin.js':{getDb:()=>({}),verifyRequestUser:async()=>({uid:'member-1'})},
     './_gemini.js':{handleOptions:()=>false,readJsonBody:req=>req.body,setCors:()=>{},sendError:(res,code,message)=>res.status(code).json({error:message})},
   };
   const code=ts.transpileModule(read('api/linky.js'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
