@@ -195,6 +195,54 @@ test('non-email tasks never fake a result — Alex says so honestly', async () =
   assert.match(result.task.reply, /only sends email/);
 });
 
+test('Sarah drafts calendar events and only approval creates them', async () => {
+  const { claimAgentSeat, createAgentTask, approveAgentTask, encryptSecret } = await import('../api/_agents.js');
+  const db = fakeDb();
+  await claimAgentSeat(db, 'beta', { email: 'beta@example.com' });
+  const text = async () => ({
+    text: JSON.stringify({
+      kind: 'event', title: 'Launch sync', start: '2027-01-16T10:00:00', end: '2027-01-16T10:30:00',
+      attendees: ['partner@example.com'], description: 'Roadmap', summary: 'A 30-minute launch sync.',
+    }),
+  });
+  const created = await createAgentTask(db, 'beta', { email: 'beta@example.com' },
+    { instruction: 'Schedule 30 min with partner@example.com tomorrow at 10', agent: 'Sarah', tz: 'Africa/Harare' }, { text, now: Date.UTC(2027, 0, 15, 8, 0, 0) });
+  assert.equal(created.ok, true);
+  assert.equal(created.task.kind, 'event');
+  assert.equal(created.task.status, 'awaiting_approval');
+  assert.equal(created.task.draft.timeZone, 'Africa/Harare');
+  // No calendar connected: approval is refused and the draft waits.
+  const refused = await approveAgentTask(db, 'beta', { taskId: created.task.id, draft: created.task.draft });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.reason, 'calendar_not_connected');
+  assert.equal(db._store.get(`agentTasks:${created.task.id}`).status, 'awaiting_approval');
+  // Connect a calendar (seeded exactly as the OAuth callback stores it) and approve.
+  const calls = [];
+  const fetchFn = async (url, options) => {
+    calls.push({ url: String(url), options });
+    if (String(url).includes('oauth2.googleapis.com/token')) {
+      return { ok: true, status: 200, json: async () => ({ access_token: 'cal-access', expires_in: 3600 }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ id: 'evt-1', htmlLink: 'https://calendar.google.com/event?eid=evt-1' }) };
+  };
+  db._store.set('agentConnections:beta__calendar', { uid: 'beta', provider: 'calendar', email: 'beta@company.com', refreshTokenEnc: encryptSecret('cal-refresh'), connectedAt: 1 });
+  const approved = await approveAgentTask(db, 'beta', { taskId: created.task.id, draft: created.task.draft }, { fetchFn });
+  assert.equal(approved.ok, true);
+  assert.equal(approved.status, 'sent');
+  const createCall = calls.find((c) => c.url.includes('calendar/v3'));
+  assert.ok(createCall, 'calendar API was called exactly at approval time');
+  const event = JSON.parse(createCall.options.body);
+  assert.equal(event.summary, 'Launch sync');
+  assert.equal(event.start.dateTime, '2027-01-16T10:00:00');
+  assert.equal(event.start.timeZone, 'Africa/Harare');
+  assert.deepEqual(event.attendees, [{ email: 'partner@example.com' }]);
+  // Gmail events through Sarah (and calendar asks through Alex) are refused honestly.
+  const wrongTool = await createAgentTask(db, 'beta', { email: 'beta@example.com' },
+    { instruction: 'Email partner@example.com', agent: 'Sarah' },
+    { text: async () => ({ text: JSON.stringify({ kind: 'email', to: 'partner@example.com', subject: 'x', body: 'y' }) }), now: Date.UTC(2027, 0, 15, 9, 0, 0) });
+  assert.equal(wrongTool.task.status, 'unsupported');
+});
+
 test('the token vault is encrypted at rest and round-trips', async () => {
   const { encryptSecret, decryptSecret } = await import('../api/_agents.js');
   const sealed = encryptSecret('refresh-token-value', 'test-secret');
@@ -205,18 +253,30 @@ test('the token vault is encrypted at rest and round-trips', async () => {
   assert.equal(decryptSecret('garbage', 'test-secret'), '');
 });
 
-test('the AI Agents printing presses are wired (route, screen, API helpers)', () => {
+test('the AI Agents printing presses are wired (routes, screens, API helpers)', () => {
   const app = fs.readFileSync(new URL('../mobile/App.tsx', import.meta.url), 'utf8');
   assert.match(app, /AiAgents: 'aiagents'/);
-  assert.match(app, /<Stack\.Screen name="AiAgents" component=\{AiAgentsScreen\} \/>/);
-  const screen = fs.readFileSync(new URL('../mobile/src/screens/AiAgentsScreen.tsx', import.meta.url), 'utf8');
-  assert.match(screen, /Alex · Personal Executive Assistant/);
-  assert.match(screen, /Approve &amp; send/);
-  assert.match(screen, /Your personal AI workforce/);
-  assert.match(screen, /Sarah · Email &amp; Communications Assistant/);
-  assert.match(screen, /Marcus · Developer &amp; GitHub Assistant/);
+  assert.match(app, /AiAgentChat: 'aiagents\/chat\/:agentId'/);
+  assert.match(app, /AiAgentProfile: 'aiagents\/profile\/:agentId'/);
+  assert.match(app, /AiAgentsSettings: 'aiagents\/settings'/);
+  for (const screen of ['AiAgents', 'AiAgentChat', 'AiAgentProfile', 'AiAgentsSettings']) {
+    assert.match(app, new RegExp(`<Stack\\.Screen name="${screen}" component=`), `${screen} registered`);
+  }
+  const directory = fs.readFileSync(new URL('../mobile/src/screens/AiAgentsScreen.tsx', import.meta.url), 'utf8');
+  assert.match(directory, /Your personal AI workforce/);
+  assert.match(directory, /Message \{agent\.name\}/);
+  const chat = fs.readFileSync(new URL('../mobile/src/screens/AiAgentChatScreen.tsx', import.meta.url), 'utf8');
+  assert.match(chat, /Approve &amp; send/);
+  assert.match(chat, /Approve &amp; add to calendar/);
+  const profile = fs.readFileSync(new URL('../mobile/src/screens/AiAgentProfileScreen.tsx', import.meta.url), 'utf8');
+  assert.match(profile, /VerifiedBadge/);
+  assert.match(profile, /AI AGENT/);
+  const settings = fs.readFileSync(new URL('../mobile/src/screens/AiAgentsSettingsScreen.tsx', import.meta.url), 'utf8');
+  assert.match(settings, /Task history/);
+  const avatar = fs.readFileSync(new URL('../mobile/src/components/AgentAvatar.tsx', import.meta.url), 'utf8');
+  assert.match(avatar, /VerifiedBadge/);
   const api = fs.readFileSync(new URL('../mobile/src/lib/linkyApi.ts', import.meta.url), 'utf8');
-  for (const fn of ['agentHome', 'agentCreateTask', 'agentApproveTask', 'agentDiscardTask']) {
+  for (const fn of ['agentHome', 'agentCreateTask', 'agentApproveTask', 'agentDiscardTask', 'agentConnectCalendar']) {
     assert.match(api, new RegExp(`export const ${fn}`));
   }
 });

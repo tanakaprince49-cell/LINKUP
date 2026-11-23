@@ -19,7 +19,7 @@ import {
   linkyChat, isPlusUser } from './_linky.js';
 import { badgeLine } from './_proof.js';
 import { writeMyProfile, assessProfileQuality, profileWriterFacts } from './_profileWriter.js';
-import { agentHome, claimAgentSeat, createAgentTask, approveAgentTask, discardAgentTask, disconnectGmail, gmailConnectUrl, handleGmailCallback } from './_agents.js';
+import { agentHome, claimAgentSeat, createAgentTask, approveAgentTask, discardAgentTask, disconnectConnection, googleConnectUrl, handleGmailCallback, handleCalendarCallback } from './_agents.js';
 
 
 // ---------------------------------------------------------------- cron auth
@@ -957,16 +957,17 @@ async function handleApp(req, res) {
         break;
       }
       case 'agentConnect': {
-        const url = gmailConnectUrl(uid);
-        if (!url.configured) { sendError(res, 503, 'Gmail connection is not switched on yet. Alex can still draft — sending unlocks when it is.'); return; }
+        const provider = body.provider === 'calendar' ? 'calendar' : 'gmail';
+        const url = googleConnectUrl(uid, provider);
+        if (!url.configured) { sendError(res, 503, 'Google connection is not switched on yet. Your agents can still draft — sending and scheduling unlock when it is.'); return; }
         out = { ok: true, url: url.url };
         break;
       }
-      case 'agentDisconnect': out = await disconnectGmail(getDb(), uid); break;
+      case 'agentDisconnect': out = await disconnectConnection(getDb(), uid, body.provider === 'calendar' ? 'calendar' : 'gmail'); break;
       case 'agentTask': {
         const me = await loadUser(uid);
         if (!me) { sendError(res, 400, 'Finish your LINKUP profile first.'); return; }
-        out = await createAgentTask(getDb(), uid, me, { instruction: body.instruction, agent: body.agent });
+        out = await createAgentTask(getDb(), uid, me, { instruction: body.instruction, agent: body.agent, tz: body.tz });
         if (!out.ok && out.reason === 'daily_limit') { sendError(res, 429, 'That is your 5 beta tasks for today. Alex resets at midnight UTC.'); return; }
         if (!out.ok && out.reason === 'beta_cap_reached') { sendError(res, 429, 'The beta has used its 700 task executions. Thank you for testing — this is exactly what we needed to learn.'); return; }
         if (!out.ok && out.reason === 'not_in_beta') { sendError(res, 403, 'Claim a beta seat first.'); return; }
@@ -976,6 +977,7 @@ async function handleApp(req, res) {
       case 'agentApprove': {
         out = await approveAgentTask(getDb(), uid, { taskId: body.taskId, draft: body.draft });
         if (!out.ok && out.reason === 'gmail_not_connected') { sendError(res, 409, 'Connect Gmail first — Alex drafts freely, but sending needs your Gmail.'); return; }
+        if (!out.ok && out.reason === 'calendar_not_connected') { sendError(res, 409, 'Connect Google Calendar first — Sarah drafts freely, but creating the event needs your calendar.'); return; }
         if (!out.ok) { sendError(res, 400, out.reason === 'bad_recipient' ? 'That recipient does not look like an email address.' : 'Alex could not send that. Check the draft and try again.'); return; }
         break;
       }
@@ -1086,6 +1088,19 @@ export default async function handler(req, res) {
       res.status(302).send('Redirecting…');
     } catch {
       res.setHeader('Location', 'https://www.linkupbuild.com/app/aiagents?gmail=error');
+      res.status(302).send('Redirecting…');
+    }
+    return;
+  }
+
+  // Same story for Google Calendar (Sarah's hands). Signed state or nothing.
+  if (String(req.query?.action || '') === 'calendarCallback') {
+    try {
+      const result = await handleCalendarCallback(getDb(), req.query || {});
+      res.setHeader('Location', result.redirect);
+      res.status(302).send('Redirecting…');
+    } catch {
+      res.setHeader('Location', 'https://www.linkupbuild.com/app/aiagents?calendar=error');
       res.status(302).send('Redirecting…');
     }
     return;

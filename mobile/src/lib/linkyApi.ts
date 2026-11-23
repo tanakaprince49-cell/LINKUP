@@ -209,34 +209,81 @@ export type WrittenProfile = {
 export const linkyWriteProfile = () => linkyCall<WrittenProfile>('writeProfile', {});
 
 /* -- AI AGENTS (closed beta): Alex drafts, you approve, Gmail sends. ------- */
+export type AgentEmailDraft = { to: string; subject: string; body: string };
+export type AgentEventDraft = {
+  title: string;
+  start: string;
+  end: string;
+  attendees: string[];
+  description: string;
+  timeZone: string;
+};
 export type AgentTask = {
   id: string;
   agent: string;
+  agentName?: string;
   instruction: string;
   status: 'awaiting_approval' | 'sent' | 'discarded' | 'unsupported' | string;
   kind?: string;
   summary?: string;
   reply?: string;
-  draft?: { to: string; subject: string; body: string } | null;
+  draft?: AgentEmailDraft | AgentEventDraft | null;
   tokensEst?: number;
   createdAt?: number;
-  result?: { to?: string; messageId?: string; sentAt?: number } | null;
+  result?: {
+    to?: string;
+    messageId?: string;
+    sentAt?: number;
+    eventId?: string;
+    htmlLink?: string;
+    title?: string;
+    start?: string;
+  } | null;
   error?: string;
 };
+export type AgentInfo = {
+  id: string;
+  name: string;
+  role: string;
+  provider: 'gmail' | 'calendar' | string;
+  live: boolean;
+  blurb?: string;
+  bio?: string;
+  skills?: string[];
+};
+export type AgentConnection = { configured: boolean; connected: boolean; email?: string };
 export type AgentHome = {
   ok: boolean;
   beta: { seatsTotal: number; seatsTaken: number; claimed: boolean; cap: number };
-  agents: { id: string; name: string; role: string; live: boolean; blurb?: string }[];
-  gmail: { configured: boolean; connected: boolean; email?: string };
+  agents: AgentInfo[];
+  gmail: AgentConnection;
+  calendar: AgentConnection;
   usage: { limit: number; usedToday: number; remaining: number };
   tasks: AgentTask[];
 };
 export const agentHome = () => linkyCall<AgentHome>('agentHome', {});
 export const agentClaim = () => linkyCall<{ ok: boolean }>('agentClaim', {});
-export const agentConnectGmail = () => linkyCall<{ ok: boolean; url: string }>('agentConnect', {});
-export const agentDisconnectGmail = () => linkyCall<{ ok: boolean }>('agentDisconnect', {});
-export const agentCreateTask = (instruction: string) =>
-  linkyCall<{ ok: boolean; task: AgentTask; usage: AgentHome['usage'] }>('agentTask', { instruction, agent: 'alex' });
-export const agentApproveTask = (taskId: string, draft: { to: string; subject: string; body: string }) =>
+export const agentConnect = (provider: 'gmail' | 'calendar') =>
+  linkyCall<{ ok: boolean; url: string }>('agentConnect', { provider });
+export const agentConnectGmail = () => agentConnect('gmail');
+export const agentConnectCalendar = () => agentConnect('calendar');
+export const agentDisconnect = (provider: 'gmail' | 'calendar') =>
+  linkyCall<{ ok: boolean }>('agentDisconnect', { provider });
+export const agentDisconnectGmail = () => agentDisconnect('gmail');
+export const agentDisconnectCalendar = () => agentDisconnect('calendar');
+export const localTimeZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+};
+export const agentCreateTask = (instruction: string, agent = 'alex') =>
+  linkyCall<{ ok: boolean; task: AgentTask; usage: AgentHome['usage'] }>('agentTask', {
+    instruction,
+    agent,
+    tz: localTimeZone(),
+  });
+export const agentApproveTask = (taskId: string, draft: AgentEmailDraft | AgentEventDraft | Record<string, unknown>) =>
   linkyCall<{ ok: boolean; status: string }>('agentApprove', { taskId, draft });
 export const agentDiscardTask = (taskId: string) => linkyCall<{ ok: boolean }>('agentDiscard', { taskId });

@@ -30,6 +30,9 @@ import LandingScreen from './src/screens/LandingScreen';
 
 const LinkyHomeScreen = lazyScreen(() => import('./src/screens/LinkyHomeScreen'));
 const AiAgentsScreen = lazyScreen(() => import('./src/screens/AiAgentsScreen'));
+const AiAgentChatScreen = lazyScreen(() => import('./src/screens/AiAgentChatScreen'));
+const AiAgentProfileScreen = lazyScreen(() => import('./src/screens/AiAgentProfileScreen'));
+const AiAgentsSettingsScreen = lazyScreen(() => import('./src/screens/AiAgentsSettingsScreen'));
 const IdeaDeckScreen = lazyScreen(() => import('./src/screens/IdeaDeckScreen'));
 const AlertsScreen = lazyScreen(() => import('./src/screens/AlertsScreen'));
 const MessagesScreen = lazyScreen(() => import('./src/screens/MessagesScreen'));
@@ -134,8 +137,11 @@ const isCampaignManagerPath = (pathname = String((globalThis as any)?.location?.
  * signed-out guard rewrites the URL to the landing page while auth is still
  * resolving, and the member tree then falls back to the dashboard.
  */
-const isAiAgentsPath = (pathname = String((globalThis as any)?.location?.pathname || '')) =>
-  Platform.OS === 'web' && webRoutePath(pathname).replace(/\/+$/, '') === '/aiagents';
+const isAiAgentsPath = (pathname = String((globalThis as any)?.location?.pathname || '')) => {
+  if (Platform.OS !== 'web') return false;
+  const route = webRoutePath(pathname).replace(/\/+$/, '');
+  return route === '/aiagents' || route.startsWith('/aiagents/');
+};
 const linking: any = {
   prefixes: [
     ExpoLinking.createURL('/'), 'linkup://',
@@ -179,6 +185,9 @@ const linking: any = {
         : {}),
       Profile: 'profile/:userId',
       AiAgents: 'aiagents',
+      AiAgentChat: 'aiagents/chat/:agentId',
+      AiAgentProfile: 'aiagents/profile/:agentId',
+      AiAgentsSettings: 'aiagents/settings',
       Messages: 'messages',
       Alerts: 'alerts',
       Matches: 'connections',
@@ -910,6 +919,9 @@ function AppContent() {
             <Stack.Screen name="BuilderWorkspace" component={BuilderWorkspaceScreen} />
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
             <Stack.Screen name="AiAgents" component={AiAgentsScreen} />
+            <Stack.Screen name="AiAgentChat" component={AiAgentChatScreen} />
+            <Stack.Screen name="AiAgentProfile" component={AiAgentProfileScreen} />
+            <Stack.Screen name="AiAgentsSettings" component={AiAgentsSettingsScreen} />
             <Stack.Screen name="GroupChat" component={GroupChatScreen} />
           </>
         ) : null}

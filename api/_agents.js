@@ -1,18 +1,20 @@
-// LINKUP AI AGENTS — the personal workforce MVP (closed beta).
+// LINKUP AI AGENTS — the personal workforce (closed beta).
 //
-// One live agent (Alex, executive assistant), one live integration (Gmail),
-// one rule that outranks every feature: an agent drafts, the human approves,
-// and only then does anything leave the building. Sending an email is a
-// Gmail API operation — it never silently spends another Gemini call.
+// Every agent is a labelled AI with a LINKUP profile; every agent works the
+// same way: the agent drafts inside a message thread, the human approves,
+// and only then does anything leave the building. Sending an email (Gmail)
+// or creating an event (Google Calendar) is an API operation — it never
+// silently spends another Gemini call.
 //
 // Beta economics are enforced here, on the server, not in the UI:
 //   - 20 seats, claimed once, first come first served (admins always in);
-//   - 5 task executions per member per day (a draft generation = 1 execution);
+//   - 5 task executions per member per day across ALL agents (a message that
+//     produces a draft = 1 execution);
 //   - 700 executions across the whole beta, then the door closes;
 //   - every task records its estimated Gemini tokens so cost per task is a
 //     number we can read, not a vibe.
 //
-// Gmail refresh tokens are stored AES-256-GCM encrypted in a server-only
+// Google refresh tokens are stored AES-256-GCM encrypted in a server-only
 // collection and are never returned to any client.
 import crypto from 'node:crypto';
 import { aiText } from './_gemini.js';
@@ -21,18 +23,33 @@ export const AGENT_BETA_SEATS = 20;
 export const AGENT_DAILY_LIMIT = 5;
 export const AGENT_BETA_CAP = 700;
 export const AGENTS = Object.freeze([
-  { id: 'alex', name: 'Alex', role: 'Personal Executive Assistant', tools: ['gmail'], live: true, blurb: 'Drafts and sends your email after you approve it. The first member of your workforce.' },
-  { id: 'sarah', name: 'Sarah', role: 'Email & Communication Assistant', tools: ['gmail'], live: false, blurb: 'Inbox triage, follow-ups and communication drafts. Joining after the Alex beta.' },
-  { id: 'marcus', name: 'Marcus', role: 'Developer & GitHub Assistant', tools: ['github'], live: false, blurb: 'Repository analysis and developer workflows. Joining after the Alex beta.' },
+  {
+    id: 'alex', name: 'Alex', role: 'Personal Executive Assistant', provider: 'gmail', tools: ['gmail'], live: true,
+    blurb: 'Your email chief of staff. Drafts, follows up and sends — after your approval.',
+    bio: 'Alex is an AI executive assistant on LINKUP. Give Alex an outcome in plain language — "follow up with Thabo about Friday" — and Alex drafts the exact email in this thread. Nothing is sent until you read it, edit it and approve it.',
+    skills: ['Email drafting', 'Follow-ups', 'Introductions', 'Meeting requests', 'Inbox replies'],
+  },
+  {
+    id: 'Sarah', name: 'Sarah', role: 'Scheduling & Calendar Assistant', provider: 'calendar', tools: ['calendar'], live: true,
+    blurb: 'Your calendar chief of staff. Puts real events on Google Calendar — after your approval.',
+    bio: 'Sarah is an AI scheduling assistant on LINKUP. Say "set up 30 minutes with sarah@example.com tomorrow at 10" and Sarah drafts the exact Google Calendar event in this thread. Nothing lands on your calendar until you approve it.',
+    skills: ['Meeting scheduling', 'Calendar events', 'Invites', 'Rescheduling drafts', 'Reminders setup'],
+  },
 ]);
 
 const ADMIN_EMAILS = ['tanakaprince49@gmail.com'];
 const SITE = 'https://www.linkupbuild.com';
+const PROVIDERS = {
+  gmail: { scope: 'https://www.googleapis.com/auth/gmail.send', callback: 'gmailCallback' },
+  calendar: { scope: 'https://www.googleapis.com/auth/calendar.events', callback: 'calendarCallback' },
+};
 
 const clean = (value, max) => String(value == null ? '' : value).replace(/\s+/g, ' ').trim().slice(0, max);
 const cleanBody = (value, max) => String(value == null ? '' : value).replace(/\r\n/g, '\n').trim().slice(0, max);
 const estTokens = (text) => Math.max(1, Math.ceil(String(text || '').length / 4));
 const dayStartUtc = (now) => { const d = new Date(now); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); };
+const agentById = (id) => AGENTS.find((a) => a.id === String(id || 'alex')) || AGENTS[0];
+const providerOf = (agent) => (agent?.provider === 'calendar' ? 'calendar' : 'gmail');
 
 /* ------------------------------------------------ token vault */
 function vaultKey(secret) {
@@ -65,6 +82,9 @@ async function listQuery(query) {
   return (snap.docs || []).map((d) => ({ id: d.id, ...d.data() }));
 }
 const isAdmin = (profile) => ADMIN_EMAILS.includes(String(profile?.email || '').toLowerCase());
+// One connection doc per member per provider. Gmail keeps the original uid
+// doc id (shipped first); calendar lives beside it.
+const connId = (uid, provider) => (provider === 'gmail' ? uid : `${uid}__${provider}`);
 
 async function seatOf(db, uid, profile) {
   const seat = await getDoc(db, 'agentBeta', uid);
@@ -84,11 +104,11 @@ export async function claimAgentSeat(db, uid, profile, now = Date.now()) {
   return { ok: true, claimed: true };
 }
 
-async function tasksFor(db, uid, max = 25) {
+async function tasksFor(db, uid, max = 60) {
   try {
     return await listQuery(db.collection('agentTasks').where('uid', '==', uid).orderBy('createdAt', 'desc').limit(max));
   } catch {
-    const all = await listQuery(db.collection('agentTasks').where('uid', '==', uid).limit(100));
+    const all = await listQuery(db.collection('agentTasks').where('uid', '==', uid).limit(200));
     return all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, max);
   }
 }
@@ -99,74 +119,86 @@ async function usageFor(db, uid, now) {
   return { limit: AGENT_DAILY_LIMIT, usedToday, remaining: Math.max(0, AGENT_DAILY_LIMIT - usedToday) };
 }
 
-/* ------------------------------------------------ Gmail */
+/* ------------------------------------------------ Google (Gmail + Calendar) */
 export function gmailConfigured() {
   return !!(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET);
 }
+export const googleConfigured = gmailConfigured;
 const googleClientSecret = () => String(process.env.GOOGLE_OAUTH_CLIENT_SECRET || '');
-const gmailRedirectUri = () => String(process.env.GOOGLE_OAUTH_REDIRECT_URI || `${SITE}/app/api/linky?action=gmailCallback`);
+const redirectUriFor = (provider) => String(
+  (provider === 'calendar' ? process.env.GOOGLE_CALENDAR_REDIRECT_URI : process.env.GOOGLE_OAUTH_REDIRECT_URI)
+  || `${SITE}/app/api/linky?action=${PROVIDERS[provider].callback}`,
+);
 
-function signState(uid, secret, now) {
-  const payload = Buffer.from(JSON.stringify({ uid, exp: now + 10 * 60 * 1000 })).toString('base64url');
+function signState(uid, provider, secret, now) {
+  const payload = Buffer.from(JSON.stringify({ uid, p: provider, exp: now + 10 * 60 * 1000 })).toString('base64url');
   const sig = crypto.createHmac('sha256', vaultKey(secret)).update(payload).digest('base64url');
   return `${payload}.${sig}`;
 }
-function verifyState(state, secret, now) {
+function verifyState(state, provider, secret, now) {
   try {
     const [payload, sig] = String(state || '').split('.');
     if (!payload || !sig) return null;
     const expected = crypto.createHmac('sha256', vaultKey(secret)).update(payload).digest('base64url');
     if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    if (!data.uid || data.exp < now) return null;
+    if (!data.uid || data.exp < now || data.p !== provider) return null;
     return data;
   } catch { return null; }
 }
 
-export function gmailConnectUrl(uid, now = Date.now()) {
+export function googleConnectUrl(uid, provider = 'gmail', now = Date.now()) {
+  const p = PROVIDERS[provider] ? provider : 'gmail';
   if (!gmailConfigured()) return { configured: false, url: '' };
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_OAUTH_CLIENT_ID,
-    redirect_uri: gmailRedirectUri(),
+    redirect_uri: redirectUriFor(p),
     response_type: 'code',
-    scope: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email openid',
+    scope: `${PROVIDERS[p].scope} https://www.googleapis.com/auth/userinfo.email openid`,
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true',
-    state: signState(uid, undefined, now),
+    state: signState(uid, p, undefined, now),
   });
   return { configured: true, url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` };
 }
+export const gmailConnectUrl = (uid, now = Date.now()) => googleConnectUrl(uid, 'gmail', now);
 
-export async function handleGmailCallback(db, query, { fetchFn = fetch, now = Date.now() } = {}) {
-  const back = (flag) => ({ redirect: `${SITE}/app/aiagents?gmail=${flag}` });
+async function exchangeCode(fetchFn, provider, code) {
+  const res = await fetchFn('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code: String(code),
+      client_id: process.env.GOOGLE_OAUTH_CLIENT_ID || '',
+      ['client' + '_secret']: googleClientSecret(),
+      redirect_uri: redirectUriFor(provider),
+      grant_type: 'authorization_code',
+    }),
+  });
+  return res.json().catch(() => ({}));
+}
+
+export async function handleOAuthCallback(db, provider, query, { fetchFn = fetch, now = Date.now() } = {}) {
+  const p = PROVIDERS[provider] ? provider : 'gmail';
+  const back = (flag) => ({ redirect: `${SITE}/app/aiagents?${p}=${flag}` });
   if (!gmailConfigured()) return back('unconfigured');
-  const data = verifyState(query?.state, undefined, now);
+  const data = verifyState(query?.state, p, undefined, now);
   if (!data || !query?.code) return back('error');
   try {
-    const tokenRes = await fetchFn('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code: String(query.code),
-        client_id: process.env.GOOGLE_OAUTH_CLIENT_ID,
-        ['client' + '_secret']: googleClientSecret(),
-        redirect_uri: gmailRedirectUri(),
-        grant_type: 'authorization_code',
-      }),
-    });
-    const tokens = await tokenRes.json().catch(() => ({}));
+    const tokens = await exchangeCode(fetchFn, p, query.code);
     if (!tokens.access_token) return back('error');
     const infoRes = await fetchFn('https://openidconnect.googleapis.com/v1/userinfo', {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
     const info = await infoRes.json().catch(() => ({}));
-    const existing = await getDoc(db, 'agentConnections', data.uid);
+    const id = connId(data.uid, p);
+    const existing = await getDoc(db, 'agentConnections', id);
     const refresh = tokens.refresh_token || (existing?.refreshTokenEnc ? decryptSecret(existing.refreshTokenEnc) : '');
     if (!refresh) return back('error');
-    await db.collection('agentConnections').doc(data.uid).set({
+    await db.collection('agentConnections').doc(id).set({
       uid: data.uid,
-      provider: 'gmail',
+      provider: p,
       email: String(info.email || ''),
       refreshTokenEnc: encryptSecret(refresh),
       accessTokenEnc: encryptSecret(tokens.access_token),
@@ -177,15 +209,18 @@ export async function handleGmailCallback(db, query, { fetchFn = fetch, now = Da
     return back('connected');
   } catch { return back('error'); }
 }
+export const handleGmailCallback = (db, query, deps) => handleOAuthCallback(db, 'gmail', query, deps);
+export const handleCalendarCallback = (db, query, deps) => handleOAuthCallback(db, 'calendar', query, deps);
 
-async function gmailAccessToken(db, uid, { fetchFn = fetch, now = Date.now() } = {}) {
-  const conn = await getDoc(db, 'agentConnections', uid);
-  if (!conn?.refreshTokenEnc) return { ok: false, reason: 'gmail_not_connected' };
+async function googleAccessToken(db, uid, provider, { fetchFn = fetch, now = Date.now() } = {}) {
+  const id = connId(uid, provider);
+  const conn = await getDoc(db, 'agentConnections', id);
+  if (!conn?.refreshTokenEnc) return { ok: false, reason: `${provider}_not_connected` };
   if (conn.accessTokenEnc && (conn.accessExpiresAt || 0) > now + 60000) {
     return { ok: true, token: decryptSecret(conn.accessTokenEnc), email: conn.email || '' };
   }
   const refresh = decryptSecret(conn.refreshTokenEnc);
-  if (!refresh) return { ok: false, reason: 'gmail_not_connected' };
+  if (!refresh) return { ok: false, reason: `${provider}_not_connected` };
   const res = await fetchFn('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -197,8 +232,8 @@ async function gmailAccessToken(db, uid, { fetchFn = fetch, now = Date.now() } =
     }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!data.access_token) return { ok: false, reason: 'gmail_not_connected' };
-  await db.collection('agentConnections').doc(uid).set({
+  if (!data.access_token) return { ok: false, reason: `${provider}_not_connected` };
+  await db.collection('agentConnections').doc(id).set({
     accessTokenEnc: encryptSecret(data.access_token),
     accessExpiresAt: now + (Number(data.expires_in || 3600) * 1000),
     updatedAt: now,
@@ -207,7 +242,7 @@ async function gmailAccessToken(db, uid, { fetchFn = fetch, now = Date.now() } =
 }
 
 async function gmailSend(db, uid, draft, deps) {
-  const access = await gmailAccessToken(db, uid, deps);
+  const access = await googleAccessToken(db, uid, 'gmail', deps);
   if (!access.ok) return access;
   const mime = [
     `To: ${draft.to}`,
@@ -227,25 +262,73 @@ async function gmailSend(db, uid, draft, deps) {
   return { ok: true, messageId: data.id, threadId: data.threadId || '' };
 }
 
+async function calendarCreate(db, uid, draft, deps) {
+  const access = await googleAccessToken(db, uid, 'calendar', deps);
+  if (!access.ok) return access;
+  const event = {
+    summary: draft.title,
+    description: draft.description || '',
+    start: { dateTime: draft.start, timeZone: draft.timeZone },
+    end: { dateTime: draft.end, timeZone: draft.timeZone },
+    attendees: (draft.attendees || []).map((email) => ({ email })),
+  };
+  const res = await deps.fetchFn('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${access.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(event),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.id) return { ok: false, reason: 'calendar_create_failed' };
+  return { ok: true, eventId: data.id, htmlLink: data.htmlLink || '' };
+}
+
 /* ------------------------------------------------ the work */
-function agentPrompt(agent, profile, instruction) {
-  return [
-    `You are ${agent.name}, the member's ${agent.role} inside LINKUP. You execute real work; you do not chat for entertainment.`,
-    'The member delegates ONE task below. Decide what it actually is and do the useful thing.',
-    'HARD RULES: invent no facts about the member beyond MEMBER below. Never claim you sent anything — a human approves every send. If the task needs a missing fact (a name, an address), write the draft with a clear [bracketed placeholder] instead of guessing.',
-    `MEMBER: ${JSON.stringify({ name: clean(profile?.displayName || profile?.fullName || '', 60), role: clean(profile?.occupation || '', 60), building: clean(profile?.buildingName || profile?.company || '', 80), city: clean(profile?.city || '', 40) })}`,
+function localNow(tz, now) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: tz, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(new Date(now));
+  } catch {
+    return new Date(now).toUTCString();
+  }
+}
+
+function agentPrompt(agent, profile, instruction, tz, now) {
+  const member = JSON.stringify({ name: clean(profile?.displayName || profile?.fullName || '', 60), role: clean(profile?.occupation || '', 60), building: clean(profile?.buildingName || profile?.company || '', 80), city: clean(profile?.city || '', 40) });
+  const head = [
+    `You are ${agent.name}, the member's ${agent.role} inside LINKUP. You are an AI agent with a member profile; you execute real work, you do not chat for entertainment.`,
+    'The member delegates ONE task below, in a message thread with you. Decide what it actually is and do the useful thing.',
+    'HARD RULES: invent no facts about the member beyond MEMBER below. Never claim you sent or created anything — a human approves every external action. If a needed fact is missing (a name, an address), use a clear [bracketed placeholder] instead of guessing.',
+    `MEMBER: ${member}`,
     `TASK: ${clean(instruction, 800)}`,
+  ];
+  if (providerOf(agent) === 'calendar') {
+    return [
+      ...head,
+      `CONTEXT: the member's timezone is ${tz}. Right now for the member it is ${localNow(tz, now)}. Resolve every relative time ("tomorrow", "next Tuesday", "in an hour") against that. Default duration is 30 minutes when none is given.`,
+      'If the task is to schedule or create a calendar event, return STRICT JSON:',
+      '{"kind":"event","title":"...","start":"YYYY-MM-DDTHH:mm:ss","end":"YYYY-MM-DDTHH:mm:ss","attendees":["email@example.com"],"description":"...","summary":"one line: what this event is"}',
+      'Times are member-local wall-clock times in the member timezone above, no UTC suffix. Attendees is an empty array when none are named.',
+      'If it is not a scheduling task, return STRICT JSON:',
+      '{"kind":"unsupported","summary":"one line: what was asked","reply":"one or two sentences: honestly, Sarah only schedules in this beta — Alex (Gmail) sends email; phrase scheduling requests as an event Sarah can draft."}',
+    ].join('\n');
+  }
+  return [
+    ...head,
     'If the task is to write or send an email, return STRICT JSON:',
     '{"kind":"email","to":"recipient email or empty","subject":"...","body":"the full email, plain text, ready to send","summary":"one line: what this draft does"}',
     'If it is not an email task, return STRICT JSON:',
-    '{"kind":"unsupported","summary":"one line: what was asked","reply":"one or two sentences: honestly, Alex only sends email in this beta — here is the closest useful thing, or ask them to phrase it as an email Alex can draft."}',
+    '{"kind":"unsupported","summary":"one line: what was asked","reply":"one or two sentences: honestly, Alex only sends email in this beta — Sarah (Calendar) schedules events; phrase it as an email Alex can draft."}',
   ].join('\n');
 }
 
 export async function agentHome(db, uid, profile, now = Date.now()) {
   const seat = await seatOf(db, uid, profile);
   const seats = await listQuery(db.collection('agentBeta').limit(AGENT_BETA_SEATS + 1));
-  const conn = await getDoc(db, 'agentConnections', uid);
+  const [gmailConn, calendarConn] = [
+    await getDoc(db, 'agentConnections', connId(uid, 'gmail')),
+    await getDoc(db, 'agentConnections', connId(uid, 'calendar')),
+  ];
   const [tasks, usage] = seat.claimed
     ? [await tasksFor(db, uid), await usageFor(db, uid, now)]
     : [[], { limit: AGENT_DAILY_LIMIT, usedToday: 0, remaining: AGENT_DAILY_LIMIT }];
@@ -253,26 +336,34 @@ export async function agentHome(db, uid, profile, now = Date.now()) {
     ok: true,
     beta: { seatsTotal: AGENT_BETA_SEATS, seatsTaken: seats.length, claimed: seat.claimed, cap: AGENT_BETA_CAP },
     agents: AGENTS,
-    gmail: { configured: gmailConfigured(), connected: !!conn?.refreshTokenEnc, email: conn?.email || '' },
+    gmail: { configured: gmailConfigured(), connected: !!gmailConn?.refreshTokenEnc, email: gmailConn?.email || '' },
+    calendar: { configured: gmailConfigured(), connected: !!calendarConn?.refreshTokenEnc, email: calendarConn?.email || '' },
     usage,
     tasks: tasks.map(({ refreshTokenEnc, accessTokenEnc, ...t }) => t),
   };
 }
 
+const validTz = (tz) => {
+  const value = clean(tz, 40);
+  return /^[A-Za-z_+\-/0-9]+$/.test(value) && value.length >= 3 ? value : 'UTC';
+};
+const validWhen = (value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(String(value || ''));
+
 export async function createAgentTask(db, uid, profile, input, { text = aiText, now = Date.now() } = {}) {
   const seat = await seatOf(db, uid, profile);
   if (!seat.claimed) return { ok: false, reason: 'not_in_beta' };
-  const agent = AGENTS.find((a) => a.id === String(input?.agent || 'alex')) || AGENTS[0];
+  const agent = agentById(input?.agent);
   if (!agent.live) return { ok: false, reason: 'agent_not_live' };
   const instruction = clean(input?.instruction, 800);
   if (instruction.length < 3) return { ok: false, reason: 'empty_task' };
+  const tz = validTz(input?.tz);
 
   const usage = await usageFor(db, uid, now);
   if (usage.remaining <= 0) return { ok: false, reason: 'daily_limit', usage };
   const all = await listQuery(db.collection('agentTasks').limit(AGENT_BETA_CAP + 1));
   if (all.length >= AGENT_BETA_CAP) return { ok: false, reason: 'beta_cap_reached', usage };
 
-  const prompt = agentPrompt(agent, profile, instruction);
+  const prompt = agentPrompt(agent, profile, instruction, tz, now);
   let parsed = null;
   let spent = 0;
   try {
@@ -293,7 +384,7 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
     createdAt: now, updatedAt: now, tokensEst: spent, kind: 'unsupported',
     status: 'unsupported', draft: null, summary: '', reply: '', result: null, error: '',
   };
-  if (parsed.kind === 'email') {
+  if (parsed.kind === 'email' && providerOf(agent) === 'gmail') {
     base.kind = 'email';
     base.status = 'awaiting_approval';
     base.summary = clean(parsed.summary, 200);
@@ -302,13 +393,41 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
       subject: clean(parsed.subject, 150) || 'Message from LINKUP',
       body: cleanBody(parsed.body, 4000),
     };
+  } else if (parsed.kind === 'event' && providerOf(agent) === 'calendar') {
+    const start = clean(parsed.start, 25);
+    const end = clean(parsed.end, 25);
+    if (!validWhen(start) || !validWhen(end) || end <= start) {
+      base.summary = clean(parsed.summary, 200);
+      base.reply = 'Sarah could not pin that time down. Say it with a date and a start time — "tomorrow at 10am for 30 minutes" — and Sarah will draft it.';
+    } else {
+      base.kind = 'event';
+      base.status = 'awaiting_approval';
+      base.summary = clean(parsed.summary, 200);
+      base.draft = {
+        title: clean(parsed.title, 200) || 'Meeting',
+        start: start.length === 16 ? `${start}:00` : start,
+        end: end.length === 16 ? `${end}:00` : end,
+        attendees: Array.isArray(parsed.attendees) ? parsed.attendees.map((a) => clean(a, 120)).filter((a) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)).slice(0, 20) : [],
+        description: cleanBody(parsed.description, 2000),
+        timeZone: tz,
+      };
+    }
   } else {
     base.summary = clean(parsed.summary, 200);
-    base.reply = cleanBody(parsed.reply, 600) || 'Alex only sends email in this beta. Phrase it as an email and Alex will draft it now.';
+    base.reply = cleanBody(parsed.reply, 600) || (providerOf(agent) === 'calendar'
+      ? 'Sarah only schedules in this beta. Phrase it as an event and Sarah will draft it now.'
+      : 'Alex only sends email in this beta. Phrase it as an email and Alex will draft it now.');
   }
   await db.collection('agentTasks').doc(id).set(base);
   return { ok: true, task: base, usage: await usageFor(db, uid, now) };
 }
+
+const normalizeAttendees = (value) => {
+  const list = Array.isArray(value)
+    ? value.map((a) => clean(a, 120))
+    : String(value || '').split(/[,\s]+/).map((a) => clean(a, 120));
+  return [...new Set(list.filter((a) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)))].slice(0, 20);
+};
 
 export async function approveAgentTask(db, uid, input, { fetchFn = fetch, now = Date.now() } = {}) {
   const taskId = clean(input?.taskId, 80);
@@ -316,6 +435,30 @@ export async function approveAgentTask(db, uid, input, { fetchFn = fetch, now = 
   if (!task || task.uid !== uid) return { ok: false, reason: 'task_not_found' };
   if (task.status !== 'awaiting_approval') return { ok: false, reason: 'not_awaiting_approval' };
   const draftIn = input?.draft && typeof input.draft === 'object' ? input.draft : {};
+
+  if (task.kind === 'event') {
+    const draft = {
+      title: clean(draftIn.title ?? task.draft?.title, 200),
+      start: clean(draftIn.start ?? task.draft?.start, 25),
+      end: clean(draftIn.end ?? task.draft?.end, 25),
+      attendees: normalizeAttendees(draftIn.attendees ?? task.draft?.attendees),
+      description: cleanBody(draftIn.description ?? task.draft?.description, 2000),
+      timeZone: validTz(draftIn.timeZone ?? task.draft?.timeZone),
+    };
+    if (!draft.title) return { ok: false, reason: 'empty_draft', draft };
+    if (!validWhen(draft.start) || !validWhen(draft.end) || draft.end <= draft.start) return { ok: false, reason: 'bad_time', draft };
+    const created = await calendarCreate(db, uid, draft, { fetchFn, now });
+    if (!created.ok) {
+      await db.collection('agentTasks').doc(taskId).set({ draft, error: created.reason, updatedAt: now }, { merge: true });
+      return { ok: false, reason: created.reason, draft };
+    }
+    await db.collection('agentTasks').doc(taskId).set({
+      draft, status: 'sent', error: '', updatedAt: now,
+      result: { eventId: created.eventId, htmlLink: created.htmlLink, createdAt: now, title: draft.title, start: draft.start },
+    }, { merge: true });
+    return { ok: true, taskId, status: 'sent', result: { eventId: created.eventId, title: draft.title } };
+  }
+
   const draft = {
     to: clean(draftIn.to ?? task.draft?.to, 120),
     subject: clean(draftIn.subject ?? task.draft?.subject, 150),
@@ -344,12 +487,15 @@ export async function discardAgentTask(db, uid, input, now = Date.now()) {
   return { ok: true, taskId, status: 'discarded' };
 }
 
-export async function disconnectGmail(db, uid, now = Date.now()) {
-  const conn = await getDoc(db, 'agentConnections', uid);
+export async function disconnectConnection(db, uid, provider = 'gmail', now = Date.now()) {
+  const p = PROVIDERS[provider] ? provider : 'gmail';
+  const id = connId(uid, p);
+  const conn = await getDoc(db, 'agentConnections', id);
   if (conn) {
-    await db.collection('agentConnections').doc(uid).set({
+    await db.collection('agentConnections').doc(id).set({
       refreshTokenEnc: '', accessTokenEnc: '', email: '', updatedAt: now, disconnectedAt: now,
     }, { merge: true });
   }
   return { ok: true };
 }
+export const disconnectGmail = (db, uid, now) => disconnectConnection(db, uid, 'gmail', now);
