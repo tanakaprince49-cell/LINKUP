@@ -368,19 +368,46 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
   if (all.length >= AGENT_BETA_CAP) return { ok: false, reason: 'beta_cap_reached', usage };
 
   const prompt = agentPrompt(agent, profile, instruction, tz, now);
+  // Models reply in JSON with varying discipline (fences, prose, truncation).
+  // Extract leniently, infer the kind from the fields when it is omitted, and
+  // give the model exactly one repair attempt before admitting defeat — with
+  // the real failure attached, never a bare "unavailable".
+  const extractJson = (raw) => {
+    const textIn = String(raw || '').replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+    const start = textIn.indexOf('{');
+    const end = textIn.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    try {
+      const obj = JSON.parse(textIn.slice(start, end + 1).replace(/,\s*([}\]])/g, '$1'));
+      if (!obj || typeof obj !== 'object') return null;
+      if (!obj.kind) {
+        if (obj.start || obj.title) obj.kind = 'event';
+        else if (obj.to !== undefined || obj.subject || obj.body) obj.kind = 'email';
+      }
+      return obj;
+    } catch { return null; }
+  };
   let parsed = null;
   let spent = 0;
-  try {
-    const result = await text(prompt, { temperature: 0.4, maxOutputTokens: 700, responseMimeType: 'application/json', timeoutMs: 20000 });
-    const rawText = String(result?.text || '');
-    spent = estTokens(prompt) + estTokens(rawText);
-    const start = rawText.indexOf('{');
-    const end = rawText.lastIndexOf('}');
-    parsed = start >= 0 && end > start ? JSON.parse(rawText.slice(start, end + 1)) : null;
-  } catch {
-    return { ok: false, reason: 'ai_unavailable', usage };
+  let aiDetail = '';
+  for (let attempt = 0; attempt < 2 && !parsed; attempt += 1) {
+    try {
+      const result = await text(
+        attempt === 0 ? prompt : `${prompt}\n\nIMPORTANT: reply with ONLY the JSON object. No markdown, no commentary.`,
+        { temperature: 0.3, maxOutputTokens: 900, responseMimeType: 'application/json', timeoutMs: 12000 },
+      );
+      const rawText = String(result?.text || '');
+      spent += estTokens(prompt) + estTokens(rawText);
+      parsed = extractJson(rawText);
+      if (!parsed) aiDetail = `unparseable AI reply (${rawText.slice(0, 60).replace(/\s+/g, ' ')}…)`;
+    } catch (err) {
+      aiDetail = String(err?.message || err).replace(/\s+/g, ' ').slice(0, 110);
+    }
   }
-  if (!parsed || typeof parsed !== 'object') return { ok: false, reason: 'ai_unavailable', usage };
+  if (!parsed) {
+    console.warn('[agents] task AI failed:', aiDetail);
+    return { ok: false, reason: 'ai_unavailable', detail: aiDetail, usage };
+  }
 
   const id = `task_${now.toString(36)}${crypto.randomBytes(3).toString('hex')}`;
   const base = {

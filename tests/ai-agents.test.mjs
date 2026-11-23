@@ -243,6 +243,33 @@ test('Sarah drafts calendar events and only approval creates them', async () => 
   assert.equal(wrongTool.task.status, 'unsupported');
 });
 
+test('AI failures are diagnosed, never swallowed: junk replies and provider errors', async () => {
+  const { claimAgentSeat, createAgentTask } = await import('../api/_agents.js');
+  // A fenced, prose-wrapped, kind-less reply still becomes a draft.
+  const db1 = fakeDb();
+  await claimAgentSeat(db1, 'beta', { email: 'beta@example.com' });
+  const fenced = async () => ({ text: 'Here you go:\n```json\n{"to":"partner@example.com","subject":"Hi","body":"Hello there.","summary":"Short one."}\n```' });
+  const okTask = await createAgentTask(db1, 'beta', { email: 'beta@example.com' }, { instruction: 'Email partner@example.com' }, { text: fenced });
+  assert.equal(okTask.ok, true);
+  assert.equal(okTask.task.kind, 'email');
+  assert.equal(okTask.task.status, 'awaiting_approval');
+  // Total garbage on both attempts: clean ai_unavailable WITH the diagnosis.
+  const db2 = fakeDb();
+  await claimAgentSeat(db2, 'beta', { email: 'beta@example.com' });
+  const junk = async () => ({ text: 'I cannot help with that today.' });
+  const junked = await createAgentTask(db2, 'beta', { email: 'beta@example.com' }, { instruction: 'Email partner@example.com' }, { text: junk });
+  assert.equal(junked.ok, false);
+  assert.equal(junked.reason, 'ai_unavailable');
+  assert.match(junked.detail, /unparseable/);
+  // A throwing provider: the provider's own words ride along.
+  const db3 = fakeDb();
+  await claimAgentSeat(db3, 'beta', { email: 'beta@example.com' });
+  const boom = async () => { throw new Error('gemini: HTTP 429 quota'); };
+  const failed = await createAgentTask(db3, 'beta', { email: 'beta@example.com' }, { instruction: 'Email partner@example.com' }, { text: boom });
+  assert.equal(failed.ok, false);
+  assert.match(failed.detail, /429/);
+});
+
 test('connect URLs ask for exactly one agent worth of scopes, nothing inherited', async () => {
   const { googleConnectUrl } = await import('../api/_agents.js');
   const prevId = process.env.GOOGLE_OAUTH_CLIENT_ID;
