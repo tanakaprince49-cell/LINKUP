@@ -157,7 +157,11 @@ export function googleConnectUrl(uid, provider = 'gmail', now = Date.now()) {
     scope: `${PROVIDERS[p].scope} https://www.googleapis.com/auth/userinfo.email openid`,
     access_type: 'offline',
     prompt: 'consent',
-    include_granted_scopes: 'true',
+    // NOTE: no include_granted_scopes here, ever. It makes Google fold every
+    // scope the member previously granted this client into our request —
+    // a legacy Drive/YouTube grant then poisons an innocent calendar ask
+    // ("scopes that cannot be requested together"). Each agent's consent
+    // stands alone, which is also why connections are stored per provider.
     state: signState(uid, p, undefined, now),
   });
   return { configured: true, url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` };

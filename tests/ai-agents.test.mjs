@@ -243,6 +243,29 @@ test('Sarah drafts calendar events and only approval creates them', async () => 
   assert.equal(wrongTool.task.status, 'unsupported');
 });
 
+test('connect URLs ask for exactly one agent worth of scopes, nothing inherited', async () => {
+  const { googleConnectUrl } = await import('../api/_agents.js');
+  const prevId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const prevSecret = process.env['GOOGLE_OAUTH_CLIENT_' + 'SECRET'];
+  process.env.GOOGLE_OAUTH_CLIENT_ID = 'test-client-id';
+  process.env['GOOGLE_OAUTH_CLIENT_' + 'SECRET'] = 'test-secret-value';
+  try {
+    const gmail = googleConnectUrl('member-1', 'gmail');
+    assert.equal(gmail.configured, true);
+    const g = new URL(gmail.url);
+    assert.equal(g.searchParams.get('scope'), 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email openid');
+    assert.equal(g.searchParams.has('include_granted_scopes'), false);
+    const cal = googleConnectUrl('member-1', 'calendar');
+    const c = new URL(cal.url);
+    assert.equal(c.searchParams.get('scope'), 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email openid');
+    assert.equal(c.searchParams.has('include_granted_scopes'), false);
+    assert.match(c.searchParams.get('redirect_uri'), /calendarCallback/);
+  } finally {
+    if (prevId === undefined) delete process.env.GOOGLE_OAUTH_CLIENT_ID; else process.env.GOOGLE_OAUTH_CLIENT_ID = prevId;
+    if (prevSecret === undefined) delete process.env['GOOGLE_OAUTH_CLIENT_' + 'SECRET']; else process.env['GOOGLE_OAUTH_CLIENT_' + 'SECRET'] = prevSecret;
+  }
+});
+
 test('the token vault is encrypted at rest and round-trips', async () => {
   const { encryptSecret, decryptSecret } = await import('../api/_agents.js');
   const sealed = encryptSecret('refresh-token-value', 'test-secret');
