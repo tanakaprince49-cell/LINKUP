@@ -21,6 +21,7 @@ import { aiText } from './_gemini.js';
 
 export const AGENT_BETA_SEATS = 20;
 export const AGENT_DAILY_LIMIT = 5;
+export const AGENT_MAX_AI_CALLS_PER_TASK = 2;
 export const AGENT_BETA_CAP = 700;
 export const AGENTS = Object.freeze([
   {
@@ -497,11 +498,16 @@ export async function createAgentTask(db, uid, profile, input, { text = aiText, 
   let parsed = null;
   let spent = 0;
   let aiDetail = '';
-  for (let attempt = 0; attempt < 2 && !parsed; attempt += 1) {
+  // Hard cap: one task costs at most AGENT_MAX_AI_CALLS_PER_TASK model calls
+  // (the first attempt plus a single JSON-repair attempt), and a provider
+  // error ends it immediately - retries live in the central orchestrator,
+  // never in agents. Executions (approvals) are plain Google API calls and
+  // spend zero AI calls.
+  for (let attempt = 0; attempt < AGENT_MAX_AI_CALLS_PER_TASK && !parsed; attempt += 1) {
     try {
       const result = await text(
         attempt === 0 ? prompt : `${prompt}\n\nIMPORTANT: reply with ONLY the JSON object. No markdown, no commentary.`,
-        { temperature: 0.3, maxOutputTokens: 900, responseMimeType: 'application/json', timeoutMs: attempt === 0 ? 25000 : 10000 },
+        { temperature: 0.3, maxOutputTokens: 900, responseMimeType: 'application/json', timeoutMs: attempt === 0 ? 25000 : 10000, userId: uid, agent: agent.id },
       );
       const rawText = String(result?.text || '');
       spent += estTokens(prompt) + estTokens(rawText);

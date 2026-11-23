@@ -254,32 +254,82 @@ test('a two-letter greeting can be sent — agents answer conversation too', asy
   assert.match(result.task.reply, /scheduling assistant/);
 });
 
-test('Gemini capacity failures walk the model chain instead of drowning with it', async () => {
+test('one central Gemini model: capacity blips retry it (max two), permanent errors never do', async () => {
   const { callGemini } = await import('../api/_gemini.js');
   const realFetch = globalThis.fetch;
   const calls = [];
-  globalThis.fetch = async (url) => {
-    calls.push(String(url));
-    if (String(url).includes('gemini-2.5-flash-lite')) {
-      return { ok: false, status: 503, text: async () => JSON.stringify({ error: { message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary.' } }) };
-    }
-    return { ok: true, status: 200, text: async () => JSON.stringify({ candidates: [{ content: { parts: [{ text: 'chain-ok' }] }, finishReason: 'STOP' }] }) };
-  };
+  const modelOf = (url) => (String(url).match(/models\/([^:]+):generateContent/) || [])[1];
   try {
-    const out = await callGemini('hello', { model: 'gemini-2.5-flash-lite', timeoutMs: 1000 }, 'test-key');
-    assert.equal(out, 'chain-ok');
-    assert.equal(calls.length, 2);
-    assert.ok(!calls[1].includes('gemini-2.5-flash-lite'), 'second attempt must be a different model');
-    // Quota fails straight through, exactly one attempt, original words intact.
+    // 503, 503, then success: three attempts, ONE model name throughout.
+    globalThis.fetch = async (url) => {
+      calls.push(String(url));
+      if (calls.length < 3) {
+        return { ok: false, status: 503, text: async () => JSON.stringify({ error: { message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary.' } }) };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ candidates: [{ content: { parts: [{ text: 'after-retries' }] }, finishReason: 'STOP' }] }) };
+    };
+    const out = await callGemini('hello', { timeoutMs: 1000, retryBaseMs: 1 }, 'test-key');
+    assert.equal(out, 'after-retries');
+    assert.equal(calls.length, 3);
+    assert.ok(modelOf(calls[0]), 'model named in URL');
+    assert.equal(modelOf(calls[1]), modelOf(calls[0]), 'retry must not switch models');
+    assert.equal(modelOf(calls[2]), modelOf(calls[0]), 'retry must not switch models');
+    // Retry budget exhausted: still the same model, error surfaces.
     calls.length = 0;
     globalThis.fetch = async (url) => {
       calls.push(String(url));
-      return { ok: false, status: 429, text: async () => JSON.stringify({ error: { message: 'Quota exceeded for this key.' } }) };
+      return { ok: false, status: 503, text: async () => JSON.stringify({ error: { message: 'This model is currently experiencing high demand.' } }) };
     };
-    await assert.rejects(() => callGemini('hello', { model: 'gemini-2.5-flash-lite' }, 'test-key'), /Quota exceeded/);
+    await assert.rejects(() => callGemini('hello', { retryBaseMs: 1 }, 'test-key'), /high demand/);
+    assert.equal(calls.length, 3, 'initial attempt plus exactly two retries');
+    // A retired model is permanent: one attempt, original words intact.
+    calls.length = 0;
+    globalThis.fetch = async (url) => {
+      calls.push(String(url));
+      return { ok: false, status: 404, text: async () => JSON.stringify({ error: { message: 'This model models/gemini-2.5-flash is no longer available to new users.' } }) };
+    };
+    await assert.rejects(() => callGemini('hello', { retryBaseMs: 1 }, 'test-key'), /no longer available/);
+    assert.equal(calls.length, 1, 'permanent errors are never retried');
+    // Opt-out callers (ranking) keep their single fast attempt.
+    calls.length = 0;
+    globalThis.fetch = async (url) => {
+      calls.push(String(url));
+      return { ok: false, status: 503, text: async () => JSON.stringify({ error: { message: 'This model is currently experiencing high demand.' } }) };
+    };
+    await assert.rejects(() => callGemini('hello', { retryBaseMs: 1, disableCapacityRetry: true }, 'test-key'), /high demand/);
     assert.equal(calls.length, 1);
   } finally {
     globalThis.fetch = realFetch;
+  }
+});
+
+test('the central orchestrator deduplicates identical in-flight prompts and caps one call per member', async () => {
+  const { aiText } = await import('../api/_gemini.js');
+  const realFetch = globalThis.fetch;
+  const savedKey = process.env.GEMINI_API_KEY;
+  const savedZen = process.env.ZEN_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  delete process.env.ZEN_API_KEY;
+  let fetchCount = 0;
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    await new Promise((resolve) => { setTimeout(resolve, 40); });
+    return { ok: true, status: 200, text: async () => JSON.stringify({ candidates: [{ content: { parts: [{ text: 'shared-result' }] }, finishReason: 'STOP' }] }) };
+  };
+  try {
+    const [a, b] = await Promise.all([aiText('identical prompt', { userId: 'member-1' }), aiText('identical prompt', { userId: 'member-1' })]);
+    assert.equal(a.text, 'shared-result');
+    assert.equal(b.text, 'shared-result');
+    assert.equal(fetchCount, 1, 'identical concurrent prompts must cost one provider call');
+    // Same member, different work, while busy: refused fast so the caller's
+    // deterministic fallback answers instead of a second concurrent call.
+    const slow = aiText('first job', { userId: 'member-2' });
+    await assert.rejects(() => aiText('second job', { userId: 'member-2' }), /ai_busy_for_user/);
+    await slow;
+  } finally {
+    globalThis.fetch = realFetch;
+    if (savedKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = savedKey;
+    if (savedZen === undefined) delete process.env.ZEN_API_KEY; else process.env.ZEN_API_KEY = savedZen;
   }
 });
 

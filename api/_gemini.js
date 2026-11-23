@@ -1,20 +1,18 @@
-const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+// THE Gemini model for the whole product: one name, centrally configured.
+// Google closed the 2.5 flash tier to new API users and points callers at
+// gemini-3.8-flash; a stale GEMINI_MODEL env naming a dead 2.5 model fails
+// permanently - by design nothing here quietly substitutes another model.
+const DEFAULT_MODEL = String(process.env.GEMINI_MODEL || '').trim() || 'gemini-3.8-flash';
 // Second brain. If Gemini is down, over quota or returns junk, the same prompt
 // goes to OpenCode Zen (OpenAI-compatible) instead of the user seeing a
 // fallback sentence. Same contract, different provider, no code change at the
 // call sites.
 const ZEN_URL = process.env.ZEN_API_URL || 'https://opencode.ai/zen/v1/chat/completions';
-// Zen's catalog moves and ids no longer carry the "opencode/" prefix, so an old
-// ZEN_MODEL value fails every call and Linky quietly drops to hard-coded sentences.
-// The prefix is stripped, and a refused model name is retried down a short chain.
+// Zen ids no longer carry the "opencode/" prefix, so it is stripped. One
+// configured model, same rule as Gemini: no silent model walk - a refused
+// model surfaces as a clear error instead of quietly burning calls.
 const cleanModel = (m) => String(m || '').trim().replace(/^opencode\//, '');
 const ZEN_MODEL = cleanModel(process.env.ZEN_MODEL || process.env.EXPO_PUBLIC_ZEN_MODEL || '') || 'gemini-3.5-flash-lite';
-const ZEN_FALLBACK_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gpt-5-nano', 'claude-haiku-4-5'];
-let zenHealthyModel = '';
-const zenChain = (wanted) => {
-  const list = [cleanModel(wanted), zenHealthyModel, ...ZEN_FALLBACK_MODELS.map(cleanModel)].filter(Boolean);
-  return [...new Set(list)];
-};
 const MAX_PROFILE_CHARS = 2600;
 
 export function setCors(res) {
@@ -110,29 +108,29 @@ export function clippedJson(value, max = MAX_PROFILE_CHARS) {
 // chain — the same trick the Zen leg below has always used — instead of
 // retrying the drowning model. Quota and auth failures fail for every model
 // on the key, so those throw straight through to the Zen rescue, as before.
-const GEMINI_FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-2.0-flash'];
-let geminiHealthyModel = '';
-const geminiChain = (wanted) => {
-  const list = [cleanModel(wanted), cleanModel(DEFAULT_MODEL), geminiHealthyModel, ...GEMINI_FALLBACK_MODELS.map(cleanModel)].filter(Boolean);
-  return [...new Set(list)];
-};
 export async function callGemini(prompt, options = {}, apiKey) {
-  const chain = geminiChain(options.model);
-  const errors = [];
-  for (const model of options.disableCapacityRetry === true ? chain.slice(0, 1) : chain) {
+  // Retry discipline - the only retries in this file: 429 / 5xx capacity
+  // blips get at most two retries with exponential backoff, honouring
+  // Retry-After. Permanent errors (bad key, refused or retired model,
+  // invalid request) are never retried, and neither are timeouts: one slow
+  // attempt has already spent the caller's budget, and the Zen rescue plus
+  // the callers' deterministic fallbacks are faster than a second hang.
+  const maxRetries = options.disableCapacityRetry === true ? 0 : 2;
+  let retries = 0;
+  for (;;) {
     try {
-      const out = await callGeminiOnce(prompt, options, apiKey, model);
-      geminiHealthyModel = model;
-      return out;
+      return await callGeminiOnce(prompt, options, apiKey, DEFAULT_MODEL);
     } catch (err) {
       const message = String(err?.message || err);
-      errors.push(`${model}: ${message}`);
-      if (!/503|500|overloaded|high demand|capacity|not found|not supported|does not exist|invalid model|no such model/i.test(message)) {
-        throw new Error(message);
-      }
+      const retryable = err?.retryable === true || /\b(429|500|503)\b|overloaded|high demand|capacity/i.test(message);
+      if (!retryable || retries >= maxRetries) throw err;
+      retries += 1;
+      const base = Number(options.retryBaseMs) > 0 ? Number(options.retryBaseMs) : 800;
+      const wait = Math.min(Math.max(Number(err?.retryAfterMs || 0), base * 2 ** (retries - 1)), 5000);
+      console.warn(`[ai] gemini retry ${retries}/${maxRetries} in ${wait}ms: ${message.slice(0, 120)}`);
+      await new Promise((resolve) => { setTimeout(resolve, wait); });
     }
   }
-  throw new Error(errors[0] || 'Gemini failed');
 }
 async function callGeminiOnce(prompt, options = {}, apiKey, model = DEFAULT_MODEL) {
 
@@ -164,7 +162,11 @@ async function callGeminiOnce(prompt, options = {}, apiKey, model = DEFAULT_MODE
   }
 
   if (!response.ok) {
-    throw new Error(data?.error?.message || `Gemini HTTP ${response.status}: ${raw.slice(0, 300)}`);
+    const err = new Error(data?.error?.message || `Gemini HTTP ${response.status}: ${raw.slice(0, 300)}`);
+    if (response.status === 429 || response.status === 500 || response.status === 503) err.retryable = true;
+    const retryAfterSec = Number(response.headers?.get?.('retry-after') || 0);
+    if (retryAfterSec > 0) err.retryAfterMs = retryAfterSec * 1000;
+    throw err;
   }
 
   const text = data?.candidates?.[0]?.content?.parts?.map((part) => part?.text || '').join('').trim();
@@ -197,24 +199,7 @@ async function zenOnce(model, prompt, options, apiKey) {
 }
 
 export async function callZen(prompt, options = {}, apiKey = getZenKey()) {
-  const errors = [];
-  const models = zenChain(options.model || ZEN_MODEL);
-  for (const model of options.singleModel === true ? models.slice(0, 1) : models) {
-    try {
-      const out = await zenOnce(model, prompt, options, apiKey);
-      zenHealthyModel = model;
-      return out;
-    } catch (err) {
-      const message = String(err?.message || err);
-      errors.push(`${model}: ${message}`);
-      // only a refused model name is worth another try - a missing payment method,
-      // a quota or a network failure fails for every model on the account
-      if (!/not supported|is not a model|unavailable|does not exist|unknown model|invalid model|no such model/i.test(message)) {
-        throw new Error(message);
-      }
-    }
-  }
-  throw new Error(errors[0] || 'Zen failed');
+  return zenOnce(ZEN_MODEL, prompt, options, apiKey);
 }
 
 /**
@@ -223,26 +208,85 @@ export async function callZen(prompt, options = {}, apiKey = getZenKey()) {
  * combined error - and every caller in Linky has a deterministic answer behind
  * it, so a throw here is never a message a member sees.
  */
+const AI_MAX_CONCURRENT = 4;
+const AI_MAX_PER_USER = 1;
+let aiInFlight = 0;
+const aiWaiters = [];
+const aiUserInFlight = new Map();
+const aiDeduped = new Map();
+const estTokensText = (value) => Math.ceil(String(value || '').length / 4);
+
+function acquireAiSlot() {
+  if (aiInFlight < AI_MAX_CONCURRENT) { aiInFlight += 1; return Promise.resolve(); }
+  return new Promise((resolve) => { aiWaiters.push(resolve); });
+}
+function releaseAiSlot() {
+  const next = aiWaiters.shift();
+  if (next) next();
+  else aiInFlight = Math.max(0, aiInFlight - 1);
+}
+
 export async function aiText(prompt, options = {}) {
-  const attempts = [
-    ['gemini', getGeminiKey(), callGemini],
-    ['zen', getZenKey(), callZen],
-  ].filter(([, key]) => !!key);
-  if (options.disableProviderFailover === true) attempts.splice(1);
-  if (!attempts.length) {
-    throw new Error('No AI provider configured (GEMINI_API_KEY or ZEN_API_KEY).');
+  // Identical prompts already in flight share one provider call and one
+  // result - a double-tap or a duplicated dispatch can never bill twice.
+  const userKey = String(options.userId || '');
+  const dedupeKey = `${userKey}|${options.temperature ?? ''}|${options.maxOutputTokens ?? ''}|${String(prompt ?? '')}`;
+  const existing = aiDeduped.get(dedupeKey);
+  if (existing) return existing;
+  const run = aiTextRun(prompt, options, userKey);
+  aiDeduped.set(dedupeKey, run);
+  try {
+    return await run;
+  } finally {
+    if (aiDeduped.get(dedupeKey) === run) aiDeduped.delete(dedupeKey);
   }
-  const errors = [];
-  for (const [provider, key, call] of attempts) {
+}
+
+async function aiTextRun(prompt, options, userKey) {
+  if (userKey) {
+    const held = aiUserInFlight.get(userKey) || 0;
+    if (held >= AI_MAX_PER_USER) {
+      throw new Error('ai_busy_for_user: this member already has an AI request in flight; answer deterministically instead.');
+    }
+    aiUserInFlight.set(userKey, held + 1);
+  }
+  await acquireAiSlot();
+  const started = Date.now();
+  const logUse = (fields) => {
     try {
-      const text = await call(prompt, options, key);
-      return { text, provider };
-    } catch (err) {
-      errors.push(`${provider}: ${err?.message || err}`);
-      if (provider === 'gemini') console.warn('[ai] gemini failed, trying Zen', err?.message || err);
+      console.info('[ai]', JSON.stringify({ user: userKey || '-', agent: String(options.agent || '-'), estInTokens: estTokensText(prompt), ms: Date.now() - started, ...fields }));
+    } catch { /* logging must never break a call */ }
+  };
+  try {
+    const attempts = [
+      ['gemini', getGeminiKey(), callGemini, DEFAULT_MODEL],
+      ['zen', getZenKey(), callZen, ZEN_MODEL],
+    ].filter(([, key]) => !!key);
+    if (options.disableProviderFailover === true) attempts.splice(1);
+    if (!attempts.length) {
+      throw new Error('No AI provider configured (GEMINI_API_KEY or ZEN_API_KEY).');
+    }
+    const errors = [];
+    for (const [provider, key, call, model] of attempts) {
+      try {
+        const text = await call(prompt, options, key);
+        logUse({ provider, model, estOutTokens: estTokensText(text), ok: true });
+        return { text, provider };
+      } catch (err) {
+        errors.push(`${provider}: ${String(err?.message || err).slice(0, 140)}`);
+        if (provider === 'gemini') console.warn('[ai] gemini failed, trying Zen', String(err?.message || err).slice(0, 140));
+      }
+    }
+    logUse({ provider: 'none', model: '-', estOutTokens: 0, ok: false });
+    throw new Error(errors.join(' | '));
+  } finally {
+    releaseAiSlot();
+    if (userKey) {
+      const held = (aiUserInFlight.get(userKey) || 1) - 1;
+      if (held <= 0) aiUserInFlight.delete(userKey);
+      else aiUserInFlight.set(userKey, held);
     }
   }
-  throw new Error(errors.join(' | '));
 }
 
 /** Same answer, provider hidden - what every existing caller already expects. */
@@ -296,7 +340,7 @@ export function localRank(me, candidates, maxCandidates) {
  *  so this is safe to serve from a diagnostic route. */
 /** Which Zen models the account would answer, newest success first. */
 export function zenModels() {
-  return { wanted: ZEN_MODEL, healthy: zenHealthyModel, chain: zenChain(ZEN_MODEL) };
+  return { wanted: ZEN_MODEL, healthy: ZEN_MODEL, chain: [ZEN_MODEL] };
 }
 
 export function aiStatus() {
@@ -307,7 +351,7 @@ export function aiStatus() {
     ready: !off && !!(g || z),
     off,
     gemini: { configured: !!g, from: g ? g[0] : '', model: process.env.GEMINI_MODEL || DEFAULT_MODEL },
-    zen: { configured: !!z, from: z ? z[0] : '', model: ZEN_MODEL, healthyModel: zenHealthyModel || '', url: ZEN_URL },
+    zen: { configured: !!z, from: z ? z[0] : '', model: ZEN_MODEL, healthyModel: ZEN_MODEL, url: ZEN_URL },
   };
 }
 
