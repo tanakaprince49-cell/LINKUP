@@ -127,6 +127,15 @@ const WEB_BASE_PATH = Platform.OS === 'web' ? webBasePath() : '';
 const CAMPAIGN_MANAGER_PATHS = ['/campaigns', '/campaign-manager'];
 const isCampaignManagerPath = (pathname = String((globalThis as any)?.location?.pathname || '')) =>
   Platform.OS === 'web' && CAMPAIGN_MANAGER_PATHS.includes(webRoutePath(pathname).replace(/\/+$/, ''));
+
+/**
+ * /app/aiagents is the AI workforce: a member destination that must survive a
+ * cold load exactly like the campaign manager does. Without this, the
+ * signed-out guard rewrites the URL to the landing page while auth is still
+ * resolving, and the member tree then falls back to the dashboard.
+ */
+const isAiAgentsPath = (pathname = String((globalThis as any)?.location?.pathname || '')) =>
+  Platform.OS === 'web' && webRoutePath(pathname).replace(/\/+$/, '') === '/aiagents';
 const linking: any = {
   prefixes: [
     ExpoLinking.createURL('/'), 'linkup://',
@@ -458,6 +467,7 @@ function AppContent() {
     Platform.OS === 'web' ? webRoutePath() : '';
   const isPublicSharedWebPath =
     webPathname.startsWith('/profile/') || webPathname.startsWith('/opportunity/');
+  const isAiAgentsWebPath = isAiAgentsPath();
   const navigationStateKey = `${user?.uid || 'guest'}-${isOnboarded ? 'onboarded' : 'new'}-${authVersion}`;
 
   React.useEffect(() => {
@@ -661,6 +671,10 @@ function AppContent() {
       return () => clearTimeout(timer);
     }
 
+    // The workforce link keeps its URL while signed out: the guest tree
+    // renders Alex's pitch, and signing in lands back here (intent below).
+    if (isAiAgentsPath()) return;
+
     if (history?.replaceState && !publicPaths.has(pathname) && !isPublicSharedPath) {
       history.replaceState(null, '', webAppPath('/landing'));
     }
@@ -742,6 +756,24 @@ function AppContent() {
       (globalThis as any)?.history?.replaceState?.(null, '', webAppPath('/campaign-manager'));
       if (navigationRef.getCurrentRoute()?.name !== 'Campaigns') {
         (navigationRef as any).navigate('Campaigns');
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [user?.uid, isOnboarded]);
+
+  // Remembered from the first paint: a visitor who arrived on the workforce
+  // URL is taken back to it the moment they are in, signed in or freshly
+  // onboarded — the beta invite link must land on Alex, not the dashboard.
+  const aiAgentsIntentRef = React.useRef(isAiAgentsPath());
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || !user?.uid || !isOnboarded) return;
+    if (!aiAgentsIntentRef.current && !isAiAgentsPath()) return;
+    aiAgentsIntentRef.current = false;
+    const timer = setTimeout(() => {
+      if (!navigationRef.isReady()) return;
+      (globalThis as any)?.history?.replaceState?.(null, '', webAppPath('/aiagents'));
+      if (navigationRef.getCurrentRoute()?.name !== 'AiAgents') {
+        (navigationRef as any).navigate('AiAgents');
       }
     }, 400);
     return () => clearTimeout(timer);
@@ -833,6 +865,9 @@ function AppContent() {
             />
                 <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
               </>
+            ) : null}
+            {isAiAgentsWebPath ? (
+              <Stack.Screen name="AiAgents" component={AiAgentsScreen} />
             ) : null}
           </>
         ) : !isOnboarded ? (

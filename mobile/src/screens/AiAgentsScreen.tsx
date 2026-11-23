@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Bot, Check, Clock3, Mail, PenLine, Send, ShieldCheck, X } from 'lucide-react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import {
   agentApproveTask,
   agentClaim,
@@ -40,8 +41,9 @@ function friendly(error: unknown, fallback: string) {
   return message && message.length < 140 ? message : fallback;
 }
 
-export default function AiAgentsScreen() {
+export default function AiAgentsScreen({ navigation }: any) {
   const { theme } = useTheme();
+  const { user, loading: authLoading } = useAuth();
   const dark = theme === 'dark';
   const [home, setHome] = useState<AgentHome | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +70,12 @@ export default function AiAgentsScreen() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // The workforce API is signed-in only. Guests get the pitch below, not a
+    // doomed request and an error toast.
+    if (user?.uid) void load();
+    else if (!authLoading) setLoading(false);
+  }, [load, user?.uid, authLoading]);
 
   const claim = useCallback(async () => {
     setBusy('claim');
@@ -164,6 +171,29 @@ export default function AiAgentsScreen() {
         <ActivityIndicator color={INK} />
         <Text style={[styles.faint, { color: faintColor, marginTop: 10 }]}>Staffing your workforce…</Text>
       </View>
+    );
+  }
+
+  if (!user && !authLoading) {
+    return (
+      <ScrollView style={{ flex: 1, backgroundColor: dark ? INK : '#F7F4E6' }} contentContainerStyle={styles.page}>
+        <View style={styles.hero}>
+          <View style={styles.heroBadge}>
+            <Text style={styles.heroBadgeText}>LINKUP AI AGENTS · AI, LABELLED AS AI</Text>
+          </View>
+          <Text style={[styles.h1, { color: titleColor }]}>Your personal AI workforce</Text>
+          <Text style={[styles.sub, { color: bodyColor }]}>
+            You have co-founders for the company. Now staff the work itself. Alex, your executive assistant, drafts and sends email under your approval — sign in to claim one of the 20 beta seats.
+          </Text>
+        </View>
+        <View style={card}>
+          <Text style={[styles.cardTitle, { color: titleColor }]}>Alex is waiting inside</Text>
+          <Text style={[styles.body, { color: bodyColor }]}>Closed beta: 20 seats, five free task executions a day for seven days. Nothing is ever sent without your explicit approval.</Text>
+          <TouchableOpacity style={[styles.primary, { backgroundColor: YELLOW }]} onPress={() => navigation.navigate('EmailAuth')} activeOpacity={0.85}>
+            <Text style={[styles.primaryText, { color: INK }]}>Sign in to claim your seat</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     );
   }
 

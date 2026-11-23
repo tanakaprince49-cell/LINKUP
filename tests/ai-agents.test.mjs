@@ -220,3 +220,25 @@ test('the AI Agents printing presses are wired (route, screen, API helpers)', ()
     assert.match(api, new RegExp(`export const ${fn}`));
   }
 });
+
+test('the workforce URL survives a cold load signed-out, signed-in, and mid-auth', () => {
+  const app = fs.readFileSync(new URL('../mobile/App.tsx', import.meta.url), 'utf8');
+  // A dedicated path helper in the campaign-manager tradition.
+  assert.match(app, /const isAiAgentsPath = /);
+  assert.ok(app.includes("=== '/aiagents'"), 'aiagents path matcher present');
+  // Registered twice: once for members, once in the guest tree on its own
+  // path — so the invite link renders Alex's pitch instead of falling
+  // through to the dashboard while auth is still resolving.
+  const registrations = app.match(/<Stack\.Screen name="AiAgents" component=\{AiAgentsScreen\} \/>/g) || [];
+  assert.equal(registrations.length, 2);
+  assert.match(app, /isAiAgentsWebPath \? \(\s*\n\s*<Stack\.Screen name="AiAgents"/);
+  // The signed-out URL guard must never rewrite this path to /landing.
+  assert.match(app, /if \(isAiAgentsPath\(\)\) return;/);
+  // And the first-paint intent carries a fresh sign-in back to Alex.
+  assert.match(app, /aiAgentsIntentRef = React\.useRef\(isAiAgentsPath\(\)\)/);
+  assert.match(app, /navigate\('AiAgents'\)/);
+  // The screen itself pitches guests instead of firing an authed request.
+  const screen = fs.readFileSync(new URL('../mobile/src/screens/AiAgentsScreen.tsx', import.meta.url), 'utf8');
+  assert.match(screen, /Sign in to claim your seat/);
+  assert.match(screen, /if \(user\?\.uid\) void load\(\);/);
+});
