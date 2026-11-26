@@ -221,14 +221,14 @@ export const handleCalendarCallback = (db, query, deps) => handleOAuthCallback(d
 // park an approval mid-flight. Default 20s - well inside the serverless
 // function budget - and the caller always gets a clean error instead of
 // a spinning wheel that never resolves.
+// Hard ceiling on every external Google call so a slow/hung endpoint can
+// never park an approval mid-flight. Promise.race works even when the
+// underlying fetch doesn't honour AbortController (some serverless runtimes).
 const fetchWithTimeout = async (fetchFn, url, init, ms = 20000) => {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetchFn(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+  const timeout = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('google_api_timeout')), ms);
+  });
+  return Promise.race([fetchFn(url, init), timeout]);
 };
 
 async function googleAccessToken(db, uid, provider, { fetchFn = fetch, now = Date.now() } = {}) {
@@ -693,7 +693,13 @@ export async function approveAgentTask(db, uid, input, { fetchFn = fetch, now = 
     draft.start = withSeconds(draft.start);
     draft.end = withSeconds(draft.end);
     await db.collection('agentTasks').doc(taskId).set({ draft, status: 'sending', updatedAt: now }, { merge: true });
-    const created = await calendarCreate(db, uid, draft, { fetchFn, now });
+    let created;
+    try {
+      created = await calendarCreate(db, uid, draft, { fetchFn, now });
+    } catch (err) {
+      await db.collection('agentTasks').doc(taskId).set({ draft, status: 'awaiting_approval', error: String(err?.message || 'Calendar request timed out'), updatedAt: now }, { merge: true });
+      return { ok: false, reason: 'calendar_create_failed', detail: String(err?.message || 'Calendar request timed out'), draft };
+    }
     if (!created.ok) {
       await db.collection('agentTasks').doc(taskId).set({ draft, status: 'awaiting_approval', error: created.detail || created.reason, updatedAt: now }, { merge: true });
       return { ok: false, reason: created.reason, detail: created.detail, draft };
@@ -713,7 +719,13 @@ export async function approveAgentTask(db, uid, input, { fetchFn = fetch, now = 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.to)) return { ok: false, reason: 'bad_recipient', draft };
   if (!draft.subject || !draft.body) return { ok: false, reason: 'empty_draft', draft };
   await db.collection('agentTasks').doc(taskId).set({ draft, status: 'sending', updatedAt: now }, { merge: true });
-  const sent = await gmailSend(db, uid, draft, { fetchFn, now });
+  let sent;
+  try {
+    sent = await gmailSend(db, uid, draft, { fetchFn, now });
+  } catch (err) {
+    await db.collection('agentTasks').doc(taskId).set({ draft, status: 'awaiting_approval', error: String(err?.message || 'Gmail request timed out'), updatedAt: now }, { merge: true });
+    return { ok: false, reason: 'gmail_send_failed', detail: String(err?.message || 'Gmail request timed out'), draft };
+  }
   if (!sent.ok) {
     await db.collection('agentTasks').doc(taskId).set({ draft, status: 'awaiting_approval', error: sent.reason, updatedAt: now }, { merge: true });
     return { ok: false, reason: sent.reason, draft };

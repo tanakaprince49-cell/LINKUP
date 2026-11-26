@@ -157,18 +157,27 @@ export async function linkyCall<T = any>(action: LinkyAction, payload: Record<st
   const token = await user.getIdToken();
   // Hard ceiling so a slow server can never leave an Approve spinner
   // spinning forever. 30s is well inside any reasonable round-trip.
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30000);
+  // Hard ceiling so a slow server can never leave an Approve spinner
+  // spinning forever. Promise.race works even when AbortController isn't
+  // honoured by the underlying fetch.
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('request_timeout')), 30000);
+  });
   let response: Response;
   try {
-    response = await fetch(endpoint(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ action, ...payload }),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
+    response = await Promise.race([
+      fetch(endpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action, ...payload }),
+      }),
+      timeout,
+    ]);
+  } catch (err) {
+    throw new LinkyApiError(
+      String((err as Error)?.message || 'The request timed out. Please try again.'),
+      504
+    );
   }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
