@@ -284,7 +284,11 @@ async function calendarCreate(db, uid, draft, deps) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.id) {
-    const detail = data?.error?.message || data?.error?.errors?.[0]?.message || `HTTP ${res.status}`;
+    const detail =
+      data?.error?.message ||
+      data?.error?.errors?.[0]?.message ||
+      JSON.stringify(data?.error || {}).slice(0, 120) ||
+      `HTTP ${res.status}`;
     console.warn('[agents] calendar create failed:', String(detail).slice(0, 200));
     return { ok: false, reason: 'calendar_create_failed', detail: String(detail).slice(0, 200) };
   }
@@ -665,6 +669,15 @@ export async function approveAgentTask(db, uid, input, { fetchFn = fetch, now = 
     };
     if (!draft.title) return { ok: false, reason: 'empty_draft', draft };
     if (!validWhen(draft.start) || !validWhen(draft.end) || draft.end <= draft.start) return { ok: false, reason: 'bad_time', draft };
+    // Google Calendar needs RFC3339 with seconds (YYYY-MM-DDTHH:mm:ss).
+    // Normalise drafts that arrived without seconds (pre-fix tasks, or
+    // manual entry) before calling the API.
+    const withSeconds = (value) => {
+      const m = String(value || '').match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/);
+      return m ? m[1] + ':00' : value;
+    };
+    draft.start = withSeconds(draft.start);
+    draft.end = withSeconds(draft.end);
     await db.collection('agentTasks').doc(taskId).set({ draft, status: 'sending', updatedAt: now }, { merge: true });
     const created = await calendarCreate(db, uid, draft, { fetchFn, now });
     if (!created.ok) {
