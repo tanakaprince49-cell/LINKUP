@@ -217,6 +217,20 @@ export async function handleOAuthCallback(db, provider, query, { fetchFn = fetch
 export const handleGmailCallback = (db, query, deps) => handleOAuthCallback(db, 'gmail', query, deps);
 export const handleCalendarCallback = (db, query, deps) => handleOAuthCallback(db, 'calendar', query, deps);
 
+// Fetch with a hard ceiling so a slow or hung Google endpoint can never
+// park an approval mid-flight. Default 20s - well inside the serverless
+// function budget - and the caller always gets a clean error instead of
+// a spinning wheel that never resolves.
+const fetchWithTimeout = async (fetchFn, url, init, ms = 20000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetchFn(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 async function googleAccessToken(db, uid, provider, { fetchFn = fetch, now = Date.now() } = {}) {
   const id = connId(uid, provider);
   const conn = await getDoc(db, 'agentConnections', id);
@@ -226,7 +240,7 @@ async function googleAccessToken(db, uid, provider, { fetchFn = fetch, now = Dat
   }
   const refresh = decryptSecret(conn.refreshTokenEnc);
   if (!refresh) return { ok: false, reason: `${provider}_not_connected` };
-  const res = await fetchFn('https://oauth2.googleapis.com/token', {
+  const res = await fetchWithTimeout(fetchFn, 'https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -235,7 +249,7 @@ async function googleAccessToken(db, uid, provider, { fetchFn = fetch, now = Dat
       ['client' + '_secret']: googleClientSecret(),
       grant_type: 'refresh_token',
     }),
-  });
+  }, 15000);
   const data = await res.json().catch(() => ({}));
   if (!data.access_token) return { ok: false, reason: `${provider}_not_connected` };
   await db.collection('agentConnections').doc(id).set({
@@ -257,11 +271,11 @@ async function gmailSend(db, uid, draft, deps) {
     draft.body,
   ].join('\r\n');
   const raw = Buffer.from(mime, 'utf8').toString('base64url');
-  const res = await deps.fetchFn('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+  const res = await fetchWithTimeout(deps.fetchFn, 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: { Authorization: `Bearer ${access.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ raw }),
-  });
+  }, 20000);
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.id) return { ok: false, reason: 'gmail_send_failed' };
   return { ok: true, messageId: data.id, threadId: data.threadId || '' };
@@ -277,11 +291,11 @@ async function calendarCreate(db, uid, draft, deps) {
     end: { dateTime: draft.end, timeZone: draft.timeZone },
     attendees: (draft.attendees || []).map((email) => ({ email })),
   };
-  const res = await deps.fetchFn('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+  const res = await fetchWithTimeout(deps.fetchFn, 'https://www.googleapis.com/calendar/v3/calendars/primary/events', {
     method: 'POST',
     headers: { Authorization: `Bearer ${access.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(event),
-  });
+  }, 20000);
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.id) {
     const detail =

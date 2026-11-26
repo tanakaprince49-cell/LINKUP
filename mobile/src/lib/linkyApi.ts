@@ -155,11 +155,21 @@ export async function linkyCall<T = any>(action: LinkyAction, payload: Record<st
   const user = auth.currentUser;
   if (!user) throw new LinkyApiError(action === 'teamMatch' ? 'Sign in to use team matching.' : 'Sign in to your LINKUP account.', 401);
   const token = await user.getIdToken();
-  const response = await fetch(endpoint(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ action, ...payload }),
-  });
+  // Hard ceiling so a slow server can never leave an Approve spinner
+  // spinning forever. 30s is well inside any reasonable round-trip.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  let response: Response;
+  try {
+    response = await fetch(endpoint(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action, ...payload }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new LinkyApiError(String(data?.error || `Team matching is unavailable (${response.status}).`), response.status, data?.messageQuota);
