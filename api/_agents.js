@@ -283,7 +283,11 @@ async function calendarCreate(db, uid, draft, deps) {
     body: JSON.stringify(event),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.id) return { ok: false, reason: 'calendar_create_failed' };
+  if (!res.ok || !data.id) {
+    const detail = data?.error?.message || data?.error?.errors?.[0]?.message || `HTTP ${res.status}`;
+    console.warn('[agents] calendar create failed:', String(detail).slice(0, 200));
+    return { ok: false, reason: 'calendar_create_failed', detail: String(detail).slice(0, 200) };
+  }
   return { ok: true, eventId: data.id, htmlLink: data.htmlLink || '' };
 }
 
@@ -457,6 +461,7 @@ function templateEventDraft(instruction, tz, now) {
     end,
     attendees,
     description: '',
+    timeZone: validTz(tz),
     summary: `The AI is unreachable right now, so Sarah drafted this from your exact words: ${dayLabel} at ${pad(hour)}:${pad(minute)} (${tz}). Edit freely — nothing is added without your approval.`,
   };
 }
@@ -663,8 +668,8 @@ export async function approveAgentTask(db, uid, input, { fetchFn = fetch, now = 
     await db.collection('agentTasks').doc(taskId).set({ draft, status: 'sending', updatedAt: now }, { merge: true });
     const created = await calendarCreate(db, uid, draft, { fetchFn, now });
     if (!created.ok) {
-      await db.collection('agentTasks').doc(taskId).set({ draft, status: 'awaiting_approval', error: created.reason, updatedAt: now }, { merge: true });
-      return { ok: false, reason: created.reason, draft };
+      await db.collection('agentTasks').doc(taskId).set({ draft, status: 'awaiting_approval', error: created.detail || created.reason, updatedAt: now }, { merge: true });
+      return { ok: false, reason: created.reason, detail: created.detail, draft };
     }
     await db.collection('agentTasks').doc(taskId).set({
       draft, status: 'sent', error: '', updatedAt: now,
