@@ -425,8 +425,8 @@ function templateEventDraft(instruction, tz, now) {
   const endTotal = startMinutes + duration;
   const endBase = new Date(Date.UTC(y, m - 1, d + Math.floor(endTotal / 1440)));
   const endMinutes = endTotal % 1440;
-  const start = `${y}-${pad(m)}-${pad(d)}T${pad(hour)}:${pad(minute)}`;
-  const end = `${endBase.getUTCFullYear()}-${pad(endBase.getUTCMonth() + 1)}-${pad(endBase.getUTCDate())}T${pad(Math.floor(endMinutes / 60))}:${pad(endMinutes % 60)}`;
+  const start = `${y}-${pad(m)}-${pad(d)}T${pad(hour)}:${pad(minute)}:${pad(0)}`;
+  const end = `${endBase.getUTCFullYear()}-${pad(endBase.getUTCMonth() + 1)}-${pad(endBase.getUTCDate())}T${pad(Math.floor(endMinutes / 60))}:${pad(endMinutes % 60)}:${pad(0)}`;
 
   const attendees = (instruction.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || []).slice(0, 20);
   let title = '';
@@ -660,9 +660,10 @@ export async function approveAgentTask(db, uid, input, { fetchFn = fetch, now = 
     };
     if (!draft.title) return { ok: false, reason: 'empty_draft', draft };
     if (!validWhen(draft.start) || !validWhen(draft.end) || draft.end <= draft.start) return { ok: false, reason: 'bad_time', draft };
+    await db.collection('agentTasks').doc(taskId).set({ draft, status: 'sending', updatedAt: now }, { merge: true });
     const created = await calendarCreate(db, uid, draft, { fetchFn, now });
     if (!created.ok) {
-      await db.collection('agentTasks').doc(taskId).set({ draft, error: created.reason, updatedAt: now }, { merge: true });
+      await db.collection('agentTasks').doc(taskId).set({ draft, status: 'awaiting_approval', error: created.reason, updatedAt: now }, { merge: true });
       return { ok: false, reason: created.reason, draft };
     }
     await db.collection('agentTasks').doc(taskId).set({
@@ -679,9 +680,10 @@ export async function approveAgentTask(db, uid, input, { fetchFn = fetch, now = 
   };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.to)) return { ok: false, reason: 'bad_recipient', draft };
   if (!draft.subject || !draft.body) return { ok: false, reason: 'empty_draft', draft };
+  await db.collection('agentTasks').doc(taskId).set({ draft, status: 'sending', updatedAt: now }, { merge: true });
   const sent = await gmailSend(db, uid, draft, { fetchFn, now });
   if (!sent.ok) {
-    await db.collection('agentTasks').doc(taskId).set({ draft, error: sent.reason, updatedAt: now }, { merge: true });
+    await db.collection('agentTasks').doc(taskId).set({ draft, status: 'awaiting_approval', error: sent.reason, updatedAt: now }, { merge: true });
     return { ok: false, reason: sent.reason, draft };
   }
   await db.collection('agentTasks').doc(taskId).set({

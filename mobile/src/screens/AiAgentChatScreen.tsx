@@ -289,13 +289,22 @@ export default function AiAgentChatScreen({ navigation, route }: any) {
                   {!!task.summary && <Text style={[styles.body, { color: bodyColor }]}>{task.summary}</Text>}
                   {status === 'unsupported' && !!task.reply && <Text style={[styles.body, { color: bodyColor }]}>{task.reply}</Text>}
 
+                  {status === 'sending' && task.kind === 'email' && (
+                    <View style={styles.draft}>
+                      <Text style={[styles.draftTag, { color: '#8A6D00' }]}>DRAFT · SENDING</Text>
+                      <View style={styles.actions}>
+                        <ActivityIndicator color={INK} style={{ marginRight: 8 }} /><Text style={[styles.primaryText, { color: INK }]}>Sending email…</Text>
+                      </View>
+                    </View>
+                  )}
+
                   {status === 'awaiting_approval' && task.kind === 'email' && (
                     <View style={styles.draft}>
                       <Text style={[styles.draftTag, { color: '#8A6D00' }]}>DRAFT · NEEDS YOUR APPROVAL</Text>
                       <TextInput value={edit.to} onChangeText={(v) => set({ to: v })} placeholder="Recipient email" placeholderTextColor={faintColor} style={inputStyle} autoCapitalize="none" />
                       <TextInput value={edit.subject} onChangeText={(v) => set({ subject: v })} placeholder="Subject" placeholderTextColor={faintColor} style={inputStyle} />
                       <TextInput value={edit.body} onChangeText={(v) => set({ body: v })} multiline style={[inputStyle, styles.draftBody]} />
-                      {!!task.error && <Text style={styles.errorText}>{task.error === 'gmail_not_connected' ? `Connect ${providerLabel} above, then approve — sending needs it.` : 'That did not go through. Check the draft and try again.'}</Text>}
+                      {!!task.error && <Text style={styles.errorText}>{task.error === 'gmail_not_connected' ? `Connect ${providerLabel} above, then approve — sending needs it.` : task.error === 'gmail_send_failed' ? `Gmail couldn't send that — try again.` : task.error === 'bad_recipient' ? `That recipient isn't a valid email address.` : `That did not go through. Check the draft and try again.`}</Text>}
                       <View style={styles.actions}>
                         <TouchableOpacity style={[styles.approve, { backgroundColor: YELLOW }]} onPress={() => approve(task)} disabled={busy === `approve-${task.id}`}>
                           {busy === `approve-${task.id}` ? <ActivityIndicator color={INK} /> : <Text style={[styles.primaryText, { color: INK }]}><Check size={14} color={INK} /> Approve &amp; send</Text>}
@@ -307,18 +316,27 @@ export default function AiAgentChatScreen({ navigation, route }: any) {
                     </View>
                   )}
 
+                  {status === 'sending' && task.kind === 'event' && (
+                    <View style={styles.draft}>
+                      <Text style={[styles.draftTag, { color: '#8A6D00' }]}>EVENT DRAFT · ADDING</Text>
+                      <View style={styles.actions}>
+                        <ActivityIndicator color={INK} style={{ marginRight: 8 }} /><Text style={[styles.primaryText, { color: INK }]}>Adding to calendar…</Text>
+                      </View>
+                    </View>
+                  )}
+
                   {status === 'awaiting_approval' && task.kind === 'event' && (
                     <View style={styles.draft}>
                       <Text style={[styles.draftTag, { color: '#8A6D00' }]}>EVENT DRAFT · NEEDS YOUR APPROVAL</Text>
                       <TextInput value={edit.title} onChangeText={(v) => set({ title: v })} placeholder="Event title" placeholderTextColor={faintColor} style={inputStyle} />
                       <View style={styles.timeRow}>
-                        <TextInput value={edit.start} onChangeText={(v) => set({ start: v })} placeholder="Start YYYY-MM-DDTHH:mm" placeholderTextColor={faintColor} style={[inputStyle, { flex: 1 }]} autoCapitalize="none" />
-                        <TextInput value={edit.end} onChangeText={(v) => set({ end: v })} placeholder="End YYYY-MM-DDTHH:mm" placeholderTextColor={faintColor} style={[inputStyle, { flex: 1 }]} autoCapitalize="none" />
+                        <TextInput value={edit.start} onChangeText={(v) => set({ start: v })} placeholder="Start YYYY-MM-DDTHH:mm:ss" placeholderTextColor={faintColor} style={[inputStyle, { flex: 1 }]} autoCapitalize="none" />
+                        <TextInput value={edit.end} onChangeText={(v) => set({ end: v })} placeholder="End YYYY-MM-DDTHH:mm:ss" placeholderTextColor={faintColor} style={[inputStyle, { flex: 1 }]} autoCapitalize="none" />
                       </View>
                       {!!(edit.start && edit.end) && <Text style={[styles.faint, { color: faintColor }]}>{whenText(edit.start)} → {whenText(edit.end)}</Text>}
                       <TextInput value={edit.attendees} onChangeText={(v) => set({ attendees: v })} placeholder="Attendees, comma-separated emails" placeholderTextColor={faintColor} style={inputStyle} autoCapitalize="none" />
                       <TextInput value={edit.description} onChangeText={(v) => set({ description: v })} placeholder="Description (optional)" placeholderTextColor={faintColor} multiline style={[inputStyle, styles.draftBody]} />
-                      {!!task.error && <Text style={styles.errorText}>{task.error === 'calendar_not_connected' ? `Connect ${providerLabel} above, then approve — creating the event needs it.` : 'That did not go through. Check the times and try again.'}</Text>}
+                      {!!task.error && <Text style={styles.errorText}>{task.error === 'calendar_not_connected' ? `Connect ${providerLabel} above, then approve — creating the event needs it.` : task.error === 'calendar_create_failed' ? `Calendar couldn't create the event — check the times and try again.` : task.error === 'bad_time' ? `The start or end time looks wrong. Use YYYY-MM-DDTHH:mm.` : `That did not go through. Check the draft and try again.`}</Text>}
                       <View style={styles.actions}>
                         <TouchableOpacity style={[styles.approve, { backgroundColor: YELLOW }]} onPress={() => approve(task)} disabled={busy === `approve-${task.id}`}>
                           {busy === `approve-${task.id}` ? <ActivityIndicator color={INK} /> : <Text style={[styles.primaryText, { color: INK }]}><CalendarPlus size={14} color={INK} /> Approve &amp; add to calendar</Text>}
@@ -334,7 +352,7 @@ export default function AiAgentChatScreen({ navigation, route }: any) {
                     <Text style={[styles.body, { color: '#1F7A3D' }]}>
                       {task.kind === 'event'
                         ? `On your Google Calendar: ${task.result?.title || 'event'} · ${whenText(task.result?.start)}`
-                        : `Sent via Gmail${task.result?.to ? ` to ${task.result.to}` : ''}. Approved by you.`}
+                        : `Email sent ✓ to ${task.result?.to || 'recipient'} — Approved by you.`}
                     </Text>
                   )}
                   {status === 'discarded' && <Text style={[styles.faint, { color: faintColor }]}>Discarded — nothing was sent.</Text>}
