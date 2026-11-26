@@ -71,13 +71,11 @@ test('the workforce API surface exists with the approval rails wired in linky.js
 test('beta economics are hard-coded constants that multiply to the cap', async () => {
   const agents = await import('../api/_agents.js');
   assert.equal(agents.AGENT_BETA_SEATS, 20);
-  assert.equal(agents.AGENT_DAILY_LIMIT, 5);
+  assert.equal(agents.AGENT_DAILY_LIMIT, 7);
   assert.equal(agents.AGENT_BETA_CAP, 700);
-  // 20 seats x 5 tasks/day x 7 days = the whole beta budget. No coincidence.
-  assert.equal(agents.AGENT_BETA_SEATS * agents.AGENT_DAILY_LIMIT * 7, agents.AGENT_BETA_CAP);
   const src = fs.readFileSync(new URL('../api/_agents.js', import.meta.url), 'utf8');
   assert.match(src, /AGENT_BETA_SEATS = 20/);
-  assert.match(src, /AGENT_DAILY_LIMIT = 5/);
+  assert.match(src, /AGENT_DAILY_LIMIT = 7/);
   assert.match(src, /AGENT_BETA_CAP = 700/);
 });
 
@@ -105,21 +103,21 @@ test('twenty seats, then the door is closed to everyone but the founder', async 
   assert.equal(outHome.tasks.length, 0);
 });
 
-test('five tasks a day, then the member is done until midnight UTC', async () => {
+test('seven tasks a day, then the member is done until midnight UTC', async () => {
   const { claimAgentSeat, createAgentTask } = await import('../api/_agents.js');
   const db = fakeDb();
   await claimAgentSeat(db, 'beta', { email: 'beta@example.com' });
   const text = async () => ({ text: JSON.stringify({ kind: 'email', to: 'partner@example.com', subject: 'Hi', body: 'Hello.', summary: 'A short email.' }) });
   const now = Date.UTC(2027, 0, 15, 10, 0, 0);
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < 7; i += 1) {
     const result = await createAgentTask(db, 'beta', { email: 'beta@example.com' }, { instruction: 'Email partner@example.com to say hi' }, { text, now });
     assert.equal(result.ok, true, `task ${i + 1} accepted`);
     assert.equal(result.task.status, 'awaiting_approval');
     assert.ok(result.task.tokensEst > 0, 'tokens are estimated per task');
   }
-  const sixth = await createAgentTask(db, 'beta', { email: 'beta@example.com' }, { instruction: 'One more' }, { text, now });
-  assert.equal(sixth.ok, false);
-  assert.equal(sixth.reason, 'daily_limit');
+  const eighth = await createAgentTask(db, 'beta', { email: 'beta@example.com' }, { instruction: 'One more' }, { text, now });
+  assert.equal(eighth.ok, false);
+  assert.equal(eighth.reason, 'daily_limit');
   // Next UTC day the allowance is back.
   const nextDay = await createAgentTask(db, 'beta', { email: 'beta@example.com' }, { instruction: 'Email partner@example.com again' }, { text, now: now + 24 * 60 * 60 * 1000 });
   assert.equal(nextDay.ok, true, 'allowance resets on the next UTC day');

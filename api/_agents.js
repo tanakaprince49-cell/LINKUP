@@ -20,7 +20,7 @@ import crypto from 'node:crypto';
 import { aiText } from './_gemini.js';
 
 export const AGENT_BETA_SEATS = 20;
-export const AGENT_DAILY_LIMIT = 5;
+export const AGENT_DAILY_LIMIT = 7;
 export const AGENT_MAX_AI_CALLS_PER_TASK = 2;
 export const AGENT_BETA_CAP = 700;
 export const AGENTS = Object.freeze([
