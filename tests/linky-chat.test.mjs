@@ -76,7 +76,7 @@ function core(db, { ai = true, plan = null } = {}) {
     './_expoPush.js': { sendExpoPush: async () => ({ sent: 0 }) },
     './_emailNotify.js': { sendHighSignalEmail: async () => ({ sent: false }) },
     './_proof.js': { proofPoints: () => [], badgeLine: () => '' },
-    './_profileWriter.js': { writeMyProfile: async () => ({ ok: false, reason: 'not_used_here' }) }, './_agents.js': { agentHome: async () => ({ ok: true }), claimAgentSeat: async () => ({ ok: true }), createAgentTask: async () => ({ ok: false, reason: 'not_used_here' }), approveAgentTask: async () => ({ ok: false }), discardAgentTask: async () => ({ ok: false }), disconnectConnection: async () => ({ ok: true }), googleConnectUrl: () => ({ configured: false, url: '' }), handleGmailCallback: async () => ({ redirect: '' }), handleCalendarCallback: async () => ({ redirect: '' }) }
+    './_profileWriter.js': { writeMyProfile: async () => ({ ok: false, reason: 'not_used_here' }) }
   };
   const code = ts.transpileModule(read('api/_linky.js'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   vm.runInNewContext(code, { module, exports: module.exports, require: (name) => { assert.ok(name in mocks, name); return mocks[name]; }, console, process: { env: {} }, Date, Set, Map, URL, Buffer, setTimeout, clearTimeout });

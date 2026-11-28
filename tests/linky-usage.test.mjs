@@ -52,7 +52,7 @@ function core(database) {
     './_memberTier.js': { memberHasPlus: async () => false },
     './_firebaseAdmin.js': { getDb: () => database, getAdmin: () => ({ firestore: { FieldValue: { delete: () => DELETE, serverTimestamp: () => Date.now() } } }) },
     './_gemini.js': { aiReady: () => false, geminiText: () => { aiCalls++; throw Error('unexpected AI call'); } },
-    './_serpapi.js': {}, './_expoPush.js':{sendExpoPush:async()=>({sent:0})},'./_emailNotify.js':{sendHighSignalEmail:async()=>({sent:false})},'./_proof.js': {}, './_profileWriter.js': { writeMyProfile: async () => ({ ok: false, reason: 'not_used_here' }) }, './_agents.js': { agentHome: async () => ({ ok: true }), claimAgentSeat: async () => ({ ok: true }), createAgentTask: async () => ({ ok: false, reason: 'not_used_here' }), approveAgentTask: async () => ({ ok: false }), discardAgentTask: async () => ({ ok: false }), disconnectConnection: async () => ({ ok: true }), googleConnectUrl: () => ({ configured: false, url: '' }), handleGmailCallback: async () => ({ redirect: '' }), handleCalendarCallback: async () => ({ redirect: '' }) }
+    './_serpapi.js': {}, './_expoPush.js':{sendExpoPush:async()=>({sent:0})},'./_emailNotify.js':{sendHighSignalEmail:async()=>({sent:false})},'./_proof.js': {}, './_profileWriter.js': { writeMyProfile: async () => ({ ok: false, reason: 'not_used_here' }) }
   };
   const code = ts.transpileModule(read('api/_linky.js'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   vm.runInNewContext(code, { module, exports: module.exports, require: (name) => { assert.ok(name in mocks, name); return mocks[name]; }, console, process: { env: {} }, Date, Set, Map, URL, Buffer, setTimeout, clearTimeout });
@@ -243,7 +243,7 @@ test('legacy Linky assistant API retires before quota spending', async () => {
   for (let i = 0; i < 4; i++) await usage.reserveMessage(db, 'member', { now: Date.now() });
   const module = { exports: {} };
   const mocks = {
-    './_builderRuntime.js': {}, 'node:crypto': crypto, './_linky.js': api, './_proof.js': {}, './_profileWriter.js': { writeMyProfile: async () => ({ ok: false, reason: 'not_used_here' }) }, './_agents.js': { agentHome: async () => ({ ok: true }), claimAgentSeat: async () => ({ ok: true }), createAgentTask: async () => ({ ok: false, reason: 'not_used_here' }), approveAgentTask: async () => ({ ok: false }), discardAgentTask: async () => ({ ok: false }), disconnectConnection: async () => ({ ok: true }), googleConnectUrl: () => ({ configured: false, url: '' }), handleGmailCallback: async () => ({ redirect: '' }), handleCalendarCallback: async () => ({ redirect: '' }) },
+    './_builderRuntime.js': {}, 'node:crypto': crypto, './_linky.js': api, './_proof.js': {}, './_profileWriter.js': { writeMyProfile: async () => ({ ok: false, reason: 'not_used_here' }) },
     './_firebaseAdmin.js': { getDb: () => db, verifyRequestUser: async () => ({ uid: 'member' }) },
     './_gemini.js': { handleOptions: () => false, readJsonBody: (req) => req.body, setCors: () => {}, sendError: (res, code, message) => res.status(code).json({ error: message }) },
   };

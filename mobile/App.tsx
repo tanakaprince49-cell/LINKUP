@@ -29,10 +29,6 @@ import EmailAuthScreen from './src/screens/EmailAuthScreen';
 import LandingScreen from './src/screens/LandingScreen';
 
 const LinkyHomeScreen = lazyScreen(() => import('./src/screens/LinkyHomeScreen'));
-const AiAgentsScreen = lazyScreen(() => import('./src/screens/AiAgentsScreen'));
-const AiAgentChatScreen = lazyScreen(() => import('./src/screens/AiAgentChatScreen'));
-const AiAgentProfileScreen = lazyScreen(() => import('./src/screens/AiAgentProfileScreen'));
-const AiAgentsSettingsScreen = lazyScreen(() => import('./src/screens/AiAgentsSettingsScreen'));
 const IdeaDeckScreen = lazyScreen(() => import('./src/screens/IdeaDeckScreen'));
 const AlertsScreen = lazyScreen(() => import('./src/screens/AlertsScreen'));
 const MessagesScreen = lazyScreen(() => import('./src/screens/MessagesScreen'));
@@ -130,18 +126,6 @@ const WEB_BASE_PATH = Platform.OS === 'web' ? webBasePath() : '';
 const CAMPAIGN_MANAGER_PATHS = ['/campaigns', '/campaign-manager'];
 const isCampaignManagerPath = (pathname = String((globalThis as any)?.location?.pathname || '')) =>
   Platform.OS === 'web' && CAMPAIGN_MANAGER_PATHS.includes(webRoutePath(pathname).replace(/\/+$/, ''));
-
-/**
- * /app/aiagents is the AI workforce: a member destination that must survive a
- * cold load exactly like the campaign manager does. Without this, the
- * signed-out guard rewrites the URL to the landing page while auth is still
- * resolving, and the member tree then falls back to the dashboard.
- */
-const isAiAgentsPath = (pathname = String((globalThis as any)?.location?.pathname || '')) => {
-  if (Platform.OS !== 'web') return false;
-  const route = webRoutePath(pathname).replace(/\/+$/, '');
-  return route === '/aiagents' || route.startsWith('/aiagents/');
-};
 const linking: any = {
   prefixes: [
     ExpoLinking.createURL('/'), 'linkup://',
@@ -184,10 +168,7 @@ const linking: any = {
         ? { Campaigns: 'campaign-manager', CampaignDetail: 'campaign-manager/:campaignId' }
         : {}),
       Profile: 'profile/:userId',
-      AiAgents: 'aiagents',
-      AiAgentChat: 'aiagents/chat/:agentId',
-      AiAgentProfile: 'aiagents/profile/:agentId',
-      AiAgentsSettings: 'aiagents/settings',
+
       Messages: 'messages',
       Alerts: 'alerts',
       Matches: 'connections',
@@ -476,7 +457,6 @@ function AppContent() {
     Platform.OS === 'web' ? webRoutePath() : '';
   const isPublicSharedWebPath =
     webPathname.startsWith('/profile/') || webPathname.startsWith('/opportunity/');
-  const isAiAgentsWebPath = isAiAgentsPath();
   const navigationStateKey = `${user?.uid || 'guest'}-${isOnboarded ? 'onboarded' : 'new'}-${authVersion}`;
 
   React.useEffect(() => {
@@ -680,10 +660,6 @@ function AppContent() {
       return () => clearTimeout(timer);
     }
 
-    // The workforce link keeps its URL while signed out: the guest tree
-    // renders Alex's pitch, and signing in lands back here (intent below).
-    if (isAiAgentsPath()) return;
-
     if (history?.replaceState && !publicPaths.has(pathname) && !isPublicSharedPath) {
       history.replaceState(null, '', webAppPath('/landing'));
     }
@@ -770,23 +746,7 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, [user?.uid, isOnboarded]);
 
-  // Remembered from the first paint: a visitor who arrived on the workforce
-  // URL is taken back to it the moment they are in, signed in or freshly
-  // onboarded — the beta invite link must land on Alex, not the dashboard.
-  const aiAgentsIntentRef = React.useRef(isAiAgentsPath());
-  React.useEffect(() => {
-    if (Platform.OS !== 'web' || !user?.uid || !isOnboarded) return;
-    if (!aiAgentsIntentRef.current && !isAiAgentsPath()) return;
-    aiAgentsIntentRef.current = false;
-    const timer = setTimeout(() => {
-      if (!navigationRef.isReady()) return;
-      (globalThis as any)?.history?.replaceState?.(null, '', webAppPath('/aiagents'));
-      if (navigationRef.getCurrentRoute()?.name !== 'AiAgents') {
-        (navigationRef as any).navigate('AiAgents');
-      }
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [user?.uid, isOnboarded]);
+
 
   // Onboarding's "Finish now" sets this flag so brand-new users land directly
   // on their own profile to keep editing, instead of the dashboard.
@@ -875,9 +835,7 @@ function AppContent() {
                 <Stack.Screen name="ActiveOpportunity" component={ActiveOpportunityScreen} />
               </>
             ) : null}
-            {isAiAgentsWebPath ? (
-              <Stack.Screen name="AiAgents" component={AiAgentsScreen} />
-            ) : null}
+
           </>
         ) : !isOnboarded ? (
           <>
@@ -918,10 +876,7 @@ function AppContent() {
             <Stack.Screen name="NetworkQuiz" component={NetworkQuizScreen} />
             <Stack.Screen name="BuilderWorkspace" component={BuilderWorkspaceScreen} />
             <Stack.Screen name="ShipLog" component={ShipLogScreen} />
-            <Stack.Screen name="AiAgents" component={AiAgentsScreen} />
-            <Stack.Screen name="AiAgentChat" component={AiAgentChatScreen} />
-            <Stack.Screen name="AiAgentProfile" component={AiAgentProfileScreen} />
-            <Stack.Screen name="AiAgentsSettings" component={AiAgentsSettingsScreen} />
+
             <Stack.Screen name="GroupChat" component={GroupChatScreen} />
           </>
         ) : null}

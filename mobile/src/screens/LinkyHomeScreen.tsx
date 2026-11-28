@@ -27,7 +27,6 @@ import {
 import PaywallModal from '../components/PaywallModal';
 import MemberBadges from '../components/MemberBadges';
 import LinkyCatIntro from '../components/LinkyCatIntro';
-import AiWorkforceEntry from '../components/AiWorkforceEntry';
 import LinkyRichText from '../components/LinkyRichText';
 import LinkyQuotaPill from '../components/LinkyQuotaPill';
 import { buildFacts, LINKY_VOICE } from '../lib/brandVoice';
@@ -447,7 +446,6 @@ export default function LinkyHomeScreen({ navigation }: any) {
   return (
     <View style={[styles.root, appBackground(dark), { paddingTop: insets.top }]}>
       <View style={[styles.header, { borderBottomColor: palette.border, backgroundColor: dark ? 'rgba(10,11,13,0.92)' : 'rgba(251,250,245,0.94)' }]}>
-        <AiWorkforceEntry />
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Back to LINKUP" onPress={() => navigation.navigate('Dashboard')} style={styles.headerButton}>
           <ArrowLeft size={21} color={palette.text} />
         </TouchableOpacity>
